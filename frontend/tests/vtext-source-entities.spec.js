@@ -409,7 +409,7 @@ test('VText source URL opens Source Viewer unless browser is explicitly requeste
             {
               entity_id: 'src-url-web-lens',
               kind: 'web_source',
-              label: 'Source URL explicit browser fixture',
+              label: 'Source URL explicit Web Lens fixture',
               target: {
                 target_kind: 'url',
                 url: sourceURL,
@@ -424,7 +424,7 @@ test('VText source URL opens Source Viewer unless browser is explicitly requeste
               display: {
                 inline_mode: 'embedded_excerpt',
                 expanded_mode: 'source_card',
-                open_surface: 'browser',
+                open_surface: 'web-lens',
                 default_collapsed: true,
               },
               evidence: {

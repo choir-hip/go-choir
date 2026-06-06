@@ -2508,6 +2508,67 @@ remaining error field: this is a frontend contract normalization fix. It does
 not replace the broader shared source schema consolidation still needed across
 runtime/platform/frontend/export.
 
+### 2026-06-06 Source Open Alias Fix
+
+Status: `accepted_on_staging_for_open_surface_aliases`.
+
+Behavior commit:
+
+```text
+e378712ace52e2282e4be8557cbbd676da840dcf
+fix: normalize source open surface aliases
+```
+
+Implementation:
+
+- `frontend/src/lib/vtext-source-renderer.ts` now normalizes source
+  `open_surface` aliases at the frontend boundary.
+- `web-lens`, `web_lens`, `live-original`, and `live_original` route to Web
+  Lens/live original.
+- `source-viewer`, `source_viewer`, `source-reader`, `reader`, `content`, and
+  `source` route to Source Viewer reader mode.
+- Default URL/content/source-service targets still route to Source Viewer, and
+  explicit video routing remains unchanged.
+
+Local verification:
+
+```text
+npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g "source open plans normalize"
+result: passed
+
+npm --prefix frontend run build
+result: passed
+```
+
+CI/deploy evidence:
+
+```text
+CI run: 27063916256 passed
+FlakeHub run: 27063916233 passed
+Node B deploy job: 79881404626 passed
+staging deployed_commit: e378712ace52e2282e4be8557cbbd676da840dcf
+staging deployed_at: 2026-06-06T13:45:00Z
+```
+
+Deployed acceptance proof:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g "VText source URL opens Source Viewer unless browser is explicitly requested"
+result: passed
+```
+
+What this proves:
+
+- A durable URL-backed source without explicit live/original request opens
+  Source Viewer.
+- A URL-backed source with `open_surface: "web-lens"` opens Web Lens/Browser.
+- The proof ran against staging while proxy and sandbox both reported deployed
+  commit `e378712ace52e2282e4be8557cbbd676da840dcf`.
+
+Residual risk: this closes Problem 14 at the frontend routing boundary. It is
+still not the full cross-language shared source schema; runtime/platform/export
+normalization should continue converging toward a single documented contract.
+
 ## Suggested `/goal`
 
 ```text
