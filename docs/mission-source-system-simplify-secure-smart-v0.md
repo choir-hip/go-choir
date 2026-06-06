@@ -841,10 +841,11 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T12:00:00Z, bounded VText diagnosis structure
-summaries render a 24-revision owner-authenticated window for the legal
-proposal, covering v87 through v64 and exposing the required v70-v78 table
-transition without full revision bodies.
+last checkpoint: 2026-06-06T12:06:24Z, VText user-save structure
+stabilization now restores an omitted parent Markdown table during unrelated
+partial-context edits while preserving explicit table deletion. The repair is
+deployed to staging and product-path proven with an authenticated temporary
+document fixture.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -869,10 +870,14 @@ diagnosis structures in the VText Sources panel and requests
 eight-summary app-surface limit before the follow-up behavior change. Behavior
 commit `a8785e97` widens the app-surface bounded diagnosis window to 24
 summaries and adds a frontend regression test requiring v78 and v70 to render.
+Docs commit `9ad53d03` records the legal proposal v70-v78 diagnosis evidence
+before the structure-preservation fix. Behavior commit `bfd23fa0` repairs the
+general omitted-parent-table preservation path for unrelated partial-context
+VText edits and adds focused runtime regression coverage.
 Existing unrelated untracked docs are preserved.
 
 what shipped: behavior commit
-`a8785e97fe5bd9efb25f0585a7f908e1e77911c9` was pushed to `origin/main` and
+`bfd23fa088d754039f679adf0a526abbdee73a64` was pushed to `origin/main` and
 deployed to staging. A later docs-only checkpoint may not appear in Node B
 health because docs-only changes intentionally do not trigger deploy.
 
@@ -1044,6 +1049,38 @@ what was proven:
   monotonic loss: the appendix table disappears and reappears across nearby
   revisions, and at least one older table variant has a different 50-row
   signature.
+- Docs checkpoint `9ad53d03` recorded the legal proposal diagnosis evidence
+  before the follow-up structure-preservation repair.
+- The first focused structure-preservation fixture failed before the repair:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownStructureStabilization'`
+  did not restore an omitted appendix table when the user draft only changed an
+  unrelated intro paragraph.
+- Focused local structure-preservation checks passed after the repair:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownStructureStabilization'`
+  and
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownStructureStabilization|TestVTextOpenMarkdownFile|TestVTextMarkdownTableRowParser|TestVTextImportMarkdownLineageCreatesRevisionHistory'`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27061733207`
+  completed successfully for `bfd23fa0`, including runtime shards,
+  non-runtime tests, integration smoke, vet/build, aggregate Go gate, and Node
+  B staging deploy.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27061733220`
+  completed successfully.
+- Staging health at `https://choir.news/health` reported proxy and upstream
+  commit/deployed_commit
+  `bfd23fa088d754039f679adf0a526abbdee73a64` with deployed_at
+  `2026-06-06T12:02:25Z`.
+- Deployed authenticated VText table-stabilization acceptance passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-table-stabilization.tmp.spec.js`.
+  The temporary spec created a parent VText revision containing an appendix
+  Markdown table, saved an unrelated partial-context edit omitting the table,
+  verified the deployed response restored the table with
+  `vtext_structure_stabilized_reason:
+  preserved_parent_markdown_table_after_collapsed_draft`, and separately
+  verified an explicit table-deletion edit did not restore the table. The
+  temporary spec was deleted after the proof and is not part of the tracked test
+  suite.
 
 unproven or partial claims:
 
@@ -1102,6 +1139,13 @@ belief-state changes:
   again at v79-v80+ with 49 rows. The next repair pass should target the
   general parse/edit/save/revise structure-preservation path for partial
   contexts, not a document-specific restoration.
+- The first repaired structure-preservation class is now proven: when an
+  authenticated VText user save submits a partial-context draft that changes
+  surrounding prose but omits a parent Markdown table, the backend restores the
+  omitted parent table. When the submitted content is otherwise equivalent to
+  the parent with that table removed, the backend treats it as explicit
+  deletion and does not restore. This is a general Markdown table stabilization
+  path, not a legal-proposal-specific special case.
 
 remaining error field:
 
@@ -1118,10 +1162,12 @@ remaining error field:
   repairs, publication transclusion selectors, and export metadata. Researcher
   updates, Source Service records, stale/blocked/unavailable product flows, and
   shared frontend/backend schema convergence remain incomplete.
-- Table structure preservation now has broader partial-context tests and a
-  deployed bounded diagnosis extraction route; the actual owner legal proposal
-  v70-v78 comparison has bounded owner app-surface evidence, but the general
-  structure-preservation repair still needs to be implemented and proven.
+- Table structure preservation now has broader partial-context tests, a
+  deployed bounded diagnosis extraction route, and a deployed authenticated
+  synthetic proof for omitted-parent-table restoration versus explicit
+  deletion. The actual owner legal proposal still needs a product-path bounded
+  edit/revise proof showing the repaired path preserves the legal proposal
+  appendix table through a real owner workflow.
 
 highest-impact remaining uncertainty: whether to introduce the shared source
 contract package first and route all callers through it, or to land the SSRF
@@ -1130,11 +1176,12 @@ documented safety risk makes the URL fetch policy the first behavior-changing
 fix, with shared contract types designed in the same pass so the fix does not
 create another isolated policy path.
 
-next executable probe: use the v70-v78 bounded owner evidence to construct the
-smallest failing Markdown/VText render/edit/save/revise fixture that can remove
-an appendix table under partial-context editing, then repair the general
-structure-preservation path and prove it on staging against the legal proposal
-and bounded table-edit acceptance.
+next executable probe: run an owner product-path bounded edit/revise proof on
+`choir_private_legal_cloud_proposal.vtext` that edits nearby prose without
+touching the appendix table, then verify through the bounded diagnosis panel
+and export/publication metadata that the appendix table survives. If that
+passes, resume source-contract convergence; if it fails, document the newly
+confirmed narrower legal-proposal workflow problem before the next fix.
 
 suggested resume goal string: continue
 `docs/mission-source-system-simplify-secure-smart-v0.md` from commits
