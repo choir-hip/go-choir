@@ -2694,6 +2694,62 @@ Residual risk: this closes Problem 15 for the frontend user surfaces covered by
 the focused local and deployed tests. The backend/runtime/platform shared schema
 remains a separate consolidation axis.
 
+### Problem 16: Runtime Source Entity Evidence Can Still Persist Out-Of-Contract States
+
+Status: `documented_before_fix`.
+
+affected contract/invariant: VText `source_entities` are canonical revision
+metadata and should use the shared evidence-state vocabulary preserved through
+VText, publication, export, Source Viewer, and Web Lens. The current
+requirements contract names `candidate`, `available`, `confirms`, `refutes`,
+`qualifies`, `no_source_needed`, `stale`, `blocked_by_access`, and
+`unavailable` as the normalized source evidence states.
+
+problem: runtime media-derived source entities can still write
+`evidence.state: pending` or `evidence.state: error` into canonical VText
+metadata. Frontend rendering now normalizes `pending` to `candidate`, but that
+only masks the inconsistency at one consumer. Platform publication metadata
+normalization does not accept `pending` or `error`, so a VText revision carrying
+those states can lose evidence-state projection at publication/export time.
+
+evidence: code audit after the Problem 15 frontend fix found:
+
+- `internal/runtime/vtext_media_sources.go::sourceEntityEvidenceState` returns
+  `pending` when a media source ref has no content id.
+- The same function returns `error` when transcript availability is `error`.
+- `internal/runtime/vtext_media_sources.go::mergeVTextSourceEntity` treats
+  existing `pending` state as a replaceable sentinel, proving `pending` is part
+  of the runtime metadata path rather than only a local UI label.
+- `internal/platform/source_metadata.go::normalizePublicationEvidenceState`
+  accepts the documented states and aliases such as `blocked` and
+  `no-source-needed`, but not `pending` or `error`.
+
+why this matters: the mission requires one source contract across VText,
+Source Viewer, Web Lens, publication, and export. If runtime writes
+out-of-contract states, publication/export either drop them or require each
+consumer to carry private aliases. That preserves the duplication Problem 15
+only fixed at the frontend boundary.
+
+first observed version/transition: current `main` after staging-accepted commit
+`681b5dbc78858e94037efbcbca9b4238b2c54542`.
+
+acceptance for fix:
+
+- runtime media-derived VText source entities use `candidate` for unresolved or
+  not-yet-represented sources instead of `pending`;
+- runtime maps transcript/source acquisition error states to a documented
+  evidence state, preferably `unavailable` unless access policy proves a more
+  specific blocked state;
+- merge behavior treats `candidate` as the replaceable unresolved state;
+- publication evidence normalization accepts legacy `pending` and `error`
+  aliases to preserve older VText metadata;
+- focused Go tests prove runtime and platform normalization agree on these
+  aliases.
+
+remaining error field: this is a backend canonical-metadata convergence step.
+It does not yet create a single exported shared source schema package for all
+runtime/platform/frontend consumers.
+
 ## Suggested `/goal`
 
 ```text
