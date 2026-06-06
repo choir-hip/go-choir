@@ -2753,6 +2753,8 @@
   }
 
   .doc-toolbar {
+    position: relative;
+    z-index: 10;
     flex: 0 0 auto;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
