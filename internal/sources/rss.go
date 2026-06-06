@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 )
 
 type RSSPoller struct {
@@ -17,7 +19,7 @@ type RSSPoller struct {
 
 func NewRSSPoller(userAgent string) *RSSPoller {
 	return &RSSPoller{
-		Client:    sourceFetchHTTPClient(30 * time.Second),
+		Client:    sourcefetch.Client(30 * time.Second),
 		UserAgent: userAgent,
 	}
 }
@@ -25,7 +27,7 @@ func NewRSSPoller(userAgent string) *RSSPoller {
 func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error) {
 	started := time.Now().UTC()
 	fetch := NewFetchRecord(*source, source.URL, started)
-	if err := validateSourceFetchURL(source.URL); err != nil {
+	if err := sourcefetch.ValidateURL(source.URL); err != nil {
 		fetch = FinishFetch(fetch, 0, nil, err)
 		return PollResult{Fetch: fetch}, err
 	}

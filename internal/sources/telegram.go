@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
+
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 )
 
 type TelegramScraper struct {
@@ -18,7 +20,7 @@ type TelegramScraper struct {
 
 func NewTelegramScraper(userAgent string) *TelegramScraper {
 	return &TelegramScraper{
-		Client:    sourceFetchHTTPClient(30 * time.Second),
+		Client:    sourcefetch.Client(30 * time.Second),
 		UserAgent: userAgent,
 	}
 }
@@ -31,7 +33,7 @@ func (s *TelegramScraper) Poll(ctx context.Context, source *Source) (PollResult,
 	}
 	started := time.Now().UTC()
 	fetch := NewFetchRecord(*source, url, started)
-	if err := validateSourceFetchURL(url); err != nil {
+	if err := sourcefetch.ValidateURL(url); err != nil {
 		fetch = FinishFetch(fetch, 0, nil, err)
 		return PollResult{Fetch: fetch}, err
 	}

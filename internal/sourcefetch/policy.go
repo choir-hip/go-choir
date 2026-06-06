@@ -1,4 +1,4 @@
-package sources
+package sourcefetch
 
 import (
 	"context"
@@ -10,9 +10,45 @@ import (
 	"time"
 )
 
-var sourceFetchAllowPrivateNetworkForTests bool
+var allowPrivateNetworkForTests bool
 
-func validateSourceFetchURL(raw string) error {
+func SetAllowPrivateNetworkForTests(allow bool) bool {
+	previous := allowPrivateNetworkForTests
+	allowPrivateNetworkForTests = allow
+	return previous
+}
+
+func Client(timeout time.Duration) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	resolver := net.DefaultResolver
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, fmt.Errorf("source fetch address: %w", err)
+		}
+		if err := ValidateHost(ctx, resolver, host); err != nil {
+			return nil, err
+		}
+		return dialer.DialContext(ctx, network, net.JoinHostPort(host, port))
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("source fetch redirect limit exceeded")
+			}
+			if req == nil || req.URL == nil {
+				return fmt.Errorf("source fetch redirect target is invalid")
+			}
+			return ValidateURL(req.URL.String())
+		},
+	}
+}
+
+func ValidateURL(raw string) error {
 	if len(strings.TrimSpace(raw)) > 4096 {
 		return fmt.Errorf("source URL is too long")
 	}
@@ -30,55 +66,25 @@ func validateSourceFetchURL(raw string) error {
 	if host == "" {
 		return fmt.Errorf("source URL host is required")
 	}
-	if sourceFetchHostnameBlocked(host) && !sourceFetchAllowPrivateNetworkForTests {
+	if hostnameBlocked(host) && !allowPrivateNetworkForTests {
 		return fmt.Errorf("source URL host is not allowed")
 	}
-	if ip := net.ParseIP(host); ip != nil && sourceFetchIPBlocked(ip) && !sourceFetchAllowPrivateNetworkForTests {
+	if ip := net.ParseIP(host); ip != nil && ipBlocked(ip) && !allowPrivateNetworkForTests {
 		return fmt.Errorf("source URL host is not allowed")
 	}
 	return nil
 }
 
-func sourceFetchHTTPClient(timeout time.Duration) *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
-	resolver := net.DefaultResolver
-	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-		host, port, err := net.SplitHostPort(address)
-		if err != nil {
-			return nil, fmt.Errorf("source fetch address: %w", err)
-		}
-		if err := validateSourceFetchHost(ctx, resolver, host); err != nil {
-			return nil, err
-		}
-		return dialer.DialContext(ctx, network, net.JoinHostPort(host, port))
-	}
-	return &http.Client{
-		Timeout:   timeout,
-		Transport: transport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 5 {
-				return fmt.Errorf("source fetch redirect limit exceeded")
-			}
-			if req == nil || req.URL == nil {
-				return fmt.Errorf("source fetch redirect target is invalid")
-			}
-			return validateSourceFetchURL(req.URL.String())
-		},
-	}
-}
-
-func validateSourceFetchHost(ctx context.Context, resolver *net.Resolver, host string) error {
+func ValidateHost(ctx context.Context, resolver *net.Resolver, host string) error {
 	host = strings.TrimSpace(strings.Trim(host, "[]"))
 	if host == "" {
 		return fmt.Errorf("source fetch host is required")
 	}
-	if sourceFetchHostnameBlocked(host) && !sourceFetchAllowPrivateNetworkForTests {
+	if hostnameBlocked(host) && !allowPrivateNetworkForTests {
 		return fmt.Errorf("source fetch host resolves to forbidden address")
 	}
 	if ip := net.ParseIP(host); ip != nil {
-		if sourceFetchIPBlocked(ip) && !sourceFetchAllowPrivateNetworkForTests {
+		if ipBlocked(ip) && !allowPrivateNetworkForTests {
 			return fmt.Errorf("source fetch host resolves to forbidden address")
 		}
 		return nil
@@ -91,14 +97,14 @@ func validateSourceFetchHost(ctx context.Context, resolver *net.Resolver, host s
 		return fmt.Errorf("source fetch resolve host: no addresses")
 	}
 	for _, addr := range addrs {
-		if sourceFetchIPBlocked(addr.IP) && !sourceFetchAllowPrivateNetworkForTests {
+		if ipBlocked(addr.IP) && !allowPrivateNetworkForTests {
 			return fmt.Errorf("source fetch host resolves to forbidden address")
 		}
 	}
 	return nil
 }
 
-func sourceFetchIPBlocked(ip net.IP) bool {
+func ipBlocked(ip net.IP) bool {
 	if ip == nil {
 		return true
 	}
@@ -123,7 +129,7 @@ func sourceFetchIPBlocked(ip net.IP) bool {
 	return false
 }
 
-func sourceFetchHostnameBlocked(host string) bool {
+func hostnameBlocked(host string) bool {
 	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
 	return host == "localhost" || strings.HasSuffix(host, ".localhost") || host == "metadata.google.internal"
 }

@@ -5,14 +5,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 )
 
 func allowPrivateSourceFetchForTest(t *testing.T) {
 	t.Helper()
-	previous := sourceFetchAllowPrivateNetworkForTests
-	sourceFetchAllowPrivateNetworkForTests = true
+	previous := sourcefetch.SetAllowPrivateNetworkForTests(true)
 	t.Cleanup(func() {
-		sourceFetchAllowPrivateNetworkForTests = previous
+		sourcefetch.SetAllowPrivateNetworkForTests(previous)
 	})
 }
 

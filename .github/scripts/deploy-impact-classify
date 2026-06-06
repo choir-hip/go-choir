@@ -179,6 +179,14 @@ for path in "${changed[@]}"; do
       mark_active_vm_refresh
       add_explanation "$path -> shared source contract dependency: runtime/platform service pointers + active VM refresh"
       ;;
+    internal/sourcefetch/*)
+      add_host_service "gateway"
+      add_host_service "sandbox"
+      add_host_service "sourcecycled"
+      mark_vmctl_restart
+      mark_active_vm_refresh
+      add_explanation "$path -> shared source fetch policy dependency: runtime/source service fetch behavior + active VM refresh"
+      ;;
     internal/markdownstructure/*)
       add_host_service "gateway"
       add_host_service "platformd"

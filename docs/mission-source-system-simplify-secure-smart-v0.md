@@ -2255,6 +2255,63 @@ remaining error field: this will not finish robots/TOS/rate policy or Web Lens
 snapshot policy. It closes the current duplicated SSRF/source-fetch policy
 implementation surface for runtime URL import and source service adapters.
 
+implementation evidence, local:
+
+- added shared `internal/sourcefetch` policy package for URL validation,
+  DNS/IP validation, redirect limits, proxy-disabled HTTP client construction,
+  configurable timeout, and test-only private-network allowance;
+- routed runtime URL import and source service RSS/GDELT/Telegram fetchers
+  through `sourcefetch.ValidateURL` and `sourcefetch.Client`;
+- removed the runtime-local policy test and the duplicated source-service
+  policy implementation, keeping generic policy tests under
+  `internal/sourcefetch` and source-service caller tests under
+  `internal/sources`;
+- updated `flake.nix` service source closures for gateway, sourcecycled, and
+  sandbox so the new shared package is included in trimmed service builds;
+- updated `.github/scripts/deploy-impact-classify` so
+  `internal/sourcefetch/*` changes trigger gateway, sandbox, sourcecycled,
+  vmctl restart, and active VM refresh.
+
+focused verification:
+
+```text
+nix develop -c go test ./internal/sourcefetch -count=1
+ok github.com/yusefmosiah/go-choir/internal/sourcefetch
+
+nix develop -c go test ./internal/sources -count=1
+ok github.com/yusefmosiah/go-choir/internal/sources
+
+nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURL|TestContentImportURLCreatesProvenanceRecord|TestContentImportURLRejectsForbiddenTargets' -count=1
+ok github.com/yusefmosiah/go-choir/internal/runtime
+
+nix develop -c go test ./cmd/gateway ./cmd/sourcecycled ./cmd/sandbox -count=1
+ok github.com/yusefmosiah/go-choir/cmd/sourcecycled
+ok github.com/yusefmosiah/go-choir/cmd/sandbox
+```
+
+deploy packaging checks:
+
+```text
+printf changed files | .github/scripts/deploy-impact-classify
+host_services=gateway,sandbox,sourcecycled
+deploy_vmctl_restart=true
+deploy_active_vm_refresh=true
+
+nix eval --raw .#packages.x86_64-linux.gateway.src
+gateway source includes internal/sourcefetch
+
+nix eval --raw .#packages.x86_64-linux.sourcecycled.src
+sourcecycled source includes internal/sourcefetch
+
+nix eval --raw .#packages.x86_64-linux.sandbox.src
+sandbox source includes internal/sourcefetch
+```
+
+residual risk after implementation: the shared package converges the current
+runtime URL import and source-service fetch adapters, but it still does not
+encode robots/TOS/rate policy, canonical source snapshot creation, or future
+connector-specific acquisition policy.
+
 ### Problem 12: Owner URL Source Repairs Default To Web Lens
 
 Status: `documented_before_fix`.

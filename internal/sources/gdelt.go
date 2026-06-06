@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 )
 
 type GDELTFetcher struct {
@@ -19,7 +21,7 @@ type GDELTFetcher struct {
 
 func NewGDELTFetcher(userAgent string) *GDELTFetcher {
 	return &GDELTFetcher{
-		Client:    sourceFetchHTTPClient(60 * time.Second),
+		Client:    sourcefetch.Client(60 * time.Second),
 		UserAgent: userAgent,
 	}
 }
@@ -27,7 +29,7 @@ func NewGDELTFetcher(userAgent string) *GDELTFetcher {
 func (f *GDELTFetcher) Poll(ctx context.Context, source *Source) (PollResult, error) {
 	started := time.Now().UTC()
 	fetch := NewFetchRecord(*source, source.URL, started)
-	if err := validateSourceFetchURL(source.URL); err != nil {
+	if err := sourcefetch.ValidateURL(source.URL); err != nil {
 		fetch = FinishFetch(fetch, 0, nil, err)
 		return PollResult{Fetch: fetch}, err
 	}
@@ -99,7 +101,7 @@ func (f *GDELTFetcher) Poll(ctx context.Context, source *Source) (PollResult, er
 }
 
 func (f *GDELTFetcher) fetchGKG(ctx context.Context, url string, source *Source, fetchID string) ([]Item, []byte, error) {
-	if err := validateSourceFetchURL(url); err != nil {
+	if err := sourcefetch.ValidateURL(url); err != nil {
 		return nil, nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

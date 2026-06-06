@@ -12,15 +12,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func allowPrivateSourceFetchForTest(t *testing.T) {
 	t.Helper()
-	previous := sourceFetchAllowPrivateNetworkForTests
-	sourceFetchAllowPrivateNetworkForTests = true
+	previous := sourcefetch.SetAllowPrivateNetworkForTests(true)
 	t.Cleanup(func() {
-		sourceFetchAllowPrivateNetworkForTests = previous
+		sourcefetch.SetAllowPrivateNetworkForTests(previous)
 	})
 }
 
