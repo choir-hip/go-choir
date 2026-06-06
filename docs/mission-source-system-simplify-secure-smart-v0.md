@@ -2464,6 +2464,50 @@ scoped owner legal-proposal bounded edit/revise proof, shared source contract
 consolidation across runtime/platform/frontend/export, adversarial/cognitive
 review, dead-path pruning, and the hard mission review report plus PDF.
 
+### Problem 14: Open-Surface Aliases Can Defeat Explicit Web Lens Routing
+
+Status: `documented_before_fix`.
+
+affected contract/invariant: source opening must keep Source Viewer as the
+default for durable artifacts while allowing Web Lens only when the source
+record explicitly requests original/live inspection.
+
+problem: the frontend open plan recognizes exact `open_surface` spellings such
+as `web_lens`, `browser`, `live`, and `original`, but does not normalize common
+serialized aliases such as `web-lens`, `live_original`, or `source_viewer`. For
+a URL-backed source, an explicit `open_surface: "web-lens"` currently fails the
+live-original branch and then falls through to the durable-reader URL branch,
+opening Source Viewer instead of Web Lens. Conversely, future `source_viewer`
+or `reader` aliases are not part of the contract even though platform/export
+metadata may reasonably use them.
+
+evidence: code audit of `frontend/src/lib/vtext-source-renderer.ts` found
+`sourceEntityRequestedOpenSurface` lowercases but does not normalize separators
+or aliases, and `sourceEntityOpenPlan` branches on exact values before falling
+back to `durableReaderTarget` for URL/content/source-service targets.
+
+why this matters: the mission requires a shared source entity/open-surface
+contract across VText, Source Viewer, Web Lens, publication, and export. If
+aliases are not normalized at the frontend boundary, equivalent metadata emitted
+by platform/export can have different open behavior even when it expresses the
+same intent.
+
+first observed version/transition: current `main` after
+`7269278e docs: record owner legal proposal proof`.
+
+acceptance for fix:
+
+- `web-lens`, `web_lens`, `live-original`, and `live_original` all route to Web
+  Lens/live original;
+- `source-viewer`, `source_viewer`, `reader`, `content`, and `source` route to
+  Source Viewer/reader mode;
+- default URL/content/source-service targets still route to Source Viewer;
+- explicit video media routing remains unchanged.
+
+remaining error field: this is a frontend contract normalization fix. It does
+not replace the broader shared source schema consolidation still needed across
+runtime/platform/frontend/export.
+
 ## Suggested `/goal`
 
 ```text
