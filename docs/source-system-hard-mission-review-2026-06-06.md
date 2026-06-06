@@ -24,12 +24,15 @@ The mission now has staging evidence for the hardest correctness claims:
   metadata;
 - owner and guest Source Viewer source-open paths for focused fixtures;
 - SSRF-safe source fetch policy for URL import and YouTube transcript paths;
-- typed source evidence and reader artifact states in the source UI.
+- typed source evidence and reader artifact states in the source UI;
+- generated Go/frontend source-contract alignment from a canonical schema,
+  including staging proof after Node B deployment.
 
 The mission is not globally complete because several broad architectural
 requirements are still proven by focused slices rather than exhaustive contract
-coverage across every future source producer. The remaining risks are explicit
-below.
+coverage across every future source producer. The earlier manual source-contract
+mirroring risk has been reduced by generated schema work after this review was
+first drafted. The remaining risks are explicit below.
 
 ## Cognitive Review
 
@@ -52,8 +55,8 @@ Changed review plan:
 - treat public resolve/export artifacts as stronger proof than UI impressions;
 - treat the legal proposal bounded edit as the central structure-preservation
   verifier;
-- treat manually mirrored frontend/Go contract constants as residual risk even
-  when behavior tests pass;
+- treat generated contract coverage as residual risk until each producer and
+  consumer shape is covered by staged publication/source-open proof;
 - reject stale Playwright storage and direct bookmarklet auth failures as proof
   of product failure unless reproduced through the product renewal path.
 
@@ -61,7 +64,17 @@ Changed review plan:
 
 ### Deploy Identity
 
-Behavior commit deployed to staging:
+Current behavior commit deployed to staging:
+
+`2af0dbb75e5def609988a09b1b96edf1c7bf9520`
+
+Staging health on 2026-06-06 reported proxy and upstream
+`deployed_commit=2af0dbb75e5def609988a09b1b96edf1c7bf9520`.
+
+CI run `27070479996` completed successfully, including Node B deploy job
+`79898767522`. FlakeHub run `27070480006` completed successfully.
+
+Earlier accepted behavior commit:
 
 `8efb05a25430330ada50e1a2ac6ebe2418af9700`
 
@@ -76,14 +89,20 @@ Staging health on 2026-06-06 reported:
 
 Latest docs-only checkpoint:
 
-`e808a7944f971a1d2e47b87592b644ecd7be22dc`
+`2287521a`
 
 This was pushed to `origin/main` and is intentionally not expected to deploy
 because docs-only commits are ignored by CI/deploy path filters.
 
 ### CI
 
-Behavior commit `8efb05a2` had successful GitHub Actions runs:
+Behavior commit `2af0dbb7` had successful GitHub Actions runs:
+
+- CI run `27070479996`;
+- FlakeHub run `27070480006`;
+- Node B deploy job `79898767522`.
+
+Earlier behavior commit `8efb05a2` had successful GitHub Actions runs:
 
 - CI run `27069371444`;
 - FlakeHub run `27069371443`;
@@ -96,6 +115,26 @@ nix develop -c go test ./internal/sourcecontract ./internal/platform -run 'TestN
 ```
 
 Result: passed.
+
+Additional focused checks after generated source-contract schema work:
+
+```text
+nix develop -c go test ./internal/sourcecontract ./internal/platform ./internal/proxy -run 'TestNormalize|TestBuildPublication|TestHandleVTextPublication|TestExport|TestSourceContractSchema' -count=1
+```
+
+Result: passed.
+
+```text
+npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'frontend source contract stays aligned with shared matrix|source evidence states normalize|source open plans normalize|source selectors normalize'
+```
+
+Result: passed locally and against `PLAYWRIGHT_BASE_URL=https://choir.news`.
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js
+```
+
+Result: 3 passed.
 
 ```text
 npm --prefix frontend run build
@@ -117,6 +156,16 @@ Limitations:
 - `screencapture` failed with `could not create image from display`;
 - the accepted owner proof therefore relies on Computer Use observation plus
   stored product/API evidence, not a new PNG.
+
+Fresh Computer Use state after the generated source-contract deploy again
+showed Comet running as `ai.perplexity.comet` on the owner legal-proposal
+publication route, authenticated as `yusefnathanson@me.com`, user id
+`5bd6de97-3b58-408c-bf89-c42c81b083de`. It also showed the legal proposal
+document id `f93cea62-f833-4dae-b414-8e44783d8cbe`, v96
+`5a5532d8-0ff3-44d6-aeef-5ea6cbc08798`, seven source entities, seven source
+markers, Appendix A, a table, and the bounded row. The same page still showed a
+single revisions-poll `401 authentication required` proof-path limitation, so
+that raw polling path remains non-acceptance evidence.
 
 ### Legal Proposal Bounded Edit
 
@@ -174,25 +223,40 @@ Evidence:
 
 ## Hard Findings
 
-### Finding 1: Manual Contract Mirroring Remains Residual Risk
+### Finding 1: Source-Service Breadth Is Focused, Not Exhaustive
 
 Severity: medium.
 
-The backend source contract lives in `internal/sourcecontract`, while the
-frontend source contract lives in `frontend/src/lib/source-contract.ts`.
-Current behavior is aligned for evidence states, reader artifact states,
-selectors, and open surfaces, and focused tests pass. However, the constants are
-still manually mirrored rather than generated from one schema.
-
-This is not a newly confirmed behavior problem, because current staging and
-focused tests prove the important paths. It is a future drift risk.
+The mission has owner and guest Source Viewer proof for focused URL-backed,
+content-item, and source-service-style publication records. It does not prove
+every future source producer, media target, connector source, or stale/blocked
+access branch.
 
 Recommended next move:
 
-- create one generated source-contract schema only after the final report is
-  accepted, so the refactor does not disturb the now-proven behavior.
+- add a generated fixture matrix for source target kind, evidence state, reader
+  artifact state, open surface, and publication visibility.
 
-### Finding 2: Direct Bookmarklet Fetches Are Not Product Auth-Renewal Proof
+### Finding 2: Generated Source Contract Narrows, But Does Not Eliminate, Drift Risk
+
+Severity: low to medium.
+
+The backend/frontend source contract is now generated from canonical
+`internal/sourcecontract/source_contract_schema.json` into Go and TypeScript
+surfaces, with schema hash checks and deployed proof. This closes the earlier
+manual constants mirroring risk for the current source-contract matrix.
+
+Residual risk remains because not every future source entity, reader artifact,
+selector, evidence, and open-surface shape has been promoted into a full typed
+IDL with exhaustive producer coverage.
+
+Recommended next move:
+
+- extend the generated contract only when a real producer/consumer needs the
+  shape, and keep staging publication/source-open proof attached to each new
+  contract expansion.
+
+### Finding 3: Direct Bookmarklet Fetches Are Not Product Auth-Renewal Proof
 
 Severity: low.
 
@@ -209,7 +273,7 @@ Recommended next move:
 - if auth-renewal concerns matter, reproduce through a product UI/API client
   that uses `fetchWithRenewal`, then document a new problem before fixing.
 
-### Finding 3: Non-public Publication Semantics Are Intentionally Not Exposed
+### Finding 4: Non-public Publication Semantics Are Intentionally Not Exposed
 
 Severity: medium.
 
@@ -221,20 +285,6 @@ Residual risk:
 
 - future unlisted/private publication semantics still need route, reader,
   export, retrieval-source, and guest enforcement proof before UI exposure.
-
-### Finding 4: Source-Service Breadth Is Focused, Not Exhaustive
-
-Severity: medium.
-
-The mission has owner and guest Source Viewer proof for focused URL-backed and
-content-item/source-service-style publication records. It does not prove every
-future source producer, media target, connector source, or stale/blocked access
-branch.
-
-Recommended next move:
-
-- add a generated fixture matrix for source target kind, evidence state, reader
-  artifact state, open surface, and publication visibility.
 
 ### Finding 5: Deploy Identity Stamp Still Needs Post-success Distinction
 
@@ -266,29 +316,33 @@ consolidation, after a separate documented problem or refactor plan.
 
 ## Residual Risks
 
-- Contract constants are manually mirrored between Go and TypeScript.
+- Generated source-contract coverage is still narrower than a full IDL for every
+  future source producer/consumer shape.
 - Source Service and connector-like future records need broader fixture
   coverage.
 - Non-public publication semantics remain unimplemented by design.
 - Direct proof scripts can bypass product auth-renewal behavior and should not
   be used as product-path auth evidence.
 - Desktop screenshot capture failed in this environment.
-- Docs-only checkpoint `e808a794` is not deployed; deployed behavior remains
-  `8efb05a2`.
+- Latest docs-only checkpoint `2287521a` is not deployed; deployed behavior
+  remains `2af0dbb7`.
 
 ## Rollback References
 
-- Last deployed behavior commit before the final docs checkpoint:
-  `8efb05a25430330ada50e1a2ac6ebe2418af9700`.
+- Last deployed behavior commit before the latest docs checkpoint:
+  `2af0dbb75e5def609988a09b1b96edf1c7bf9520`.
 - Latest docs/evidence checkpoint:
-  `e808a7944f971a1d2e47b87592b644ecd7be22dc`.
+  `2287521a`.
 - If the publication-policy UI change needs rollback, revert
   `8efb05a25430330ada50e1a2ac6ebe2418af9700` after preserving the mission
   evidence.
+- If the generated source-contract schema deployment needs rollback, revert
+  `2af0dbb75e5def609988a09b1b96edf1c7bf9520` after preserving the mission
+  evidence and schema-generation diagnostics.
 
 ## Next Realism Axis
 
-Build one generated fixture/verifier matrix that crosses:
+Build one broader generated fixture/verifier matrix that crosses:
 
 - source target kind;
 - reader artifact state;
@@ -300,4 +354,3 @@ Build one generated fixture/verifier matrix that crosses:
 
 This is the next high-information move because it attacks the remaining drift
 risk without weakening the behavior already proven on staging.
-
