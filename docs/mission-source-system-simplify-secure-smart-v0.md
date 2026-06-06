@@ -5507,7 +5507,7 @@ mission axes.
 
 ### Problem 34: Nix Deploy Source Closures Exclude Source Contract Schema Assets
 
-Status: `documented_before_source_closure_fix`.
+Status: `source_closure_fix_local_verified_pending_ci`.
 
 problem: commit `519c5e9560370d1dccb459f70eba04a544339ae5` passed GitHub Go
 tests, runtime shards, frontend build, integration smoke, and FlakeHub publish,
@@ -5577,6 +5577,58 @@ planned fix:
   closure or include the required generator/schema context in that closure;
 - rerun focused local checks, push, monitor CI/deploy, and verify staging
   health/deployed acceptance against the fixed commit.
+
+fix and local proof:
+
+- `flake.nix` now includes
+  `internal/sourcecontract/source_contract_schema.json` in Go service source
+  closures whenever `internal/sourcecontract` is included. It does not include
+  `internal/sourcecontract/testdata/source_contract_matrix.json`, preserving
+  the verifier-only testdata deploy-impact fix from Problem 33.
+- `flake.nix` now includes `.mjs` files in the frontend Nix package source
+  closure so `frontend/scripts/generate-source-contract.mjs` is available to
+  the Nix frontend build.
+- `frontend/scripts/generate-source-contract.mjs --check` now detects when the
+  canonical schema is outside a reduced frontend-only source closure and relies
+  on the committed generated file. The full checkout and Go tests still verify
+  the generated file hash against the canonical schema.
+
+verification:
+
+```text
+node frontend/scripts/generate-source-contract.mjs --check
+
+npm --prefix frontend run build
+
+nix develop -c go test ./internal/sourcecontract ./internal/platform ./internal/proxy -run 'TestNormalize|TestBuildPublication|TestHandleVTextPublication|TestExport|TestSourceContractSchema' -count=1
+
+nix eval --raw .#packages.x86_64-linux.platformd.src.outPath
+  -> /nix/store/rz54kj95lggldm8znz5f0i7lqdks1asa-source
+
+test -f /nix/store/rz54kj95lggldm8znz5f0i7lqdks1asa-source/internal/sourcecontract/source_contract_schema.json
+  -> platformd-schema-present
+
+test ! -f /nix/store/rz54kj95lggldm8znz5f0i7lqdks1asa-source/internal/sourcecontract/testdata/source_contract_matrix.json
+  -> platformd-testdata-absent
+
+nix eval --raw .#packages.x86_64-linux.frontend.src.outPath
+  -> /nix/store/crjajz2mipffkzaj2m65gcm9rfz9giaf-source
+
+test -f /nix/store/crjajz2mipffkzaj2m65gcm9rfz9giaf-source/scripts/generate-source-contract.mjs
+  -> frontend-generator-present
+
+test -f /nix/store/crjajz2mipffkzaj2m65gcm9rfz9giaf-source/src/lib/source-contract.generated.ts
+  -> frontend-generated-present
+
+cd /nix/store/crjajz2mipffkzaj2m65gcm9rfz9giaf-source && node scripts/generate-source-contract.mjs --check
+  -> source contract schema is outside this source closure; relying on committed generated source-contract.generated.ts
+```
+
+remaining error field: the local source-closure probes now cover the exact
+files missing in the failed Node B deploy, but this remains pending until the
+fix commit passes GitHub Actions, Node B deploy, and staging health/deployed
+acceptance. The early deploy identity-stamp weakness remains open as a separate
+known platform issue.
 
 ## Suggested `/goal`
 

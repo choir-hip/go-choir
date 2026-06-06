@@ -69,8 +69,9 @@
               rel = relPath path;
               base = baseNameOf path;
               isGoSource = pkgs.lib.hasSuffix ".go" path && !(pkgs.lib.hasSuffix "_test.go" path);
+              isSourceContractSchema = rel == "internal/sourcecontract/source_contract_schema.json";
               inInternalDir = dir:
-                pkgs.lib.hasPrefix (dir + "/") rel && isGoSource;
+                pkgs.lib.hasPrefix (dir + "/") rel && (isGoSource || isSourceContractSchema);
             in
               type == "directory" ||
               (base == "go.mod") ||
@@ -114,6 +115,7 @@
               base != "node_modules" && base != "test-results" && base != ".cache"
             else
               (pkgs.lib.hasSuffix ".js" path) ||
+              (pkgs.lib.hasSuffix ".mjs" path) ||
               (pkgs.lib.hasSuffix ".ts" path) ||
               (pkgs.lib.hasSuffix ".svelte" path) ||
               (pkgs.lib.hasSuffix ".css" path) ||

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,6 +8,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const schemaPath = resolve(root, 'internal/sourcecontract/source_contract_schema.json');
 const outputPath = resolve(root, 'frontend/src/lib/source-contract.generated.ts');
 const check = process.argv.includes('--check');
+
+if (check && !existsSync(schemaPath)) {
+  console.warn('source contract schema is outside this source closure; relying on committed generated source-contract.generated.ts');
+  process.exit(0);
+}
 
 const raw = readFileSync(schemaPath, 'utf8');
 const schema = JSON.parse(raw);
