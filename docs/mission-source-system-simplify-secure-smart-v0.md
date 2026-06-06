@@ -2627,7 +2627,14 @@ not replace the broader backend/runtime/platform shared schema consolidation.
 
 ### 2026-06-06 Source Evidence State UI Fix
 
-Status: `local_correctness_passed_pending_ci_deploy`.
+Status: `accepted_on_staging_for_source_evidence_state_ui`.
+
+Behavior commit:
+
+```text
+681b5dbc78858e94037efbcbca9b4238b2c54542
+fix: render typed source evidence states
+```
 
 Implementation:
 
@@ -2655,6 +2662,24 @@ npm --prefix frontend run build
 result: passed
 ```
 
+CI/deploy evidence:
+
+```text
+CI run: 27064141567 passed
+FlakeHub run: 27064141571 passed
+Node B deploy job: 79882003069 passed
+staging proxy deployed_commit: 681b5dbc78858e94037efbcbca9b4238b2c54542
+staging sandbox deployed_commit: 681b5dbc78858e94037efbcbca9b4238b2c54542
+staging deployed_at: 2026-06-06T13:55:31Z
+```
+
+Deployed acceptance proof:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies source-gap repair"
+result: passed
+```
+
 What this proves locally:
 
 - the frontend evidence normalizer maps aliases including `pending`,
@@ -2666,9 +2691,8 @@ What this proves locally:
   before opening the source artifact.
 
 Residual risk: this closes Problem 15 for the frontend user surfaces covered by
-the focused tests. CI, deploy, and staging acceptance are still pending for
-this behavior commit, and the backend/runtime/platform shared schema remains a
-separate consolidation axis.
+the focused local and deployed tests. The backend/runtime/platform shared schema
+remains a separate consolidation axis.
 
 ## Suggested `/goal`
 
