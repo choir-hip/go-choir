@@ -1416,3 +1416,33 @@ windows with `sourceEntity.reader_snapshot.text_content` still attempt live URL
 import, and the error branch wins over the snapshot renderer. The repair should
 skip import whenever a source entity provides reader snapshot text, not only in
 published reader mode.
+
+## 2026-06-06 Source Viewer Default Routing Fix Evidence
+
+Status: `local_fix_ready_for_ci`.
+
+Repair made after the documentation checkpoints:
+
+- Simplified `sourceEntityOpenAppID` so `display.open_surface: "source"` maps to
+  the Source Viewer (`content`) regardless of URL presence.
+- Preserved explicit browser/Web Lens routing: `display.open_surface:
+  "browser"` still opens the Browser app, and URL-only entities without an
+  explicit source/content policy still fall back to Browser.
+- Updated `ContentViewer.loadContentItem` so any source entity with
+  `reader_snapshot.text_content` renders that durable snapshot without first
+  attempting live URL import. The original URL remains available through the
+  `Open original` link.
+- Added a product-level Playwright regression where a URL-backed source entity
+  with `open_surface: "source"` opens Source Viewer, renders reader snapshot
+  text, and does not open Web Lens.
+
+Local verification:
+
+```text
+pnpm --dir frontend exec playwright test tests/vtext-source-entities.spec.js -g "source URL opens Source Viewer"
+pnpm --dir frontend build
+```
+
+Result: both passed locally. Remaining acceptance, if this behavior is landed,
+is the normal push -> CI -> Node B deploy -> staging identity loop plus an
+owner/public source-open smoke check against a URL-backed source.

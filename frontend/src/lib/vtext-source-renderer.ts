@@ -164,7 +164,6 @@ export function sourceEntityOpenAppID(entity: any): string {
   const targetKind = sourceEntityTargetKind(entity);
   const requested = String(entity?.display?.open_surface || record?.display?.open_surface || '').trim();
   if (targetKind === 'published_vtext_span' || targetKind === 'publication_version') return 'vtext';
-  if (requested === 'source' && sourceEntityTargetURL(entity)) return 'browser';
   if (requested === 'source' || requested === 'content') return 'content';
   if (requested) return requested;
   if ((entity?.kind || record?.kind) === 'youtube_video') return 'video';

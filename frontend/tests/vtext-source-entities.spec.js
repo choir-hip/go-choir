@@ -255,6 +255,100 @@ test('VText opens content-item text sources as reader-mode markdown', async ({ d
   await expect(page.locator('[data-content-viewer][data-source-reader-mode="true"]')).toHaveCount(1);
 });
 
+test('VText source URL opens Source Viewer unless browser is explicitly requested', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  await page.evaluate(async () => {
+    await fetch('/api/desktop/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windows: [], active_window_id: '' }),
+    });
+  });
+  await page.reload();
+  await expect(page.locator('[data-desktop]')).toBeVisible({ timeout: 10000 });
+
+  const created = await page.evaluate(async () => {
+    const title = `Source URL Routing Fixture ${Date.now()}`;
+    const sourceURL = 'https://example.com/source-url-routing-fixture';
+    const docRes = await fetch('/api/vtext/documents', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
+    const doc = await docRes.json();
+    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: '# Source URL Routing Fixture\n\nThis claim opens a source URL [1](source:src-url-source-viewer).',
+        author_kind: 'user',
+        author_label: 'browser-test',
+        metadata: {
+          source_entities: [
+            {
+              entity_id: 'src-url-source-viewer',
+              kind: 'web_source',
+              label: 'Source URL routing fixture',
+              target: {
+                target_kind: 'url',
+                url: sourceURL,
+                canonical_url: sourceURL,
+              },
+              selectors: [
+                {
+                  selector_kind: 'text_quote',
+                  text_quote: 'Reader snapshot text proves Source Viewer opened instead of Web Lens.',
+                },
+              ],
+              reader_snapshot: {
+                text_content: '# Source URL routing fixture\n\nReader snapshot text proves Source Viewer opened instead of Web Lens.',
+              },
+              display: {
+                inline_mode: 'embedded_excerpt',
+                expanded_mode: 'source_card',
+                open_surface: 'source',
+                default_collapsed: true,
+              },
+              evidence: {
+                state: 'available',
+                research_state: 'confirmed',
+              },
+              provenance: {
+                created_by: 'browser-test',
+                rights_scope: 'public_url_snapshot',
+                untrusted_source_text: true,
+              },
+            },
+          ],
+        },
+      }),
+    });
+    if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);
+    return { title };
+  });
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-url-source-viewer"]');
+  await expect(citation).toBeVisible({ timeout: 10000 });
+  await citation.click();
+  await rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source]').click();
+
+  const sourceWindow = page.locator('[data-content-viewer]').last();
+  await expect(sourceWindow).toBeVisible({ timeout: 10000 });
+  await expect(sourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
+  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Reader snapshot text proves Source Viewer opened');
+  await expect(page.locator('[data-browser-app]')).toHaveCount(0);
+});
+
 test('published source readers prefer publication snapshots over loaded content items', async ({ desktopSession }) => {
   const { page } = desktopSession;
   await page.evaluate(async () => {

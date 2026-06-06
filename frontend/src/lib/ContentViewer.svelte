@@ -40,7 +40,7 @@
   async function loadContentItem() {
     const contentId = appContext?.contentId || appContext?.content_id || '';
     if (item || (!contentId && !sourceUrl)) return;
-    if (isPublishedSourceReader && sourceEntityReaderSnapshot) return;
+    if (sourceEntityReaderSnapshot) return;
     loading = true;
     error = '';
     try {
