@@ -6778,3 +6778,90 @@ next action:
 
 - Repair the verifier to assert the durable post-attachment behavior and keep
   request status assertions for the two write legs.
+
+## 2026-06-06 Deployment Evidence: Source Action Extraction And Durable Attach Proof
+
+status: deployed_verified_checkpoint_incomplete
+
+commits:
+
+- `4f8fb2af` (`docs: document source artifact attach ui failure`) documented
+  the initial `method not allowed` evidence before any source-attachment
+  verifier or code change.
+- `73ab8c52bab7d6d233e1f29c6754994da71201dc`
+  (`refactor: centralize vtext source actions`) extracted source review,
+  import, content-item creation, and source-attachment write actions from
+  `VTextEditor.svelte` into `frontend/src/lib/vtext-source-actions.ts`, and
+  added the owner source-panel attach regression proof.
+- `1582f453` (`docs: document source attach verifier flake`) documented the
+  deployed verifier's transient-copy assertion problem after the durable write
+  requests were observed returning `201`.
+- `4ea251977a5c7adbed8edc00e5c73569a0a82705`
+  (`test: harden source attachment proof`) repaired the test to assert durable
+  source behavior instead of ephemeral panel status text.
+
+CI and deploy:
+
+- CI run `27049566366` for `73ab8c52` passed: frontend build, Go vet/build,
+  runtime shards, non-runtime tests, integration smoke, and Node B deploy.
+- FlakeHub publish run `27049566383` for `73ab8c52` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `73ab8c52bab7d6d233e1f29c6754994da71201dc`, deployed at
+  `2026-06-06T02:05:44Z`.
+- CI run `27049658704` for verifier-only commit `4ea25197` passed. Its frontend
+  build and Node B deploy jobs were skipped because the commit only touched
+  tests/docs.
+- FlakeHub publish run `27049658687` for `4ea25197` passed.
+
+deployed automated proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText source panel attaches
+  readable text" --project=chromium --timeout=120000` -> passed.
+- This proof created a readable markdown content item through
+  `POST /api/content/items`, attached it to an existing source entity through
+  `POST /api/vtext/documents/{id}/source-attachments`, expanded the citation,
+  and opened the attached reader-mode markdown source window.
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> passed.
+
+deployed Comet owner proof:
+
+- Computer Use was available in this thread; `list_apps` found Comet running
+  and `get_app_state` returned the authenticated owner publication at
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The owner publication showed the client-ready
+  `choir_private_legal_cloud_proposal.vtext` draft, not the short source-demo
+  draft.
+- The publication showed the expanded ABA Formal Opinion 512 source note beside
+  proposal prose in the magazine/journal source-flow surface.
+- The source note rendered content-first source text: title, supporting excerpt,
+  `Open source`, and `Close`, without a bunched top source list.
+- Computer Use clicked the publication-side `Open source` control. A new ABA
+  Formal Opinion 512 source window opened with reader-mode source text,
+  source evidence, source entity, and provenance disclosure controls.
+
+belief-state update:
+
+- The original local 405 was caused by a stale local service process, not a
+  current source route.
+- The source action extraction reduced `VTextEditor.svelte` ownership of
+  source write payloads without introducing a parallel repair system.
+- The staging source path now proves typed source repair, Pretext/journal
+  source-flow rendering, and owner-entered readable source artifact attachment.
+- Remaining mission work is still broad: continue simplifying old source/window
+  paths, reduce duplicated Comet source windows/taskbar accumulation, improve
+  publication text extraction so the raw text-entry mirror does not concatenate
+  hidden controls into prose, and continue the legal-cloud artifact toward more
+  fully researched/cited client-ready content.
