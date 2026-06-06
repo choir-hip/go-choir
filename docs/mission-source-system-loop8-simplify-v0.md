@@ -1841,3 +1841,63 @@ staging proof:
   typed evidence-state metadata, DOCX/PDF binary signatures, source manifest
   metadata, and export-profile metadata policy fields.
 ```
+
+## Loop 8 VText Structure Preservation Extraction Target
+
+Status: `documented_before_code`.
+
+Next backend simplification target: extract VText structure-preservation
+helpers out of `internal/runtime/vtext.go` into a same-package module. This
+boundary owns durable metadata carry-forward, stale user-draft content rebasing,
+Markdown table-block detection, collapsed-table recovery, omitted-table
+restoration, comparable Markdown projections, and collapsed text boundary
+mapping.
+
+This is a behavior-preserving extraction. It must not change revision handler
+flow, store write ordering, revision metadata keys, table normalization,
+restore semantics, stale-save conflict behavior, source entity carry-forward,
+or publication/export behavior. The extraction is valuable because this logic
+protects the owner-appendix/legal-proposal table survival path and bounded
+table edits, but currently lives inside the main VText API handler monolith.
+
+acceptance:
+
+- `internal/runtime/vtext_structure.go` owns pure structure preservation and
+  stale-draft rebase helpers;
+- `internal/runtime/vtext.go` keeps HTTP handlers and revision store writes;
+- existing tests for collapsed table recovery, historical table restore,
+  concurrent stale-save rejection/rebase, and source-entity carry-forward pass;
+- runtime shard tests pass or any blocker is recorded precisely;
+- no source/publication security or rich-export contract changes.
+
+local implementation/evidence:
+
+```text
+change:
+  Extracted durable metadata carry-forward, stale user-draft content rebase,
+  Markdown table block detection, collapsed/omitted table recovery, comparable
+  Markdown projections, and collapsed text boundary mapping into
+  internal/runtime/vtext_structure.go.
+
+line-count effect:
+  internal/runtime/vtext.go             2180 lines
+  internal/runtime/vtext_structure.go    324 lines
+
+local focused proof:
+  nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVText(MarkdownStructureStabilization|RestoreRevisionNormalizesMalformedTableTailRows|UserSaveAndAgentRevisePreserveSourcesAndTableShape|UserSaveRemovesDuplicateMarkdownTableSeparator|CreateRevisionRejectsStaleParent|CreateRevisionRebasesAllowedStaleUserDraft|DiagnosisIncludesStructureEvidence|DiagnosisCanOmitRevisionContentForStructureEvidence)'
+  -count=1 -v
+  result: passed for matched tests covering structure stabilization, bounded
+  table cell edit, omitted appendix-table restoration, restore normalization,
+  source/table carry-forward, duplicate separator removal, stale-save rebase,
+  and diagnosis structure omission.
+
+  nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextCreateRevisionRejectsStaleHead|TestVTextDiagnosisReportsCurrentRevisionVersion'
+  -count=1 -v
+  result: passed.
+
+local shard proof:
+  nix develop -c scripts/go-test-runtime-shards
+  result: passed.
+```
