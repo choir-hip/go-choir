@@ -260,6 +260,193 @@ Acceptance:
 - final report includes commit SHAs, CI, deploy identity, staging proof,
   rollback refs, residual risks, and next realism axis.
 
+## Loop 8 Audit And Refactor Design
+
+Status: `initial_design_ready`.
+
+Audit date: 2026-06-06.
+
+### Size And Responsibility Evidence
+
+```text
+wc -l:
+  frontend/src/lib/VTextEditor.svelte              3768
+  internal/runtime/vtext.go                        5667
+  internal/platform/service.go                     1302
+  internal/platform/export_formats.go               848
+  internal/platform/source_metadata.go              375
+  internal/platform/publication_document.go         356
+  internal/platform/handlers.go                     229
+```
+
+Findings:
+
+- `frontend/src/lib/VTextEditor.svelte` owns too many responsibilities in one
+  Svelte component: recent-document chooser, editor state, autosave, toolbar
+  chrome, publish menu/result/download UI, published reader mode, source panel
+  orchestration, source artifact forms, source-ref click handling, compare and
+  merge panels, source journal flow mounting, and document rendering.
+- The frontend already has useful extraction anchors:
+  `vtext-source-renderer.ts`, `vtext-source-launcher.ts`,
+  `vtext-source-actions.ts`, `vtext-source-flow.ts`,
+  `vtext-source-flow.css`, `VTextSourcePanel.svelte`, and
+  `vtext-markdown-renderer.ts`. Future extraction should strengthen these
+  existing seams rather than create a parallel source UI contract.
+- `internal/runtime/vtext.go` is the largest backend risk. It mixes document
+  CRUD/handlers, file open/import, `.vtext` shortcut manifests, Markdown lineage
+  migration, source gap repair, source artifact attachment, table preservation,
+  diagnosis, compare/merge, appagent prompting, and event emission.
+- The backend also already has extraction anchors:
+  `internal/sourcecontract`, `internal/markdownstructure`,
+  `internal/runtime/vtext_media_sources.go`,
+  `internal/runtime/vtext_controller.go`,
+  `internal/runtime/vtext_proposals.go`,
+  `internal/runtime/vtext_workflow_verifier.go`, and the newer
+  `internal/platform/publication_document.go`/`export_formats.go` spine.
+- The first rich-export cleanup removed the old PDF
+  `publicationDocumentPlainText`/`wrapPDFLines` shortcut path. Similar pruning
+  should be searched for by behavior surface rather than by file-size pressure.
+
+### Design Principles
+
+- Extract around stable contracts, not around visual proximity. A component or
+  package boundary is valid only if it has a named input/output contract and can
+  be tested without the full editor/runtime.
+- Preserve the source contract as the shared grammar. The frontend should keep
+  normalizing source evidence/open-surface/reader states through
+  `source-contract.ts` and source renderer helpers; backend publication/export
+  should keep normalizing through `internal/sourcecontract`.
+- Keep publication export profile logic in the publication/export spine. VText
+  editor code should request export/download, not know how HTML/DOCX/PDF encode
+  source manifests.
+- Do not split files merely to make line counts smaller. Each extraction should
+  remove a concrete coupling: event handling, UI chrome, source contract
+  normalization, document rendering, publication actions, import projection, or
+  appagent prompt construction.
+- Performance constraint: extractions must not add network calls, additional
+  publication bundle loads, or repeated Markdown/source parsing on the hot
+  editing path. Prefer derived state passed down as props and single-pass
+  render/export over recomputation inside child components.
+
+### Frontend Extraction Order
+
+1. `VTextToolbar.svelte`
+   - Owns version controls, state label, prompt/cancel/compare/source/publish
+     buttons, restore/merge actions, and stable toolbar dimensions.
+   - Inputs: revision state, loading/action state, labels, source candidate
+     count, booleans for published/historical/merge/compare modes.
+   - Outputs: semantic events only (`prompt`, `cancel`, `compare`, `sources`,
+     `restore`, `merge-preview`, `publish-toggle`, etc.).
+   - Verification: existing `vtext-authoring-history.spec.js` toolbar-height
+     assertions plus publish-menu click proof.
+
+2. `VTextPublishControls.svelte`
+   - Owns publish menu, publish-result panel, copy/open/download actions, and
+     published-result layout.
+   - Inputs: version label, publish result, public URL, pending state, available
+     formats.
+   - Outputs: `publish`, `cancel`, `copy-link`, `open-link`, `copy-text`,
+     `download`.
+   - Verification: publish policy/menu test and visual proof that controls do
+     not obscure the document.
+
+3. `VTextDocumentSurface.svelte`
+   - Owns editor/published article surface, rendered Markdown injection,
+     source-ref pointer/keyboard handlers, focus state, and source-flow
+     mounting hooks.
+   - Inputs: rendered HTML, editability/read-only mode, source entities,
+     document body flags.
+   - Outputs: content edits, source ref open/toggle, focus/scroll events.
+   - Verification: source transclusion tests and long-doc editing tests.
+
+4. `VTextCompareMergePanel.svelte`
+   - Owns compare result, merge preview, suggestion selection, errors, and
+     accept/discard controls.
+   - Verification: semantic compare/merge tests; no change to model prompt or
+     backend merge semantics.
+
+5. Keep `VTextSourcePanel.svelte` as the source-work drawer, but move shared
+   source selection/form state helpers out of `VTextEditor.svelte` into a small
+   `vtext-source-state.ts` only after the component extractions make the
+   remaining state shape obvious.
+
+### Backend Extraction Order
+
+1. `internal/runtime/vtext_import.go`
+   - Move file-open projections, `.vtext` shortcut manifests, DOCX/PDF/text
+     import projection helpers, alias/title canonicalization, and original
+     content item preservation.
+   - Keep API handler behavior unchanged. Tests: `vtext-markdown-lineage`,
+     file-browser VText open tests, focused Go tests for import projections.
+
+2. `internal/runtime/vtext_lineage.go`
+   - Move Markdown lineage types/helpers: source gap detection, citation
+     resolution application, lineage metadata, source repair resolution
+     manifests, and table-shaped row normalization entry points that are
+     lineage-specific.
+   - Leave generic table preservation helpers in or move them to a structure
+     module only if reused by restore/create paths.
+
+3. `internal/runtime/vtext_sources.go`
+   - Move VText source entity decoding/normalization, source gap repair, and
+     source artifact attachment.
+   - Do not fork `internal/sourcecontract`; this module should call it.
+
+4. `internal/runtime/vtext_merge.go`
+   - Move semantic compare/merge model request/normalization/prompt helpers.
+   - Preserve current model policy path and no-new-role-assumption invariant.
+
+5. `internal/runtime/vtext_api_handlers.go`
+   - After helper extraction, keep thin HTTP handlers and response shaping in a
+     clearly named file rather than the current monolith.
+
+### Publication Export Package Boundary
+
+`internal/platform/publication_document.go` and `export_formats.go` are now the
+canonical rich-export spine but are still in first modular shape. The next
+backend package boundary should be:
+
+```text
+internal/publicationexport
+  Document AST
+  Source manifest
+  Export profile
+  HTML renderer
+  DOCX renderer
+  PDF renderer
+```
+
+`internal/platform` should own storage, route resolution, access policy, and
+export endpoint orchestration. The export package should own pure rendering
+from an already-authorized immutable `PublicationBundle`/projection input. Do
+not move until staging-rich-export behavior has remained stable through at
+least one more cleanup pass; otherwise the package move will obscure renderer
+bugs.
+
+### Performance Checks
+
+- Local focused backend check:
+  `nix develop -c go test ./internal/platform ./internal/sourcecontract`.
+- Runtime shard check before and after backend VText extraction:
+  `nix develop -c scripts/go-test-runtime-shards`.
+- Frontend check after VText component extraction:
+  `npm --prefix frontend run build` and focused Playwright tests for VText
+  authoring/history, source entities, source-service publication, and long-doc
+  editing.
+- Staging acceptance for behavior-affecting extraction:
+  same deployed identity gate as code fixes plus the relevant focused
+  Playwright/API proof.
+
+### Forbidden Cleanup
+
+- Do not move source normalization into Svelte components.
+- Do not make export renderers call live source acquisition or reader services.
+- Do not use local proof to claim toolbar/source/publication behavior is fixed.
+- Do not remove compatibility aliases until search evidence and staging proof
+  show no current VText/source/publication path still emits them.
+- Do not split `internal/runtime/vtext.go` by copying types into duplicate
+  packages; move them with the smallest import graph that compiles.
+
 ## Initial Problems
 
 ### Problem L8-1: VText Publish Menu Still Has Hit-Test Debt
