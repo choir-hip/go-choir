@@ -3869,6 +3869,57 @@ entities, and source launch/open-plan code paths. The broader mission still
 needs a generated or otherwise single-source cross-language contract and shared
 ReaderArtifact/SourceSelector/OpenPlan structs.
 
+### Problem 24: Frontend Source Open-Plan Resolution Still Lives In The Renderer
+
+Status: `documented_before_fix`.
+
+problem: `frontend/src/lib/source-contract.ts` now owns source evidence and
+open-surface normalization, but the actual Source Viewer/Web Lens/media/VText
+open-plan decision still lives in `frontend/src/lib/vtext-source-renderer.ts`.
+That renderer-specific function decides whether a source opens `content`,
+`browser`, `video`, or `vtext` based on target kind, requested open surface,
+source kind, and URL presence. Source launch, Source Viewer, publication-local
+source entities, and Web Lens routing all depend on this decision, so leaving
+it in the renderer preserves a hidden behavior contract outside the contract
+module.
+
+affected contract/invariant: Source Viewer must remain the default for durable
+URL/content-item/source-service artifacts, while Web Lens must be an explicit
+live/original action. That is an open-plan contract, not only a rendering
+detail. If the renderer remains the only owner, future Source Viewer, Web Lens,
+or publication code can accidentally bypass or fork the rule.
+
+confirmed evidence:
+
+```text
+frontend/src/lib/source-contract.ts:
+  owns evidence-state and open-surface normalization only.
+
+frontend/src/lib/vtext-source-renderer.ts:
+  sourceEntityOpenPlan computes appId/openSurface/mode/liveOriginal/readerMode.
+  sourceEntityOpenAppID and vtext-source-launcher depend on this renderer
+  function for opening sources.
+
+frontend/tests/vtext-source-entities.spec.js:
+  source open-plan tests import sourceEntityOpenPlan from the renderer rather
+  than a source-contract module.
+```
+
+acceptance for fix:
+
+- move the generic open-plan resolver into `frontend/src/lib/source-contract.ts`;
+- keep entity-shape extraction in the renderer, but pass a small normalized
+  input object to the contract resolver;
+- preserve current Source Viewer default, explicit Web Lens/live routing,
+  media routing, and published VText routing;
+- add or keep focused frontend tests proving the same open-plan behavior through
+  the exported renderer API and the contract resolver.
+
+remaining error field: this is a frontend open-plan consolidation slice. It
+does not yet create backend/shared generated `SourceOpenPlan` structs or cover
+ReaderArtifact/SourceSelector contracts, but it removes another renderer-owned
+behavior rule from the source opening path.
+
 ## Suggested `/goal`
 
 ```text
