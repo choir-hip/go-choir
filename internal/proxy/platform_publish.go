@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/platform"
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 )
 
 const maxPublishedSourceSnapshotRunes = 20000
@@ -205,13 +206,13 @@ func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, us
 			continue
 		}
 		if !contentItemAllowsPublishedSnapshot(item) {
-			entity["reader_snapshot_status"] = map[string]any{"state": "not_publication_safe"}
+			entity["reader_snapshot_status"] = map[string]any{"state": sourcecontract.ReaderArtifactStateNotPublicationSafe}
 			changed = true
 			continue
 		}
 		text := strings.TrimSpace(item.TextContent)
 		if text == "" {
-			entity["reader_snapshot_status"] = map[string]any{"state": "bounded_excerpt_only", "reason": "source_import_empty"}
+			entity["reader_snapshot_status"] = map[string]any{"state": sourcecontract.ReaderArtifactStateBoundedExcerptOnly, "reason": "source_import_empty"}
 			changed = true
 			continue
 		}
@@ -232,7 +233,7 @@ func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, us
 			"access_scope":        "publication_reader",
 		}
 		entity["reader_snapshot_status"] = map[string]any{
-			"state":           "reader_snapshot_ready",
+			"state":           sourcecontract.ReaderArtifactStateReady,
 			"text_char_count": len([]rune(text)),
 			"truncated":       truncated,
 		}
@@ -279,6 +280,9 @@ func (h *Handler) publicationSourceSnapshotItem(r *http.Request, sandboxURL, use
 }
 
 func sourceSnapshotStatus(state, reason string, attrs map[string]any) map[string]any {
+	if normalized := sourcecontract.NormalizeReaderArtifactState(state); normalized != "" {
+		state = normalized
+	}
 	status := map[string]any{"state": state}
 	if strings.TrimSpace(reason) != "" {
 		status["reason"] = strings.TrimSpace(reason)

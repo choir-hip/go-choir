@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/platform"
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 )
 
 func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing.T) {
@@ -251,10 +252,10 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 	if snapshot["original_media_type"] != "text/html; charset=utf-8" {
 		t.Fatalf("reader snapshot original_media_type = %#v, want source html type", snapshot["original_media_type"])
 	}
-	if !strings.Contains(metadata, "reader_snapshot_ready") {
-		t.Fatalf("platform metadata missing reader snapshot status: %s", metadata)
-	}
 	status := publicationReaderSnapshotStatus(t, gotPlatformReq.Metadata, "src-url")
+	if status["state"] != sourcecontract.ReaderArtifactStateReady {
+		t.Fatalf("reader snapshot state = %#v, want %q", status["state"], sourcecontract.ReaderArtifactStateReady)
+	}
 	if status["quality"] != "warning" {
 		t.Fatalf("reader snapshot quality = %#v, want warning", status["quality"])
 	}
@@ -342,8 +343,9 @@ func TestHandleVTextPublicationRecordsURLSnapshotImportFailureState(t *testing.T
 		t.Fatalf("status: got %d body %s", w.Code, w.Body.String())
 	}
 	metadata := string(gotPlatformReq.Metadata)
-	if !strings.Contains(metadata, "reader_snapshot_status") || !strings.Contains(metadata, "import_failed") {
-		t.Fatalf("platform metadata missing import failure state: %s", metadata)
+	status := publicationReaderSnapshotStatus(t, gotPlatformReq.Metadata, "src-url")
+	if status["state"] != sourcecontract.ReaderArtifactStateImportFailed {
+		t.Fatalf("reader snapshot state = %#v, want %q", status["state"], sourcecontract.ReaderArtifactStateImportFailed)
 	}
 	if !strings.Contains(metadata, "source_import_failed") || !strings.Contains(metadata, "http_403") || !strings.Contains(metadata, "http_status") {
 		t.Fatalf("platform metadata missing import failure diagnostics: %s", metadata)
