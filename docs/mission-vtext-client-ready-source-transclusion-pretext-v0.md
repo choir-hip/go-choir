@@ -17,8 +17,9 @@ status: checkpoint_incomplete
 
 last checkpoint:
 
-- Docs checkpoint `fbe5a82ef6ee26763d07ceabfa105d2dcb6e0223` records deployed
-  proof for source-flow stylesheet simplification commit `bd27c07e`.
+- Docs checkpoint pending after behavior commit
+  `1ba4764681831371c7c9a9aea27fe711e0c02e63` records deployed proof for
+  no-source-needed source review.
 
 current artifact state:
 
@@ -38,13 +39,15 @@ what shipped:
 - Legacy noncanonical VText editor file write-through was removed.
 - Source-flow styling was extracted out of the monolithic VText editor and now
   lives with the Pretext source-flow surface.
+- Source review now supports explicit no-source-needed marker omission with a
+  recorded reason, without creating fake source entities.
 
 what was proven:
 
-- CI run `27046935553` and FlakeHub run `27046935544` succeeded for
-  `fbe5a82ef6ee26763d07ceabfa105d2dcb6e0223`.
+- CI run `27050794362` and FlakeHub run `27050794349` succeeded for
+  `1ba4764681831371c7c9a9aea27fe711e0c02e63`.
 - Node B `/health` reported proxy and sandbox deployed at that SHA on
-  `2026-06-06T00:18:09Z`.
+  `2026-06-06T03:04:22Z`.
 - Comet staging proof opened the deployed legal-cloud route, expanded the ABA
   Formal Opinion source marker into a minimal right-side journal note with
   proposal prose wrapped beside it, and opened the reader-mode source window.
@@ -52,6 +55,8 @@ what was proven:
 - Public Markdown export remained available with 38,449 content bytes, compact
   `source:` markers,
   no `missing source` prose, and `private_material_omitted: true`.
+- Deployed Playwright source-review proof passed for both source-backed marker
+  repair and no-source-needed marker omission.
 
 unproven or partial claims:
 
@@ -71,30 +76,34 @@ belief-state changes:
 
 remaining error field:
 
-- Replace operator-grade source repair controls with typed claim/source review.
+- Continue replacing operator-grade source repair controls with typed
+  claim/source review.
 - Improve Obscura/web-source cleanup into Markdown reader artifacts and keep
   iframe/Web Lens as fallback.
 - Continue simplification in `VTextEditor.svelte`, source artifact state, and
   `internal/runtime/vtext.go` without changing the source graph contract.
-- Reduce remaining generic card/pill layering outside the Pretext journal note.
+- Reduce remaining generic card/pill layering outside the Pretext journal note
+  and implement expanded source wrapping through Pretext line-flow, not card
+  stacking.
 
 highest-impact remaining uncertainty:
 
-- Whether the next UI pass can make source expansion feel like a journal
-  footnote/marginal note that preserves reading flow while still opening the
-  full source artifact and preserving all publication policy boundaries.
+- Whether the next UI pass can route article text around expanded source notes
+  with Pretext line ranges in a magazine/academic-journal layout while keeping
+  source content minimal, readable, and policy-preserving.
 
 next executable probe:
 
-- Continue source realism by improving the source acquisition/cleanup path:
-  convert failed or noisy web captures into cleaned Markdown reader artifacts
-  before iframe fallback, and keep citation/source review claim-based rather
-  than JSON/operator-based.
+- Continue source realism by improving the source layout and acquisition paths:
+  implement Pretext line-flow wrapping for expanded source notes, convert
+  failed or noisy web captures into cleaned Markdown reader artifacts before
+  iframe fallback, and keep citation/source review claim-based rather than
+  JSON/operator-based.
 
 suggested resume goal string:
 
 ```text
-/goal Continue docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md from checkpoint fbe5a82e. Keep Pretext as the magazine/journal line-flow mechanism for article prose around minimal source notes. Before code, document any newly found source-acquisition/source-window problem. Next improve cleaned Markdown reader artifacts and fallback behavior for arbitrary web sources while preserving canonical VText, source transclusions, source publication policy, Markdown export, CI, Node B deploy, and Comet staging proof.
+/goal Continue docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md from checkpoint 1ba47646. Keep Pretext as the magazine/journal line-flow mechanism for article prose around minimal source notes. Before code, document any newly found source-layout/source-acquisition/source-window problem. Next improve expanded source wrapping and cleaned Markdown reader artifacts while preserving canonical VText, source transclusions, source publication policy, Markdown export, CI, Node B deploy, and Comet staging proof.
 ```
 
 evidence artifact refs:
@@ -105,8 +114,8 @@ evidence artifact refs:
 rollback refs:
 
 - Last deployed behavior-changing commit:
-  `bd27c07e`.
-- Last docs checkpoint: `fbe5a82e`.
+  `1ba47646`.
+- Last docs checkpoint: pending.
 
 ## Goal String
 
@@ -7471,7 +7480,7 @@ next repair:
 
 ## 2026-06-06 Repair: Source Review Can Omit No-Source-Needed Markers
 
-status: local_verified_pending_deploy
+status: deployed_verified_checkpoint_incomplete
 
 root cause:
 
@@ -7508,6 +7517,60 @@ local proof:
   `pnpm --dir frontend exec playwright test
   frontend/tests/vtext-markdown-lineage.spec.js --project=chromium
   --timeout=120000` -> passed, 8 tests.
+
+CI and deploy:
+
+- Problem checkpoint `539b5927` (`docs: document no-source-needed review gap`)
+  was committed before behavior changes.
+- Behavior commit `1ba4764681831371c7c9a9aea27fe711e0c02e63`
+  (`fix: support no-source-needed source reviews`) was pushed to
+  `origin/main`.
+- CI run `27050794362` passed: frontend build, Go vet/build, non-runtime Go
+  tests, runtime shards, integration-tagged smoke, and Node B deploy.
+- FlakeHub publish run `27050794349` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `1ba4764681831371c7c9a9aea27fe711e0c02e63`, deployed at
+  `2026-06-06T03:04:22Z`.
+
+deployed proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel can
+  mark a citation gap as no source needed" --project=chromium
+  --timeout=120000` -> passed.
+- The deployed proof imported a Markdown lineage document, opened it as
+  canonical VText, selected the source-review `no_source_needed` outcome,
+  submitted a reason, observed a source-repair POST with no `source_entities`,
+  and verified the resulting revision removed `[2]`, cleared `source_gaps`,
+  created no source entities, and recorded the omit reason in
+  `source_repair_resolutions`.
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair and opens repaired source window" --project=chromium
+  --timeout=120000` -> passed.
+- The source-backed deployed proof verified the existing repair path still
+  writes `link_source`, creates an owner-supplied source entity, renders the
+  inline transclusion, and opens the repaired source window.
+
+Comet owner-account state:
+
+- Computer Use remained available and Comet was running as
+  `ai.perplexity.comet`.
+- Comet was owner-authenticated on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The legal-cloud proposal opened as
+  `My version of choir_private_legal_cloud_proposal.vtext`, rendered the full
+  proposal heading and source markers, and had reader-mode source artifact
+  windows open for ABA Model Rule 1.6 and ABA Formal Opinion 512.
+- This Comet pass confirms owner-account staging availability and legal-cloud
+  source-window continuity after the repair. The no-source-needed interaction
+  itself was proven through deployed Playwright because the current owner
+  legal-cloud proposal no longer contains a safe disposable unresolved marker
+  for this repair action.
 
 belief-state update:
 
