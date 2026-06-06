@@ -2809,7 +2809,21 @@ boundaries.
 
 ### 2026-06-06 Shared Backend Source Evidence Contract
 
-Status: `local_correctness_passed_pending_ci_deploy`.
+Status: `accepted_on_staging_for_shared_backend_source_evidence_contract`.
+
+Behavior commit:
+
+```text
+38d0c969b57e84dc9e11626277fb2857324af22d
+refactor: share source evidence contract
+```
+
+Deploy packaging fix:
+
+```text
+81eb39964a769f39b977c20ef73f18333960ac87
+fix: include source contract in deploy builds
+```
 
 Implementation:
 
@@ -2844,13 +2858,27 @@ What this proves locally:
 - VText source repair and publication selector evidence paths still pass their
   focused tests.
 
+CI/deploy evidence:
+
+```text
+behavior CI run: 27064439772 passed Go gates; deploy failed before packaging fix
+behavior FlakeHub run: 27064439773 passed
+deploy packaging problem checkpoint: 9dda47a7 docs: record source contract deploy packaging gap
+deploy packaging fix CI run: 27064564602 passed
+deploy packaging fix FlakeHub run: 27064564607 passed
+Node B deploy job: 79883126145 passed
+staging proxy deployed_commit: 81eb39964a769f39b977c20ef73f18333960ac87
+staging sandbox deployed_commit: 81eb39964a769f39b977c20ef73f18333960ac87
+staging deployed_at: 2026-06-06T14:14:28Z
+```
+
 Residual risk: this closes the backend evidence-state implementation drift, but
 it is not yet a generated/shared frontend contract and does not yet cover
 ReaderArtifact, selector, or open-plan structs.
 
 ### Problem 17: Shared Internal Source Contract Was Omitted From Deploy Source Closures
 
-Status: `documented_before_fix`.
+Status: `fixed_and_accepted_on_staging`.
 
 Confirmed evidence:
 
@@ -2892,9 +2920,31 @@ Acceptance for fix:
 - push the fix, monitor CI and staging deploy, and verify staging reports the
   fixed commit identity.
 
+Fix evidence:
+
+```text
+documentation checkpoint: 9dda47a7 docs: record source contract deploy packaging gap
+fix commit: 81eb39964a769f39b977c20ef73f18333960ac87
+local classifier check:
+  internal/sourcecontract/evidence.go -> gateway,platformd,proxy,sandbox,sourcecycled
+local filtered source closure check:
+  platformd/proxy/gateway/sourcecycled/sandbox source closures contain internal/sourcecontract/evidence.go
+local full package build limitation:
+  x86_64-linux Nix packages could not be built from this aarch64-darwin workspace because the configured remote builder was aarch64-linux only
+local Go regression:
+  nix develop -c go test ./internal/sourcecontract -count=1 passed
+CI run: 27064564602 passed
+FlakeHub run: 27064564607 passed
+Node B deploy job: 79883126145 passed
+staging proxy deployed_commit: 81eb39964a769f39b977c20ef73f18333960ac87
+staging sandbox deployed_commit: 81eb39964a769f39b977c20ef73f18333960ac87
+```
+
 Remaining error field: this is a deploy packaging and impact-classification
-gap, not a flaw in the evidence-state semantics. It must be fixed before the
-shared backend source evidence contract can be accepted on staging.
+gap, not a flaw in the evidence-state semantics. The immediate closure gap is
+fixed for the current shared backend source evidence contract. Residual risk:
+future shared source packages outside `internal/sourcecontract` still need an
+explicit source-closure and deploy-impact entry when introduced.
 
 ## Suggested `/goal`
 
