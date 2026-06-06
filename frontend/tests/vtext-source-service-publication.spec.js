@@ -239,10 +239,12 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
   await expect(publishedReader).toBeVisible({ timeout: 15_000 });
   const citation = publishedReader.locator('[data-vtext-source-ref][data-source-entity-id="src-public-content"]').first();
   await citation.click();
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).not.toContainText('Full cleaned reader source detail');
+  const sourceNote = publishedReader.locator('[data-vtext-source-flow-note]').filter({ hasText: 'ABA Formal Opinion 512 cleaned source' }).last();
+  await expect(sourceNote).toBeVisible({ timeout: 10_000 });
+  await expect(sourceNote).toContainText(excerpt);
+  await expect(sourceNote).not.toContainText('Full cleaned reader source detail');
 
-  await citation.locator('[data-vtext-open-source]').click();
+  await sourceNote.locator('[data-vtext-open-source]').click();
   const sourceWindow = page.locator('[data-browser-app]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
   await expect(sourceWindow).toContainText('Source reader snapshot');
@@ -257,8 +259,10 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
     await expect(guestReader).toBeVisible({ timeout: 15_000 });
     const guestCitation = guestReader.locator('[data-vtext-source-ref][data-source-entity-id="src-public-content"]').first();
     await guestCitation.click();
-    await expect(guestCitation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
-    await guestCitation.locator('[data-vtext-open-source]').click();
+    const guestSourceNote = guestReader.locator('[data-vtext-source-flow-note]').filter({ hasText: 'ABA Formal Opinion 512 cleaned source' }).last();
+    await expect(guestSourceNote).toBeVisible({ timeout: 10_000 });
+    await expect(guestSourceNote).toContainText(excerpt);
+    await guestSourceNote.locator('[data-vtext-open-source]').click();
     const guestSourceWindow = guestPage.locator('[data-browser-app]').last();
     await expect(guestSourceWindow).toBeVisible({ timeout: 10000 });
     await expect(guestSourceWindow).toContainText('Source reader snapshot');

@@ -5740,3 +5740,31 @@ intended repair:
   parallel source-open mechanism.
 - Re-run the deployed E2E to reach the authenticated and guest source-window
   assertions.
+
+## 2026-06-06 Local Repair: Source-Open Verifier Follows Journal Note
+
+status: staging_verified_pending_commit
+
+change:
+
+- `vtext-source-service-publication.spec.js` now waits for the mounted
+  `[data-vtext-source-flow-note]`, asserts the bounded source excerpt there,
+  and clicks the visible note-scoped `[data-vtext-open-source]`.
+- The guest half of the same test uses the same visible source-note topology.
+- No production source-open path, data attribute, or source-flow behavior was
+  changed.
+
+deployed proof against already-deployed `bb3e1ff8`:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-service-publication.spec.js -g "publishes public
+  content-item sources with cleaned reader snapshots" --project=chromium
+  --timeout=120000`
+  -> `1 passed (6.8s)`.
+- This proved: publication-carried `reader_snapshot` contains the full cleaned
+  reader text, inline/journal source note stays bounded to the excerpt,
+  authenticated source window opens as `Source reader snapshot`, and an
+  unauthenticated guest reader opens the same cleaned source snapshot without
+  rendering an iframe.
