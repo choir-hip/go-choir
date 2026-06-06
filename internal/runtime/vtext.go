@@ -4134,13 +4134,21 @@ func (h *APIHandler) HandleVTextRestoreRevision(w http.ResponseWriter, r *http.R
 		"restore_mode":               strings.TrimSpace(req.Mode),
 		"draft_line":                 defaultDraftLine(),
 	})
+	content := sourceRev.Content
+	if normalized, changed := markdownstructure.NormalizeTableShapedRows(content); changed {
+		content = normalized
+		metadata = mergeVTextRevisionMetadata(metadata, map[string]any{
+			"vtext_structure_stabilized":        true,
+			"vtext_structure_stabilized_reason": "normalized_restored_markdown_table_rows",
+		})
+	}
 	rev := types.Revision{
 		RevisionID:       uuid.New().String(),
 		DocID:            docID,
 		OwnerID:          ownerID,
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      ownerID,
-		Content:          sourceRev.Content,
+		Content:          content,
 		Citations:        sourceRev.Citations,
 		Metadata:         metadata,
 		ParentRevisionID: doc.CurrentRevisionID,

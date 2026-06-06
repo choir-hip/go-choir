@@ -3721,6 +3721,108 @@ func TestVTextMarkdownStructureStabilizationHandlesPartialTableContexts(t *testi
 	}
 }
 
+func TestVTextRestoreRevisionNormalizesMalformedTableTailRows(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+	createDocReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents", vtextCreateDocRequest{
+		Title: "Restore Table Tail Fixture",
+	})
+	w := httptest.NewRecorder()
+	h.HandleVTextDocumentsRoot(w, createDocReq)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create document: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var doc vtextCreateDocResponse
+	if err := json.NewDecoder(w.Body).Decode(&doc); err != nil {
+		t.Fatalf("decode document response: %v", err)
+	}
+
+	malformedSource := strings.Join([]string{
+		"# Legal Cloud",
+		"",
+		"Appendix A: Glossary",
+		"",
+		"| Term | Definition |",
+		"| --- | --- |",
+		"| Agent | Multi-step worker. |",
+		"| Vector database | Stores embeddings for retrieval. |",
+		"",
+		"| Work product | Durable output.",
+		"",
+		"End of proposal.",
+	}, "\n")
+	sourceReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+doc.DocID+"/revisions", vtextCreateRevisionRequest{
+		Content: malformedSource,
+		Metadata: json.RawMessage(`{
+			"created_from":"historical_import",
+			"source_entities":[{"entity_id":"src-restore-rule","label":"ABA Model Rule 1.6"}]
+		}`),
+	})
+	w = httptest.NewRecorder()
+	h.HandleVTextRevisions(w, sourceReq)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create malformed source revision: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var sourceResp vtextRevisionResponse
+	if err := json.NewDecoder(w.Body).Decode(&sourceResp); err != nil {
+		t.Fatalf("decode source revision response: %v", err)
+	}
+	sourceRev, err := s.GetRevision(ctx, sourceResp.RevisionID, "user-1")
+	if err != nil {
+		t.Fatalf("GetRevision source: %v", err)
+	}
+	sourceTables := extractMarkdownTableBlocks(sourceRev.Content)
+	if len(sourceTables) != 1 || sourceTables[0].EndLine-sourceTables[0].StartLine+1 != 4 {
+		t.Fatalf("source revision should retain the historical partial table shape:\n%s", sourceRev.Content)
+	}
+
+	currentContent := strings.Replace(malformedSource, "Legal Cloud", "Legal Cloud Current", 1)
+	currentReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+doc.DocID+"/revisions", vtextCreateRevisionRequest{
+		Content:          currentContent,
+		ParentRevisionID: sourceResp.RevisionID,
+		Metadata:         json.RawMessage(`{"created_from":"current_head"}`),
+	})
+	w = httptest.NewRecorder()
+	h.HandleVTextRevisions(w, currentReq)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create current revision: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	restoreReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+doc.DocID+"/restore", vtextRestoreRevisionRequest{
+		RevisionID: sourceResp.RevisionID,
+		Mode:       "primary",
+	})
+	w = httptest.NewRecorder()
+	h.HandleVTextRouter(w, restoreReq)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("restore revision: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var restoredResp vtextRevisionResponse
+	if err := json.NewDecoder(w.Body).Decode(&restoredResp); err != nil {
+		t.Fatalf("decode restored revision response: %v", err)
+	}
+	restored, err := s.GetRevision(ctx, restoredResp.RevisionID, "user-1")
+	if err != nil {
+		t.Fatalf("GetRevision restored: %v", err)
+	}
+	if !strings.Contains(restored.Content, "| Vector database | Stores embeddings for retrieval. |\n| Work product | Durable output. |") {
+		t.Fatalf("restored revision did not normalize the table tail row:\n%s", restored.Content)
+	}
+	restoredTables := extractMarkdownTableBlocks(restored.Content)
+	if len(restoredTables) != 1 || restoredTables[0].EndLine-restoredTables[0].StartLine+1 != 5 {
+		t.Fatalf("restored revision table shape = %#v; content:\n%s", restoredTables, restored.Content)
+	}
+	meta := decodeRevisionMetadata(restored.Metadata)
+	if meta["vtext_structure_stabilized"] != true ||
+		meta["vtext_structure_stabilized_reason"] != "normalized_restored_markdown_table_rows" {
+		t.Fatalf("restored metadata did not record normalization: %#v", meta)
+	}
+	entities := decodeVTextSourceEntities(meta["source_entities"])
+	if len(entities) != 1 || entities[0].EntityID != "src-restore-rule" {
+		t.Fatalf("restored source_entities = %#v", meta["source_entities"])
+	}
+}
+
 func TestVTextMarkdownStructureStabilizationAllowsExplicitTableDeletion(t *testing.T) {
 	parentContent := strings.Join([]string{
 		"# Appendix",
