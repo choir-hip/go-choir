@@ -32,18 +32,17 @@ test('vtext uses the document surface as the window and exposes version navigati
   await expect(next).toBeDisabled();
 });
 
-test('vtext publish requires explicit public policy acknowledgement and forwards policy', async ({ desktopSession }) => {
+test('vtext publish keeps policy behind the publish menu and forwards policy', async ({ desktopSession }) => {
   const { page, baseURL } = desktopSession;
   await openVText(page);
 
   const editor = page.locator('[data-vtext-editor-area]');
-  await editor.fill('Publish policy fixture.\n\nThis revision should publish only after explicit owner approval.');
+  await editor.fill('Publish policy fixture.\n\nThis revision should publish from an explicit menu confirmation.');
 
-  const policyPanel = page.locator('[data-vtext-publish-policy]');
   const publishButton = page.locator('[data-vtext-publish]');
-  await expect(policyPanel).toBeVisible();
-  await expect(policyPanel.locator('[data-vtext-publish-policy-summary]')).toContainText('Public route');
-  await expect(publishButton).toBeDisabled();
+  await expect(page.locator('[data-vtext-publish-policy]')).toHaveCount(0);
+  await expect(page.locator('[data-vtext-publish-menu]')).toHaveCount(0);
+  await expect(publishButton).toBeEnabled();
 
   let publishPayload = null;
   await page.route('**/api/platform/vtext/publications', async (route) => {
@@ -60,9 +59,15 @@ test('vtext publish requires explicit public policy acknowledgement and forwards
     });
   });
 
-  await page.locator('[data-vtext-publish-public-confirm]').check();
-  await expect(publishButton).toBeEnabled();
   await publishButton.click();
+  const publishMenu = page.locator('[data-vtext-publish-menu]');
+  await expect(publishMenu).toBeVisible();
+  await expect(publishMenu.locator('[data-vtext-publish-policy-summary]')).toContainText('Route');
+  await expect(publishMenu.locator('[data-vtext-publish-policy-summary]')).toContainText('Public');
+  await expect(publishMenu.locator('[data-vtext-publish-policy-summary]')).toContainText('Snapshots included');
+  await expect(publishMenu.locator('[data-vtext-publish-policy-summary]')).toContainText('txt, md, html, docx, pdf');
+
+  await page.locator('[data-vtext-publish-confirm]').click();
 
   await expect(page.locator('[data-vtext-publish-result]')).toBeVisible({ timeout: 10000 });
   expect(publishPayload).toMatchObject({

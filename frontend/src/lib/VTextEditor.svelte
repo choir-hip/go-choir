@@ -96,8 +96,7 @@
   let publishedProposal = null;
   let publishedActionPending = false;
   let publishResult = null;
-  let publishPolicyAcknowledged = false;
-  let publishPolicyAcknowledgedFor = '';
+  let publishMenuOpen = false;
   let cancelPending = false;
   let compareResult = null;
   let compareError = '';
@@ -723,11 +722,6 @@
       download_allowed: true,
       formats: ['txt', 'md', 'html', 'docx', 'pdf'],
     };
-  }
-
-  function handlePublishPolicyAcknowledgement(event) {
-    publishPolicyAcknowledged = !!event.currentTarget.checked;
-    publishPolicyAcknowledgedFor = publishPolicyAcknowledged ? publishPolicyKey : '';
   }
 
   function openPublishedURL(result = publishResult) {
@@ -1472,11 +1466,6 @@
       dispatch('authrequired', { kind: 'publish_vtext', appId: 'vtext', appName: 'VText', title: currentDoc.title });
       return;
     }
-    if (!publishPolicyReady) {
-      error = 'Approve the public publication policy before publishing.';
-      saveStatus = 'Publish policy required';
-      return;
-    }
     publishedActionPending = true;
     error = '';
     publishResult = null;
@@ -1491,8 +1480,7 @@
         accessPolicy: buildExplicitPublishAccessPolicy(),
         exportPolicy: buildExplicitPublishExportPolicy(),
       });
-      publishPolicyAcknowledged = false;
-      publishPolicyAcknowledgedFor = '';
+      publishMenuOpen = false;
       const copied = await copyPublicURL(publicURLForPublishResult(publishResult));
       const opened = openPublishedURL(publishResult);
       if (opened) {
@@ -2207,12 +2195,7 @@
   $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly;
   $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published VText document' : 'VText document';
   $: editorSurfaceAriaMultiline = isPublishedReadOnly ? undefined : 'true';
-  $: publishPolicyKey = `${currentDoc?.doc_id || ''}:${currentRevision?.revision_id || ''}:${versionLabel}`;
-  $: publishPolicyReady = publishPolicyAcknowledged && publishPolicyAcknowledgedFor === publishPolicyKey;
-  $: if (publishPolicyAcknowledged && publishPolicyAcknowledgedFor !== publishPolicyKey) {
-    publishPolicyAcknowledged = false;
-    publishPolicyAcknowledgedFor = '';
-  }
+  $: if (publishMenuOpen && (!currentDoc || isPublishedMode || loading || submitting || agentPending || !!mergePreview)) publishMenuOpen = false;
   $: sourceGaps = revisionSourceGaps(currentRevision);
   $: sourceEntities = revisionSourceEntities(currentRevision, publishedBundle);
   $: sourceCandidates = sourceRepairCandidates(editorValue, sourceGaps);
@@ -2447,41 +2430,64 @@
                 </button>
               {/if}
             {/if}
-            <button
-              class="secondary-action"
-              data-vtext-publish
-              on:click={handlePublishCurrent}
-              disabled={loading || submitting || agentPending || !!mergePreview || publishedActionPending || !currentDoc || !publishPolicyReady}
-            >
-              {publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}
-            </button>
+            <div class="publish-menu-wrap">
+              <button
+                class="secondary-action"
+                data-vtext-publish
+                aria-haspopup="menu"
+                aria-expanded={publishMenuOpen}
+                on:click={() => (publishMenuOpen = !publishMenuOpen)}
+                disabled={loading || submitting || agentPending || !!mergePreview || publishedActionPending || !currentDoc}
+              >
+                {publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}
+              </button>
+              {#if publishMenuOpen}
+                <div class="publish-menu" data-vtext-publish-menu role="menu" aria-label="Publication policy">
+                  <div class="publish-menu-heading">
+                    <p class="eyebrow">Publication policy</p>
+                    <h3>Publish {versionLabel} publicly</h3>
+                  </div>
+                  <dl class="publish-menu-facts" data-vtext-publish-policy-summary>
+                    <div>
+                      <dt>Route</dt>
+                      <dd>Public</dd>
+                    </div>
+                    <div>
+                      <dt>Sources</dt>
+                      <dd>Snapshots included</dd>
+                    </div>
+                    <div>
+                      <dt>Copy and downloads</dt>
+                      <dd>txt, md, html, docx, pdf</dd>
+                    </div>
+                  </dl>
+                  <div class="publish-menu-actions">
+                    <button
+                      type="button"
+                      class="primary-action"
+                      data-vtext-publish-confirm
+                      on:click={handlePublishCurrent}
+                      disabled={publishedActionPending}
+                    >
+                      {publishedActionPending ? 'Publishing…' : 'Publish public version'}
+                    </button>
+                    <button
+                      type="button"
+                      class="secondary-action"
+                      data-vtext-publish-cancel
+                      on:click={() => (publishMenuOpen = false)}
+                      disabled={publishedActionPending}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              {/if}
+            </div>
           {/if}
         {/if}
       </div>
     </div>
-
-    {#if !isPublishedMode && currentDoc}
-      <section class="publication-panel publication-policy" data-vtext-publish-policy>
-        <div class="publication-heading">
-          <p class="eyebrow">Publication policy</p>
-          <div class="publication-policy-summary" data-vtext-publish-policy-summary>
-            <span>Public route</span>
-            <span>Source snapshots</span>
-            <span>Copy and downloads: txt, md, html, docx, pdf</span>
-          </div>
-        </div>
-        <label class="publication-policy-confirm">
-          <input
-            type="checkbox"
-            checked={publishPolicyReady}
-            on:change={handlePublishPolicyAcknowledgement}
-            data-vtext-publish-public-confirm
-            disabled={loading || submitting || agentPending || publishedActionPending || !!mergePreview}
-          />
-          <span>I approve publishing this revision to a public route.</span>
-        </label>
-      </section>
-    {/if}
 
     {#if agentPending}
       <div
@@ -2756,7 +2762,7 @@
     border-bottom: 1px solid var(--choir-border-strong);
     background: var(--choir-state-selected);
     max-height: 4.2rem;
-    overflow: hidden;
+    overflow: visible;
     transition:
       opacity 180ms ease,
       transform 180ms ease,
@@ -2774,6 +2780,7 @@
     padding-bottom: 0;
     border-bottom-color: transparent;
     opacity: 0;
+    overflow: hidden;
     pointer-events: none;
     transform: translateY(-100%);
   }
@@ -3144,6 +3151,74 @@
     overflow: hidden;
   }
 
+  .publish-menu-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .publish-menu {
+    position: absolute;
+    top: calc(100% + 0.48rem);
+    right: 0;
+    z-index: 8;
+    width: min(22rem, calc(100vw - 2rem));
+    display: grid;
+    gap: 0.72rem;
+    padding: 0.78rem;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 0.5rem;
+    background: var(--choir-surface-elevated);
+    box-shadow: var(--choir-shadow-lg);
+    color: var(--choir-text-primary);
+  }
+
+  .publish-menu-heading h3 {
+    margin: 0.12rem 0 0;
+    color: var(--choir-text-primary);
+    font-size: 0.92rem;
+    line-height: 1.2;
+  }
+
+  .publish-menu-facts {
+    display: grid;
+    gap: 0.48rem;
+    margin: 0;
+  }
+
+  .publish-menu-facts div {
+    display: grid;
+    grid-template-columns: 6.7rem minmax(0, 1fr);
+    gap: 0.62rem;
+    align-items: baseline;
+    min-width: 0;
+  }
+
+  .publish-menu-facts dt,
+  .publish-menu-facts dd {
+    margin: 0;
+    min-width: 0;
+    font-size: 0.76rem;
+    line-height: 1.35;
+  }
+
+  .publish-menu-facts dt {
+    color: var(--choir-text-muted);
+    font-weight: 720;
+  }
+
+  .publish-menu-facts dd {
+    color: var(--choir-text-secondary);
+    overflow-wrap: anywhere;
+  }
+
+  .publish-menu-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.48rem;
+    min-width: 0;
+  }
+
   .rendered-doc {
     flex: 1 1 auto;
     min-height: 0;
@@ -3434,49 +3509,6 @@
     border-bottom-color: var(--choir-status-success);
   }
 
-  .publication-policy {
-    grid-template-columns: minmax(0, 1fr) minmax(14rem, auto);
-    background: var(--choir-surface-pane);
-  }
-
-  .publication-policy-summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.42rem;
-    min-width: 0;
-  }
-
-  .publication-policy-summary span {
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 999px;
-    padding: 0.24rem 0.48rem;
-    color: var(--choir-text-secondary);
-    font-size: 0.68rem;
-    font-weight: 700;
-    line-height: 1.2;
-  }
-
-  .publication-policy-confirm {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.44rem;
-    min-width: 0;
-    color: var(--choir-text-primary);
-    font-size: 0.74rem;
-    font-weight: 720;
-    line-height: 1.3;
-    cursor: pointer;
-  }
-
-  .publication-policy-confirm input {
-    flex: 0 0 auto;
-  }
-
-  .publication-policy-confirm span {
-    min-width: 0;
-  }
-
   .public-link {
     display: inline-block;
     max-width: min(34rem, 100%);
@@ -3733,8 +3765,14 @@
       padding: 0.62rem 0.7rem;
     }
 
-    .publication-policy-confirm {
-      justify-content: flex-start;
+    .publish-menu {
+      right: -0.2rem;
+      width: min(20rem, calc(100vw - 1.4rem));
+    }
+
+    .publish-menu-facts div {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.12rem;
     }
 
     .publication-heading h2 {
