@@ -5931,7 +5931,7 @@ or non-public publication semantics.
 
 ### Problem 35: Platform Publication Metadata Can Preserve Raw Reader Artifact Aliases
 
-Status: `fixed_with_local_contract_proof_pending_ci_deploy`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: the prior reader-artifact contract repair normalized
 `reader_snapshot_status.state` in the proxy publication enrichment path, but
@@ -6027,9 +6027,50 @@ deploy-impact:
   frontend/guest/vmctl/host_os deploy flags=false
 ```
 
-remaining proof required: push the behavior commit, monitor CI and FlakeHub,
-confirm Node B deploy identity for the new behavior commit, and run the focused
-deployed publication/export contract proof on staging.
+post-push CI/deploy/staging proof:
+
+```text
+behavior commit:
+  03371ea798707793d7c39e0e4864bb18d2470a0e
+  platform: normalize publication reader artifact states
+
+CI:
+  https://github.com/choir-hip/go-choir/actions/runs/27071050888
+  conclusion=success
+  Go gates: success
+  Build Frontend: skipped as expected
+  Deploy to Staging (Node B) job 79900322230: success
+
+FlakeHub:
+  https://github.com/choir-hip/go-choir/actions/runs/27071050883
+  conclusion=success
+
+staging health:
+  https://choir.news/health
+  status=ok
+  vmctl_status=ok
+  proxy deployed_commit=03371ea798707793d7c39e0e4864bb18d2470a0e
+  upstream deployed_commit=03371ea798707793d7c39e0e4864bb18d2470a0e
+  deployed_at=2026-06-06T19:00:02Z
+
+deployed product-path proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-contract-publication.tmp.spec.js
+  result: 1 passed
+
+temporary verifier behavior:
+  the deployed spec created a VText through /api/vtext/documents and
+  /api/vtext/documents/{id}/revisions, published it through
+  /api/platform/vtext/publications, resolved it through
+  /api/platform/publications/resolve, and exported Markdown through
+  /api/platform/publications/export. It supplied reader_snapshot_status.state
+  as snapshot-ready and verified both resolve and export metadata returned
+  reader_snapshot_ready while preserving quality, canonical open_surface,
+  canonical selector kind, and canonical evidence state.
+```
+
+remaining error field: Problem 35 is closed for platform publication/export
+normalization. The broader private/public visibility and future connector
+producer matrix remains open.
 
 ## Suggested `/goal`
 

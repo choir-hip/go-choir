@@ -66,13 +66,19 @@ Changed review plan:
 
 Current behavior commit deployed to staging:
 
-`2af0dbb75e5def609988a09b1b96edf1c7bf9520`
+`03371ea798707793d7c39e0e4864bb18d2470a0e`
 
 Staging health on 2026-06-06 reported proxy and upstream
-`deployed_commit=2af0dbb75e5def609988a09b1b96edf1c7bf9520`.
+`deployed_commit=03371ea798707793d7c39e0e4864bb18d2470a0e`.
 
-CI run `27070479996` completed successfully, including Node B deploy job
-`79898767522`. FlakeHub run `27070480006` completed successfully.
+CI run `27071050888` completed successfully, including Node B deploy job
+`79900322230`. FlakeHub run `27071050883` completed successfully.
+
+This commit normalizes platform publication/export
+`reader_snapshot_status.state` aliases through the shared backend reader
+artifact contract before source entity JSON is stored. Staging `/health`
+reported `deployed_at=2026-06-06T19:00:02Z`, `status=ok`, and
+`vmctl_status=ok`.
 
 Latest verifier commit:
 
@@ -106,7 +112,13 @@ non-deployed artifacts.
 
 ### CI
 
-Behavior commit `2af0dbb7` had successful GitHub Actions runs:
+Behavior commit `03371ea7` had successful GitHub Actions runs:
+
+- CI run `27071050888`;
+- FlakeHub run `27071050883`;
+- Node B deploy job `79900322230`.
+
+Earlier behavior commit `2af0dbb7` had successful GitHub Actions runs:
 
 - CI run `27070479996`;
 - FlakeHub run `27070480006`;
@@ -253,13 +265,15 @@ Severity: medium.
 The mission has owner and guest Source Viewer proof for focused URL-backed,
 content-item, and source-service-style publication records. It now also has a
 platform verifier that sends every canonical evidence state through publication
-bundle and export metadata. It does not prove every future source producer,
-media target, connector source, or non-public access branch.
+bundle and export metadata, plus a deployed platform verifier for reader
+artifact alias normalization through publication resolve and Markdown export.
+It does not prove every future source producer, media target, connector source,
+or non-public access branch.
 
 Recommended next move:
 
 - extend the current fixture matrix across source target kind, reader artifact
-  state, open surface, and publication visibility.
+  state, open surface, owner/guest authorization, and publication visibility.
 
 ### Finding 2: Generated Source Contract Narrows, But Does Not Eliminate, Drift Risk
 
@@ -343,20 +357,23 @@ consolidation, after a separate documented problem or refactor plan.
 - Generated source-contract coverage is still narrower than a full IDL for every
   future source producer/consumer shape.
 - Source Service and connector-like future records still need broader fixture
-  coverage beyond the current source-service/content-item/URL-backed slices.
+  coverage beyond the current source-service/content-item/URL-backed slices,
+  though reader artifact aliases now have deployed platform publication/export
+  proof.
 - Non-public publication semantics remain unimplemented by design.
 - Direct proof scripts can bypass product auth-renewal behavior and should not
   be used as product-path auth evidence.
 - Desktop screenshot capture failed in this environment.
-- Latest verifier/docs checkpoint `8f7e1084` is not deployed; deployed behavior
-  remains `2af0dbb7` because the commit changed only docs and tests.
+- Latest deployed behavior checkpoint is `03371ea7`; the earlier
+  evidence-state-only verifier `8f7e1084` remains CI-only because it changed
+  only docs and tests.
 
 ## Rollback References
 
-- Last deployed behavior commit before the latest docs checkpoint:
-  `2af0dbb75e5def609988a09b1b96edf1c7bf9520`.
+- Last deployed behavior commit:
+  `03371ea798707793d7c39e0e4864bb18d2470a0e`.
 - Latest docs/evidence checkpoint:
-  `8f7e1084`.
+  `03371ea7` plus this report refresh.
 - If the publication-policy UI change needs rollback, revert
   `8efb05a25430330ada50e1a2ac6ebe2418af9700` after preserving the mission
   evidence.
@@ -366,8 +383,8 @@ consolidation, after a separate documented problem or refactor plan.
 
 ## Next Realism Axis
 
-Build one broader generated fixture/verifier matrix that extends the new
-evidence-state publication/export verifier across:
+Build one broader generated fixture/verifier matrix that extends the current
+evidence-state and reader-artifact publication/export verifiers across:
 
 - source target kind;
 - reader artifact state;
