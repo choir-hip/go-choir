@@ -1300,6 +1300,55 @@ staging proof:
     /tmp/choir-rich-export-staging-proof/docx-quicklook/rich-export-staging-proof.docx.png
 ```
 
+## Loop 8 Semantic Compare/Merge Extraction Target
+
+Status: `documented_before_code`.
+
+Next backend simplification target: extract VText semantic compare/merge
+helpers and HTTP handlers from `internal/runtime/vtext.go` into a same-package
+module.
+
+This is a behavior-preserving extraction, not a semantic merge redesign. The
+model prompt, provider retry path, VText model policy resolution, evidence
+records, merge-edit sanitizer, revision metadata, and API request/response
+shapes must remain unchanged. The extraction is valuable because semantic
+compare/merge currently mixes provider prompting, model result normalization,
+HTTP handler orchestration, merge-preview evidence, and revision acceptance
+inside the main VText monolith.
+
+acceptance:
+
+- `internal/runtime/vtext.go` loses the semantic compare/merge implementation
+  without introducing a parallel model or source contract;
+- existing semantic merge unit tests still cover provider-backed JSON, summary
+  fallback, and provenance stripping;
+- runtime shard tests pass before any deploy claim;
+- staging proof after deploy uses an existing VText history/compare product
+  path or records a precise limitation if provider-backed semantic merge cannot
+  be safely exercised from staging.
+
+local result:
+
+```text
+implementation:
+  internal/runtime/vtext_merge.go now owns semantic compare/merge helpers,
+  provider-backed prompt/model calls, model-result normalization, merge edit
+  application, and semantic compare/preview/accept HTTP handlers.
+
+line-count effect:
+  internal/runtime/vtext.go        3550 lines
+  internal/runtime/vtext_merge.go   533 lines
+
+local focused proof:
+  nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextSemanticMerge|TestApplyVTextModelMergeEdits'
+  result: ok
+
+local shard proof:
+  nix develop -c scripts/go-test-runtime-shards
+  result: passed
+```
+
 ## Suggested Goal String
 
 ```text
