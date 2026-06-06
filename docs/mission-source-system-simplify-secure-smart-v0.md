@@ -5505,6 +5505,79 @@ or open-surface shape with a typed IDL, and it still leaves broader source
 service fixture coverage and owner legal-proposal end-to-end proof as separate
 mission axes.
 
+### Problem 34: Nix Deploy Source Closures Exclude Source Contract Schema Assets
+
+Status: `documented_before_source_closure_fix`.
+
+problem: commit `519c5e9560370d1dccb459f70eba04a544339ae5` passed GitHub Go
+tests, runtime shards, frontend build, integration smoke, and FlakeHub publish,
+but the Node B deploy job failed because the Nix service/frontend package
+source closures did not include the new embedded source-contract JSON schema
+and frontend generator script context.
+
+affected contract/invariant: staging acceptance depends on the same declared
+Nix packaging path that Node B deploy uses. Go package tests and ordinary
+frontend build are insufficient if Nix source filters omit non-Go assets needed
+by `go:embed` or omit build-time frontend generator inputs. A source-contract
+schema change must be packaged with the runtime services and frontend bundle
+that consume it.
+
+evidence:
+
+```text
+behavior commit:
+  519c5e9560370d1dccb459f70eba04a544339ae5
+
+CI run:
+  https://github.com/choir-hip/go-choir/actions/runs/27070378361
+
+passed jobs:
+  Detect Staging Deploy Impact
+  Go Test (non-runtime)
+  Go Vet + Build
+  Go Test (integration-tagged smoke)
+  Go Test (internal/runtime shards 0-3)
+  Build Frontend
+  Go Vet + Test + Build
+
+FlakeHub:
+  https://github.com/choir-hip/go-choir/actions/runs/27070378398
+  conclusion=success
+
+failed deploy job:
+  Deploy to Staging (Node B), job 79898478253
+
+platformd/proxy Nix package failure:
+  internal/sourcecontract/schema.go:11:12:
+  pattern source_contract_schema.json: no matching files found
+
+frontend Nix package failure:
+  Error: Cannot find module '/build/source/scripts/generate-source-contract.mjs'
+```
+
+additional evidence: staging health after the failed deploy reported proxy and
+upstream `deployed_commit=519c5e9560370d1dccb459f70eba04a544339ae5` and
+`deployed_at=2026-06-06T18:29:53Z` even though the deploy job failed. This
+recurs the known deploy identity-stamp weakness: health can name the target
+checkout before all selected Nix builds/install/restarts succeed.
+
+suspected owner: `flake.nix` source filters for `goServiceSrc` and
+`frontendPkg`.
+
+why local/UI-only fix is insufficient: local `go test` and `npm run build`
+proved behavior in the full checkout, but Node B deploy packages filtered
+source trees before building. The fix must update Nix packaging source
+closures and then pass the actual staging deploy path.
+
+planned fix:
+
+- include the embedded source-contract schema JSON in Go service Nix source
+  closures whenever `internal/sourcecontract` is included;
+- make the frontend generator check compatible with the Nix frontend package
+  closure or include the required generator/schema context in that closure;
+- rerun focused local checks, push, monitor CI/deploy, and verify staging
+  health/deployed acceptance against the fixed commit.
+
 ## Suggested `/goal`
 
 ```text
