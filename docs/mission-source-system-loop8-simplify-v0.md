@@ -1732,4 +1732,25 @@ local proof:
 
   nix develop -c go test ./internal/platform ./internal/sourcecontract
   result: passed
+
+commit/deploy proof:
+  commit 143db3ba407d9e87297490cc03cc4468faa9a3a9
+  GitHub Actions CI 27076765965 passed.
+  FlakeHub publish 27076765961 passed.
+  Node B deploy job 79915440789 passed.
+  /health reported proxy and sandbox deployed_commit
+  143db3ba407d9e87297490cc03cc4468faa9a3a9, deployed_at
+  2026-06-06T23:25:37Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000
+  npm --prefix frontend run e2e --
+  tests/rich-export-profile-staging.tmp.spec.js
+  result: 1 passed; temporary spec and Playwright .last-run.json were deleted
+  after the run.
+
+  The proof created a source-backed VText publication through deployed product
+  APIs and verified the shared default-professional profile contract in HTML
+  export metadata/body, DOCX custom properties/styles, PDF XMP metadata, and
+  API export metadata while preserving the source manifest.
 ```
