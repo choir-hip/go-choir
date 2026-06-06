@@ -3471,6 +3471,44 @@ shared source contract consolidation across runtime/platform/frontend/export,
 adversarial/cognitive review, dead-path pruning, and the hard mission review
 report plus PDF.
 
+Continuation Comet/API capability probe on 2026-06-06 at approximately
+`2026-06-06T17:02:40Z`:
+
+- Computer Use controlled the same `/Applications/Comet.app/`
+  (`ai.perplexity.comet`) staging tab.
+- Reloading `https://choir.news/auth/session` in Comet returned
+  `authenticated: true` for `yusefnathanson@me.com`, user id
+  `5bd6de97-3b58-408c-bf89-c42c81b083de`, with session `created_at`
+  `2026-05-26T08:58:19Z`.
+- Direct Comet navigation to
+  `/api/vtext/documents/f93cea62-f833-4dae-b414-8e44783d8cbe/diagnosis?limit=5&include_content=false`
+  succeeded through the owner session and showed the legal proposal as
+  `choir_private_legal_cloud_proposal.vtext`.
+- The diagnosis response reported owner id
+  `5bd6de97-3b58-408c-bf89-c42c81b083de`, current revision
+  `b2c9f30-7d31-4cee-a465-fad96a89b70c`, current version `v94`,
+  revision count `95`, last author kind `user`, one table with `50` rows,
+  `7` source markers, appendix table `L269-L318`, and stable table signature
+  `sha256:a86643578fed81c67c8838ab00c5aba0a3af9a26294d59df529db8a15ab1f3b8`.
+- The same response exposed recent proof lineage: a user bounded edit created
+  revision `c29778fc-da4c-49d5-adb4-6d91a14a29c9` at `v93`, restore created
+  revision `8cb29f30-7d31-4cee-a465-fad96a89b70c` at `v94`, and a recent
+  `vtext` appagent run completed for the legal proposal with prompt
+  `A revise event was triggered for the current VText document. Intent: revise.`
+- Computer Use captured a visible app-state screenshot in the Codex thread,
+  but `screencapture -x docs/evidence/source-system-2026-06-06/comet-legal-proposal-diagnosis-v94-20260606T170240Z.png`
+  failed with `could not create image from display`; this turn therefore has
+  thread-attached Computer Use visual evidence, not a repo-stored PNG.
+
+Updated belief state: Comet owner authentication is currently usable for
+read-only, document-id-scoped owner product endpoints. The legal proposal is at
+a source-bearing true VText head with a 50-row appendix table after the bounded
+edit/restore/revise lineage visible in diagnosis. The remaining acceptance gap
+is not table survival at the current head; it is a clean, repeatable,
+document-scoped owner mutation proof with durable screenshot/trace capture and
+explicit rollback references, plus the broader publication/export and final
+review requirements.
+
 ### Problem 14: Open-Surface Aliases Can Defeat Explicit Web Lens Routing
 
 Status: `accepted_on_staging_for_open_surface_aliases`.
