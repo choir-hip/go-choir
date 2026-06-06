@@ -2134,6 +2134,76 @@ planned proof: change URL repair payloads to default to
 `buildSourceReviewPayload`; keep or extend existing Source Viewer/Web Lens
 routing coverage so explicitly requested browser surfaces still open Web Lens.
 
+### 2026-06-06 Owner URL Source Repair Open-Surface Fix Evidence
+
+Status: `accepted_on_staging_for_url_repair_open_surface`.
+
+Repair:
+
+- Problem checkpoint commit `10a54897` documented the source-repair open-surface
+  gap before behavior-changing code.
+- Behavior commit `5344749d4f1651f88518310ff0d0d32be30dc522` changes
+  `buildSourceReviewPayload` so URL-backed owner source repairs default to
+  `display.open_surface: "source"`.
+- The same commit adds a focused Playwright payload regression test asserting a
+  URL repair produces a `web_source` with URL target and Source Viewer open
+  surface.
+
+Local verification:
+
+```text
+npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g "source review URL repairs default to Source Viewer open surface"
+npm --prefix frontend run build
+```
+
+Landing evidence:
+
+```text
+Fix commit: 5344749d4f1651f88518310ff0d0d32be30dc522
+Problem checkpoint commit: 10a54897
+CI run: 27063262622
+FlakeHub publish run: 27063262630
+Node B deploy job: 79879686582
+Health proxy deployed_commit: 5344749d4f1651f88518310ff0d0d32be30dc522
+Health sandbox deployed_commit: 5344749d4f1651f88518310ff0d0d32be30dc522
+Health deployed_at: 2026-06-06T13:14:48Z
+```
+
+Deployed routing proof:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g "VText source URL opens Source Viewer unless browser is explicitly requested"
+result: passed
+```
+
+Deployed owner-repair proof used real staging passkey registration and
+authenticated public VText APIs/UI. It created a Markdown-lineage VText with a
+`[2]` citation gap, opened the VText Sources panel, filled Source title, Source
+URL, and Source excerpt, applied source review, inspected the actual
+`/source-repairs` request, fetched stored revision metadata, and opened the
+repaired citation.
+
+Accepted evidence:
+
+```text
+registered_email: playwright-state-1780751722999-etdyij@example.com
+doc_id: 3489a64d-5d47-4072-b9d1-4ab408d192e8
+repair_revision_id: a8648728-30d5-4a08-b595-6d6b6aae0ede
+request_open_surface: source
+stored_open_surface: source
+target_kind: url
+source_url: https://example.com/url-source-repair-1780751816732
+opened_content_viewer_delta: 1
+browser_window_delta: 0
+result: passed
+```
+
+Residual risk: this fixes the owner source-review URL repair default and proves
+durable URL repairs open Source Viewer on staging. It does not complete the
+larger source-system contract convergence: publication/export selector
+richness, shared source acquisition policy, guest publication source-open proof,
+and final adversarial/cognitive review remain open mission work.
+
 ## Suggested `/goal`
 
 ```text
