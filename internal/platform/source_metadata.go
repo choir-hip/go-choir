@@ -131,14 +131,15 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 	target := mapValue(m["target"])
 	display := mapValue(m["display"])
 	selectors := sliceValue(m["selectors"])
-	firstSelector := map[string]any{"selector_kind": "whole_resource"}
+	normalizedSelectors := normalizePublicationSourceSelectors(selectors)
+	firstSelector := sourcecontract.NormalizeSelector(map[string]any{"selector_kind": "whole_resource"})
 	if len(selectors) > 0 {
 		if selectorMap := mapValue(selectors[0]); len(selectorMap) > 0 {
-			firstSelector = selectorMap
+			firstSelector = sourcecontract.NormalizeSelector(selectorMap)
 		}
 	}
 	evidenceState := publicationSourceEvidenceState(m)
-	sourceSelector, err := marshalPublicationSourceSelector(selectors, firstSelector, evidenceState)
+	sourceSelector, err := marshalPublicationSourceSelector(normalizedSelectors, firstSelector, evidenceState)
 	if err != nil {
 		return entity, transclusion, false, fmt.Errorf("marshal source selector: %w", err)
 	}
@@ -190,7 +191,7 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 	return entity, transclusion, true, nil
 }
 
-func marshalPublicationSourceSelector(selectors []any, firstSelector map[string]any, evidenceState map[string]any) (json.RawMessage, error) {
+func marshalPublicationSourceSelector(selectors []map[string]any, firstSelector map[string]any, evidenceState map[string]any) (json.RawMessage, error) {
 	if len(selectors) <= 1 {
 		selector := copyStringAnyMap(firstSelector)
 		if len(evidenceState) > 0 {
@@ -206,6 +207,21 @@ func marshalPublicationSourceSelector(selectors []any, firstSelector map[string]
 		selectorSet["evidence_state"] = evidenceState
 	}
 	return json.Marshal(selectorSet)
+}
+
+func normalizePublicationSourceSelectors(selectors []any) []map[string]any {
+	if len(selectors) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(selectors))
+	for _, selector := range selectors {
+		selectorMap := mapValue(selector)
+		if len(selectorMap) == 0 {
+			continue
+		}
+		out = append(out, sourcecontract.NormalizeSelector(selectorMap))
+	}
+	return out
 }
 
 func copyStringAnyMap(in map[string]any) map[string]any {

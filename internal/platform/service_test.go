@@ -277,18 +277,18 @@ func TestBuildPublicationSourceMetadataPreservesSelectorSet(t *testing.T) {
 			},
 			"selectors": []map[string]any{
 				{
-					"selector_kind": "text_quote",
+					"selector_kind": "text quote",
 					"text_quote":    "The quoted passage remains the inline snapshot.",
 					"content_hash":  "hash-quoted-passage",
 				},
 				{
-					"selector_kind": "table_range",
+					"selector_kind": "table-range",
 					"table_id":      "appendix-a",
 					"start_row":     3,
 					"end_row":       7,
 				},
 				{
-					"selector_kind": "page_range",
+					"selector_kind": "page range",
 					"start_page":    12,
 					"end_page":      13,
 				},
@@ -323,11 +323,42 @@ func TestBuildPublicationSourceMetadataPreservesSelectorSet(t *testing.T) {
 	if selectorSet.SelectorKind != "selector_set" || len(selectorSet.Selectors) != 3 {
 		t.Fatalf("selector set = %#v from %s", selectorSet, string(transclusion.SourceSelector))
 	}
-	if selectorSet.Selectors[1]["selector_kind"] != "table_range" || selectorSet.Selectors[2]["selector_kind"] != "page_range" {
-		t.Fatalf("selector set lost non-quote selectors: %#v", selectorSet.Selectors)
+	if selectorSet.Selectors[0]["selector_kind"] != "text_quote" || selectorSet.Selectors[1]["selector_kind"] != "table_range" || selectorSet.Selectors[2]["selector_kind"] != "page_range" {
+		t.Fatalf("selector set lost or failed to normalize selectors: %#v", selectorSet.Selectors)
 	}
 	if selectorSet.EvidenceState["state"] != "confirms" || selectorSet.EvidenceState["relation"] != "confirms" || selectorSet.EvidenceState["research_state"] != "owner_supplied" {
 		t.Fatalf("selector set evidence state = %#v from %s", selectorSet.EvidenceState, string(transclusion.SourceSelector))
+	}
+}
+
+func TestBuildPublicationSourceMetadataDefaultsMissingSelectorKind(t *testing.T) {
+	metadata, _ := json.Marshal(map[string]any{
+		"source_entities": []map[string]any{{
+			"entity_id": "src-missing-selector-kind",
+			"kind":      "source_service_item",
+			"target": map[string]any{
+				"target_kind": "source_service_item",
+				"item_id":     "source-item-missing-selector-kind",
+			},
+			"selectors": []map[string]any{{
+				"content_hash": "hash-whole-source",
+			}},
+		}},
+	})
+
+	got, err := buildPublicationSourceMetadata(PublishVTextRequest{Metadata: metadata})
+	if err != nil {
+		t.Fatalf("buildPublicationSourceMetadata: %v", err)
+	}
+	if len(got.Transclusions) != 1 {
+		t.Fatalf("transclusions = %d, want 1: %#v", len(got.Transclusions), got.Transclusions)
+	}
+	var selector map[string]any
+	if err := json.Unmarshal(got.Transclusions[0].SourceSelector, &selector); err != nil {
+		t.Fatalf("decode source selector: %v", err)
+	}
+	if selector["selector_kind"] != "whole_resource" || selector["content_hash"] != "hash-whole-source" {
+		t.Fatalf("selector = %#v from %s", selector, string(got.Transclusions[0].SourceSelector))
 	}
 }
 
