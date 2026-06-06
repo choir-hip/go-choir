@@ -247,6 +247,10 @@ export function sourceEntityMedia(entity: any, { inline = false } = {}): string 
   return '';
 }
 
+export function sourceEntityExpansionSurface(entity: any): string {
+  return sourceEntityMedia(entity, { inline: true }) ? 'media' : 'journal';
+}
+
 export function renderSourceEntityFacts(entity: any): string {
   const transcript = String(entity?.evidence?.transcript_availability || '').trim();
   const selectors = Array.isArray(entity?.selectors) ? entity.selectors : [];
@@ -288,7 +292,8 @@ export function renderInlineSourceRef(label: string, entityID: string, sourceEnt
   }
   const title = sourceEntityTitle(entity);
   const marker = sourceEntities.indexOf(entity) + 1 || '';
-  return `<span class="vtext-source-ref" data-vtext-source-ref data-vtext-citation-transclusion data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
+  const expansionSurface = sourceEntityExpansionSurface(entity);
+  return `<span class="vtext-source-ref" data-vtext-source-ref data-vtext-citation-transclusion data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" data-source-expansion-surface="${escapeHTML(expansionSurface)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
     <span class="vtext-source-ref-label">${escapeHTML(marker || displayLabel)}</span>
     <span class="vtext-source-ref-popover" data-vtext-source-ref-popover data-vtext-inline-transclusion role="note">
       <strong>${escapeHTML(title)}</strong>

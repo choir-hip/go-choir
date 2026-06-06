@@ -3095,7 +3095,7 @@
     cursor: pointer;
   }
 
-  .rendered-doc :global(.vtext-source-ref[data-expanded="true"]) {
+  .rendered-doc :global(.vtext-source-ref[data-source-expansion-surface="media"][data-expanded="true"]) {
     display: inline-grid;
     grid-template-columns: auto minmax(12rem, 1fr);
     align-items: start;
@@ -3137,7 +3137,7 @@
     text-transform: none;
   }
 
-  .rendered-doc :global(.vtext-source-ref[data-expanded="true"] .vtext-source-ref-popover) {
+  .rendered-doc :global(.vtext-source-ref[data-source-expansion-surface="media"][data-expanded="true"] .vtext-source-ref-popover) {
     position: static;
     z-index: auto;
     display: grid;

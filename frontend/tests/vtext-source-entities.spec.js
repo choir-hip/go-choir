@@ -70,6 +70,7 @@ test('VText renders source entities as expandable sources and opens owning media
   await rendered.locator('[data-vtext-source-ref]').click();
   const citation = rendered.locator('[data-vtext-source-ref]');
   await expect(citation).toHaveAttribute('data-expanded', 'true');
+  await expect(citation).toHaveAttribute('data-source-expansion-surface', 'media');
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText('YouTube source fixture');
   await expect(citation.locator('[data-vtext-inline-transclusion] iframe')).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText('transcript unavailable');
@@ -435,6 +436,7 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
   const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-fixture-flow"]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
+  await expect(citation).toHaveAttribute('data-source-expansion-surface', 'journal');
   await citation.click();
   const flow = rendered.locator('[data-vtext-source-flow]');
   await expect(flow).toBeVisible({ timeout: 5000 });
@@ -594,6 +596,7 @@ test('VText uses stacked journal flow instead of old source card when side routi
   });
   const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-stacked-flow"]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
+  await expect(citation).toHaveAttribute('data-source-expansion-surface', 'journal');
   await citation.click();
 
   const flow = rendered.locator('[data-vtext-source-flow]');
