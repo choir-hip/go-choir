@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/generate-source-contract.mjs --check && vite build",
     "preview": "vite preview",
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium",

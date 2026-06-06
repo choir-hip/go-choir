@@ -1,7 +1,5 @@
 package sourcecontract
 
-import "strings"
-
 const (
 	SelectorKindWholeResource     = "whole_resource"
 	SelectorKindTextQuote         = "text_quote"
@@ -18,39 +16,14 @@ const (
 )
 
 func NormalizeSelectorKind(value string) string {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	normalized = strings.ReplaceAll(normalized, "-", "_")
-	normalized = strings.ReplaceAll(normalized, " ", "_")
-	switch normalized {
-	case "":
+	normalized := normalizeToken(value)
+	if normalized == "" {
 		return SelectorKindWholeResource
-	case SelectorKindWholeResource, "whole", "resource", "whole_document", "whole_source":
-		return SelectorKindWholeResource
-	case SelectorKindTextQuote, "quote", "quoted_text":
-		return SelectorKindTextQuote
-	case SelectorKindTextPosition, "text_range", "char_range", "character_range":
-		return SelectorKindTextPosition
-	case SelectorKindParagraphHeading, "paragraph", "heading", "heading_range", "paragraph_range":
-		return SelectorKindParagraphHeading
-	case SelectorKindByteRange, "bytes":
-		return SelectorKindByteRange
-	case SelectorKindPageRange, "pages":
-		return SelectorKindPageRange
-	case SelectorKindTimestampRange, "timestamp", "time_range", "media_range":
-		return SelectorKindTimestampRange
-	case SelectorKindTranscriptSegment, "transcript", "segment", "transcript_segments":
-		return SelectorKindTranscriptSegment
-	case SelectorKindTableRange, "table", "table_rows", "row_range":
-		return SelectorKindTableRange
-	case SelectorKindTableCell, "cell", "table_cells":
-		return SelectorKindTableCell
-	case SelectorKindDataVintage, "vintage", "data_release_vintage":
-		return SelectorKindDataVintage
-	case SelectorKindSelectorSet, "selectors":
-		return SelectorKindSelectorSet
-	default:
-		return normalized
 	}
+	if canonical := canonicalFromSchema(embeddedSourceContractSchema.SelectorKinds, value); canonical != "" {
+		return canonical
+	}
+	return normalized
 }
 
 func NormalizeSelector(selector map[string]any) map[string]any {

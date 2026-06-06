@@ -5441,6 +5441,70 @@ staging health after CI:
   status=ok, upstream=ok, vmctl_status=ok
 ```
 
+## Generated source-contract schema checkpoint
+
+Status: `local_verified_pending_ci`.
+
+The source contract no longer depends on manually duplicated alias switch
+tables in Go and TypeScript. The canonical contract vocabulary now lives in
+`internal/sourcecontract/source_contract_schema.json`, including evidence
+states, reader artifact states, selector kinds, open surfaces, aliases, labels,
+and relational evidence-state flags.
+
+Implementation:
+
+- `internal/sourcecontract/schema.go` embeds the JSON schema and provides
+  shared canonical lookup for Go normalizers.
+- `NormalizeEvidenceState`, `NormalizeReaderArtifactState`,
+  `NormalizeSelectorKind`, and `NormalizeOpenSurface` now use the embedded
+  schema rather than hand-maintained alias switch tables.
+- `frontend/scripts/generate-source-contract.mjs` generates
+  `frontend/src/lib/source-contract.generated.ts` from the same schema while
+  preserving the existing public frontend constant object names.
+- `frontend/src/lib/source-contract.ts` imports the generated constants/schema
+  and uses schema-backed lookup for frontend normalizers and labels.
+- `frontend/package.json` runs the generator in `--check` mode before
+  `vite build`.
+- `internal/sourcecontract/schema_test.go` verifies the Go constants are
+  represented in the schema and the generated frontend file carries the current
+  schema hash.
+
+Verification:
+
+```text
+node frontend/scripts/generate-source-contract.mjs --check
+
+nix develop -c go test ./internal/sourcecontract ./internal/platform ./internal/proxy -run 'TestNormalize|TestBuildPublication|TestHandleVTextPublication|TestExport|TestSourceContractSchema' -count=1
+
+npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'frontend source contract stays aligned with shared matrix|source evidence states normalize|source open plans normalize|source selectors normalize'
+
+npm --prefix frontend run build
+```
+
+All passed locally.
+
+deploy-impact local classification for the schema/frontend slice:
+
+```text
+deploy_needed=true
+deploy_host=true
+deploy_frontend=true
+deploy_host_service=true
+deploy_ordinary_guest=false
+deploy_playwright_guest=false
+deploy_host_os=false
+deploy_vmctl_restart=true
+deploy_active_vm_refresh=true
+host_services=gateway,platformd,proxy,sandbox,sourcecycled
+```
+
+remaining error field: this converts the current source-contract canonical
+values, labels, and aliases into a generated cross-runtime schema path. It does
+not yet replace every future source entity, reader artifact, selector, evidence,
+or open-surface shape with a typed IDL, and it still leaves broader source
+service fixture coverage and owner legal-proposal end-to-end proof as separate
+mission axes.
+
 ## Suggested `/goal`
 
 ```text
