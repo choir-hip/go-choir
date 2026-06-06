@@ -6865,3 +6865,49 @@ belief-state update:
   publication text extraction so the raw text-entry mirror does not concatenate
   hidden controls into prose, and continue the legal-cloud artifact toward more
   fully researched/cited client-ready content.
+
+## 2026-06-06 Problem: Published Reader Exposes Source Chrome As Textbox Prose
+
+status: documented_pending_root_cause
+
+new evidence:
+
+- In the deployed Comet owner proof, Computer Use reported the published
+  legal-cloud document surface as a `text entry area` with
+  `aria-label="VText document"`.
+- The accessible value included source-flow UI controls and note text inside
+  the document prose, for example `Open source`, `Close`, and the expanded ABA
+  source excerpt before the proposal body.
+- The same value showed word-boundary damage around inline citations, such as
+  `chatbotsthat` and `Aprivate`, which makes the accessible text-entry mirror
+  unsuitable as a client-facing text projection.
+
+current interpretation:
+
+- The visual publication route is working better than the accessibility/plain
+  text surface: the source note appears beside prose and opens source windows,
+  but the reader surface is still modeled as an editable textbox even in
+  published read-only mode.
+- Published/read-only VText should be an article/document reading surface, not
+  a textbox. Source controls should be operable controls and transclusions,
+  not concatenated into the document's prose value.
+- Copy/download may already use the publication export API rather than DOM
+  text, but the accessibility tree is still product evidence and should not
+  imply that hidden source chrome is canonical document text.
+
+risk:
+
+- A client or assistive technology could perceive source apparatus as body
+  prose.
+- Future copy/export shortcuts could accidentally reuse the rendered DOM text
+  and reintroduce a rendered-DOM export path, violating the VText-canonical
+  projection invariant.
+
+next root-cause probe:
+
+- Confirm the published reader's DOM role/contenteditable state and split the
+  editable authoring surface from the published article surface without
+  weakening canonical VText editing.
+- Add a regression proof that a published/read-only VText surface is not exposed
+  as a textbox and that source-flow controls are not treated as the document
+  value.
