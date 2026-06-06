@@ -841,11 +841,11 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T12:06:24Z, VText user-save structure
-stabilization now restores an omitted parent Markdown table during unrelated
-partial-context edits while preserving explicit table deletion. The repair is
-deployed to staging and product-path proven with an authenticated temporary
-document fixture.
+last checkpoint: 2026-06-06T12:27:10Z, VText local draft recovery now prefers
+the non-empty canonical VText head over any differing browser-local draft. The
+repair is deployed to staging and product-path proven with synthetic
+authenticated documents plus owner-authenticated Comet reload of the legal
+proposal.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -873,11 +873,17 @@ summaries and adds a frontend regression test requiring v78 and v70 to render.
 Docs commit `9ad53d03` records the legal proposal v70-v78 diagnosis evidence
 before the structure-preservation fix. Behavior commit `bfd23fa0` repairs the
 general omitted-parent-table preservation path for unrelated partial-context
-VText edits and adds focused runtime regression coverage.
+VText edits and adds focused runtime regression coverage. Docs commits
+`746d506c`, `7ec67227`, `b879c5df`, and `8e04af2c` record the table
+preservation evidence and the two stale-draft recovery gaps before behavior
+fixes. Behavior commits `5c61a6b8`, `465c599c`, and `93d9f819` progressively
+tighten VText local draft recovery: older-parent drafts are skipped,
+table-flattened same-head drafts are skipped, and any differing browser-local
+draft is skipped when a non-empty canonical revision exists.
 Existing unrelated untracked docs are preserved.
 
 what shipped: behavior commit
-`bfd23fa088d754039f679adf0a526abbdee73a64` was pushed to `origin/main` and
+`93d9f8197747c7526e11a730f6dab3932af82d75` was pushed to `origin/main` and
 deployed to staging. A later docs-only checkpoint may not appear in Node B
 health because docs-only changes intentionally do not trigger deploy.
 
@@ -1081,6 +1087,34 @@ what was proven:
   verified an explicit table-deletion edit did not restore the table. The
   temporary spec was deleted after the proof and is not part of the tracked test
   suite.
+- Docs checkpoints `7ec67227`, `b879c5df`, and `8e04af2c` recorded stale
+  local-draft recovery problems before the follow-up behavior fixes.
+- Focused local stale-draft recovery checks passed:
+  `npm run e2e -- vtext-document-stream.spec.js -g "stale local draft|same-head local draft|differing local draft"`
+  and `npm run build` in `frontend`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27062222566`
+  completed successfully for `93d9f819`, including runtime shards,
+  non-runtime tests, frontend build, vet/build, aggregate Go gate, and Node B
+  staging deploy.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27062222573`
+  completed successfully.
+- Staging health at `https://choir.news/health` reported proxy and upstream
+  commit/deployed_commit
+  `93d9f8197747c7526e11a730f6dab3932af82d75` with deployed_at
+  `2026-06-06T12:25:56Z`.
+- Deployed stale-draft recovery acceptance passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-document-stream.spec.js -g "stale local draft|same-head local draft|differing local draft"`.
+  The deployed proof covered older-parent stale drafts, same-head
+  table-flattened drafts, and same-head ordinary prose drafts that differ from
+  a non-empty canonical revision.
+- Owner-authenticated Comet proof passed after navigating the staging tab to
+  `https://choir.news/?draft_recovery=93d9f819`: the
+  `choir_private_legal_cloud_proposal.vtext` window reloaded at v87 with
+  `Primary draft Latest`, no `Unsaved edit`, and status
+  `Autosaved draft skipped; canonical version loaded`. No owner mutation was
+  performed.
 
 unproven or partial claims:
 
@@ -1146,6 +1180,10 @@ belief-state changes:
   the parent with that table removed, the backend treats it as explicit
   deletion and does not restore. This is a general Markdown table stabilization
   path, not a legal-proposal-specific special case.
+- Browser-local VText drafts no longer auto-mask a non-empty canonical
+  revision. The owner legal proposal now reloads in Comet as v87 `Latest`
+  rather than `Unsaved edit`, with the stale browser-local draft skipped before
+  any owner save/revise action.
 
 remaining error field:
 
@@ -1165,9 +1203,10 @@ remaining error field:
 - Table structure preservation now has broader partial-context tests, a
   deployed bounded diagnosis extraction route, and a deployed authenticated
   synthetic proof for omitted-parent-table restoration versus explicit
-  deletion. The actual owner legal proposal still needs a product-path bounded
-  edit/revise proof showing the repaired path preserves the legal proposal
-  appendix table through a real owner workflow.
+  deletion. The actual owner legal proposal is no longer blocked by stale
+  local-draft masking, but it still needs a product-path bounded edit/revise
+  proof showing the repaired path preserves the legal proposal appendix table
+  through a real owner workflow.
 
 highest-impact remaining uncertainty: whether to introduce the shared source
 contract package first and route all callers through it, or to land the SSRF
@@ -1184,11 +1223,11 @@ passes, resume source-contract convergence; if it fails, document the newly
 confirmed narrower legal-proposal workflow problem before the next fix.
 
 suggested resume goal string: continue
-`docs/mission-source-system-simplify-secure-smart-v0.md` from commits
-`bf7e52df`, `068b6b5f`, `61b89e93`, `c3295ae7`, `a2ee6dd9`, `cf5bf9b7`, and
-`c7f43961` by running bounded diagnosis extraction on the owner legal proposal
-history, proving the v70-v78 table transition, then converging source
-entity/evidence normalization without document-specific fixes.
+`docs/mission-source-system-simplify-secure-smart-v0.md` from behavior commit
+`93d9f8197747c7526e11a730f6dab3932af82d75` and docs checkpoint `8e04af2c` by
+running an owner product-path bounded legal-proposal edit/revise proof, then
+verifying appendix table survival through bounded diagnosis and continuing
+source entity/evidence normalization without document-specific fixes.
 
 evidence artifact refs:
 
@@ -1209,6 +1248,15 @@ evidence artifact refs:
   failed because JavaScript from Apple Events is disabled.
 - Behavior/test commits: `068b6b5f`, `61b89e93`, `98fb4d2c`, `c3295ae7`,
   `92138e61`, `a2ee6dd9`.
+- Stale-draft recovery commits: docs `7ec67227`, docs `b879c5df`, docs
+  `8e04af2c`, behavior `5c61a6b8`, behavior `465c599c`, and behavior
+  `93d9f8197747c7526e11a730f6dab3932af82d75`.
+- Latest stale-draft deployment evidence: CI run `27062222566`, FlakeHub run
+  `27062222573`, staging health deployed_commit
+  `93d9f8197747c7526e11a730f6dab3932af82d75`, deployed Playwright command
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-document-stream.spec.js -g "stale local draft|same-head local draft|differing local draft"`,
+  and owner Comet URL `https://choir.news/?draft_recovery=93d9f819` showing
+  v87 `Latest` with `Autosaved draft skipped; canonical version loaded`.
 - Frontend source-open slice: `sourceEntityOpenPlan`, `ContentViewer`
   live-import guard, and focused Playwright routing proof.
 - CI/deploy evidence: GitHub Actions run `27060657873`; FlakeHub publish run
