@@ -6563,7 +6563,7 @@ belief-state update:
 
 ## 2026-06-06 Simplification Pass: Remove Dead JSON Repair Diagnostics
 
-status: local_verified_pending_deploy
+status: deployed_verified
 
 documented problem:
 
@@ -6607,8 +6607,55 @@ local proof:
   sources as noncanonical journal flow" --project=chromium --timeout=120000`
   -> passed.
 
-deployment proof still needed:
+commit:
 
-- Commit and push the dead-path removal, wait for CI and Node B deploy, confirm
-  staging identity, then repeat deployed source-panel and Pretext source-flow
-  proofs.
+- `304c4d6bca62cb6e3c3a109f8cc3f42e66dd20f9`
+  (`refactor: remove dead source repair diagnostics`) was pushed to
+  `origin/main`.
+- The problem-only documentation checkpoint immediately before the fix was
+  `49ddcb3e` (`docs: document dead source repair diagnostics path`).
+
+CI and deploy:
+
+- GitHub Actions CI run `27049143982` completed successfully.
+- The CI run included successful frontend build, Go runtime shards, Go
+  non-runtime tests, Go vet/build, integration smoke, and Node B staging deploy.
+- FlakeHub publish run `27049144025` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `304c4d6bca62cb6e3c3a109f8cc3f42e66dd20f9`, deployed at
+  `2026-06-06T01:46:27Z`.
+
+deployed automated proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> passed.
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+
+deployed Comet owner proof:
+
+- Computer Use was available in Comet, and click actions worked.
+- Comet remained owner-authenticated on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The legal-cloud publication still showed the expanded ABA Formal Opinion 512
+  source note beside article prose.
+- Clicking the publication-side `Open source` control with Computer Use opened
+  another ABA Formal Opinion 512 source window after the dead diagnostic path
+  had been removed from deployed code.
+
+belief-state update:
+
+- The obsolete raw JSON source repair path is no longer merely hidden; it is
+  removed from the owner VText editor and source panel.
+- Source repair in the product now flows through the typed owner source-review
+  form and the backend source-repair contract.
+- Remaining source-workflow simplification should focus on extracting the
+  typed source review/import write functions out of `VTextEditor.svelte` without
+  reintroducing a parallel repair path.
