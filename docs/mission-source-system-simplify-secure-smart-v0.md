@@ -5507,7 +5507,7 @@ mission axes.
 
 ### Problem 34: Nix Deploy Source Closures Exclude Source Contract Schema Assets
 
-Status: `source_closure_fix_local_verified_pending_ci`.
+Status: `source_closure_fix_staging_health_verified_pending_deploy_job_terminal`.
 
 problem: commit `519c5e9560370d1dccb459f70eba04a544339ae5` passed GitHub Go
 tests, runtime shards, frontend build, integration smoke, and FlakeHub publish,
@@ -5629,6 +5629,58 @@ files missing in the failed Node B deploy, but this remains pending until the
 fix commit passes GitHub Actions, Node B deploy, and staging health/deployed
 acceptance. The early deploy identity-stamp weakness remains open as a separate
 known platform issue.
+
+post-push evidence for fix commit:
+
+```text
+fix commit:
+  2af0dbb75e5def609988a09b1b96edf1c7bf9520
+
+CI run:
+  https://github.com/choir-hip/go-choir/actions/runs/27070479996
+
+pre-deploy jobs:
+  Detect Staging Deploy Impact -> success
+  Go Test (integration-tagged smoke) -> success
+  Go Vet + Build -> success
+  Go Test (non-runtime) -> success
+  Go Test (internal/runtime shards 0-3) -> success
+  Build Frontend -> success
+  Go Vet + Test + Build -> success
+
+FlakeHub:
+  https://github.com/choir-hip/go-choir/actions/runs/27070480006
+  conclusion=success
+
+staging health observed while deploy job was still in progress:
+  observed_at=2026-06-06T18:37:07Z
+  proxy commit=2af0dbb75e5def609988a09b1b96edf1c7bf9520
+  proxy deployed_commit=2af0dbb75e5def609988a09b1b96edf1c7bf9520
+  proxy deployed_at=2026-06-06T18:34:33Z
+  upstream commit=2af0dbb75e5def609988a09b1b96edf1c7bf9520
+  upstream deployed_commit=2af0dbb75e5def609988a09b1b96edf1c7bf9520
+  upstream deployed_at=2026-06-06T18:34:33Z
+
+focused staging-base source-contract proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'frontend source contract stays aligned with shared matrix|source evidence states normalize|source open plans normalize|source selectors normalize'
+  -> 4 passed
+```
+
+current deploy ambiguity: at 2026-06-06T18:38:30Z, GitHub still reported the
+`Deploy to Staging (Node B)` job `79898767522` as `in_progress`, with the
+`Deploy to staging` step open, even though `/health` already reported the fix
+commit for proxy and upstream. Do not treat this as terminal deploy acceptance
+until the workflow reaches a terminal conclusion. If the job remains open past
+the normal deploy window, document a separate deploy-observability problem
+before changing behavior.
+
+remaining error field: Problem 34 has deployed-service identity and focused
+staging-base contract proof for the fix commit, but still lacks terminal Node B
+deploy-job acceptance and deploy log evidence. The broader mission still lacks
+owner/guest source opens, URL-backed/content-item/source-service-style source
+proof, legal proposal table survival, bounded table edit proof, publication and
+export source metadata proof, screenshots/traces, final hard review, and PDF
+report.
 
 ## Suggested `/goal`
 
