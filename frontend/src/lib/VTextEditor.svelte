@@ -495,6 +495,23 @@
     }
   }
 
+  function markdownTableBlockCount(content = '') {
+    const lines = String(content || '').split(/\r?\n/);
+    let count = 0;
+    for (let i = 0; i < lines.length - 1; i += 1) {
+      const header = lines[i] || '';
+      const separator = lines[i + 1] || '';
+      if (!header.includes('|') || !separator.includes('|')) continue;
+      if (!/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(separator)) continue;
+      count += 1;
+      i += 1;
+      while (i + 1 < lines.length && (lines[i + 1] || '').includes('|')) {
+        i += 1;
+      }
+    }
+    return count;
+  }
+
   function restoreLocalDraftIfNewer() {
     const draft = loadLocalDraft();
     if (!draft || typeof draft.content !== 'string') return false;
@@ -503,6 +520,11 @@
     const currentRevisionId = String(currentRevision?.revision_id || '').trim();
     if (draftParentRevisionId && currentRevisionId && draftParentRevisionId !== currentRevisionId) {
       saveStatus = 'Autosaved draft skipped; newer version loaded';
+      return false;
+    }
+    const savedTableCount = markdownTableBlockCount(savedContent);
+    if (savedTableCount > 0 && markdownTableBlockCount(draft.content) < savedTableCount) {
+      saveStatus = 'Autosaved draft skipped; canonical table structure loaded';
       return false;
     }
     if (draft.content === savedContent) {
