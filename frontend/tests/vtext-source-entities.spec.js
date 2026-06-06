@@ -1,4 +1,28 @@
 import { test, expect } from './helpers/fixtures.js';
+import { buildSourceReviewPayload } from '../src/lib/vtext-source-review.js';
+
+test('source review URL repairs default to Source Viewer open surface', () => {
+  const payload = buildSourceReviewPayload({
+    marker: '[1]',
+    title: 'Source review URL fixture',
+    excerpt: 'The cited source confirms the claim.',
+    url: 'https://example.com/source-review-url-fixture',
+    revisionID: 'rev-url-source-viewer',
+    relation: 'confirms',
+  });
+
+  expect(payload.source_entities).toHaveLength(1);
+  expect(payload.source_entities[0]).toMatchObject({
+    kind: 'web_source',
+    target: {
+      target_kind: 'url',
+      url: 'https://example.com/source-review-url-fixture',
+    },
+    display: {
+      open_surface: 'source',
+    },
+  });
+});
 
 test('VText renders source entities as expandable sources and opens owning media surface', async ({ desktopSession }) => {
   const { page } = desktopSession;

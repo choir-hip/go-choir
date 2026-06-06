@@ -75,7 +75,7 @@ export function buildSourceReviewPayload({
         display: {
           inline_mode: 'embedded_excerpt',
           expanded_mode: 'source_card',
-          open_surface: cleanURL ? 'browser' : 'source',
+          open_surface: 'source',
           default_collapsed: true,
         },
         evidence: {
