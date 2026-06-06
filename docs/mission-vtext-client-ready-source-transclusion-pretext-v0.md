@@ -7222,3 +7222,72 @@ next repair:
   type as `original_media_type`.
 - Add proxy tests so HTML-derived source snapshots prove both fields and do not
   regress the private-source or import-failure publication policy.
+
+## 2026-06-06 Repair: Publication Reader Snapshots Declare Markdown
+
+status: deployed_verified_checkpoint_incomplete
+
+root cause:
+
+- Publication enrichment correctly created `reader_snapshot.snapshot_kind =
+  cleaned_reader_markdown`, but the snapshot payload reused the source
+  `ContentItem.media_type`.
+- For HTML-derived public source items, that made a cleaned reader snapshot
+  advertise itself as `text/html`, even though the publication reader should
+  render the cleaned source text as Markdown/reader content.
+
+change:
+
+- `internal/proxy/platform_publish.go` now emits publication reader snapshots
+  with `media_type: text/markdown`.
+- The original source item media type is preserved separately as
+  `original_media_type`, so provenance is not lost.
+- Proxy publication tests now decode the structured metadata and assert both
+  fields for content-item source snapshots and imported public URL snapshots.
+- The deployed Playwright publication verifier now asserts the same contract
+  for a real staging publication and confirms the opened source window still
+  renders the cleaned reader snapshot without iframe fallback.
+
+local proof:
+
+- `nix develop -c go test ./internal/proxy -run
+  'TestHandleVTextPublication(ReadsPrivateRevisionAndPostsProjection|PublishesPublicURLSourceSnapshots|RecordsURLSnapshotImportFailureState|DoesNotPublishPrivateSourceSnapshots)|TestContentItemAllowsPublishedSnapshotRejectsPrivateProvenance'`
+  -> passed.
+- `nix develop -c go test ./internal/proxy` -> passed.
+
+CI and deploy:
+
+- Behavior commit `4767a5b7850875ddba7217be272a61de89225ef2`
+  (`fix: mark publication reader snapshots as markdown`) was pushed to
+  `origin/main`.
+- CI run `27050159496` passed: non-runtime Go tests, runtime shards,
+  integration-tagged smoke, Go vet/build, and Node B deploy.
+- FlakeHub publish run `27050159501` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `4767a5b7850875ddba7217be272a61de89225ef2`, deployed at
+  `2026-06-06T02:33:36Z`.
+
+deployed proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-service-publication.spec.js -g "publishes public
+  content-item sources with cleaned reader snapshots" --project=chromium
+  --timeout=120000` -> passed.
+- The proof created a public HTML-derived content item, published a VText with
+  that item as a source entity, resolved the publication bundle, and asserted:
+  - `reader_snapshot.snapshot_kind = cleaned_reader_markdown`;
+  - `reader_snapshot.media_type = text/markdown`;
+  - `reader_snapshot.original_media_type = text/html`;
+  - the publication source window rendered `Source reader snapshot`;
+  - no iframe rendered while the publication-carried reader snapshot existed.
+
+belief-state update:
+
+- Publication source snapshots now more accurately represent the durable
+  reader artifact instead of drifting back toward iframe/live HTML semantics.
+- This is a small source-quality/status repair, not the whole Obscura cleanup
+  axis. The next repair should improve acquisition quality signals and source
+  cleanup for arbitrary URLs, especially when the reader snapshot is low
+  confidence, only a bounded excerpt, or polluted by source chrome.
