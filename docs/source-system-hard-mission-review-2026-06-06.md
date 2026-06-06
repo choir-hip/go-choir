@@ -74,6 +74,15 @@ Staging health on 2026-06-06 reported proxy and upstream
 CI run `27070479996` completed successfully, including Node B deploy job
 `79898767522`. FlakeHub run `27070480006` completed successfully.
 
+Latest verifier commit:
+
+`8f7e1084426b64b4282c1f3146dd45adc50ac5fb`
+
+CI run `27070847728` completed successfully, including the publication
+evidence-state matrix verifier. Deploy-impact reported `deploy_needed=false`,
+so Node B deploy was skipped. FlakeHub run `27070847733` completed
+successfully.
+
 Earlier accepted behavior commit:
 
 `8efb05a25430330ada50e1a2ac6ebe2418af9700`
@@ -87,12 +96,13 @@ Staging health on 2026-06-06 reported:
   `8efb05a25430330ada50e1a2ac6ebe2418af9700`;
 - deployed at `2026-06-06T17:44:31Z`.
 
-Latest docs-only checkpoint:
+Latest verifier/docs checkpoint:
 
-`2287521a`
+`8f7e1084`
 
 This was pushed to `origin/main` and is intentionally not expected to deploy
-because docs-only commits are ignored by CI/deploy path filters.
+because deploy-impact classified the changed docs and `_test.go` file as
+non-deployed artifacts.
 
 ### CI
 
@@ -101,6 +111,13 @@ Behavior commit `2af0dbb7` had successful GitHub Actions runs:
 - CI run `27070479996`;
 - FlakeHub run `27070480006`;
 - Node B deploy job `79898767522`.
+
+Verifier commit `8f7e1084` had successful GitHub Actions runs:
+
+- CI run `27070847728`;
+- FlakeHub run `27070847733`;
+- Deploy to Staging skipped because deploy-impact reported no deployed artifact
+  changes.
 
 Earlier behavior commit `8efb05a2` had successful GitHub Actions runs:
 
@@ -331,15 +348,15 @@ consolidation, after a separate documented problem or refactor plan.
 - Direct proof scripts can bypass product auth-renewal behavior and should not
   be used as product-path auth evidence.
 - Desktop screenshot capture failed in this environment.
-- Latest docs-only checkpoint `2287521a` is not deployed; deployed behavior
-  remains `2af0dbb7`.
+- Latest verifier/docs checkpoint `8f7e1084` is not deployed; deployed behavior
+  remains `2af0dbb7` because the commit changed only docs and tests.
 
 ## Rollback References
 
 - Last deployed behavior commit before the latest docs checkpoint:
   `2af0dbb75e5def609988a09b1b96edf1c7bf9520`.
 - Latest docs/evidence checkpoint:
-  `2287521a`.
+  `8f7e1084`.
 - If the publication-policy UI change needs rollback, revert
   `8efb05a25430330ada50e1a2ac6ebe2418af9700` after preserving the mission
   evidence.

@@ -5783,7 +5783,7 @@ still lack current evidence.
 
 ### Contract Verifier Checkpoint: Publication Evidence-State Matrix
 
-Status: `local_contract_matrix_verifier_passed_pending_ci`.
+Status: `contract_matrix_verifier_ci_accepted`.
 
 claim: the platform publication/export contract now has a focused verifier for
 the complete canonical source-evidence vocabulary, including non-happy states
@@ -5837,9 +5837,28 @@ nix develop -c go test ./internal/sourcecontract ./internal/platform ./internal/
   -> ok
 ```
 
-remaining error field: this is a local verifier expansion, not new staging
-behavior. It reduces the stale/blocked/researcher-state fixture gap but remains
-pending CI. It does not add exhaustive connector/media source producer coverage
+post-push CI evidence:
+
+```text
+commit:
+  8f7e1084426b64b4282c1f3146dd45adc50ac5fb
+
+CI:
+  https://github.com/choir-hip/go-choir/actions/runs/27070847728
+  conclusion=success
+
+FlakeHub:
+  https://github.com/choir-hip/go-choir/actions/runs/27070847733
+  conclusion=success
+
+Deploy impact:
+  deploy_needed=false
+  Deploy to Staging (Node B) -> skipped
+```
+
+remaining error field: this is a verifier expansion, not new staging behavior.
+It reduces the stale/blocked/researcher-state fixture gap and has CI
+acceptance. It does not add exhaustive connector/media source producer coverage
 or non-public publication semantics.
 
 ## Suggested `/goal`
