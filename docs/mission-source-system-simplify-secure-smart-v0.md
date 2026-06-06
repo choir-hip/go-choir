@@ -5694,6 +5694,68 @@ source opens, URL-backed/content-item/source-service-style source proof, legal
 proposal table survival, bounded table edit proof, publication and export
 source metadata proof, screenshots/traces, final hard review, and PDF report.
 
+### Staging Proof Checkpoint: Publication Source Records, Snapshots, Guest Opens, And Export Metadata
+
+Status: `staging_playwright_publication_source_proof_passed_owner_comet_unproven`.
+
+claim: deployed staging now has product-path proof for publication source
+records and source opens for synthetic authenticated author plus unauthenticated
+guest readers across source-service, content-item, and URL-backed source
+shapes.
+
+scope and limitation: this is not the owner `yusefnathanson@me.com`
+computer-use/Comet proof. The Playwright fixture authenticated as
+`playwright-state-1780771357494-jmjup4@example.com` on `https://choir.news`.
+It proves the deployed API/browser product path for a test author and guest
+readers, but owner-specific Comet/session capability remains unproven.
+
+evidence:
+
+```text
+deployed commit under test:
+  2af0dbb75e5def609988a09b1b96edf1c7bf9520
+
+staging health:
+  proxy deployed_commit=2af0dbb75e5def609988a09b1b96edf1c7bf9520
+  upstream deployed_commit=2af0dbb75e5def609988a09b1b96edf1c7bf9520
+
+command:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js
+
+result:
+  3 passed
+
+covered tests:
+  publishes source-service source entities as expandable transclusions and canonical exports
+  publishes public content-item sources with cleaned reader snapshots
+  publishes public URL-backed sources with reader snapshots for guests
+```
+
+behavior proven:
+
+- author creates VText documents through `/api/vtext/documents` and revision
+  APIs with `source_entities` metadata;
+- publication uses `/api/platform/vtext/publications`;
+- publication resolve returns source records and transclusions;
+- selector-rich source sets survive publication and Markdown export metadata;
+- evidence state survives publication/export metadata for confirming
+  source-service and URL-backed sources;
+- published reader renders citation markers as transclusion points;
+- owner/test-author source opens use Source Viewer reader windows, not Web
+  Lens/browser windows, for durable reader artifacts;
+- guest readers can open publication-carried source snapshots without owner
+  private content reads;
+- content-item cleaned reader snapshots carry warning quality metadata;
+- URL-backed public sources produce publication-reader snapshots;
+- text and Markdown exports include canonical source metadata and omit UI
+  controls such as "Open source" and "Close".
+
+remaining error field: this closes a broad staging proof slice for synthetic
+author plus guest publication/source behavior. It still does not prove the
+owner legal cloud proposal, bounded table edits, owner Comet authentication,
+screenshots/traces, no-source-needed/stale/blocked researcher states, or final
+hard-review/PDF deliverables.
+
 ## Suggested `/goal`
 
 ```text
