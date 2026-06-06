@@ -70,6 +70,38 @@ latest deployed repair checkpoint:
   snapshot text exists, but improving real source depth requires the next
   source-acquisition/cleaned-Markdown reader-mode slice.
 
+post-fix adversarial review checkpoint:
+
+- Cognitive transform - Depth Extraction: the source viewer is not a generic
+  media preview with metadata bolted on; it is a source-inspection instrument
+  for the VText source graph. Any code path that treats it as "just content"
+  risks reintroducing card chrome, metadata-first layout, or iframe-only
+  fallback behavior.
+- Cognitive transform - Load-bearing Variable: the real load-bearing variable
+  is not whether a source window opens. It is whether a reader can inspect the
+  cited source without losing reading flow, provenance, source identity, or
+  publication policy.
+- Cognitive transform - High-information Probe: the best next probe is not a
+  new source fixture. It is whether the deployed owner and guest publication
+  can both open multiple source windows while `ContentViewer` sheds the
+  measurement/metadata workaround and still passes geometry tests.
+- GStack review finding: `ContentViewer.svelte` now contains source-reader
+  semantics, generic media preview behavior, source apparatus rendering, and a
+  `requestAnimationFrame` descendant-measurement shim. That shim was useful to
+  get the first deployed overlap repair, but it is a weak abstraction: it hides
+  layout ownership in imperative DOM measurement instead of making reader text
+  and source apparatus normal document flow.
+- Design-review finding: the deployed source reader is materially better than
+  the screenshot failure, but its title/source header, reader body, and source
+  details should remain an academic-reader hierarchy. The next design
+  simplification should remove measurement scaffolding and keep the quiet
+  content-first source-reader mode, not add new cards or pills.
+- Problem to fix next, after this documentation checkpoint: simplify
+  `ContentViewer` so source reader content and apparatus participate in normal
+  block flow without the `readerShellMinHeight` measurement shim. Preserve the
+  same geometry tests, source-window singleton behavior, and media preview
+  behavior.
+
 current artifact state:
 
 - The legal-cloud proposal is a canonical `.vtext` publication with source
