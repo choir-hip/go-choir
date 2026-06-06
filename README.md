@@ -137,7 +137,6 @@ Requirements:
 - Node.js 22+
 - pnpm 10+
 - Nix for reproducible Linux builds, deployment configuration, and dev shells
-- ICU headers/libs for Go tests that touch Dolt-backed packages
 
 Install frontend dependencies:
 
@@ -150,11 +149,13 @@ cd ..
 Start the local stack when local iteration is appropriate:
 
 ```sh
-./start-services.sh
+nix develop -c ./start-services.sh
 ```
 
-The script uses local auth keys and service ports. For detailed manual service
-startup, inspect `start-services.sh` and the relevant `cmd/*` package configs.
+The script uses local auth keys and service ports, and requires the repo dev
+shell so Dolt/ICU compiler and linker paths come from the declared Nix
+environment. For detailed manual service startup, inspect `start-services.sh`
+and the relevant `cmd/*` package configs.
 
 Local development is useful for frontend iteration, focused unit shaping, and
 reproducing transitions identified by deployed evidence. It is not sufficient

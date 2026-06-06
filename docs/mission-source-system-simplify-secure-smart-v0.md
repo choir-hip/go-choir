@@ -4779,7 +4779,7 @@ connector policy, or the broader generated source-contract schema work.
 
 ### Problem 30: Local Service Startup Still Injects Host-Specific ICU Flags
 
-Status: `documented_before_fix`.
+Status: `fixed_with_local_harness_proof`.
 
 problem: `start-services.sh` now starts the local platform publication path, but
 it still contains a Homebrew-specific Dolt/ICU fallback:
@@ -4814,10 +4814,25 @@ script teaches future agents and humans that host-local Homebrew paths are an
 accepted harness path, which contradicts the project contract and can make
 worker/candidate or CI failures look like local machine configuration problems.
 
-planned proof: remove the Homebrew ICU fallback, require the Nix dev shell by
-default with an explicit diagnostic escape hatch, keep platformd/Dolt startup
-intact, and verify script syntax plus the declared Nix environment's Go/Dolt
-ICU flags.
+fix and proof:
+
+- `start-services.sh` now refuses to run outside the repo dev shell unless
+  `CHOIR_ALLOW_HOST_LOCAL_SERVICES=1` is set for an explicit short diagnostic
+  run.
+- The Homebrew `/opt/homebrew/opt/icu4c@78` `CGO_*` injection block was removed.
+- README local startup now uses `nix develop -c ./start-services.sh` and
+  describes Dolt/ICU paths as coming from the declared Nix environment.
+- `bash -n start-services.sh` passed.
+- Running `./start-services.sh` outside Nix failed with the intended diagnostic.
+- `nix develop -c sh -lc 'test -n "$IN_NIX_SHELL" && command -v dolt && pkg-config --cflags icu-i18n icu-uc >/dev/null && printf "IN_NIX_SHELL=%s\nCGO_CFLAGS=%s\nCGO_LDFLAGS=%s\n" "$IN_NIX_SHELL" "$CGO_CFLAGS" "$CGO_LDFLAGS"'`
+  passed and showed Dolt from the Nix store with Nix-store ICU compiler/linker
+  flags.
+
+remaining error field: this answers the local `start-services.sh` question and
+keeps local publication-platform startup aligned with the repo dev-shell
+contract. It does not change staging behavior and does not replace staging as
+the acceptance environment for vmctl, live workers, provider credentials,
+promotion, rollback, or Choir-in-Choir behavior.
 
 ## Suggested `/goal`
 

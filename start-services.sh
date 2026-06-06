@@ -1,4 +1,16 @@
 #!/bin/bash
+if [ -z "${IN_NIX_SHELL:-}" ] && [ "${CHOIR_ALLOW_HOST_LOCAL_SERVICES:-0}" != "1" ]; then
+  cat >&2 <<'EOF'
+start-services.sh must run inside the repo dev shell:
+
+  nix develop -c ./start-services.sh
+
+Set CHOIR_ALLOW_HOST_LOCAL_SERVICES=1 only for a short diagnostic run when
+investigating host-local harness configuration.
+EOF
+  exit 1
+fi
+
 CHOIR_AUTH_SIGNING_KEY_PATH="${CHOIR_AUTH_SIGNING_KEY_PATH:-/tmp/go-choir-m2/auth-signing-key}"
 mkdir -p "$(dirname "$CHOIR_AUTH_SIGNING_KEY_PATH")"
 if [ ! -f "$CHOIR_AUTH_SIGNING_KEY_PATH" ]; then
@@ -6,11 +18,6 @@ if [ ! -f "$CHOIR_AUTH_SIGNING_KEY_PATH" ]; then
 fi
 if [ ! -f "${CHOIR_AUTH_SIGNING_KEY_PATH}.pub" ]; then
   ssh-keygen -y -f "$CHOIR_AUTH_SIGNING_KEY_PATH" > "${CHOIR_AUTH_SIGNING_KEY_PATH}.pub"
-fi
-if [ -d /opt/homebrew/opt/icu4c@78/include ] && [ -d /opt/homebrew/opt/icu4c@78/lib ]; then
-  export CGO_CFLAGS="${CGO_CFLAGS:--I/opt/homebrew/opt/icu4c@78/include}"
-  export CGO_CXXFLAGS="${CGO_CXXFLAGS:--I/opt/homebrew/opt/icu4c@78/include}"
-  export CGO_LDFLAGS="${CGO_LDFLAGS:--L/opt/homebrew/opt/icu4c@78/lib}"
 fi
 
 wait_for_url() {
