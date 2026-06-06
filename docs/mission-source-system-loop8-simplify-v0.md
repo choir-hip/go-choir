@@ -603,6 +603,40 @@ and preview provenance chips. No new behavior problem is confirmed; this is a
 bounded extraction to remove markup/CSS coupling from `VTextEditor.svelte`
 without moving model/provider semantics or merge state transitions.
 
+Result: `frontend/src/lib/VTextCompareMergePanel.svelte` now owns the
+compare/merge panel rendering. `VTextEditor.svelte` keeps compare/merge API
+calls, editor content replacement, selected suggestion state, and adoption
+handlers, passing state into the panel and receiving semantic retry/toggle
+events.
+
+```text
+frontend/src/lib/VTextEditor.svelte              2897 lines
+frontend/src/lib/VTextToolbar.svelte              590 lines
+frontend/src/lib/VTextPublicationResult.svelte    283 lines
+frontend/src/lib/vtext-markdown-serializer.ts      95 lines
+frontend/src/lib/VTextCompareMergePanel.svelte    281 lines
+
+local verification:
+  npm --prefix frontend run build
+  result: passed with no Svelte unused-selector warnings.
+
+commit:
+  82a823e7fb7446c60e2d9601411e435235f93165
+
+CI/deploy:
+  GitHub Actions CI 27074699960 passed.
+  FlakeHub publish 27074699942 passed.
+  Node B deploy job 79910045947 passed.
+  /health reported proxy and sandbox deployed_commit
+  82a823e7fb7446c60e2d9601411e435235f93165, deployed_at
+  2026-06-06T21:45:13Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-authoring-history.spec.js
+  result: 2 passed.
+```
+
 ### Performance Checks
 
 - Local focused backend check:
