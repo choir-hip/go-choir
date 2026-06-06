@@ -135,7 +135,8 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 			firstSelector = selectorMap
 		}
 	}
-	sourceSelector, err := marshalPublicationSourceSelector(selectors, firstSelector)
+	evidenceState := publicationSourceEvidenceState(m)
+	sourceSelector, err := marshalPublicationSourceSelector(selectors, firstSelector, evidenceState)
 	if err != nil {
 		return entity, transclusion, false, fmt.Errorf("marshal source selector: %w", err)
 	}
@@ -178,15 +179,71 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 	return entity, transclusion, true, nil
 }
 
-func marshalPublicationSourceSelector(selectors []any, firstSelector map[string]any) (json.RawMessage, error) {
+func marshalPublicationSourceSelector(selectors []any, firstSelector map[string]any, evidenceState map[string]any) (json.RawMessage, error) {
 	if len(selectors) <= 1 {
-		return json.Marshal(firstSelector)
+		selector := copyStringAnyMap(firstSelector)
+		if len(evidenceState) > 0 {
+			selector["evidence_state"] = evidenceState
+		}
+		return json.Marshal(selector)
 	}
 	selectorSet := map[string]any{
 		"selector_kind": "selector_set",
 		"selectors":     selectors,
 	}
+	if len(evidenceState) > 0 {
+		selectorSet["evidence_state"] = evidenceState
+	}
 	return json.Marshal(selectorSet)
+}
+
+func copyStringAnyMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in)+1)
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func publicationSourceEvidenceState(entity map[string]any) map[string]any {
+	evidence := mapValue(entity["evidence"])
+	if len(evidence) == 0 {
+		return nil
+	}
+	state := normalizePublicationEvidenceState(firstString(evidence, "state", "relation", "research_state"))
+	if state == "" {
+		return nil
+	}
+	out := map[string]any{"state": state}
+	if relation := normalizePublicationEvidenceState(firstString(evidence, "relation")); relation == "confirms" || relation == "refutes" || relation == "qualifies" {
+		out["relation"] = relation
+	}
+	if researchState := strings.TrimSpace(firstString(evidence, "research_state")); researchState != "" {
+		out["research_state"] = researchState
+	}
+	if uncertainty := strings.TrimSpace(firstString(evidence, "uncertainty")); uncertainty != "" {
+		out["uncertainty"] = uncertainty
+	}
+	return out
+}
+
+func normalizePublicationEvidenceState(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "candidate", "available", "confirms", "refutes", "qualifies", "no_source_needed", "stale", "blocked_by_access", "unavailable":
+		return strings.ToLower(strings.TrimSpace(value))
+	case "confirming", "confirmed", "represented", "owner_supplied":
+		return "confirms"
+	case "refuting", "refuted":
+		return "refutes"
+	case "qualifying", "qualified":
+		return "qualifies"
+	case "blocked", "blocked_access", "access_blocked":
+		return "blocked_by_access"
+	case "not_needed", "no-source-needed", "no_source":
+		return "no_source_needed"
+	default:
+		return ""
+	}
 }
 
 func normalizePublicationDisplayPolicy(raw string, display map[string]any, selector map[string]any) string {

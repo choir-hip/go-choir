@@ -196,6 +196,10 @@ func TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusi
 				"text_quote":    "The quoted passage is part of the argument.",
 				"content_hash":  "hash-quoted-passage",
 			}},
+			"evidence": map[string]any{
+				"state":       "blocked",
+				"uncertainty": "reader authorization required",
+			},
 		}},
 	})
 
@@ -215,6 +219,14 @@ func TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusi
 	}
 	if transclusion.SnapshotText != "The quoted passage is part of the argument." || transclusion.ContentHash != "hash-quoted-passage" {
 		t.Fatalf("transclusion snapshot/hash = %#v", transclusion)
+	}
+	var selector map[string]any
+	if err := json.Unmarshal(transclusion.SourceSelector, &selector); err != nil {
+		t.Fatalf("decode source selector: %v", err)
+	}
+	evidenceState := mapValue(selector["evidence_state"])
+	if evidenceState["state"] != "blocked_by_access" || evidenceState["uncertainty"] != "reader authorization required" {
+		t.Fatalf("selector evidence state = %#v from %s", evidenceState, string(transclusion.SourceSelector))
 	}
 }
 
@@ -246,6 +258,11 @@ func TestBuildPublicationSourceMetadataPreservesSelectorSet(t *testing.T) {
 					"end_page":      13,
 				},
 			},
+			"evidence": map[string]any{
+				"state":          "confirms",
+				"relation":       "confirms",
+				"research_state": "owner_supplied",
+			},
 		}},
 	})
 
@@ -261,8 +278,9 @@ func TestBuildPublicationSourceMetadataPreservesSelectorSet(t *testing.T) {
 		t.Fatalf("snapshot text = %q", transclusion.SnapshotText)
 	}
 	var selectorSet struct {
-		SelectorKind string           `json:"selector_kind"`
-		Selectors    []map[string]any `json:"selectors"`
+		SelectorKind  string           `json:"selector_kind"`
+		Selectors     []map[string]any `json:"selectors"`
+		EvidenceState map[string]any   `json:"evidence_state"`
 	}
 	if err := json.Unmarshal(transclusion.SourceSelector, &selectorSet); err != nil {
 		t.Fatalf("decode source selector: %v", err)
@@ -272,6 +290,9 @@ func TestBuildPublicationSourceMetadataPreservesSelectorSet(t *testing.T) {
 	}
 	if selectorSet.Selectors[1]["selector_kind"] != "table_range" || selectorSet.Selectors[2]["selector_kind"] != "page_range" {
 		t.Fatalf("selector set lost non-quote selectors: %#v", selectorSet.Selectors)
+	}
+	if selectorSet.EvidenceState["state"] != "confirms" || selectorSet.EvidenceState["relation"] != "confirms" || selectorSet.EvidenceState["research_state"] != "owner_supplied" {
+		t.Fatalf("selector set evidence state = %#v from %s", selectorSet.EvidenceState, string(transclusion.SourceSelector))
 	}
 }
 
@@ -306,7 +327,9 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 				"open_surface": "source",
 			},
 			"evidence": map[string]any{
-				"state": "available",
+				"state":          "confirms",
+				"relation":       "confirms",
+				"research_state": "owner_supplied",
 			},
 			"provenance": map[string]any{
 				"created_by":            "vtext",
@@ -386,6 +409,15 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	if transclusion.SnapshotText != "The committee held rates steady." || transclusion.ContentHash != "hash-fed-rates" {
 		t.Fatalf("bundle transclusion snapshot/hash = %#v", transclusion)
 	}
+	var bundleSelector struct {
+		EvidenceState map[string]any `json:"evidence_state"`
+	}
+	if err := json.Unmarshal(transclusion.SourceSelector, &bundleSelector); err != nil {
+		t.Fatalf("decode bundle source selector: %v", err)
+	}
+	if bundleSelector.EvidenceState["state"] != "confirms" || bundleSelector.EvidenceState["relation"] != "confirms" || bundleSelector.EvidenceState["research_state"] != "owner_supplied" {
+		t.Fatalf("bundle selector evidence state = %#v from %s", bundleSelector.EvidenceState, string(transclusion.SourceSelector))
+	}
 	if !strings.Contains(string(bundle.Policy.Export), `"download_allowed":true`) {
 		t.Fatalf("bundle export policy = %s", string(bundle.Policy.Export))
 	}
@@ -398,6 +430,25 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	}
 	if !strings.Contains(exported.Content, "This is the published projection.") || exported.ContentHash == "" {
 		t.Fatalf("export content/hash = %#v", exported)
+	}
+	var exportedMetadata struct {
+		SourceEntities []PublicationSourceEntity `json:"source_entities"`
+		Transclusions  []PublicationTransclusion `json:"transclusions"`
+	}
+	if err := json.Unmarshal(exported.Metadata, &exportedMetadata); err != nil {
+		t.Fatalf("decode export metadata: %v\n%s", err, string(exported.Metadata))
+	}
+	if len(exportedMetadata.SourceEntities) != 1 || len(exportedMetadata.Transclusions) != 1 {
+		t.Fatalf("export source metadata = %#v from %s", exportedMetadata, string(exported.Metadata))
+	}
+	var exportedSelector struct {
+		EvidenceState map[string]any `json:"evidence_state"`
+	}
+	if err := json.Unmarshal(exportedMetadata.Transclusions[0].SourceSelector, &exportedSelector); err != nil {
+		t.Fatalf("decode export source selector: %v", err)
+	}
+	if exportedSelector.EvidenceState["state"] != "confirms" || exportedSelector.EvidenceState["relation"] != "confirms" {
+		t.Fatalf("export selector evidence state = %#v from %s", exportedSelector.EvidenceState, string(exportedMetadata.Transclusions[0].SourceSelector))
 	}
 	search, err := svc.SearchPublished(context.Background(), "projection")
 	if err != nil {

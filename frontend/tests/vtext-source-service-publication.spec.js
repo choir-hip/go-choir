@@ -66,7 +66,8 @@ test('publishes source-service source entities as expandable transclusions and c
               default_collapsed: false,
             },
             evidence: {
-              state: 'available',
+              state: 'confirms',
+              relation: 'confirms',
               research_state: 'represented',
             },
             provenance: {
@@ -112,6 +113,11 @@ test('publishes source-service source entities as expandable transclusions and c
     default_display_mode: 'embedded_excerpt',
     snapshot_text: excerpt,
   });
+  expect(resolved.transclusions[0].source_selector.evidence_state).toMatchObject({
+    state: 'confirms',
+    relation: 'confirms',
+    research_state: 'represented',
+  });
   expect(resolved.policy.export.formats).toEqual(expect.arrayContaining(['txt', 'md', 'html']));
 
   const exported = await fetchJSON(page, `/api/platform/publications/export?route=${encodeURIComponent(publish.route_path)}&format=md`);
@@ -119,6 +125,12 @@ test('publishes source-service source entities as expandable transclusions and c
   expect(exported.content).toContain(`# ${title}`);
   expect(exported.content_hash).toBeTruthy();
   expect(exported.filename).toMatch(/\.md$/);
+  expect(exported.metadata.source_entities[0].source_entity_id).toBe('src-service-economy');
+  expect(exported.metadata.transclusions[0].source_selector.evidence_state).toMatchObject({
+    state: 'confirms',
+    relation: 'confirms',
+    research_state: 'represented',
+  });
   const textExport = await fetchJSON(page, `/api/platform/publications/export?route=${encodeURIComponent(publish.route_path)}&format=txt`);
   expect(textExport.content).toContain(excerpt);
   expect(textExport.content).not.toContain('Open source');
