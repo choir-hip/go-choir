@@ -21,7 +21,7 @@ async function fetchJSON(page, path, options = {}) {
   }, { requestPath: path, requestOptions: options });
 }
 
-test('publishes source-service source entities as expandable transclusions and canonical exports', async ({ desktopSession }) => {
+test('publishes source-service source entities as expandable transclusions and canonical exports', async ({ desktopSession, browser }) => {
   const { page, baseURL } = desktopSession;
   const itemID = process.env.SOURCE_SERVICE_ITEM_ID || 'srcitem_fixture_economy';
   const sourceID = process.env.SOURCE_SERVICE_SOURCE_ID || 'gdelt:15min';
@@ -57,6 +57,17 @@ test('publishes source-service source entities as expandable transclusions and c
                 selector_kind: 'text_quote',
                 text_quote: excerpt,
                 content_hash: 'sha256-fixture-source-service-excerpt',
+              },
+              {
+                selector_kind: 'table_range',
+                table_id: 'source-service-fixture-table',
+                start_row: 1,
+                end_row: 2,
+              },
+              {
+                selector_kind: 'page_range',
+                start_page: 3,
+                end_page: 4,
               },
             ],
             display: {
@@ -113,6 +124,14 @@ test('publishes source-service source entities as expandable transclusions and c
     default_display_mode: 'embedded_excerpt',
     snapshot_text: excerpt,
   });
+  expect(resolved.transclusions[0].source_selector).toMatchObject({
+    selector_kind: 'selector_set',
+  });
+  expect(resolved.transclusions[0].source_selector.selectors).toHaveLength(3);
+  expect(resolved.transclusions[0].source_selector.selectors[1]).toMatchObject({
+    selector_kind: 'table_range',
+    table_id: 'source-service-fixture-table',
+  });
   expect(resolved.transclusions[0].source_selector.evidence_state).toMatchObject({
     state: 'confirms',
     relation: 'confirms',
@@ -126,6 +145,15 @@ test('publishes source-service source entities as expandable transclusions and c
   expect(exported.content_hash).toBeTruthy();
   expect(exported.filename).toMatch(/\.md$/);
   expect(exported.metadata.source_entities[0].source_entity_id).toBe('src-service-economy');
+  expect(exported.metadata.transclusions[0].source_selector).toMatchObject({
+    selector_kind: 'selector_set',
+  });
+  expect(exported.metadata.transclusions[0].source_selector.selectors).toHaveLength(3);
+  expect(exported.metadata.transclusions[0].source_selector.selectors[2]).toMatchObject({
+    selector_kind: 'page_range',
+    start_page: 3,
+    end_page: 4,
+  });
   expect(exported.metadata.transclusions[0].source_selector.evidence_state).toMatchObject({
     state: 'confirms',
     relation: 'confirms',
@@ -173,6 +201,29 @@ test('publishes source-service source entities as expandable transclusions and c
   await expect(sourceWindow).toContainText(excerpt);
   await expect(sourceWindow.locator('[data-source-entity]')).toContainText('src-service-economy');
   await expect(sourceWindow.locator('[data-source-entity]')).toContainText(itemID);
+
+  const guestContext = await browser.newContext();
+  try {
+    const guestPage = await guestContext.newPage();
+    await guestPage.goto(`${baseURL}${publish.route_path}`);
+    const guestReader = guestPage.locator('[data-vtext-published-reader]').last();
+    await expect(guestReader).toBeVisible({ timeout: 15_000 });
+    const guestCitation = guestReader.locator('[data-vtext-source-ref][data-source-entity-id="src-service-economy"]').first();
+    await guestCitation.click();
+    const guestOpenSource = guestReader.locator('[data-vtext-source-flow-note] [data-vtext-open-source]').first();
+    await expect(guestOpenSource).toBeVisible({ timeout: 10_000 });
+    const initialGuestSourceWindows = await guestPage.locator('[data-content-viewer]').count();
+    await guestOpenSource.click();
+    await expect(guestPage.locator('[data-content-viewer]')).toHaveCount(initialGuestSourceWindows + 1, { timeout: 10000 });
+    const guestSourceWindow = guestPage.locator('[data-content-viewer]').last();
+    await expect(guestSourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
+    await expect(guestSourceWindow).toContainText(sourceLabel);
+    await expect(guestSourceWindow).toContainText(excerpt);
+    await expect(guestSourceWindow.locator('[data-source-entity]')).toContainText('src-service-economy');
+    await expect(guestPage.locator('[data-browser-app]')).toHaveCount(0);
+  } finally {
+    await guestContext.close();
+  }
 });
 
 test('publishes public content-item sources with cleaned reader snapshots', async ({ desktopSession, browser }) => {

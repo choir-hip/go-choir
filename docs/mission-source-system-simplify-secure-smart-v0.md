@@ -2306,6 +2306,43 @@ focused publication test. It does not yet prove every URL-backed and
 source-service-style publication source shape, nor does it finish the shared
 selector/evidence/open-surface contract consolidation.
 
+### 2026-06-06 Source-Service Publication Selector And Guest Proof
+
+Status: `accepted_on_staging_for_source_service_publication_selector_guest`.
+
+Acceptance expansion:
+
+- Test checkpoint commit `03918d12` updates
+  `frontend/tests/vtext-source-service-publication.spec.js` so the
+  source-service publication path carries three selectors: text quote,
+  table range, and page range.
+- The test now asserts the resolved publication bundle and Markdown export
+  metadata preserve the selector set, not only the first quote selector.
+- The test now opens the same published source as a signed-out guest and
+  asserts Source Viewer opens in reader mode without creating Web Lens/Browser.
+
+Deployed acceptance proof:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities"
+result: passed
+staging deployed_commit during proof: b63b4fd5840f3a7a6f42df6cb1925279f5f88b0b
+```
+
+What this proves:
+
+- `source_selector.selector_kind` is `selector_set` in the resolved bundle.
+- Resolved selector metadata includes the table range selector.
+- Export metadata includes the selector set and the page range selector.
+- Owner source open creates a Source Viewer window with source-service identity.
+- Guest source open creates a Source Viewer reader-mode window and does not
+  create `data-browser-app`.
+
+Residual risk: this closes the source-service-style publication selector and
+guest-open proof gap for the focused test fixture. URL-backed publication source
+snapshots still need equivalent owner/guest product-path proof with publication
+export metadata, and the broader shared contract consolidation remains open.
+
 ## Suggested `/goal`
 
 ```text
