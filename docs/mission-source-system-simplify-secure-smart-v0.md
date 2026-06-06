@@ -5122,6 +5122,85 @@ CI/deploy/staging proof:
   source-service publication fixture and still proves resolved/exported
   source metadata plus owner/guest Source Viewer opens.
 
+owner-visible policy control fix:
+
+- Behavior commit
+  `8efb05a25430330ada50e1a2ac6ebe2418af9700` adds an owner-visible
+  `Publication policy` band to the VText editor. The band states the currently
+  supported policy precisely: public route, source snapshots, and copy/download
+  exports for `txt`, `md`, `html`, `docx`, and `pdf`.
+- The VText UI publish button is disabled until the owner checks
+  `I approve publishing this revision to a public route.` The acknowledgement
+  is tied to the currently selected document/version label so revision
+  navigation cannot silently carry an old acknowledgement into a different
+  selected version.
+- `handlePublishCurrent` now sends explicit access/export policy through the
+  existing owner publish API:
+  `access_policy={"visibility":"public","route":"public"}` and
+  `export_policy={"copy_allowed":true,"download_allowed":true,
+  "formats":["txt","md","html","docx","pdf"]}`.
+- `frontend/tests/vtext-authoring-history.spec.js` includes a regression test
+  that stubs the product publish endpoint, verifies the publish button is
+  disabled before acknowledgement, and asserts the explicit policy payload sent
+  by the editor.
+- Local verification: `npm --prefix frontend run build` passed.
+- Local Playwright limitation: `nix develop -c ./start-services.sh` reported
+  `Services started successfully`, but the local backend/frontend processes
+  exited after startup in this desktop session. The focused local Playwright
+  regression therefore failed before the VText flow: first because
+  `localhost:4173` was not listening, then because `/auth/register/begin`
+  could not reach the local auth service. This was treated as local harness
+  persistence debt and not as staging acceptance proof.
+
+owner-visible policy CI/deploy/staging proof:
+
+- Behavior commit
+  `8efb05a25430330ada50e1a2ac6ebe2418af9700` was pushed to `origin/main`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27069371444` completed
+  successfully, including deploy-impact detection, runtime shards,
+  non-runtime tests, integration smoke, Go vet/build, frontend build, aggregate
+  Go gate, and Node B deploy job `79895836858`.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27069371443` completed
+  successfully.
+- Staging health after the deploy job completed reported proxy and upstream
+  `deployed_commit=8efb05a25430330ada50e1a2ac6ebe2418af9700`,
+  `deployed_at=2026-06-06T17:44:31Z`, `status=ok`, and `vmctl_status=ok`.
+- Headless Playwright proof using the old saved storage state
+  `/tmp/choir-policy-forward.storage.json` was explicitly rejected as
+  unauthenticated because `/auth/session` returned
+  `{"authenticated":false}` and the UI showed `Local preview - sign in to
+  save`.
+- Computer Use / Comet owner proof on the running Comet app confirmed an
+  authenticated staging owner surface: the desktop showed `Online`, open VText
+  windows for the legal proposal, the deployed `PUBLICATION POLICY` band, and
+  disabled `Publish v94` before acknowledgement. After checking the
+  acknowledgement, Comet exposed enabled `Publish v94`; clicking it published
+  the route
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pubb26d816ed`
+  and the editor reported `Published v94; opened public link and copied URL`.
+- Public resolve/export evidence for that route is stored at
+  `docs/evidence/source-system-2026-06-06/vtext-publish-policy-owner-comet-20260606T1749Z.json`.
+  It records publication `pub-b26d816e-dcab-4d23-bc75-26ab3e405b18`,
+  publication version `pubver-0fae8500-7940-4239-a691-a0b79d1b6e2f`,
+  `policy.access={"visibility":"public","route":"public"}`,
+  `policy.export={"copy_allowed":true,"download_allowed":true,
+  "formats":["txt","md","html","docx","pdf"]}`, seven selector-rich
+  transclusions carrying the same access/export policy, Markdown export
+  metadata with the same policy, Appendix A survival, table-header survival,
+  and source marker survival.
+- Attempted desktop screenshot capture with `screencapture` failed with
+  `could not create image from display`, so this slice relies on the Computer
+  Use accessibility/screenshot observation in the run log plus stored
+  resolve/export JSON evidence rather than a new PNG.
+
+remaining error field: Problem 32 is closed for explicit API forwarding and
+for owner-visible public publication acknowledgement in VText. Remaining policy
+work is broader: add real non-public publication semantics only after route,
+reader, export, retrieval-source, and guest enforcement are proven; avoid
+offering unlisted/private controls before those semantics exist.
+
 ## Suggested `/goal`
 
 ```text
