@@ -5513,3 +5513,19 @@ evidence to collect:
 - If behavior changes land, push to `main`, wait for CI/deploy, verify staging
   identity, and run deployed owner/path proof with Comet as primary where
   possible.
+
+local probe update:
+
+- After the first stylesheet extraction, `pnpm --dir frontend exec playwright
+  test frontend/tests/vtext-source-entities.spec.js --project=chromium
+  --timeout=120000` failed the journal-flow geometry assertion:
+  `continuedBelowFlow` was false.
+- The failure context showed the source note still existed and prose still
+  routed beside it, but the generic editor rules for transclusion quotes,
+  source facts, and source buttons won the cascade inside the extracted journal
+  note. That made the note taller and pulled more paragraphs into the synthetic
+  Pretext flow.
+- Root cause: simply moving selectors out of Svelte changed the cascade owner.
+  The source-flow stylesheet must use source-flow-specific selectors strong
+  enough to preserve the minimal journal note instead of inheriting generic
+  card/pill source affordances.
