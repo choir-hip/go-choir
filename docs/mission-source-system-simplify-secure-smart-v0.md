@@ -1572,6 +1572,57 @@ auto-restoring either stale collapsed draft. Then redeploy and re-open the
 owner legal proposal in Comet to verify v87 no longer shows the collapsed
 appendix draft as an unsaved edit.
 
+### Problem 8: Local Draft Recovery Still Trusts Browser Text Over Versioned VText
+
+problem: after deploying the parent-revision and Markdown-table-count draft
+guards, the owner-authenticated Comet legal-proposal window still restored a
+browser-local v87 draft over the canonical v87 document. The editor remained in
+`Primary draft Unsaved edit` with status `Autosaved draft restored`, and the
+appendix glossary was still exposed as flattened prose lines rather than a
+canonical table. This proves the restore policy is still too trusting when a
+document already has a durable revision.
+
+affected contract/invariant: canonical VText revisions are the source of truth.
+Local browser draft recovery is a convenience cache, not a revision line, and
+must not silently replace the visible content of an existing non-empty
+canonical head. A local draft can be offered or retained as recovery evidence,
+but automatic replacement of a versioned VText body is unsafe for owner
+workflows.
+
+evidence: behavior commit `465c599c44b425264813f6c9072e2ca18078e7c2` added
+frontend tests for older-parent stale drafts and same-head table-flattened
+drafts. Local e2e and frontend build passed; GitHub Actions run
+`27062081688`, FlakeHub run `27062081694`, staging health
+`/health` deployed commit `465c599c44b425264813f6c9072e2ca18078e7c2` at
+`2026-06-06T12:19:15Z`; deployed staging Playwright proof passed for synthetic
+old-parent and same-head table-flattened drafts. After that deploy, Computer
+Use reloaded the owner-authenticated Comet window at `https://choir.news` and
+the legal proposal still showed v87, `Primary draft Unsaved edit`, status
+`Autosaved draft restored`, and flattened glossary text in the editable VText
+surface. No owner mutation was performed.
+
+first observed version/transition: staging at deployed commit
+`465c599c44b425264813f6c9072e2ca18078e7c2` during owner Comet reload after the
+second stale-draft repair.
+
+suspected owner: frontend VText local draft recovery policy.
+
+why local/API-only fix is insufficient: synthetic Playwright covered the table
+patterns we could seed into browser storage, but the actual owner session still
+contains a browser-local draft shape that bypasses those heuristics. A
+heuristic that tries to prove every unsafe draft shape is incomplete. The
+safer product invariant is that durable VText revisions load from canonical
+state by default, and browser-local drafts do not auto-replace non-empty
+versioned content.
+
+planned proof: change VText local draft recovery so an existing non-empty
+canonical revision is loaded by default and any differing browser draft is
+skipped instead of auto-restored. Add a frontend regression proving a current
+head with ordinary prose does not auto-restore a differing local draft. Keep
+draft cleanup/skip status observable, redeploy, and reload the owner legal
+proposal in Comet to verify the window no longer shows `Unsaved edit` or
+`Autosaved draft restored` before attempting a bounded owner edit/revise proof.
+
 ## Suggested `/goal`
 
 ```text
