@@ -3583,6 +3583,50 @@ func TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTa
 	}
 }
 
+func TestVTextMarkdownStructureStabilizationRepairsMalformedTableTailRow(t *testing.T) {
+	parentContent := strings.Join([]string{
+		"# Legal Cloud",
+		"",
+		"| Term | Definition |",
+		"| --- | --- |",
+		"| Agent | Multi-step worker. |",
+		"| Work product | Durable output. |",
+		"",
+		"Closing paragraph.",
+	}, "\n")
+	userContent := strings.Join([]string{
+		"# Legal Cloud",
+		"",
+		"| Term | Definition |",
+		"| --- | --- |",
+		"| Agent | Multi-step worker. |",
+		"| Work product | Durable output.",
+		"",
+		"Closing paragraph with user edit.",
+	}, "\n")
+
+	stabilized, changed := stabilizeVTextUserMarkdownStructures(parentContent, userContent)
+	if !changed {
+		t.Fatalf("stabilization did not report a malformed table-row repair")
+	}
+	if !strings.Contains(stabilized, "| Work product | Durable output. |") {
+		t.Fatalf("stabilized content did not restore final table delimiter:\n%s", stabilized)
+	}
+	if !strings.Contains(stabilized, "Closing paragraph with user edit.") {
+		t.Fatalf("stabilized content dropped user edit:\n%s", stabilized)
+	}
+}
+
+func TestVTextMarkdownTableRowParserHandlesEscapedPipes(t *testing.T) {
+	cells := markdownTableRowCells(`| Term \| Alias | Definition with \| symbol |`)
+	if len(cells) != 2 {
+		t.Fatalf("cells = %#v, want 2 cells", cells)
+	}
+	if cells[0] != "Term | Alias" || cells[1] != "Definition with | symbol" {
+		t.Fatalf("cells = %#v", cells)
+	}
+}
+
 func TestVTextImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 

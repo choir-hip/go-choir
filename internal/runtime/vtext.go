@@ -2339,7 +2339,7 @@ func stabilizeVTextUserMarkdownStructures(parentContent, userContent string) (st
 	}
 	userTables := extractMarkdownTableBlocks(userContent)
 	if len(userTables) >= len(parentTables) {
-		return userContent, false
+		return normalizeMarkdownTableShapedRows(userContent)
 	}
 	out := userContent
 	changed := false
@@ -2354,7 +2354,48 @@ func stabilizeVTextUserMarkdownStructures(parentContent, userContent string) (st
 		out = next
 		changed = true
 	}
+	next, normalized := normalizeMarkdownTableShapedRows(out)
+	if normalized {
+		out = next
+		changed = true
+	}
 	return out, changed
+}
+
+func normalizeMarkdownTableShapedRows(content string) (string, bool) {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	changed := false
+	inTable := false
+	tableHasSeparator := false
+	for i, line := range lines {
+		strictCells := markdownTableRowCells(line)
+		if strictCells != nil {
+			inTable = true
+			if isMarkdownTableSeparatorCells(strictCells) {
+				tableHasSeparator = true
+			}
+			continue
+		}
+		if strings.TrimSpace(line) == "" {
+			inTable = false
+			tableHasSeparator = false
+			continue
+		}
+		if !inTable || !tableHasSeparator {
+			continue
+		}
+		if markdownTableShapedRowCells(line) == nil {
+			inTable = false
+			tableHasSeparator = false
+			continue
+		}
+		lines[i] = strings.TrimRight(line, " \t") + " |"
+		changed = true
+	}
+	if !changed {
+		return content, false
+	}
+	return strings.Join(lines, "\n"), true
 }
 
 func extractMarkdownTableBlocks(content string) []markdownTableBlock {
@@ -2403,7 +2444,7 @@ func markdownTableRowCells(line string) []string {
 	if !strings.HasPrefix(trimmed, "|") || !strings.HasSuffix(trimmed, "|") {
 		return nil
 	}
-	parts := strings.Split(strings.Trim(trimmed, "|"), "|")
+	parts := splitMarkdownTableCells(strings.Trim(trimmed, "|"))
 	if len(parts) < 2 {
 		return nil
 	}
@@ -2411,6 +2452,48 @@ func markdownTableRowCells(line string) []string {
 	for _, part := range parts {
 		cells = append(cells, strings.TrimSpace(strings.ReplaceAll(part, `\|`, "|")))
 	}
+	return cells
+}
+
+func markdownTableShapedRowCells(line string) []string {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "|") || strings.HasSuffix(trimmed, "|") {
+		return nil
+	}
+	parts := splitMarkdownTableCells(strings.TrimPrefix(trimmed, "|"))
+	if len(parts) < 2 {
+		return nil
+	}
+	cells := make([]string, 0, len(parts))
+	for _, part := range parts {
+		cells = append(cells, strings.TrimSpace(strings.ReplaceAll(part, `\|`, "|")))
+	}
+	return cells
+}
+
+func splitMarkdownTableCells(value string) []string {
+	var cells []string
+	var cell strings.Builder
+	escaped := false
+	for _, r := range value {
+		if escaped {
+			cell.WriteRune(r)
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			cell.WriteRune(r)
+			escaped = true
+			continue
+		}
+		if r == '|' {
+			cells = append(cells, cell.String())
+			cell.Reset()
+			continue
+		}
+		cell.WriteRune(r)
+	}
+	cells = append(cells, cell.String())
 	return cells
 }
 

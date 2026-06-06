@@ -6,13 +6,36 @@ type RenderMarkdownOptions = {
   wrapTables?: boolean;
 };
 
+function splitTableCells(value: string): string[] {
+  const cells: string[] = [];
+  let cell = '';
+  let escaped = false;
+  for (const char of value) {
+    if (escaped) {
+      cell += char === '|' ? '|' : `\\${char}`;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '|') {
+      cells.push(cell);
+      cell = '';
+      continue;
+    }
+    cell += char;
+  }
+  cells.push(cell);
+  return cells;
+}
+
 function parseTableRow(line: string): string[] | null {
   const trimmed = line.trim();
-  if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return null;
-  const cells = trimmed
-    .slice(1, -1)
-    .split('|')
-    .map((cell) => cell.trim());
+  if (!trimmed.startsWith('|')) return null;
+  const body = trimmed.endsWith('|') ? trimmed.slice(1, -1) : trimmed.slice(1);
+  const cells = splitTableCells(body).map((cell) => cell.trim());
   return cells.length >= 2 ? cells : null;
 }
 
