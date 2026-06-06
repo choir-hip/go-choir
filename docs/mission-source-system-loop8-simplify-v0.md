@@ -789,6 +789,23 @@ local verification:
 
   nix develop -c scripts/go-test-runtime-shards
   result: passed.
+
+commit:
+  bb1127f79e9faff9cd6662f4ee3e4fd3a571d2f5
+
+CI/deploy:
+  GitHub Actions CI 27075349478 passed.
+  FlakeHub publish 27075349466 passed.
+  Node B deploy job 79911740479 passed.
+  /health reported proxy and sandbox deployed_commit
+  bb1127f79e9faff9cd6662f4ee3e4fd3a571d2f5, deployed_at
+  2026-06-06T22:15:58Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-markdown-lineage.spec.js -g
+  'Migrated source gaps can be repaired|Sources panel applies source-gap repair'
+  result: 2 passed.
 ```
 
 ### Performance Checks
