@@ -5459,3 +5459,57 @@ residual risk:
 - This hardening bounds the weak Diagnosis path but does not yet remove the
   diagnostic JSON surface from normal reader/editor UX or replace manual source
   review with researched confirming/refuting source acquisition.
+
+## 2026-06-06 Problem: Source Flow Styling Is Still Owned By The Monolithic Editor
+
+status: documented_before_code
+
+current uncertainty or obstacle:
+
+- The latest user clarification tightened the Pretext requirement: Pretext is
+  valuable here because it lets article prose wrap like a magazine or academic
+  journal around a source note. It is not primarily a source-card styling tool.
+- The current source-flow behavior uses the right Pretext family:
+  `prepareRichInline()` for citation fragments and `layoutNextLineRange()` /
+  `layoutNextRichInlineLineRange()` for row-by-row routing around the note.
+- The ownership boundary is still weak. `frontend/src/lib/vtext-source-flow.ts`
+  owns the geometry and DOM mount, but the matching `.vtext-source-journal-*`
+  presentation rules still live as a large global CSS island inside
+  `VTextEditor.svelte`.
+
+selected cognitive transforms:
+
+1. Depth extraction on "use Pretext": the load-bearing variable is text-flow
+   geometry, not whether the source note visually says "card" or "chip".
+2. Ownership inversion: the source-flow module should own the source-flow
+   presentation contract instead of relying on a monolithic editor stylesheet.
+3. Verifier shift: prove the note is a wrapped journal surface with line
+   geometry and source-window behavior, then use visual proof on staging for
+   owner confidence.
+
+route-changing insight:
+
+- The next simplification should not add another source-card abstraction.
+  It should move the journal-flow CSS next to the source-flow implementation,
+  preserving the existing data attributes and tests while making the wrapped
+  source note easier to tune and prune.
+
+intended generic repair:
+
+- Extract the `.vtext-source-journal-*` and source-flow-specific overrides from
+  `VTextEditor.svelte` into a focused source-flow stylesheet imported by the
+  VText surface.
+- Keep canonical VText, source entity metadata, publication bundles, Markdown
+  export, and source-window reader behavior untouched.
+- Preserve the hover/collapsed marker affordance outside the mounted journal
+  flow.
+
+evidence to collect:
+
+- Local frontend build.
+- Source-entity Playwright coverage proving source markers still expand into a
+  Pretext-routed journal note, lines route beside the note, no cloned popover is
+  in the note, and source windows still open.
+- If behavior changes land, push to `main`, wait for CI/deploy, verify staging
+  identity, and run deployed owner/path proof with Comet as primary where
+  possible.
