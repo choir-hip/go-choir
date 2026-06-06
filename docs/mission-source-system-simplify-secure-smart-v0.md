@@ -2752,7 +2752,14 @@ runtime/platform/frontend consumers.
 
 ### 2026-06-06 Runtime Source Evidence State Canonicalization
 
-Status: `local_correctness_passed_pending_ci_deploy`.
+Status: `accepted_on_staging_for_runtime_source_evidence_states`.
+
+Behavior commit:
+
+```text
+4e46902c05b19a089db0273b257203f2ad337207
+fix: canonicalize source evidence states
+```
 
 Implementation:
 
@@ -2776,6 +2783,17 @@ nix develop -c go test ./internal/platform -run TestBuildPublicationSourceMetada
 result: passed
 ```
 
+CI/deploy evidence:
+
+```text
+CI run: 27064305893 passed
+FlakeHub run: 27064305913 passed
+Node B deploy job: 79882444697 passed
+staging proxy deployed_commit: 4e46902c05b19a089db0273b257203f2ad337207
+staging sandbox deployed_commit: 4e46902c05b19a089db0273b257203f2ad337207
+staging deployed_at: 2026-06-06T14:02:43Z
+```
+
 What this proves locally:
 
 - canonical runtime VText source entity metadata no longer emits `pending` or
@@ -2784,9 +2802,10 @@ What this proves locally:
 - publication/export projection preserves legacy `pending` and `error` source
   metadata as typed evidence states instead of dropping the state.
 
-Residual risk: CI, deploy, and staging health identity are still pending for
-this behavior commit. This is still a convergence step, not a single shared
-source schema package across all language boundaries.
+Residual risk: this closes Problem 16 for runtime media-derived source entity
+states and platform publication projection of legacy aliases. This is still a
+convergence step, not a single shared source schema package across all language
+boundaries.
 
 ## Suggested `/goal`
 
