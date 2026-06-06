@@ -1282,6 +1282,44 @@ entities with `state: confirms`, no-source-needed revisions clear gaps through
 `state: no_source_needed`, and Source Viewer/VText render the state without
 falling back to missing-source placeholders.
 
+### Problem 5: VText Diagnosis Lacks Bounded Structure Evidence
+
+problem: the owner-authenticated product path has either full revision bodies
+or high-level history metadata, but no bounded structure summary that can prove
+table preservation/regression across historical revisions without dumping full
+legal-proposal content into a browser accessibility tree.
+
+affected contract/invariant: root-cause work for the legal proposal appendix
+table regression must compare v70-v78 through product/control evidence. The
+verifier needs table/heading/source-marker structure, hashes, and revision
+identity without requiring a full private document export or direct database
+access.
+
+evidence: `GET /api/vtext/documents/{id}/revisions?limit=10000` returned full
+revision JSON in Comet for `f93cea62-f833-4dae-b414-8e44783d8cbe`, but the
+response was too large for reliable accessibility-tree extraction. Direct
+navigation to `/api/vtext/documents/{id}/history` then returned
+`{"error":"authentication required"}` because direct API page loads do not
+exercise frontend `fetchWithRenewal`. Existing `HandleVTextDiagnosis` lists
+revision responses through `revisionResponseFromRecord`, which includes full
+`Content`.
+
+first observed version/transition: current staging behavior at
+`cf5bf9b70d5d9f5c3b3764811f12715db08b422f` during the Comet extraction probe.
+
+suspected owner: VText diagnosis/product verifier surface.
+
+why local/UI-only fix is insufficient: local tests can model table survival,
+but the mission needs owner-authenticated staging evidence against the actual
+legal proposal history. UI screenshots cannot reliably compare hidden table
+rows and Markdown/VText structure across eight revisions.
+
+planned proof: extend the owner-authenticated VText diagnosis bundle with
+bounded revision structure summaries: version/revision identity, content hash,
+line/heading/table/source-marker counts, compact table signatures, and no full
+content. Add runtime tests proving diagnosis includes structure summaries and
+omits private revision bodies when requested with a bounded structure mode.
+
 ## Suggested `/goal`
 
 ```text
