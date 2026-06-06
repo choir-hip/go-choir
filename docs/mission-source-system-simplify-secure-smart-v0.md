@@ -6072,6 +6072,72 @@ remaining error field: Problem 35 is closed for platform publication/export
 normalization. The broader private/public visibility and future connector
 producer matrix remains open.
 
+### Problem 36: Publication Visibility Policy Is Stored But Not Enforced For Resolve/Search
+
+Status: `documented_pending_fix`.
+
+problem: `access_policy.visibility` and route policy are stored in
+`publication_policies` and export metadata, but platform route resolution and
+retrieval search currently treat every active publication route as public. A
+publication request with `access_policy.visibility` set to `private` or
+`unlisted` still receives a `/pub/vtext/...` route, and
+`GetPublicationBundleByRoute`, `ExportPublicationByRoute`, and
+`SearchPublished` query `public_routes`/`publications` without checking the
+stored access policy. This means policy metadata can say `private` or
+`unlisted` while the public resolve/search surface behaves as if it were
+public.
+
+affected contract/invariant: `docs/source-external-data-publication.md` says
+publication stores public/private route artifacts, route policy controls
+visibility/export, private corpus records must not leak through public
+publication/search/copy/export, and public transclusions must resolve only to
+public-safe artifacts. Storing visibility without enforcing it is weaker than
+the requirements contract and makes future private/unlisted UI exposure unsafe.
+
+confirmed evidence:
+
+```text
+internal/platform/source_metadata.go:
+  buildPublicationSourceMetadata accepts request or revision metadata
+  access_policy / route_policy and stores it as publication AccessPolicy.
+
+internal/platform/service.go:
+  PublishVText always inserts an active public_routes row and retrieval_sources
+  row with visibility='public', independent of access_policy.visibility.
+
+internal/platform/service.go:
+  GetPublicationBundleByRoute resolves any active route where p.state is
+  published; it does not join publication_policies or inspect visibility.
+
+internal/platform/service.go:
+  SearchPublished lists every active published public_route and does not
+  inspect publication_policies or route visibility.
+
+internal/proxy/platform_public.go:
+  /api/platform/publications/resolve, /export, and retrieval search are public
+  proxy handlers; they forward to platformd without an authenticated subject or
+  policy decision.
+```
+
+acceptance for fix:
+
+- define the current public API contract conservatively: public resolve/search
+  returns only publications with `access_policy.visibility == "public"` and
+  route policy allowing a public route;
+- keep unlisted/private publication artifacts stored and exportable only through
+  an authorized/internal path in a later feature, not through public search;
+- ensure public search omits unlisted/private publications;
+- ensure public resolve for private publications returns not found or a typed
+  policy denial, without leaking source metadata;
+- keep public publication/export behavior unchanged for
+  `visibility="public"`;
+- add platform service tests that publish public, unlisted, and private
+  records and prove public resolve/search/export behavior follows policy.
+
+remaining error field: this fix should close public-surface leakage for stored
+private/unlisted policies. It will not implement full private/password/role
+gated reader access; that remains a future authorized publication surface.
+
 ## Suggested `/goal`
 
 ```text
