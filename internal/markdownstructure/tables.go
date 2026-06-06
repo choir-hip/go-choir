@@ -38,6 +38,10 @@ func NormalizeTableShapedRows(content string) (string, bool) {
 			inTable = true
 			tableColumnCount = len(strictCells)
 			if IsTableSeparatorCells(strictCells) {
+				if tableHasSeparator {
+					changed = true
+					continue
+				}
 				tableHasSeparator = true
 			}
 			normalized = append(normalized, line)

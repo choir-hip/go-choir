@@ -344,6 +344,10 @@
     return childText;
   }
 
+  function isMarkdownTableSeparatorCells(cells = []) {
+    return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(String(cell || '').trim()));
+  }
+
   function serializeBlockMarkdown(node) {
     if (!node) return '';
     if (node.nodeType === Node.TEXT_NODE) {
@@ -383,13 +387,13 @@
           const cellTag = cell.tagName?.toLowerCase();
           return cellTag === 'th' || cellTag === 'td';
         });
-        return `| ${cells.map((cell) => serializeInlineMarkdown(cell).trim().replace(/\|/g, '\\|')).join(' | ')} |`;
-      });
+        return cells.map((cell) => serializeInlineMarkdown(cell).trim().replace(/\|/g, '\\|'));
+      }).filter((cells) => cells.length > 0 && !isMarkdownTableSeparatorCells(cells));
       if (rows.length > 1) {
-        const width = Array.from(node.querySelectorAll('tr:first-child > *')).length || 1;
-        rows.splice(1, 0, `| ${Array.from({ length: width }).map(() => '---').join(' | ')} |`);
+        const width = rows[0].length || 1;
+        rows.splice(1, 0, Array.from({ length: width }).map(() => '---'));
       }
-      return rows.join('\n');
+      return rows.map((cells) => `| ${cells.join(' | ')} |`).join('\n');
     }
     return serializeInlineMarkdown(node).trimEnd();
   }

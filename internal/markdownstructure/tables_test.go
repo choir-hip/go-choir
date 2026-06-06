@@ -76,6 +76,31 @@ func TestNormalizeTableShapedRowsIgnoresDifferentWidthRowAfterTable(t *testing.T
 	}
 }
 
+func TestNormalizeTableShapedRowsRemovesDuplicateSeparatorRows(t *testing.T) {
+	content := strings.Join([]string{
+		"# Proposal",
+		"",
+		"| Term | Definition |",
+		"| --- | --- |",
+		"| --- | --- |",
+		"| Vector search | Similarity lookup. |",
+		"| Work product | Durable output. |",
+		"",
+		"Closing paragraph.",
+	}, "\n")
+
+	got, changed := NormalizeTableShapedRows(content)
+	if !changed {
+		t.Fatalf("NormalizeTableShapedRows changed = false")
+	}
+	if strings.Count(got, "| --- | --- |") != 1 {
+		t.Fatalf("normalized content kept duplicate separator:\n%s", got)
+	}
+	if !strings.Contains(got, "| Vector search | Similarity lookup. |\n| Work product | Durable output. |") {
+		t.Fatalf("normalized content dropped table body rows:\n%s", got)
+	}
+}
+
 func TestTableRowCellsHandlesEscapedPipes(t *testing.T) {
 	cells := TableRowCells(`| Term \| Alias | Definition with \| symbol |`)
 	if len(cells) != 2 {

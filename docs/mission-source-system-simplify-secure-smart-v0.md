@@ -1906,6 +1906,52 @@ source entities, diagnosis row counts/signatures remain stable, Source Viewer
 opens still work, and publication/export metadata includes the preserved source
 records.
 
+follow-up root-cause refinement after source-contract deploy proof:
+
+- the restore-path table-tail fix made restored parent revisions canonical, but
+  the editable VText frontend can still render Markdown tables as DOM `<table>`
+  nodes and serialize DOM rows back to Markdown when saving a browser edit;
+- the serializer always inserted a Markdown separator row after the first DOM
+  row, which is correct for normal rendered tables but unsafe if an existing
+  separator-like row survives into the DOM table rows;
+- the backend structure stabilizer repaired omitted/collapsed tables and final
+  rows missing delimiters, but did not remove duplicate separator rows when the
+  submitted content still contained at least as many table blocks as the parent;
+- this is the still-open browser-save class of Problem 10: one extra table row
+  below an unrelated prose edit while source metadata remains preserved.
+
+First repair implementation:
+
+- `frontend/src/lib/VTextEditor.svelte` now skips separator-like DOM rows while
+  serializing a table and then inserts one canonical Markdown separator;
+- `internal/markdownstructure.NormalizeTableShapedRows` now removes duplicate
+  Markdown separator rows inside a table, protecting the API path from stale or
+  alternate clients that submit duplicated separators;
+- `internal/runtime` now has a source-bearing VText user-save regression proving
+  a prose edit above the appendix survives, duplicate separators are removed,
+  the parent table text/signature is preserved, and durable `source_entities`
+  still carry forward.
+
+Local verification:
+
+```text
+nix develop -c go test ./internal/markdownstructure -count=1
+result: passed
+
+nix develop -c go test -tags comprehensive ./internal/runtime -run TestVTextUserSaveRemovesDuplicateMarkdownTableSeparator -count=1
+result: passed
+
+nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownStructureStabilization(RepairsMalformedTableTailRow|HandlesPartialTableContexts|AllowsExplicitTableDeletion)|TestVTextSourceMetadataCarryForwardPreservesTablesThroughUserAndAgentRevisions' -count=1
+result: passed
+
+npm --prefix frontend run build
+result: passed
+```
+
+Remaining proof required: deploy this repair, rerun staging acceptance, and
+perform a fresh owner-authenticated bounded edit/revise on the legal proposal
+to confirm v90-style 49-row table shape no longer materializes as 50 rows.
+
 ### 2026-06-06 Restore Table-Tail Fix Evidence
 
 Status: `accepted_on_staging_for_restore_transition`.

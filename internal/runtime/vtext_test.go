@@ -4224,6 +4224,108 @@ func TestVTextUserSaveAndAgentRevisePreserveSourcesAndTableShape(t *testing.T) {
 	}
 }
 
+func TestVTextUserSaveRemovesDuplicateMarkdownTableSeparator(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+	entity := vtextSourceEntity{
+		EntityID: "src-table-separator-proof",
+		Kind:     "source_service_item",
+		Label:    "Table Source",
+		Target: vtextSourceEntityTarget{
+			TargetKind: "source_service_item",
+			ItemID:     "srcitem-table-separator-proof",
+			SourceID:   "fixture:table",
+			FetchID:    "fetch-table-separator-proof",
+		},
+	}
+	parentContent := strings.Join([]string{
+		"# Proposal",
+		"",
+		"A private legal cloud solves this [1].",
+		"",
+		"Appendix A: Glossary",
+		"",
+		"| Term | Definition |",
+		"| --- | --- |",
+		"| Agent | Multi-step worker. |",
+		"| Work product | Durable output. |",
+		"| Vector database | Stores embeddings for retrieval. |",
+		"",
+		"End of proposal.",
+	}, "\n")
+	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath:     "proposals/table-separator-proof.md",
+		Title:          "table-separator-proof.md",
+		SourceEntities: []vtextSourceEntity{entity},
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:   "v1",
+			Content: parentContent,
+			CitationResolutions: []vtextCitationMarkerResolution{{
+				Marker:   "[1]",
+				EntityID: entity.EntityID,
+			}},
+		}},
+	})
+	w := httptest.NewRecorder()
+	h.HandleVTextRouter(w, importReq)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var imported vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(w.Body).Decode(&imported); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+	parentRev, err := s.GetRevision(ctx, imported.CurrentRevisionID, "user-1")
+	if err != nil {
+		t.Fatalf("GetRevision parent: %v", err)
+	}
+	parentTables := extractMarkdownTableBlocks(parentRev.Content)
+	if len(parentTables) != 1 {
+		t.Fatalf("parent tables = %d, want 1:\n%s", len(parentTables), parentRev.Content)
+	}
+
+	userContent := strings.Replace(parentRev.Content, "A private legal cloud solves this", "A private legal cloud addresses this", 1)
+	userContent = strings.Replace(userContent, "| --- | --- |\n| Agent |", "| --- | --- |\n| --- | --- |\n| Agent |", 1)
+	userReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/revisions", vtextCreateRevisionRequest{
+		Content:          userContent,
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      "owner",
+		Metadata:         json.RawMessage(`{"created_from":"browser_user_edit"}`),
+		ParentRevisionID: imported.CurrentRevisionID,
+	})
+	w = httptest.NewRecorder()
+	h.HandleVTextRevisions(w, userReq)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create user revision: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var userRevResp vtextRevisionResponse
+	if err := json.NewDecoder(w.Body).Decode(&userRevResp); err != nil {
+		t.Fatalf("decode user revision response: %v", err)
+	}
+	userRev, err := s.GetRevision(ctx, userRevResp.RevisionID, "user-1")
+	if err != nil {
+		t.Fatalf("GetRevision user: %v", err)
+	}
+	if !strings.Contains(userRev.Content, "A private legal cloud addresses this") {
+		t.Fatalf("user prose edit was not preserved:\n%s", userRev.Content)
+	}
+	if strings.Count(userRev.Content, "| --- | --- |") != 1 {
+		t.Fatalf("user revision kept duplicate separator:\n%s", userRev.Content)
+	}
+	userTables := extractMarkdownTableBlocks(userRev.Content)
+	if len(userTables) != 1 || userTables[0].Text != parentTables[0].Text {
+		t.Fatalf("user revision table changed:\nparent:\n%s\nuser:\n%s", parentTables[0].Text, userRev.Content)
+	}
+	userMeta := decodeRevisionMetadata(userRev.Metadata)
+	if userMeta["vtext_structure_stabilized"] != true {
+		t.Fatalf("user metadata did not record table stabilization: %#v", userMeta)
+	}
+	userEntities := decodeVTextSourceEntities(userMeta["source_entities"])
+	if len(userEntities) != 1 || userEntities[0].EntityID != entity.EntityID {
+		t.Fatalf("user revision source_entities = %#v", userMeta["source_entities"])
+	}
+}
+
 func TestVTextSourceGapRepairCreatesRevision(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	entity := vtextSourceEntity{
