@@ -6998,3 +6998,36 @@ deployment status:
 - pending commit, push, CI, Node B deploy, staging health identity, deployed
   publication regression proof, and Comet owner proof that the published
   legal-cloud reader is no longer exposed as a textbox.
+
+## 2026-06-06 Problem: Publication Regression Expected Hidden Inline Source Action
+
+status: documented_pending_test_repair
+
+new evidence:
+
+- After `f7f7145fa909e6e75d56b74eaa2011ceaaac9abf` deployed to staging, the
+  deployed publication regression reached the published-reader semantic checks.
+- It then failed expecting the original inline popover's
+  `[data-vtext-open-source]` button to be visible.
+- The locator resolved the inline button, but Playwright reported it as hidden.
+
+current interpretation:
+
+- This is verifier drift from the older popover/card interaction model.
+- The current Pretext/journal source-flow path intentionally hides the original
+  expanded popover and renders the visible `Open source` action in the
+  journal note beside article prose.
+- The verifier should assert the visible journal-note action when source-flow
+  mounts, while still allowing inline popover behavior for narrow/fallback
+  layouts where journal-flow does not mount.
+
+risk:
+
+- Tests that keep asserting the old source-card surface can push the product
+  back toward card/pill layering instead of the requested magazine/journal
+  source UX.
+
+next action:
+
+- Repair the publication regression to open the visible source action from the
+  journal note when present, with inline popover as fallback.
