@@ -1754,3 +1754,66 @@ staging proof:
   export metadata/body, DOCX custom properties/styles, PDF XMP metadata, and
   API export metadata while preserving the source manifest.
 ```
+
+## Loop 8 Platform Publication Read/Export Extraction Target
+
+Status: `documented_before_code`.
+
+Next backend simplification target: extract publication read, export, and
+published-search service methods out of `internal/platform/service.go` into a
+same-package module. `service.go` currently owns publish writes, reader
+proposal writes, public bundle hydration, export gating, export response
+assembly, published search, blob helpers, ids, slugging, and generic SQL
+helpers. Keeping the read/export path in the same monolith makes it harder to
+audit source/publication visibility and export policy behavior after rich
+export work.
+
+This is a behavior-preserving extraction. It must not change route
+normalization, visibility enforcement, export-policy gating, source manifest
+hydration, retrieval spans, citation edge private-revision redaction, source
+entity/transclusion loading, public search behavior, export media types,
+filename normalization, or Markdown/table export normalization. It should only
+move the publication read/export/search methods and their private helpers into
+a clearer file boundary.
+
+acceptance:
+
+- `internal/platform/service.go` loses the public bundle/export/search helper
+  surface without introducing a second export or source contract;
+- extracted code remains in `internal/platform` and continues to call the same
+  `PublicationBundle`, `PublicationDocument`, `publicationExportProfile`, and
+  source-manifest renderers;
+- platform/sourcecontract tests pass;
+- deployed staging proof after push reuses a publication export path that
+  checks source/profile metadata, because this refactor touches the route used
+  by public rich exports.
+
+local implementation/evidence:
+
+```text
+change:
+  Extracted public publication bundle hydration, export-policy gating, export
+  response assembly, published search, route/export normalization, retrieval
+  span hydration, citation-edge redaction, source entity/transclusion loading,
+  publication policy loading, provenance summary loading, render-block
+  projection, and snippets into
+  internal/platform/service_publication_read.go.
+
+line-count effect:
+  internal/platform/service.go                    684 lines
+  internal/platform/service_publication_read.go   629 lines
+
+local proof:
+  gofmt -w internal/platform/service.go \
+    internal/platform/service_publication_read.go
+  git diff --check
+  result: passed
+
+  nix develop -c go test ./internal/platform -run
+  'TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestPublishVTextCreatesImmutablePublicRecords|TestPublicationPublicSurfacesEnforceVisibilityPolicy'
+  -count=1 -v
+  result: passed
+
+  nix develop -c go test ./internal/platform ./internal/sourcecontract
+  result: passed
+```
