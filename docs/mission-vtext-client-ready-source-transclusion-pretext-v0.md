@@ -7591,3 +7591,57 @@ remaining error field:
 - Arbitrary web-source cleanup remains incomplete. Reader-mode Markdown should
   be the preferred durable source artifact, with iframe/Web Lens as fallback
   when cleaning fails or when a live source view is explicitly useful.
+
+## 2026-06-06 Problem: Imported HTML Sources Keep Browser Identity After Reader Cleanup
+
+status: documented_pending_repair
+
+new evidence:
+
+- `internal/runtime/content.go` `ImportURLContent` fetches HTML pages,
+  extracts readable article text with `extractReadableHTML`, and stores that
+  extracted text in `ContentItem.text_content`.
+- The same import path keeps `ContentItem.media_type` as the original HTML
+  media type and derives `app_hint` from that media type, so ordinary HTML
+  imports become `app_hint: browser`.
+- `ContentViewer.svelte` and `BrowserApp.svelte` can render cleaned
+  reader-mode source text when it is present, but source identity still carries
+  browser/live-page semantics unless publication enrichment later wraps the
+  artifact as `reader_snapshot`.
+- `platform_publish.go` already publishes source snapshots as
+  `snapshot_kind: cleaned_reader_markdown` while preserving
+  `original_media_type`; that policy is stronger than the owner-side URL import
+  artifact identity.
+
+current interpretation:
+
+- URL import is doing part of the right cleanup work, but the durable
+  owner-side content item does not name the cleaned text as a Markdown reader
+  artifact.
+- This keeps iframe/Web Lens semantics too close to source evidence. A source
+  opened from VText should prefer a cleaned, durable reader artifact when
+  extraction succeeded, with raw HTML/live iframe available only as provenance
+  or fallback.
+
+risk:
+
+- Source windows can look like web-browser tabs even when Choir already has
+  cleaned source text.
+- Publication and owner-editor source artifacts diverge: published readers get
+  explicit `cleaned_reader_markdown`, while the owner repair/import surface
+  stores the same kind of artifact as `text/html`/`browser`.
+- Future cleanup or export code may make decisions from `media_type`/`app_hint`
+  and accidentally treat cleaned source evidence as a live web page instead of
+  durable reader Markdown.
+
+next repair:
+
+- When HTML URL import produces readable text, persist the imported
+  `ContentItem` as `media_type: text/markdown` and `app_hint: content` or the
+  existing reader-capable content surface, while preserving
+  `original_media_type`, HTTP status/content type, retrieval strategy, warnings,
+  source URL, canonical URL, and raw hash provenance.
+- Keep non-HTML media behavior unchanged.
+- Add focused tests that HTML imports produce reader-artifact identity, source
+  attachment still works, and publication snapshots continue carrying
+  `original_media_type` plus warning/status provenance.
