@@ -1355,3 +1355,35 @@ not a full Markdown parser. It is intentionally constrained by confirmed table
 context, a short blank gap, and matching column count. A later VText-native table
 node would be a stronger canonical representation and would reduce dependence on
 Markdown renderer recovery behavior.
+
+## 2026-06-06 Source URL Routing Problem Checkpoint
+
+Status: `documented_before_fix`.
+
+New routing problem found during post-mission review: `sourceEntityOpenAppID`
+currently routes a source entity with `display.open_surface: "source"` to the
+Browser/Web Lens app whenever the entity also has a URL. That means ordinary
+citation source opens can land in Web Lens solely because a URL exists, even
+when the source entity carries a cleaned reader snapshot or content-item backing
+that Source Viewer can render more reliably.
+
+Observed code path:
+
+```text
+frontend/src/lib/vtext-source-renderer.ts
+if (requested === 'source' && sourceEntityTargetURL(entity)) return 'browser';
+```
+
+This is backwards for the current UX contract. A source marker should default to
+the source reader surface. Web Lens is appropriate when the source entity or
+caller explicitly requests browser/Web Lens, or when a later capability-aware
+flow has proven that a live iframe/full page can load and the user chooses that
+surface. It should not be selected merely because an iframe might exist, and it
+should definitely not be the fallback when iframe loading is unavailable or
+blocked.
+
+Root-cause belief before code change: the earlier rule conflated "owning source
+surface" with "URL browser surface." That made URL presence override the
+semantic `open_surface: "source"` display policy. The repair should preserve
+explicit `open_surface: "browser"` behavior while mapping generic
+`open_surface: "source"` to Source Viewer regardless of URL presence.
