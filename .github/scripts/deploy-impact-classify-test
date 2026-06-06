@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+CLASSIFIER="$ROOT/.github/scripts/deploy-impact-classify"
+
+run_classifier() {
+  printf '%s\n' "$@" | "$CLASSIFIER"
+}
+
+assert_contains() {
+  local haystack="$1"
+  local needle="$2"
+  if [[ "$haystack" != *"$needle"* ]]; then
+    printf 'expected output to contain:\n%s\n\nactual output:\n%s\n' "$needle" "$haystack" >&2
+    exit 1
+  fi
+}
+
+assert_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+  if [[ "$haystack" == *"$needle"* ]]; then
+    printf 'expected output not to contain:\n%s\n\nactual output:\n%s\n' "$needle" "$haystack" >&2
+    exit 1
+  fi
+}
+
+sourcecontract_testdata_output="$(
+  run_classifier \
+    "internal/sourcecontract/testdata/source_contract_matrix.json" \
+    "internal/sourcecontract/matrix_test.go"
+)"
+assert_contains "$sourcecontract_testdata_output" "deploy_needed=false"
+assert_contains "$sourcecontract_testdata_output" "internal/sourcecontract/testdata/source_contract_matrix.json -> ignored (docs/workflow/test artifact)"
+assert_contains "$sourcecontract_testdata_output" "internal/sourcecontract/matrix_test.go -> ignored (docs/workflow/test artifact)"
+assert_not_contains "$sourcecontract_testdata_output" "shared source contract dependency"
+
+sourcecontract_runtime_output="$(run_classifier "internal/sourcecontract/evidence.go")"
+assert_contains "$sourcecontract_runtime_output" "deploy_needed=true"
+assert_contains "$sourcecontract_runtime_output" "deploy_host=true"
+assert_contains "$sourcecontract_runtime_output" "deploy_host_service=true"
+assert_contains "$sourcecontract_runtime_output" "deploy_vmctl_restart=true"
+assert_contains "$sourcecontract_runtime_output" "deploy_active_vm_refresh=true"
+assert_contains "$sourcecontract_runtime_output" "host_services=gateway,platformd,proxy,sandbox,sourcecycled"
+assert_contains "$sourcecontract_runtime_output" "internal/sourcecontract/evidence.go -> shared source contract dependency: runtime/platform service pointers + active VM refresh"
+
+printf 'deploy-impact-classify-test: ok\n'

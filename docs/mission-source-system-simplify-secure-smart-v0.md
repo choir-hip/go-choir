@@ -5371,6 +5371,33 @@ planned fix:
 - add classifier regression coverage for testdata under a deployed package and
   for a real sourcecontract `.go` file control.
 
+fix and proof:
+
+- `.github/scripts/deploy-impact-classify` now treats `internal/*/testdata/*`
+  as an ignored docs/workflow/test artifact before the broad deployed
+  `internal/sourcecontract/*` rule can match it.
+- `.github/scripts/deploy-impact-classify-test` covers the sourcecontract
+  testdata path, the companion `_test.go` path, and a real runtime
+  `internal/sourcecontract/evidence.go` control.
+- `.github/workflows/ci.yml` runs the classifier regression script in the
+  deploy-impact job before classifying the pushed change set.
+- `bash -n .github/scripts/deploy-impact-classify
+  .github/scripts/deploy-impact-classify-test` passed.
+- `.github/scripts/deploy-impact-classify-test` passed.
+- Exact changed-set proof for this mission doc, the shared source-contract
+  matrix testdata, the Go matrix test, and the frontend source-entity test now
+  returns `deploy_needed=false`.
+- Control proof for `internal/sourcecontract/evidence.go` still returns
+  `deploy_needed=true`, `deploy_vmctl_restart=true`,
+  `deploy_active_vm_refresh=true`, and
+  `host_services=gateway,platformd,proxy,sandbox,sourcecycled`.
+
+remaining error field: this fixes the verifier-only testdata
+overclassification for direct `internal/*/testdata/*` paths and adds CI
+coverage for the regression. It does not solve the broader architectural
+problem that deploy impact is still path-pattern based rather than derived from
+build closures or explicit package manifests.
+
 ## Suggested `/goal`
 
 ```text

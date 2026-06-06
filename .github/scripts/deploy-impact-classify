@@ -95,7 +95,7 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> ignored (local developer service harness)"
       continue
       ;;
-    docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go)
+    docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go|internal/*/testdata/*)
       add_explanation "$path -> ignored (docs/workflow/test artifact)"
       continue
       ;;
