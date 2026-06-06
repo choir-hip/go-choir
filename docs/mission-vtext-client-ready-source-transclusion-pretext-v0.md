@@ -6187,3 +6187,44 @@ next simplification axis:
 - Extract source workflow surface area out of `VTextEditor.svelte`, starting
   with a source panel component and source-surface launcher helper, while
   preserving the deployed behavior and proof suite.
+
+## 2026-06-06 Simplification Pass: Source Panel Component Extraction
+
+status: local_verified_pending_deploy
+
+change:
+
+- Extracted the owner source panel markup and panel-scoped styles from
+  `frontend/src/lib/VTextEditor.svelte` into
+  `frontend/src/lib/VTextSourcePanel.svelte`.
+- Kept source diagnosis, repair, artifact import/attach, source-window launch,
+  canonical VText writes, and publication behavior in the existing owner
+  functions. This is a view/component ownership reduction, not a new source
+  workflow.
+- `VTextEditor.svelte` dropped from 4,156 lines to 3,665 lines. The new source
+  panel component is 631 lines and carries the formerly inline panel CSS.
+
+local proof:
+
+- `pnpm --dir frontend run build` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+
+test-harness note:
+
+- Running those two desktop-session Playwright slices concurrently caused the
+  Pretext flow test to inspect the still-open source-repair VText window from
+  the other process. Rerunning the Pretext flow slice serially passed. This was
+  a verifier isolation issue in my local command choice, not evidence of a
+  product regression.
+
+deployment proof still needed:
+
+- Commit and push the extraction, wait for CI and Node B deploy, confirm staging
+  identity, then repeat deployed source-panel/source-flow proof on
+  `https://choir.news`.
