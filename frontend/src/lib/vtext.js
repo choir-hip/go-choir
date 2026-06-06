@@ -293,6 +293,9 @@ export async function restoreVTextRevision(docId, { revisionId, mode = 'restore_
 
 export async function getVTextDiagnosis(docId, limit = 50, options = {}) {
   const params = new URLSearchParams({ limit: String(limit || 50) });
+  if (options.includeContent === false) {
+    params.set('include_content', 'false');
+  }
   const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/diagnosis?${params.toString()}`), {
     method: 'GET',
     signal: options.signal,

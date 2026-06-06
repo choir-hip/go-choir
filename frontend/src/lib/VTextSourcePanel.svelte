@@ -13,6 +13,7 @@
   export let sourceCandidates = [];
   export let sourceEntities = [];
   export let sourceSummary = null;
+  export let sourceStructures = [];
   export let editEvidence = null;
   export let sourceDiagnosisPending = false;
   export let sourceRepairPending = false;
@@ -106,6 +107,67 @@
       {#if sourceSummary.errorCount}
         <span>{sourceSummary.errorCount} errors</span>
       {/if}
+      {#if sourceSummary.tableCount}
+        <span>{sourceSummary.tableCount} tables</span>
+      {/if}
+      {#if sourceSummary.sourceMarkerCount}
+        <span>{sourceSummary.sourceMarkerCount} source markers</span>
+      {/if}
+    </div>
+  {/if}
+
+  {#if sourceStructures.length}
+    <div class="source-structure-evidence" data-vtext-structure-summary>
+      <div class="source-artifact-heading">
+        <span class="evidence-label">Revision structure</span>
+        <strong>{sourceStructures.length} bounded summaries</strong>
+      </div>
+      {#each sourceStructures as structure}
+        <article
+          class="source-structure-card"
+          data-vtext-structure-revision
+          data-revision-id={structure.revisionID}
+          data-version={structure.version}
+        >
+          <div>
+            <strong>{structure.version || 'revision'}</strong>
+            {#if structure.revisionID}
+              <span>{structure.revisionID.slice(0, 8)}</span>
+            {/if}
+          </div>
+          <dl>
+            <div>
+              <dt>tables</dt>
+              <dd>{structure.tableCount}</dd>
+            </div>
+            <div>
+              <dt>rows</dt>
+              <dd>{structure.tableRowCount}</dd>
+            </div>
+            <div>
+              <dt>sources</dt>
+              <dd>{structure.sourceMarkerCount}</dd>
+            </div>
+            <div>
+              <dt>hash</dt>
+              <dd>{structure.contentHash.slice(0, 19)}</dd>
+            </div>
+          </dl>
+          {#if structure.tables.length}
+            <div class="source-table-signatures" data-vtext-table-signatures>
+              {#each structure.tables as table}
+                <span
+                  data-vtext-table-signature
+                  data-table-index={table.index}
+                  data-table-signature={table.signature}
+                >
+                  table {table.index + 1}: L{table.startLine}-{table.endLine}, {table.columnCount}c/{table.rowCount}r, {table.signature.slice(0, 19)}
+                </span>
+              {/each}
+            </div>
+          {/if}
+        </article>
+      {/each}
     </div>
   {/if}
 
@@ -372,6 +434,71 @@
     border-radius: 8px;
     padding: 0.58rem;
     background: rgba(255, 255, 255, 0.045);
+  }
+
+  .source-structure-evidence {
+    display: grid;
+    gap: 0.46rem;
+  }
+
+  .source-structure-card {
+    display: grid;
+    gap: 0.44rem;
+    min-width: 0;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 8px;
+    padding: 0.56rem;
+    background: rgba(255, 255, 255, 0.045);
+  }
+
+  .source-structure-card > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.38rem;
+    min-width: 0;
+    color: var(--choir-text-muted);
+    font-size: 0.72rem;
+  }
+
+  .source-structure-card strong {
+    color: var(--choir-text-primary);
+    font-size: 0.82rem;
+  }
+
+  .source-structure-card dl {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.38rem;
+    margin: 0;
+  }
+
+  .source-structure-card dt {
+    margin: 0 0 0.1rem;
+    color: var(--choir-text-muted);
+    font-size: 0.64rem;
+  }
+
+  .source-structure-card dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--choir-text-primary);
+    font-size: 0.72rem;
+    font-weight: 720;
+  }
+
+  .source-table-signatures {
+    display: grid;
+    gap: 0.26rem;
+  }
+
+  .source-table-signatures span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--choir-text-secondary);
+    font-size: 0.68rem;
+    line-height: 1.32;
   }
 
   .source-edit-evidence > div:first-child {

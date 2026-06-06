@@ -761,3 +761,97 @@ test('VText Sources panel shows structured edit evidence without raw prompts', a
   await expect(editEvidence).not.toContainText('raw prompt text must stay out');
   await expect(vtextWindow.locator('[data-vtext-rendered]')).not.toContainText('focused_user_edit_diff');
 });
+
+test('VText Sources panel shows bounded revision structure without body text', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const stamp = Date.now();
+  const doc = await fetchJSON(page, '/api/vtext/documents', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `Structure Evidence Fixture ${stamp}`,
+    }),
+  });
+
+  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      content: [
+        '# Structure Evidence Fixture',
+        '',
+        '| Term | Meaning |',
+        '| --- | --- |',
+        '| Work product | Durable output [source](source:src-structure-evidence) |',
+        '',
+      ].join('\n'),
+      metadata: {
+        source: 'owner_structure_probe',
+      },
+    }),
+  });
+
+  const diagnosisRoute = `**/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/diagnosis?*`;
+  await page.route(diagnosisRoute, async (route) => {
+    expect(route.request().url()).toContain('include_content=false');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        owner_id: 'user-1',
+        doc_id: doc.doc_id,
+        store_path: '',
+        vtext_path: '',
+        document: doc,
+        revisions: [],
+        revision_structures: [{
+          revision_id: 'rev-structure-ui',
+          doc_id: doc.doc_id,
+          version_number: 0,
+          author_kind: 'user',
+          author_label: 'browser-test',
+          created_at: '2026-06-06T11:40:00.000Z',
+          content_hash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          line_count: 6,
+          non_empty_line_count: 4,
+          heading_count: 1,
+          source_marker_count: 1,
+          table_count: 1,
+          table_row_count: 3,
+          tables: [{
+            index: 0,
+            start_line: 3,
+            end_line: 5,
+            column_count: 2,
+            row_count: 3,
+            has_separator: true,
+            signature: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          }],
+        }],
+        runs: [],
+        events: [],
+        messages: [],
+        evidence: [],
+      }),
+    });
+  });
+
+  const vtextWindow = await openRecentVTextDocument(page, `Structure Evidence Fixture ${stamp}`);
+  try {
+    await vtextWindow.locator('[data-vtext-source-panel]').click();
+    await vtextWindow.locator('[data-vtext-load-diagnosis]').click();
+
+    const structureSummary = vtextWindow.locator('[data-vtext-structure-summary]');
+    await expect(structureSummary).toBeVisible({ timeout: 10000 });
+    await expect(structureSummary).toContainText('bounded summaries');
+    await expect(structureSummary).toContainText('tables');
+    await expect(structureSummary).toContainText('sources');
+    const structureRevision = structureSummary.locator('[data-vtext-structure-revision]').first();
+    await expect(structureRevision).toContainText('table 1');
+    await expect(structureRevision).toContainText('2c/3r');
+    const signature = await structureRevision.locator('[data-vtext-table-signature]').first().getAttribute('data-table-signature');
+    expect(signature || '').toMatch(/^sha256:/);
+    await expect(structureSummary).not.toContainText('Work product');
+    await expect(structureSummary).not.toContainText('Durable output');
+  } finally {
+    await page.unroute(diagnosisRoute);
+  }
+});

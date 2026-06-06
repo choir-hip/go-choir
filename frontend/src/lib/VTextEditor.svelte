@@ -178,16 +178,43 @@
   function sourceDiagnosisSummary(diagnosis = sourceDiagnosis) {
     if (!diagnosis) return null;
     const revisions = Array.isArray(diagnosis.revisions) ? diagnosis.revisions : [];
+    const structures = Array.isArray(diagnosis.revision_structures) ? diagnosis.revision_structures : [];
     const runs = Array.isArray(diagnosis.runs) ? diagnosis.runs : [];
     const latest = revisions[0] || null;
+    const latestStructure = structures[0] || null;
     return {
-      revisionCount: revisions.length,
+      revisionCount: revisions.length || structures.length,
       runCount: runs.length,
-      latestRevisionId: latest?.revision_id || '',
-      latestVersion: latest ? versionLabelForRevision(latest, revisions.length - 1) : '',
+      latestRevisionId: latest?.revision_id || latestStructure?.revision_id || '',
+      latestVersion: latest
+        ? versionLabelForRevision(latest, revisions.length - 1)
+        : (typeof latestStructure?.version_number === 'number' ? `v${latestStructure.version_number}` : ''),
       latestAuthor: latest ? `${latest.author_kind || ''}:${latest.author_label || ''}` : '',
       errorCount: Array.isArray(diagnosis.error_matches) ? diagnosis.error_matches.length : 0,
+      tableCount: structures.reduce((sum, item) => sum + (Number(item?.table_count) || 0), 0),
+      sourceMarkerCount: structures.reduce((sum, item) => sum + (Number(item?.source_marker_count) || 0), 0),
     };
+  }
+
+  function sourceStructureEvidence(diagnosis = sourceDiagnosis) {
+    const structures = Array.isArray(diagnosis?.revision_structures) ? diagnosis.revision_structures : [];
+    return structures.slice(0, 8).map((structure) => ({
+      revisionID: structure?.revision_id || '',
+      version: typeof structure?.version_number === 'number' ? `v${structure.version_number}` : '',
+      contentHash: structure?.content_hash || '',
+      headingCount: Number(structure?.heading_count) || 0,
+      tableCount: Number(structure?.table_count) || 0,
+      tableRowCount: Number(structure?.table_row_count) || 0,
+      sourceMarkerCount: Number(structure?.source_marker_count) || 0,
+      tables: Array.isArray(structure?.tables) ? structure.tables.slice(0, 4).map((table) => ({
+        index: Number(table?.index) || 0,
+        startLine: Number(table?.start_line) || 0,
+        endLine: Number(table?.end_line) || 0,
+        columnCount: Number(table?.column_count) || 0,
+        rowCount: Number(table?.row_count) || 0,
+        signature: table?.signature || '',
+      })) : [],
+    }));
   }
 
   function numberMetadataValue(metadata, key) {
@@ -1586,7 +1613,7 @@
           controller.abort();
         }
       }, SOURCE_DIAGNOSIS_TIMEOUT_MS);
-      sourceDiagnosis = await getVTextDiagnosis(currentDoc.doc_id, 80, { signal: controller.signal });
+      sourceDiagnosis = await getVTextDiagnosis(currentDoc.doc_id, 80, { signal: controller.signal, includeContent: false });
       saveStatus = 'Source diagnosis loaded';
     } catch (err) {
       if (err instanceof AuthRequiredError) {
@@ -2117,6 +2144,7 @@
   $: sourceCandidates = sourceRepairCandidates(editorValue, sourceGaps);
   $: if (sourcePanelOpen) ensureSourceReviewSelection(sourceCandidates);
   $: sourceSummary = sourceDiagnosisSummary(sourceDiagnosis);
+  $: sourceStructures = sourceStructureEvidence(sourceDiagnosis);
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
   $: if (sourcePanelOpen) ensureSourceArtifactSelection();
   $: renderedMarkdown = renderDocumentHTML(editorValue);
@@ -2383,6 +2411,7 @@
           {sourceCandidates}
           {sourceEntities}
           {sourceSummary}
+          {sourceStructures}
           {editEvidence}
           {sourceDiagnosisPending}
           {sourceRepairPending}
