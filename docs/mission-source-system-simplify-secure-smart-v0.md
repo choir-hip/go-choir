@@ -2091,6 +2091,49 @@ shared source acquisition policy module used by runtime URL import, source
 service adapters, Web Lens import, publication source snapshots, and future
 connectors.
 
+### Problem 12: Owner URL Source Repairs Default To Web Lens
+
+Status: `documented_before_fix`.
+
+problem: the owner source-review repair path still creates URL-backed source
+entities with `display.open_surface: "browser"`. That means an owner-supplied
+URL source repair is born as an explicit live/original Web Lens artifact instead
+of a durable Source Viewer source artifact. The renderer already handles
+hand-authored URL entities correctly when they specify `open_surface: "source"`,
+but the repair builder chooses the wrong default before the renderer sees the
+entity.
+
+affected contract/invariant: Source Viewer is the default for durable URL,
+content-item, source-service, and publication reader artifacts. Web Lens is
+reserved for explicit live/original inspection. Owner repair should therefore
+produce a durable source entity by default, while any later live inspection
+should be a distinct explicit action.
+
+evidence from code audit:
+
+- `frontend/src/lib/vtext-source-review.js` sets
+  `display.open_surface` to `"browser"` whenever `buildSourceReviewPayload`
+  receives a URL.
+- `frontend/src/lib/vtext-source-renderer.ts` treats requested
+  `browser`/`web`/`web_lens`/`live`/`original` as a Web Lens/browser open plan.
+- `frontend/tests/vtext-source-entities.spec.js` already proves a URL-backed
+  source opens Source Viewer only when the entity metadata says
+  `open_surface: "source"`, so this is a source-repair payload problem, not the
+  currently tested renderer happy path.
+
+first observed version/transition: source-system audit on 2026-06-06 after
+source-cycle fetch policy repair `fd75bb80d1ed3d6a342008463d7b6d940af1d580`
+was deployed.
+
+suspected owner: VText source review payload construction in
+`frontend/src/lib/vtext-source-review.js`, with acceptance in the VText
+source-entity open-surface tests.
+
+planned proof: change URL repair payloads to default to
+`open_surface: "source"`; add a focused test for
+`buildSourceReviewPayload`; keep or extend existing Source Viewer/Web Lens
+routing coverage so explicitly requested browser surfaces still open Web Lens.
+
 ## Suggested `/goal`
 
 ```text
