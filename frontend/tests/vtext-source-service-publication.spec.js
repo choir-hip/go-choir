@@ -21,8 +21,16 @@ async function fetchJSON(page, path, options = {}) {
   }, { requestPath: path, requestOptions: options });
 }
 
+async function clearDesktopWindows(page) {
+  await fetchJSON(page, '/api/desktop/state', {
+    method: 'PUT',
+    body: JSON.stringify({ windows: [], active_window_id: '' }),
+  });
+}
+
 test('publishes source-service source entities as expandable transclusions and canonical exports', async ({ desktopSession, browser }) => {
   const { page, baseURL } = desktopSession;
+  await clearDesktopWindows(page);
   const itemID = process.env.SOURCE_SERVICE_ITEM_ID || 'srcitem_fixture_economy';
   const sourceID = process.env.SOURCE_SERVICE_SOURCE_ID || 'gdelt:15min';
   const fetchID = process.env.SOURCE_SERVICE_FETCH_ID || 'fetch_fixture';
@@ -189,7 +197,7 @@ test('publishes source-service source entities as expandable transclusions and c
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
   await expect(citation.locator('[data-vtext-inline-transclusion]')).not.toContainText(itemID);
   const journalOpenSource = publishedReader.locator('[data-vtext-source-flow-note] [data-vtext-open-source]').first();
-  const inlineOpenSource = citation.locator('[data-vtext-open-source]');
+  const inlineOpenSource = publishedReader.locator('[data-vtext-open-source][data-source-entity-id="src-service-economy"]:visible').first();
   const openSource = await journalOpenSource.isVisible().catch(() => false) ? journalOpenSource : inlineOpenSource;
   await expect(openSource).toBeVisible();
 
@@ -228,6 +236,7 @@ test('publishes source-service source entities as expandable transclusions and c
 
 test('publishes public content-item sources with cleaned reader snapshots', async ({ desktopSession, browser }) => {
   const { page, baseURL } = desktopSession;
+  await clearDesktopWindows(page);
   const stamp = Date.now();
   const title = `Public Source Snapshot Publication ${stamp}`;
   const excerpt = 'ABA guidance says lawyers using generative AI must consider competence and confidentiality.';
@@ -355,6 +364,149 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
     await expect(guestSourceWindow).toBeVisible({ timeout: 10000 });
     await expect(guestSourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
     await expect(guestSourceWindow.locator('[data-content-reader-markdown]')).toContainText('Full cleaned reader source detail');
+    await expect(guestPage.locator('[data-browser-app]')).toHaveCount(0);
+  } finally {
+    await guestContext.close();
+  }
+});
+
+test('publishes public URL-backed sources with reader snapshots for guests', async ({ desktopSession, browser }) => {
+  const { page, baseURL } = desktopSession;
+  await clearDesktopWindows(page);
+  const stamp = Date.now();
+  const title = `Public URL Source Snapshot ${stamp}`;
+  const sourceURL = 'https://example.com/';
+  const sourceLabel = 'Example Domain public URL source';
+  const excerpt = 'This domain is for use in illustrative examples in documents.';
+
+  const doc = await fetchJSON(page, '/api/vtext/documents', {
+    method: 'POST',
+    body: JSON.stringify({ title }),
+  });
+  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      content: `# ${title}\n\nThe publication path imports a public URL-backed source snapshot [1](source:src-public-url).`,
+      author_kind: 'user',
+      author_label: 'browser-test',
+      metadata: {
+        source_entities: [
+          {
+            entity_id: 'src-public-url',
+            kind: 'web_source',
+            label: sourceLabel,
+            target: {
+              target_kind: 'url',
+              url: sourceURL,
+              canonical_url: sourceURL,
+            },
+            selectors: [
+              {
+                selector_kind: 'text_quote',
+                text_quote: excerpt,
+              },
+            ],
+            display: {
+              inline_mode: 'embedded_excerpt',
+              expanded_mode: 'source_card',
+              open_surface: 'source',
+              default_collapsed: true,
+            },
+            evidence: {
+              state: 'confirms',
+              relation: 'confirms',
+              research_state: 'owner_supplied',
+            },
+            provenance: {
+              created_by: 'browser-test',
+              rights_scope: 'public_url_snapshot',
+              untrusted_source_text: true,
+            },
+          },
+        ],
+        export_policy: {
+          copy_allowed: true,
+          download_allowed: true,
+          formats: ['md', 'html', 'txt'],
+        },
+      },
+    }),
+  });
+
+  const publish = await fetchJSON(page, '/api/platform/vtext/publications', {
+    method: 'POST',
+    body: JSON.stringify({
+      doc_id: doc.doc_id,
+      slug: `public-url-source-snapshot-${stamp}`,
+    }),
+  });
+  const resolved = await fetchJSON(page, `/api/platform/publications/resolve?route=${encodeURIComponent(publish.route_path)}`);
+  const entity = resolved.source_entities?.[0]?.entity || {};
+  expect(resolved.source_entities?.[0]).toMatchObject({
+    source_entity_id: 'src-public-url',
+    kind: 'web_source',
+    target_kind: 'url',
+    target_id: sourceURL,
+    open_surface: 'source',
+  });
+  expect(resolved.transclusions?.[0]?.snapshot_text).toBe(excerpt);
+  expect(resolved.transclusions?.[0]?.source_selector.evidence_state).toMatchObject({
+    state: 'confirms',
+    relation: 'confirms',
+    research_state: 'owner_supplied',
+  });
+  expect(entity.reader_snapshot?.text_content).toContain('Example Domain');
+  expect(entity.reader_snapshot?.source_url).toBe(sourceURL);
+  expect(entity.reader_snapshot?.access_scope).toBe('publication_reader');
+  expect(entity.reader_snapshot_status?.state).toBe('reader_snapshot_ready');
+
+  const exported = await fetchJSON(page, `/api/platform/publications/export?route=${encodeURIComponent(publish.route_path)}&format=md`);
+  expect(exported.metadata.source_entities[0].source_entity_id).toBe('src-public-url');
+  expect(exported.metadata.transclusions[0].snapshot_text).toBe(excerpt);
+  expect(exported.metadata.transclusions[0].source_selector.evidence_state).toMatchObject({
+    state: 'confirms',
+    relation: 'confirms',
+    research_state: 'owner_supplied',
+  });
+
+  await page.goto(`${baseURL}${publish.route_path}`);
+  const publishedReader = page.locator('[data-vtext-published-reader]').last();
+  await expect(publishedReader).toBeVisible({ timeout: 15_000 });
+  const citation = publishedReader.locator('[data-vtext-source-ref][data-source-entity-id="src-public-url"]').first();
+  await citation.click();
+  const sourceNote = publishedReader.locator('[data-vtext-source-flow-note]').filter({ hasText: sourceLabel }).last();
+  await expect(sourceNote).toBeVisible({ timeout: 10_000 });
+  await expect(sourceNote).toContainText(excerpt);
+  await expect(sourceNote).not.toContainText('More information');
+
+  const initialSourceWindows = await page.locator('[data-content-viewer]').count();
+  await sourceNote.locator('[data-vtext-open-source]').click();
+  await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
+  const sourceWindow = page.locator('[data-content-viewer]').last();
+  await expect(sourceWindow).toBeVisible({ timeout: 10000 });
+  await expect(sourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
+  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Example Domain');
+  await expect(page.locator('[data-browser-app]')).toHaveCount(0);
+
+  const guestContext = await browser.newContext();
+  try {
+    const guestPage = await guestContext.newPage();
+    await guestPage.goto(`${baseURL}${publish.route_path}`);
+    const guestReader = guestPage.locator('[data-vtext-published-reader]').last();
+    await expect(guestReader).toBeVisible({ timeout: 15_000 });
+    const guestCitation = guestReader.locator('[data-vtext-source-ref][data-source-entity-id="src-public-url"]').first();
+    await guestCitation.click();
+    const guestSourceNote = guestReader.locator('[data-vtext-source-flow-note]').filter({ hasText: sourceLabel }).last();
+    await expect(guestSourceNote).toBeVisible({ timeout: 10_000 });
+    await expect(guestSourceNote).toContainText(excerpt);
+    await expect(guestSourceNote).not.toContainText('More information');
+    const initialGuestSourceWindows = await guestPage.locator('[data-content-viewer]').count();
+    await guestSourceNote.locator('[data-vtext-open-source]').click();
+    await expect(guestPage.locator('[data-content-viewer]')).toHaveCount(initialGuestSourceWindows + 1, { timeout: 10000 });
+    const guestSourceWindow = guestPage.locator('[data-content-viewer]').last();
+    await expect(guestSourceWindow).toBeVisible({ timeout: 10000 });
+    await expect(guestSourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
+    await expect(guestSourceWindow.locator('[data-content-reader-markdown]')).toContainText('Example Domain');
     await expect(guestPage.locator('[data-browser-app]')).toHaveCount(0);
   } finally {
     await guestContext.close();

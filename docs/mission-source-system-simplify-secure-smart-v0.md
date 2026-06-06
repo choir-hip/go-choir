@@ -2343,6 +2343,52 @@ guest-open proof gap for the focused test fixture. URL-backed publication source
 snapshots still need equivalent owner/guest product-path proof with publication
 export metadata, and the broader shared contract consolidation remains open.
 
+### 2026-06-06 URL-Backed Publication Source Snapshot Proof
+
+Status: `accepted_on_staging_for_url_backed_publication_sources`.
+
+Acceptance expansion:
+
+- `frontend/tests/vtext-source-service-publication.spec.js` now includes a
+  public URL-backed source fixture with `target_kind: "url"`,
+  `rights_scope: "public_url_snapshot"`, and `open_surface: "source"`.
+- The test publishes the VText through the product path, causing publication
+  enrichment to import `https://example.com/` through `/api/content/import-url`
+  and attach a reader snapshot for publication readers.
+- The test asserts resolved publication metadata, Markdown export metadata,
+  owner Source Viewer open, and guest Source Viewer open.
+- The same test file now clears persisted desktop windows between cases so
+  owner/guest source-open assertions are not polluted by windows from earlier
+  publication tests.
+
+Deployed acceptance proof:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js
+result: passed
+tests: 3 passed
+staging deployed_commit during proof: b63b4fd5840f3a7a6f42df6cb1925279f5f88b0b
+```
+
+What this proves:
+
+- Source-service-style publication sources preserve selector sets in resolved
+  bundle metadata and export metadata.
+- Public content-item publication sources preserve full cleaned reader snapshots
+  for owner and guest Source Viewer opens while keeping inline notes bounded.
+- Public URL-backed publication sources import and publish a reader snapshot for
+  authorized publication readers.
+- Owner and guest URL-backed source opens create Source Viewer reader-mode
+  windows and do not create Web Lens/Browser windows.
+- Markdown export metadata includes the URL-backed source entity and normalized
+  evidence state.
+
+Residual risk: this closes the focused URL-backed/content-item/source-service
+publication proof gap. Remaining mission work is broader: legal proposal owner
+proof after the table restore fix, shared source contract consolidation across
+runtime/platform/frontend/export, adversarial/cognitive review, dead-path
+pruning, and the hard mission review report plus PDF.
+
 ## Suggested `/goal`
 
 ```text
