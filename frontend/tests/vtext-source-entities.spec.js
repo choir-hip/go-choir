@@ -1,5 +1,5 @@
 import { test, expect } from './helpers/fixtures.js';
-import { sourceEntityInlineExcerptText } from '../src/lib/vtext-source-renderer.ts';
+import { sourceEntityInlineExcerptText, sourceEntityOpenPlan } from '../src/lib/vtext-source-renderer.ts';
 import { buildSourceReviewPayload } from '../src/lib/vtext-source-review.js';
 
 test('source review URL repairs default to Source Viewer open surface', () => {
@@ -41,6 +41,46 @@ test('source inline excerpts prefer selected transclusion over full reader snaps
   };
 
   expect(sourceEntityInlineExcerptText(entity)).toBe('Selected bounded citation excerpt.');
+});
+
+test('source open plans normalize Web Lens and Source Viewer aliases', () => {
+  const urlSource = {
+    entity_id: 'src-open-alias-url',
+    kind: 'web_source',
+    target: {
+      target_kind: 'url',
+      url: 'https://example.com/open-alias',
+      canonical_url: 'https://example.com/open-alias',
+    },
+  };
+
+  for (const open_surface of ['web-lens', 'web_lens', 'live-original', 'live_original']) {
+    expect(sourceEntityOpenPlan({ ...urlSource, display: { open_surface } })).toMatchObject({
+      appId: 'browser',
+      mode: 'live_original',
+      liveOriginal: true,
+      readerMode: false,
+    });
+  }
+
+  for (const open_surface of ['source-viewer', 'source_viewer', 'reader', 'content', 'source']) {
+    expect(sourceEntityOpenPlan({ ...urlSource, display: { open_surface } })).toMatchObject({
+      appId: 'content',
+      mode: 'source_reader',
+      liveOriginal: false,
+      readerMode: true,
+    });
+  }
+
+  expect(sourceEntityOpenPlan(urlSource)).toMatchObject({
+    appId: 'content',
+    mode: 'source_reader',
+    readerMode: true,
+  });
+  expect(sourceEntityOpenPlan({ ...urlSource, kind: 'youtube_video', display: { open_surface: 'video' } })).toMatchObject({
+    appId: 'video',
+    mode: 'media',
+  });
 });
 
 test('VText renders source entities as expandable sources and opens owning media surface', async ({ desktopSession }) => {

@@ -158,9 +158,35 @@ export function sourceEntityTargetKind(entity: any): string {
   ).trim();
 }
 
+export function normalizeSourceOpenSurface(value: unknown): string {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  switch (normalized) {
+    case 'web_lens':
+    case 'weblens':
+    case 'browser':
+    case 'web':
+    case 'live':
+    case 'original':
+    case 'live_original':
+      return normalized === 'weblens' ? 'web_lens' : normalized;
+    case 'source_viewer':
+    case 'source_reader':
+    case 'reader':
+    case 'content':
+    case 'source':
+      return normalized === 'source_viewer' || normalized === 'source_reader' || normalized === 'reader'
+        ? 'source'
+        : normalized;
+    case 'video':
+      return 'video';
+    default:
+      return normalized;
+  }
+}
+
 function sourceEntityRequestedOpenSurface(entity: any): string {
   const record = sourceEntityRecord(entity);
-  return String(entity?.display?.open_surface || record?.display?.open_surface || '').trim().toLowerCase();
+  return normalizeSourceOpenSurface(entity?.display?.open_surface || record?.display?.open_surface || '');
 }
 
 export function sourceEntityOpenPlan(entity: any): any {
@@ -174,7 +200,7 @@ export function sourceEntityOpenPlan(entity: any): any {
   if (targetKind === 'published_vtext_span' || targetKind === 'publication_version') {
     return { appId: 'vtext', openSurface: requested || 'vtext', mode: 'published_vtext', liveOriginal: false, readerMode: false };
   }
-  if (requested === 'browser' || requested === 'web' || requested === 'web_lens' || requested === 'live' || requested === 'original') {
+  if (requested === 'browser' || requested === 'web' || requested === 'web_lens' || requested === 'live' || requested === 'original' || requested === 'live_original') {
     return { appId: 'browser', openSurface: requested, mode: 'live_original', liveOriginal: true, readerMode: false };
   }
   if (requested === 'video' || kind === 'youtube_video') {
