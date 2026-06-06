@@ -5768,3 +5768,83 @@ deployed proof against already-deployed `bb3e1ff8`:
   authenticated source window opens as `Source reader snapshot`, and an
   unauthenticated guest reader opens the same cleaned source snapshot without
   rendering an iframe.
+
+## 2026-06-06 Deployed Proof: Guest Source Snapshot Preservation
+
+status: checkpoint_incomplete
+
+what shipped:
+
+- Problem checkpoint: `9193d1aa` (`docs: record guest source snapshot
+  problem`).
+- Behavior commit: `bb3e1ff8` (`fix: preserve guest source snapshots`).
+- Verifier problem checkpoint: `3a10e63f` (`docs: record hidden source owner
+  verifier problem`).
+- Verifier repair: `49a839c8` (`test: target visible source journal
+  actions`).
+
+CI and deploy evidence:
+
+- CI run `27047305088` for `bb3e1ff8` completed successfully, including Go
+  gates, frontend build, runtime shards, and `Deploy to Staging (Node B)`.
+- FlakeHub run `27047305084` for `bb3e1ff8` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `bb3e1ff8664740a4a44970bc0413ac5e848ad43b`, deployed at
+  `2026-06-06T00:32:20Z`.
+- CI run `27047464886` for `49a839c8` completed successfully. `Detect Staging
+  Deploy Impact` skipped frontend build and Node B deploy because the commit
+  only changed docs/tests.
+- FlakeHub run `27047464913` for `49a839c8` completed successfully.
+
+automated deployed proof:
+
+- Against deployed `bb3e1ff8`, the updated source publication E2E passed:
+  `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-service-publication.spec.js -g "publishes public
+  content-item sources with cleaned reader snapshots" --project=chromium
+  --timeout=120000`
+  -> `1 passed (6.8s)`.
+- The proof created a real source-backed VText, published it through
+  `/api/platform/vtext/publications`, verified the publication payload carried
+  the full `reader_snapshot`, verified the inline/journal note stayed bounded
+  to the excerpt, opened the authenticated source window as `Source reader
+  snapshot`, then reopened the published route in a fresh unauthenticated
+  browser context and proved the guest source window also rendered the cleaned
+  reader snapshot with no iframe.
+
+Comet staging proof:
+
+- Computer Use on Comet remained available and was used for owner-account UI
+  inspection on `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- Comet showed the client-ready legal-cloud publication, a mounted journal note
+  for `ABA Formal Opinion 512`, visible `Open source` / `Close` actions, and
+  reader-mode source windows for ABA Rule 1.6 and ABA Formal Opinion 512.
+- This confirms the owner-account source-note/source-window path remained
+  usable after the deployed behavior commit. The unauthenticated guest
+  source-window preservation was proven by the deployed Playwright E2E because
+  Comet is authenticated to the owner account.
+
+belief-state changes:
+
+- BrowserApp guest mode now preserves publication-carried source snapshots
+  instead of treating unauthenticated readers as iframe-only.
+- The source-flow verifier must target the visible mounted journal note, not
+  the hidden original source-ref owner node.
+
+remaining error field:
+
+- The legal-cloud publication still has source-acquisition quality gaps for
+  arbitrary URL/PDF sources; some sources carry full cleaned reader snapshots
+  and some still degrade to bounded excerpts or import-failure diagnostics.
+- Source windows now prefer cleaned reader snapshots where present, but the
+  Obscura/Web Lens cleanup pipeline still needs better reader-mode extraction
+  and Markdown normalization for hostile or low-content web pages.
+
+next executable probe:
+
+- Continue the source-acquisition axis: improve import/snapshot cleanup so
+  URL-backed legal-cloud sources consistently materialize as cleaned Markdown
+  reader artifacts with explicit status diagnostics, then prove those artifacts
+  publish and open for authorized readers without relying on iframe rendering.
