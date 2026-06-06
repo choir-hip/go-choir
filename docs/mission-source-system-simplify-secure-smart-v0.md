@@ -4292,6 +4292,61 @@ generated or otherwise single-source frontend/backend SourceSelector schema,
 Source Service selector resolution, and legal-proposal/content-item guest
 selector-rich proof.
 
+### Problem 27: Frontend Source Quote Extraction Ignores Publication SourceSelector Sets
+
+Status: `documented_before_fix`.
+
+problem: backend publication now stores selector-rich `source_selector` records
+on publication transclusions, including canonical `selector_set` values, but
+frontend source quote/excerpt helpers only scan `entity.selectors` and
+`record.selectors`. A published source entity reconstructed from platform
+records can therefore lose access to the canonical text quote when the entity
+JSON lacks a flat `selectors` array and the quote only exists in
+`transclusion.source_selector`. The Source Viewer and source-repair attachment
+paths can then fall back to empty or less precise excerpt text despite the
+publication carrying the selector-rich transclusion record.
+
+affected contract/invariant: SourceSelector is a shared contract across VText,
+Source Viewer, publication, export, and repair paths. Frontend surfaces should
+read canonical publication `source_selector` records, including selector sets,
+instead of assuming selectors only live as a flat source-entity field.
+
+confirmed evidence:
+
+```text
+internal/platform/source_metadata.go:
+  platform publication stores source selectors in publication_transclusions as
+  source_selector_json, using either a single selector or selector_set.
+
+frontend/src/lib/vtext-source-renderer.ts:
+  publicationSourceEntityToLocal attaches the matching publication transclusion
+  to entity.transclusion, but selectorTextQuote only scans entity.selectors and
+  record.selectors. It does not inspect transclusion.source_selector or nested
+  selector_set.selectors.
+
+frontend/src/lib/vtext-source-actions.ts:
+  attachReadableSourceToVText sends selectorTextQuote(entity) as the text_quote
+  when attaching readable source artifacts, so the same blind spot affects
+  source repair/attachment payloads.
+```
+
+acceptance for fix:
+
+- add frontend SourceSelector helpers to `frontend/src/lib/source-contract.ts`
+  that normalize selector kind aliases and flatten selector sets without losing
+  payload fields;
+- make `selectorTextQuote` and excerpt helpers inspect entity selectors,
+  record selectors, and publication transclusion `source_selector` records;
+- preserve the current preference for explicit transclusion `snapshot_text`
+  before selector fallback;
+- add focused frontend tests proving selector-set quotes are read from
+  publication transclusions even when flat entity selectors are absent.
+
+remaining error field: this is a frontend SourceSelector convergence slice. It
+does not yet generate a single schema from the backend contract or resolve
+selector text through Source Service, but it stops one publication/Source
+Viewer/repair path from silently ignoring selector-rich publication metadata.
+
 ## Suggested `/goal`
 
 ```text
