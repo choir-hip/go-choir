@@ -1347,6 +1347,24 @@ local focused proof:
 local shard proof:
   nix develop -c scripts/go-test-runtime-shards
   result: passed
+
+commit/deploy proof:
+  commit d6f37b3c6dbe71d68f7604da611d970333c0cdfc
+  GitHub Actions CI 27075642754 passed.
+  FlakeHub publish 27075642763 passed.
+  Node B deploy job 79912531396 passed.
+  /health reported proxy and sandbox deployed_commit
+  d6f37b3c6dbe71d68f7604da611d970333c0cdfc, deployed_at
+  2026-06-06T22:30:22Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-semantic-merge-staging.tmp.spec.js
+  result: 1 passed; temporary spec was deleted after the run.
+  The proof created two VText revisions through authenticated product APIs,
+  called deployed `/api/vtext/documents/{id}/compare`, `/merge-preview`, and
+  `/accept-merge`, and verified accepted merge revision metadata plus absence
+  of visible merge-preview provenance.
 ```
 
 ## Suggested Goal String
