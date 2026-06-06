@@ -291,10 +291,11 @@ export async function restoreVTextRevision(docId, { revisionId, mode = 'restore_
   return res.json();
 }
 
-export async function getVTextDiagnosis(docId, limit = 50) {
+export async function getVTextDiagnosis(docId, limit = 50, options = {}) {
   const params = new URLSearchParams({ limit: String(limit || 50) });
   const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/diagnosis?${params.toString()}`), {
     method: 'GET',
+    signal: options.signal,
   });
 
   if (!res.ok) {

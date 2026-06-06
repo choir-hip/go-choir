@@ -555,6 +555,69 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText(/src_review_2_panel_repair_source/);
 });
 
+test('VText Sources panel can cancel diagnosis without blocking source review', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const stamp = Date.now();
+  let releaseDiagnosis = null;
+  const diagnosisRoute = '**/api/vtext/documents/*/diagnosis?*';
+
+  const imported = await fetchJSON(page, '/api/vtext/markdown-lineage/import', {
+    method: 'POST',
+    body: JSON.stringify({
+      source_path: `proposals/cancel-source-diagnosis-${stamp}.md`,
+      title: `Cancel Source Diagnosis ${stamp}`,
+      versions: [
+        {
+          label: 'v44',
+          source_revision_id: `legacy-cancel-diagnosis-v44-${stamp}`,
+          content: [
+            '# Cancel Source Diagnosis',
+            '',
+            'This claim keeps source review available while diagnosis is pending [2].',
+          ].join('\n'),
+        },
+      ],
+    }),
+  });
+  expect(imported.doc_id).toBeTruthy();
+
+  await page.route(diagnosisRoute, async (route) => {
+    await new Promise((resolve) => {
+      releaseDiagnosis = resolve;
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ revisions: [], runs: [] }),
+    }).catch(() => {});
+  });
+
+  try {
+    const vtextWindow = await openRecentVTextDocument(page, `Cancel Source Diagnosis ${stamp}`);
+    await vtextWindow.locator('[data-vtext-source-panel]').click();
+    const sourcePanel = vtextWindow.locator('[data-vtext-source-diagnostics]');
+    const diagnosisButton = sourcePanel.locator('[data-vtext-load-diagnosis]');
+    await expect(sourcePanel).toBeVisible({ timeout: 10000 });
+    await expect(sourcePanel.locator('[data-vtext-source-review-panel]')).toBeVisible();
+    await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toContainText('[2]');
+
+    const diagnosisRequest = page.waitForRequest((request) => request.url().includes('/diagnosis'));
+    await diagnosisButton.click();
+    await diagnosisRequest;
+    await expect(diagnosisButton).toHaveText('Cancel diagnosis');
+    await expect(sourcePanel.locator('[data-vtext-apply-source-review]')).toBeDisabled();
+
+    await diagnosisButton.click();
+    await expect(diagnosisButton).toHaveText('Diagnosis', { timeout: 5000 });
+    await expect(vtextWindow.locator('[data-vtext-save-status]')).toContainText('Source diagnosis cancelled');
+    await expect(sourcePanel.locator('[data-vtext-source-review-panel]')).toBeVisible();
+    await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toContainText('[2]');
+  } finally {
+    if (releaseDiagnosis) releaseDiagnosis();
+    await page.unroute(diagnosisRoute);
+  }
+});
+
 test('VText Sources panel shows structured edit evidence without raw prompts', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const stamp = Date.now();

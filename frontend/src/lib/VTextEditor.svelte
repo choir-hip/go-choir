@@ -105,6 +105,8 @@
   let sourcePanelOpen = false;
   let sourceDiagnosis = null;
   let sourceDiagnosisPending = false;
+  let sourceDiagnosisAbortController = null;
+  let sourceDiagnosisAbortReason = '';
   let sourceRepairPending = false;
   let sourceRepairPayload = '';
   let sourceRepairError = '';
@@ -131,6 +133,7 @@
   const SOURCE_FLOW_MIN_WIDTH = 620;
   const SOURCE_FLOW_GAP = 24;
   const SOURCE_FLOW_LINE_HEIGHT = 29;
+  const SOURCE_DIAGNOSIS_TIMEOUT_MS = 12000;
 
   function revisionMediaSourceRefs(revision = currentRevision) {
     const refs = revision?.metadata?.media_source_refs;
@@ -1108,6 +1111,7 @@
     sourcePanelOpen = false;
     sourceDiagnosis = null;
     sourceDiagnosisPending = false;
+    cancelSourceDiagnosis();
     sourceRepairPending = false;
     sourceRepairPayload = '';
     sourceRepairError = '';
@@ -1580,31 +1584,80 @@
   async function handleOpenSourcePanel() {
     sourcePanelOpen = !sourcePanelOpen;
     sourceRepairError = '';
+    if (!sourcePanelOpen) {
+      cancelSourceDiagnosis();
+      return;
+    }
     if (sourcePanelOpen) {
       ensureSourceRepairPayload();
       ensureSourceReviewSelection();
     }
   }
 
+  function cancelSourceDiagnosis(reason = 'cancelled') {
+    sourceDiagnosisAbortReason = reason;
+    if (sourceDiagnosisAbortController) {
+      sourceDiagnosisAbortController.abort();
+      sourceDiagnosisAbortController = null;
+    }
+  }
+
+  function handleSourceDiagnosisButton() {
+    if (sourceDiagnosisPending) {
+      cancelSourceDiagnosis('cancelled');
+      return;
+    }
+    void handleLoadSourceDiagnosis();
+  }
+
   async function handleLoadSourceDiagnosis() {
-    if (!currentDoc?.doc_id || sourceDiagnosisPending) return;
+    if (!currentDoc?.doc_id) return;
+    if (sourceDiagnosisPending) {
+      cancelSourceDiagnosis('cancelled');
+      return;
+    }
     if (!authenticated) {
       dispatch('authrequired', { kind: 'vtext_diagnosis', appId: 'vtext', appName: 'VText', title: currentDoc.title });
       return;
     }
+    const controller = new AbortController();
+    let timeout = null;
+    sourceDiagnosisAbortController = controller;
+    sourceDiagnosisAbortReason = '';
     sourceDiagnosisPending = true;
     sourceRepairError = '';
     try {
-      sourceDiagnosis = await getVTextDiagnosis(currentDoc.doc_id, 80);
+      timeout = window.setTimeout(() => {
+        if (sourceDiagnosisAbortController === controller) {
+          sourceDiagnosisAbortReason = 'timeout';
+          controller.abort();
+        }
+      }, SOURCE_DIAGNOSIS_TIMEOUT_MS);
+      sourceDiagnosis = await getVTextDiagnosis(currentDoc.doc_id, 80, { signal: controller.signal });
       saveStatus = 'Source diagnosis loaded';
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
+      if (err?.name === 'AbortError') {
+        if (sourceDiagnosisAbortReason === 'timeout') {
+          sourceRepairError = 'Source diagnosis timed out; source review remains available';
+          saveStatus = 'Source diagnosis timed out';
+        } else {
+          sourceRepairError = '';
+          saveStatus = 'Source diagnosis cancelled';
+        }
+        return;
+      }
       sourceRepairError = err.message || 'Could not load source diagnosis';
       saveStatus = 'Source diagnosis failed';
     } finally {
+      if (timeout) window.clearTimeout(timeout);
+      if (sourceDiagnosisAbortController === controller) {
+        sourceDiagnosisAbortController = null;
+      }
+      sourceDiagnosisAbortReason = '';
       sourceDiagnosisPending = false;
     }
   }
@@ -2185,6 +2238,7 @@
 
   onDestroy(() => {
     clearAutosaveTimer();
+    cancelSourceDiagnosis();
     closeDocumentStream();
     removeLiveListener();
     window.removeEventListener('resize', refreshSourceJournalFlow);
@@ -2428,10 +2482,10 @@
               type="button"
               class="secondary-action"
               data-vtext-load-diagnosis
-              on:click={handleLoadSourceDiagnosis}
-              disabled={sourceDiagnosisPending || !currentDoc || isPublishedReadOnly}
+              on:click={handleSourceDiagnosisButton}
+              disabled={!currentDoc || isPublishedReadOnly}
             >
-              {sourceDiagnosisPending ? 'Loading…' : 'Diagnosis'}
+              {sourceDiagnosisPending ? 'Cancel diagnosis' : 'Diagnosis'}
             </button>
           </div>
 

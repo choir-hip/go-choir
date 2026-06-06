@@ -5393,3 +5393,46 @@ deployed refactor evidence:
   frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
   source-gap repair" --project=chromium --timeout=120000` -> `1 passed
   (14.9s)`.
+
+## 2026-06-06 Local Hardening: Bounded Source Diagnosis
+
+status: local_behavior_verified
+
+problem addressed:
+
+- The hard-review report identified source Diagnosis as a P1 weak path: it was
+  no longer required for source review, but an explicit Diagnosis request could
+  still stay pending without a clear cancel/timeout contract.
+
+changes:
+
+- `getVTextDiagnosis()` now accepts a fetch `signal` so callers can abort the
+  request.
+- `VTextEditor.svelte` now gives source Diagnosis a bounded client timeout
+  (`12000ms`) and an explicit cancel state. While pending, the button reads
+  `Cancel diagnosis`; closing the Sources panel or destroying the editor also
+  aborts the in-flight diagnosis request.
+- Abort handling distinguishes timeout from user cancellation. Timeout reports
+  that source review remains available; cancellation returns the panel to the
+  normal `Diagnosis` state.
+
+local evidence:
+
+- Focused test:
+  `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "cancel diagnosis"
+  --project=chromium --timeout=90000` -> `1 passed (6.1s)`.
+- Full lineage spec:
+  `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js --project=chromium
+  --timeout=120000` -> `7 passed (29.8s)`.
+- Frontend build:
+  `pnpm --dir frontend build` passed and emitted
+  `VTextEditor-CNWZyUK8.js`.
+
+contract implication:
+
+- Diagnosis remains an explicit evidence/debug path rather than a hidden
+  prerequisite for source review.
+- Source review, source gaps, and source entity repair remain available while
+  diagnosis is pending or cancelled.
