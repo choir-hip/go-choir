@@ -5848,3 +5848,51 @@ next executable probe:
   URL-backed legal-cloud sources consistently materialize as cleaned Markdown
   reader artifacts with explicit status diagnostics, then prove those artifacts
   publish and open for authorized readers without relying on iframe rendering.
+
+## 2026-06-06 Problem: Reader Snapshots Can Be Present But Not Clean
+
+status: documented_before_code
+
+evidence:
+
+- Current staging publication metadata for
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` reports
+  `reader_snapshot_ready` for all seven source entities.
+- That is progress over the earlier import-failure state, but inspecting the
+  actual `reader_snapshot.text_content` shows mixed quality:
+  - `src_hetzner_datacenters` begins with cookie-banner, location-selector,
+    navigation, login, and product-menu text before the useful datacenter
+    content.
+  - `src_gdpr_article_32` begins with site navigation, search widgets,
+    chapter menus, and non-article scaffolding before Article 32 text.
+  - Curated/attached sources such as `src_aba_formal_op_512`,
+    `src_aba_rule_16`, `src_ovh_private_cloud`, and `src_qdrant_search` are
+    readable, but some are concise source artifacts rather than full extracted
+    article text.
+
+why this matters:
+
+- The mission target is source-backed publication that improves the article
+  without distracting from it. Opening a source window should show a reader-mode
+  source artifact, not a raw web scrape full of cookie banners and site chrome.
+- The user explicitly called out the iframe/Web Lens fallback and asked for
+  Obscura/source cleanup into Markdown reader mode. A `reader_snapshot_ready`
+  state is misleading if the snapshot is mostly navigation or consent UI.
+
+root-cause belief:
+
+- The publication path can now carry source snapshots correctly. The remaining
+  issue is upstream cleanup quality in the URL import/snapshot pipeline.
+- The owner is the generic source acquisition/HTML-to-reader-text path
+  (`/api/content/import-url` and related browser snapshot fallback), not
+  VText rendering, Pretext layout, or source-window dispatch.
+
+intended repair:
+
+- Improve HTML cleanup before storing/publishing reader snapshots: remove
+  common cookie/consent/location/navigation/menu/login scaffolding and prefer
+  article/main content where available.
+- Preserve explicit failure/status diagnostics when cleaned content remains
+  low-quality; do not mark a snapshot as ready just because raw text exists.
+- Add regression coverage with generic noisy HTML fixtures, not legal-cloud or
+  source-ID special cases.
