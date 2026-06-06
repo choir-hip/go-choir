@@ -80,6 +80,11 @@ func (h *Handler) HandlePlatformPublicationResolve(w http.ResponseWriter, r *htt
 	var out platform.PublicationBundle
 	status, err := h.getPlatformJSON(r, u.String(), &out)
 	if err != nil {
+		if platformErr, ok := err.(*platformStatusError); ok && platformErr.status == http.StatusNotFound {
+			http.NotFound(w, r)
+			h.lifecycle.record("platform_publication.resolve", lifecycleHTTPStatus(http.StatusNotFound), time.Since(started))
+			return
+		}
 		log.Printf("proxy: platform publication resolve: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve publication"})
 		return
@@ -116,6 +121,11 @@ func (h *Handler) HandlePlatformPublicationExport(w http.ResponseWriter, r *http
 	var out platform.PublicationExport
 	status, err := h.getPlatformJSON(r, u.String(), &out)
 	if err != nil {
+		if platformErr, ok := err.(*platformStatusError); ok && platformErr.status == http.StatusNotFound {
+			http.NotFound(w, r)
+			h.lifecycle.record("platform_publication.export", lifecycleHTTPStatus(http.StatusNotFound), time.Since(started))
+			return
+		}
 		log.Printf("proxy: platform publication export: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to export publication"})
 		return
@@ -396,6 +406,15 @@ func (h *Handler) recordPublicationProposalDeliveryState(r *http.Request, propos
 	return nil
 }
 
+type platformStatusError struct {
+	status int
+	body   string
+}
+
+func (e *platformStatusError) Error() string {
+	return fmt.Sprintf("platformd status %d: %s", e.status, strings.TrimSpace(e.body))
+}
+
 func (h *Handler) getPlatformJSON(r *http.Request, target string, out any) (int, error) {
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
 	if err != nil {
@@ -412,7 +431,7 @@ func (h *Handler) getPlatformJSON(r *http.Request, target string, out any) (int,
 		return resp.StatusCode, fmt.Errorf("read platformd response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return resp.StatusCode, fmt.Errorf("platformd status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return resp.StatusCode, &platformStatusError{status: resp.StatusCode, body: string(body)}
 	}
 	if err := json.Unmarshal(body, out); err != nil {
 		return resp.StatusCode, fmt.Errorf("decode platformd response: %w", err)

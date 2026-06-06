@@ -6185,7 +6185,7 @@ public versus unlisted/private publication resolve/search/export.
 
 ### Problem 37: Public Publication Proxy Turns Platform Policy Misses Into 502
 
-Status: `documented_pending_fix`.
+Status: `fixed_with_local_proxy_proof_pending_ci_deploy`.
 
 problem: after Problem 36, platformd can return `sql.ErrNoRows`/404 for
 publication routes that are inactive, nonexistent, or no longer public according
@@ -6227,6 +6227,45 @@ acceptance for fix:
 
 remaining error field: this is a proxy status-mapping fix. It does not add a
 future authenticated private publication reader path.
+
+fix and proof:
+
+```text
+behavior:
+  internal/proxy/platform_public.go now wraps non-2xx platformd responses in a
+  typed platformStatusError. Public publication resolve/export handlers
+  propagate platformd 404 as public 404 and continue to map genuine transport
+  or decode failures to 502.
+
+verifier:
+  internal/proxy/platform_public_test.go adds
+  TestPlatformPublicationResolveAndExportPropagateNotFound.
+
+assertions:
+  successful public resolve/export behavior is unchanged;
+  platformd 404 from /internal/platform/publications/resolve becomes public
+  404 from /api/platform/publications/resolve;
+  platformd 404 from /internal/platform/publications/export becomes public 404
+  from /api/platform/publications/export.
+
+local checks:
+  gofmt -w internal/proxy/platform_public.go internal/proxy/platform_public_test.go
+  nix develop -c go test ./internal/proxy ./internal/platform -run 'TestPlatformPublicationResolveAndExportPropagateNotFound|TestPlatformPublicationResolveIsPublicAndInternalOnly|TestPublicationPublicSurfacesEnforceVisibilityPolicy' -count=1
+    -> ok
+  nix develop -c go test ./internal/sourcecontract ./internal/platform ./internal/proxy -run 'TestNormalize|TestBuildPublication|TestHandleVTextPublication|TestExport|TestPublicationPublicSurfacesEnforceVisibilityPolicy|TestPlatformPublicationResolveAndExportPropagateNotFound|TestPlatformPublicationResolveIsPublicAndInternalOnly' -count=1
+    -> ok
+
+deploy-impact:
+  deploy_needed=true
+  deploy_host=true
+  deploy_host_service=true
+  host_services=proxy
+  frontend/guest/vmctl/host_os deploy flags=false
+```
+
+remaining proof required: push the proxy behavior commit, monitor CI/deploy,
+confirm Node B identity, and run the deployed public/unlisted/private
+publication proof.
 
 ## Suggested `/goal`
 

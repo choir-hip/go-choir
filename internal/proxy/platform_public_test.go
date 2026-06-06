@@ -84,6 +84,49 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 	}
 }
 
+func TestPlatformPublicationResolveAndExportPropagateNotFound(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("platformd missing internal caller header")
+		}
+		switch r.URL.Path {
+		case "/internal/platform/publications/resolve", "/internal/platform/publications/export":
+			http.NotFound(w, r)
+		default:
+			t.Fatalf("platformd path: got %s", r.URL.Path)
+		}
+	}))
+	defer platformd.Close()
+
+	h, err := NewHandler(&Config{
+		Port:              "0",
+		SandboxURL:        "http://127.0.0.1:1",
+		AuthPublicKeyPath: "/unused/in/test",
+		PlatformdURL:      platformd.URL,
+	}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	resolveReq := httptest.NewRequest(http.MethodGet, "/api/platform/publications/resolve?route=/pub/vtext/private", nil)
+	resolveW := httptest.NewRecorder()
+	h.HandleAPI(resolveW, resolveReq)
+	if resolveW.Code != http.StatusNotFound {
+		t.Fatalf("resolve status: got %d body %s, want 404", resolveW.Code, resolveW.Body.String())
+	}
+
+	exportReq := httptest.NewRequest(http.MethodGet, "/api/platform/publications/export?route=/pub/vtext/private&format=md", nil)
+	exportW := httptest.NewRecorder()
+	h.HandleAPI(exportW, exportReq)
+	if exportW.Code != http.StatusNotFound {
+		t.Fatalf("export status: got %d body %s, want 404", exportW.Code, exportW.Body.String())
+	}
+}
+
 func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
