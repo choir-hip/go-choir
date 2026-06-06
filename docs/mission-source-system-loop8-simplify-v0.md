@@ -454,6 +454,26 @@ focused verification:
 ```text
 nix develop -c go test ./internal/platform ./internal/sourcecontract
 result: passed.
+
+commit:
+  792691a7ab0ecd732ffe0363bd3ed0c5267e2302
+
+CI/deploy:
+  GitHub Actions CI 27073773109 passed.
+  FlakeHub publish 27073773117 passed.
+  Node B deploy job 79907566344 passed.
+  /health reported proxy and sandbox deployed_commit
+  792691a7ab0ecd732ffe0363bd3ed0c5267e2302, deployed_at
+  2026-06-06T21:02:18Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/rich-export-refactor-staging.tmp.spec.js
+  result: 1 passed.
+
+  The temporary proof created a source-backed VText publication, exported HTML,
+  DOCX, and PDF, and verified semantic rich output plus embedded/recoverable
+  source manifests. The scratch spec was deleted after the proof.
 ```
 
 ### Performance Checks
