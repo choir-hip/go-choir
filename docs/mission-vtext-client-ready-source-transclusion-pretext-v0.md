@@ -6561,11 +6561,11 @@ belief-state update:
   write functions out of `VTextEditor.svelte` or replace the diagnostic JSON
   path with a clearer operator-only diagnostics surface.
 
-## 2026-06-06 Problem: Context-Gated JSON Repair Is Dead Debug Scaffolding
+## 2026-06-06 Simplification Pass: Remove Dead JSON Repair Diagnostics
 
-status: documented_pending_fix
+status: local_verified_pending_deploy
 
-new evidence:
+documented problem:
 
 - After the owner-facing diagnostic JSON editor was hidden, the remaining raw
   repair path is reachable only through launch-context flags
@@ -6578,26 +6578,37 @@ new evidence:
 - The real owner source-review path already calls `repairVTextSourceGaps()` with
   a typed payload assembled from marker/title/excerpt/source URL fields.
 
-risk:
+change:
 
-- A hidden debug path can drift untested while preserving the illusion that a
-  diagnostic UX still exists.
-- The editor stays coupled to two source-repair modes: the real typed review
-  workflow and the obsolete raw JSON workflow.
-- Future agents may preserve or extend the JSON path instead of improving the
-  typed claim/source review path.
-
-intended fix:
-
-- Remove the hidden raw JSON repair UI, payload template, and apply handler.
-- Keep `sourceRepairPending` and `sourceRepairError` only for the typed source
+- Removed the hidden raw JSON repair UI, payload template, and apply handler.
+- Kept `sourceRepairPending` and `sourceRepairError` only for the typed source
   review workflow that still owns real source repairs.
-- Preserve the source import/attach workflow and the deployed Pretext
+- Preserved the source import/attach workflow and the deployed Pretext
   journal-flow source rendering.
+- Net code change is deletion: `VTextEditor.svelte` no longer owns
+  `defaultSourceRepairPayload()`, `ensureSourceRepairPayload()`,
+  `sourceRepairPayload`, or `handleApplySourceRepair()`;
+  `VTextSourcePanel.svelte` no longer renders or styles the diagnostic JSON
+  disclosure.
 
-proof required:
+local proof:
 
-- Local and deployed source-panel proof must still show manual source review
-  repairs a citation gap and opens the repaired source window.
-- Local and deployed Pretext source-flow proof must still show expanded source
-  notes beside article prose.
+- `pnpm --dir frontend run build` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> passed.
+- A parallel run of the Pretext source-flow test failed to find the expected
+  mounted source flow in the active VText window while another Playwright proof
+  was manipulating the same desktop session. The isolated rerun passed, so this
+  is recorded as verifier interference rather than product behavior evidence.
+- Isolated rerun:
+  `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+
+deployment proof still needed:
+
+- Commit and push the dead-path removal, wait for CI and Node B deploy, confirm
+  staging identity, then repeat deployed source-panel and Pretext source-flow
+  proofs.

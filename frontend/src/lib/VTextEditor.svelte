@@ -109,7 +109,6 @@
   let sourceDiagnosisAbortController = null;
   let sourceDiagnosisAbortReason = '';
   let sourceRepairPending = false;
-  let sourceRepairPayload = '';
   let sourceRepairError = '';
   let sourceReviewMarker = '';
   let sourceReviewTitle = '';
@@ -239,24 +238,6 @@
       if (evidence) return evidence;
     }
     return null;
-  }
-
-  function defaultSourceRepairPayload() {
-    const candidates = sourceRepairCandidates();
-    const existing = revisionSourceEntities();
-    return {
-      base_revision_id: currentRevision?.revision_id || '',
-      source_entities: [],
-      citation_resolutions: candidates.map((marker, index) => ({
-        marker,
-        entity_id: sourceEntityID(existing[index]) || '',
-      })),
-    };
-  }
-
-  function ensureSourceRepairPayload() {
-    if (sourceRepairPayload.trim()) return;
-    sourceRepairPayload = JSON.stringify(defaultSourceRepairPayload(), null, 2);
   }
 
   function prepareSourceReviewForm(marker = sourceRepairCandidates()[0] || sourceReviewMarker) {
@@ -882,7 +863,6 @@
     if (index < 0 || index >= revisions.length) return;
     resetCompareMergeState();
     sourceRepairError = '';
-    sourceRepairPayload = '';
     sourceReviewMarker = '';
     sourceReviewTitle = '';
     sourceReviewURL = '';
@@ -901,7 +881,6 @@
       clearNewVersionIndicator();
     }
     if (sourcePanelOpen) {
-      ensureSourceRepairPayload();
       ensureSourceArtifactSelection();
     }
   }
@@ -1114,7 +1093,6 @@
     sourceDiagnosisPending = false;
     cancelSourceDiagnosis();
     sourceRepairPending = false;
-    sourceRepairPayload = '';
     sourceRepairError = '';
     sourceReviewMarker = '';
     sourceReviewTitle = '';
@@ -1590,7 +1568,6 @@
       return;
     }
     if (sourcePanelOpen) {
-      ensureSourceRepairPayload();
       ensureSourceReviewSelection();
     }
   }
@@ -1700,14 +1677,12 @@
         ...payload,
       });
       sourceDiagnosis = null;
-      sourceRepairPayload = '';
       sourceReviewStatus = `Applied source review for ${marker}`;
       sourceReviewTitle = '';
       sourceReviewURL = '';
       sourceReviewExcerpt = '';
       saveStatus = 'Loading repaired source revision...';
       await reloadDocument(revision.revision_id);
-      ensureSourceRepairPayload();
       ensureSourceReviewSelection();
       saveStatus = `Repaired sources in ${versionLabel}`;
     } catch (err) {
@@ -1717,49 +1692,6 @@
       }
       sourceRepairError = err.message || 'Source review failed';
       sourceReviewStatus = '';
-      saveStatus = 'Source repair failed';
-    } finally {
-      sourceRepairPending = false;
-    }
-  }
-
-  async function handleApplySourceRepair() {
-    if (!currentDoc?.doc_id || !currentRevision?.revision_id || sourceRepairPending) return;
-    if (!authenticated) {
-      dispatch('authrequired', { kind: 'vtext_source_repair', appId: 'vtext', appName: 'VText', title: currentDoc.title });
-      return;
-    }
-    let payload;
-    try {
-      payload = JSON.parse(sourceRepairPayload || '{}');
-    } catch (_err) {
-      sourceRepairError = 'Repair payload must be valid JSON';
-      return;
-    }
-    if (!Array.isArray(payload?.citation_resolutions) || payload.citation_resolutions.length === 0) {
-      sourceRepairError = 'Repair payload needs citation_resolutions';
-      return;
-    }
-    sourceRepairPending = true;
-    sourceRepairError = '';
-    saveStatus = 'Repairing sources...';
-    try {
-      const revision = await repairVTextSourceGaps(currentDoc.doc_id, {
-        ...payload,
-        base_revision_id: payload.base_revision_id || currentRevision.revision_id,
-        author_label: getAuthorLabel(),
-      });
-      sourceDiagnosis = null;
-      sourceRepairPayload = '';
-      await reloadDocument(revision.revision_id);
-      ensureSourceRepairPayload();
-      saveStatus = `Repaired sources in ${versionLabel}`;
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      sourceRepairError = err.message || 'Source repair failed';
       saveStatus = 'Source repair failed';
     } finally {
       sourceRepairPending = false;
@@ -1780,9 +1712,7 @@
       }],
     });
     sourceDiagnosis = null;
-    sourceRepairPayload = '';
     await reloadDocument(revision.revision_id);
-    ensureSourceRepairPayload();
     return revision;
   }
 
@@ -2193,10 +2123,6 @@
   $: sourceSummary = sourceDiagnosisSummary(sourceDiagnosis);
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
   $: if (sourcePanelOpen) ensureSourceArtifactSelection();
-  $: showSourceRepairDiagnostics = !!(
-    appContext?.showSourceRepairDiagnostics
-    || appContext?.debugSourceRepair
-  );
   $: renderedMarkdown = renderDocumentHTML(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
@@ -2477,8 +2403,6 @@
           {sourceArtifactPending}
           {sourceArtifactStatus}
           {sourceArtifactError}
-          bind:sourceRepairPayload
-          showDiagnosticRepair={showSourceRepairDiagnostics}
           on:diagnosis={handleSourceDiagnosisButton}
           on:source-entity-open={(event) => handleSourceEntityOpen(event.detail.entity)}
           on:source-review-marker={(event) => prepareSourceReviewForm(event.detail.marker)}
@@ -2486,7 +2410,6 @@
           on:source-artifact-target={(event) => prepareSourceArtifactForm(event.detail.entity)}
           on:import-source-artifact={handleImportAndAttachSourceArtifact}
           on:attach-source-artifact={handleCreateAndAttachSourceArtifact}
-          on:apply-source-repair={handleApplySourceRepair}
         />
       {/if}
 
