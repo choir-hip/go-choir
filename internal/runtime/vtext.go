@@ -2338,8 +2338,12 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 		metadata = json.RawMessage("{}")
 	}
 	content := req.Content
+	var parentRev types.Revision
+	var hasParentRev bool
 	if strings.TrimSpace(parentID) != "" {
-		if parentRev, err := h.rt.Store().GetRevision(r.Context(), parentID, ownerID); err == nil {
+		if rev, err := h.rt.Store().GetRevision(r.Context(), parentID, ownerID); err == nil {
+			parentRev = rev
+			hasParentRev = true
 			var stabilized bool
 			content, stabilized = stabilizeVTextUserMarkdownStructures(parentRev.Content, content)
 			if stabilized {
@@ -2351,6 +2355,9 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 		} else {
 			log.Printf("vtext api: load parent revision for structure stabilization %s: %v", parentID, err)
 		}
+	}
+	if hasParentRev {
+		metadata = carryForwardDurableVTextMetadata(metadata, parentRev.Metadata)
 	}
 	if canonicalPath, err := h.ensureCanonicalVTextProjectionPath(r.Context(), ownerID, doc); err == nil && canonicalPath != "" {
 		metadata = mergeVTextRevisionMetadata(metadata, map[string]any{
@@ -2427,6 +2434,7 @@ func (h *APIHandler) createRebasedUserRevision(ctx context.Context, docID, owner
 		"rebase_strategy":          strategy,
 		"rebase_clean":             clean,
 	})
+	mergedMetadata = carryForwardDurableVTextMetadata(mergedMetadata, headRev.Metadata)
 
 	rev := types.Revision{
 		RevisionID:       uuid.New().String(),
@@ -2448,6 +2456,54 @@ func (h *APIHandler) createRebasedUserRevision(ctx context.Context, docID, owner
 		return types.Revision{}, fmt.Errorf("load rebased user revision: %w", err)
 	}
 	return storedRev, nil
+}
+
+func carryForwardDurableVTextMetadata(raw, parentRaw json.RawMessage) json.RawMessage {
+	parentMeta := decodeRevisionMetadata(parentRaw)
+	if len(parentMeta) == 0 {
+		return raw
+	}
+	meta := decodeRevisionMetadata(raw)
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	changed := false
+	for _, key := range durableMetadataKeys {
+		if hasNonEmptyVTextMetadataValue(meta[key]) {
+			continue
+		}
+		val, ok := parentMeta[key]
+		if !ok || !hasNonEmptyVTextMetadataValue(val) {
+			continue
+		}
+		meta[key] = val
+		changed = true
+	}
+	if !changed {
+		return raw
+	}
+	data, err := json.Marshal(meta)
+	if err != nil {
+		return raw
+	}
+	return data
+}
+
+func hasNonEmptyVTextMetadataValue(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return false
+	case string:
+		return strings.TrimSpace(typed) != ""
+	case []any:
+		return len(typed) > 0
+	case []vtextSourceEntity:
+		return len(typed) > 0
+	case []vtextMediaSourceRef:
+		return len(typed) > 0
+	default:
+		return true
+	}
 }
 
 func rebaseUserDraftContent(baseContent, headContent, userContent, staleParentID string) (string, string, bool) {

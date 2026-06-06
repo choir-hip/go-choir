@@ -3983,6 +3983,145 @@ func TestVTextImportMarkdownLineageResolvesCitationMarkers(t *testing.T) {
 	t.Fatalf("missing original source snapshot item: %#v", items)
 }
 
+func TestVTextUserSaveAndAgentRevisePreserveSourcesAndTableShape(t *testing.T) {
+	provider := newVTextEditToolProvider("")
+	provider.resultFunc = func(string) string {
+		return vtextApplyEditsResult([]vtextTextEdit{{
+			Op:      "replace",
+			Find:    "A private legal cloud addresses this.",
+			Replace: "A private legal cloud addresses this clearly.",
+		}})
+	}
+	h, s, _ := vtextAPISetupWithProvider(t, provider, true)
+	ctx := context.Background()
+	entity := vtextSourceEntity{
+		EntityID: "src-aba-rule-16",
+		Kind:     "source_service_item",
+		Label:    "ABA Model Rule 1.6",
+		Target: vtextSourceEntityTarget{
+			TargetKind: "source_service_item",
+			ItemID:     "srcitem_aba_rule_16",
+		},
+		Selectors: []vtextSourceEntitySelector{{
+			SelectorKind: "text_quote",
+			TextQuote:    "A lawyer shall not reveal information relating to the representation of a client.",
+		}},
+		Display: vtextSourceEntityDisplay{
+			InlineMode:   "embedded_excerpt",
+			ExpandedMode: "source_card",
+			OpenSurface:  "source",
+		},
+		Evidence: vtextSourceEntityEvidence{
+			State:         "available",
+			ResearchState: "represented",
+		},
+		Provenance: vtextSourceEntityProvenance{
+			CreatedBy:   "migration",
+			RightsScope: "source_service_projection",
+		},
+	}
+	parentContent := strings.Join([]string{
+		"# Proposal",
+		"",
+		"The core problem is confidentiality [1].",
+		"",
+		"A private legal cloud solves this.",
+		"",
+		"Appendix A: Glossary",
+		"",
+		"| Term | Definition |",
+		"| --- | --- |",
+		"| Agent | Multi-step worker. |",
+		"| Work product | Durable output. |",
+		"| Vector database | Stores embeddings for retrieval. |",
+		"",
+		"End of proposal.",
+	}, "\n")
+	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath:     "proposals/legal-cloud-sourced.md",
+		Title:          "legal-cloud-sourced.md",
+		SourceEntities: []vtextSourceEntity{entity},
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:   "v1",
+			Content: parentContent,
+			CitationResolutions: []vtextCitationMarkerResolution{{
+				Marker:   "[1]",
+				EntityID: entity.EntityID,
+			}},
+		}},
+	})
+	w := httptest.NewRecorder()
+	h.HandleVTextRouter(w, importReq)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var imported vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(w.Body).Decode(&imported); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+	parentRev, err := s.GetRevision(ctx, imported.CurrentRevisionID, "user-1")
+	if err != nil {
+		t.Fatalf("GetRevision parent: %v", err)
+	}
+	parentTables := extractMarkdownTableBlocks(parentRev.Content)
+	if len(parentTables) != 1 {
+		t.Fatalf("parent tables = %d, want 1:\n%s", len(parentTables), parentRev.Content)
+	}
+
+	userContent := strings.Replace(parentRev.Content, "A private legal cloud solves this.", "A private legal cloud addresses this.", 1)
+	userReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/revisions", vtextCreateRevisionRequest{
+		Content:          userContent,
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      "owner",
+		Metadata:         json.RawMessage(`{"created_from":"browser_user_edit"}`),
+		ParentRevisionID: imported.CurrentRevisionID,
+	})
+	w = httptest.NewRecorder()
+	h.HandleVTextRevisions(w, userReq)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create user revision: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var userRevResp vtextRevisionResponse
+	if err := json.NewDecoder(w.Body).Decode(&userRevResp); err != nil {
+		t.Fatalf("decode user revision response: %v", err)
+	}
+	userRev, err := s.GetRevision(ctx, userRevResp.RevisionID, "user-1")
+	if err != nil {
+		t.Fatalf("GetRevision user: %v", err)
+	}
+	userMeta := decodeRevisionMetadata(userRev.Metadata)
+	userEntities := decodeVTextSourceEntities(userMeta["source_entities"])
+	if len(userEntities) != 1 || userEntities[0].EntityID != entity.EntityID {
+		t.Fatalf("user revision source_entities = %#v", userMeta["source_entities"])
+	}
+	userTables := extractMarkdownTableBlocks(userRev.Content)
+	if len(userTables) != 1 || userTables[0].Text != parentTables[0].Text {
+		t.Fatalf("user revision table changed:\nparent:\n%s\nuser:\n%s", parentTables[0].Text, userRev.Content)
+	}
+
+	reviseReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/revise",
+		map[string]string{"intent": "revise"})
+	w = httptest.NewRecorder()
+	h.HandleVTextAgentRevision(w, reviseReq)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("revise status = %d, want %d; body: %s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	revs := waitForRevisionCount(t, s, imported.DocID, "user-1", 3, 5*time.Second)
+	agentRev := revs[0]
+	agentMeta := decodeRevisionMetadata(agentRev.Metadata)
+	agentEntities := decodeVTextSourceEntities(agentMeta["source_entities"])
+	if len(agentEntities) != 1 || agentEntities[0].EntityID != entity.EntityID {
+		t.Fatalf("agent revision source_entities = %#v", agentMeta["source_entities"])
+	}
+	agentTables := extractMarkdownTableBlocks(agentRev.Content)
+	if len(agentTables) != 1 || agentTables[0].Text != parentTables[0].Text {
+		t.Fatalf("agent revision table changed:\nparent:\n%s\nagent:\n%s", parentTables[0].Text, agentRev.Content)
+	}
+	if !strings.Contains(agentRev.Content, "A private legal cloud addresses this clearly.") {
+		t.Fatalf("agent edit did not apply:\n%s", agentRev.Content)
+	}
+}
+
 func TestVTextSourceGapRepairCreatesRevision(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	entity := vtextSourceEntity{

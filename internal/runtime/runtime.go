@@ -1953,7 +1953,7 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 		if parentRev, err := rt.store.GetRevision(context.Background(), doc.CurrentRevisionID, ownerID); err == nil {
 			parentMeta := decodeRevisionMetadata(parentRev.Metadata)
 			for _, key := range durableMetadataKeys {
-				if val, ok := parentMeta[key]; ok && val != nil && val != "" {
+				if val, ok := parentMeta[key]; ok && hasNonEmptyVTextMetadataValue(val) {
 					meta[key] = val
 				}
 			}
@@ -1964,7 +1964,7 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 	// request sets these directly).
 	if rec.Metadata != nil {
 		for _, key := range durableMetadataKeys {
-			if val, ok := rec.Metadata[key]; ok && val != nil && val != "" {
+			if val, ok := rec.Metadata[key]; ok && hasNonEmptyVTextMetadataValue(val) {
 				// Run metadata takes precedence over parent revision.
 				meta[key] = val
 			}
