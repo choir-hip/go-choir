@@ -476,6 +476,28 @@ staging proof:
   source manifests. The scratch spec was deleted after the proof.
 ```
 
+2026-06-06: the VText toolbar was extracted into
+`frontend/src/lib/VTextToolbar.svelte` without changing toolbar semantics.
+`VTextEditor.svelte` now computes revision/publish/source state and delegates
+toolbar rendering/actions through semantic Svelte events.
+
+```text
+frontend/src/lib/VTextEditor.svelte   3399 lines
+frontend/src/lib/VTextToolbar.svelte   590 lines
+
+local verification:
+  npm --prefix frontend run build
+  result: passed with no Svelte unused-selector warnings.
+
+local focused Playwright:
+  npm --prefix frontend run e2e -- tests/vtext-authoring-history.spec.js
+  result: blocked by local auth harness, not product code.
+  details: initial run failed because no local server listened on localhost:4173;
+  after `nix develop -c ./start-services.sh` and a persistent Vite session,
+  `/auth/register/begin` returned 500 and the auth service was no longer
+  listening on 127.0.0.1:8081. Staging proof remains required after deploy.
+```
+
 ### Performance Checks
 
 - Local focused backend check:

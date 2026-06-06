@@ -39,6 +39,7 @@
     importSourceContentItem,
   } from './vtext-source-actions';
   import VTextSourcePanel from './VTextSourcePanel.svelte';
+  import VTextToolbar from './VTextToolbar.svelte';
   import { sourceEntityLaunchPayload } from './vtext-source-launcher';
   import {
     mediaRefToSourceEntity,
@@ -2189,13 +2190,31 @@
   $: versionLabel = currentRevision ? versionLabelForRevision(currentRevision, activeRevisionIndex) : `v${documentCurrentVersionNumber()}`;
   $: nextVersionLabel = `v${nextVersionNumber()}`;
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
-  $: navDisabled = loading || submitting;
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
   $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly;
   $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published VText document' : 'VText document';
   $: editorSurfaceAriaMultiline = isPublishedReadOnly ? undefined : 'true';
   $: revisionLineLabel = isViewingHistorical ? 'Historical' : 'Latest';
+  $: previousVersionLabel = activeRevisionIndex > 0 ? versionLabelForRevision(revisions[activeRevisionIndex - 1], activeRevisionIndex - 1) : '';
+  $: nextRevisionLabel = activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? versionLabelForRevision(revisions[activeRevisionIndex + 1], activeRevisionIndex + 1) : '';
+  $: toolbarStateLabel = mergePreview
+    ? `${nextVersionLabel} preview`
+    : compareResult
+      ? `Comparing to ${compareTargetVersionLabel()}`
+      : isPublishedMode && !publishedDerivativeActive
+        ? (currentUser ? 'Published reader' : 'Guest reader')
+        : isPublishedMode && publishedDerivativeActive
+          ? 'Private proposal draft'
+          : publishResult
+            ? `Published ${versionLabel}`
+            : isViewingHistorical
+              ? 'Historical version'
+              : isDirty
+                ? 'Unsaved edit'
+                : agentPending
+                  ? synthStatusLabel()
+                  : 'Latest';
   $: if (publishMenuOpen && (!currentDoc || isPublishedMode || loading || submitting || agentPending || !!mergePreview)) publishMenuOpen = false;
   $: sourceGaps = revisionSourceGaps(currentRevision);
   $: sourceEntities = revisionSourceEntities(currentRevision, publishedBundle);
@@ -2272,210 +2291,53 @@
       </div>
     </section>
   {:else}
-    <div class="doc-toolbar" class:toolbar-hidden={toolbarHidden} data-vtext-toolbar>
-      <div class="version-controls">
-        <span class="nav-version" data-vtext-version>{versionLabel}</span>
-        <button
-          class="nav-btn"
-          data-vtext-prev
-          aria-label={activeRevisionIndex > 0 ? `Older version (${versionLabelForRevision(revisions[activeRevisionIndex - 1], activeRevisionIndex - 1)})` : 'At oldest version'}
-          title={activeRevisionIndex > 0 ? `Go to ${versionLabelForRevision(revisions[activeRevisionIndex - 1], activeRevisionIndex - 1)}` : 'At oldest version'}
-          on:click={handlePrevVersion}
-          disabled={navDisabled || activeRevisionIndex <= 0}
-        >
-          &lt;
-        </button>
-        <button
-          class="nav-btn"
-          data-vtext-next
-          aria-label={activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? `Newer version (${versionLabelForRevision(revisions[activeRevisionIndex + 1], activeRevisionIndex + 1)})` : 'At latest version'}
-          title={activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? `Go to ${versionLabelForRevision(revisions[activeRevisionIndex + 1], activeRevisionIndex + 1)}` : 'At latest version'}
-          on:click={handleNextVersion}
-          disabled={navDisabled || activeRevisionIndex < 0 || activeRevisionIndex >= revisions.length - 1}
-        >
-          &gt;
-        </button>
-        <span class="draft-line" data-vtext-draft-line>{revisionLineLabel}</span>
-      </div>
-
-      <div class="doc-state" data-vtext-state>
-        {#if mergePreview}
-          {nextVersionLabel} preview
-        {:else if compareResult}
-          Comparing to {compareTargetVersionLabel()}
-        {:else if isPublishedMode && !publishedDerivativeActive}
-          {currentUser ? 'Published reader' : 'Guest reader'}
-        {:else if isPublishedMode && publishedDerivativeActive}
-          Private proposal draft
-        {:else if publishResult}
-          Published {versionLabel}
-        {:else if isViewingHistorical}
-          Historical version
-        {:else if isDirty}
-          Unsaved edit
-        {:else if agentPending}
-          {synthStatusLabel()}
-        {:else}
-          Latest
-        {/if}
-      </div>
-
-      <div class="doc-actions">
-        {#if isPublishedMode && !publishedDerivativeActive}
-          <button
-            class="secondary-action"
-            data-vtext-copy-full-text
-            on:click={handleCopyPublishedText}
-            disabled={loading || publishedActionPending}
-          >
-            Copy text
-          </button>
-          <details class="download-menu" data-vtext-download-menu>
-            <summary>Download</summary>
-            <button type="button" data-vtext-download-md on:click={() => handleDownloadPublished('md')} disabled={loading || publishedActionPending}>Markdown</button>
-            <button type="button" data-vtext-download-txt on:click={() => handleDownloadPublished('txt')} disabled={loading || publishedActionPending}>Text</button>
-            <button type="button" data-vtext-download-html on:click={() => handleDownloadPublished('html')} disabled={loading || publishedActionPending}>HTML</button>
-            <button type="button" data-vtext-download-docx on:click={() => handleDownloadPublished('docx')} disabled={loading || publishedActionPending}>DOCX</button>
-            <button type="button" data-vtext-download-pdf on:click={() => handleDownloadPublished('pdf')} disabled={loading || publishedActionPending}>PDF</button>
-          </details>
-          <button
-            class="prompt-btn"
-            data-vtext-edit-published
-            on:click={handleCreatePublishedDerivative}
-            disabled={loading || publishedActionPending}
-          >
-            {publishedActionPending ? 'Opening…' : currentUser ? 'Edit my version' : 'Edit'}
-          </button>
-        {:else}
-          <button
-            class="prompt-btn"
-            data-vtext-prompt
-            data-vtext-save
-            on:click={handlePrompt}
-            disabled={loading || submitting || agentPending || isViewingHistorical || publishedActionPending}
-          >
-            {promptLabel}
-          </button>
-          {#if agentPending}
-            <button
-              class="secondary-action danger"
-              data-vtext-cancel-revision
-              on:click={handleCancelRevision}
-              disabled={cancelPending}
-            >
-              {cancelPending ? 'Cancelling…' : 'Cancel'}
-            </button>
-          {/if}
-          {#if isPublishedMode}
-            <button
-              class="secondary-action"
-              data-vtext-submit-proposal
-              on:click={handleSubmitProposal}
-              disabled={loading || submitting || agentPending || publishedActionPending || !currentDoc}
-            >
-              {publishedActionPending ? 'Submitting…' : 'Propose'}
-            </button>
-          {:else}
-            {#if mergePreview}
-              <button
-                class="prompt-btn"
-                data-vtext-accept-merge
-                on:click={handleAcceptMerge}
-                disabled={mergePending || publishedActionPending || !currentDoc}
-              >
-                {mergePending ? 'Accepting…' : 'Accept'}
-              </button>
-              <button
-                class="secondary-action danger"
-                data-vtext-discard-merge
-                on:click={handleDiscardMerge}
-                disabled={mergePending || publishedActionPending}
-              >
-                Discard
-              </button>
-            {:else}
-              <button
-                class="secondary-action"
-                data-vtext-compare
-                on:click={handleCompareToDraft}
-                disabled={loading || submitting || agentPending || comparePending || activeRevisionIndex < 0 || activeRevisionIndex >= revisions.length - 1}
-              >
-                {comparePending ? 'Comparing…' : 'Compare'}
-              </button>
-              <button
-                class="secondary-action"
-                data-vtext-source-panel
-                on:click={handleOpenSourcePanel}
-                disabled={loading || submitting || agentPending || !currentDoc}
-              >
-                Sources{sourceCandidates.length ? ` ${sourceCandidates.length}` : ''}
-              </button>
-              {#if isViewingHistorical}
-                <button
-                  class="secondary-action"
-                  data-vtext-restore-version
-                  on:click={handleRestoreHistoricalRevision}
-                  disabled={loading || submitting || agentPending || restorePending || !currentRevision}
-                >
-                  {restorePending ? 'Restoring…' : 'Restore'}
-                </button>
-              {/if}
-              {#if compareResult}
-                <button
-                  class="secondary-action"
-                  data-vtext-merge-preview
-                  on:click={handlePreviewMerge}
-                  disabled={mergePending || selectedMergeSuggestionIds.length === 0}
-                >
-                  {mergePending ? 'Merging…' : 'Merge into draft'}
-                </button>
-              {/if}
-            {/if}
-            <div class="publish-menu-wrap">
-              <button
-                class="secondary-action publish-action"
-                data-vtext-publish
-                aria-haspopup="menu"
-                aria-expanded={publishMenuOpen}
-                on:click={() => (publishMenuOpen = !publishMenuOpen)}
-                disabled={loading || submitting || agentPending || !!mergePreview || publishedActionPending || !currentDoc}
-              >
-                {publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}
-              </button>
-              {#if publishMenuOpen}
-                <div class="publish-menu" data-vtext-publish-menu role="menu" aria-label="Publish this version">
-                  <div class="publish-menu-heading">
-                    <p class="eyebrow">Publish</p>
-                    <h3>Publish {versionLabel}</h3>
-                    <p>This creates a public link with the current text and source snapshots.</p>
-                  </div>
-                  <div class="publish-menu-actions">
-                    <button
-                      type="button"
-                      class="primary-action"
-                      data-vtext-publish-confirm
-                      on:click={handlePublishCurrent}
-                      disabled={publishedActionPending}
-                    >
-                      {publishedActionPending ? 'Publishing…' : 'Publish'}
-                    </button>
-                    <button
-                      type="button"
-                      class="secondary-action"
-                      data-vtext-publish-cancel
-                      on:click={() => (publishMenuOpen = false)}
-                      disabled={publishedActionPending}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              {/if}
-            </div>
-          {/if}
-        {/if}
-      </div>
-    </div>
+    <VTextToolbar
+      {toolbarHidden}
+      {versionLabel}
+      {previousVersionLabel}
+      {nextRevisionLabel}
+      previousDisabled={activeRevisionIndex <= 0}
+      nextDisabled={activeRevisionIndex < 0 || activeRevisionIndex >= revisions.length - 1}
+      {revisionLineLabel}
+      stateLabel={toolbarStateLabel}
+      isPublishedReader={isPublishedMode && !publishedDerivativeActive}
+      {isPublishedMode}
+      {isViewingHistorical}
+      hasMergePreview={!!mergePreview}
+      hasCompareResult={!!compareResult}
+      {currentUser}
+      {loading}
+      {submitting}
+      {agentPending}
+      {cancelPending}
+      {comparePending}
+      {mergePending}
+      {restorePending}
+      {publishedActionPending}
+      {publishMenuOpen}
+      {promptLabel}
+      sourceCandidateCount={sourceCandidates.length}
+      selectedMergeSuggestionCount={selectedMergeSuggestionIds.length}
+      hasCurrentDoc={!!currentDoc}
+      hasCurrentRevision={!!currentRevision}
+      on:prev={handlePrevVersion}
+      on:next={handleNextVersion}
+      on:copy-full-text={handleCopyPublishedText}
+      on:download={(event) => handleDownloadPublished(event.detail)}
+      on:edit-published={handleCreatePublishedDerivative}
+      on:prompt={handlePrompt}
+      on:cancel-revision={handleCancelRevision}
+      on:submit-proposal={handleSubmitProposal}
+      on:accept-merge={handleAcceptMerge}
+      on:discard-merge={handleDiscardMerge}
+      on:compare={handleCompareToDraft}
+      on:sources={handleOpenSourcePanel}
+      on:restore={handleRestoreHistoricalRevision}
+      on:merge-preview={handlePreviewMerge}
+      on:toggle-publish={() => (publishMenuOpen = !publishMenuOpen)}
+      on:publish-confirm={handlePublishCurrent}
+      on:publish-cancel={() => (publishMenuOpen = false)}
+    />
 
     {#if agentPending}
       <div
@@ -2740,84 +2602,6 @@
       var(--choir-state-selected);
   }
 
-  .doc-toolbar {
-    position: relative;
-    z-index: 10;
-    flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.55rem;
-    min-height: 3.7rem;
-    padding: 0.5rem 0.72rem;
-    border-bottom: 1px solid var(--choir-border-strong);
-    background: var(--choir-state-selected);
-    max-height: 3.7rem;
-    overflow: visible;
-    transition:
-      opacity 180ms ease,
-      transform 180ms ease,
-      max-height 180ms ease,
-      padding 180ms ease,
-      border-color 180ms ease;
-    will-change: opacity, transform, max-height;
-  }
-
-  .doc-toolbar.toolbar-hidden {
-    height: 0;
-    max-height: 0;
-    min-height: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-    border-bottom-color: transparent;
-    opacity: 0;
-    overflow: hidden;
-    pointer-events: none;
-    transform: translateY(-100%);
-  }
-
-  .doc-toolbar.toolbar-hidden > * {
-    visibility: hidden;
-  }
-
-  .doc-toolbar.toolbar-hidden:focus-within {
-    height: auto;
-    max-height: 4.2rem;
-    padding-top: 0.58rem;
-    padding-bottom: 0.58rem;
-    border-bottom-color: var(--choir-border-strong);
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0);
-  }
-
-  .doc-toolbar.toolbar-hidden:focus-within > * {
-    visibility: visible;
-  }
-
-  .version-controls,
-  .doc-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.42rem;
-    min-width: 0;
-    flex-wrap: nowrap;
-  }
-
-  .doc-actions {
-    justify-content: flex-end;
-  }
-
-  .doc-state {
-    min-width: 0;
-    text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--choir-text-accent);
-    font-size: 0.74rem;
-  }
-
   .document-body {
     position: relative;
     flex: 1 1 auto;
@@ -2994,42 +2778,6 @@
     }
   }
 
-  .nav-version {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 3.1rem;
-    height: 1.95rem;
-    padding: 0 0.6rem;
-    border-radius: 999px;
-    border: 1px solid var(--choir-border-strong);
-    background: var(--choir-state-selected);
-    color: var(--choir-text-accent);
-    font-size: 0.76rem;
-    font-weight: 650;
-    backdrop-filter: blur(8px);
-  }
-
-  .draft-line {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 7.6rem;
-    height: 1.95rem;
-    padding: 0 0.72rem;
-    border-radius: 999px;
-    border: 1px solid var(--choir-border-strong);
-    background: var(--choir-surface-raised);
-    color: var(--choir-text-primary);
-    font-size: 0.74rem;
-    font-weight: 680;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .nav-btn,
-  .prompt-btn,
   .secondary-action,
   .download-menu > summary,
   .download-menu button,
@@ -3043,21 +2791,6 @@
     transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
   }
 
-  .nav-btn {
-    width: 1.95rem;
-    height: 1.95rem;
-    border-radius: 999px;
-    font-size: 0.92rem;
-    font-weight: 700;
-  }
-
-  .prompt-btn {
-    border-radius: 999px;
-    padding: 0.62rem 0.95rem;
-    font-size: 0.82rem;
-    font-weight: 700;
-  }
-
   .secondary-action {
     border-radius: 999px;
     min-width: 5.8rem;
@@ -3068,15 +2801,6 @@
     color: var(--choir-text-accent);
     line-height: 1;
     white-space: nowrap;
-  }
-
-  .publish-action {
-    min-width: 7.4rem;
-  }
-
-  .secondary-action.danger {
-    border-color: var(--choir-status-danger);
-    color: var(--choir-status-danger);
   }
 
   .download-menu {
@@ -3149,49 +2873,6 @@
     background: var(--choir-surface-elevated);
     box-shadow: var(--choir-shadow-lg);
     overflow: hidden;
-  }
-
-  .publish-menu-wrap {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-  }
-
-  .publish-menu {
-    position: absolute;
-    top: calc(100% + 0.48rem);
-    right: 0;
-    z-index: 8;
-    width: min(18rem, calc(100vw - 2rem));
-    display: grid;
-    gap: 0.68rem;
-    padding: 0.78rem;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 0.5rem;
-    background: #081225;
-    box-shadow: var(--choir-shadow-lg);
-    color: var(--choir-text-primary);
-  }
-
-  .publish-menu-heading h3 {
-    margin: 0.12rem 0 0;
-    color: var(--choir-text-primary);
-    font-size: 0.92rem;
-    line-height: 1.2;
-  }
-
-  .publish-menu-heading p:not(.eyebrow) {
-    margin: 0.34rem 0 0;
-    color: var(--choir-text-secondary);
-    font-size: 0.76rem;
-    line-height: 1.35;
-  }
-
-  .publish-menu-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.48rem;
-    min-width: 0;
   }
 
   .rendered-doc {
@@ -3642,8 +3323,6 @@
     backdrop-filter: blur(10px);
   }
 
-  .nav-btn:hover:enabled,
-  .prompt-btn:hover:enabled,
   .secondary-action:hover:enabled,
   .update-pill:hover:enabled,
   .primary-action:hover:enabled {
@@ -3652,8 +3331,6 @@
     border-color: var(--choir-border-strong);
   }
 
-  .nav-btn:disabled,
-  .prompt-btn:disabled,
   .secondary-action:disabled,
   .update-pill:disabled,
   .primary-action:disabled {
@@ -3674,49 +3351,8 @@
   }
 
   @media (max-width: 768px) {
-    .doc-toolbar {
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 0.42rem;
-      padding: 0.46rem 0.55rem;
-    }
-
-    .version-controls,
-    .doc-actions {
-      gap: 0.32rem;
-    }
-
-    .doc-state {
-      text-align: center;
-      font-size: 0.68rem;
-    }
-
     .rendered-doc {
       padding: 1rem;
-    }
-
-    .nav-version {
-      min-width: 2.05rem;
-      height: 1.78rem;
-      padding: 0 0.48rem;
-      font-size: 0.7rem;
-    }
-
-    .draft-line {
-      max-width: 6.8rem;
-      height: 1.78rem;
-      padding: 0 0.52rem;
-      font-size: 0.68rem;
-    }
-
-    .nav-btn {
-      width: 1.78rem;
-      height: 1.78rem;
-      font-size: 0.82rem;
-    }
-
-    .prompt-btn {
-      padding: 0.5rem 0.7rem;
-      font-size: 0.75rem;
     }
 
     .secondary-action {
@@ -3739,11 +3375,6 @@
       grid-template-columns: minmax(0, 1fr);
       gap: 0.5rem;
       padding: 0.62rem 0.7rem;
-    }
-
-    .publish-menu {
-      right: -0.2rem;
-      width: min(18rem, calc(100vw - 1.4rem));
     }
 
     .publication-heading h2 {
