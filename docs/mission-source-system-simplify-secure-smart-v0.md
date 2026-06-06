@@ -1983,6 +1983,53 @@ acceptance for a fresh owner Comet bounded edit/revise on the legal proposal,
 guest source-open proof, publication/export metadata proof, and adversarial
 source-system review.
 
+### Problem 11: Source-Cycle Fetchers Bypass The Runtime Source-Fetch SSRF Policy
+
+Status: `documented_before_fix`.
+
+problem: the runtime URL import path has a dedicated source-fetch HTTP client
+and validation path that rejects localhost, private networks, link-local
+metadata hosts, userinfo URLs, and forbidden redirect targets. The source-cycle
+adapter path does not consistently use that policy. `internal/sources/rss.go`
+and `internal/sources/gdelt.go` construct plain `http.Client` instances, and
+`internal/sources/gdelt.go` follows the GKG URL parsed from remote
+`lastupdate.txt` without revalidating the second-stage URL against the
+source-fetch policy. That leaves an acquisition path where a configured source
+or a compromised source response can direct the source cycle toward internal
+addresses.
+
+affected contract/invariant: `docs/source-external-data-publication.md`
+requires Source Service acquisition to respect source policy, auth policy,
+robots/TOS policy, and rate policy, while preserving fetch records as evidence.
+SSRF safety is part of source policy. The policy cannot apply only to
+owner-triggered runtime URL imports; source-cycle adapters need the same
+public-network validation, redirect handling, proxy disabling, and bounded
+fetch behavior.
+
+evidence from code audit:
+
+- `internal/runtime/content.go` has `sourceFetchHTTPClient`,
+  `validateSourceFetchURL`, `validateSourceFetchHost`, and tests in
+  `internal/runtime/source_fetch_policy_test.go`.
+- `internal/sources/rss.go` uses `&http.Client{Timeout: 30 * time.Second}` and
+  creates requests directly from `source.URL`.
+- `internal/sources/gdelt.go` uses `&http.Client{Timeout: 60 * time.Second}`;
+  it reads `source.URL`, parses `gkgURL` from the response body, and calls
+  `fetchGKG(ctx, gkgURL, ...)` without URL policy validation before creating
+  the request.
+
+first observed version/transition: repository source-system audit on
+2026-06-06 after restore-table fix `af8870448df7adc0072e3ce133b2124bf913010b`
+was deployed.
+
+suspected owner: source-cycle acquisition helpers in `internal/sources`.
+
+planned proof: add a shared source-fetch policy helper for source-cycle
+adapters, make RSS and GDELT constructors use the policy client, reject
+forbidden configured and second-stage URLs, preserve fetch records with an
+error state, and add focused tests for loopback source URLs plus GDELT
+second-stage loopback URLs.
+
 ## Suggested `/goal`
 
 ```text
