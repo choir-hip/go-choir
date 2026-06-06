@@ -280,8 +280,11 @@ export const visibleWindows = derived(windows, ($windows) =>
 export function openApp(appId, appName, icon, appContext = {}) {
   windows.update(($windows) => {
     const definition = getAppDefinition(appId);
-    const allowMultiple = appContext.allowMultiple === true || definition?.window?.singleton === false;
-    const existing = !allowMultiple ? $windows.find((w) => w.appId === appId && w.mode !== 'closed') : null;
+    const singletonKey = String(appContext.singletonKey || '').trim();
+    const allowMultiple = !singletonKey && (appContext.allowMultiple === true || definition?.window?.singleton === false);
+    const existing = singletonKey
+      ? $windows.find((w) => w.appId === appId && w.mode !== 'closed' && w.appContext?.singletonKey === singletonKey)
+      : (!allowMultiple ? $windows.find((w) => w.appId === appId && w.mode !== 'closed') : null);
     if (existing) {
       // Focus existing window and apply any launch context such as a deep link.
       activeWindowId.set(existing.windowId);

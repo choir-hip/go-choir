@@ -161,6 +161,14 @@ test('VText opens content-item text sources as reader-mode markdown', async ({ d
                   content_hash: item.content_hash,
                 },
               ],
+              reader_snapshot: {
+                text_content: [
+                  'Full cleaned reader source detail supports the cited claim.',
+                  'Second source sentence explains why the cleaned markdown is useful before opening the full source window.',
+                  'Third source sentence gives the inline citation enough context to be read in flow without turning the note into a complete source dump.',
+                  'Fourth source sentence should remain bounded by the excerpt helper when the inline note is compact.',
+                ].join(' '),
+              },
               display: {
                 inline_mode: 'embedded_excerpt',
                 expanded_mode: 'source_card',
@@ -196,10 +204,14 @@ test('VText opens content-item text sources as reader-mode markdown', async ({ d
   await citation.click();
   const flowNote = rendered.locator('[data-vtext-source-flow-note]');
   await expect(flowNote).toBeVisible();
+  await expect(flowNote).toContainText('Second source sentence explains why the cleaned markdown is useful');
+  await expect(flowNote).toContainText('Third source sentence gives the inline citation enough context');
+  await expect(flowNote).not.toContainText('Fourth source sentence should remain bounded');
   await flowNote.locator('[data-vtext-open-source][data-source-entity-id="src-reader-mode"]').click();
 
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
+  await expect(sourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
   const reader = sourceWindow.locator('[data-content-reader-markdown]');
   await expect(reader).toBeVisible();
   await expect(reader.locator('h2')).toContainText('Reader-mode source fixture');
@@ -208,6 +220,39 @@ test('VText opens content-item text sources as reader-mode markdown', async ({ d
   await expect(reader).toContainText('Full cleaned reader source detail');
   await expect(reader).not.toContainText(created.contentID);
   await expect(sourceWindow.locator('[data-content-evidence]')).toContainText('SHA-256');
+  await expect(sourceWindow.locator('.eyebrow')).toHaveCount(0);
+  const closedGeometry = await sourceWindow.evaluate((node) => {
+    const reader = node.querySelector('[data-content-reader-markdown]');
+    const apparatus = node.querySelector('.source-apparatus');
+    const title = node.querySelector('h2');
+    const openLink = node.querySelector('.source-link');
+    const lastReaderChild = reader?.lastElementChild;
+    const readerBox = lastReaderChild?.getBoundingClientRect();
+    const apparatusBox = apparatus?.getBoundingClientRect();
+    const titleBox = title?.getBoundingClientRect();
+    const linkBox = openLink?.getBoundingClientRect();
+    return {
+      apparatusAfterReader: !!readerBox && !!apparatusBox && apparatusBox.top >= readerBox.bottom - 1,
+      titleAndLinkDoNotOverlap: !!titleBox && !!linkBox && (titleBox.right <= linkBox.left - 8 || linkBox.top >= titleBox.bottom - 1),
+    };
+  });
+  expect(closedGeometry.apparatusAfterReader).toBe(true);
+  expect(closedGeometry.titleAndLinkDoNotOverlap).toBe(true);
+  await sourceWindow.locator('[data-content-evidence] summary').click();
+  const expandedGeometry = await sourceWindow.evaluate((node) => {
+    const reader = node.querySelector('[data-content-reader-markdown]');
+    const shell = reader?.parentElement;
+    const evidence = node.querySelector('[data-content-evidence]');
+    const lastReaderChild = reader?.lastElementChild;
+    const readerBox = lastReaderChild?.getBoundingClientRect();
+    const shellBox = shell?.getBoundingClientRect();
+    const evidenceBox = evidence?.getBoundingClientRect();
+    return !!readerBox && !!shellBox && !!evidenceBox && evidenceBox.top >= readerBox.bottom - 1 && evidenceBox.top >= shellBox.bottom - 1;
+  });
+  expect(expandedGeometry).toBe(true);
+  await page.locator('[data-window-app-id="vtext"]').last().click({ position: { x: 24, y: 24 } });
+  await flowNote.locator('[data-vtext-open-source][data-source-entity-id="src-reader-mode"]').click();
+  await expect(page.locator('[data-content-viewer][data-source-reader-mode="true"]')).toHaveCount(1);
 });
 
 test('VText source panel attaches readable text to an existing source entity', async ({ desktopSession }) => {

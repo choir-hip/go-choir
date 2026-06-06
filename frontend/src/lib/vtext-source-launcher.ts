@@ -11,6 +11,7 @@ export function sourceEntityLaunchPayload(entity: any): any | null {
   const sourceUrl = sourceEntityTargetURL(entity);
   const contentId = entity?.target?.content_id || '';
   const title = sourceEntityTitle(entity);
+  const entityId = sourceEntityID(entity);
   return {
     appId,
     appName: title || appId,
@@ -24,11 +25,11 @@ export function sourceEntityLaunchPayload(entity: any): any | null {
       mediaType: entity?.kind === 'youtube_video' ? 'video/youtube' : '',
       appHint: appId,
       sourceEntity: entity,
-      sourceEntityId: sourceEntityID(entity),
+      sourceEntityId: entityId,
       sourceServiceItemId: entity?.target?.item_id || '',
       publishedRoutePath: entity?.publication_route_path || '',
       publishedGuest: !!entity?.publication_route_path,
-      allowMultiple: true,
+      singletonKey: entityId ? `source:${entityId}` : '',
     },
   };
 }

@@ -67,6 +67,32 @@ export function sourceEntitySnapshotText(entity: any): string {
   return sourceEntityReaderSnapshotText(entity) || sourceEntityExcerptText(entity);
 }
 
+function normalizeExcerptText(value: unknown): string {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function boundedExcerpt(value: unknown, maxChars = 520): string {
+  const text = normalizeExcerptText(value);
+  if (text.length <= maxChars) return text;
+  const sentenceMatches = text.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [];
+  let output = '';
+  for (const sentence of sentenceMatches) {
+    const next = normalizeExcerptText(`${output} ${sentence}`);
+    if (next.length > maxChars) break;
+    output = next;
+    if (output.length >= Math.floor(maxChars * 0.65)) break;
+  }
+  if (output) return output;
+  return `${text.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
+export function sourceEntityInlineExcerptText(entity: any, maxChars = 520): string {
+  const readerSnapshot = sourceEntityReaderSnapshotText(entity);
+  const selectedExcerpt = sourceEntityExcerptText(entity);
+  if (readerSnapshot) return boundedExcerpt(readerSnapshot, maxChars);
+  return boundedExcerpt(selectedExcerpt, maxChars);
+}
+
 export function sourceEntityReaderSnapshotStatus(entity: any): any {
   const record = sourceEntityRecord(entity);
   return entity?.reader_snapshot_status || record?.reader_snapshot_status || null;
@@ -267,7 +293,7 @@ export function renderSourceEntityFacts(entity: any): string {
 }
 
 export function renderSourceTransclusionBody(entity: any, { compact = false } = {}): string {
-  const snapshot = sourceEntityExcerptText(entity);
+  const snapshot = compact ? sourceEntityInlineExcerptText(entity, 360) : sourceEntityExcerptText(entity);
   const facts = renderSourceEntityFacts(entity);
   if (compact) {
     return `<span class="vtext-transclusion-body vtext-transclusion-body--compact" data-vtext-transclusion-body>

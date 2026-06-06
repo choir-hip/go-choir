@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { afterUpdate, onMount } from 'svelte';
   import { createEventDispatcher } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { renderMarkdownBlocks } from './vtext-markdown-renderer';
@@ -11,6 +11,9 @@
   let item = appContext?.contentItem || null;
   let loading = false;
   let error = '';
+  let readerShellEl;
+  let readerShellMinHeight = 0;
+  let measureQueued = false;
 
   $: sourceEntity = appContext?.sourceEntity || null;
   $: sourceEntityTarget = sourceEntity?.target || {};
@@ -28,8 +31,29 @@
     ? youtubeEmbedURL(sourceUrl)
     : '';
   $: readerText = String(item?.text_content || sourceEntitySnapshot || '').trim();
-  $: readerHTML = renderMarkdownBlocks(readerText, [], { headingLevelOffset: 1, wrapTables: false });
+  $: readerHTML = renderMarkdownBlocks(readerText, [], { headingLevelOffset: 1, wrapTables: true });
   $: hasReaderText = readerText.length > 0;
+  $: isSourceReader = hasReaderText && (appHint === 'content' || !!sourceEntity);
+  $: sourceState = sourceEntity?.evidence?.state || sourceEntity?.reader_snapshot_status?.state || item?.provenance?.state || '';
+
+  function measureReader() {
+    measureQueued = false;
+    if (!readerShellEl) {
+      readerShellMinHeight = 0;
+      return;
+    }
+    const shellBox = readerShellEl.getBoundingClientRect();
+    const descendantBottoms = Array.from(readerShellEl.querySelectorAll('*') || [])
+      .map((child) => child.getBoundingClientRect().bottom - shellBox.top);
+    const nextShellHeight = Math.ceil(Math.max(readerShellEl.scrollHeight || 0, ...descendantBottoms, 0));
+    if (nextShellHeight && Math.abs(nextShellHeight - readerShellMinHeight) > 1) readerShellMinHeight = nextShellHeight;
+  }
+
+  function queueMeasureReader() {
+    if (measureQueued || typeof requestAnimationFrame !== 'function') return;
+    measureQueued = true;
+    requestAnimationFrame(measureReader);
+  }
 
   async function loadContentItem() {
     const contentId = appContext?.contentId || appContext?.content_id || '';
@@ -84,17 +108,29 @@
     return '';
   }
 
-  onMount(loadContentItem);
+  onMount(() => {
+    loadContentItem();
+    queueMeasureReader();
+  });
+  afterUpdate(queueMeasureReader);
 </script>
 
-<section class="content-viewer" data-content-viewer data-content-app={appHint}>
+<section class="content-viewer" class:source-reader-mode={isSourceReader} data-content-viewer data-content-app={appHint} data-source-reader-mode={isSourceReader ? 'true' : 'false'}>
   <header class="content-header">
     <div>
-      <p class="eyebrow">{appHint} content</p>
+      {#if !isSourceReader}
+        <p class="eyebrow">{appHint} content</p>
+      {/if}
       <h2>{title}</h2>
+      {#if isSourceReader && (sourceState || mediaType)}
+        <p class="source-kicker">
+          {#if sourceState}<span>{sourceState}</span>{/if}
+          {#if mediaType}<span>{mediaType}</span>{/if}
+        </p>
+      {/if}
     </div>
     {#if sourceUrl}
-      <a class="source-link" href={sourceUrl} target="_blank" rel="noreferrer">Open source</a>
+      <a class="source-link" href={sourceUrl} target="_blank" rel="noreferrer">{isSourceReader ? 'Open original' : 'Open source'}</a>
     {/if}
   </header>
 
@@ -103,7 +139,7 @@
   {:else if error}
     <p class="error" role="alert">{error}</p>
   {:else}
-    <div class:preview-shell={!hasReaderText || appHint === 'image' || appHint === 'audio' || appHint === 'video' || appHint === 'pdf'} class:reader-shell={hasReaderText}>
+    <div class:preview-shell={!hasReaderText || appHint === 'image' || appHint === 'audio' || appHint === 'video' || appHint === 'pdf'} class:reader-shell={hasReaderText} bind:this={readerShellEl} style={readerShellMinHeight ? `min-height: ${readerShellMinHeight}px` : ''}>
       {#if appHint === 'image' && displayUrl}
         <img src={displayUrl} alt={title} />
       {:else if appHint === 'audio' && displayUrl}
@@ -125,50 +161,52 @@
       {/if}
     </div>
 
-    <details class="provenance source-evidence" data-content-evidence>
-      <summary>Source evidence</summary>
-      <dl>
-        <div>
-          <dt>Media type</dt>
-          <dd>{mediaType || 'unknown'}</dd>
-        </div>
-        {#if displayUrl}
+    <aside class="source-apparatus" aria-label="Source details">
+      <details class="provenance source-evidence" data-content-evidence>
+        <summary>Source evidence</summary>
+        <dl>
           <div>
-            <dt>Reference</dt>
-            <dd>{displayUrl}</dd>
+            <dt>Media type</dt>
+            <dd>{mediaType || 'unknown'}</dd>
           </div>
-        {/if}
-        {#if item?.content_hash}
-          <div>
-            <dt>SHA-256</dt>
-            <dd>{item.content_hash}</dd>
-          </div>
-        {/if}
-      </dl>
-    </details>
-
-    {#if sourceEntity}
-      <details class="provenance" data-source-entity>
-        <summary>Source entity</summary>
-        <p><strong>Entity:</strong> {appContext?.sourceEntityId || sourceEntity?.entity_id || sourceEntity?.source_entity_id || 'source'}</p>
-        {#if appContext?.sourceServiceItemId || sourceEntityTarget?.item_id}
-          <p><strong>Source item:</strong> {appContext?.sourceServiceItemId || sourceEntityTarget.item_id}</p>
-        {/if}
-        {#if sourceEntityTarget?.content_id}
-          <p><strong>Content item:</strong> {sourceEntityTarget.content_id}</p>
-        {/if}
-        {#if sourceEntity?.evidence}
-          <p><strong>Evidence:</strong> {sourceEntity.evidence.state || 'available'} / {sourceEntity.evidence.research_state || 'unclassified'}</p>
-        {/if}
+          {#if displayUrl}
+            <div>
+              <dt>Reference</dt>
+              <dd>{displayUrl}</dd>
+            </div>
+          {/if}
+          {#if item?.content_hash}
+            <div>
+              <dt>SHA-256</dt>
+              <dd>{item.content_hash}</dd>
+            </div>
+          {/if}
+        </dl>
       </details>
-    {/if}
 
-    {#if item?.provenance}
-      <details class="provenance" data-content-provenance>
-        <summary>Provenance</summary>
-        <pre>{JSON.stringify(item.provenance, null, 2)}</pre>
-      </details>
-    {/if}
+      {#if sourceEntity}
+        <details class="provenance" data-source-entity>
+          <summary>Source entity</summary>
+          <p><strong>Entity:</strong> {appContext?.sourceEntityId || sourceEntity?.entity_id || sourceEntity?.source_entity_id || 'source'}</p>
+          {#if appContext?.sourceServiceItemId || sourceEntityTarget?.item_id}
+            <p><strong>Source item:</strong> {appContext?.sourceServiceItemId || sourceEntityTarget.item_id}</p>
+          {/if}
+          {#if sourceEntityTarget?.content_id}
+            <p><strong>Content item:</strong> {sourceEntityTarget.content_id}</p>
+          {/if}
+          {#if sourceEntity?.evidence}
+            <p><strong>Evidence:</strong> {sourceEntity.evidence.state || 'available'} / {sourceEntity.evidence.research_state || 'unclassified'}</p>
+          {/if}
+        </details>
+      {/if}
+
+      {#if item?.provenance}
+        <details class="provenance" data-content-provenance>
+          <summary>Provenance</summary>
+          <pre>{JSON.stringify(item.provenance, null, 2)}</pre>
+        </details>
+      {/if}
+    </aside>
   {/if}
 </section>
 
@@ -191,6 +229,12 @@
     gap: 16px;
   }
 
+  .source-reader-mode .content-header {
+    max-width: 76ch;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--choir-border);
+  }
+
   .eyebrow {
     margin: 0 0 6px;
     color: var(--choir-text-muted);
@@ -206,11 +250,26 @@
     overflow-wrap: anywhere;
   }
 
+  .source-reader-mode h2 {
+    font-size: 1.35rem;
+    line-height: 1.2;
+  }
+
+  .source-kicker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0 0;
+    color: var(--choir-text-muted);
+    font-size: 0.82rem;
+  }
+
   .source-link {
     color: var(--choir-text-accent);
     text-decoration: underline;
     text-underline-offset: 0.18em;
     font-weight: 700;
+    white-space: nowrap;
   }
 
   .preview-shell {
@@ -222,6 +281,8 @@
   }
 
   .reader-shell {
+    display: flow-root;
+    height: max-content;
     min-height: 0;
   }
 
@@ -248,11 +309,18 @@
   }
 
   .source-reader {
-    max-width: 72ch;
+    contain: layout;
+    display: flow-root;
+    height: max-content;
+    max-width: 76ch;
     padding: 2px 0 4px;
     color: var(--choir-text-primary);
     font-size: 1rem;
     line-height: 1.7;
+  }
+
+  .source-reader-mode .source-reader {
+    font-size: 1.02rem;
   }
 
   .source-reader :global(h2),
@@ -287,10 +355,18 @@
   }
 
   .source-reader :global(table) {
+    display: block;
     width: 100%;
     border-collapse: collapse;
     margin: 1.1em 0;
     font-size: 0.95em;
+    overflow-x: auto;
+  }
+
+  .source-reader :global(.table-scroll) {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   .source-reader :global(th),
@@ -315,18 +391,35 @@
     padding: 18px;
   }
 
+  .source-apparatus {
+    display: grid;
+    gap: 6px;
+    max-width: 76ch;
+    padding-top: 8px;
+    border-top: 1px solid color-mix(in srgb, var(--choir-border) 70%, transparent);
+  }
+
   .provenance {
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    padding: 12px 14px;
-    background: color-mix(in srgb, var(--choir-text-primary) 4%, transparent);
+    padding: 4px 0;
     overflow-wrap: anywhere;
+    color: var(--choir-text-secondary);
+    font-size: 0.88rem;
+  }
+
+  .provenance summary {
+    cursor: pointer;
+    color: var(--choir-text-accent);
+    font-weight: 700;
+  }
+
+  .provenance p {
+    margin: 8px 0 0;
   }
 
   .source-evidence dl {
     display: grid;
     gap: 10px;
-    margin: 12px 0 0;
+    margin: 10px 0 0;
   }
 
   .source-evidence div {
@@ -343,6 +436,17 @@
 
   .source-evidence dd {
     margin: 0;
+  }
+
+  .provenance pre {
+    max-height: 220px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 10px 0 0;
+    padding: 10px;
+    border-left: 2px solid var(--choir-border);
+    background: color-mix(in srgb, var(--choir-text-primary) 4%, transparent);
   }
 
   .status,
