@@ -2,25 +2,27 @@ import { test, expect } from './helpers/fixtures.js';
 
 async function openVText(page) {
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  await page.locator('[data-vtext-editor]').waitFor({ state: 'visible', timeout: 10000 });
-  const recent = page.locator('[data-vtext-recent]');
+  const root = page.locator('.window.window-active [data-vtext-editor]').last();
+  await root.waitFor({ state: 'visible', timeout: 10000 });
+  const recent = root.locator('[data-vtext-recent]');
   if (await recent.isVisible().catch(() => false)) {
-    await page.locator('[data-vtext-new-document]').click();
+    await root.locator('[data-vtext-new-document]').click();
   }
-  const editor = page.locator('[data-vtext-editor-area]');
+  const editor = root.locator('[data-vtext-editor-area]');
   await editor.waitFor({ state: 'visible', timeout: 10000 });
   await expect(editor).toHaveAttribute('contenteditable', 'true', { timeout: 10000 });
+  return root;
 }
 
 test('vtext uses the document surface as the window and exposes version navigation', async ({ desktopSession }) => {
   const { page } = desktopSession;
-  await openVText(page);
+  const root = await openVText(page);
 
-  const editor = page.locator('[data-vtext-editor-area]');
-  const prev = page.locator('[data-vtext-prev]');
-  const next = page.locator('[data-vtext-next]');
-  const toolbar = page.locator('[data-vtext-toolbar]');
-  const revisionLine = page.locator('[data-vtext-draft-line]');
+  const editor = root.locator('[data-vtext-editor-area]');
+  const prev = root.locator('[data-vtext-prev]');
+  const next = root.locator('[data-vtext-next]');
+  const toolbar = root.locator('[data-vtext-toolbar]');
+  const revisionLine = root.locator('[data-vtext-draft-line]');
 
   await expect(editor).toBeVisible();
   await expect(revisionLine).toContainText('Latest');
@@ -29,9 +31,9 @@ test('vtext uses the document surface as the window and exposes version navigati
   const latestToolbarHeight = await toolbar.evaluate((el) => Math.round(el.getBoundingClientRect().height));
 
   await editor.fill('Version zero content.\n\nExpand this into a better document.');
-  await page.locator('[data-vtext-prompt]').click();
+  await root.locator('[data-vtext-prompt]').click();
 
-  await expect(page.locator('[data-vtext-save-status]')).toContainText(/First draft ready|Agent created next version/, { timeout: 10000 });
+  await expect(root.locator('[data-vtext-save-status]')).toContainText(/First draft ready|Agent created next version/, { timeout: 10000 });
   await expect(prev).toBeEnabled();
   await expect(next).toBeDisabled();
 
@@ -43,14 +45,14 @@ test('vtext uses the document surface as the window and exposes version navigati
 
 test('vtext publish keeps policy behind the publish menu and forwards policy', async ({ desktopSession }) => {
   const { page, baseURL } = desktopSession;
-  await openVText(page);
+  const root = await openVText(page);
 
-  const editor = page.locator('[data-vtext-editor-area]');
+  const editor = root.locator('[data-vtext-editor-area]');
   await editor.fill('Publish policy fixture.\n\nThis revision should publish from an explicit menu confirmation.');
 
-  const publishButton = page.locator('[data-vtext-publish]');
-  await expect(page.locator('[data-vtext-publish-policy]')).toHaveCount(0);
-  await expect(page.locator('[data-vtext-publish-menu]')).toHaveCount(0);
+  const publishButton = root.locator('[data-vtext-publish]');
+  await expect(root.locator('[data-vtext-publish-policy]')).toHaveCount(0);
+  await expect(root.locator('[data-vtext-publish-menu]')).toHaveCount(0);
   await expect(publishButton).toBeEnabled();
 
   let publishPayload = null;
@@ -69,17 +71,17 @@ test('vtext publish keeps policy behind the publish menu and forwards policy', a
   });
 
   await publishButton.click();
-  const publishMenu = page.locator('[data-vtext-publish-menu]');
+  const publishMenu = root.locator('[data-vtext-publish-menu]');
   await expect(publishMenu).toBeVisible();
   await expect(publishMenu).toContainText('Publish v0');
   await expect(publishMenu).toContainText('This creates a public link with the current text and source snapshots.');
   await expect(publishMenu).not.toContainText('Route');
   await expect(publishMenu).not.toContainText('txt, md, html, docx, pdf');
 
-  await page.locator('[data-vtext-publish-confirm]').click();
+  await root.locator('[data-vtext-publish-confirm]').click();
 
-  await expect(page.locator('[data-vtext-publish-result]')).toBeVisible({ timeout: 10000 });
-  await expect(page.locator('[data-vtext-publish-menu]')).toHaveCount(0);
+  await expect(root.locator('[data-vtext-publish-result]')).toBeVisible({ timeout: 10000 });
+  await expect(root.locator('[data-vtext-publish-menu]')).toHaveCount(0);
   expect(publishPayload).toMatchObject({
     access_policy: {
       visibility: 'public',
