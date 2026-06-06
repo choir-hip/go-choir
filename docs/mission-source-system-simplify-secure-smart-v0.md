@@ -841,8 +841,9 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T11:21:00Z, first behavior loops landed,
-deployed to staging, and Comet owner-authenticated staging capability verified.
+last checkpoint: 2026-06-06T11:30:00Z, publication/export source evidence
+metadata loop landed, deployed to staging, and focused staging acceptance
+passed.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -855,11 +856,13 @@ source-open plan and pins Source Viewer/Web Lens routing behavior. Behavior
 commit `c3295ae7` has been pushed and deployed to staging. Docs commit
 `92138e61` recorded the source evidence-state problem before code. Behavior
 commit `a2ee6dd9` adds typed source evidence-state records to VText source gaps
-and source repairs.
+and source repairs. Behavior commit `cf5bf9b7` carries normalized source
+evidence state into publication transclusion source selectors and includes
+public source entities/transclusions in canonical export metadata.
 Existing unrelated untracked docs are preserved.
 
 what shipped: behavior commit
-`a2ee6dd905d8402409e13187bb44f325bf01b517` was pushed to `origin/main` and
+`cf5bf9b70d5d9f5c3b3764811f12715db08b422f` was pushed to `origin/main` and
 deployed to staging. A later docs-only checkpoint may not appear in Node B
 health because docs-only changes intentionally do not trigger deploy.
 
@@ -929,6 +932,22 @@ what was proven:
   `2026-06-06T11:20:47Z`.
 - Deployed evidence-state/source-gap acceptance passed:
   `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-markdown-lineage.spec.js -g "Migrated source gaps can be repaired|VText Sources panel applies source-gap repair|VText Sources panel can mark a citation gap as no source needed"`.
+- Publication/export source metadata local checks passed:
+  `nix develop -c go test ./internal/platform -run 'TestBuildPublicationSourceMetadata|TestPublishVTextCreatesImmutablePublicRecords'`
+  and `npm run build` in `frontend`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27061034738`
+  completed successfully for `cf5bf9b7`, including runtime shards, non-runtime
+  tests, frontend build, vet/build, and the Node B staging deploy job.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27061034727`
+  completed successfully.
+- Staging health at `https://choir.news/health` reported proxy and upstream
+  commit/deployed_commit
+  `cf5bf9b70d5d9f5c3b3764811f12715db08b422f` with deployed_at
+  `2026-06-06T11:29:03Z`.
+- Deployed publication/export source metadata acceptance passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-source-service-publication.spec.js -g "publishes source-service source entities"`.
 
 unproven or partial claims:
 
@@ -941,10 +960,9 @@ unproven or partial claims:
   off." A bounded product diagnosis/export endpoint or enabling
   `View > Developer > Allow JavaScript from Apple Events` would allow structured
   extraction.
-- CI, deploy identity, and a focused staging source-open acceptance proof have
-  been produced for the first behavior slice. CI, deploy identity, and focused
-  staging evidence-state/source-gap acceptance proof have been produced for the
-  second behavior slice. The broader mission proofs requested by the goal remain
+- CI, deploy identity, and focused staging acceptance proof have been produced
+  for the source-open, evidence-state/source-gap, and publication/export source
+  metadata slices. The broader mission proofs requested by the goal remain
   incomplete.
 
 belief-state changes:
@@ -969,6 +987,9 @@ belief-state changes:
 - VText source gaps now carry typed `evidence_state: candidate`; source repairs
   preserve typed relation states such as `confirms`; no-source-needed repairs
   carry `evidence_state: no_source_needed` in repair resolution metadata.
+- Publication transclusions now carry normalized `evidence_state` inside their
+  `source_selector` JSON, and canonical publication export metadata now includes
+  the public `source_entities` and `transclusions` records.
 
 remaining error field:
 
@@ -976,14 +997,15 @@ remaining error field:
   converged into Source Service.
 - Source entity normalization remains duplicated; source opening has a local
   frontend plan but is not yet shared with runtime/platform/export contracts.
-- Publication selector-set projection is locally fixed and tested; frontend and
-  export consumers still need broader selector-rich proof.
+- Publication selector-set projection and export source metadata are locally and
+  staging proven for source-service-style sources; broader selector-rich
+  guest/content-item/legal-proposal export proof remains incomplete.
 - Published source windows depend on frontend reconstruction of publication
   records and reader snapshots.
-- Source evidence states are partially typed for Markdown lineage gaps and
-  owner source repairs, but researcher updates, Source Service, publication,
-  export, stale/blocked/unavailable states, and shared frontend/backend schema
-  convergence remain incomplete.
+- Source evidence states are typed for Markdown lineage gaps, owner source
+  repairs, publication transclusion selectors, and export metadata. Researcher
+  updates, Source Service records, stale/blocked/unavailable product flows, and
+  shared frontend/backend schema convergence remain incomplete.
 - Table structure preservation now has broader partial-context tests, but the
   v70-v78 staging root-cause comparison is still blocked on structured
   extraction from the authenticated staging revision history.
@@ -995,16 +1017,16 @@ documented safety risk makes the URL fetch policy the first behavior-changing
 fix, with shared contract types designed in the same pass so the fix does not
 create another isolated policy path.
 
-next executable probe: either enable a bounded structured extraction route for
-the legal proposal v70-v78 comparison, or continue evidence-state convergence
-by routing researcher/source-service/publication/export records through the same
-typed source evidence contract.
+next executable probe: enable a bounded structured extraction route for the
+legal proposal v70-v78 comparison, or continue evidence-state convergence by
+routing researcher and Source Service records through the same typed source
+evidence contract.
 
 suggested resume goal string: continue
 `docs/mission-source-system-simplify-secure-smart-v0.md` from commits
-`bf7e52df`, `068b6b5f`, `61b89e93`, `c3295ae7`, and `a2ee6dd9` by extracting
-or otherwise proving the legal proposal v70-v78 table transition, then
-converging source entity/evidence normalization without document-specific
+`bf7e52df`, `068b6b5f`, `61b89e93`, `c3295ae7`, `a2ee6dd9`, and `cf5bf9b7`
+by extracting or otherwise proving the legal proposal v70-v78 table transition,
+then converging source entity/evidence normalization without document-specific
 fixes.
 
 evidence artifact refs:
@@ -1036,6 +1058,11 @@ evidence artifact refs:
   staging health deployed commit
   `a2ee6dd905d8402409e13187bb44f325bf01b517`, deployed Playwright proof for
   repaired gaps and no-source-needed repairs.
+- Publication/export source metadata slice: behavior commit `cf5bf9b7`,
+  GitHub Actions run `27061034738`, FlakeHub publish run `27061034727`,
+  staging health deployed commit
+  `cf5bf9b70d5d9f5c3b3764811f12715db08b422f`, deployed Playwright proof for
+  source-service transclusion and export metadata evidence state.
 
 rollback refs: current branch `main`, starting commit
 `1af0e8459b78fb31a18fee933a54f6f716a9b067`.
