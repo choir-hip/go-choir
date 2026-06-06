@@ -23,6 +23,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -6551,6 +6552,10 @@ func TestVTextDiagnosisIncludesDocumentChannelRuns(t *testing.T) {
 
 func TestVTextAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 	t.Setenv("CHOIR_DISABLE_YOUTUBE_TRANSCRIPT_FETCH", "1")
+	previous := sourcefetch.SetAllowPrivateNetworkForTests(true)
+	t.Cleanup(func() {
+		sourcefetch.SetAllowPrivateNetworkForTests(previous)
+	})
 	h, s, rt := vtextAPISetupWithRuntime(t)
 
 	image := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

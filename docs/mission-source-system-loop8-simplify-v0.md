@@ -1372,3 +1372,111 @@ staging proof:
 ```text
 /goal Run docs/mission-source-system-loop8-simplify-v0.md as a Codex-operated MissionGradient mission. Preserve docs/source-external-data-publication.md as the requirements contract and docs/missiongradient-method.md as the operating method. Treat docs/mission-source-system-simplify-secure-smart-v0.md as the parent evidence ledger, not the active checklist. First document all newly confirmed VText/source/publication UI, export, and behavior problems before behavior-changing code. Stabilize VText chrome and publish/published-result interactions on staging, including stable toolbar dimensions across version labels, correct latest/historical state labels, non-overlapping publish/download controls, and content-forward reading space. Then make rich publication export a core Loop 8 artifact: design and implement a canonical PublicationDocument/source-manifest spine that renders professional format-native HTML, DOCX, and PDF from VText/publication semantics rather than raw Markdown; preserve visible citations/source appendices and embedded source metadata in every rich format; support future firm-specific export profiles for headings, typography, citation placement, headers/footers, and metadata policy. After rich export correctness, run Loop 8 simplification in subphases: bug inventory, bounded UI stabilization, rich export spine, dead/weak path pruning, modularity/refactor design with performance constraints, incremental extraction, and adversarial hard review. Audit large core files including frontend/src/lib/VTextEditor.svelte, internal/runtime/vtext.go, and backend VText/source/publication files for dead code, duplicate contracts, shortcut paths, and refactor boundaries. Refactor only through shared contracts, focused tests, no source/publication security regressions, no measurable performance cost, CI, Node B deploy identity, staging Playwright/API proof, visual/download inspection of DOCX/PDF/HTML, rollback refs, and residual risks. Produce an updated hard mission report in docs and PDF in iCloud Drive before claiming completion.
 ```
+
+## Loop 8 Appagent Revision Extraction Target
+
+Status: `documented_before_code`.
+
+Next backend simplification target: extract VText appagent revision handling
+from `internal/runtime/vtext.go` into a same-package module. This boundary owns
+the `/revise` and `/cancel` handlers, pending mutation reconciliation, VText
+agent run submission, backend-owned prompt construction, worker-message
+context, focused long-document edit context, and VText revision event emission.
+
+This is a behavior-preserving extraction. It must not change the VText
+appagent prompt text, provider/tool-loop path, worker handoff rules, source
+entity registration, pending mutation/idempotency behavior, cancellation
+semantics, or revision event payloads. Test-only worker update/research
+endpoints may remain in `vtext.go` unless moving them proves cleaner without
+mixing product and test seams.
+
+acceptance:
+
+- `internal/runtime/vtext.go` loses appagent revision orchestration without
+  introducing a parallel VText agent contract;
+- existing prompt/unit tests still cover backend prompt invariants, focused
+  user-edit context, super/researcher routing, source-ref preservation, and
+  command-evidence rules;
+- existing runtime tests still cover appagent revision creation, structured
+  edits, cancellation, idempotency, progress events, media/source refs, and
+  document stream head-change events;
+- runtime shard tests pass before any deploy claim;
+- staging proof after deploy exercises a deployed VText revise path or records
+  a precise limitation if a live provider-backed revise cannot be safely run
+  as part of this behavior-preserving extraction.
+
+### Problem 47: Media Source Ref Comprehensive Test Uses Loopback Without Test Policy
+
+status: `documented_before_fix`.
+
+problem: during the appagent revision extraction proof, the comprehensive
+`TestVTextAgentRevisionRegistersMediaSourceRefs` test failed because the direct
+image fixture is served from `httptest.NewServer`, which produces a loopback
+URL. The source acquisition policy correctly rejects loopback/private-network
+fetches by default to preserve SSRF safety, so `registerVTextMediaSourceRefs`
+registered only the YouTube source ref and skipped the image ref.
+
+evidence:
+
+```text
+nix develop -c go test -tags comprehensive ./internal/runtime -run
+'^TestVTextAgentRevisionRegistersMediaSourceRefs$' -count=1 -v
+result: failed
+media_source_refs len = 1, want 2
+only ref: kind=youtube canonical_url=https://www.youtube.com/watch?v=dQw4w9WgXcQ
+```
+
+classification: `test/proof debt` with source-policy relevance. The production
+policy behavior is correct; the test must explicitly enable the existing
+test-only private-network allowance while preserving the default production
+SSRF checks.
+
+acceptance:
+
+- the test declares and restores the sourcefetch private-network test override;
+- the comprehensive media-source-ref test registers both YouTube and image
+  source refs;
+- sourcefetch policy tests still prove localhost/private-address rejection by
+  default;
+- no production source acquisition policy is weakened.
+
+fix/evidence:
+
+```text
+files:
+  internal/runtime/vtext_agent_revision.go       1074 lines
+  internal/runtime/vtext.go                      2493 lines
+
+change:
+  VText appagent revision handlers, pending mutation reconciliation, agent run
+  submission, prompt construction, worker-message context, focused edit
+  context, and revision event emission moved from vtext.go to
+  vtext_agent_revision.go.
+
+  TestVTextAgentRevisionRegistersMediaSourceRefs now enables and restores the
+  existing sourcefetch.SetAllowPrivateNetworkForTests override around its
+  httptest image fixture only.
+
+local proof:
+  gofmt -w internal/runtime/vtext_test.go internal/runtime/vtext.go \
+    internal/runtime/vtext_agent_revision.go && git diff --check
+  result: passed
+
+  nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextPrompt|TestBuildAgentRevisionRequest'
+  result: passed
+
+  nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextAgentRevisionCreatesCanonicalRevision|TestVTextAgentRevisionAppliesStructuredEdit|TestVTextCancelAgentRevisionCancelsRunGraphAndLeavesMutationResumable|TestVTextAgentRevisionProgressEvents|TestVTextDocumentStreamEmitsHeadChangeAfterAgentRevision|TestVTextAgentRevisionNoDuplicateOnRenewalRetry|TestVTextAgentRevisionMutationCompletedOnlyOnce'
+  result: passed
+
+  nix develop -c go test -tags comprehensive ./internal/runtime -run
+  '^TestVTextAgentRevisionRegistersMediaSourceRefs$' -count=1 -v
+  result: passed
+
+  nix develop -c go test ./internal/sourcefetch
+  result: passed
+
+  nix develop -c scripts/go-test-runtime-shards
+  result: passed
+```
