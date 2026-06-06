@@ -527,6 +527,10 @@
       saveStatus = 'Autosaved draft skipped; canonical table structure loaded';
       return false;
     }
+    if (savedContent.trim() !== '' && draft.content !== savedContent) {
+      saveStatus = 'Autosaved draft skipped; canonical version loaded';
+      return false;
+    }
     if (draft.content === savedContent) {
       clearLocalDraft();
       return false;

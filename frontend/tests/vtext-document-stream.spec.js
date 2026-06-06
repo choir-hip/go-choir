@@ -362,6 +362,72 @@ test('vtext does not restore same-head local draft that lost canonical tables', 
   await expect(vtextWindow.locator('[data-vtext-state]')).toContainText('Latest');
 });
 
+test('vtext does not auto-restore a differing local draft over a non-empty canonical head', async ({ page, authenticator }) => {
+  await registerAndLoadDesktop(page, authenticator, uniqueEmail());
+  const stamp = Date.now();
+  const created = await page.evaluate(async (stampValue) => {
+    const docRes = await fetch('/api/vtext/documents', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: `Canonical Draft Skip ${stampValue}` }),
+    });
+    if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
+    const doc = await docRes.json();
+    const currentContent = [
+      '# Canonical Draft Skip',
+      '',
+      'This is the saved canonical paragraph.',
+      '',
+      'The browser cache has a different local draft.',
+    ].join('\n');
+    const revisionRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: currentContent,
+        author_kind: 'user',
+        author_label: 'browser-test',
+        metadata: { source: 'canonical_draft_skip' },
+      }),
+    });
+    if (!revisionRes.ok) throw new Error(`create current revision failed: ${revisionRes.status}`);
+    const revision = await revisionRes.json();
+
+    const sessionRes = await fetch('/auth/session', { credentials: 'include' });
+    if (!sessionRes.ok) throw new Error(`session failed: ${sessionRes.status}`);
+    const session = await sessionRes.json();
+    const owner = session.user?.id || session.user?.email || 'guest';
+    localStorage.setItem(`choir:vtext:draft:${owner}:${doc.doc_id}`, JSON.stringify({
+      doc_id: doc.doc_id,
+      parent_revision_id: revision.revision_id,
+      content: [
+        '# Canonical Draft Skip',
+        '',
+        'This is the stale browser-local paragraph.',
+        '',
+        'It must not mask the saved canonical revision.',
+      ].join('\n'),
+      updated_at: new Date().toISOString(),
+    }));
+    return { doc, revision, title: doc.title };
+  }, stamp);
+
+  await page.reload();
+  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 10000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  await expect(rendered).toContainText('This is the saved canonical paragraph.', { timeout: 10000 });
+  await expect(rendered).not.toContainText('This is the stale browser-local paragraph.');
+  await expect(vtextWindow.locator('[data-vtext-save-status]')).toContainText('Autosaved draft skipped; canonical version loaded');
+  await expect(vtextWindow.locator('[data-vtext-state]')).toContainText('Latest');
+});
+
 test('vtext compares historical version and accepts merge preview as next revision', async ({ page, authenticator }) => {
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
   const fileName = `semantic-merge-${Date.now()}.md`;
