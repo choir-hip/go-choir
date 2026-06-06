@@ -5007,7 +5007,7 @@ status until the deploy script exposes a post-success identity distinction.
 
 ### Problem 32: Owner Publish API Cannot Explicitly Set Publication Policy
 
-Status: `fixed_locally_pending_deploy`.
+Status: `accepted_on_staging_for_explicit_policy_forwarding`.
 
 problem: the real legal proposal publication proof intentionally needed a
 guest-readable artifact, and the owner-authenticated publish endpoint created
@@ -5100,6 +5100,27 @@ forwarding, but it does not yet add owner-visible publish policy controls or
 change the default policy. Until those land, UI publish actions still default to
 the current platform policy unless the document revision metadata or caller
 explicitly supplies policy.
+
+CI/deploy/staging proof:
+
+- Behavior commit
+  `db0dc5f0e64cd4cd74984ffd1e064bf3ecc684c6` was pushed to `origin/main`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27069128729` completed
+  successfully, including runtime shards, non-runtime tests, integration smoke,
+  Go vet/build, frontend build, aggregate Go gate, and Node B deploy job
+  `79895187852`.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27069128732` completed
+  successfully.
+- Staging health after the deploy job completed reported proxy and upstream
+  `deployed_commit=db0dc5f0e64cd4cd74984ffd1e064bf3ecc684c6`,
+  `deployed_at=2026-06-06T17:33:10Z`, `status=ok`, and `vmctl_status=ok`.
+- Deployed product-path proof passed:
+  `CHOIR_AUTH_STATE=/tmp/choir-policy-forward.storage.json CHOIR_AUTH_META=/tmp/choir-policy-forward.meta.json PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities"`.
+  The test now sends explicit public access/export policy for the
+  source-service publication fixture and still proves resolved/exported
+  source metadata plus owner/guest Source Viewer opens.
 
 ## Suggested `/goal`
 
