@@ -3594,6 +3594,13 @@ does not test every rendered citation marker, and does not close the platform's
 current limitation that publication policy defaults to public route/public
 visibility unless revision metadata overrides it.
 
+Hard mission review checkpoint:
+
+- `docs/mission-source-system-hard-review-2026-06-06.md` records the
+  adversarial/cognitive completion audit, hard findings, weak paths to prune,
+  residual risks, and next realism axis. Status remains
+  `checkpoint_incomplete`.
+
 ### Problem 14: Open-Surface Aliases Can Defeat Explicit Web Lens Routing
 
 Status: `accepted_on_staging_for_open_surface_aliases`.
