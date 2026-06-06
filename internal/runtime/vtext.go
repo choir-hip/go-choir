@@ -108,10 +108,11 @@ type vtextMarkdownLineageVersion struct {
 }
 
 type vtextCitationMarkerResolution struct {
-	Marker   string `json:"marker"`
-	EntityID string `json:"entity_id"`
-	Action   string `json:"action,omitempty"`
-	Reason   string `json:"reason,omitempty"`
+	Marker        string `json:"marker"`
+	EntityID      string `json:"entity_id"`
+	Action        string `json:"action,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+	EvidenceState string `json:"evidence_state,omitempty"`
 }
 
 type resolvedMarkdownLineageVersion struct {
@@ -677,9 +678,10 @@ func detectMarkdownLineageSourceGaps(content string, resolutions []vtextCitation
 		}
 		seen[marker] = true
 		gaps = append(gaps, map[string]any{
-			"kind":   "unresolved_markdown_citation_marker",
-			"marker": marker,
-			"policy": "repairable_gap_no_invented_citations",
+			"kind":           "unresolved_markdown_citation_marker",
+			"marker":         marker,
+			"policy":         "repairable_gap_no_invented_citations",
+			"evidence_state": vtextSourceEvidenceStateRecord("candidate", "", "unresolved markdown citation marker"),
 		})
 	}
 	return gaps
@@ -784,6 +786,39 @@ func markdownLineageResolutionManifest(resolutions []vtextCitationMarkerResoluti
 	return out
 }
 
+func markdownLineageSourceRepairResolutionManifest(resolutions []vtextCitationMarkerResolution) []map[string]any {
+	if len(resolutions) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(resolutions))
+	for _, resolution := range resolutions {
+		marker := strings.TrimSpace(resolution.Marker)
+		entityID := strings.TrimSpace(resolution.EntityID)
+		action := normalizeVTextCitationResolutionAction(resolution.Action, entityID)
+		reason := strings.TrimSpace(resolution.Reason)
+		if marker == "" {
+			continue
+		}
+		state := normalizeVTextEvidenceState(resolution.EvidenceState)
+		if state == "" {
+			state = vtextEvidenceStateForCitationResolution(action, "")
+		}
+		item := map[string]any{
+			"marker":         marker,
+			"action":         action,
+			"evidence_state": vtextSourceEvidenceStateRecord(state, entityID, reason),
+		}
+		if entityID != "" {
+			item["entity_id"] = entityID
+		}
+		if reason != "" {
+			item["reason"] = reason
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
 func markdownLineageSourceEntities(global, local []vtextSourceEntity) []vtextSourceEntity {
 	entities, _ := mergeVTextSourceEntities(append([]vtextSourceEntity{}, global...), local)
 	return entities
@@ -797,6 +832,7 @@ func markdownLineageCitationResolutions(global, local []vtextCitationMarkerResol
 		resolution.EntityID = strings.TrimSpace(resolution.EntityID)
 		resolution.Action = normalizeVTextCitationResolutionAction(resolution.Action, resolution.EntityID)
 		resolution.Reason = strings.TrimSpace(resolution.Reason)
+		resolution.EvidenceState = normalizeVTextEvidenceState(resolution.EvidenceState)
 		if resolution.Marker == "" || (resolution.EntityID == "" && resolution.Action != "no_source_needed") {
 			return
 		}
@@ -812,6 +848,90 @@ func markdownLineageCitationResolutions(global, local []vtextCitationMarkerResol
 	}
 	for _, resolution := range local {
 		add(resolution)
+	}
+	return out
+}
+
+func normalizeVTextEvidenceState(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "candidate", "available", "confirms", "refutes", "qualifies", "no_source_needed", "stale", "blocked_by_access", "unavailable":
+		return normalized
+	case "confirming", "confirmed", "represented", "owner_supplied":
+		return "confirms"
+	case "refuting", "refuted":
+		return "refutes"
+	case "qualifying", "qualified":
+		return "qualifies"
+	case "blocked", "blocked_access", "access_blocked":
+		return "blocked_by_access"
+	case "not_needed", "no-source-needed", "no_source":
+		return "no_source_needed"
+	default:
+		return ""
+	}
+}
+
+func vtextEvidenceStateForCitationResolution(action, relation string) string {
+	relationState := normalizeVTextEvidenceState(relation)
+	if relationState == "confirms" || relationState == "refutes" || relationState == "qualifies" {
+		return relationState
+	}
+	if normalizeVTextCitationResolutionAction(action, "") == "no_source_needed" {
+		return "no_source_needed"
+	}
+	return "confirms"
+}
+
+func vtextSourceEvidenceStateRecord(state, targetID, reason string) map[string]any {
+	normalized := normalizeVTextEvidenceState(state)
+	if normalized == "" {
+		normalized = "candidate"
+	}
+	record := map[string]any{"state": normalized}
+	if targetID = strings.TrimSpace(targetID); targetID != "" {
+		record["target_id"] = targetID
+	}
+	if reason = strings.TrimSpace(reason); reason != "" {
+		record["reason"] = reason
+	}
+	return record
+}
+
+func normalizeVTextSourceRepairEvidence(entities []vtextSourceEntity, resolutions []vtextCitationMarkerResolution) []vtextSourceEntity {
+	if len(entities) == 0 {
+		return nil
+	}
+	stateByEntityID := map[string]string{}
+	for _, resolution := range resolutions {
+		entityID := strings.TrimSpace(resolution.EntityID)
+		if entityID == "" {
+			continue
+		}
+		state := normalizeVTextEvidenceState(resolution.EvidenceState)
+		if state == "" {
+			state = vtextEvidenceStateForCitationResolution(resolution.Action, "")
+		}
+		stateByEntityID[entityID] = state
+	}
+	out := append([]vtextSourceEntity{}, entities...)
+	for i := range out {
+		entityID := strings.TrimSpace(out[i].EntityID)
+		relation := normalizeVTextEvidenceState(out[i].Evidence.Relation)
+		if relation != "confirms" && relation != "refutes" && relation != "qualifies" {
+			relation = normalizeVTextEvidenceState(out[i].Evidence.State)
+		}
+		if relation != "confirms" && relation != "refutes" && relation != "qualifies" {
+			relation = stateByEntityID[entityID]
+		}
+		if relation != "confirms" && relation != "refutes" && relation != "qualifies" {
+			relation = "confirms"
+		}
+		out[i].Evidence.Relation = relation
+		out[i].Evidence.State = relation
+		if strings.TrimSpace(out[i].Evidence.ResearchState) == "" {
+			out[i].Evidence.ResearchState = "owner_supplied"
+		}
 	}
 	return out
 }
@@ -3454,12 +3574,13 @@ func (h *APIHandler) HandleVTextSourceGapRepair(w http.ResponseWriter, r *http.R
 		metadata = map[string]any{}
 	}
 	existingEntities := decodeVTextSourceEntities(metadata["source_entities"])
-	sourceEntities, _ := mergeVTextSourceEntities(existingEntities, req.SourceEntities)
 	resolutions := markdownLineageCitationResolutions(nil, req.CitationResolutions)
 	if len(resolutions) == 0 {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "citation_resolutions are required"})
 		return
 	}
+	requestEntities := normalizeVTextSourceRepairEvidence(req.SourceEntities, resolutions)
+	sourceEntities, _ := mergeVTextSourceEntities(existingEntities, requestEntities)
 	if err := validateMarkdownLineageCitationResolutions(sourceEntities, resolutions); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
@@ -3481,7 +3602,7 @@ func (h *APIHandler) HandleVTextSourceGapRepair(w http.ResponseWriter, r *http.R
 	nextMetadata["base_revision_id"] = baseRev.RevisionID
 	nextMetadata["draft_line"] = defaultDraftLine()
 	nextMetadata["source_repair_resolution_count"] = len(resolutions)
-	nextMetadata["source_repair_resolutions"] = markdownLineageResolutionManifest(resolutions)
+	nextMetadata["source_repair_resolutions"] = markdownLineageSourceRepairResolutionManifest(resolutions)
 	if len(sourceEntities) > 0 {
 		nextMetadata["source_entities"] = sourceEntities
 	}

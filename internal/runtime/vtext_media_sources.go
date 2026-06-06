@@ -72,6 +72,7 @@ type vtextSourceEntityDisplay struct {
 type vtextSourceEntityEvidence struct {
 	State                  string `json:"state"`
 	ResearchState          string `json:"research_state,omitempty"`
+	Relation               string `json:"relation,omitempty"`
 	TranscriptContentID    string `json:"transcript_content_id,omitempty"`
 	TranscriptAvailability string `json:"transcript_availability,omitempty"`
 	SourceRepresentationID string `json:"source_representation_id,omitempty"`

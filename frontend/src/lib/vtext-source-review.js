@@ -79,7 +79,7 @@ export function buildSourceReviewPayload({
           default_collapsed: true,
         },
         evidence: {
-          state: 'available',
+          state: cleanRelation,
           research_state: 'owner_supplied',
           relation: cleanRelation,
         },

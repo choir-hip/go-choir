@@ -3814,6 +3814,10 @@ func TestVTextImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 	if !ok || len(gaps) != 1 {
 		t.Fatalf("source gaps = %#v", meta["source_gaps"])
 	}
+	gap := gaps[0].(map[string]any)
+	if state := gap["evidence_state"].(map[string]any)["state"]; state != "candidate" {
+		t.Fatalf("source gap evidence_state = %#v", gap["evidence_state"])
+	}
 	latestMeta := decodeRevisionMetadata(revs[0].Metadata)
 	if latestMeta["source_metadata"].(map[string]any)["import_note"] != "owner selected current draft" {
 		t.Fatalf("latest source metadata = %#v", latestMeta["source_metadata"])
@@ -4025,6 +4029,14 @@ func TestVTextSourceGapRepairCreatesRevision(t *testing.T) {
 	if len(sourceEntities) != 1 || sourceEntities[0].EntityID != entity.EntityID {
 		t.Fatalf("source_entities = %#v", meta["source_entities"])
 	}
+	if sourceEntities[0].Evidence.State != "confirms" || sourceEntities[0].Evidence.Relation != "confirms" {
+		t.Fatalf("source entity evidence = %#v", sourceEntities[0].Evidence)
+	}
+	manifest := meta["source_repair_resolutions"].([]any)
+	evidenceState := manifest[0].(map[string]any)["evidence_state"].(map[string]any)
+	if evidenceState["state"] != "confirms" || evidenceState["target_id"] != entity.EntityID {
+		t.Fatalf("source repair evidence_state = %#v", evidenceState)
+	}
 	revs, err := s.ListRevisionsByDoc(context.Background(), imported.DocID, "user-1", 10)
 	if err != nil {
 		t.Fatalf("ListRevisionsByDoc: %v", err)
@@ -4095,6 +4107,9 @@ func TestVTextSourceGapRepairPreservesUnrepairedGaps(t *testing.T) {
 	if gap["marker"] != "[2]" {
 		t.Fatalf("remaining source gap = %#v", gap)
 	}
+	if state := gap["evidence_state"].(map[string]any)["state"]; state != "candidate" {
+		t.Fatalf("remaining source gap evidence_state = %#v", gap["evidence_state"])
+	}
 }
 
 func TestVTextSourceGapRepairCanOmitNoSourceNeededMarker(t *testing.T) {
@@ -4153,6 +4168,10 @@ func TestVTextSourceGapRepairCanOmitNoSourceNeededMarker(t *testing.T) {
 	}
 	if item["reason"] != "The sentence is structural framing, not a factual claim needing citation." {
 		t.Fatalf("source repair reason = %#v", item["reason"])
+	}
+	evidenceState := item["evidence_state"].(map[string]any)
+	if evidenceState["state"] != "no_source_needed" || evidenceState["reason"] != item["reason"] {
+		t.Fatalf("no-source-needed evidence_state = %#v", evidenceState)
 	}
 }
 
