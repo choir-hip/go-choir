@@ -1168,6 +1168,45 @@ planned proof: `SourceOpenPlan` golden tests for URL-only, content item,
 source-service item, YouTube, PDF, published VText span, public guest source,
 and explicit browser/original opening.
 
+### Problem 4: Missing-Source And Evidence State Are Parallel Ad Hoc Contracts
+
+problem: source-backed VText has at least three overlapping state families:
+`metadata.source_gaps` for missing citation artifacts, source entity
+`evidence.state`/`research_state` for represented source artifacts, and source
+repair `relation` values such as `confirms`. These encode different parts of
+the same claim/source/evidence relation without one typed state vocabulary.
+
+affected contract/invariant: missing-source placeholders must be replaced with
+typed evidence states and researcher-backed
+confirming/refuting/qualifying/no-source-needed/stale/blocked states. VText,
+Source Viewer, publication, export, and researcher repair must agree on the
+meaning of the state they carry.
+
+evidence: `internal/runtime/vtext_media_sources.go` defines
+`vtextSourceEntityEvidence` with free-form `State` and `ResearchState`;
+`frontend/src/lib/VTextEditor.svelte` derives `sourceGaps` from
+`metadata.source_gaps`; `frontend/src/lib/vtext-source-actions.ts` defaults
+repair relation to `confirms`; existing tests assert `source_gaps`,
+`research_state: represented`, and `relation: confirms` independently.
+
+first observed version/transition: current worktree at
+`1e62f6bf44a9d7e...` after the first source-open staging checkpoint.
+
+suspected owner: shared source entity/evidence contract across runtime VText
+metadata, researcher updates, source repair actions, frontend rendering,
+publication, and export.
+
+why local/UI-only fix is insufficient: UI label changes cannot make exported
+metadata, publication records, and appagent/researcher revisions preserve the
+same evidence semantics; the normalized metadata itself must carry typed
+states.
+
+planned proof: unit or focused browser tests showing migrated source gaps carry
+typed `evidence_state` records, owner source repairs convert gaps into source
+entities with `state: confirms`, no-source-needed revisions clear gaps through
+`state: no_source_needed`, and Source Viewer/VText render the state without
+falling back to missing-source placeholders.
+
 ## Suggested `/goal`
 
 ```text
