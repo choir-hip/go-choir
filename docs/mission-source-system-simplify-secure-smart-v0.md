@@ -1544,6 +1544,12 @@ accessibility tree showed the Appendix A glossary as plain lines beginning
 pipe table. Code inspection showed `restoreLocalDraftIfNewer()` restores any
 localStorage draft whose content differs from the current revision and does not
 check the stored `parent_revision_id` against the current head revision.
+After deploying a parent-revision guard in `5c61a6b8`, synthetic staging proof
+passed for stale drafts based on older revisions, but reloading the owner Comet
+window still restored the collapsed legal-proposal draft at v87. That shows the
+dangerous draft can also be based on the current head after the rendered editor
+has already serialized a table-flattened draft; parent identity alone is not a
+sufficient restore guard.
 
 first observed version/transition: staging at deployed commit
 `bfd23fa088d754039f679adf0a526abbdee73a64`, Comet owner session after the
@@ -1558,12 +1564,13 @@ but it cannot prevent the product editor from presenting stale collapsed
 content as the active owner draft. The restore policy must prevent stale drafts
 from masking a newer canonical head before the user saves or revises.
 
-planned proof: add a frontend regression test that seeds a local draft with an
-older `parent_revision_id`, advances the canonical document head to a version
-with a Markdown table, reopens the document, and verifies the editor renders
-the current table head instead of auto-restoring the stale collapsed draft.
-Then redeploy and re-open the owner legal proposal in Comet to verify v87 no
-longer shows the collapsed appendix draft as an unsaved edit.
+planned proof: add frontend regression tests that seed local drafts with both
+an older `parent_revision_id` and a same-parent table-flattened draft, advance
+or load the canonical document head to a version with a Markdown table, reopen
+the document, and verify the editor renders the current table head instead of
+auto-restoring either stale collapsed draft. Then redeploy and re-open the
+owner legal proposal in Comet to verify v87 no longer shows the collapsed
+appendix draft as an unsaved edit.
 
 ## Suggested `/goal`
 
