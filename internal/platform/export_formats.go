@@ -75,6 +75,7 @@ func publicationExportMetadata(bundle *PublicationBundle, format string) json.Ra
 
 func buildPublicationDOCX(bundle *PublicationBundle, doc PublicationDocument, metadata json.RawMessage) ([]byte, error) {
 	manifestJSON := publicationSourceManifestJSON(doc.Manifest)
+	profile := defaultPublicationExportProfile()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	files := map[string]string{
@@ -86,6 +87,7 @@ func buildPublicationDOCX(bundle *PublicationBundle, doc PublicationDocument, me
 			"ChoirPublicationVersionID": bundle.Version.ID,
 			"ChoirRoutePath":            bundle.Route.Path,
 			"ChoirContentHash":          bundle.Version.ContentHash,
+			"ChoirExportProfile":        profile.ID,
 			"ChoirExportMetadata":       string(metadata),
 			"ChoirSourceManifestSchema": doc.Manifest.Schema,
 		}),
@@ -93,7 +95,8 @@ func buildPublicationDOCX(bundle *PublicationBundle, doc PublicationDocument, me
 		"customXml/_rels/item1.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
 			`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`,
 		"word/document.xml":            docxDocumentXML(doc),
-		"word/_rels/document.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`,
+		"word/styles.xml":              docxStylesXML(),
+		"word/_rels/document.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
 	}
 	for name, content := range files {
 		w, err := zw.Create(name)
@@ -118,6 +121,7 @@ func contentTypesXML() string {
 		`<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
 		`<Default Extension="xml" ContentType="application/xml"/>` +
 		`<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>` +
+		`<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>` +
 		`<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>` +
 		`<Override PartName="/docProps/custom.xml" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/>` +
 		`<Override PartName="/customXml/item1.xml" ContentType="application/xml"/>` +
@@ -173,26 +177,46 @@ func docxSourceManifestXML(manifestJSON string) string {
 		`</json></choirSourceManifest>`
 }
 
+func docxStylesXML() string {
+	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+		`<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+		`<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="180" w:line="300" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="22"/></w:rPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:spacing w:before="0" w:after="280"/></w:pPr><w:rPr><w:b/><w:sz w:val="34"/></w:rPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="360" w:after="160"/></w:pPr><w:rPr><w:b/><w:sz w:val="30"/></w:rPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="280" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/></w:rPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="220" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="360" w:hanging="180"/><w:spacing w:after="120"/></w:pPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="SourceAppendix"><w:name w:val="Source Appendix"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="120"/></w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:style>` +
+		`</w:styles>`
+}
+
 func docxDocumentXML(doc PublicationDocument) string {
 	var b strings.Builder
+	ordinals := publicationSourceOrdinals(doc)
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`)
 	b.WriteString(`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>`)
+	wroteTitle := false
 	for _, block := range doc.Blocks {
 		switch block.Kind {
 		case "heading":
-			b.WriteString(docxParagraph(block.Inlines, "Heading"+strconv.Itoa(clampInt(block.Level, 1, 6))))
+			style := "Heading" + strconv.Itoa(clampInt(block.Level, 1, 6))
+			if block.Level == 1 && !wroteTitle {
+				style = "Title"
+				wroteTitle = true
+			}
+			b.WriteString(docxParagraph(block.Inlines, style, ordinals))
 		case "list_item":
-			b.WriteString(docxParagraph(append([]publicationInline{{Kind: "text", Text: "• "}}, block.Inlines...), "ListParagraph"))
+			b.WriteString(docxParagraph(append([]publicationInline{{Kind: "text", Text: "- "}}, block.Inlines...), "ListParagraph", ordinals))
 		case "table":
-			b.WriteString(docxTable(block.Rows))
+			b.WriteString(docxTable(block.Rows, ordinals))
 		case "rule":
-			b.WriteString(docxParagraph([]publicationInline{{Kind: "text", Text: ""}}, ""))
+			b.WriteString(docxParagraph([]publicationInline{{Kind: "text", Text: ""}}, "", ordinals))
 		default:
-			b.WriteString(docxParagraph(block.Inlines, ""))
+			b.WriteString(docxParagraph(block.Inlines, "", ordinals))
 		}
 	}
 	if len(doc.Manifest.Sources) > 0 {
-		b.WriteString(docxParagraph([]publicationInline{{Kind: "text", Text: "Sources"}}, "Heading1"))
+		b.WriteString(docxParagraph([]publicationInline{{Kind: "text", Text: "Sources"}}, "Heading1", ordinals))
 		for i, source := range doc.Manifest.Sources {
 			text := fmt.Sprintf("[%d] %s", i+1, firstNonEmpty(source.Title, source.SourceEntityID))
 			if source.URL != "" {
@@ -201,7 +225,7 @@ func docxDocumentXML(doc PublicationDocument) string {
 			if source.SnapshotText != "" {
 				text += " — " + source.SnapshotText
 			}
-			b.WriteString(docxParagraph([]publicationInline{{Kind: "text", Text: text}}, ""))
+			b.WriteString(docxParagraph([]publicationInline{{Kind: "text", Text: text}}, "SourceAppendix", ordinals))
 		}
 	}
 	b.WriteString(`<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`)
@@ -209,7 +233,7 @@ func docxDocumentXML(doc PublicationDocument) string {
 	return b.String()
 }
 
-func docxParagraph(inlines []publicationInline, style string) string {
+func docxParagraph(inlines []publicationInline, style string, ordinals map[string]int) string {
 	var b strings.Builder
 	b.WriteString(`<w:p>`)
 	if style != "" {
@@ -217,40 +241,49 @@ func docxParagraph(inlines []publicationInline, style string) string {
 		b.WriteString(xmlEscape(style))
 		b.WriteString(`"/></w:pPr>`)
 	}
-	b.WriteString(docxRuns(inlines))
+	b.WriteString(docxRuns(inlines, ordinals))
 	b.WriteString(`</w:p>`)
 	return b.String()
 }
 
-func docxRuns(inlines []publicationInline) string {
+func docxRuns(inlines []publicationInline, ordinals map[string]int) string {
 	var b strings.Builder
 	for _, inline := range inlines {
-		text := inline.Text
 		if inline.Kind == "source_ref" {
-			text = inline.Text + " [" + firstNonEmpty(inline.SourceID, "source") + "]"
+			if inline.Text != "" {
+				b.WriteString(docxRun(inline.Text, false, false, false))
+			}
+			b.WriteString(docxRun("["+publicationSourceMarker(ordinals, inline.SourceID)+"]", false, false, true))
+			continue
 		}
-		b.WriteString(`<w:r>`)
-		if inline.Kind == "strong" || inline.Kind == "em" || inline.Kind == "source_ref" {
-			b.WriteString(`<w:rPr>`)
-			if inline.Kind == "strong" {
-				b.WriteString(`<w:b/>`)
-			}
-			if inline.Kind == "em" {
-				b.WriteString(`<w:i/>`)
-			}
-			if inline.Kind == "source_ref" {
-				b.WriteString(`<w:vertAlign w:val="superscript"/><w:color w:val="2F5597"/>`)
-			}
-			b.WriteString(`</w:rPr>`)
-		}
-		b.WriteString(`<w:t xml:space="preserve">`)
-		b.WriteString(xmlEscape(text))
-		b.WriteString(`</w:t></w:r>`)
+		b.WriteString(docxRun(inline.Text, inline.Kind == "strong", inline.Kind == "em", false))
 	}
 	return b.String()
 }
 
-func docxTable(rows [][]publicationTableCell) string {
+func docxRun(text string, strong, em, superscript bool) string {
+	var b strings.Builder
+	b.WriteString(`<w:r>`)
+	if strong || em || superscript {
+		b.WriteString(`<w:rPr>`)
+		if strong {
+			b.WriteString(`<w:b/>`)
+		}
+		if em {
+			b.WriteString(`<w:i/>`)
+		}
+		if superscript {
+			b.WriteString(`<w:vertAlign w:val="superscript"/><w:color w:val="2F5597"/><w:sz w:val="16"/>`)
+		}
+		b.WriteString(`</w:rPr>`)
+	}
+	b.WriteString(`<w:t xml:space="preserve">`)
+	b.WriteString(xmlEscape(text))
+	b.WriteString(`</w:t></w:r>`)
+	return b.String()
+}
+
+func docxTable(rows [][]publicationTableCell, ordinals map[string]int) string {
 	var b strings.Builder
 	b.WriteString(`<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="A6A6A6"/><w:left w:val="single" w:sz="4" w:space="0" w:color="A6A6A6"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="A6A6A6"/><w:right w:val="single" w:sz="4" w:space="0" w:color="A6A6A6"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="A6A6A6"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="A6A6A6"/></w:tblBorders></w:tblPr>`)
 	for _, row := range rows {
@@ -262,7 +295,7 @@ func docxTable(rows [][]publicationTableCell) string {
 			if cell.Header {
 				inlines = forceStrongInlines(inlines)
 			}
-			b.WriteString(docxParagraph(inlines, style))
+			b.WriteString(docxParagraph(inlines, style, ordinals))
 			b.WriteString(`</w:tc>`)
 		}
 		b.WriteString(`</w:tr>`)
@@ -284,29 +317,29 @@ func forceStrongInlines(inlines []publicationInline) []publicationInline {
 
 func buildPublicationPDF(bundle *PublicationBundle, doc PublicationDocument) ([]byte, error) {
 	title := doc.Title
-	lines := wrapPDFLines(publicationDocumentPlainText(doc), 92)
-	if len(lines) == 0 {
-		lines = []string{title}
-	}
+	pages := renderPublicationPDFPages(doc)
 	xmp := pdfMetadataXML(bundle, doc)
-	pageLineCount := 48
-	pageCount := (len(lines) + pageLineCount - 1) / pageLineCount
-	infoObjectNumber := 5 + pageCount*2
+	pageCount := len(pages)
+	if pageCount == 0 {
+		pages = []string{pdfTextOp(50, 740, "F2", 18, title)}
+		pageCount = 1
+	}
+	infoObjectNumber := 6 + pageCount*2
 	kids := make([]string, 0, pageCount)
 	objects := []string{
-		"<< /Type /Catalog /Pages 2 0 R /Metadata 4 0 R >>",
+		"<< /Type /Catalog /Pages 2 0 R /Metadata 5 0 R >>",
 		"",
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
 		fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len([]byte(xmp)), xmp),
 	}
 	for page := 0; page < pageCount; page++ {
-		pageObjectNumber := 5 + page*2
+		pageObjectNumber := 6 + page*2
 		contentObjectNumber := pageObjectNumber + 1
 		kids = append(kids, strconv.Itoa(pageObjectNumber)+" 0 R")
-		pageLines := lines[page*pageLineCount : minInt(len(lines), (page+1)*pageLineCount)]
-		streamText := pdfPageStream(pageLines)
+		streamText := pages[page]
 		objects = append(objects,
-			fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents %d 0 R >>", contentObjectNumber),
+			fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents %d 0 R >>", contentObjectNumber),
 			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len([]byte(streamText)), streamText),
 		)
 	}
@@ -339,19 +372,219 @@ func buildPublicationPDF(bundle *PublicationBundle, doc PublicationDocument) ([]
 	return buf.Bytes(), nil
 }
 
-func pdfPageStream(lines []string) string {
-	var stream strings.Builder
-	stream.WriteString("BT\n/F1 11 Tf\n50 760 Td\n14 TL\n")
-	for i, line := range lines {
-		if i > 0 {
-			stream.WriteString("T*\n")
+type publicationPDFRenderer struct {
+	pages   []string
+	current strings.Builder
+	y       float64
+}
+
+func renderPublicationPDFPages(doc PublicationDocument) []string {
+	r := publicationPDFRenderer{y: 744}
+	ordinals := publicationSourceOrdinals(doc)
+	hasTitleHeading := false
+	for _, block := range doc.Blocks {
+		if block.Kind == "heading" && block.Level == 1 {
+			hasTitleHeading = true
+			break
 		}
-		stream.WriteString("(")
-		stream.WriteString(pdfEscape(line))
-		stream.WriteString(") Tj\n")
 	}
-	stream.WriteString("ET\n")
-	return stream.String()
+	if !hasTitleHeading && strings.TrimSpace(doc.Title) != "" {
+		r.writeWrappedText(doc.Title, 50, 512, "F2", 22, 26, 14)
+	}
+	for _, block := range doc.Blocks {
+		switch block.Kind {
+		case "heading":
+			level := clampInt(block.Level, 1, 6)
+			size := 22.0
+			leading := 26.0
+			before := 16.0
+			if level == 2 {
+				size, leading, before = 16, 20, 14
+			} else if level >= 3 {
+				size, leading, before = 13, 17, 12
+			}
+			r.writeWrappedText(publicationInlinesPDFText(block.Inlines, ordinals), 50, 512, "F2", size, leading, before)
+		case "paragraph":
+			r.writeWrappedText(publicationInlinesPDFText(block.Inlines, ordinals), 50, 512, "F1", 11, 15, 5)
+		case "list_item":
+			r.writeWrappedText("- "+publicationInlinesPDFText(block.Inlines, ordinals), 64, 498, "F1", 11, 15, 3)
+		case "table":
+			r.writeTable(block.Rows, ordinals)
+		case "rule":
+			r.ensureSpace(16)
+			r.current.WriteString(fmt.Sprintf("0.75 G %.2f %.2f m %.2f %.2f l S 0 G\n", 50.0, r.y, 562.0, r.y))
+			r.y -= 16
+		}
+	}
+	if len(doc.Manifest.Sources) > 0 {
+		r.writeWrappedText("Sources", 50, 512, "F2", 16, 20, 18)
+		for i, source := range doc.Manifest.Sources {
+			text := fmt.Sprintf("[%d] %s", i+1, firstNonEmpty(source.Title, source.SourceEntityID))
+			if source.URL != "" {
+				text += " - " + source.URL
+			}
+			if source.SnapshotText != "" {
+				text += " - " + source.SnapshotText
+			}
+			r.writeWrappedText(text, 50, 512, "F1", 9.5, 13, 2)
+		}
+	}
+	r.finishPage()
+	return r.pages
+}
+
+func (r *publicationPDFRenderer) finishPage() {
+	if r.current.Len() == 0 {
+		return
+	}
+	r.pages = append(r.pages, r.current.String())
+	r.current.Reset()
+	r.y = 744
+}
+
+func (r *publicationPDFRenderer) ensureSpace(height float64) {
+	if r.y-height >= 52 {
+		return
+	}
+	r.finishPage()
+}
+
+func (r *publicationPDFRenderer) writeWrappedText(text string, x, width float64, font string, size, leading, before float64) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	lines := wrapTextForPDF(text, int(width/(size*0.52)))
+	height := before + float64(len(lines))*leading
+	r.ensureSpace(height)
+	r.y -= before
+	for _, line := range lines {
+		r.current.WriteString(pdfTextOp(x, r.y, font, size, line))
+		r.y -= leading
+	}
+}
+
+func (r *publicationPDFRenderer) writeTable(rows [][]publicationTableCell, ordinals map[string]int) {
+	if len(rows) == 0 {
+		return
+	}
+	r.ensureSpace(24)
+	r.y -= 8
+	tableX := 50.0
+	tableWidth := 512.0
+	cols := 1
+	for _, row := range rows {
+		if len(row) > cols {
+			cols = len(row)
+		}
+	}
+	cellWidth := tableWidth / float64(cols)
+	for _, row := range rows {
+		cellLines := make([][]string, cols)
+		rowLines := 1
+		for i := 0; i < cols; i++ {
+			text := ""
+			if i < len(row) {
+				text = publicationInlinesPDFText(row[i].Inlines, ordinals)
+			}
+			cellLines[i] = wrapTextForPDF(text, int((cellWidth-12)/(9.5*0.52)))
+			if len(cellLines[i]) > rowLines {
+				rowLines = len(cellLines[i])
+			}
+		}
+		rowHeight := 16 + float64(rowLines-1)*12
+		r.ensureSpace(rowHeight + 4)
+		yTop := r.y
+		for i := 0; i < cols; i++ {
+			x := tableX + float64(i)*cellWidth
+			if len(row) > 0 && row[0].Header {
+				r.current.WriteString(fmt.Sprintf("0.95 g %.2f %.2f %.2f %.2f re f 0 g 0 G\n", x, yTop-rowHeight, cellWidth, rowHeight))
+			}
+			r.current.WriteString(fmt.Sprintf("0.65 G %.2f %.2f %.2f %.2f re S 0 G\n", x, yTop-rowHeight, cellWidth, rowHeight))
+			font := "F1"
+			if i < len(row) && row[i].Header {
+				font = "F2"
+			}
+			lineY := yTop - 12
+			for _, line := range cellLines[i] {
+				r.current.WriteString(pdfTextOp(x+6, lineY, font, 9.5, line))
+				lineY -= 12
+			}
+		}
+		r.y -= rowHeight
+	}
+	r.y -= 12
+}
+
+func publicationInlinesPDFText(inlines []publicationInline, ordinals map[string]int) string {
+	var b strings.Builder
+	for _, inline := range inlines {
+		b.WriteString(inline.Text)
+		if inline.Kind == "source_ref" {
+			b.WriteString(" [")
+			b.WriteString(publicationSourceMarker(ordinals, inline.SourceID))
+			b.WriteString("]")
+		}
+	}
+	return b.String()
+}
+
+func wrapTextForPDF(text string, width int) []string {
+	if width < 12 {
+		width = 12
+	}
+	var out []string
+	for _, raw := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		words := strings.Fields(raw)
+		if len(words) == 0 {
+			out = append(out, "")
+			continue
+		}
+		line := ""
+		for _, word := range words {
+			if len([]rune(line))+1+len([]rune(word)) > width && line != "" {
+				out = append(out, line)
+				line = word
+				continue
+			}
+			if line == "" {
+				line = word
+			} else {
+				line += " " + word
+			}
+		}
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+func pdfTextOp(x, y float64, font string, size float64, text string) string {
+	return fmt.Sprintf("0 g BT /%s %.1f Tf %.2f %.2f Td (%s) Tj ET\n", font, size, x, y, pdfEscape(pdfWinAnsiText(text)))
+}
+
+func pdfWinAnsiText(text string) string {
+	replacer := strings.NewReplacer(
+		"\u2013", "-",
+		"\u2014", "-",
+		"\u2018", "'",
+		"\u2019", "'",
+		"\u201c", `"`,
+		"\u201d", `"`,
+		"\u2022", "-",
+		"\u00a0", " ",
+	)
+	text = replacer.Replace(text)
+	var b strings.Builder
+	for _, r := range text {
+		if r == '\n' || r == '\t' || (r >= 32 && r <= 126) {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteRune('?')
+	}
+	return b.String()
 }
 
 func pdfMetadataXML(bundle *PublicationBundle, doc PublicationDocument) string {
@@ -367,10 +600,17 @@ func pdfMetadataXML(bundle *PublicationBundle, doc PublicationDocument) string {
 
 func renderPublicationHTML(doc PublicationDocument) string {
 	manifestJSON := publicationSourceManifestJSON(doc.Manifest)
+	profile := defaultPublicationExportProfile()
+	ordinals := publicationSourceOrdinals(doc)
 	var b strings.Builder
 	b.WriteString("<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>")
 	b.WriteString(html.EscapeString(doc.Title))
 	b.WriteString(`</title><meta name="generator" content="Choir">`)
+	b.WriteString(`<meta name="choir-export-profile" content="`)
+	b.WriteString(html.EscapeString(profile.ID))
+	b.WriteString(`"><style>`)
+	b.WriteString(publicationHTMLProfileCSS(profile))
+	b.WriteString(`</style>`)
 	b.WriteString(`<script type="application/ld+json">`)
 	b.WriteString(safeScriptJSON(publicationJSONLD(doc)))
 	b.WriteString(`</script><script type="application/json" id="choir-source-manifest">`)
@@ -383,20 +623,20 @@ func renderPublicationHTML(doc PublicationDocument) string {
 			b.WriteString("<h")
 			b.WriteString(strconv.Itoa(level))
 			b.WriteString(">")
-			b.WriteString(renderHTMLInlines(block.Inlines))
+			b.WriteString(renderHTMLInlines(block.Inlines, ordinals))
 			b.WriteString("</h")
 			b.WriteString(strconv.Itoa(level))
 			b.WriteString(">\n")
 		case "paragraph":
 			b.WriteString("<p>")
-			b.WriteString(renderHTMLInlines(block.Inlines))
+			b.WriteString(renderHTMLInlines(block.Inlines, ordinals))
 			b.WriteString("</p>\n")
 		case "list_item":
 			b.WriteString("<ul><li>")
-			b.WriteString(renderHTMLInlines(block.Inlines))
+			b.WriteString(renderHTMLInlines(block.Inlines, ordinals))
 			b.WriteString("</li></ul>\n")
 		case "table":
-			b.WriteString("<table><tbody>")
+			b.WriteString(`<table class="vtext-table"><tbody>`)
 			for _, row := range block.Rows {
 				b.WriteString("<tr>")
 				for _, cell := range row {
@@ -407,7 +647,7 @@ func renderPublicationHTML(doc PublicationDocument) string {
 					b.WriteString("<")
 					b.WriteString(tag)
 					b.WriteString(">")
-					b.WriteString(renderHTMLInlines(cell.Inlines))
+					b.WriteString(renderHTMLInlines(cell.Inlines, ordinals))
 					b.WriteString("</")
 					b.WriteString(tag)
 					b.WriteString(">")
@@ -447,7 +687,7 @@ func renderPublicationHTML(doc PublicationDocument) string {
 	return b.String()
 }
 
-func renderHTMLInlines(inlines []publicationInline) string {
+func renderHTMLInlines(inlines []publicationInline, ordinals map[string]int) string {
 	var b strings.Builder
 	for _, inline := range inlines {
 		switch inline.Kind {
@@ -472,12 +712,39 @@ func renderHTMLInlines(inlines []publicationInline) string {
 			b.WriteString(html.EscapeString(inline.SourceID))
 			b.WriteString(`">`)
 			b.WriteString(html.EscapeString(inline.Text))
-			b.WriteString(`</a>`)
+			b.WriteString(`<sup>[`)
+			b.WriteString(html.EscapeString(publicationSourceMarker(ordinals, inline.SourceID)))
+			b.WriteString(`]</sup></a>`)
 		default:
 			b.WriteString(html.EscapeString(inline.Text))
 		}
 	}
 	return b.String()
+}
+
+func publicationHTMLProfileCSS(profile publicationExportProfile) string {
+	return `:root{color-scheme:light;--choir-text:#171717;--choir-muted:#5f6673;--choir-rule:#d6dbe3;--choir-accent:#1d4f91;--choir-source-bg:#f7f9fc}` +
+		`html{background:#f4f5f7}` +
+		`body{margin:0;color:var(--choir-text);font:16px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}` +
+		`.vtext-publication{box-sizing:border-box;max-width:820px;margin:42px auto;padding:56px 64px;background:#fff;box-shadow:0 1px 8px rgba(15,23,42,.08)}` +
+		`h1{font-size:30px;line-height:1.18;margin:0 0 24px;font-weight:750;letter-spacing:0}` +
+		`h2{font-size:22px;line-height:1.28;margin:34px 0 14px;font-weight:720;letter-spacing:0}` +
+		`h3{font-size:18px;line-height:1.35;margin:28px 0 10px;font-weight:700;letter-spacing:0}` +
+		`h4,h5,h6{font-size:16px;line-height:1.4;margin:24px 0 8px;font-weight:700;letter-spacing:0}` +
+		`p{margin:0 0 16px}` +
+		`ul{margin:0 0 16px 1.25rem;padding:0}` +
+		`li{margin:0 0 8px}` +
+		`.vtext-table{border-collapse:collapse;width:100%;margin:22px 0 28px;font-size:14px;line-height:1.45}` +
+		`.vtext-table th,.vtext-table td{border:1px solid var(--choir-rule);padding:9px 11px;vertical-align:top;text-align:left}` +
+		`.vtext-table th{background:#f1f4f8;font-weight:700}` +
+		`.vtext-source-ref{color:var(--choir-accent);text-decoration:none;border-bottom:1px solid rgba(29,79,145,.28)}` +
+		`.vtext-source-ref sup{font-size:.72em;line-height:0;margin-left:2px}` +
+		`.vtext-sources{margin-top:44px;padding-top:22px;border-top:1px solid var(--choir-rule);font-size:14px;color:#2f3744}` +
+		`.vtext-sources h2{font-size:18px;margin:0 0 14px}` +
+		`.vtext-sources ol{padding-left:1.35rem}` +
+		`.vtext-sources li{margin-bottom:14px}` +
+		`.vtext-sources blockquote{margin:8px 0 0;padding:10px 12px;background:var(--choir-source-bg);border-left:3px solid var(--choir-rule);color:var(--choir-muted)}` +
+		`@media(max-width:760px){.vtext-publication{margin:0;padding:32px 22px;box-shadow:none}h1{font-size:26px}}`
 }
 
 func publicationJSONLD(doc PublicationDocument) string {
@@ -523,55 +790,6 @@ func safeScriptJSON(value string) string {
 	return value
 }
 
-func publicationDocumentPlainText(doc PublicationDocument) string {
-	var b strings.Builder
-	b.WriteString(doc.Title)
-	b.WriteString("\n\n")
-	for _, block := range doc.Blocks {
-		switch block.Kind {
-		case "heading":
-			b.WriteString(publicationInlinesPlainText(block.Inlines))
-			b.WriteString("\n\n")
-		case "paragraph":
-			b.WriteString(publicationInlinesPlainText(block.Inlines))
-			b.WriteString("\n\n")
-		case "list_item":
-			b.WriteString("• ")
-			b.WriteString(publicationInlinesPlainText(block.Inlines))
-			b.WriteString("\n")
-		case "table":
-			for _, row := range block.Rows {
-				values := make([]string, 0, len(row))
-				for _, cell := range row {
-					values = append(values, publicationInlinesPlainText(cell.Inlines))
-				}
-				b.WriteString(strings.Join(values, " | "))
-				b.WriteString("\n")
-			}
-			b.WriteString("\n")
-		}
-	}
-	if len(doc.Manifest.Sources) > 0 {
-		b.WriteString("Sources\n")
-		for i, source := range doc.Manifest.Sources {
-			b.WriteString("[")
-			b.WriteString(strconv.Itoa(i + 1))
-			b.WriteString("] ")
-			b.WriteString(firstNonEmpty(source.Title, source.SourceEntityID))
-			if source.URL != "" {
-				b.WriteString(" ")
-				b.WriteString(source.URL)
-			}
-			if source.SnapshotText != "" {
-				b.WriteString(" ")
-				b.WriteString(source.SnapshotText)
-			}
-			b.WriteString("\n")
-		}
-	}
-	return b.String()
-}
-
 func isMarkdownTableStart(lines []string, i int) bool {
 	if i+1 >= len(lines) {
 		return false
@@ -608,34 +826,6 @@ func splitMarkdownTableRow(line string) []string {
 	return out
 }
 
-func wrapPDFLines(text string, width int) []string {
-	var out []string
-	for _, raw := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		words := strings.Fields(raw)
-		if len(words) == 0 {
-			out = append(out, "")
-			continue
-		}
-		line := ""
-		for _, word := range words {
-			if len([]rune(line))+1+len([]rune(word)) > width && line != "" {
-				out = append(out, line)
-				line = word
-				continue
-			}
-			if line == "" {
-				line = word
-			} else {
-				line += " " + word
-			}
-		}
-		if line != "" {
-			out = append(out, line)
-		}
-	}
-	return out
-}
-
 func xmlEscape(s string) string {
 	return html.EscapeString(s)
 }
@@ -655,11 +845,4 @@ func clampInt(v, min, max int) int {
 		return max
 	}
 	return v
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

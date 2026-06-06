@@ -289,11 +289,20 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	if strings.Contains(parts["word/document.xml"], "**private legal cloud**") || strings.Contains(parts["word/document.xml"], "(source:src-export-proof)") || strings.Contains(parts["word/document.xml"], "# Export Proof") {
 		t.Fatalf("docx document leaked raw markdown syntax: %s", parts["word/document.xml"])
 	}
-	if !strings.Contains(parts["word/document.xml"], "<w:b/>") || !strings.Contains(parts["word/document.xml"], "Export source proof [src-export-proof]") {
+	if strings.Contains(parts["word/document.xml"], "src-export-proof") {
+		t.Fatalf("docx visible document leaked internal source id: %s", parts["word/document.xml"])
+	}
+	if !strings.Contains(parts["word/document.xml"], "<w:b/>") || !strings.Contains(parts["word/document.xml"], "Export source proof") || !strings.Contains(parts["word/document.xml"], "[1]") {
 		t.Fatalf("docx document missing format-native emphasis/source marker: %s", parts["word/document.xml"])
+	}
+	if !strings.Contains(parts["word/styles.xml"], "default-professional") && !strings.Contains(parts["word/styles.xml"], "Heading1") {
+		t.Fatalf("docx styles missing default professional style definitions: %s", parts["word/styles.xml"])
 	}
 	if !strings.Contains(parts["docProps/custom.xml"], resp.PublicationVersionID) || !strings.Contains(parts["docProps/custom.xml"], resp.ContentHash) {
 		t.Fatalf("docx custom properties missing public provenance: %s", parts["docProps/custom.xml"])
+	}
+	if !strings.Contains(parts["docProps/custom.xml"], "ChoirExportProfile") || !strings.Contains(parts["docProps/custom.xml"], "default-professional") {
+		t.Fatalf("docx custom properties missing export profile: %s", parts["docProps/custom.xml"])
 	}
 	if !strings.Contains(parts["docProps/custom.xml"], `access_policy`) || !strings.Contains(parts["docProps/custom.xml"], `retrieval`) {
 		t.Fatalf("docx custom properties missing export metadata envelope: %s", parts["docProps/custom.xml"])
@@ -1000,6 +1009,9 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	}
 	if !strings.Contains(exported.Content, "<h1>Mission Note</h1>") || !strings.Contains(exported.Content, `<a class="vtext-source-ref"`) || !strings.Contains(exported.Content, `id="choir-source-manifest"`) {
 		t.Fatalf("html export missing semantic document/source manifest: %s", exported.Content)
+	}
+	if !strings.Contains(exported.Content, `choir-export-profile" content="default-professional"`) || !strings.Contains(exported.Content, `.vtext-table`) {
+		t.Fatalf("html export missing default professional profile: %s", exported.Content)
 	}
 	if strings.Contains(exported.Content, "# Legal Cloud") || strings.Contains(exported.Content, "**") || strings.Contains(exported.Content, "(source:src-entity-fed-rates)") {
 		t.Fatalf("html export leaked raw markdown syntax: %s", exported.Content)

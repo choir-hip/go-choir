@@ -500,7 +500,7 @@ remaining risks:
 
 ### Problem L8-5: HTML Rich Export Is Semantic But Browser-Default, Not Document-Professional
 
-Status: `documented_unfixed`.
+Status: `fixed_local_pending_staging`.
 
 problem: after the first rich export fix, HTML no longer leaks raw Markdown
 syntax, but visual inspection of a staging-generated artifact shows a
@@ -541,9 +541,29 @@ acceptance:
 - source IDs may remain in machine-readable attributes/manifests, but visible
   body citations should read as professional markers or labels.
 
+fix/evidence:
+
+```text
+local implementation:
+  internal/platform/publication_document.go defines the initial
+  default-professional export profile and source ordinal helpers.
+  internal/platform/export_formats.go embeds profile CSS in HTML exports and
+  renders visible source references with numeric markers while preserving
+  source IDs in data attributes and the embedded source manifest.
+
+local proof:
+  nix develop -c go test ./internal/platform ./internal/sourcecontract
+  result: ok
+
+visual artifact:
+  /tmp/choir-rich-export-local-proof/html-render.png
+  shows bounded document width, professional spacing, styled table borders,
+  numeric citation marker, and styled source appendix.
+```
+
 ### Problem L8-6: PDF Rich Export Flattens Structure And Misrenders Document Glyphs
 
-Status: `documented_unfixed`.
+Status: `fixed_local_pending_staging`.
 
 problem: after the first rich export fix, PDF content is generated from the
 `PublicationDocument` spine, but the visual artifact still looks like a plain
@@ -581,9 +601,28 @@ acceptance:
 - source manifest XMP metadata remains embedded and extraction tests still
   prove it.
 
+fix/evidence:
+
+```text
+local implementation:
+  internal/platform/export_formats.go replaces the PDF plain-text flattening
+  path with block-aware PDF page rendering for headings, paragraphs, lists,
+  tables, rules, and source appendix entries. The old publicationDocumentPlainText,
+  wrapPDFLines, and minInt shortcut helpers were removed.
+
+local proof:
+  nix develop -c go test ./internal/platform ./internal/sourcecontract
+  result: ok
+
+visual artifact:
+  /tmp/choir-rich-export-local-proof/pdf-pages/page-1.png
+  shows no duplicate title, readable heading hierarchy, stable ASCII list
+  markers, drawn table borders, and visible source appendix.
+```
+
 ### Problem L8-7: DOCX Rich Export Still Exposes Internal Source IDs And Lacks Profile Polish
 
-Status: `documented_unfixed`.
+Status: `fixed_local_pending_staging`.
 
 problem: after the first rich export fix, DOCX is a true WordprocessingML
 package with runs, tables, custom properties, and a custom XML source manifest.
@@ -627,6 +666,26 @@ acceptance:
   list/table/source appendix treatment, and future firm-specific overrides;
 - extraction tests verify the manifest, policy, and source IDs survive while
   body text no longer exposes raw `src-...` markers as the visible citation.
+
+fix/evidence:
+
+```text
+local implementation:
+  internal/platform/export_formats.go adds a DOCX styles part, package
+  relationships for styles, profile-oriented title/heading/list/source appendix
+  styles, and numeric visible source markers. Internal source entity IDs remain
+  in custom XML/custom properties and export metadata.
+
+local proof:
+  nix develop -c go test ./internal/platform ./internal/sourcecontract
+  result: ok
+
+visual artifact:
+  /tmp/choir-rich-export-local-proof/docx-quicklook/rich-export-visual-proof.docx.png
+  shows styled headings, table survival, numeric visible source marker, and a
+  source appendix. LibreOffice/soffice remains unavailable locally, so Quick
+  Look is still the local visual renderer for DOCX.
+```
 
 ## Suggested Goal String
 

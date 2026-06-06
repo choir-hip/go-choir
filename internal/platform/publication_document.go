@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,6 +33,18 @@ type publicationInline struct {
 	Text     string
 	Href     string
 	SourceID string
+}
+
+type publicationExportProfile struct {
+	ID   string
+	Name string
+}
+
+func defaultPublicationExportProfile() publicationExportProfile {
+	return publicationExportProfile{
+		ID:   "default-professional",
+		Name: "Default Professional",
+	}
 }
 
 type publicationSourceManifest struct {
@@ -324,10 +337,20 @@ func mergeAdjacentTextInlines(in []publicationInline) []publicationInline {
 	return out
 }
 
-func publicationInlinesPlainText(inlines []publicationInline) string {
-	var b strings.Builder
-	for _, inline := range inlines {
-		b.WriteString(inline.Text)
+func publicationSourceOrdinals(doc PublicationDocument) map[string]int {
+	out := make(map[string]int, len(doc.Manifest.Sources))
+	for i, source := range doc.Manifest.Sources {
+		if strings.TrimSpace(source.SourceEntityID) == "" {
+			continue
+		}
+		out[source.SourceEntityID] = i + 1
 	}
-	return b.String()
+	return out
+}
+
+func publicationSourceMarker(ordinals map[string]int, sourceID string) string {
+	if ordinal, ok := ordinals[sourceID]; ok && ordinal > 0 {
+		return strconv.Itoa(ordinal)
+	}
+	return "?"
 }
