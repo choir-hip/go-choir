@@ -4777,6 +4777,48 @@ remaining error field: this closes a concrete source-acquisition policy bypass
 for YouTube transcript imports. It does not complete robots/TOS/rate policy,
 connector policy, or the broader generated source-contract schema work.
 
+### Problem 30: Local Service Startup Still Injects Host-Specific ICU Flags
+
+Status: `documented_before_fix`.
+
+problem: `start-services.sh` now starts the local platform publication path, but
+it still contains a Homebrew-specific Dolt/ICU fallback:
+
+```text
+if [ -d /opt/homebrew/opt/icu4c@78/include ] && [ -d /opt/homebrew/opt/icu4c@78/lib ]; then
+  export CGO_CFLAGS="${CGO_CFLAGS:--I/opt/homebrew/opt/icu4c@78/include}"
+  export CGO_CXXFLAGS="${CGO_CXXFLAGS:--I/opt/homebrew/opt/icu4c@78/include}"
+  export CGO_LDFLAGS="${CGO_LDFLAGS:--L/opt/homebrew/opt/icu4c@78/lib}"
+fi
+```
+
+affected contract/invariant: the repo operating contract says Go, Dolt, and
+native-dependency work should run through `nix develop`, and explicitly says
+not to normalize hand-entered host-specific `CGO_CFLAGS`, `CGO_CXXFLAGS`, or
+`CGO_LDFLAGS` for Dolt ICU except as a short diagnostic. The durable fix is the
+declared Nix environment or equivalent harness configuration.
+
+evidence: current `flake.nix` declares `icu` and `dolt` in the dev shell and
+sets ICU `PKG_CONFIG_PATH`, `LD_LIBRARY_PATH`, and `CGO_*` through Nix. The
+local startup script separately looks for `/opt/homebrew/opt/icu4c@78` and
+injects those paths before launching the service stack.
+
+first observed version/transition: resumed mission audit after docs checkpoint
+`03b8b19b`, while answering whether the local `start-services.sh` should be
+updated.
+
+suspected owner: local developer service harness.
+
+why local/UI-only fix is insufficient: leaving the fallback in the canonical
+script teaches future agents and humans that host-local Homebrew paths are an
+accepted harness path, which contradicts the project contract and can make
+worker/candidate or CI failures look like local machine configuration problems.
+
+planned proof: remove the Homebrew ICU fallback, require the Nix dev shell by
+default with an explicit diagnostic escape hatch, keep platformd/Dolt startup
+intact, and verify script syntax plus the declared Nix environment's Go/Dolt
+ICU flags.
+
 ## Suggested `/goal`
 
 ```text
