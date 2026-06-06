@@ -62,18 +62,18 @@ test('publishes source-service source entities as expandable transclusions and c
             },
             selectors: [
               {
-                selector_kind: 'text_quote',
+                selector_kind: 'text quote',
                 text_quote: excerpt,
                 content_hash: 'sha256-fixture-source-service-excerpt',
               },
               {
-                selector_kind: 'table_range',
+                selector_kind: 'table-range',
                 table_id: 'source-service-fixture-table',
                 start_row: 1,
                 end_row: 2,
               },
               {
-                selector_kind: 'page_range',
+                selector_kind: 'page range',
                 start_page: 3,
                 end_page: 4,
               },
@@ -136,6 +136,9 @@ test('publishes source-service source entities as expandable transclusions and c
     selector_kind: 'selector_set',
   });
   expect(resolved.transclusions[0].source_selector.selectors).toHaveLength(3);
+  expect(resolved.transclusions[0].source_selector.selectors[0]).toMatchObject({
+    selector_kind: 'text_quote',
+  });
   expect(resolved.transclusions[0].source_selector.selectors[1]).toMatchObject({
     selector_kind: 'table_range',
     table_id: 'source-service-fixture-table',
