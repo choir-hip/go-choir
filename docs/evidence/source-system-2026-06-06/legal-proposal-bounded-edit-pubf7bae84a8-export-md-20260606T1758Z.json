@@ -1,0 +1,760 @@
+{
+    "route_path": "/pub/vtext/choir-private-legal-cloud-proposal-vtext-pubf7bae84a8",
+    "publication_id": "pub-f7bae84a-80fa-4bf7-87f7-18ff07a01ca4",
+    "publication_version_id": "pubver-ae91528d-d605-42dc-980c-16bfde4c20f8",
+    "format": "md",
+    "media_type": "text/markdown; charset=utf-8",
+    "filename": "choir-private-legal-cloud-proposal-vtext-pubf7bae84a8.md",
+    "content": "---\n\n# Proposal for [Redacted]: A Private Legal Cloud\n\n## The Problem and the Solution Space\n\nLegal practice today generates an enormous volume of documents, research, client communications, and work product, but most of it lives in disconnected systems: file servers, email, legal research platforms, document management systems, and\u2014increasingly\u2014generic AI chatbots [ABA Formal Opinion 512](source:src_aba_formal_op_512) that produce ephemeral answers with no provenance, no version history, and no reliable citation mechanism.\n\nThe core problem is that the available tools do not respect the fundamental requirements of legal work: confidentiality [ABA Model Rule 1.6](source:src_aba_rule_16), source citation, version control, matter organization, role-based access, and durable work product.\n\nA **private legal cloud** solves this. It is a single system that houses the firm's documents, research, and work product under the firm's control; provides AI assistance that can cite its sources and preserve its reasoning; supports client portals, assistant workflows, and partner collaboration with proper access boundaries; and runs on infrastructure the firm controls, in a jurisdiction of its choosing.\n\nThis proposal describes the solution space for building such a system. Several platforms and approaches are evaluated. Technical terms used in this proposal are defined in **Appendix A (Glossary)** for the convenience of legal review.\n\n---\n\n## 1. Executive Summary\n\nThe core question is how to build a private legal and personal knowledge cloud: a system comprising the Client's documents, matters, writing style, research sources, client portal, and private inference layer, all running on infrastructure under the Client's control.\n\n**The durable assets are the corpus, workflow, access boundaries, document history, style guides, source citations, and matter memory.** Models will change. Hosting options will change. GPU economics will change. What should not change is that the Client's work lives in a system the Client owns; that understands the Client's documents; that can cite its sources; that can help produce legal work product; and that can be safely used by the Client's assistant, clients, partners, and trusted personal contacts.\n\nThis proposal evaluates the solution space for a single-tenant private cloud deployment: a client-owned system running on European infrastructure, with a document-first multiagent platform as the primary interface. Several platforms are assessed; the recommendations focus on the solution space and requirements, not on any single product. The first version should include the full shape of the final system: data intake, encrypted storage, document search, embeddings, document workflow, style-guide tuning, private inference, authenticated client portals, and upload and publishing flows. It does not all need to be perfect on day one. It does need to be real end-to-end, because a system of this kind only teaches us enough when the whole loop exists.\n\nThe simplest first architecture is: European server, NixOS, encrypted storage, a vector database for search, an open-weight embedding model, and privacy-preserving inference through a verified provider while we benchmark whether dedicated GPU hardware is actually necessary. If usage grows into always-on local inference, a dedicated GPU server or local appliance can be added later.\n\n---\n\n## 2. What We Are Building\n\nThe objective is a private cloud that serves both the Client's legal practice and personal life without commingling them carelessly. The same substrate should support firm work, client portals, assistant workflows, co-counsel or partner collaboration, family and personal documents, personal writing, and private research. It will grow to include agents that automate what can be accomplished autonomously. The key is not to create many separate tools. The key is to create one trusted artifact system with strong boundaries.\n\n**The core object is the document.**\n\nIn a document-first system, the document layer is versioned texts that can be edited, revised, cited, styled, published, and used as working memory by agents. A document can be a legal memo, a client letter, a contract review, a research note, a timeline, a source packet, a style guide, a rubric, a personal note, or a published page. This sounds simple because it is simple. The power is not that the document layer is magic. The power is that language, version history, source references, and agents are sufficient.\n\nFor legal work, this is the correct architecture. A lawyer needs work product: drafts, memos, citations, tables, client deliverables, and controlled revisions\u2014not a chatbot that produces a disposable answer and forgets how it got there. The system should keep track of sources and decisions. It should distinguish what came from the Client's files, what came from a legal database, what was inferred, what remains uncertain, and what changed between versions.\n\n---\n\n## 3. Solution Space and Platform Considerations\n\nThe question is what architecture best serves the problem: a private legal cloud with durable documents, source citation, version control, role-based access, and private inference.\n\nThe architecture described in this proposal\u2014European hosting, encrypted storage, vector database, open-weight embeddings, versioned documents, style guides, and a role-gated portal\u2014is the durable recommendation regardless of which specific platform is chosen. The platform decision should be driven by the Client's requirements, which will become clearer through the pilot phase.\n\nSeveral platforms and tools exist in this space. One candidate is a document-first multiagent platform whose ontology\u2014versioned artifacts, agentic workflows, private-infrastructure-native deployment\u2014aligns with the requirements of a legal cloud. Another is an open-source legal document analysis application with useful ideas around document chat and tabular review. Both are early-stage. Both contain useful ideas. Neither should be chosen by platform preference alone.\n\nThe trade-off in any platform decision is architectural ownership. If the consultant deploys and supports an open-source system for the Client, the Client inherits another party's system, assumptions, bugs, and roadmap. If the system is built on a platform the consultant controls, every feature and repair compounds into that platform. The incentives are different in each case, and the decision should be driven by the Client's requirements rather than by platform preference.\n\nThe platform decision should be revisited as options evolve and as the Client's requirements become clearer through the pilot phase.\n\n---\n\n## 4. The Interfaces: Desktop, Mail, and Base\n\nThe platform has three major interfaces in this plan.\n\n**4.1 Desktop.** The full browser-based operating surface. This is where the Client opens documents, files, tables, sources, matter workspaces, settings, publishing controls, and eventually agentic workflows.\n\n**4.2 Email.** Email remains useful because it is addressable, familiar, and open enough to be used by clients and counterparties. The platform includes an email agent. However, email is not the ideal place for privileged document workflows. Email is appropriate for notification and communication. It is not the right primary substrate for file ingestion, source provenance, versioning, or access control.\n\n**4.3 Base Layer.** The third interface\u2014and probably the most urgent new interface\u2014is the base artifact layer.\n\nThe base layer is the private artifact layer between the Client's devices, clients, assistant, and automatic computer. The local folder or mounted-drive experience works like Dropbox or Google Drive.\n\nWhen the Client or a client puts a file into the base layer, that file enters the system with a manifest: who submitted it, from what device or portal, when it arrived, what matter it belongs to, what its hash is, who may access it, whether agents may use it, and what derived text or embeddings were generated from it. This is fundamentally different from giving an AI agent access to an entire laptop. The agent can work on what was explicitly submitted. It cannot rummage through where the user lives.\n\nFor the Client's clients, the base layer becomes the upload and download surface. They can be invited to a matter, see specific files, upload requested documents, read published documents or PDFs, and comment where appropriate. For the Client's assistant, it becomes a triage and filing surface. For partners, it becomes a collaboration surface. For personal life, it becomes a private records and document cloud. Same substrate, different access boundaries.\n\n---\n\n## 5. Hosting and Infrastructure Options\n\nThe Client has requested European infrastructure. This is viable and strategically clean. The first deployment can run on a European server under the Client's control. The base server does not need to be a GPU machine. It needs to run the private cloud reliably: the platform, storage, database, document extraction, embeddings, authentication, portals, and the private corpus.\n\n**Hosting providers.** The recommended starting point is a European provider such as Hetzner [Hetzner data centers](source:src_hetzner_datacenters) or OVH [OVHcloud Hosted Private Cloud](source:src_ovh_private_cloud). Both offer European hosting with root control and can accommodate GPU servers if needed later.\n\n**Operating system.** The server should run a Linux distribution that supports reproducible, version-controlled system configurations with rollback capability [NixOS rollback](source:src_nixos_rollback). This means the system can be rebuilt from a description file, configuration can be audited, and recovery from bad changes is cleaner than with conventional setups.\n\n**Base architecture.** The architecture is: European host, the platform software, encrypted storage [GDPR Article 32](source:src_gdpr_article_32), a vector database [Qdrant search docs](source:src_qdrant_search), open-weight embeddings, and private inference routing.\n\n**GPU layer.** The GPU layer should be replaceable. The platform can run on one stable server and call a GPU worker elsewhere over a private connection. The legal cloud owns the corpus and workflow. GPU capacity is rented cognition.\n\n---\n\n## 6. GPU and Model Options\n\nImmediate purchase of a large GPU system is not recommended. Immediate commencement of custom model training is also not recommended. The first step is to learn the workload.\n\nFor the Client's use case, the right question is what is the most practical private system that reliably produces good legal work product from the Client's corpus. Legal work often needs retrieval, citation discipline, style, and source control more than maximum reasoning power. A well-built retrieval and document system using mid-size open models may deliver more value than an enormous frontier model on every turn.\n\n**Model tiers.** Models are categorized by size (parameter count\u2014see Glossary). A mid-size model can handle extraction, classification, short answers, style rewrites, document triage, and many legal assistant tasks. A larger model provides stronger synthesis. The largest models that can run on dedicated hardware may be the high-end local sweet spot. The first system should not be designed around self-hosting the very largest models.\n\n**Benchmarking plan.** The recommended approach is to benchmark across tiers:\n\n1. Run local embeddings and retrieval. 2. Test mid-size and larger open models on rented GPUs or privacy-preserving inference providers. 3. Decide whether a dedicated GPU server is sufficient. 4. Consider heavier GPU paths only if usage proves it necessary.\n\n**Hardware considerations.** A server with sufficient GPU memory can run mid-size and larger models. The real questions are speed, context size, and concurrency. These should be measured on actual legal tasks.\n\nA dedicated AI workstation is interesting but probably not the first move. It may become the right answer later if the Client is running agents frequently or around the clock and the required model tier is known. Buying it before measuring the workload risks solving the wrong problem expensively.\n\n---\n\n## 7. Privacy-Preserving Inference\n\nBecause private inference is important, encrypted or attested token providers should be tested before purchasing major hardware. Several providers are worth testing as near-term candidates.\n\nThe important distinction is that \"private\" can mean different things. It may mean contractually private, no-retention, anonymized, TEE-attested, or end-to-end encrypted into an enclave. These are not the same. For privileged legal material, vague privacy claims should not be relied upon. The exact model, exact privacy mode, and exact proof bundle should be verified.\n\nFor any attested provider specifically, the consultant should test whether they can prove, request by request, that the model ran in the configuration they claim. The right proof bundle should bind the prompt, response, model ID, container and config measurement, GPU and TEE attestation, timestamp, nonce, and inference parameters. If their signature only covers the prompt and messages and not the full request configuration, then the proof is incomplete for serious use.\n\nThis does not mean attested providers are unsuitable. It means this is exactly the kind of thing that should be verified before scaling. If a provider works, it may allow access to larger open-weight models privately without purchasing hardware immediately. If it does not meet the bar, the fallback is self-hosted models and dedicated GPU infrastructure.\n\nFor the first pilot, synthetic, redacted, or carefully scoped legal context packs should be used. Once the proof model and contractual posture are trusted, a determination can be made whether it is acceptable for privileged material.\n\n---\n\n## 8. Embeddings and Qdrant\n\n**Qwen3 Embedding models (researched June 2026).** The Qwen team released Qwen3-VL-Embedding (multimodal) and Qwen3-Embedding (text-only) on January 8, 2026 (arXiv 2601.04720). Both are available in 2B and 8B parameter sizes with 32k context length. The multimodal variant accepts text, images, document images, and video input, using Matryoshka Representation Learning for flexible output dimensions. It supports 30+ languages. Qwen3-VL-Embedding-8B scored 77.8 on MMEB-V2 (ranked #1 as of January 2026). Qwen3-Embedding-8B (text-only) ranked #1 on the MTEB multilingual leaderboard (70.58 as of June 2025). GPU memory estimates: the 8B variant requires approximately 17 GB at FP16 precision; the 2B variant requires approximately 4\u20135 GB at FP16. Quantization (e.g., Q4_K_M) can reduce the 8B variant to approximately 5\u20138 GB. These are the strongest current candidates for GPU-backed embedding in this project.\n\n**CPU-only embedding alternatives (researched June 2026).** For CPU-only deployment, nomic-embed-text-v2 (137M params, 274 MB, 8192 context, ~580 chunks/sec on CPU, Matryoshka dimensions 64\u2013768) is the strongest practical option as of mid-2026. It outperforms all-MiniLM-L6-v2 (22 MB, 384-dim, only 256-token context \u2014 too small for legal documents) by a wide margin on quality and context length. BGE-M3 (568M params, 8192 context, 100+ languages) is the best option for legal hybrid search because it natively supports dense + sparse + multi-vector (ColBERT) retrieval in one model \u2014 ideal for legal citation accuracy \u2014 but is GPU-recommended; CPU inference is possible but slow at 568M params. Jina-embeddings-v3 (572M params) is strong quality-wise but also GPU-recommended. For high-throughput CPU scenarios, Potion-mxbai-256d-v2 achieves 71.45 MTEB at 15,000+ sentences/sec on CPU but is newer and less proven for legal domain.\n\n**Recommendation for this project.** For GPU-backed embedding, Qwen3-VL-Embedding-2B or 8B is the leading candidate. For CPU-only deployment, nomic-embed-text-v2 is the best practical choice given its 8192 context length and strong quality. BGE-M3 should be evaluated for hybrid dense+sparse retrieval if GPU is available. The final selection should be confirmed through benchmarking on the Client's actual documents once the corpus is collected. Supports 32k context. I think that\u2019s by far best option, though requiring gpu. And what\u2019s best cpu-only option? This should dovetail back into gpu discussions above\n\nAn open-weight embedding model should be run on the Client's own infrastructure. This is non-negotiable if the corpus is to remain private and useful.\n\nQdrant is the preferred first vector database. The consultant has had good experiences with Qdrant Cloud, and self-hosting is a natural next step. It is mature enough, operationally simple enough, and fits the project. The vector database is not the whole retrieval system, but it is a good center.\n\nThe first embedding candidates should include BGE-M3, Qwen3 Embedding, and Jina embeddings v3. These should be tested on the Client's actual documents. Legal search is not generic semantic search. It needs citations, exact phrases, dates, matter context, and sometimes precise lexical precision. The retrieval stack should therefore be hybrid: embeddings plus keyword and full-text search plus reranking for important queries.\n\nEvery answer should know where it came from. A cited answer is significantly more valuable than a fluent answer.\n\n---\n\n## 9. Legal Data Sources\n\nThe Client's paid legal research subscriptions are a major part of the system. The more those sources can be integrated, the more valuable the system becomes. This must be handled carefully.\n\n**Contractual review.** The first question is contractual. Which sources does the Client pay for, and what do the licenses allow? Do they allow export? Local caching? AI analysis? API access? Automated browser use? Integration with a document management system? If they do not allow official API access, can attended browser workflows be used where the Client remains the licensed user and the system captures permitted exports?\n\n**Export-aware ingestion.** The immediate safe path is export-aware ingestion. If the Client downloads a case, article, PDF, or report from a legal research source, the system should preserve the source metadata, citation, timestamp, original URL if available, and the matter where it belongs. That alone is extremely useful.\n\n**Attended Mac connector.** Since the Client is a Mac user and has spare iMacs that could run continuously, a Mac can be used as a licensed-access bridge. The Mac can operate legal research frontends, download permitted files, capture source metadata, and drop them into the system. Browser automation is likely more reliable than pure screenshot computer use, but both can be tested. The Mac should not be the main cloud. It should be the source-access appliance. The platform is where the knowledge becomes durable.\n\n---\n\n## 10. Mobile Interface\n\nThe Client needs mobile access, and the mobile experience should be functionally equivalent to the desktop experience. This is a core design principle: the platform should not treat mobile as a secondary or limited interface. A chat-only mobile connector is insufficient\u2014chat connectors leak data into platforms never designed for privileged professional work.\n\nThe mobile interface should be the platform itself plus its file layer. On iPhone, the minimum experience should be: share a PDF or link into the system, choose a matter or inbox, see upload status, read a generated document or PDF, approve or comment, and receive outputs. That is sufficient to make the system live.\n\nThe desktop is for full work. The phone is for capture, review, approval, and steering\u2014but with the same access to documents, matters, and sources. This parity is a core design principle and a major advantage over systems that treat mobile as a thin chat surface. Many legal AI tools (such as MikeOSS, Harvey, or Legora) offer mobile as a limited chat interface at best. A system where mobile equals desktop in capability is a fundamentally different proposition: it means the lawyer can review, approve, and steer real work product from anywhere, not just consume chat responses.\n\n---\n\n## 11. Publishing and Client Portals\n\nA major generic feature that should be built early is role-gated publishing.\n\nThe Client should be able to publish a document, PDF, file bundle, or table to a specific client, assistant, partner, friend, or role. Some documents can require login. Some can be password-protected. Some can expire. Some can allow uploads back. Some can allow comments. Every access should be logged.\n\nThis is useful for the Client's legal work, but it is also strategically important. If the Client's clients use a portal the Client controls, they are introduced to the system. Some may want their own install on their own infrastructure. Others may want a hosted managed version. This creates distribution without turning the product into a generic SaaS prematurely.\n\nThe first portal version should support matter-specific access. A client should see only their matter. The Client's assistant should see only what is delegated. A partner should see only the workspace where collaboration is appropriate. Personal friends or family can have separate spaces. Same system, separate authority boundaries.\n\n---\n\n## 12. Style and Rubrics\n\nThe Client's writing style and legal judgment should be represented as versioned objects, not as one-off prompts.\n\nStyle-guide documents and rubric documents are proposed. A style guide can describe how the Client writes client letters, memos, arguments, summaries, and personal notes. A rubric can describe what counts as a good answer: citation requirements, uncertainty handling, tone, risk posture, jurisdictional caution, brevity, and what should be escalated for human review.\n\nThe writing system should separate substance from style. Research agents should not attempt to write in the Client's style while doing research. They should find sources, extract claims, build context, and identify uncertainty. The document agent should then render the material in the selected style. That separation produces better work.\n\nOver time, these style guides and rubrics become intellectual property. They are not merely prompts. They are versioned representations of taste, judgment, and professional standards.\n\n---\n\n## 13. Why Not Custom Model Training Now\n\nCustom model training may eventually be useful. It is not the first step.\n\nBefore training a custom model, the system needs to know what \"good\" means. That requires examples, rubrics, style guides, evaluation sets, failure cases, and a retrieval and context system. If training occurs before that, resources are being spent to encode confusion into weights.\n\nThe smarter path is to build the private corpus, retrieval system, context packs, style guides, and evaluation workflow first. Then it can be tested whether a smaller local model fine-tuned on the Client's patterns outperforms an off-the-shelf open model with good retrieval and style guidance.\n\nA conservative estimate is that a serious custom training loop could cost tens of thousands of dollars across multiple runs. Costs may come down, and certain fine-tuning paths may be cheaper. But the main point remains: training is not a shortcut around understanding the workflow.\n\n---\n\n## 14. Suggested Phases\n\nThe phases below are numbered for reference. The first phase is collecting and organizing all the Client's data. As the project evolves, phases may be relabeled without changing the sequence of work.\n\n**Phase One: Collect and Organize the Data, Then Pilot.** The first step is to inventory and ingest the Client's existing data\u2014documents, matters, research sources, devices, and workflows. A limited but representative corpus is selected. The platform is deployed on European infrastructure with encrypted storage, vector database, local embeddings, document workflows, and a basic portal. A small set of real or sanitized documents is ingested. The first style guide is created. A cited document memo is generated and published to a test portal.\n\n**Phase Two: Legal-Source Integration and Document Workflows.** Export-aware ingestion from the Client's paid legal sources is added. Matter workspaces are built. PDF and document handling is improved. Table review is created. The Mac connector is made useful.\n\n**Phase Three: Private Inference Benchmarking.** Mid-size and larger local or rented models are compared. Private inference providers are tested. A dedicated GPU server is evaluated. The output of this phase is not a subjective ranking. It is a measured recommendation for the Client's actual workload.\n\n**Phase Four: Hardening and Expansion.** Additional users, assistant workflows, client portals, better permissions, audit logs, backups, and personal and business separation are added.\n\n**Phase Five: Optional Hardware or Custom Tuning.** If usage justifies it, dedicated GPU hardware is added or a custom model tuning process begins, based on the rubrics and examples accumulated.\n\n---\n\n## 15. Answered Questions\n\n**Is this a legal chatbot?** This is a private legal cloud and document workflow. It may include chat-like input where useful, but the output is durable documents, cited memos, tables, portals, and versioned artifacts.\n\n**Why use one platform over another?** The choice depends on the Client's requirements. Several platforms exist in this space, each with different strengths. The decision should be driven by the Client's requirements, not by platform preference.\n\n**Why European infrastructure?** Because the Client requested it, and because it provides a clean single-tenant story. The system can run on infrastructure the Client controls. The Client does not need to trust the consultant as a SaaS platform owner with their data. The Client does need to trust the consultant as an operator during setup and support, which is a different and more normal professional relationship.\n\n**Will the system need cloud model APIs?** Not necessarily. The goal is private inference. Local or open models, rented GPU workers, dedicated GPU servers, or cryptographically attested private inference providers can be used. If an external inference provider is used, the privacy mechanism should be verified and broad privileged data should not be sent until that mechanism is proven.\n\n**Should we buy GPU hardware immediately?** Probably not. The workload should be measured first. If private inference becomes frequent or around the clock, dedicated GPU hardware becomes more attractive. Until then, rented GPUs and verified private-inference providers allow faster experimentation.\n\n**Can mid-size models be sufficient?** For many legal RAG tasks, yes. The core value often comes from retrieval quality, source citations, matter context, and style discipline. Top-end reasoning matters for some tasks, but not every turn needs the largest possible model.\n\n**Can clients and assistants use it?** Yes, that is part of the design. The system should support assistant access, client portals, partner spaces, uploads, authenticated publishing, and role-based permissions.\n\n**Can business and personal use coexist?** Yes, but not by blending everything together. The system needs spaces or realms with authority boundaries. Legal matters, personal documents, friends and family access, and partner workspaces can share the same infrastructure while remaining permissioned separately.\n\n**Can we integrate Lexis, Westlaw, Bloomberg, and similar sources?** Yes, but the integration method depends on the Client's licenses. The starting point should be export-aware ingestion and attended browser workflows, then deeper API or partner integrations only where permitted.\n\n**What is the base layer?** The base layer is the artifact layer between the Client's devices, automatic computer, and invited persons. It is where files, links, exports, uploads, transcripts, and outputs enter and leave the system with provenance and permissions. The local folder or mounted-drive experience is one interface to it.\n\n---\n\n## 16. Immediate Next Steps\n\nThe plan follows a fitting cycle, like tailoring a suit:\n\n**Take measurements.** Collect and organize the Client's data. Inventory sources, devices, and workflows. Ask questions to understand what the system needs to do.\n\n**Initial deployment.** Deploy the first single-tenant instance on European infrastructure. Build the first complete loop: upload, ingest, embed, search, draft document, style pass, publish to portal, receive upload back.\n\n**First fitting.** Take notes on what works and what needs customization. Adjust the system based on real use.\n\n**Second fitting.** Do it again: deploy improvements, take more measurements, adjust further.\n\n**Ongoing maintenance and service.** Continue with regular updates, new feature requests, and system evolution.\n\n---\n\n## 17. Final Recommendation\n\nThe problem is clear: legal work needs a private, durable, cited, and controlled document system. The solution space is a private legal cloud on the Client's own infrastructure, using a document-first multiagent platform. Several platforms are assessed in this proposal; the recommendations focus on the solution space and requirements, not on any single product. The architecture\u2014European hosting, NixOS, encrypted storage, vector database, open-weight embeddings, versioned documents, style guides, and a role-gated portal\u2014is the durable recommendation regardless of platform choice.\n\nThe starting point is European hosting, NixOS, the platform software, encrypted storage, vector database, open-weight embeddings, document workflows, style guides, and a role-gated portal. Private inference providers should be treated as experiments to verify, not as blind trust. Major GPU hardware should be deferred until usage proves the need. Open-source legal tools should be used as reference designs, not as the platform.\n\nThe aim is to build a private knowledge system that makes the Client's documents, style, sources, and matter memory more useful every month.\n\nIf this works, it serves the Client's practice, assistant, clients, partners, and personal life. It also provides a foundation that can later support local models, dedicated GPU inference, legal-source integrations, custom tuning, and client-owned deployments for others.\n\n**That is the right project.**\n\n---\n\n## Appendix A: Glossary of Technical Terms\n\nThis glossary defines technical terms used in the body of this proposal. Terms are defined as they are used in the context of this proposal; definitions may not correspond to every usage in the broader industry.\n\n| Term | Definition |\n| --- | --- |\n| **32B / 70B / 120B-class models** | Categories of large language models distinguished by parameter count (billions of parameters). Generally, higher parameter counts indicate greater capability but require more computational resources to run. |\n| **Agent / Agentic system** | A software system that can perform multi-step tasks autonomously or semi-autonomously, rather than responding to a single prompt and stopping. |\n| **API (Application Programming Interface)** | A defined protocol that allows one software system to communicate with another. |\n| **Appliance** | A dedicated hardware device pre-configured to run a specific software workload, as opposed to general-purpose server hardware. |\n| **Attested inference** | A process by which a third party can cryptographically verify that a model inference was performed on specific hardware in a specific configuration, typically using a Trusted Execution Environment (TEE). |\n| **BGE-M3** | An open-weight embedding model developed by the Beijing Academy of Artificial Intelligence (BAAI), designed for multilingual and multi-granularity text representation. |\n| **Chat connector** | A software integration that routes messages between a user and an AI model through a third-party chat platform (e.g., Slack, WhatsApp, iMessage). |\n| **Context pack** | A curated set of documents, sources, and instructions provided to an AI model as context for a specific task. |\n| **Corpus** | A collection of documents, files, and data that serves as the knowledge base for the system. |\n| **Custom model training** | The process of further training (fine-tuning) an existing AI model on a specific dataset to improve its performance on particular tasks. |\n| **Dedicated GPU server** | A server equipped with one or more graphics processing units (GPUs) dedicated to running AI model inference or training, as opposed to shared or cloud-based GPU resources. |\n| **Embedding / Embedding model** | A technique that converts text into numerical vectors (lists of numbers) that capture semantic meaning, enabling similarity search. An embedding model performs this conversion. |\n| **Encrypted storage** | Storage where data is encrypted (scrambled using cryptographic keys) so that it cannot be read without the correct decryption key. |\n| **End-to-end encrypted** | A communication or storage system where data is encrypted on the sender's side and can only be decrypted by the intended recipient, with no intermediate party able to read it. |\n| **Fine-tuning** | The process of taking a pre-trained AI model and training it further on a smaller, task-specific dataset to improve performance on that task. |\n| **Frontier model** | A large language model at the leading edge of capability, typically among the largest and most capable models available at a given time. |\n| **GPU (Graphics Processing Unit)** | A specialized processor originally designed for rendering graphics, now widely used for AI model training and inference due to its parallel processing capabilities. |\n| **GPU memory** | The dedicated memory (VRAM) on a GPU card, which determines the size of AI models that can be loaded and run. |\n| **Hybrid search** | A search technique that combines semantic (embedding-based) search with keyword or full-text search to improve relevance. |\n| **Inference** | The process of running a trained AI model on input data to produce output (e.g., generating text from a prompt). |\n| **Inference provider** | A service that hosts and runs AI models, making them accessible via API for a fee. |\n| **Jina embeddings v3** | An open-weight embedding model developed by Jina AI, optimized for text representation and search. |\n| **Local inference** | Running AI model inference on hardware physically located at the user's premises, rather than on remote cloud servers. |\n| **Matter** | A legal file, case, or client engagement that serves as an organizing unit for documents, communications, and work product. |\n| **Multiagent system** | A software architecture in which multiple autonomous agents (programs) collaborate, each with specialized roles, to accomplish complex tasks. |\n| **NixOS** | A Linux distribution built on a declarative package management system (Nix) that allows reproducible, version-controlled system configurations with rollback capability. |\n| **Nonce** | A cryptographic term for a number used once, typically to prevent replay attacks in authentication or attestation protocols. |\n| **Open-weight model** | An AI model whose trained parameters (weights) are publicly released, allowing anyone to download, inspect, and run the model. |\n| **Parameter count** | The number of adjustable weights in a neural network model, typically measured in billions (B). Higher parameter counts generally indicate greater model capacity. |\n| **Private cloud** | A computing environment dedicated to a single organization, hosted on infrastructure that organization controls, as opposed to a multi-tenant public cloud. |\n| **Private inference** | Running AI model inference in a manner that prevents the model operator or any third party from accessing the input data or output. |\n| **Provenance** | The recorded origin, ownership, and history of a piece of data or document. |\n| **Qdrant** | An open-source vector database designed for similarity search on embeddings. |\n| **Quantized model** | A model whose parameters have been compressed to use fewer bits per parameter (e.g., 4-bit or 8-bit instead of 16-bit or 32-bit), reducing memory requirements at a potential small cost to accuracy. |\n| **Qwen3 Embedding** | An open-weight embedding model developed by Alibaba Cloud's Qwen team. |\n| **RAG (Retrieval-Augmented Generation)** | A technique where an AI model is given relevant documents retrieved from a knowledge base before generating a response, improving accuracy and citability. |\n| **Reranking** | A two-stage search process where an initial set of candidate results is retrieved quickly, then a more expensive but more accurate model re-orders them by relevance. |\n| **Role-gated publishing** | A publishing system where access to published content is controlled by the viewer's role or relationship to the publisher. |\n| **Rubric** | A set of criteria and standards used to evaluate the quality of AI-generated output. |\n| **SaaS (Software as a Service)** | A software distribution model where a provider hosts applications and makes them available to customers over the internet, typically on a subscription basis. |\n| **Semantic search** | Search based on meaning and conceptual similarity rather than exact keyword matching. |\n| **Single-tenant** | A deployment where each customer runs their own isolated instance of the software, as opposed to multi-tenant where multiple customers share the same instance. |\n| **Style guide** | A document describing preferred writing style, tone, conventions, and formatting for a particular author or organization. |\n| **TEE (Trusted Execution Environment)** | A secure area within a processor that ensures code and data loaded inside it are protected with respect to confidentiality and integrity. |\n| **Tokens per second** | A measure of AI model inference speed, indicating how many tokens (roughly, pieces of words) the model can generate per second. |\n| **Vector database** | A database optimized for storing and searching numerical vectors (embeddings), enabling similarity search for the bounded edit proof. |\n| **Vector search** | A search technique that finds items similar to a query by comparing their vector representations in a high-dimensional space. |\n| **Work product** | Durable, reviewable output of professional work\u2014drafts, memos, briefs, letters, tables, cited research\u2014as opposed to ephemeral chat responses. |\n\n---\n\n*End of Proposal*",
+    "content_hash": "beb42d95161ffcfe969a62d00466b3d3cfe0ee340ad6237cca8f44bce4aad6f4",
+    "metadata": {
+        "access_policy": {
+            "visibility": "public",
+            "route": "public"
+        },
+        "artifact_manifest_id": "artman-1e476280-3cb9-431b-b061-a62f58b4073c",
+        "content_hash": "beb42d95161ffcfe969a62d00466b3d3cfe0ee340ad6237cca8f44bce4aad6f4",
+        "export_policy": {
+            "copy_allowed": true,
+            "download_allowed": true,
+            "formats": [
+                "txt",
+                "md",
+                "html",
+                "docx",
+                "pdf"
+            ]
+        },
+        "format": "md",
+        "generated_at": "2026-06-06T17:59:57.706872571Z",
+        "private_material_omitted": true,
+        "projection_hash": "beb42d95161ffcfe969a62d00466b3d3cfe0ee340ad6237cca8f44bce4aad6f4",
+        "provenance_scope": "public_publication_version_only",
+        "publication_id": "pub-f7bae84a-80fa-4bf7-87f7-18ff07a01ca4",
+        "publication_version_id": "pubver-ae91528d-d605-42dc-980c-16bfde4c20f8",
+        "retrieval": {
+            "source_id": "source-123b8359-3341-4c9c-b519-e0cb647d0c57",
+            "spans": [
+                {
+                    "id": "span-8af641fc-9e08-417b-b0fb-1330f899d0ba",
+                    "source_id": "source-123b8359-3341-4c9c-b519-e0cb647d0c57",
+                    "source_version_id": "pubver-ae91528d-d605-42dc-980c-16bfde4c20f8",
+                    "selector_kind": "text_position",
+                    "selector": {
+                        "type": "TextPositionSelector",
+                        "start": 0,
+                        "end": 38426
+                    },
+                    "text_hash": "beb42d95161ffcfe969a62d00466b3d3cfe0ee340ad6237cca8f44bce4aad6f4",
+                    "chunk_hash": "beb42d95161ffcfe969a62d00466b3d3cfe0ee340ad6237cca8f44bce4aad6f4",
+                    "token_count": 5749,
+                    "snippet": "---\n\n# Proposal for [Redacted]: A Private Legal Cloud\n\n## The Problem and the Solution Space\n\nLegal practice today generates an enormous volume of documents, research, client communications, and work product, but most of it lives in disconn..."
+                }
+            ]
+        },
+        "route_path": "/pub/vtext/choir-private-legal-cloud-proposal-vtext-pubf7bae84a8",
+        "schema": "choir.publication_export.v0",
+        "source_entities": [
+            {
+                "id": "pubsrc-0bf83f2b-88df-4cd7-b465-1399ff6ac8ad",
+                "source_entity_id": "src_qdrant_search",
+                "kind": "technical_documentation",
+                "target_kind": "content_item",
+                "target_id": "994ee32a-ea97-43f8-b103-689bff1822d1",
+                "display_policy": "embedded_excerpt",
+                "open_surface": "source",
+                "entity": {
+                    "display": {
+                        "default_collapsed": true,
+                        "expanded_mode": "source_card",
+                        "inline_mode": "embedded_excerpt",
+                        "open_surface": "source"
+                    },
+                    "entity_id": "src_qdrant_search",
+                    "evidence": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "kind": "technical_documentation",
+                    "label": "Qdrant similarity search documentation",
+                    "provenance": {
+                        "created_by": "codex_mission_source_graph_seed",
+                        "rights_scope": "public_url_snapshot",
+                        "untrusted_source_text": true
+                    },
+                    "reader_snapshot": {
+                        "access_scope": "publication_reader",
+                        "canonical_url": "https://qdrant.tech/documentation/search/",
+                        "content_hash": "698f0cc7a0b32d502c70a59f0cb980270a3d89a18f1df3592c90a53965df29e0",
+                        "media_type": "text/markdown",
+                        "original_media_type": "text/markdown",
+                        "snapshot_kind": "cleaned_reader_markdown",
+                        "source": "content_item",
+                        "source_content_id": "994ee32a-ea97-43f8-b103-689bff1822d1",
+                        "source_url": "https://qdrant.tech/documentation/search/",
+                        "text_char_count": 817,
+                        "text_content": "# Qdrant Similarity Search Documentation\n\nQdrant documents vector search over stored points and payloads, including query APIs for nearest-neighbor retrieval and filtering. In a private legal cloud, this kind of vector database is relevant to semantic retrieval over documents, matters, source packets, and style/rubric artifacts. It supports the proposal's architectural recommendation to use a vector database for search while keeping source provenance and document history outside the embedding index itself.\n\nReader-mode note: this source artifact backs the proposal's mention of Qdrant/vector search as an infrastructure component for retrieval-augmented legal work. It does not claim Qdrant is the only possible vector database.\n\nSource: Qdrant Documentation, \"Search\", https://qdrant.tech/documentation/search/",
+                        "title": "Qdrant similarity search documentation",
+                        "truncated": false
+                    },
+                    "reader_snapshot_status": {
+                        "original_media_type": "text/markdown",
+                        "quality": "cleaned_reader",
+                        "state": "reader_snapshot_ready",
+                        "text_char_count": 817,
+                        "truncated": false,
+                        "warning_count": 0
+                    },
+                    "selectors": [
+                        {
+                            "content_hash": "698f0cc7a0b32d502c70a59f0cb980270a3d89a18f1df3592c90a53965df29e0",
+                            "selector_kind": "text_quote",
+                            "text_quote": "Qdrant documents vector similarity search for nearest vectors and related query patterns."
+                        }
+                    ],
+                    "target": {
+                        "canonical_url": "https://qdrant.tech/documentation/search/",
+                        "content_id": "994ee32a-ea97-43f8-b103-689bff1822d1",
+                        "target_kind": "content_item",
+                        "url": "https://qdrant.tech/documentation/search/"
+                    }
+                }
+            },
+            {
+                "id": "pubsrc-14d95ab9-c9a9-4f82-bec1-a7895db0c1a7",
+                "source_entity_id": "src_ovh_private_cloud",
+                "kind": "vendor_support_page",
+                "target_kind": "content_item",
+                "target_id": "30bec229-6aee-4808-9687-b31305b37ad4",
+                "display_policy": "embedded_excerpt",
+                "open_surface": "source",
+                "entity": {
+                    "display": {
+                        "default_collapsed": true,
+                        "expanded_mode": "source_card",
+                        "inline_mode": "embedded_excerpt",
+                        "open_surface": "source"
+                    },
+                    "entity_id": "src_ovh_private_cloud",
+                    "evidence": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "kind": "vendor_support_page",
+                    "label": "OVHcloud Hosted Private Cloud service offerings",
+                    "provenance": {
+                        "created_by": "codex_mission_source_graph_seed",
+                        "rights_scope": "public_url_snapshot",
+                        "untrusted_source_text": true
+                    },
+                    "reader_snapshot": {
+                        "access_scope": "publication_reader",
+                        "canonical_url": "https://support.us.ovhcloud.com/hc/en-us/articles/360000857284-Hosted-Private-Cloud-Service-Offerings",
+                        "content_hash": "9f83a9dfaf2b937fc4c06d0bc393889abe9e06d5d065b87fd9fd5da759c4020b",
+                        "media_type": "text/markdown",
+                        "original_media_type": "text/markdown",
+                        "snapshot_kind": "cleaned_reader_markdown",
+                        "source": "content_item",
+                        "source_content_id": "30bec229-6aee-4808-9687-b31305b37ad4",
+                        "source_url": "https://support.us.ovhcloud.com/hc/en-us/articles/360000857284-Hosted-Private-Cloud-Service-Offerings",
+                        "text_char_count": 871,
+                        "text_content": "# OVHcloud Hosted Private Cloud Service Offerings\n\nOVHcloud describes Hosted Private Cloud as a VMware-based private cloud service family. The support page distinguishes service options and explains that the customer receives managed private cloud infrastructure for workloads that need isolation, virtualization, predictable operations, and enterprise hosting controls.\n\nReader-mode note: this source artifact supports the proposal's comparison of managed private cloud options for a legal-cloud deployment. It is evidence for the availability of hosted private cloud service models, not a recommendation to select OVHcloud without a separate cost, jurisdiction, support, and data-protection review.\n\nSource: OVHcloud Support, \"Hosted Private Cloud Service Offerings\", https://support.us.ovhcloud.com/hc/en-us/articles/360000857284-Hosted-Private-Cloud-Service-Offerings",
+                        "title": "OVHcloud Hosted Private Cloud service offerings",
+                        "truncated": false
+                    },
+                    "reader_snapshot_status": {
+                        "original_media_type": "text/markdown",
+                        "quality": "cleaned_reader",
+                        "state": "reader_snapshot_ready",
+                        "text_char_count": 871,
+                        "truncated": false,
+                        "warning_count": 0
+                    },
+                    "selectors": [
+                        {
+                            "content_hash": "9f83a9dfaf2b937fc4c06d0bc393889abe9e06d5d065b87fd9fd5da759c4020b",
+                            "selector_kind": "text_quote",
+                            "text_quote": "OVHcloud describes physically isolated single-tenant cloud environments for enterprise workloads."
+                        }
+                    ],
+                    "target": {
+                        "canonical_url": "https://support.us.ovhcloud.com/hc/en-us/articles/360000857284-Hosted-Private-Cloud-Service-Offerings",
+                        "content_id": "30bec229-6aee-4808-9687-b31305b37ad4",
+                        "target_kind": "content_item",
+                        "url": "https://support.us.ovhcloud.com/hc/en-us/articles/360000857284-Hosted-Private-Cloud-Service-Offerings"
+                    }
+                }
+            },
+            {
+                "id": "pubsrc-60447bb2-1d52-4edc-8393-079addda7d20",
+                "source_entity_id": "src_aba_formal_op_512",
+                "kind": "ethics_opinion",
+                "target_kind": "content_item",
+                "target_id": "ed981507-cade-4d12-b825-ae5a5aa149ee",
+                "display_policy": "embedded_excerpt",
+                "open_surface": "source",
+                "entity": {
+                    "display": {
+                        "default_collapsed": true,
+                        "expanded_mode": "source_card",
+                        "inline_mode": "embedded_excerpt",
+                        "open_surface": "source"
+                    },
+                    "entity_id": "src_aba_formal_op_512",
+                    "evidence": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "kind": "ethics_opinion",
+                    "label": "ABA Formal Opinion 512: Generative Artificial Intelligence Tools",
+                    "provenance": {
+                        "created_by": "codex_mission_source_graph_seed",
+                        "rights_scope": "public_url_snapshot",
+                        "untrusted_source_text": true
+                    },
+                    "reader_snapshot": {
+                        "access_scope": "publication_reader",
+                        "canonical_url": "https://www.americanbar.org/content/dam/aba/administrative/professional_responsibility/ethics-opinions/aba-formal-opinion-512.pdf",
+                        "content_hash": "aa93d9d2dd5ba3eaac4189b5104b64e797048c88981c6086e4bf7041fec20cfa",
+                        "media_type": "text/markdown",
+                        "original_media_type": "text/markdown",
+                        "snapshot_kind": "cleaned_reader_markdown",
+                        "source": "content_item",
+                        "source_content_id": "ed981507-cade-4d12-b825-ae5a5aa149ee",
+                        "source_url": "https://www.americanbar.org/content/dam/aba/administrative/professional_responsibility/ethics-opinions/aba-formal-opinion-512.pdf",
+                        "text_char_count": 993,
+                        "text_content": "# ABA Formal Opinion 512: Generative Artificial Intelligence Tools\n\nThe ABA Standing Committee on Ethics and Professional Responsibility published Formal Opinion 512 on July 29, 2024. The opinion addresses lawyers' use of generative artificial intelligence tools. It explains that lawyers evaluating generative AI must account for professional duties including competence, confidentiality, communication, supervision, candor to tribunals, meritorious claims and contentions, truthfulness, and reasonable fees.\n\nReader-mode note: this source artifact is a concise, citation-safe summary used to back the proposal's claim that generic AI chatbots create legal-work risks unless the system preserves provenance, confidentiality, and source discipline.\n\nSource: American Bar Association, Formal Opinion 512, \"Generative Artificial Intelligence Tools\" (July 29, 2024), https://www.americanbar.org/content/dam/aba/administrative/professional_responsibility/ethics-opinions/aba-formal-opinion-512.pdf",
+                        "title": "ABA Formal Opinion 512: Generative Artificial Intelligence Tools",
+                        "truncated": false
+                    },
+                    "reader_snapshot_status": {
+                        "original_media_type": "text/markdown",
+                        "quality": "cleaned_reader",
+                        "state": "reader_snapshot_ready",
+                        "text_char_count": 993,
+                        "truncated": false,
+                        "warning_count": 0
+                    },
+                    "selectors": [
+                        {
+                            "content_hash": "aa93d9d2dd5ba3eaac4189b5104b64e797048c88981c6086e4bf7041fec20cfa",
+                            "selector_kind": "text_quote",
+                            "text_quote": "Lawyers using generative artificial intelligence tools must consider duties including competence, confidentiality, communication, supervision, candor, and reasonable fees."
+                        }
+                    ],
+                    "target": {
+                        "canonical_url": "https://www.americanbar.org/content/dam/aba/administrative/professional_responsibility/ethics-opinions/aba-formal-opinion-512.pdf",
+                        "content_id": "ed981507-cade-4d12-b825-ae5a5aa149ee",
+                        "target_kind": "content_item",
+                        "url": "https://www.americanbar.org/content/dam/aba/administrative/professional_responsibility/ethics-opinions/aba-formal-opinion-512.pdf"
+                    }
+                }
+            },
+            {
+                "id": "pubsrc-67ad4350-cad5-4983-9de4-1bb3448b5bc9",
+                "source_entity_id": "src_nixos_rollback",
+                "kind": "technical_documentation",
+                "target_kind": "url",
+                "target_id": "https://nixos.org/guides/how-nix-works/",
+                "display_policy": "embedded_excerpt",
+                "open_surface": "source",
+                "entity": {
+                    "display": {
+                        "default_collapsed": true,
+                        "expanded_mode": "source_card",
+                        "inline_mode": "embedded_excerpt",
+                        "open_surface": "source"
+                    },
+                    "entity_id": "src_nixos_rollback",
+                    "evidence": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "kind": "technical_documentation",
+                    "label": "NixOS reproducible configuration and rollback",
+                    "provenance": {
+                        "created_by": "codex_mission_source_graph_seed",
+                        "rights_scope": "public_url_snapshot",
+                        "untrusted_source_text": true
+                    },
+                    "reader_snapshot": {
+                        "access_scope": "publication_reader",
+                        "canonical_url": "https://nixos.org/guides/how-nix-works/",
+                        "content_hash": "69c07a2fbcb6ae03d7855400eecb0c297b5add7f00341101544a428c18b3e5e0",
+                        "media_type": "text/markdown",
+                        "original_media_type": "text/markdown",
+                        "snapshot_kind": "cleaned_reader_markdown",
+                        "source": "content_item",
+                        "source_content_id": "29192d79-f3d8-4eea-a806-f2bcaba60e84",
+                        "source_url": "https://nixos.org/guides/how-nix-works/",
+                        "text_char_count": 11043,
+                        "text_content": "Nix is a  purely functional package manager . This means that it treats packages like values in purely functional programming languages such as Haskell \u2014 they are built by functions that don\u2019t have side-effects, and they never change after they have been built. Nix stores packages in the  Nix store , usually the directory  /nix/store , where each package has its own unique subdirectory such as\n/nix/store/b6gvzjyb2pg0kjfwrjmg1vfhh54ad73z-firefox-33.1/\nwhere  b6gvzjyb2pg0\u2026  is a unique identifier for the package that captures all its dependencies (it\u2019s a cryptographic hash of the package\u2019s build dependency graph). This enables many powerful features.\nMultiple versions\nYou can have multiple versions or variants of a package installed at the same time. This is especially important when different applications have dependencies on different versions of the same package \u2014 it prevents the \u201cDLL hell\u201d. Because of the hashing scheme, different versions of a package end up in different paths in the Nix store, so they don\u2019t interfere with each other.\nAn important consequence is that operations like upgrading or uninstalling an application cannot break other applications, since these operations never \u201cdestructively\u201d update or delete files that are used by other packages.\nComplete dependencies\nWhen you\u2019re making a package for a package management system, like RPM, you are supposed to declare its dependencies, but you can\u2019t easily guarantee that your dependency declaration is complete. If you forget a dependency, that you have separately installed on your machine, then the component may build and work correctly on  your  machine, but failing on the end user\u2019s machine.\nNix ensures that package dependency specifications are complete.\nUnder Nix, a build process will only find resources that have been declared explicitly as dependencies. There\u2019s no way it can build until everything it needs has been correctly declared. If it builds, you will know you\u2019ve provided a complete declaration.\nOnce a build is complete, ongoing runtime dependencies are detected automatically.\nMulti-user support\nStarting at version 0.11, Nix has multi-user support. This means that non-privileged users can securely install software. Each user can have a different  profile , a set of packages in the Nix store that appear in the user\u2019s PATH. If a user installs a package that another user has already installed previously, the package won\u2019t be built or downloaded a second time. At the same time, it is not possible for one user to inject a Trojan horse into a package that might be used by another user.\nAtomic upgrades and rollbacks\nSince package management operations never overwrite packages in the Nix store but just add new versions in different paths, they are  atomic . So during a package upgrade, there is no time window in which the package has some files from the old version and some files from the new version \u2014 which would be bad because a program might well crash if it\u2019s started during that period.\nAnd since packages aren\u2019t overwritten, the old versions are still there after an upgrade. This means that you can  roll back  to the old version:\n$  nix-env  --upgrade  _some-packages_\n$  nix-env  --rollback\nGarbage collection\nWhen you uninstall a package like this\u2026\n$  nix-env  --uninstall  firefox\nthe package isn\u2019t deleted from the system right away (after all, you might want to do a rollback, or it might be in the profiles of other users). Instead, unused packages can be deleted safely by running the  garbage collector :\n$  nix-collect-garbage\nThis deletes all packages that aren\u2019t in use by any user profile or by a currently running program.\nFunctional package language\nPackages are built from  Nix expressions , which is a simple functional language. A Nix expression describes everything that goes into a package build action (a \u201cderivation\u201d): other packages, sources, the build script, environment variables for the build script, etc. Nix tries very hard to ensure that Nix expressions are  deterministic : building a Nix expression twice should yield the same result.\nBecause it\u2019s a functional language, it\u2019s easy to support building variants of a package: turn the Nix expression into a function and call it any number of times with the appropriate arguments. Due to the hashing scheme, variants don\u2019t conflict with each other in the Nix store.\nTransparent source/binary deployment\nNix expressions generally describe how to build a package from source, so an installation action like\n$  nix-env  --install  firefox\ncould  cause quite a bit of build activity, as not only Firefox but also all its dependencies (all the way up to the C library and the compiler) would have to be built, at least if they are not already in the Nix store. This is a  source deployment model . For most users, building from source is not very pleasant as it takes far too long. However, Nix can automatically skip building from source and instead use a  binary cache , a web server that provides pre-built binaries. For instance, when asked to build  /nix/store/b6gvzjyb2pg0\u2026-firefox-33.1  from source, Nix would first check if the file  http://cache.nixos.org/b6gvzjyb2pg0\u2026.narinfo  exists, and if so, fetch the pre-built binary referenced from there; otherwise, it would fall back to building from source.\nNix Packages collection\nWe provide a large set of Nix expressions containing thousands of existing Unix packages, the  Nix Packages collection  (Nixpkgs) .\nPortability\nNix runs on Linux and macOS.\nHow does NixOS work?\nNixOS is based on  Nix , a purely functional package management system. Nix stores all packages in isolation from each other under paths such as\n/nix/store/5rnfzla9kcx4mj5zdc7nlnv8na1najvg-firefox-3.5.4/\nThe string  5rnf...  is a cryptographic hash of all input used to build the package. Packages are never overwritten after they have been built; instead, if you change the build description of a package (its \u2018Nix expression\u2019), it\u2019s rebuilt and installed in a different path in  /nix/store  so it doesn\u2019t interfere with the old version. NixOS extends this by using Nix not only to build packages, but also things like configuration files. For instance, the configuration of the SSH daemon is also built from a Nix expression and stored under a path like\n/nix/store/s2sjbl85xnrc18rl4fhn56irkxqxyk4p-sshd\\_config\nBy building entire system configurations from a Nix expression, NixOS ensures that such configurations don\u2019t overwrite each other, can be rolled back, and so on.\nA big implication of the way that Nix/NixOS stores packages is that there is no  /bin ,  /sbin ,  /lib ,  /usr , and so on. Instead all packages are kept in  /nix/store . (The only exception is a symlink  /bin/sh  to Bash in the Nix store.) Not using \u2018global\u2019 directories such as  /bin  is what allows multiple versions of a package to coexist. Nix does have a  /etc  to keep system-wide configuration files, but most files in that directory are symlinks to generated files in  /nix/store .\nDeclarative system configuration model\nIn NixOS, the entire operating system \u2014 the kernel, applications, system packages, configuration files, and so on \u2014 is built by the  Nix package manager  from a description in a purely functional build language. The fact that it\u2019s purely functional essentially means that building a new configuration cannot overwrite previous configurations. Most of the other features follow from this.\nYou configure a NixOS system by writing a specification of the functionality that you want on your machine in  /etc/nixos/configuration.nix . For instance, here is a minimal configuration of a machine running an SSH daemon:\n{\nboot . loader . grub . device  =  \"/dev/sda\" ;\nfileSystems . \"/\" . device  =  \"/dev/sda1\" ;\nservices . sshd . enable  =  true;\n}\nAfter changing  /etc/nixos/configuration.nix , you realise the configuration by running this command:\n$  nixos-rebuild  switch\nThis command does everything necessary to make the configuration happen, including downloading and compiling OpenSSH, generating the configuration files for the SSH server, and so on.\nReliable upgrades\nAnother advantage of purely functional package management is that  nixos-rebuild switch  will always produce the same result, regardless of what packages or configuration files you already had on your system. Thus, upgrading a system is as reliable as reinstalling from scratch.\nAtomic upgrades\nNixOS has a  transactional  approach to configuration management: configuration changes such as upgrades are  atomic . This means that if the upgrade to a new configuration is interrupted \u2014 say, the power fails half-way through \u2014 the system will still be in a consistent state: it will either boot in the old or the new configuration. In most other systems, you\u2019ll end up in an inconsistent state, and your machine may not even boot anymore.\nRollbacks\nBecause the files of a new configuration don\u2019t overwrite old ones, you can (atomically) roll back to a previous configuration. For instance, if after a  nixos-rebuild switch  you discover that you don\u2019t like the new configuration, you can just go back:\n$  nixos-rebuild  switch  --rollback\nIn fact, all old system configurations automatically show up in the boot menu. So if the new configuration crashes or doesn\u2019t boot properly, you can just roll back by selecting an older configuration in the boot menu. Rollbacks are very fast: it doesn\u2019t involve lots of files having to be restored from copies.\nReproducible system configurations\nNixOS\u2019 declarative configuration model makes it easy to reproduce a system configuration on another machine (for instance, to test a change in a test environment before doing it on the production server). You just copy the  configuration.nix  file to the target NixOS machine and run  nixos-rebuild switch . This will give you the same configuration (kernel, applications, system services, and so on) except for \u2018mutable state\u2019 (such as the stuff that lives in  /var ).\nSafe to test changes\nNixOS makes it safe to test potentially dangerous changes to the system, because you can always roll back. (Unless you screw up the boot loader, that is\u2026) For instance, whether the change is as simple as enabling a system service, or as large as rebuilding the entire system with a new version of Glibc, you can test it by doing:\n$  nixos-rebuild  test\nThis builds and activates the new configuration, but doesn\u2019t make it the boot default. Thus, rebooting the system will take you back to the previous, known-good configuration.\nAn even nicer way to test changes is the following:\n$  nixos-rebuild  build-vm\n$  ./result/bin/run- \\* -vm\nThis builds and starts a virtual machine that contains the new system configuration (i.e. a clone of the configuration of the host machine, with any changes that you made to configuration.nix). The VM doesn\u2019t share any data with the host, so you can safely experiment inside the VM. The  build-vm  command is very efficient (it doesn\u2019t require a disk image for the VM to be created), so it\u2019s a very effective way to test changes.",
+                        "title": "How Nix Works | Nix & NixOS",
+                        "truncated": false
+                    },
+                    "reader_snapshot_status": {
+                        "original_media_type": "text/markdown",
+                        "quality": "cleaned_reader",
+                        "retrieval_strategy": "direct_http_then_readability_lite",
+                        "state": "reader_snapshot_ready",
+                        "text_char_count": 11043,
+                        "truncated": false,
+                        "warning_count": 0
+                    },
+                    "selectors": [
+                        {
+                            "selector_kind": "text_quote",
+                            "text_quote": "NixOS declarative configuration helps reproduce system configuration and supports rollback."
+                        }
+                    ],
+                    "target": {
+                        "canonical_url": "https://nixos.org/guides/how-nix-works/",
+                        "target_kind": "url",
+                        "url": "https://nixos.org/guides/how-nix-works/"
+                    }
+                }
+            },
+            {
+                "id": "pubsrc-a329dc80-3104-40da-a737-e31ea63e9648",
+                "source_entity_id": "src_gdpr_article_32",
+                "kind": "regulation",
+                "target_kind": "url",
+                "target_id": "https://gdpr-info.eu/art-32-gdpr/",
+                "display_policy": "embedded_excerpt",
+                "open_surface": "source",
+                "entity": {
+                    "display": {
+                        "default_collapsed": true,
+                        "expanded_mode": "source_card",
+                        "inline_mode": "embedded_excerpt",
+                        "open_surface": "source"
+                    },
+                    "entity_id": "src_gdpr_article_32",
+                    "evidence": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "kind": "regulation",
+                    "label": "GDPR Article 32: Security of processing",
+                    "provenance": {
+                        "created_by": "codex_mission_source_graph_seed",
+                        "rights_scope": "public_url_snapshot",
+                        "untrusted_source_text": true
+                    },
+                    "reader_snapshot": {
+                        "access_scope": "publication_reader",
+                        "canonical_url": "https://gdpr-info.eu/art-32-gdpr/",
+                        "content_hash": "db7a0b4816fa5498d5b0907881a4722f75dbf396641e4b6760c8a655f0107ba2",
+                        "media_type": "text/markdown",
+                        "original_media_type": "text/markdown",
+                        "snapshot_kind": "cleaned_reader_markdown",
+                        "source": "content_item",
+                        "source_content_id": "97003606-c79e-4ac5-8f2f-1f3e5228a592",
+                        "source_url": "https://gdpr-info.eu/art-32-gdpr/",
+                        "text_char_count": 7993,
+                        "text_content": "Art. 32 GDPR \u2013 Security of processing - General Data Protection Regulation (GDPR)\nSearch for:\nGeneral Data Protection Regulation (GDPR)\nFinal text of the GDPR including recitals.\nMenu and widgets\nDSGVO\nGDPR\nRecitals\nKey Issues\nAI Act\nData Act\nSkip to content\nSearch for:\nGDPR\nRecitals\nKey Issues\nAI Act\nData Act\nGDPR\nChapter 1 (Art. 1 &#8211; 4) General provisions\nArt. 1 Subject-matter and objectives\nArt. 2 Material scope\nArt. 3 Territorial scope\nArt. 4 Definitions\nChapter 2 (Art. 5 &#8211; 11) Principles\nArt. 5 Principles relating to processing of personal data\nArt. 6 Lawfulness of processing\nArt. 7 Conditions for consent\nArt. 8 Conditions applicable to child\u2019s consent in relation to information society services\nArt. 9 Processing of special categories of personal data\nArt. 10 Processing of personal data relating to criminal convictions and offences\nArt. 11 Processing which does not require identification\nChapter 3 (Art. 12 &#8211; 23) Rights of the data subject\nArt. 12 Transparent information, communication and modalities for the exercise of the rights of the data subject\nArt. 13 Information to be provided where personal data are collected from the data subject\nArt. 14 Information to be provided where personal data have not been obtained from the data subject\nArt. 15 Right of access by the data subject\nArt. 16 Right to rectification\nArt. 17 Right to erasure (\u2018right to be forgotten\u2019)\nArt. 18 Right to restriction of processing\nArt. 19 Notification obligation regarding rectification or erasure of personal data or restriction of processing\nArt. 20 Right to data portability\nArt. 21 Right to object\nArt. 22 Automated individual decision-making, including profiling\nArt. 23 Restrictions\nChapter 4 (Art. 24 &#8211; 43) Controller and processor\nArt. 24 Responsibility of the controller\nArt. 25 Data protection by design and by default\nArt. 26 Joint controllers\nArt. 27 Representatives of controllers or processors not established in the Union\nArt. 28 Processor\nArt. 29 Processing under the authority of the controller or processor\nArt. 30 Records of processing activities\nArt. 31 Cooperation with the supervisory authority\nArt. 32 Security of processing\nArt. 33 Notification of a personal data breach to the supervisory authority\nArt. 34 Communication of a personal data breach to the data subject\nArt. 35 Data protection impact assessment\nArt. 36 Prior consultation\nArt. 37 Designation of the data protection officer\nArt. 38 Position of the data protection officer\nArt. 39 Tasks of the data protection officer\nArt. 40 Codes of conduct\nArt. 41 Monitoring of approved codes of conduct\nArt. 42 Certification\nArt. 43 Certification bodies\nChapter 5 (Art. 44 &#8211; 50) Transfers of personal data to third countries or international organisations\nArt. 44 General principle for transfers\nArt. 45 Transfers on the basis of an adequacy decision\nArt. 46 Transfers subject to appropriate safeguards\nArt. 47 Binding corporate rules\nArt. 48 Transfers or disclosures not authorised by Union law\nArt. 49 Derogations for specific situations\nArt. 50 International cooperation for the protection of personal data\nChapter 6 (Art. 51 &#8211; 59) Independent supervisory authorities\nArt. 51 Supervisory authority\nArt. 52 Independence\nArt. 53 General conditions for the members of the supervisory authority\nArt. 54 Rules on the establishment of the supervisory authority\nArt. 55 Competence\nArt. 56 Competence of the lead supervisory authority\nArt. 57 Tasks\nArt. 58 Powers\nArt. 59 Activity reports\nChapter 7 (Art. 60 &#8211; 76) Cooperation and consistency\nArt. 60 Cooperation between the lead supervisory authority and the other supervisory authorities concerned\nArt. 61 Mutual assistance\nArt. 62 Joint operations of supervisory authorities\nArt. 63 Consistency mechanism\nArt. 64 Opinion of the Board\nArt. 65 Dispute resolution by the Board\nArt. 66 Urgency procedure\nArt. 67 Exchange of information\nArt. 68 European Data Protection Board\nArt. 69 Independence\nArt. 70 Tasks of the Board\nArt. 71 Reports\nArt. 72 Procedure\nArt. 73 Chair\nArt. 74 Tasks of the Chair\nArt. 75 Secretariat\nArt. 76 Confidentiality\nChapter 8 (Art. 77 &#8211; 84) Remedies, liability and penalties\nArt. 77 Right to lodge a complaint with a supervisory authority\nArt. 78 Right to an effective judicial remedy against a supervisory authority\nArt. 79 Right to an effective judicial remedy against a controller or processor\nArt. 80 Representation of data subjects\nArt. 81 Suspension of proceedings\nArt. 82 Right to compensation and liability\nArt. 83 General conditions for imposing administrative fines\nArt. 84 Penalties\nChapter 9 (Art. 85 &#8211; 91) Provisions relating to specific processing situations\nArt. 85 Processing and freedom of expression and information\nArt. 86 Processing and public access to official documents\nArt. 87 Processing of the national identification number\nArt. 88 Processing in the context of employment\nArt. 89 Safeguards and derogations relating to processing for archiving purposes in the public interest, scientific or historical research purposes or statistical purposes\nArt. 90 Obligations of secrecy\nArt. 91 Existing data protection rules of churches and religious associations\nChapter 10 (Art. 92 &#8211; 93) Delegated acts and implementing acts\nArt. 92 Exercise of the delegation\nArt. 93 Committee procedure\nChapter 11 (Art. 94 &#8211; 99) Final provisions\nArt. 94 Repeal of Directive 95/46/EC\nArt. 95 Relationship with Directive 2002/58/EC\nArt. 96 Relationship with previously concluded Agreements\nArt. 97 Commission reports\nArt. 98 Review of other Union legal acts on data protection\nArt. 99 Entry into force and application\nImprint | Privacy Policy | Liability\nArt. 32 GDPR   Security of processing\nTaking into account the state of the art, the costs of implementation and the nature, scope, context and purposes of processing as well as the risk of varying likelihood and severity for the rights and freedoms of natural persons, the controller and the processor shall implement appropriate technical and organisational measures to ensure a level of security appropriate to the risk, including inter alia as appropriate:\nthe pseudonymisation and encryption of personal data;\nthe ability to ensure the ongoing confidentiality, integrity, availability and resilience of processing systems and services;\nthe ability to restore the availability and access to personal data in a timely manner in the event of a physical or technical incident;\na process for regularly testing, assessing and evaluating the effectiveness of technical and organisational measures for ensuring the security of the processing.\nIn assessing the appropriate level of security account shall be taken in particular of the risks that are presented by processing, in particular from accidental or unlawful destruction, loss, alteration, unauthorised disclosure of, or access to personal data transmitted, stored or otherwise processed.\nAdherence to an approved code of conduct as referred to in  Article 40  or an approved certification mechanism as referred to in  Article 42  may be used as an element by which to demonstrate compliance with the requirements set out in paragraph 1 of this Article.\nThe controller and processor shall take steps to ensure that any natural person acting under the authority of the controller or the processor who has access to personal data does not process them except on instructions from the controller, unless he or she is required to do so by Union or Member State law.\nSuitable Recitals\n( 75 ) Risks to the Rights and Freedoms of Natural Persons\n( 76 ) Risk Assessment\n( 77 ) Risk Assessment Guidelines\n( 78 ) Appropriate Technical and Organisational Measures\n( 79 ) Allocation of the Responsibilities\n( 83 ) Security of Processing\n&larr; Art. 31 GDPR\nArt. 33 GDPR &rarr;\nGDPR\nTable of contents\nReport error\nLogo\nWe are a consulting company specialised in the fields of data protection, IT security and IT forensics.\nCTA\nLearn more\nFollow us:\nXING  |\nLinkedIn\nRate us:\nPlease wait...",
+                        "title": "GDPR Article 32: Security of processing",
+                        "truncated": false
+                    },
+                    "reader_snapshot_status": {
+                        "original_media_type": "text/markdown",
+                        "quality": "cleaned_reader",
+                        "state": "reader_snapshot_ready",
+                        "text_char_count": 7993,
+                        "truncated": false,
+                        "warning_count": 0
+                    },
+                    "selectors": [
+                        {
+                            "selector_kind": "text_quote",
+                            "text_quote": "Article 32 lists encryption, confidentiality, integrity, availability, resilience, restore ability, and testing as security measures."
+                        }
+                    ],
+                    "target": {
+                        "canonical_url": "https://gdpr-info.eu/art-32-gdpr/",
+                        "target_kind": "url",
+                        "url": "https://gdpr-info.eu/art-32-gdpr/"
+                    }
+                }
+            },
+            {
+                "id": "pubsrc-cec726e8-6536-43c7-936a-cbbbae396877",
+                "source_entity_id": "src_aba_rule_16",
+                "kind": "professional_rule",
+                "target_kind": "content_item",
+                "target_id": "39c3296c-9c03-4b92-93cb-c7c8bfc4b52e",
+                "display_policy": "embedded_excerpt",
+                "open_surface": "source",
+                "entity": {
+                    "display": {
+                        "default_collapsed": true,
+                        "expanded_mode": "source_card",
+                        "inline_mode": "embedded_excerpt",
+                        "open_surface": "source"
+                    },
+                    "entity_id": "src_aba_rule_16",
+                    "evidence": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "kind": "professional_rule",
+                    "label": "ABA Model Rule 1.6: Confidentiality of Information",
+                    "provenance": {
+                        "created_by": "codex_mission_source_graph_seed",
+                        "rights_scope": "public_url_snapshot",
+                        "untrusted_source_text": true
+                    },
+                    "reader_snapshot": {
+                        "access_scope": "publication_reader",
+                        "canonical_url": "https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/",
+                        "content_hash": "35a699d09756692e25d8b6d3ba9bf6a4f34c7cfbb3f7b82bde3338e31704754c",
+                        "media_type": "text/markdown",
+                        "original_media_type": "text/markdown",
+                        "snapshot_kind": "cleaned_reader_markdown",
+                        "source": "content_item",
+                        "source_content_id": "39c3296c-9c03-4b92-93cb-c7c8bfc4b52e",
+                        "source_url": "https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/",
+                        "text_char_count": 1008,
+                        "text_content": "# ABA Model Rule 1.6: Confidentiality of Information\n\nABA Model Rule 1.6 addresses a lawyer's duty to protect information relating to the representation of a client. The rule and its comments frame confidentiality as a default professional obligation, subject to defined exceptions and informed-consent paths. For a legal-cloud system, this supports treating confidentiality, access control, source discipline, and careful disclosure boundaries as core requirements rather than optional product polish.\n\nReader-mode note: this source artifact backs the proposal's claim that legal work needs confidentiality-preserving infrastructure and that AI/document systems for lawyers must be designed around professional confidentiality obligations.\n\nSource: American Bar Association, Model Rules of Professional Conduct, Rule 1.6 \"Confidentiality of Information\", https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/",
+                        "title": "ABA Model Rule 1.6: Confidentiality of Information",
+                        "truncated": false
+                    },
+                    "reader_snapshot_status": {
+                        "original_media_type": "text/markdown",
+                        "quality": "cleaned_reader",
+                        "state": "reader_snapshot_ready",
+                        "text_char_count": 1008,
+                        "truncated": false,
+                        "warning_count": 0
+                    },
+                    "selectors": [
+                        {
+                            "content_hash": "35a699d09756692e25d8b6d3ba9bf6a4f34c7cfbb3f7b82bde3338e31704754c",
+                            "selector_kind": "text_quote",
+                            "text_quote": "A lawyer shall not reveal information relating to the representation of a client unless an exception applies."
+                        }
+                    ],
+                    "target": {
+                        "canonical_url": "https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/",
+                        "content_id": "39c3296c-9c03-4b92-93cb-c7c8bfc4b52e",
+                        "target_kind": "content_item",
+                        "url": "https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/"
+                    }
+                }
+            },
+            {
+                "id": "pubsrc-ea1ff36e-6f8b-4d01-890f-1f2715da7e69",
+                "source_entity_id": "src_hetzner_datacenters",
+                "kind": "vendor_page",
+                "target_kind": "url",
+                "target_id": "https://www.hetzner.com/unternehmen/rechenzentrum/",
+                "display_policy": "embedded_excerpt",
+                "open_surface": "source",
+                "entity": {
+                    "display": {
+                        "default_collapsed": true,
+                        "expanded_mode": "source_card",
+                        "inline_mode": "embedded_excerpt",
+                        "open_surface": "source"
+                    },
+                    "entity_id": "src_hetzner_datacenters",
+                    "evidence": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "kind": "vendor_page",
+                    "label": "Hetzner data centers",
+                    "provenance": {
+                        "created_by": "codex_mission_source_graph_seed",
+                        "rights_scope": "public_url_snapshot",
+                        "untrusted_source_text": true
+                    },
+                    "reader_snapshot": {
+                        "access_scope": "publication_reader",
+                        "canonical_url": "https://www.hetzner.com/unternehmen/rechenzentrum/",
+                        "content_hash": "463e15c20c35b7b282089f36097702f77a8fdd2cee39e5923c6d2a4fae38e068",
+                        "media_type": "text/markdown",
+                        "original_media_type": "text/markdown",
+                        "snapshot_kind": "cleaned_reader_markdown",
+                        "source": "content_item",
+                        "source_content_id": "b4a649ff-7bf6-4302-9ef8-477a44545e1e",
+                        "source_url": "https://www.hetzner.com/unternehmen/rechenzentrum/",
+                        "text_char_count": 8239,
+                        "text_content": "Datacenter\nRegardless of which Hetzner product you choose - our high-performance web hosting, managed servers, cloud servers, dedicated root servers, or colocation services - you can rely on our state-of-the-art and environmentally-friendly infrastructure. Hetzner Online provides you with multi-redundant network connections to important Internet exchanges. In addition to three state-of-the-art data center parks in Nuremberg, in Falkenstein/Vogtland and in Helsinki, this is also ensured by the international locations in Singapore as well as Ashburn, Virginia and Hillsboro, Oregon, USA. So your internet presence will benefit from speedy loadtimes and top performance.\nLocations\nData Center Park Nuremberg, Germany\nData Center Park Falkenstein, Germany\nData Center Park Helsinki, Finland\nDatacenter Ashburn, Virginia, USA\nDatacenter Hillsboro, Oregon, USA\nDatacenter Singapore, Singapore\nPeering-Points (9790G)\n2800\nDE-CIX Frankfurt\nFRA\n800\nAMS-IX\nAMS\n400\nCity-IX Frankfurt\nFRA\n200\nGNM-IX\nHEL\n400\nNL-ix\nFRA\n400\nPeering.cz\nFRA\n100\nPeering.cz\nPRG\n200\nLINX\nLON\n200\nNetIX\nFRA\n200\nPITER-IX\nFRA\n200\nPITER-IX\nHEL\n200\nVIX\nVIE\n100\n1-IX EU\nAMS\n100\n1-IX EU\nFRA\n100\nBBIX Amsterdam\nAMS\n200\nDE-CIX Madrid\nFRA\n100\nERA-IX\nFRA\n100\nERA-IX\nAMS\n200\nFICIX\nHEL\n100\nFrance-IX Paris\nPAR\n100\nfrankonIX\nNBG\n100\nFrys-IX\nAMS\n100\nGiganet IXN\nFRA\n100\nGiganet IXN Amsterdam\nAMS\n100\nLOCIX Frankfurt\nFRA\n200\nMegaIX Frankfurt\nFRA\n100\nNETNOD\nSTO\n100\nNIX.CZ\nPRG\n200\nSpeed-IX\nAMS\n100\nSOX Serbia\nVIE\n100\nSTH-IX\nSTO\n50\nDE-CIX Barcelona\nFRA\n50\nDE-CIX Lisbon\nFRA\n50\nDE-CIX Marseille\nFRA\n20\nDE-CIX Leipzig\nFRA\n20\nN-IX\nNBG\n200\nMegaIX Ashburn\nASH\n200\nNWAX\nHIL\n100\nEquinix Singapore\nSIN\n100\nSGIX\nSIN\nTransit (11300G)\n400\nCore-Backbone\nFRA\n900\nCore-Backbone\nNBG\n200\nCore-Backbone\nSTO\n200\nCogent\nNBG\n200\nCogent\nHEL\n200\nDeutsche Telekom\nAMS\n800\nDeutsche Telekom\nFRA\n400\nDeutsche Telekom\nNBG\n400\nGTT\nFRA\n800\nLumen\nFSN\n400\nLumen\nHEL\n200\nLumen\nNBG\n400\nNTT\nFRA\n400\nTelecom Italia\nFRA\n400\nTATA\nFRA\n900\nTelia\nNBG\n800\nTelia\nFSN\n800\nTelia\nHEL\n300\nTelia\nFRA\n200\nCogent\nASH\n200\nLumen\nASH\n200\nNTT\nASH\n400\nTelia\nASH\n200\nLumen\nHIL\n100\nTATA\nHIL\n400\nTelia\nHIL\n100\nZiply\nHIL\n100\nTelia\nSIN\n100\nNTT\nSIN\n100\nSG.GS\nSIN\n100\nViewQwest\nSIN\nPrivate Peerings (26910G)\n400\nAeza\nFRA\n200\nAmazon\nAMS\n200\nAmazon\nHEL\n800\nAmazon\nFRA\n100\nA1\nFRA\n100\nA1\nVIE\n10\nAS-Bite\nFRA\n10\nAcorus\nFRA\n200\nAirtel\nLON\n10\nAixit\nFRA\n200\nAkamai\nFRA\n200\nAnexia\nNBG\n20\nBritisch Telecom (BT)\nAMS\n40\nBritisch Telecom (BT)\nFRA\n100\nBICS\nAMS\n100\nBICS\nFRA\n10\nBackboneDirect\nAMS\n10\nBaltnet\nFRA\n40\nBeltelecom\nFRA\n40\nBlazingFast\nFRA\n100\nBytedance\nFRA\n100\nCore-Backbone\nNBG\n100\nCBWS\nAMS\n100\nCDN77\nSTO\n800\nCDN77\nFRA\n10\nCloudCall\nLON\n100\nClouvider\nFRA\n100\nCombahton\nFRA\n100\nComnet\nFRA\n100\nCosmonova\nFRA\n200\nCloudflare\nAMS\n1200\nCloudflare\nFRA\n200\nCloudflare\nHEL\n200\nCloudflare\nLON\n200\nCloudflare\nPAR\n100\nDdoS-Guard\nAMS\n100\nDFN\nFRA\n100\nDataforest\nFRA\n40\nDatagroup\nFRA\n100\nDataline\nFRA\n200\nDigitalOcean\nFRA\n400\nDropbox\nFRA\n100\nDurand do\u2019 Brasil\nFRA\n400\nDelta Telecom\nFRA\n100\nER-Telecom\nSTO\n100\nER-Telecom\nFRA\n100\nEdgecast\nSTO\n100\nEdgecast\nFRA\n40\nEliteServices\nAMS\n10\nEliteServices\nFRA\n10\nEliteServices\nSTO\n10\nEnviatel\nFSN\n100\nEtisalat\nFRA\n100\nEweka\nAMS\n10\nExaTel\nFRA\n2400\nMeta\nFRA\n400\nMeta\nHEL\n20\nFPT-Telecom\nFSN\n100\nFastly\nFRA\n20\nFeral\nAMS\n100\nFiberway\nPAR\n100\nFilanco\nFRA\n10\nFiord\nAMS\n100\nFiord\nFRA\n100\nFirstcolo\nFRA\n200\nGoogle\nAMS\n1400\nGoogle\nFRA\n400\nGoogle\nHEL\n200\nGoogle\nSTO\n200\nGithub\nFRA\n20\nGlobalCloudExchange\nFRA\n100\nGlobalConnect\nFRA\n40\nGlobalLayer\nAMS\n400\nGlobalSecureLayer\nFRA\n100\nHydraCom\nFRA\n100\nIONOS\nFRA\n100\nIP-Projects\nFRA\n100\nIPVolume\nAMS\n100\nISTQSERVERS\nAMS\n10\nIAG\nFRA\n100\nIkoula\nPAR\n200\nInetcom\nFRA\n200\nInetcom\nSTO\n200\nInit7\nFRA\n100\nInnetra\nAMS\n200\nInter.link\nFRA\n100\nItsHosted\nAMS\n100\nKwant-Telecom\nFRA\n110\nLWLcom\nFRA\n100\nLeaseweb\nAMS\n100\nLeaseweb\nFRA\n40\nLumaserv\nFRA\n140\nMegafon\nFRA\n100\nMegafon\nHEL\n100\nM247\nAMS\n100\nM247\nFRA\n100\nMTS.ru\nFRA\n30\nMTS.ru\nHEL\n100\nMeerfarbig\nFRA\n10\nMegaSpace\nFRA\n100\nMelbikomas\nFRA\n200\nMicrosoft\nFRA\n40\nMobily\nFRA\n10\nMoldtelecom\nFRA\n100\nmyLoc\nAMS\n100\nmyLoc\nFRA\n100\nNFOrce\nAMS\n100\nNTEC\nFRA\n20\nNetAssist\nFRA\n100\nNetshield\nFRA\n100\nNitrado\nFRA\n10\nNorlys\nFRA\n200\nNovoserv\nAMS\n40\nOTEGlobe\nFRA\n10\nOmonia\nFRA\n10\nOrion Telekom\nFRA\n800\nOVH\nFRA\n100\nPeer1\nFRA\n200\nRETN\nFRA\n40\nRETN\nHEL\n200\nRIL\nFRA\n100\nRDSNET\nFRA\n40\nRascom\nFRA\n100\nRascom\nHEL\n200\nScaleway\nFSN\n200\nScaleway\nNBG\n200\nScaleway\nAMS\n10\nSERVED\nPAR\n100\nSMARTNET\nFRA\n100\nSTC\nFRA\n100\nSeacom\nFRA\n100\nServerius\nAMS\n40\nServers.com/Webzilla\nFRA\n100\nSky\nLON\n100\nSkyLink\nAMS\n200\nTelefonica\nFRA\n400\nTelegram\nAMS\n40\nTalkTalk\nLON\n10\nTelehouse.bg\nFRA\n100\nTelstra\nLON\n100\nTencent\nFRA\n100\nTencentCDN\nFRA\n10\nTerraTransit\nNBG\n10\nUTG\nFRA\n100\nVeon\nFRA\n100\nVersatel\nFRA\n400\nVodafone\nFRA\n100\nWNET\nFRA\n100\nWOBCOM\nFRA\n10\nWilhelm.Tel\nFRA\n40\nWorldstream\nAMS\n100\nWorldstream\nFRA\n100\nYandex\nFRA\n100\nZainGroup\nFRA\n40\nZenex5ive\nAMS\n200\nZetServers\nFRA\n100\nZetServers\nAMS\n200\nChinaTelecom\nFRA\n400\nRostelecom\nFRA\n200\nAeza\nHEL\n100\nSYNLINQ\nFRA\n100\nEdgeUno\nFRA\n100\nFDCServers\nFRA\n10\nMacarne\nAMS\n100\nNetia S.A.\nFRA\n100\nmyLoc\nNBG\n100\nApple\nFRA\n100\nHostkey\nAMS\n100\nESTOXY\nAMS\n100\nJSC-TimeWeb\nFRA\n100\nFastly\nSTO\n100\nWaicore\nFRA\n100\nLancom\nFRA\n100\nRoyaleHosting\nAMS\n200\nScaleway\nFRA\n100\nAS43668\nAMS\n100\nLiteServer\nAMS\n100\nAWN\nPAR\n100\nTubeHosting\nAMS\nPower Supply\nRedundant UPS facility\nBackup power system to ensure continuous operation during extended power outages\nRedundant power supply from the substation\nClimate Control\nEnergy efficient direct free cooling N+2 redundancy\nCold aisle containment\nMonitoring of all process-relevant parameters via an intelligent system for measurement, control, regulation, and monitoring\nCold air supply channeled through a raised floor system\nColocation Racks\n4,000 sq m of colocation floor space\nOptional location in Nuremberg, Falkenstein or Helsinki\nUp to 47 rack height units (1 U) in 19'' racks\nExtra deep racks\nAir conditioning channeled through a raised floor or cold aisle containment\n24/7 access and on-site service\nSeparate work and lounge area\nAdditional services available on request\nFire protection\nModern early warning fire system; automatic fire alarm system that uses aspirating smoke detectors\nDirect connection of the data center's fire alarm system to the local fire and rescue coordination center; includes fault monitoring\nFire detectors include alarms\nSeparation of the various fire protection areas by fireproof doors\nDoors automatically shut when system detects smoke\nHandheld CO\u2082 fire extinguishers and portable wheeled CO\u2082 fire extinguishers in every data center unit\nDC units (buildings) separated from each other with a gap in between them to prevent fire from spreading (flashover) until fire department arrives\nDesignated fire-fighting spaces for every data center\nRooms for transformers, medium-voltage stations, and battery rooms built with firewalls and fireproof doors\nCable ducts in firewalls are sealed for at least 90 minutes\nVentilation ducts in the firewalls equipped with self-closing fire dampers\nDesignated Hetzner staff members are fire protection officers and helpers; they communicate regularly with local fire departments\nFire protection plans for every data center; these take into account any differences in structural design\nDue to local conditions, there may be differences between the various data center parks.\nManagement\nBilingual personnel (German/English)\n24/7 service by qualified personnel\nInstallation work by qualified technicians\nSecurity\nVideo-monitored high-security perimeter fencing around the entire data center park\nEntry via electronic access control terminals\nComprehensive 24/7 video surveillance covering all relevant areas such as the high-security fence, driveways, entrances and exits, security locks, and server rooms\nDownload   Download brochure  (pdf, 683 KB)\nDDoS Protection\nHigh-quality hardware applications\nComplex filtering technology\nAutomated system that can protect your web applications, websites, servers, and IT infrastructure\nFilters harmful botnet traffic\nRead more\nCertification\nCertified in accordance with DIN ISO/IEC 27001:2022\nInternationally recognized standard for information security\nCertification for all of our data center parks and entire infrastructure\nVerification for our continuous assessment of and sustained improvements to security standards\nRead more",
+                        "title": "Datacenter",
+                        "truncated": false
+                    },
+                    "reader_snapshot_status": {
+                        "original_media_type": "text/markdown",
+                        "quality": "cleaned_reader",
+                        "retrieval_strategy": "direct_http_then_readability_lite",
+                        "state": "reader_snapshot_ready",
+                        "text_char_count": 8239,
+                        "truncated": false,
+                        "warning_count": 0
+                    },
+                    "selectors": [
+                        {
+                            "selector_kind": "text_quote",
+                            "text_quote": "Hetzner documents data center parks in Germany and Finland."
+                        }
+                    ],
+                    "target": {
+                        "canonical_url": "https://www.hetzner.com/unternehmen/rechenzentrum/",
+                        "target_kind": "url",
+                        "url": "https://www.hetzner.com/unternehmen/rechenzentrum/"
+                    }
+                }
+            }
+        ],
+        "source_revision_hash": "6f252a39e6fd9759fab974fc68edf5b135b38fbc63282ca110ebad082c7490fe",
+        "transclusions": [
+            {
+                "id": "trans-23599490-ed15-4fbe-8461-bd62712ede33",
+                "source_entity_id": "src_aba_rule_16",
+                "host_selector": {
+                    "source_entity_id": "src_aba_rule_16",
+                    "type": "citation_marker"
+                },
+                "source_selector": {
+                    "content_hash": "35a699d09756692e25d8b6d3ba9bf6a4f34c7cfbb3f7b82bde3338e31704754c",
+                    "evidence_state": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "selector_kind": "text_quote",
+                    "text_quote": "A lawyer shall not reveal information relating to the representation of a client unless an exception applies."
+                },
+                "relation_type": "references",
+                "default_display_mode": "embedded_excerpt",
+                "snapshot_text": "A lawyer shall not reveal information relating to the representation of a client unless an exception applies.",
+                "content_hash": "35a699d09756692e25d8b6d3ba9bf6a4f34c7cfbb3f7b82bde3338e31704754c",
+                "access_policy": {
+                    "visibility": "public",
+                    "route": "public"
+                },
+                "export_policy": {
+                    "copy_allowed": true,
+                    "download_allowed": true,
+                    "formats": [
+                        "txt",
+                        "md",
+                        "html",
+                        "docx",
+                        "pdf"
+                    ]
+                }
+            },
+            {
+                "id": "trans-44e7155b-0edb-4953-a658-4e20d5f0cd50",
+                "source_entity_id": "src_nixos_rollback",
+                "host_selector": {
+                    "source_entity_id": "src_nixos_rollback",
+                    "type": "citation_marker"
+                },
+                "source_selector": {
+                    "evidence_state": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "selector_kind": "text_quote",
+                    "text_quote": "NixOS declarative configuration helps reproduce system configuration and supports rollback."
+                },
+                "relation_type": "references",
+                "default_display_mode": "embedded_excerpt",
+                "snapshot_text": "NixOS declarative configuration helps reproduce system configuration and supports rollback.",
+                "access_policy": {
+                    "visibility": "public",
+                    "route": "public"
+                },
+                "export_policy": {
+                    "copy_allowed": true,
+                    "download_allowed": true,
+                    "formats": [
+                        "txt",
+                        "md",
+                        "html",
+                        "docx",
+                        "pdf"
+                    ]
+                }
+            },
+            {
+                "id": "trans-6798f471-3ef0-4298-b854-0298b9a31974",
+                "source_entity_id": "src_qdrant_search",
+                "host_selector": {
+                    "source_entity_id": "src_qdrant_search",
+                    "type": "citation_marker"
+                },
+                "source_selector": {
+                    "content_hash": "698f0cc7a0b32d502c70a59f0cb980270a3d89a18f1df3592c90a53965df29e0",
+                    "evidence_state": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "selector_kind": "text_quote",
+                    "text_quote": "Qdrant documents vector similarity search for nearest vectors and related query patterns."
+                },
+                "relation_type": "references",
+                "default_display_mode": "embedded_excerpt",
+                "snapshot_text": "Qdrant documents vector similarity search for nearest vectors and related query patterns.",
+                "content_hash": "698f0cc7a0b32d502c70a59f0cb980270a3d89a18f1df3592c90a53965df29e0",
+                "access_policy": {
+                    "visibility": "public",
+                    "route": "public"
+                },
+                "export_policy": {
+                    "copy_allowed": true,
+                    "download_allowed": true,
+                    "formats": [
+                        "txt",
+                        "md",
+                        "html",
+                        "docx",
+                        "pdf"
+                    ]
+                }
+            },
+            {
+                "id": "trans-85eb1f32-a454-400f-bc80-2a46aa489a7b",
+                "source_entity_id": "src_hetzner_datacenters",
+                "host_selector": {
+                    "source_entity_id": "src_hetzner_datacenters",
+                    "type": "citation_marker"
+                },
+                "source_selector": {
+                    "evidence_state": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "selector_kind": "text_quote",
+                    "text_quote": "Hetzner documents data center parks in Germany and Finland."
+                },
+                "relation_type": "references",
+                "default_display_mode": "embedded_excerpt",
+                "snapshot_text": "Hetzner documents data center parks in Germany and Finland.",
+                "access_policy": {
+                    "visibility": "public",
+                    "route": "public"
+                },
+                "export_policy": {
+                    "copy_allowed": true,
+                    "download_allowed": true,
+                    "formats": [
+                        "txt",
+                        "md",
+                        "html",
+                        "docx",
+                        "pdf"
+                    ]
+                }
+            },
+            {
+                "id": "trans-af6807a0-8fbb-4792-9b4e-abab38ba2b56",
+                "source_entity_id": "src_gdpr_article_32",
+                "host_selector": {
+                    "source_entity_id": "src_gdpr_article_32",
+                    "type": "citation_marker"
+                },
+                "source_selector": {
+                    "evidence_state": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "selector_kind": "text_quote",
+                    "text_quote": "Article 32 lists encryption, confidentiality, integrity, availability, resilience, restore ability, and testing as security measures."
+                },
+                "relation_type": "references",
+                "default_display_mode": "embedded_excerpt",
+                "snapshot_text": "Article 32 lists encryption, confidentiality, integrity, availability, resilience, restore ability, and testing as security measures.",
+                "access_policy": {
+                    "visibility": "public",
+                    "route": "public"
+                },
+                "export_policy": {
+                    "copy_allowed": true,
+                    "download_allowed": true,
+                    "formats": [
+                        "txt",
+                        "md",
+                        "html",
+                        "docx",
+                        "pdf"
+                    ]
+                }
+            },
+            {
+                "id": "trans-ecaa41bf-faa9-4122-ac43-7e4097573f7d",
+                "source_entity_id": "src_aba_formal_op_512",
+                "host_selector": {
+                    "source_entity_id": "src_aba_formal_op_512",
+                    "type": "citation_marker"
+                },
+                "source_selector": {
+                    "content_hash": "aa93d9d2dd5ba3eaac4189b5104b64e797048c88981c6086e4bf7041fec20cfa",
+                    "evidence_state": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "selector_kind": "text_quote",
+                    "text_quote": "Lawyers using generative artificial intelligence tools must consider duties including competence, confidentiality, communication, supervision, candor, and reasonable fees."
+                },
+                "relation_type": "references",
+                "default_display_mode": "embedded_excerpt",
+                "snapshot_text": "Lawyers using generative artificial intelligence tools must consider duties including competence, confidentiality, communication, supervision, candor, and reasonable fees.",
+                "content_hash": "aa93d9d2dd5ba3eaac4189b5104b64e797048c88981c6086e4bf7041fec20cfa",
+                "access_policy": {
+                    "visibility": "public",
+                    "route": "public"
+                },
+                "export_policy": {
+                    "copy_allowed": true,
+                    "download_allowed": true,
+                    "formats": [
+                        "txt",
+                        "md",
+                        "html",
+                        "docx",
+                        "pdf"
+                    ]
+                }
+            },
+            {
+                "id": "trans-f151d9f1-acb9-4f2a-8f46-3acd451bac7d",
+                "source_entity_id": "src_ovh_private_cloud",
+                "host_selector": {
+                    "source_entity_id": "src_ovh_private_cloud",
+                    "type": "citation_marker"
+                },
+                "source_selector": {
+                    "content_hash": "9f83a9dfaf2b937fc4c06d0bc393889abe9e06d5d065b87fd9fd5da759c4020b",
+                    "evidence_state": {
+                        "research_state": "represented",
+                        "state": "available"
+                    },
+                    "selector_kind": "text_quote",
+                    "text_quote": "OVHcloud describes physically isolated single-tenant cloud environments for enterprise workloads."
+                },
+                "relation_type": "references",
+                "default_display_mode": "embedded_excerpt",
+                "snapshot_text": "OVHcloud describes physically isolated single-tenant cloud environments for enterprise workloads.",
+                "content_hash": "9f83a9dfaf2b937fc4c06d0bc393889abe9e06d5d065b87fd9fd5da759c4020b",
+                "access_policy": {
+                    "visibility": "public",
+                    "route": "public"
+                },
+                "export_policy": {
+                    "copy_allowed": true,
+                    "download_allowed": true,
+                    "formats": [
+                        "txt",
+                        "md",
+                        "html",
+                        "docx",
+                        "pdf"
+                    ]
+                }
+            }
+        ]
+    }
+}

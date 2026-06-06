@@ -5201,6 +5201,72 @@ work is broader: add real non-public publication semantics only after route,
 reader, export, retrieval-source, and guest enforcement are proven; avoid
 offering unlisted/private controls before those semantics exist.
 
+## Post-publication legal proposal bounded-edit proof
+
+Status: `accepted_on_staging_for_owner_bounded_edit_revise_publish_export`.
+
+Owner-authenticated Comet proof on 2026-06-06 closed the remaining
+post-publication bounded-edit gap for the legal proposal document
+`f93cea62-f833-4dae-b414-8e44783d8cbe`:
+
+- Computer Use / Comet remained authenticated on staging as
+  `yusefnathanson@me.com`, user id
+  `5bd6de97-3b58-408c-bf89-c42c81b083de`.
+- The first mutation/proof bookmarklet ran against the document-scoped VText
+  API, observed the legal proposal at v95 after the owner bounded edit, and
+  confirmed v95 was user-authored with seven source entities, seven source
+  markers, Appendix A, the glossary table header, and the Vector database row
+  containing `bounded edit proof`.
+- The document-scoped revise request
+  `fd76a8d5-4282-4907-89db-d447a88291ba` created app-agent revision v96
+  `5a5532d8-0ff3-44d6-aeef-5ea6cbc08798`. Comet observed v96 preserved the
+  bounded phrase, Appendix A, the glossary table header, the bounded Vector
+  database row, seven source entities, and seven source markers. Revision
+  metadata reported `vtext_context_mode=focused_user_edit_diff`,
+  `vtext_edit_operation=apply_edits`, and `vtext_run_prompt_chars=13808`.
+- The app-agent v96 revision was published with explicit public access and
+  export policy at
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pubf7bae84a8`.
+- Public resolve proof for that route returned publication
+  `pub-f7bae84a-80fa-4bf7-87f7-18ff07a01ca4`, publication version
+  `pubver-ae91528d-d605-42dc-980c-16bfde4c20f8`, seven transclusions,
+  `access={"visibility":"public","route":"public"}`, and
+  `export={"copy_allowed":true,"download_allowed":true,
+  "formats":["txt","md","html","docx","pdf"]}`.
+- Public Markdown export proof for the same route returned `format=md`,
+  content length `38426`, the bounded edit phrase, Appendix A, the glossary
+  table header, source marker `source:src_aba_formal_op_512`, and metadata
+  keys including `access_policy`, `export_policy`, `source_entities`,
+  `source_revision_hash`, and `transclusions`.
+
+Evidence artifacts:
+
+- `docs/evidence/source-system-2026-06-06/legal-proposal-post-publication-bounded-edit-20260606T1758Z.json`
+- `docs/evidence/source-system-2026-06-06/legal-proposal-bounded-edit-pubf7bae84a8-resolve-20260606T1758Z.json`
+- `docs/evidence/source-system-2026-06-06/legal-proposal-bounded-edit-pubf7bae84a8-export-md-20260606T1758Z.json`
+
+Proof limitations:
+
+- The first bookmarklet attempt found the current head was already v95 with the
+  bounded row, so it did not create a second owner edit. The accepted proof uses
+  that v95 user revision as the bounded edit and v96 as the app-agent revise
+  survival revision.
+- A later compact collector accidentally submitted another document-scoped
+  revise request from v96, then received a single `401 authentication required`
+  response while polling the owner revision list despite `/auth/session`
+  reporting authenticated earlier in the same collector. That later collector
+  was not used as acceptance evidence. This is recorded as proof-path
+  limitation and a possible auth-renewal follow-up, not yet as a newly
+  confirmed platform behavior problem.
+
+remaining error field: the legal proposal now has staging evidence for true
+VText source-bearing table survival, bounded owner edit survival through
+app-agent revise, explicit publication policy, and Markdown export source
+metadata preservation. Remaining mission work shifts to final adversarial /
+cognitive review, pruning weak or duplicate source-system paths, final hard
+mission report plus PDF, and any broader shared-contract gaps that the review
+still identifies.
+
 ## Suggested `/goal`
 
 ```text

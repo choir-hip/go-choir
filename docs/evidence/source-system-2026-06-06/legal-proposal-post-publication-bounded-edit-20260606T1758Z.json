@@ -1,0 +1,100 @@
+{
+  "observed_at": "2026-06-06T17:58:25Z",
+  "observer": "Computer Use / Comet authenticated staging session plus public publication API",
+  "owner_session": {
+    "authenticated": true,
+    "email": "yusefnathanson@me.com",
+    "user_id": "5bd6de97-3b58-408c-bf89-c42c81b083de"
+  },
+  "document": {
+    "doc_id": "f93cea62-f833-4dae-b414-8e44783d8cbe",
+    "title": "choir_private_legal_cloud_proposal.vtext"
+  },
+  "bounded_user_edit": {
+    "version": 95,
+    "revision_id": "fc2cd0de-ba3a-458f-b1b3-04206d74df9c",
+    "author": "user",
+    "has_bounded_edit_phrase": true,
+    "has_appendix_a": true,
+    "has_glossary_table_header": true,
+    "has_vector_database_bounded_row": true,
+    "source_entities": 7,
+    "source_markers": 7
+  },
+  "appagent_revision": {
+    "version": 96,
+    "revision_id": "5a5532d8-0ff3-44d6-aeef-5ea6cbc08798",
+    "author": "appagent",
+    "has_bounded_edit_phrase": true,
+    "has_appendix_a": true,
+    "has_glossary_table_header": true,
+    "has_vector_database_bounded_row": true,
+    "source_entities": 7,
+    "source_markers": 7,
+    "context_mode": "focused_user_edit_diff",
+    "edit_operation": "apply_edits",
+    "prompt_chars": 13808
+  },
+  "revise_request": {
+    "loop_id": "fd76a8d5-4282-4907-89db-d447a88291ba",
+    "state": "pending",
+    "created_at": "2026-06-06T17:58:25.937Z"
+  },
+  "publication": {
+    "route": "/pub/vtext/choir-private-legal-cloud-proposal-vtext-pubf7bae84a8",
+    "publication_id": "pub-f7bae84a-80fa-4bf7-87f7-18ff07a01ca4",
+    "publication_version_id": "pubver-ae91528d-d605-42dc-980c-16bfde4c20f8",
+    "transclusions": 7,
+    "access_policy": {
+      "visibility": "public",
+      "route": "public"
+    },
+    "export_policy": {
+      "copy_allowed": true,
+      "download_allowed": true,
+      "formats": [
+        "txt",
+        "md",
+        "html",
+        "docx",
+        "pdf"
+      ]
+    }
+  },
+  "markdown_export": {
+    "format": "md",
+    "content_length": 38426,
+    "has_bounded_edit_phrase": true,
+    "has_appendix_a": true,
+    "has_glossary_table_header": true,
+    "has_source_aba_formal_op_512": true,
+    "metadata_keys": [
+      "access_policy",
+      "artifact_manifest_id",
+      "content_hash",
+      "export_policy",
+      "format",
+      "generated_at",
+      "private_material_omitted",
+      "projection_hash",
+      "provenance_scope",
+      "publication_id",
+      "publication_version_id",
+      "retrieval",
+      "route_path",
+      "schema",
+      "source_entities",
+      "source_revision_hash",
+      "transclusions"
+    ]
+  },
+  "raw_evidence": {
+    "public_resolve": "docs/evidence/source-system-2026-06-06/legal-proposal-bounded-edit-pubf7bae84a8-resolve-20260606T1758Z.json",
+    "public_markdown_export": "docs/evidence/source-system-2026-06-06/legal-proposal-bounded-edit-pubf7bae84a8-export-md-20260606T1758Z.json"
+  },
+  "limitations": [
+    "The first bookmarklet attempt created or observed v95 but then stopped before revise because the target row had already been changed to the bounded-edit wording.",
+    "A later compact collector accidentally submitted a second revise request from v96 and then received a 401 on a follow-up owner revision-list fetch despite /auth/session reporting authenticated. This was not used as acceptance evidence; public publication/export checks and the earlier Comet observation above are the accepted proof."
+  ],
+  "accepted": true
+}
