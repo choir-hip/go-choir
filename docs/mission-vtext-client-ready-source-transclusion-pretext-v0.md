@@ -5529,3 +5529,35 @@ local probe update:
   The source-flow stylesheet must use source-flow-specific selectors strong
   enough to preserve the minimal journal note instead of inheriting generic
   card/pill source affordances.
+
+## 2026-06-06 Local Simplification: Source Flow Stylesheet Extraction
+
+status: local_verified_pending_deploy
+
+change:
+
+- Moved the source-flow-only presentation rules from `VTextEditor.svelte` into
+  `frontend/src/lib/vtext-source-flow.css`.
+- `VTextEditor.svelte` now imports the source-flow stylesheet next to
+  `mountSourceJournalFlow`, leaving generic inline source marker/popover styles
+  in the editor surface.
+- The extracted stylesheet uses journal-note-specific selectors for
+  transclusion quotes, source facts, and source actions so generic rendered-doc
+  card/pill styles do not re-enter the Pretext note by cascade.
+
+local evidence:
+
+- `pnpm --dir frontend build` passed and emitted
+  `VTextEditor-CVj15cfM.js`.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js --project=chromium
+  --timeout=120000` passed: `5 passed (36.5s)`.
+
+contract implication:
+
+- This is an ownership/simplification slice. It preserves canonical VText,
+  source entity metadata, source transclusions, source windows, table
+  roundtrip, and Markdown export behavior.
+- The Pretext journal-flow styling now lives with the Pretext source-flow
+  module, which makes the remaining magazine/journal source-note tuning easier
+  to reason about without adding another card abstraction.
