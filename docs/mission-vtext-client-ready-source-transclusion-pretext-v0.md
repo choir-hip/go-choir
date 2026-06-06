@@ -6146,3 +6146,44 @@ residual risk:
   expanded path is Pretext journal flow, but a later simplification pass should
   decide whether the hover popover can also be reduced or replaced without
   harming keyboard/accessibility behavior.
+
+## 2026-06-06 Hard Review: Whole Mission And Current System
+
+status: report_created
+
+artifacts:
+
+- Markdown report:
+  `docs/vtext-mission-current-system-hard-review-2026-06-06.md`
+- PDF report:
+  `/Users/wiz/Library/Mobile Documents/com~apple~CloudDocs/vtext-mission-current-system-hard-review-2026-06-06.pdf`
+
+verification:
+
+- The PDF was rendered with Pandoc and WeasyPrint because the gstack
+  `make-pdf` binary was not built in this checkout.
+- The PDF is 7 pages, 50,667 bytes, and text extraction from the first pages
+  contains the report heading and findings.
+
+review result:
+
+- The mission is not complete.
+- The report finds that the legal-cloud publication, Markdown export,
+  source-transclusion expansion, guest source snapshots, reader cleanup, and
+  Pretext journal flow are materially working on staging.
+- The report also identifies remaining P1/P2 risks:
+  - source workflow remains too centralized in `VTextEditor.svelte`;
+  - manual source review still marks owner-entered evidence as confirmed;
+  - source windows still lead with app/source chrome before source content;
+  - publication reader snapshots need source-quality status beyond access
+    policy;
+  - Pretext flow is a correct noncanonical display projection but should stay
+    isolated from canonical document structure;
+  - diagnostic JSON repair still lives in the owner source panel;
+  - some owner-account proof remains split between Comet and Playwright/API.
+
+next simplification axis:
+
+- Extract source workflow surface area out of `VTextEditor.svelte`, starting
+  with a source panel component and source-surface launcher helper, while
+  preserving the deployed behavior and proof suite.
