@@ -1232,3 +1232,53 @@ nix build .#packages.x86_64-linux.sandbox .#packages.x86_64-linux.gateway --no-l
 Result: both temporary package builds completed successfully on Node B. The
 remaining proof is the normal push-triggered CI deploy and staging acceptance
 checks.
+
+## 2026-06-06 Deployed Markdown Export Table-Tail Proof Failure
+
+Status: `documented_before_fix`.
+
+Commit `18c5bf505b1e16efd779fc46e57d4dffc9720304` passed CI and deployed to
+Node B. Staging health reported both proxy and sandbox at that SHA:
+
+```text
+CI run: 27054280586
+Deploy job: 79855568648
+Health deployed_commit: 18c5bf505b1e16efd779fc46e57d4dffc9720304
+Health deployed_at: 2026-06-06T05:54:39Z
+```
+
+The owner publication Markdown export proof still failed against staging:
+
+```text
+GET https://choir.news/api/platform/publications/export?route=/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6&format=md
+format md
+filename choir-private-legal-cloud-proposal-vtext-pub270a62fb6.md
+content_hash_present True
+proposal title retained: True
+work product row present: True
+work product row has trailing delimiter: False
+no open source ui label: True
+no close ui label: True
+source evidence retained: True
+```
+
+Observed tail:
+
+```markdown
+| **Vector database** | A database optimized for storing and searching numerical vectors (embeddings), enabling similarity search. |
+| **Vector search** | A search technique that finds items similar to a query by comparing their vector representations in a high-dimensional space. |
+
+| **Work product** | Durable, reviewable output of professional work—drafts, memos, briefs, letters, tables, cited research—as opposed to ephemeral chat responses.
+
+---
+```
+
+Root-cause belief before code change: the shared Markdown table normalizer fixed
+malformed table-shaped rows only while it was already inside a contiguous table
+block. The real owner document contains a blank line before the malformed final
+row. The frontend renderer's table recovery is permissive enough that this row
+appears visually attached to the glossary table, but the export normalizer
+treated the blank line as the end of table context and therefore did not repair
+the final delimiter. The next repair should generalize table-structure recovery
+for table-shaped continuation rows near a preceding confirmed table, while still
+avoiding ordinary pipe-containing prose.
