@@ -6367,6 +6367,13 @@ frontend/tests/vtext-authoring-history.spec.js:
   the publish regression test asserts the banner is visible, the fake policy
   summary contains Public route, and Publish is disabled until the checkbox is
   checked.
+
+first menu-fix staging attempt:
+  commit 7f576d1a9e316ded3741af39d0d1e019bf085ee9 removed the persistent
+  banner and rendered a publish menu, but deployed Playwright proof showed the
+  editor surface intercepted pointer events for the menu's final
+  data-vtext-publish-confirm command. The menu was visible but not clickable,
+  so the toolbar/menu stacking contract still failed.
 ```
 
 acceptance for fix:
@@ -6383,6 +6390,8 @@ acceptance for fix:
 - preserve the explicit access/export policy payload sent to the publish API;
 - delete the obsolete checkbox acknowledgement state and tests that require the
   banner.
+- keep the publish menu above the document surface in both visual and
+  pointer-event stacking order.
 
 remaining error field: this is a product-surface and simplification regression.
 It does not change the backend public publication policy contract from
