@@ -4446,6 +4446,66 @@ does not yet generate a single schema from the backend contract or resolve
 selector text through Source Service, but it stops one publication/Source
 Viewer/repair path from silently ignoring selector-rich publication metadata.
 
+### Problem 28: Reader Artifact Status Is Still A Frontend-Only Source Contract
+
+Status: `documented_before_fix`.
+
+problem: the mission now separates source evidence state from reader artifact
+workflow state in the frontend, but the backend shared source contract does not
+define reader artifact status at all. `frontend/src/lib/source-contract.ts`
+defines `reader_snapshot_ready`, `not_publication_safe`,
+`bounded_excerpt_only`, and `import_failed`, while
+`internal/sourcecontract` defines evidence, open-surface, and selector
+contracts only. Backend publication enrichment in
+`internal/proxy/platform_publish.go` writes raw `reader_snapshot_status.state`
+strings directly into VText metadata before platform publication. That leaves
+Source Viewer, publication, export, and future Source Service readers depending
+on a frontend-private interpretation of reader snapshot workflow state.
+
+affected contract/invariant: reader artifacts are source-system objects, not
+frontend labels. Source Viewer must remain the durable default for source
+artifacts, Web Lens must remain explicit live/original inspection, and
+publication must preserve source snapshots for authorized readers. Those claims
+depend on a shared reader artifact state vocabulary distinct from evidence
+states such as `confirms` or `blocked_by_access`.
+
+confirmed evidence:
+
+```text
+frontend/src/lib/source-contract.ts:
+  READER_ARTIFACT_STATES = reader_snapshot_ready, not_publication_safe,
+  bounded_excerpt_only, import_failed
+  normalizeReaderArtifactState(...)
+
+internal/sourcecontract:
+  evidence.go, open_surface.go, selector.go exist, but no reader artifact
+  status contract exists.
+
+internal/proxy/platform_publish.go:
+  enrichVTextPublicationMetadata writes reader_snapshot_status.state values
+  "not_publication_safe", "bounded_excerpt_only", and
+  "reader_snapshot_ready" directly as string literals.
+
+frontend/tests/vtext-source-entities.spec.js:
+  verifies reader_snapshot_ready is not source evidence state and is only
+  normalized through the frontend reader artifact helper.
+```
+
+acceptance for fix:
+
+- add a backend shared reader artifact contract under `internal/sourcecontract`
+  with canonical states and alias normalization matching the frontend helper;
+- make publication enrichment use the shared constants/helpers for
+  `reader_snapshot_status.state`;
+- add focused backend tests proving aliases normalize and publication metadata
+  emits canonical reader artifact states;
+- preserve frontend behavior and add/keep a frontend parity test showing reader
+  artifact states remain separate from source evidence states.
+
+remaining error field: this closes one more shared source-contract gap but does
+not generate a cross-language schema or finish owner legal-proposal
+bounded-edit proof.
+
 ## Suggested `/goal`
 
 ```text
