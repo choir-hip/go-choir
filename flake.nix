@@ -211,6 +211,7 @@
           vendorHash = "sha256-EKND/igipnszR8cAOxBGeH9w4KX5p+zrk5IwEOZiYSE=";
           internalDirs = [
             "internal/buildinfo"
+            "internal/markdownstructure"
             "internal/platform"
             "internal/proxy"
             "internal/server"
@@ -256,6 +257,7 @@
             "internal/buildinfo"
             "internal/events"
             "internal/gateway"
+            "internal/markdownstructure"
             "internal/modelcatalog"
             "internal/provider"
             "internal/runtime"
@@ -273,6 +275,7 @@
           vendorHash = "sha256-5PpkmU0U+dVrHV5scrQCp7V0ejMRlDOw9qVLp3wFxHA=";
           internalDirs = [
             "internal/buildinfo"
+            "internal/markdownstructure"
             "internal/platform"
             "internal/server"
           ];
@@ -285,6 +288,7 @@
             "internal/buildinfo"
             "internal/cycle"
             "internal/events"
+            "internal/markdownstructure"
             "internal/modelcatalog"
             "internal/provider"
             "internal/runtime"
@@ -305,6 +309,7 @@
             "internal/buildinfo"
             "internal/events"
             "internal/gatewayruntime"
+            "internal/markdownstructure"
             "internal/modelcatalog"
             "internal/runtime"
             "internal/sandbox"

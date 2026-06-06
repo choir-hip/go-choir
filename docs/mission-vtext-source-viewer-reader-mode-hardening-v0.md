@@ -1142,3 +1142,37 @@ glossary-specific export patch.
 Stopping impact: mission cannot be complete until a follow-up commit repairs the
 Node B build, deploys, confirms staging identity for the fixed SHA, and reruns
 the actual owner-publication Markdown export proof.
+
+## 2026-06-06 Node B Deploy Packaging Fix Evidence
+
+Status: `local_packaging_fix_ready_for_ci`.
+
+Repair made after the documentation checkpoint:
+
+- Added `internal/markdownstructure` to the flake `internalDirs` source
+  closures for `proxy`, `gateway`, `platformd`, `sourcecycled`, and `sandbox`,
+  matching the service graphs that compile `internal/platform` or
+  `internal/runtime`.
+- Added a deploy-impact classifier rule for `internal/markdownstructure/*` so
+  future changes select gateway, platformd, proxy, sandbox, and the appropriate
+  host/guest deployment work instead of silently skipping the shared package.
+
+Local verification:
+
+```text
+printf '%s\n' internal/markdownstructure/tables.go internal/platform/service.go internal/runtime/vtext.go .github/scripts/deploy-impact-classify flake.nix | .github/scripts/deploy-impact-classify /tmp/choir-impact.out
+# deploy_needed=true, host_services=gateway,platformd,proxy,sandbox,
+# ordinary/playwright guest image refresh selected through flake.nix
+
+nix develop -c go test ./internal/markdownstructure ./internal/platform
+```
+
+Local limitation:
+
+```text
+nix build .#packages.x86_64-linux.sandbox .#packages.x86_64-linux.platformd .#packages.x86_64-linux.proxy --no-link
+```
+
+could not run on the local `aarch64-darwin` machine because no
+`x86_64-linux` builder was available. The packaging fix therefore requires CI
+and Node B deploy proof before acceptance.
