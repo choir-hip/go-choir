@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"html"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -797,9 +796,7 @@ func formatPublicationExportContent(bundle *PublicationBundle, format string) st
 		normalized, _ := markdownstructure.NormalizeTableShapedRows(content)
 		return normalized
 	case "html":
-		title := html.EscapeString(firstNonEmpty(bundle.Publication.Title, "Published VText"))
-		body := strings.ReplaceAll(html.EscapeString(content), "\n", "<br>\n")
-		return "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>" + title + "</title></head><body><article><h1>" + title + "</h1><p>" + body + "</p></article></body></html>\n"
+		return renderPublicationHTML(buildPublicationDocument(bundle))
 	default:
 		return content
 	}

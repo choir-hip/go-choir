@@ -69,6 +69,7 @@ type publicationExportMetadataEnvelope struct {
 	PrivateMaterialOmitted bool                      `json:"private_material_omitted"`
 	SourceEntities         []PublicationSourceEntity `json:"source_entities"`
 	Transclusions          []PublicationTransclusion `json:"transclusions"`
+	SourceManifest         publicationSourceManifest `json:"source_manifest"`
 }
 
 func decodePublicationExportMetadata(t *testing.T, raw json.RawMessage) publicationExportMetadataEnvelope {
@@ -198,13 +199,43 @@ type publicationSourceContractCase struct {
 func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	svc := NewService(store, filepath.Join(root, "artifacts"))
+	metadata, err := json.Marshal(map[string]any{
+		"source_entities": []map[string]any{{
+			"entity_id": "src-export-proof",
+			"kind":      "web_source",
+			"label":     "Export source proof",
+			"target": map[string]any{
+				"target_kind": "url",
+				"url":         "https://example.com/export-proof",
+			},
+			"selectors": []map[string]any{{
+				"selector_kind": "text_quote",
+				"text_quote":    "This source snapshot must survive rich export.",
+				"content_hash":  "hash-export-proof",
+			}},
+			"display": map[string]any{
+				"inline_mode":           "embedded_excerpt",
+				"open_surface":          "source_viewer",
+				"reader_artifact_state": "snapshot_ready",
+			},
+			"evidence": map[string]any{
+				"state":          "confirms",
+				"relation":       "confirms",
+				"research_state": "owner_supplied",
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal source metadata: %v", err)
+	}
 
 	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
 		Title:            "Export Proof",
-		Content:          "# Export Proof\n\n| Term | Definition |\n| --- | --- |\n| VText | Canonical artifact. |\n\nThis is the published projection.\n\n" + strings.Repeat("Long document proof line with enough content to require PDF pagination.\n", 80) + "\nLast line must survive export.",
+		Content:          "# Export Proof\n\n| Term | Definition |\n| --- | --- |\n| VText | Canonical **artifact**. |\n\nThis is the published projection with [Export source proof](source:src-export-proof).\n\nA **private legal cloud** survives rich export without Markdown syntax.\n\n" + strings.Repeat("Long document proof line with enough content to require PDF pagination.\n", 80) + "\nLast line must survive export.",
+		Metadata:         metadata,
 		RequestedBy:      "user-1",
 	})
 	if err != nil {
@@ -228,6 +259,9 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	if docxMetadata.Retrieval.SourceID == "" || len(docxMetadata.Retrieval.Spans) != 1 || docxMetadata.Retrieval.Spans[0].ID == "" {
 		t.Fatalf("docx export retrieval metadata = %#v", docxMetadata.Retrieval)
 	}
+	if docxMetadata.SourceManifest.Schema != "choir.publication_sources.v1" || len(docxMetadata.SourceManifest.Sources) != 1 {
+		t.Fatalf("docx source manifest metadata = %#v", docxMetadata.SourceManifest)
+	}
 	docxBytes, err := decodeBase64(docxExport.ContentBase64)
 	if err != nil {
 		t.Fatalf("decode docx base64: %v", err)
@@ -249,14 +283,23 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 		}
 		parts[file.Name] = string(data)
 	}
-	if !strings.Contains(parts["word/document.xml"], "Canonical artifact.") || !strings.Contains(parts["word/document.xml"], "<w:tbl>") {
+	if !strings.Contains(parts["word/document.xml"], "Canonical ") || !strings.Contains(parts["word/document.xml"], "artifact") || !strings.Contains(parts["word/document.xml"], "<w:tbl>") {
 		t.Fatalf("docx document did not preserve content/table: %s", parts["word/document.xml"])
+	}
+	if strings.Contains(parts["word/document.xml"], "**private legal cloud**") || strings.Contains(parts["word/document.xml"], "(source:src-export-proof)") || strings.Contains(parts["word/document.xml"], "# Export Proof") {
+		t.Fatalf("docx document leaked raw markdown syntax: %s", parts["word/document.xml"])
+	}
+	if !strings.Contains(parts["word/document.xml"], "<w:b/>") || !strings.Contains(parts["word/document.xml"], "Export source proof [src-export-proof]") {
+		t.Fatalf("docx document missing format-native emphasis/source marker: %s", parts["word/document.xml"])
 	}
 	if !strings.Contains(parts["docProps/custom.xml"], resp.PublicationVersionID) || !strings.Contains(parts["docProps/custom.xml"], resp.ContentHash) {
 		t.Fatalf("docx custom properties missing public provenance: %s", parts["docProps/custom.xml"])
 	}
 	if !strings.Contains(parts["docProps/custom.xml"], `access_policy`) || !strings.Contains(parts["docProps/custom.xml"], `retrieval`) {
 		t.Fatalf("docx custom properties missing export metadata envelope: %s", parts["docProps/custom.xml"])
+	}
+	if !strings.Contains(parts["customXml/item1.xml"], "choir.publication_sources.v1") || !strings.Contains(parts["customXml/item1.xml"], "src-export-proof") || !strings.Contains(parts["customXml/item1.xml"], "This source snapshot must survive rich export.") {
+		t.Fatalf("docx custom XML missing source manifest: %s", parts["customXml/item1.xml"])
 	}
 
 	pdfExport, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "pdf")
@@ -275,11 +318,17 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 		t.Fatalf("decode pdf base64: %v", err)
 	}
 	pdfText := string(pdfBytes)
-	if !strings.HasPrefix(pdfText, "%PDF-1.4") || !strings.Contains(pdfText, resp.PublicationVersionID) || !strings.Contains(pdfText, "This is the published projection.") || !strings.Contains(pdfText, "Last line must survive export.") {
+	if !strings.HasPrefix(pdfText, "%PDF-1.4") || !strings.Contains(pdfText, resp.PublicationVersionID) || !strings.Contains(pdfText, "This is the published projection with") || !strings.Contains(pdfText, "Last line must survive export.") {
 		t.Fatalf("pdf content/provenance missing: %.400s", pdfText)
 	}
-	if !strings.Contains(pdfText, `access_policy`) || !strings.Contains(pdfText, `retrieval`) {
-		t.Fatalf("pdf embedded metadata missing policy/retrieval envelope: %.400s", pdfText)
+	if strings.Contains(pdfText, "**private legal cloud**") || strings.Contains(pdfText, "(source:src-export-proof)") || strings.Contains(pdfText, "# Export Proof") {
+		t.Fatalf("pdf leaked raw markdown syntax: %.800s", pdfText)
+	}
+	if !strings.Contains(pdfText, "private legal cloud") || !strings.Contains(pdfText, "Sources") || !strings.Contains(pdfText, "This source snapshot must survive rich export.") || !strings.Contains(pdfText, "choir.publication_sources.v1") {
+		t.Fatalf("pdf missing rendered content/source manifest: %.800s", pdfText)
+	}
+	if !strings.Contains(pdfText, `access_policy`) || !strings.Contains(pdfText, `choir.publication_sources.v1`) {
+		t.Fatalf("pdf embedded metadata missing policy/source manifest: %.400s", pdfText)
 	}
 }
 
@@ -866,7 +915,7 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
 		Title:            "Mission Note",
-		Content:          "A public note.\n\nThis is the published projection.",
+		Content:          "# Mission Note\n\nA public note.\n\nThis is the published projection with [Federal Reserve rate statement](source:src-entity-fed-rates).",
 		Citations:        citations,
 		Metadata:         metadata,
 		RequestedBy:      "user-1",
@@ -898,7 +947,7 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	if trailingSlashBundle.Route.Path != resp.RoutePath {
 		t.Fatalf("trailing slash route normalized to %q, want %q", trailingSlashBundle.Route.Path, resp.RoutePath)
 	}
-	if bundle.Artifact.Content != "A public note.\n\nThis is the published projection." {
+	if bundle.Artifact.Content != "# Mission Note\n\nA public note.\n\nThis is the published projection with [Federal Reserve rate statement](source:src-entity-fed-rates)." {
 		t.Fatalf("bundle content mismatch: %q", bundle.Artifact.Content)
 	}
 	if bundle.Citations[0].ToKind == "private_vtext_revision" || bundle.Citations[0].ToID == "rev-1" {
@@ -946,12 +995,24 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	if exported.Format != "html" || exported.MediaType != "text/html; charset=utf-8" || !strings.HasSuffix(exported.Filename, ".html") {
 		t.Fatalf("export metadata = %#v", exported)
 	}
-	if !strings.Contains(exported.Content, "This is the published projection.") || exported.ContentHash == "" {
+	if !strings.Contains(exported.Content, "This is the published projection with") || exported.ContentHash == "" {
 		t.Fatalf("export content/hash = %#v", exported)
+	}
+	if !strings.Contains(exported.Content, "<h1>Mission Note</h1>") || !strings.Contains(exported.Content, `<a class="vtext-source-ref"`) || !strings.Contains(exported.Content, `id="choir-source-manifest"`) {
+		t.Fatalf("html export missing semantic document/source manifest: %s", exported.Content)
+	}
+	if strings.Contains(exported.Content, "# Legal Cloud") || strings.Contains(exported.Content, "**") || strings.Contains(exported.Content, "(source:src-entity-fed-rates)") {
+		t.Fatalf("html export leaked raw markdown syntax: %s", exported.Content)
+	}
+	if !strings.Contains(exported.Content, "choir.publication_sources.v1") || !strings.Contains(exported.Content, "src-entity-fed-rates") || !strings.Contains(exported.Content, "The committee held rates steady.") {
+		t.Fatalf("html export missing embedded source metadata: %s", exported.Content)
 	}
 	exportedMetadata := decodePublicationExportMetadata(t, exported.Metadata)
 	if len(exportedMetadata.SourceEntities) != 1 || len(exportedMetadata.Transclusions) != 1 {
 		t.Fatalf("export source metadata = %#v from %s", exportedMetadata, string(exported.Metadata))
+	}
+	if exportedMetadata.SourceManifest.Schema != "choir.publication_sources.v1" || len(exportedMetadata.SourceManifest.Sources) != 1 {
+		t.Fatalf("export source manifest = %#v from %s", exportedMetadata.SourceManifest, string(exported.Metadata))
 	}
 	if !strings.Contains(string(exportedMetadata.AccessPolicy), `"visibility":"public"`) || !strings.Contains(string(exportedMetadata.ExportPolicy), `"download_allowed":true`) {
 		t.Fatalf("export policy metadata access=%s export=%s", string(exportedMetadata.AccessPolicy), string(exportedMetadata.ExportPolicy))
