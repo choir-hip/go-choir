@@ -5310,7 +5310,7 @@ architecture simplification rather than a correctness blocker.
 
 ### Problem 33: Source Contract Testdata Triggers Staging Deploy
 
-Status: `documented_before_classifier_fix`.
+Status: `classifier_fixed_and_ci_accepted`.
 
 problem: the shared source-contract verifier checkpoint changed only
 documentation, frontend tests, Go tests, and a test fixture under
@@ -5397,6 +5397,49 @@ overclassification for direct `internal/*/testdata/*` paths and adds CI
 coverage for the regression. It does not solve the broader architectural
 problem that deploy impact is still path-pattern based rather than derived from
 build closures or explicit package manifests.
+
+post-push acceptance:
+
+```text
+problem checkpoint commit:
+  81127f94 docs: record source contract testdata deploy impact
+
+classifier fix commit:
+  4c5d762866ef918e4909b0cf8c39336fe70598e3
+
+CI run:
+  https://github.com/choir-hip/go-choir/actions/runs/27070151859
+  conclusion=success
+
+deploy-impact job:
+  79897807085
+  Test deploy impact classifier: success
+  deploy_needed=false
+  deploy_host=false
+  deploy_frontend=false
+  deploy_host_service=false
+  deploy_ordinary_guest=false
+  deploy_playwright_guest=false
+  deploy_host_os=false
+  deploy_vmctl_restart=false
+  deploy_active_vm_refresh=false
+  host_services=
+  .github/scripts/deploy-impact-classify -> ignored (docs/workflow/test artifact)
+  .github/scripts/deploy-impact-classify-test -> ignored (docs/workflow/test artifact)
+  .github/workflows/ci.yml -> ignored (docs/workflow/test artifact)
+  docs/mission-source-system-simplify-secure-smart-v0.md -> ignored (docs/workflow/test artifact)
+  Skipping staging deploy: only docs, workflow, or Playwright test artifacts changed.
+
+other CI jobs:
+  Go vet/build, non-runtime tests, runtime shards, integration smoke, aggregate check all succeeded.
+  Build Frontend skipped.
+  Deploy to Staging (Node B) skipped.
+
+staging health after CI:
+  proxy and upstream stayed on deployed_commit=5855acd2a9475de6c0423de1d195512eb3dfdf53
+  deployed_at=2026-06-06T18:11:10Z
+  status=ok, upstream=ok, vmctl_status=ok
+```
 
 ## Suggested `/goal`
 
