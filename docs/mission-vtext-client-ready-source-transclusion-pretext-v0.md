@@ -6560,3 +6560,44 @@ belief-state update:
 - The next source-workflow simplification should either extract the repair/import
   write functions out of `VTextEditor.svelte` or replace the diagnostic JSON
   path with a clearer operator-only diagnostics surface.
+
+## 2026-06-06 Problem: Context-Gated JSON Repair Is Dead Debug Scaffolding
+
+status: documented_pending_fix
+
+new evidence:
+
+- After the owner-facing diagnostic JSON editor was hidden, the remaining raw
+  repair path is reachable only through launch-context flags
+  (`showSourceRepairDiagnostics` or `debugSourceRepair`).
+- No reviewed owner workflow or operator workflow launches a dedicated
+  diagnostics surface for those flags.
+- The hidden path keeps old scaffolding alive:
+  `defaultSourceRepairPayload()`, `ensureSourceRepairPayload()`,
+  `sourceRepairPayload`, and `handleApplySourceRepair()`.
+- The real owner source-review path already calls `repairVTextSourceGaps()` with
+  a typed payload assembled from marker/title/excerpt/source URL fields.
+
+risk:
+
+- A hidden debug path can drift untested while preserving the illusion that a
+  diagnostic UX still exists.
+- The editor stays coupled to two source-repair modes: the real typed review
+  workflow and the obsolete raw JSON workflow.
+- Future agents may preserve or extend the JSON path instead of improving the
+  typed claim/source review path.
+
+intended fix:
+
+- Remove the hidden raw JSON repair UI, payload template, and apply handler.
+- Keep `sourceRepairPending` and `sourceRepairError` only for the typed source
+  review workflow that still owns real source repairs.
+- Preserve the source import/attach workflow and the deployed Pretext
+  journal-flow source rendering.
+
+proof required:
+
+- Local and deployed source-panel proof must still show manual source review
+  repairs a citation gap and opens the repaired source window.
+- Local and deployed Pretext source-flow proof must still show expanded source
+  notes beside article prose.
