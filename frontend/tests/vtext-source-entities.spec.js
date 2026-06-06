@@ -353,17 +353,7 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   expect(journalGeometry.sideColumnIsClear).toBe(true);
   expect(journalGeometry.secondParagraphBesideNote).toBe(true);
   expect(continuedBelowFlow).toBe(true);
-  const noteFactStyle = await note.locator('.vtext-source-facts span').first().evaluate((node) => {
-    const style = getComputedStyle(node);
-    return {
-      borderStyle: style.borderStyle,
-      borderRadius: style.borderRadius,
-      backgroundColor: style.backgroundColor,
-    };
-  });
-  expect(noteFactStyle.borderStyle).toBe('none');
-  expect(noteFactStyle.borderRadius).toBe('0px');
-  expect(noteFactStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  await expect(note.locator('.vtext-source-facts')).toHaveCount(0);
   const nestedCitation = flow.locator('[data-vtext-source-ref][data-source-entity-id="src-fixture-nested"]');
   await expect(nestedCitation).toBeVisible();
   await expect(nestedCitation.locator('[data-vtext-inline-transclusion]')).toBeHidden();

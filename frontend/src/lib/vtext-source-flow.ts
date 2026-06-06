@@ -74,12 +74,6 @@ const MIN_LINE_WIDTH = 180;
 const MAX_FLOW_BLOCKS = 6;
 const SOURCE_FLOW_BLOCK_SELECTOR = 'p';
 
-function cloneHTMLElement(element: Element | null): HTMLElement | null {
-  if (!element) return null;
-  const clone = element.cloneNode(true);
-  return clone instanceof HTMLElement ? clone : null;
-}
-
 function normalizeFlowText(value: unknown): string {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
@@ -240,6 +234,20 @@ function sourceFlowItems(node: Node | null, activeSourceRef: Element, font: stri
   return Array.from(node.childNodes).flatMap((child) => sourceFlowItems(child, activeSourceRef, font));
 }
 
+function sourceRefEntityID(sourceRef: Element): string {
+  return sourceRef.getAttribute('data-source-entity-id') || '';
+}
+
+function sourceRefTitle(sourceRef: Element, popover: Element): string {
+  return normalizeFlowText(popover.querySelector('strong')?.textContent)
+    || sourceRef.getAttribute('data-source-label')
+    || 'Source';
+}
+
+function sourceRefExcerpt(popover: Element): string {
+  return normalizeFlowText(popover.querySelector('[data-vtext-transclusion-body] .vtext-transclusion-quote')?.textContent);
+}
+
 function isSourceFlowBlock(element: Element | null): boolean {
   if (!element?.matches?.(SOURCE_FLOW_BLOCK_SELECTOR)) return false;
   if (element.closest?.('[data-vtext-source-flow]')) return false;
@@ -247,25 +255,35 @@ function isSourceFlowBlock(element: Element | null): boolean {
   return !!normalizeFlowText(element.textContent);
 }
 
-function buildSourceJournalNoteContent(note: HTMLElement, popover: Element, close: HTMLButtonElement): void {
+function buildSourceJournalNoteContent(note: HTMLElement, sourceRef: Element, popover: Element, close: HTMLButtonElement): void {
   const title = document.createElement('cite');
   title.className = 'vtext-source-journal-cite';
   title.setAttribute('data-vtext-source-flow-note-title', '');
-  title.textContent = normalizeFlowText(popover.querySelector('strong')?.textContent) || 'Source';
+  title.textContent = sourceRefTitle(sourceRef, popover);
   note.append(title);
 
-  const body = cloneHTMLElement(popover.querySelector('[data-vtext-transclusion-body]'));
-  if (body) {
+  const excerpt = sourceRefExcerpt(popover);
+  if (excerpt) {
+    const body = document.createElement('p');
     body.classList.add('vtext-source-journal-body');
     body.setAttribute('data-vtext-source-flow-note-body', '');
+    body.textContent = excerpt;
     note.append(body);
   }
 
   const actions = document.createElement('div');
   actions.className = 'vtext-source-journal-actions';
   actions.setAttribute('data-vtext-source-flow-note-actions', '');
-  const open = cloneHTMLElement(popover.querySelector('[data-vtext-open-source]'));
-  if (open) actions.append(open);
+  const entityID = sourceRefEntityID(sourceRef);
+  if (entityID) {
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'vtext-source-open';
+    open.setAttribute('data-vtext-open-source', '');
+    open.setAttribute('data-source-entity-id', entityID);
+    open.textContent = 'Open source';
+    actions.append(open);
+  }
   actions.append(close);
   note.append(actions);
 }
@@ -337,7 +355,7 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   close.setAttribute('data-vtext-source-flow-collapse', '');
   close.setAttribute('aria-label', 'Collapse source');
   close.textContent = 'Close';
-  buildSourceJournalNoteContent(note, popover, close);
+  buildSourceJournalNoteContent(note, sourceRef, popover, close);
   flow.append(note);
   paragraph.insertAdjacentElement('beforebegin', flow);
 

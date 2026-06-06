@@ -6042,3 +6042,46 @@ next implementation target:
   visible journal note, Pretext-routed line nodes, no cloned hidden-owner action
   targeting, no nested popover/card inside the flow, and text continuing beside
   the source note when viewport width allows it.
+
+## 2026-06-06 Local Repair: Journal Note Stops Cloning Card DOM
+
+status: local_verified_pending_deploy
+
+change:
+
+- `vtext-source-flow.ts` now builds the Pretext journal note directly from the
+  source ref semantics: title, cleaned excerpt/quote, `Open source`, and
+  `Close`.
+- The note no longer clones the old inline popover/transclusion body, so source
+  metadata/facts do not enter the magazine/journal flow and do not need
+  compensating de-card/de-pill CSS.
+- `vtext-source-flow.css` removed the journal-note-specific source-facts and
+  transclusion-body override rules. The source window remains the place for
+  fuller metadata/provenance inspection.
+- The old popover remains available only as the collapsed inline hover/fallback
+  source ref surface; the expanded reader path remains the Pretext-routed
+  journal flow.
+
+why this matches the clarification:
+
+- Pretext is still the wrapping/layout owner: line routing remains in
+  `layoutNextLineRange` / `layoutNextRichInlineLineRange`.
+- The source note is now content-forward source matter rather than a cloned app
+  card styled into submission.
+- This is a simplification pass, not a new source display layer.
+
+local proof:
+
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+- `pnpm --dir frontend run build` -> passed.
+
+deployment proof still needed:
+
+- Push this UI simplification, wait for CI/Node B deploy, verify deployed commit
+  identity, then repeat owner-account Comet proof on the legal-cloud VText:
+  source marker expands to a single Pretext journal note, article text routes
+  beside it, no cloned popover/card/facts appear inside the note, and `Open
+  source` still opens the reader snapshot source window.
