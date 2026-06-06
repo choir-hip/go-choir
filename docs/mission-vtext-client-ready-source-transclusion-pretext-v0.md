@@ -8089,3 +8089,54 @@ remaining error field:
   the owner desktop.
 - The larger mission still needs source acquisition cleanup and typed
   claim/source review before the client-ready proposal is complete.
+
+## 2026-06-06 Problem: Web Lens Snapshot Import Opens Prose VText Without Durable Content Artifact
+
+status: documented_pending_repair
+
+new evidence:
+
+- `frontend/src/lib/BrowserApp.svelte` `importSnapshotToVText` builds a Markdown
+  document headed `Web Lens import` or `Source reader import`, embeds source URL
+  and session ID as prose, and dispatches `openvtext`.
+- The dispatched context uses `sourceContentId: sessionID`, but that session ID
+  is not a `ContentItem.content_id` from `/api/content/items`.
+- `VTextEditor.svelte` stores `source_url`, `source_content_id`, and
+  `created_from` in document/revision metadata, so the snapshot can look like it
+  has a content source even though no durable content artifact was created.
+- `web-surface-rationalization.spec.js` currently proves this prose VText import
+  path by checking for `Web Lens import` in the VText editor. It does not prove
+  a content item exists, has reader-artifact identity, or can later be attached
+  to a source entity or published as a source snapshot.
+
+current interpretation:
+
+- This is a source-acquisition shortcut. The cleaned Web Lens snapshot is useful
+  source content, but the product path stores it first as canonical VText prose
+  rather than as a durable source/content artifact.
+- The behavior conflicts with the mission direction: source acquisition should
+  create cleaned Markdown reader artifacts first, and VText should reference
+  those artifacts through source metadata/transclusions instead of treating the
+  imported snapshot as article prose.
+
+risk:
+
+- Web Lens cleanup can create source text that is hard to reuse, attach, publish,
+  or audit because the source text is embedded in a VText document body instead
+  of the content substrate.
+- `source_content_id` metadata can be misleading when it contains a browser
+  session ID rather than a durable content item ID.
+- Later publication/source-window code can miss these snapshots because they do
+  not enter the source artifact path used by content-item source entities.
+
+next repair:
+
+- When a Web Lens snapshot is imported to VText, first create a `text/markdown`
+  `ContentItem` with `app_hint: content`, source URL/canonical URL, snapshot
+  text, warning/status metadata, and provenance marking it as a Web Lens reader
+  snapshot.
+- Dispatch `openvtext` with the real content item ID in `sourceContentId` and
+  keep the VText body as a lightweight review wrapper, not the only durable copy
+  of the source.
+- Update the Web Lens import verifier to prove the content item creation request
+  and metadata, not just that a prose VText window opened.
