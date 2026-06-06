@@ -500,7 +500,7 @@ remaining risks:
 
 ### Problem L8-5: HTML Rich Export Is Semantic But Browser-Default, Not Document-Professional
 
-Status: `fixed_local_pending_staging`.
+Status: `fixed_staging_proven`.
 
 problem: after the first rich export fix, HTML no longer leaks raw Markdown
 syntax, but visual inspection of a staging-generated artifact shows a
@@ -559,11 +559,28 @@ visual artifact:
   /tmp/choir-rich-export-local-proof/html-render.png
   shows bounded document width, professional spacing, styled table borders,
   numeric citation marker, and styled source appendix.
+
+staging proof:
+  commit 5435e48df9840886565e6a47faf866be5265e676
+  GitHub Actions CI 27073438481 passed.
+  FlakeHub run 27073438490 passed.
+  Node B deploy job 79906671881 passed.
+  /health reported proxy and sandbox deployed_commit
+  5435e48df9840886565e6a47faf866be5265e676.
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/rich-export-artifacts.tmp.spec.js
+  result: 1 passed; temporary spec was deleted after the run.
+  Product-path publication:
+    https://choir.news/pub/vtext/rich-export-staging-proof-1780778997223-pubeceb52e4d
+  Downloaded HTML artifact:
+    /tmp/choir-rich-export-staging-proof/rich-export-staging-proof.html
+  Visual render:
+    /tmp/choir-rich-export-staging-proof/html-render.png
 ```
 
 ### Problem L8-6: PDF Rich Export Flattens Structure And Misrenders Document Glyphs
 
-Status: `fixed_local_pending_staging`.
+Status: `fixed_staging_proven`.
 
 problem: after the first rich export fix, PDF content is generated from the
 `PublicationDocument` spine, but the visual artifact still looks like a plain
@@ -618,11 +635,23 @@ visual artifact:
   /tmp/choir-rich-export-local-proof/pdf-pages/page-1.png
   shows no duplicate title, readable heading hierarchy, stable ASCII list
   markers, drawn table borders, and visible source appendix.
+
+staging proof:
+  commit 5435e48df9840886565e6a47faf866be5265e676
+  GitHub Actions CI 27073438481 passed.
+  Node B deploy job 79906671881 passed.
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/rich-export-artifacts.tmp.spec.js
+  result: 1 passed; temporary spec was deleted after the run.
+  Downloaded PDF artifact:
+    /tmp/choir-rich-export-staging-proof/rich-export-staging-proof.pdf
+  Visual render:
+    /tmp/choir-rich-export-staging-proof/pdf-pages/page-1.png
 ```
 
 ### Problem L8-7: DOCX Rich Export Still Exposes Internal Source IDs And Lacks Profile Polish
 
-Status: `fixed_local_pending_staging`.
+Status: `fixed_staging_proven`.
 
 problem: after the first rich export fix, DOCX is a true WordprocessingML
 package with runs, tables, custom properties, and a custom XML source manifest.
@@ -685,6 +714,18 @@ visual artifact:
   shows styled headings, table survival, numeric visible source marker, and a
   source appendix. LibreOffice/soffice remains unavailable locally, so Quick
   Look is still the local visual renderer for DOCX.
+
+staging proof:
+  commit 5435e48df9840886565e6a47faf866be5265e676
+  GitHub Actions CI 27073438481 passed.
+  Node B deploy job 79906671881 passed.
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/rich-export-artifacts.tmp.spec.js
+  result: 1 passed; temporary spec was deleted after the run.
+  Downloaded DOCX artifact:
+    /tmp/choir-rich-export-staging-proof/rich-export-staging-proof.docx
+  Visual render:
+    /tmp/choir-rich-export-staging-proof/docx-quicklook/rich-export-staging-proof.docx.png
 ```
 
 ## Suggested Goal String
