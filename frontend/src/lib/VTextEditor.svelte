@@ -38,6 +38,7 @@
     createSourceContentItem,
     importSourceContentItem,
   } from './vtext-source-actions';
+  import VTextPublicationResult from './VTextPublicationResult.svelte';
   import VTextSourcePanel from './VTextSourcePanel.svelte';
   import VTextToolbar from './VTextToolbar.svelte';
   import { sourceEntityLaunchPayload } from './vtext-source-launcher';
@@ -1937,11 +1938,6 @@
     saveStatus = 'Public link shown in address bar';
   }
 
-  function handlePublishedLinkClick(event) {
-    event.preventDefault();
-    handleOpenPublishedURL();
-  }
-
   async function handleCreatePublishedDerivative() {
     await createPublishedDerivative();
   }
@@ -2461,66 +2457,15 @@
         </section>
       {/if}
 
-      {#if publishResult}
-        <section
-          class="publication-panel publication-result"
-          data-vtext-publish-result
-          data-publication-id={publishResult.publication_id || ''}
-          data-publication-version-id={publishResult.publication_version_id || ''}
-          data-public-route={publishResult.route_path || ''}
-          data-public-url={publicURLForPublishResult(publishResult)}
-        >
-          <div class="publication-heading">
-            <p class="eyebrow">Published</p>
-            <a
-              class="public-link"
-              data-vtext-public-link
-              href={publicURLForPublishResult(publishResult)}
-              on:click={handlePublishedLinkClick}
-            >
-              {publicURLForPublishResult(publishResult) || 'Public route ready'}
-            </a>
-          </div>
-          <div class="publication-actions">
-            <button type="button" class="primary-action" data-vtext-copy-public on:click={handleCopyPublishedURL}>
-              Copy link
-            </button>
-            <button type="button" class="secondary-action" data-vtext-open-public on:click={handleOpenPublishedURL}>
-              Open link
-            </button>
-            <button type="button" class="secondary-action" data-vtext-copy-full-text on:click={handleCopyPublishedText}>
-              Copy text
-            </button>
-            <details class="download-menu" data-vtext-download-menu>
-              <summary>Download</summary>
-              <button type="button" data-vtext-download-md on:click={() => handleDownloadPublished('md')}>Markdown</button>
-              <button type="button" data-vtext-download-txt on:click={() => handleDownloadPublished('txt')}>Text</button>
-              <button type="button" data-vtext-download-html on:click={() => handleDownloadPublished('html')}>HTML</button>
-              <button type="button" data-vtext-download-docx on:click={() => handleDownloadPublished('docx')}>DOCX</button>
-              <button type="button" data-vtext-download-pdf on:click={() => handleDownloadPublished('pdf')}>PDF</button>
-            </details>
-          </div>
-        </section>
-      {/if}
-
-      {#if publishedProposal}
-        <section
-          class="publication-panel publication-result"
-          data-vtext-proposal-result
-          data-proposal-id={publishedProposal.proposal_id || ''}
-          data-proposal-state={publishedProposal.state || ''}
-          data-delivery-state={publishedProposal.delivery_state || ''}
-        >
-          <div class="publication-heading">
-            <p class="eyebrow">Proposal</p>
-            <h2>{publishedProposal.state || 'recorded'}</h2>
-          </div>
-          <div class="publication-facts">
-            <span>{publishedProposal.delivery_state || 'recorded_for_author'}</span>
-            <span>{shortHash(publishedProposal.proposal_revision_hash || '')}</span>
-          </div>
-        </section>
-      {/if}
+      <VTextPublicationResult
+        {publishResult}
+        {publishedProposal}
+        publicURL={publicURLForPublishResult(publishResult)}
+        on:copy-public={handleCopyPublishedURL}
+        on:open-public={handleOpenPublishedURL}
+        on:copy-full-text={handleCopyPublishedText}
+        on:download={(event) => handleDownloadPublished(event.detail)}
+      />
 
       {#if isPublishedReadOnly}
         <article
@@ -2779,8 +2724,6 @@
   }
 
   .secondary-action,
-  .download-menu > summary,
-  .download-menu button,
   .update-pill,
   .primary-action {
     border: 1px solid var(--choir-border-strong);
@@ -2801,78 +2744,6 @@
     color: var(--choir-text-accent);
     line-height: 1;
     white-space: nowrap;
-  }
-
-  .download-menu {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-  }
-
-  .download-menu > summary {
-    list-style: none;
-    border-radius: 999px;
-    padding: 0.62rem 0.84rem;
-    font-size: 0.78rem;
-    font-weight: 720;
-    color: var(--choir-text-accent);
-  }
-
-  .download-menu > summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .download-menu[open] > summary {
-    background: var(--choir-accent-soft);
-    border-color: var(--choir-accent);
-  }
-
-  .download-menu[open] {
-    z-index: 4;
-  }
-
-  .download-menu[open]::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-  }
-
-  .download-menu button {
-    display: block;
-    width: 100%;
-    border-radius: 0;
-    border-width: 0;
-    border-bottom: 1px solid var(--choir-border);
-    background: transparent;
-    color: var(--choir-text-primary);
-    padding: 0.58rem 0.7rem;
-    text-align: left;
-    font-size: 0.76rem;
-    font-weight: 680;
-  }
-
-  .download-menu button:last-child {
-    border-bottom: 0;
-  }
-
-  .download-menu[open] button {
-    min-width: 8rem;
-  }
-
-  .download-menu[open] > button,
-  .download-menu[open] > :global(button) {
-    display: block;
-  }
-
-  .download-menu[open] {
-    flex-direction: column;
-    align-items: stretch;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 0.65rem;
-    background: var(--choir-surface-elevated);
-    box-shadow: var(--choir-shadow-lg);
-    overflow: hidden;
   }
 
   .rendered-doc {
@@ -3135,69 +3006,6 @@
     background: var(--choir-state-selected);
   }
 
-  .publication-panel {
-    flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.65rem;
-    align-items: center;
-    padding: 0.58rem 0.78rem;
-    border-bottom: 1px solid var(--choir-border-strong);
-    background: var(--choir-state-selected);
-  }
-
-  .publication-heading {
-    min-width: 0;
-  }
-
-  .publication-heading h2 {
-    margin: 0;
-    color: var(--choir-text-accent);
-    font-size: 1rem;
-    line-height: 1.24;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .publication-result {
-    background: var(--choir-status-success-soft);
-    border-bottom-color: var(--choir-status-success);
-  }
-
-  .public-link {
-    display: block;
-    max-width: min(28rem, 100%);
-    color: var(--choir-text-accent);
-    font-size: 0.84rem;
-    font-weight: 720;
-    line-height: 1.2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-decoration: none;
-    white-space: nowrap;
-  }
-
-  .public-link:hover,
-  .public-link:focus-visible {
-    color: var(--choir-text-accent);
-    text-decoration: underline;
-  }
-
-  .publication-actions {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 0.42rem;
-    align-items: center;
-    min-width: 0;
-  }
-
-  .publication-actions .primary-action {
-    background: var(--choir-accent);
-    border-color: var(--choir-accent);
-    color: var(--choir-text-on-accent);
-  }
-
   .recent-panel {
     flex: 1 1 auto;
     min-height: 0;
@@ -3369,20 +3177,6 @@
     .provenance-strip,
     .merge-suggestions {
       grid-template-columns: minmax(0, 1fr);
-    }
-
-    .publication-panel {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0.5rem;
-      padding: 0.62rem 0.7rem;
-    }
-
-    .publication-heading h2 {
-      font-size: 0.92rem;
-    }
-
-    .publication-facts {
-      justify-content: flex-start;
     }
 
     .update-pill {

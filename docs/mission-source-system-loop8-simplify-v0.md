@@ -514,6 +514,28 @@ staging proof:
   result: 2 passed.
 ```
 
+Next extraction target: VText publication result chrome. After the toolbar
+move, `VTextEditor.svelte` still owns the published-success panel,
+proposal-result panel, and a second copy of download-menu styling. No new
+behavior problem is confirmed; this is a bounded simplification to keep
+publish-result layout/action code with publication controls and reduce duplicate
+chrome CSS. The parent should retain publication state and side-effect handlers;
+the child should render panels and emit semantic copy/open/download events.
+
+Result: `frontend/src/lib/VTextPublicationResult.svelte` now owns
+published-success/proposal-result rendering and the parent delegates semantic
+copy/open/download events.
+
+```text
+frontend/src/lib/VTextEditor.svelte             3193 lines
+frontend/src/lib/VTextToolbar.svelte             590 lines
+frontend/src/lib/VTextPublicationResult.svelte   283 lines
+
+local verification:
+  npm --prefix frontend run build
+  result: passed with no Svelte unused-selector warnings.
+```
+
 ### Performance Checks
 
 - Local focused backend check:
