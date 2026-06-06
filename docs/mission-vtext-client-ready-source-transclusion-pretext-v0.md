@@ -7295,3 +7295,43 @@ belief-state update:
   axis. The next repair should improve acquisition quality signals and source
   cleanup for arbitrary URLs, especially when the reader snapshot is low
   confidence, only a bounded excerpt, or polluted by source chrome.
+
+## 2026-06-06 Problem: Publication Source Windows Hide Snapshot Quality Warnings
+
+status: documented_pending_repair
+
+new evidence:
+
+- Publication enrichment has access to the source `ContentItem` while building
+  `reader_snapshot` and `reader_snapshot_status`.
+- URL imports already persist extraction provenance with `warnings`, rungs, and
+  retrieval strategy. Examples include low-content extraction and fallback
+  reader modes.
+- The publication snapshot status currently records only `state`,
+  `text_char_count`, and `truncated`.
+- Browser/Web Lens source windows render publication-carried source snapshots
+  as `Source reader snapshot`, but the initial source-entity snapshot path does
+  not surface source-item warning provenance.
+
+current interpretation:
+
+- A publication reader can inspect a cleaned source snapshot, but cannot tell
+  whether that snapshot was a strong reader extraction, low-content fallback,
+  or warning-bearing cleanup path.
+- This is the next generic source-quality gap after fixing snapshot media type:
+  the durable reader artifact is present, but its confidence/status is too
+  opaque.
+
+risk:
+
+- Dirty or weak snapshots can look as authoritative as good source artifacts.
+- Future verifier evidence may assert that a source window opened without
+  proving the source artifact was high quality or warning-free.
+
+next repair:
+
+- Carry source-item extraction warnings and retrieval strategy into
+  publication `reader_snapshot_status`.
+- Make Browser/Web Lens source windows show those warning badges for
+  publication-carried source snapshots, without turning warnings into article
+  prose and without changing iframe fallback behavior.
