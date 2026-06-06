@@ -1444,10 +1444,14 @@ belief-state changes:
 
 remaining error field:
 
-- URL fetch policy is locally improved but not yet proven on staging and not yet
-  converged into Source Service.
-- Source entity normalization remains duplicated; source opening has a local
-  frontend plan but is not yet shared with runtime/platform/export contracts.
+- URL fetch policy is converged through the shared `internal/sourcefetch`
+  package for runtime URL import and source-service adapters, with staging
+  product-route proof for forbidden loopback import. Robots/TOS/rate policy and
+  future connector/Web Lens acquisition policy remain open.
+- Source entity, evidence-state, open-surface, and selector normalization now
+  have shared backend/frontend contract slices and staging proof for the focused
+  publication/source-open cases. A generated or otherwise single-source schema
+  across runtime, platform, frontend, export, and Source Service remains open.
 - Publication selector-set projection and export source metadata are locally and
   staging proven for source-service-style sources, and backend publication now
   canonicalizes selector kind aliases through `internal/sourcecontract`;
@@ -1481,27 +1485,31 @@ remaining error field:
   the edited prose region. This is documented as Problem 10 before any
   follow-up structure fix.
 
-highest-impact remaining uncertainty: owner legal-proposal proof is blocked on
-renewing the Comet passkey session, but useful parallel work remains in the
-shared source contract/export convergence slices. The largest product
-uncertainty after that remains the legal proposal's exact table survival and
-source metadata through a fresh owner edit/revise cycle.
+highest-impact remaining uncertainty: owner Comet is currently authenticated
+for `yusefnathanson@me.com`, and same-origin bookmarklet reads can call public
+owner VText APIs. The remaining uncertainty is not login; it is the safe,
+repeatable owner legal-proposal mutation/proof path for bounded edit/revise,
+publication/export metadata, screenshots/traces, and rollback refs without
+global-prompt misrouting or whole-document UI replacement.
 
-next executable probe: if owner Comet is renewed, run the legal proposal
-product-path proof for true `.vtext`, table survival, source opens, bounded
-edit, publication/export metadata, and rollback refs. If Comet remains
-passkey-blocked, continue the unblocked convergence work by auditing
-selector/evidence/open-surface preservation through publication/export and
-source snapshot records for URL-backed, content-item, and source-service-style
-sources.
+next executable probe: use an authenticated product path that explicitly
+targets legal proposal doc `f93cea62-f833-4dae-b414-8e44783d8cbe` to run the
+bounded edit/revise proof, then verify table signature/row count, represented
+sources, source opens, publication/export metadata, and rollback refs. Avoid
+the global prompt bar for this proof because it previously created a separate
+VText artifact. If Comet bookmarklet mutation remains unreliable, build a
+normal Playwright/Chrome-auth proof path or add a safe owner-approved UI/API
+test harness rather than editing the whole VText body through Computer Use.
 
 suggested resume goal string: continue
 `docs/mission-source-system-simplify-secure-smart-v0.md` from behavior commit
-`fab6b25b0d3d0092d9f7f55c672373216291657b` and this docs checkpoint. First
-attempt owner Comet renewal/proof if available; otherwise continue the next
-unblocked source-contract convergence slice while preserving the proven
-source-fetch policy, source-entity carry-forward, table normalization,
-text-like import metadata, and source open-surface behavior.
+`c7210d27dcb311149d56b90911b664f8a1589394` plus docs checkpoints `9464f38b`
+and `d0fca254`. Owner Comet is authenticated; continue with a safe
+document-id-scoped legal proposal bounded edit/revise proof if the product API
+path can be made reliable, otherwise continue the next source-contract
+convergence slice while preserving the proven source-fetch policy,
+source-entity carry-forward, table normalization, text-like import metadata,
+and source open-surface behavior.
 
 evidence artifact refs:
 
@@ -3366,14 +3374,43 @@ Proof limitation discovered:
   legal proposal's own window controls or an authenticated product endpoint
   that explicitly addresses the legal proposal document id.
 
+Follow-up Comet/API capability probe on 2026-06-06:
+
+- Computer Use switched Comet from a ChatGPT tab to an existing Choir tab at
+  `https://choir.news/?draft_recovery=93d9f819`; the visible desktop still
+  showed the real owner legal proposal window
+  `choir_private_legal_cloud_proposal.vtext` at `v92`.
+- Direct Comet navigation to `https://choir.news/auth/session` returned
+  `authenticated: true` for `yusefnathanson@me.com` with user id
+  `5bd6de97-3b58-408c-bf89-c42c81b083de`.
+- A short same-origin JavaScript bookmarklet executed successfully in Comet,
+  proving the browser can run owner-authenticated in-page API probes without a
+  fresh passkey ceremony.
+- A read-only owner-authenticated diagnosis bookmarklet for doc
+  `f93cea62-f833-4dae-b414-8e44783d8cbe` returned HTTP 200 and confirmed:
+  current revision `f92d40dc-9266-4e7c-b6a6-3a104e8d20c0`, version `v92`,
+  owner id `5bd6de97-3b58-408c-bf89-c42c81b083de`, title
+  `choir_private_legal_cloud_proposal.vtext`, revision count `93`, last author
+  `appagent`, `7` source markers, `1` table, `50` table rows, appendix table
+  `L269-L318`, and table signature `sha256:a86643578fed81c67c8838ab00c5aba0a3af9a26294d59df529db8a15ab1f3b8`.
+- Attempting to run a longer mutation/restore bookmarklet through Comet's
+  address field was unreliable: the page continued showing the prior diagnosis
+  output instead of executing the new script. Reading Comet's encrypted cookies
+  from `~/Library/Application Support/Comet/Default/Cookies` showed
+  `choir_access` and `choir_refresh`, but decrypting via macOS Keychain blocked
+  on access control and was stopped. The bounded edit/restore proof therefore
+  remains unrun in this checkpoint.
+
 Residual risk: this closes the fresh Comet owner-authentication and current
 legal-proposal structure observation gap, and it gives concrete post-repair
 table/source evidence for `v91`/`v92`. It does not yet satisfy the full
 post-repair owner bounded-edit acceptance because the attempted global-prompt
-edit targeted a new VText artifact. Remaining mission work includes a properly
-scoped owner legal-proposal bounded edit/revise proof, shared source contract
-consolidation across runtime/platform/frontend/export, adversarial/cognitive
-review, dead-path pruning, and the hard mission review report plus PDF.
+edit targeted a new VText artifact and the later bookmarklet mutation path was
+not reliable enough to use for owner document mutation. Remaining mission work
+includes a properly scoped owner legal-proposal bounded edit/revise proof,
+shared source contract consolidation across runtime/platform/frontend/export,
+adversarial/cognitive review, dead-path pruning, and the hard mission review
+report plus PDF.
 
 ### Problem 14: Open-Surface Aliases Can Defeat Explicit Web Lens Routing
 
