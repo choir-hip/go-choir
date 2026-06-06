@@ -564,6 +564,37 @@ The child/helper module must not import Svelte state, source acquisition, or
 publication contracts. It should accept a DOM root and return Markdown using
 the same current projection semantics.
 
+Result: `frontend/src/lib/vtext-markdown-serializer.ts` now owns the
+contenteditable DOM-to-Markdown projection. `VTextEditor.svelte` imports the
+helper and keeps only the editor event handler that calls it before autosave.
+
+```text
+frontend/src/lib/VTextEditor.svelte              3100 lines
+frontend/src/lib/VTextToolbar.svelte              590 lines
+frontend/src/lib/VTextPublicationResult.svelte    283 lines
+frontend/src/lib/vtext-markdown-serializer.ts      95 lines
+
+local verification:
+  npm --prefix frontend run build
+  result: passed with no Svelte unused-selector warnings.
+
+commit:
+  bd499fbb40000a2f7a045832376c389463e5cdad
+
+CI/deploy:
+  GitHub Actions CI 27074540510 passed.
+  FlakeHub publish 27074540515 passed.
+  Node B deploy job 79909616958 passed.
+  /health reported proxy and sandbox deployed_commit
+  bd499fbb40000a2f7a045832376c389463e5cdad, deployed_at
+  2026-06-06T21:37:35Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-authoring-history.spec.js
+  result: 2 passed.
+```
+
 ### Performance Checks
 
 - Local focused backend check:
