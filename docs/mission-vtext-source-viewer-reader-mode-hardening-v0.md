@@ -1,6 +1,6 @@
 # MissionGradient v0: Source Viewer Reader-Mode Hardening And Source UX Simplification
 
-Status: checkpoint_incomplete
+Status: deployed_review_checkpoint_complete
 Date: 2026-06-06
 
 Requirements contracts:
@@ -14,9 +14,12 @@ Supersedes for the next run:
 Related current-state review:
 [vtext-mission-hard-review-2026-06-05.md](vtext-mission-hard-review-2026-06-05.md)
 
+Final mission review:
+[vtext-source-viewer-mission-review-2026-06-06.md](vtext-source-viewer-mission-review-2026-06-06.md)
+
 ## Run Checkpoint & Resumption State
 
-status: checkpoint_incomplete
+status: deployed_review_checkpoint_complete
 
 last checkpoint:
 
@@ -69,6 +72,21 @@ latest deployed repair checkpoint:
   summaries. The renderer now uses more available inline space when richer
   snapshot text exists, but improving real source depth requires the next
   source-acquisition/cleaned-Markdown reader-mode slice.
+
+final review artifact checkpoint:
+
+- Hard review report written to
+  [vtext-source-viewer-mission-review-2026-06-06.md](vtext-source-viewer-mission-review-2026-06-06.md).
+- PDF rendered to iCloud Drive:
+  `/Users/wiz/Library/Mobile Documents/com~apple~CloudDocs/Choir Reports/vtext-source-viewer-mission-review-2026-06-06.pdf`.
+- PDF verification: `pdfinfo` reported title `VText Source Viewer Mission
+  Review`, producer `WeasyPrint 67.0`, 5 pages, PDF 1.7, size 40301 bytes.
+- Review conclusion: the core mission objective is substantially satisfied for
+  source viewer collision repair, richer inline transclusions, generic table
+  stabilization, owner proof, guest/public proof, adversarial review, and code
+  simplification. Residual risks remain for source acquisition quality,
+  selector-centered excerpts, explicit source-reader authority typing, and
+  structured VText table blocks.
 
 post-fix adversarial review checkpoint:
 
