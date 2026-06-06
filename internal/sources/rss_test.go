@@ -7,7 +7,17 @@ import (
 	"testing"
 )
 
+func allowPrivateSourceFetchForTest(t *testing.T) {
+	t.Helper()
+	previous := sourceFetchAllowPrivateNetworkForTests
+	sourceFetchAllowPrivateNetworkForTests = true
+	t.Cleanup(func() {
+		sourceFetchAllowPrivateNetworkForTests = previous
+	})
+}
+
 func TestRSSPollerReturnsFetchRecordAndStableItem(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("User-Agent") != "ChoirTest/1.0" {
 			t.Fatalf("User-Agent = %q", r.Header.Get("User-Agent"))

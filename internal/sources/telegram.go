@@ -18,9 +18,7 @@ type TelegramScraper struct {
 
 func NewTelegramScraper(userAgent string) *TelegramScraper {
 	return &TelegramScraper{
-		Client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		Client:    sourceFetchHTTPClient(30 * time.Second),
 		UserAgent: userAgent,
 	}
 }
@@ -33,6 +31,10 @@ func (s *TelegramScraper) Poll(ctx context.Context, source *Source) (PollResult,
 	}
 	started := time.Now().UTC()
 	fetch := NewFetchRecord(*source, url, started)
+	if err := validateSourceFetchURL(url); err != nil {
+		fetch = FinishFetch(fetch, 0, nil, err)
+		return PollResult{Fetch: fetch}, err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

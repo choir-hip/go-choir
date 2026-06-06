@@ -17,9 +17,7 @@ type RSSPoller struct {
 
 func NewRSSPoller(userAgent string) *RSSPoller {
 	return &RSSPoller{
-		Client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		Client:    sourceFetchHTTPClient(30 * time.Second),
 		UserAgent: userAgent,
 	}
 }
@@ -27,6 +25,10 @@ func NewRSSPoller(userAgent string) *RSSPoller {
 func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error) {
 	started := time.Now().UTC()
 	fetch := NewFetchRecord(*source, source.URL, started)
+	if err := validateSourceFetchURL(source.URL); err != nil {
+		fetch = FinishFetch(fetch, 0, nil, err)
+		return PollResult{Fetch: fetch}, err
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", source.URL, nil)
 	if err != nil {
 		fetch = FinishFetch(fetch, 0, nil, err)
