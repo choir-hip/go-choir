@@ -62,14 +62,15 @@ test('vtext publish keeps policy behind the publish menu and forwards policy', a
   await publishButton.click();
   const publishMenu = page.locator('[data-vtext-publish-menu]');
   await expect(publishMenu).toBeVisible();
-  await expect(publishMenu.locator('[data-vtext-publish-policy-summary]')).toContainText('Route');
-  await expect(publishMenu.locator('[data-vtext-publish-policy-summary]')).toContainText('Public');
-  await expect(publishMenu.locator('[data-vtext-publish-policy-summary]')).toContainText('Snapshots included');
-  await expect(publishMenu.locator('[data-vtext-publish-policy-summary]')).toContainText('txt, md, html, docx, pdf');
+  await expect(publishMenu).toContainText('Publish v0');
+  await expect(publishMenu).toContainText('This creates a public link with the current text and source snapshots.');
+  await expect(publishMenu).not.toContainText('Route');
+  await expect(publishMenu).not.toContainText('txt, md, html, docx, pdf');
 
   await page.locator('[data-vtext-publish-confirm]').click();
 
   await expect(page.locator('[data-vtext-publish-result]')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-vtext-publish-menu]')).toHaveCount(0);
   expect(publishPayload).toMatchObject({
     access_policy: {
       visibility: 'public',

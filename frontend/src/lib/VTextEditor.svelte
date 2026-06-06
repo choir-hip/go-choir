@@ -1467,6 +1467,7 @@
       return;
     }
     publishedActionPending = true;
+    publishMenuOpen = false;
     error = '';
     publishResult = null;
     try {
@@ -1480,7 +1481,6 @@
         accessPolicy: buildExplicitPublishAccessPolicy(),
         exportPolicy: buildExplicitPublishExportPolicy(),
       });
-      publishMenuOpen = false;
       const copied = await copyPublicURL(publicURLForPublishResult(publishResult));
       const opened = openPublishedURL(publishResult);
       if (opened) {
@@ -2442,25 +2442,12 @@
                 {publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}
               </button>
               {#if publishMenuOpen}
-                <div class="publish-menu" data-vtext-publish-menu role="menu" aria-label="Publication policy">
+                <div class="publish-menu" data-vtext-publish-menu role="menu" aria-label="Publish this version">
                   <div class="publish-menu-heading">
-                    <p class="eyebrow">Publication policy</p>
-                    <h3>Publish {versionLabel} publicly</h3>
+                    <p class="eyebrow">Publish</p>
+                    <h3>Publish {versionLabel}</h3>
+                    <p>This creates a public link with the current text and source snapshots.</p>
                   </div>
-                  <dl class="publish-menu-facts" data-vtext-publish-policy-summary>
-                    <div>
-                      <dt>Route</dt>
-                      <dd>Public</dd>
-                    </div>
-                    <div>
-                      <dt>Sources</dt>
-                      <dd>Snapshots included</dd>
-                    </div>
-                    <div>
-                      <dt>Copy and downloads</dt>
-                      <dd>txt, md, html, docx, pdf</dd>
-                    </div>
-                  </dl>
                   <div class="publish-menu-actions">
                     <button
                       type="button"
@@ -2469,7 +2456,7 @@
                       on:click={handlePublishCurrent}
                       disabled={publishedActionPending}
                     >
-                      {publishedActionPending ? 'Publishing…' : 'Publish public version'}
+                      {publishedActionPending ? 'Publishing…' : 'Publish'}
                     </button>
                     <button
                       type="button"
@@ -3164,13 +3151,13 @@
     top: calc(100% + 0.48rem);
     right: 0;
     z-index: 8;
-    width: min(22rem, calc(100vw - 2rem));
+    width: min(18rem, calc(100vw - 2rem));
     display: grid;
-    gap: 0.72rem;
+    gap: 0.68rem;
     padding: 0.78rem;
     border: 1px solid var(--choir-border-strong);
     border-radius: 0.5rem;
-    background: var(--choir-surface-elevated);
+    background: #081225;
     box-shadow: var(--choir-shadow-lg);
     color: var(--choir-text-primary);
   }
@@ -3182,36 +3169,11 @@
     line-height: 1.2;
   }
 
-  .publish-menu-facts {
-    display: grid;
-    gap: 0.48rem;
-    margin: 0;
-  }
-
-  .publish-menu-facts div {
-    display: grid;
-    grid-template-columns: 6.7rem minmax(0, 1fr);
-    gap: 0.62rem;
-    align-items: baseline;
-    min-width: 0;
-  }
-
-  .publish-menu-facts dt,
-  .publish-menu-facts dd {
-    margin: 0;
-    min-width: 0;
+  .publish-menu-heading p:not(.eyebrow) {
+    margin: 0.34rem 0 0;
+    color: var(--choir-text-secondary);
     font-size: 0.76rem;
     line-height: 1.35;
-  }
-
-  .publish-menu-facts dt {
-    color: var(--choir-text-muted);
-    font-weight: 720;
-  }
-
-  .publish-menu-facts dd {
-    color: var(--choir-text-secondary);
-    overflow-wrap: anywhere;
   }
 
   .publish-menu-actions {
@@ -3769,12 +3731,7 @@
 
     .publish-menu {
       right: -0.2rem;
-      width: min(20rem, calc(100vw - 1.4rem));
-    }
-
-    .publish-menu-facts div {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0.12rem;
+      width: min(18rem, calc(100vw - 1.4rem));
     }
 
     .publication-heading h2 {
