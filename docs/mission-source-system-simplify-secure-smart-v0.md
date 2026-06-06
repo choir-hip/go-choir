@@ -841,20 +841,16 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T15:47Z, deployed behavior commit
-`53dd9b34d694ecd04c354cc1e614c12d87245631` adds publication export policy and
-retrieval context to canonical export metadata. It followed docs checkpoint
-`a4165abb`, passed focused platform tests, frontend build, GitHub Actions CI,
-FlakeHub publish, Node B deploy, staging health identity, and deployed
-Playwright product-path publication export proof. Follow-up dev-harness commit
-`a7e7e82143bf88c77a7c67a758d1bee0f2f8e023` updates local
-`start-services.sh` to launch platformd/Platform Dolt by default; it passed CI
-and FlakeHub, deployed to Node B, reached staging health identity, and the same
-deployed publication export proof passed against the current staging commit.
-During the deploy, health briefly returned 502/degraded while vmctl was
-unavailable; this transient acceptance-boundary ambiguity is recorded as
-Problem 22. Current owner Comet proof remains limited by the passkey renewal
-overlay documented in commit `d5df7db7`.
+last checkpoint: 2026-06-06T15:56Z, deployed behavior commit
+`41b2135f7d72c21ee3ddccf6a7deb9053b8ad6b3` moves frontend evidence-state and
+open-surface normalization into `frontend/src/lib/source-contract.ts`, aligns
+frontend legacy evidence aliases with backend `internal/sourcecontract`, and
+stops unknown evidence tokens from leaking raw UI labels. It followed docs
+checkpoint `bb9d1614`, passed focused frontend tests, frontend build, GitHub
+Actions CI, FlakeHub publish, Node B deploy, staging health identity, and
+deployed Playwright proof for source evidence/open-plan normalization.
+Earlier behavior commits `53dd9b34` and `a7e7e821` remain the latest
+publication export metadata and local startup harness proofs.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -905,18 +901,22 @@ code. Behavior commit `53dd9b34` includes publication access/export policy and
 retrieval source/span context in Markdown/HTML/DOCX/PDF export metadata. Dev
 harness commit `a7e7e821` answers the local startup question by starting
 platformd and local Platform Dolt from `start-services.sh`, with Dolt declared
-in the dev shell.
+in the dev shell. Docs checkpoint `bb9d1614` records the frontend source
+contract drift before behavior commit `41b2135f` extracted a frontend
+source-contract helper module and aligned evidence/open-surface aliases with
+the backend contract.
 Existing unrelated untracked docs are preserved.
 
 what shipped: latest behavior commit
-`53dd9b34d694ecd04c354cc1e614c12d87245631` was pushed to `origin/main` and
-deployed to staging. It adds policy and retrieval context to canonical
-publication export metadata while preserving existing public source
-entities/transclusions and the private-material-omitted claim. Follow-up
-dev-harness commit `a7e7e82143bf88c77a7c67a758d1bee0f2f8e023` was also pushed
-to `origin/main`; it updates local startup only and passed CI, FlakeHub, Node B
-deploy, staging health identity, and the same deployed publication export proof.
-Prior behavior
+`41b2135f7d72c21ee3ddccf6a7deb9053b8ad6b3` was pushed to `origin/main` and
+deployed to staging. It consolidates frontend source evidence/open-surface
+normalization into a dedicated frontend source-contract module. Prior behavior
+commit `53dd9b34d694ecd04c354cc1e614c12d87245631` adds policy and retrieval
+context to canonical publication export metadata while preserving existing
+public source entities/transclusions and the private-material-omitted claim.
+Dev-harness commit `a7e7e82143bf88c77a7c67a758d1bee0f2f8e023` updates local
+startup only and passed CI, FlakeHub, Node B deploy, staging health identity,
+and deployed publication export proof. Prior behavior
 commit `fab6b25b0d3d0092d9f7f55c672373216291657b` adds shared source
 open-surface normalization, makes runtime durable source producers emit
 canonical `source`, normalizes platform publication open-surface metadata, and
@@ -1012,6 +1012,21 @@ what was proven:
 - Deployed publication export metadata proof passed again on the current
   `a7e7e821` staging identity:
   `CHOIR_AUTH_STATE=/tmp/choir-export-metadata-a7.storage.json CHOIR_AUTH_META=/tmp/choir-export-metadata-a7.meta.json PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities as expandable transclusions and canonical exports"`.
+- Frontend source-contract local checks passed:
+  `npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize|source open plans normalize'`
+  and `npm --prefix frontend run build`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27066839185`
+  completed successfully for `41b2135f`, including Node B staging deploy.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27066839188`
+  completed successfully.
+- Staging health after that deploy reported `status: "ok"`,
+  `vmctl_status: "ok"`, and proxy/upstream deployed_commit
+  `41b2135f7d72c21ee3ddccf6a7deb9053b8ad6b3`, deployed_at
+  `2026-06-06T15:54:42Z`.
+- Deployed frontend source-contract proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize|source open plans normalize'`.
 - Source evidence-state local checks passed:
   `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownLineage|TestVTextSourceGapRepair'`
   and `npm run build` in `frontend`.
@@ -3740,7 +3755,7 @@ explicit source-closure and deploy-impact entry when introduced.
 
 ### Problem 23: Frontend Source Contract Still Duplicates Backend Evidence And Open-Surface Normalization
 
-Status: `documented_before_fix`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: backend runtime/platform paths now share evidence-state and
 open-surface normalization through `internal/sourcecontract`, but the frontend
@@ -3794,6 +3809,65 @@ remaining error field: this is a frontend contract-consolidation slice. It
 does not generate a single cross-language schema or cover ReaderArtifact and
 selector structs yet, but it removes one active duplicated normalization path
 from the user-facing source surfaces.
+
+Fix evidence:
+
+```text
+documentation checkpoint: bb9d1614 docs: record frontend source contract drift
+behavior commit: 41b2135f7d72c21ee3ddccf6a7deb9053b8ad6b3
+```
+
+Implementation:
+
+- Added `frontend/src/lib/source-contract.ts` as the dedicated frontend source
+  contract module for typed evidence-state constants, evidence normalization,
+  evidence labels, and open-surface normalization.
+- `frontend/src/lib/vtext-source-renderer.ts` now imports and re-exports those
+  helpers instead of carrying its own evidence/open-surface switches.
+- Frontend evidence normalization now matches the backend contract for
+  `error`, `failed`, and `fetch_failed` aliases by mapping them to
+  `unavailable`.
+- Unknown evidence-state tokens now return no canonical state and label as
+  `Evidence unclassified`, instead of leaking raw tokens like
+  `reader snapshot ready` into user-facing source surfaces.
+
+Local verification:
+
+```text
+npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize|source open plans normalize'
+result: 2 passed
+
+npm --prefix frontend run build
+result: passed
+```
+
+CI/deploy evidence:
+
+```text
+CI run: https://github.com/choir-hip/go-choir/actions/runs/27066839185
+CI result: passed, including Go gates, frontend build, and Node B deploy
+FlakeHub run: https://github.com/choir-hip/go-choir/actions/runs/27066839188
+FlakeHub result: passed
+Node B deploy job: 79889165316 passed
+staging status: ok
+staging vmctl_status: ok
+staging proxy deployed_commit: 41b2135f7d72c21ee3ddccf6a7deb9053b8ad6b3
+staging sandbox deployed_commit: 41b2135f7d72c21ee3ddccf6a7deb9053b8ad6b3
+staging deployed_at: 2026-06-06T15:54:42Z
+```
+
+Deployed acceptance proof:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize|source open plans normalize'
+result: 2 passed
+```
+
+Residual risk: frontend evidence/open-surface normalization now has one local
+module used by VText source rendering, Source Viewer, publication-local source
+entities, and source launch/open-plan code paths. The broader mission still
+needs a generated or otherwise single-source cross-language contract and shared
+ReaderArtifact/SourceSelector/OpenPlan structs.
 
 ## Suggested `/goal`
 
