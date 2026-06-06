@@ -841,13 +841,14 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T15:10Z, deployed behavior commit
-`6a141811fd6c8ff97d4aa98f6a98bb30e59f8603` preserves text-like file import
-metadata across the first durable VText revision. CI, FlakeHub, Node B deploy,
-staging health identity, and deployed Playwright product-path acceptance passed
-for imported Markdown and imported plain text advancing from source artifact to
-canonical `.vtext` with Markdown export. Current owner Comet proof remains
-limited by the passkey renewal overlay documented in commit `d5df7db7`.
+last checkpoint: 2026-06-06T15:24Z, deployed behavior commit
+`fab6b25b0d3d0092d9f7f55c672373216291657b` converges source open-surface
+normalization through the shared source contract, runtime source entity
+producers, platform publication metadata, and frontend source-open planning.
+CI, FlakeHub, Node B deploy, staging health identity, and deployed Playwright
+product-path acceptance passed for default Source Viewer opening versus
+explicit Web Lens opening. Current owner Comet proof remains limited by the
+passkey renewal overlay documented in commit `d5df7db7`.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -896,11 +897,17 @@ appendix table from 49 to 50 rows.
 Existing unrelated untracked docs are preserved.
 
 what shipped: latest behavior commit
-`6a141811fd6c8ff97d4aa98f6a98bb30e59f8603` was pushed to `origin/main` and
-deployed to staging. It adds text-like file-open migration manifests, carries
-`import_manifest` and `migration_manifest` through durable user/appagent
-revisions, and makes canonical `.vtext` aliases win as a document's source
-path while preserving original file aliases. Earlier behavior commits
+`fab6b25b0d3d0092d9f7f55c672373216291657b` was pushed to `origin/main` and
+deployed to staging. It adds shared source open-surface normalization, makes
+runtime durable source producers emit canonical `source`, normalizes platform
+publication open-surface metadata, and aligns frontend source-open planning so
+durable source artifacts still open Source Viewer by default while explicit
+Web Lens/live/original aliases open the live inspection path. Prior behavior
+commit `6a141811fd6c8ff97d4aa98f6a98bb30e59f8603` adds text-like file-open
+migration manifests, carries `import_manifest` and `migration_manifest` through
+durable user/appagent revisions, and makes canonical `.vtext` aliases win as a
+document's source path while preserving original file aliases. Earlier behavior
+commits
 `3f48a1ad34af7945e4b5e764a9064a6c1c7c9c44`,
 `d404e6ecd4b16bfd4a907924c16846b82e3d26ff`, and
 `93d9f8197747c7526e11a730f6dab3932af82d75` remain relevant rollback refs for
@@ -1306,24 +1313,25 @@ remaining error field:
 
 highest-impact remaining uncertainty: owner legal-proposal proof is blocked on
 renewing the Comet passkey session, but useful parallel work remains in the
-shared source contract/open-surface/export convergence slices. The largest
-product uncertainty after that remains the legal proposal's exact table
-survival and source metadata through a fresh owner edit/revise cycle.
+shared source contract/export convergence slices. The largest product
+uncertainty after that remains the legal proposal's exact table survival and
+source metadata through a fresh owner edit/revise cycle.
 
 next executable probe: if owner Comet is renewed, run the legal proposal
 product-path proof for true `.vtext`, table survival, source opens, bounded
 edit, publication/export metadata, and rollback refs. If Comet remains
-passkey-blocked, continue the unblocked convergence work by reducing remaining
-source entity/open-surface/export contract duplication across runtime,
-platform, and frontend.
+passkey-blocked, continue the unblocked convergence work by auditing
+selector/evidence/open-surface preservation through publication/export and
+source snapshot records for URL-backed, content-item, and source-service-style
+sources.
 
 suggested resume goal string: continue
 `docs/mission-source-system-simplify-secure-smart-v0.md` from behavior commit
-`6a141811fd6c8ff97d4aa98f6a98bb30e59f8603` and this docs checkpoint. First
+`fab6b25b0d3d0092d9f7f55c672373216291657b` and this docs checkpoint. First
 attempt owner Comet renewal/proof if available; otherwise continue the next
 unblocked source-contract convergence slice while preserving the proven
-source-fetch policy, source-entity carry-forward, table normalization, and
-text-like import metadata behavior.
+source-fetch policy, source-entity carry-forward, table normalization,
+text-like import metadata, and source open-surface behavior.
 
 evidence artifact refs:
 
@@ -2577,6 +2585,103 @@ remaining error field: this problem is about open-surface contract convergence.
 It does not by itself solve selector-rich publication projection, source reader
 layout, legal proposal table preservation, owner Comet passkey renewal, or
 publication access policy for private source snapshots.
+
+implementation evidence, local:
+
+- `internal/sourcecontract` now defines canonical source open surfaces and
+  alias normalization for durable Source Viewer (`source`), explicit
+  live/original Web Lens (`web_lens`), VText publication (`vtext`), video, and
+  image;
+- runtime Source Service and `ContentItem` source entity producers now emit
+  canonical `source` instead of splitting durable reader intent across
+  `"source"` and `"content"`;
+- source artifact attachment now canonicalizes any blank or Source Viewer alias
+  to `source`;
+- platform publication normalizes `display.open_surface` before persisting both
+  `publication_source_entities.open_surface` and embedded `entity_json`;
+- frontend source open planning now normalizes aliases to the same canonical
+  values while preserving user behavior: durable source artifacts open in
+  Source Viewer by default, explicit Web Lens/live/original aliases open the
+  browser/Web Lens surface, and media sources keep media surfaces.
+
+focused verification:
+
+```text
+nix develop -c go test ./internal/sourcecontract -run 'TestNormalizeOpenSurface|TestOpenSurfacePredicates|TestNormalizeEvidenceState|TestIsRelationalEvidenceState' -count=1
+ok github.com/yusefmosiah/go-choir/internal/sourcecontract
+
+nix develop -c go test ./internal/platform -run 'TestBuildPublicationSourceMetadataNormalizesOpenSurface|TestPublishVTextCreatesImmutablePublicRecords' -count=1
+ok github.com/yusefmosiah/go-choir/internal/platform
+
+nix develop -c go test ./internal/runtime -run 'TestVTextPromptDerivesSourceServiceEntitiesFromResearcherUpdates|TestVTextDerivesContentItemSourceEntitiesFromResearcherRefs' -count=1
+ok github.com/yusefmosiah/go-choir/internal/runtime
+
+nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestMarkVTextMediaSourceRefsResearchState|TestMediaSourceRefToSourceEntityUsesTypedEvidenceStates|TestVTextAgentRevisionDerivesContentItemSourceEntitiesFromResearcherRefs' -count=1
+ok github.com/yusefmosiah/go-choir/internal/runtime
+
+npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source open plans normalize Web Lens and Source Viewer aliases'
+1 passed
+
+npm --prefix frontend run build
+success
+```
+
+local test limitation:
+
+```text
+nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextAgentRevisionRegistersMediaSourceRefs|TestMarkVTextMediaSourceRefsResearchState|TestMediaSourceRefToSourceEntityUsesTypedEvidenceStates' -count=1
+FAIL TestVTextAgentRevisionRegistersMediaSourceRefs
+media_source_refs len = 1, want 2
+```
+
+This failure happened before the open-surface assertion: the loopback
+`httptest` image fixture was not imported as a second media source under the
+current source-fetch policy. The narrower media-source normalization tests
+passed, and CI runtime shards passed after the behavior commit. The failing
+local fixture remains a test-harness/source-policy interaction to audit if
+future media-source work depends on loopback image fixtures.
+
+deployed evidence:
+
+```text
+problem checkpoint commit:
+  be126abf docs: record source open surface contract gap
+
+behavior commit:
+  fab6b25b0d3d0092d9f7f55c672373216291657b
+
+GitHub Actions:
+  CI run 27066097876: completed success
+    Deploy to Staging (Node B): completed success in 1m28s
+  FlakeHub run 27066097878: completed success
+
+staging /health:
+  proxy commit/deployed_commit:
+    fab6b25b0d3d0092d9f7f55c672373216291657b
+  sandbox upstream commit/deployed_commit:
+    fab6b25b0d3d0092d9f7f55c672373216291657b
+  deployed_at:
+    2026-06-06T15:22:10Z
+```
+
+deployed product-path acceptance:
+
+```text
+Base URL: https://choir.news
+Auth path: temporary Playwright/WebAuthn staging user via public /auth routes
+Command:
+  CHOIR_AUTH_STATE=/tmp/choir-open-surface.storage.json \
+  CHOIR_AUTH_META=/tmp/choir-open-surface.meta.json \
+  PLAYWRIGHT_BASE_URL=https://choir.news \
+  npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'VText source URL opens Source Viewer unless browser is explicitly requested'
+Result:
+  1 passed
+```
+
+The staging proof used public browser-authenticated VText/product routes and
+verified that a URL-backed durable source opens Source Viewer by default while
+an explicit Web Lens request opens the browser/Web Lens path. It did not use
+internal or test-only routes.
 
 ### Problem 12: Owner URL Source Repairs Default To Web Lens
 
