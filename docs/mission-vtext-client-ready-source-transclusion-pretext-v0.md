@@ -7612,6 +7612,10 @@ new evidence:
   `snapshot_kind: cleaned_reader_markdown` while preserving
   `original_media_type`; that policy is stronger than the owner-side URL import
   artifact identity.
+- `frontend/src/lib/vtext-source-actions.ts` already tries to create manual
+  source artifacts with `app_hint: content`, but `internal/runtime/content.go`
+  `normalizeAppHint` does not accept `content` and silently degrades those
+  source artifacts to `files`.
 
 current interpretation:
 
@@ -7630,6 +7634,8 @@ risk:
 - Publication and owner-editor source artifacts diverge: published readers get
   explicit `cleaned_reader_markdown`, while the owner repair/import surface
   stores the same kind of artifact as `text/html`/`browser`.
+- Manual owner-supplied source artifacts can lose their intended content-reader
+  identity even when the frontend asks for that surface.
 - Future cleanup or export code may make decisions from `media_type`/`app_hint`
   and accidentally treat cleaned source evidence as a live web page instead of
   durable reader Markdown.
@@ -7637,10 +7643,10 @@ risk:
 next repair:
 
 - When HTML URL import produces readable text, persist the imported
-  `ContentItem` as `media_type: text/markdown` and `app_hint: content` or the
-  existing reader-capable content surface, while preserving
+  `ContentItem` as `media_type: text/markdown` and `app_hint: content`, while preserving
   `original_media_type`, HTTP status/content type, retrieval strategy, warnings,
   source URL, canonical URL, and raw hash provenance.
+- Accept `content` as a first-class app hint for reader-mode content artifacts.
 - Keep non-HTML media behavior unchanged.
 - Add focused tests that HTML imports produce reader-artifact identity, source
   attachment still works, and publication snapshots continue carrying
