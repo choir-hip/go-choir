@@ -217,18 +217,19 @@ func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, us
 		}
 		snapshotText, truncated := truncateRunes(text, maxPublishedSourceSnapshotRunes)
 		entity["reader_snapshot"] = map[string]any{
-			"snapshot_kind":     "cleaned_reader_markdown",
-			"source":            "content_item",
-			"source_content_id": item.ContentID,
-			"title":             firstNonEmptyString(item.Title, item.SourceURL, item.CanonicalURL),
-			"source_url":        item.SourceURL,
-			"canonical_url":     item.CanonicalURL,
-			"media_type":        item.MediaType,
-			"content_hash":      item.ContentHash,
-			"text_content":      snapshotText,
-			"text_char_count":   len([]rune(text)),
-			"truncated":         truncated,
-			"access_scope":      "publication_reader",
+			"snapshot_kind":       "cleaned_reader_markdown",
+			"source":              "content_item",
+			"source_content_id":   item.ContentID,
+			"title":               firstNonEmptyString(item.Title, item.SourceURL, item.CanonicalURL),
+			"source_url":          item.SourceURL,
+			"canonical_url":       item.CanonicalURL,
+			"media_type":          "text/markdown",
+			"original_media_type": item.MediaType,
+			"content_hash":        item.ContentHash,
+			"text_content":        snapshotText,
+			"text_char_count":     len([]rune(text)),
+			"truncated":           truncated,
+			"access_scope":        "publication_reader",
 		}
 		entity["reader_snapshot_status"] = map[string]any{
 			"state":           "reader_snapshot_ready",

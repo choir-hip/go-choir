@@ -117,6 +117,13 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	if !strings.Contains(string(gotPlatformReq.Metadata), "reader_snapshot") || !strings.Contains(string(gotPlatformReq.Metadata), "Cleaned public source text") {
 		t.Fatalf("platform metadata missing public source reader snapshot: %s", string(gotPlatformReq.Metadata))
 	}
+	snapshot := publicationReaderSnapshot(t, gotPlatformReq.Metadata, "src-1")
+	if snapshot["media_type"] != "text/markdown" {
+		t.Fatalf("reader snapshot media_type = %#v, want text/markdown", snapshot["media_type"])
+	}
+	if snapshot["original_media_type"] != "text/html; charset=utf-8" {
+		t.Fatalf("reader snapshot original_media_type = %#v, want source html type", snapshot["original_media_type"])
+	}
 	var resp platform.PublishVTextResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -234,6 +241,13 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 	metadata := string(gotPlatformReq.Metadata)
 	if !strings.Contains(metadata, "reader_snapshot") || !strings.Contains(metadata, "Cleaned URL source text") {
 		t.Fatalf("platform metadata missing URL reader snapshot: %s", metadata)
+	}
+	snapshot := publicationReaderSnapshot(t, gotPlatformReq.Metadata, "src-url")
+	if snapshot["media_type"] != "text/markdown" {
+		t.Fatalf("reader snapshot media_type = %#v, want text/markdown", snapshot["media_type"])
+	}
+	if snapshot["original_media_type"] != "text/html; charset=utf-8" {
+		t.Fatalf("reader snapshot original_media_type = %#v, want source html type", snapshot["original_media_type"])
 	}
 	if !strings.Contains(metadata, "reader_snapshot_ready") {
 		t.Fatalf("platform metadata missing reader snapshot status: %s", metadata)
@@ -405,6 +419,31 @@ func TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots(t *testing.T
 	if strings.Contains(string(gotPlatformReq.Metadata), "reader_snapshot") || strings.Contains(string(gotPlatformReq.Metadata), "private full source text") {
 		t.Fatalf("private source snapshot leaked into platform metadata: %s", string(gotPlatformReq.Metadata))
 	}
+}
+
+func publicationReaderSnapshot(t *testing.T, raw json.RawMessage, entityID string) map[string]any {
+	t.Helper()
+	var metadata map[string]any
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		t.Fatalf("decode publication metadata: %v", err)
+	}
+	values, ok := metadata["source_entities"].([]any)
+	if !ok {
+		t.Fatalf("metadata.source_entities = %#v, want array", metadata["source_entities"])
+	}
+	for _, value := range values {
+		entity, ok := value.(map[string]any)
+		if !ok || entity["entity_id"] != entityID {
+			continue
+		}
+		snapshot, ok := entity["reader_snapshot"].(map[string]any)
+		if !ok {
+			t.Fatalf("entity %s reader_snapshot = %#v, want object", entityID, entity["reader_snapshot"])
+		}
+		return snapshot
+	}
+	t.Fatalf("source entity %s not found in metadata: %s", entityID, string(raw))
+	return nil
 }
 
 func TestContentItemAllowsPublishedSnapshotRejectsPrivateProvenance(t *testing.T) {
