@@ -2249,6 +2249,63 @@ when no selected excerpt exists; rerun the publication snapshot test against
 staging after deployment and confirm the inline note remains bounded while the
 full reader snapshot opens from the source window.
 
+### 2026-06-06 Published Inline Source Note Bounding Fix Evidence
+
+Status: `accepted_on_staging_for_published_inline_snapshot_boundaries`.
+
+Repair:
+
+- Problem checkpoint commit `7668324f` documented the published inline source
+  note leak before behavior-changing code.
+- Behavior commit `b63b4fd5840f3a7a6f42df6cb1925279f5f88b0b` changes
+  `sourceEntityInlineExcerptText` so compact inline/journal source notes prefer
+  the selected transclusion/selector excerpt and fall back to reader snapshots
+  only when no bounded excerpt exists.
+- The same commit adds a focused frontend regression test for a source entity
+  carrying both `transclusion.snapshot_text` and a longer
+  `reader_snapshot.text_content`.
+
+Local verification:
+
+```text
+npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g "source review URL repairs default|source inline excerpts prefer"
+npm --prefix frontend run build
+```
+
+Landing evidence:
+
+```text
+Fix commit: b63b4fd5840f3a7a6f42df6cb1925279f5f88b0b
+Problem checkpoint commit: 7668324f
+CI run: 27063425138
+FlakeHub publish run: 27063425139
+Node B deploy job: 79880094595
+Health proxy deployed_commit: b63b4fd5840f3a7a6f42df6cb1925279f5f88b0b
+Health sandbox deployed_commit: b63b4fd5840f3a7a6f42df6cb1925279f5f88b0b
+Health deployed_at: 2026-06-06T13:22:23Z
+```
+
+Deployed acceptance proof:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes public content-item sources with cleaned reader snapshots"
+result: passed
+```
+
+The first post-deploy rerun advanced past the original failure: the inline
+published source note no longer contained `Full cleaned reader source detail`.
+It then failed at the stale assertion that published reader snapshots should
+open `BrowserApp`; the live product opened Source Viewer instead. The test was
+updated to assert the mission contract: owner and guest published source opens
+create `data-content-viewer` reader-mode windows, render the full cleaned reader
+snapshot there, and do not create `data-browser-app` windows.
+
+Residual risk: this fixes the inline/full-reader boundary for published
+content-item snapshots and proves owner plus guest Source Viewer opens in the
+focused publication test. It does not yet prove every URL-backed and
+source-service-style publication source shape, nor does it finish the shared
+selector/evidence/open-surface contract consolidation.
+
 ## Suggested `/goal`
 
 ```text

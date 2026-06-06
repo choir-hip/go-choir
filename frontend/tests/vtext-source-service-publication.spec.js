@@ -282,12 +282,11 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
   await expect(sourceNote).not.toContainText('Full cleaned reader source detail');
 
   await sourceNote.locator('[data-vtext-open-source]').click();
-  const sourceWindow = page.locator('[data-browser-app]').last();
+  const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
-  await expect(sourceWindow).toContainText('Source reader snapshot');
-  await expect(sourceWindow.locator('[data-browser-snapshot-warnings]')).toContainText('extracted text is low-content');
-  await expect(sourceWindow.locator('[data-browser-reader-markdown]')).toContainText('Full cleaned reader source detail');
-  await expect(sourceWindow.locator('[data-browser-iframe]')).toHaveCount(0);
+  await expect(sourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
+  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Full cleaned reader source detail');
+  await expect(page.locator('[data-browser-app]')).toHaveCount(0);
 
   const guestContext = await browser.newContext();
   try {
@@ -301,12 +300,11 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
     await expect(guestSourceNote).toBeVisible({ timeout: 10_000 });
     await expect(guestSourceNote).toContainText(excerpt);
     await guestSourceNote.locator('[data-vtext-open-source]').click();
-    const guestSourceWindow = guestPage.locator('[data-browser-app]').last();
+    const guestSourceWindow = guestPage.locator('[data-content-viewer]').last();
     await expect(guestSourceWindow).toBeVisible({ timeout: 10000 });
-    await expect(guestSourceWindow).toContainText('Source reader snapshot');
-    await expect(guestSourceWindow.locator('[data-browser-snapshot-warnings]')).toContainText('extracted text is low-content');
-    await expect(guestSourceWindow.locator('[data-browser-reader-markdown]')).toContainText('Full cleaned reader source detail');
-    await expect(guestSourceWindow.locator('[data-browser-iframe]')).toHaveCount(0);
+    await expect(guestSourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
+    await expect(guestSourceWindow.locator('[data-content-reader-markdown]')).toContainText('Full cleaned reader source detail');
+    await expect(guestPage.locator('[data-browser-app]')).toHaveCount(0);
   } finally {
     await guestContext.close();
   }
