@@ -7468,3 +7468,63 @@ next repair:
   source gap, and records the explicit resolution reason in revision metadata.
 - Keep source-backed resolutions unchanged and do not create fake source
   entities for omitted markers.
+
+## 2026-06-06 Repair: Source Review Can Omit No-Source-Needed Markers
+
+status: local_verified_pending_deploy
+
+root cause:
+
+- The source-gap repair contract only represented one action: link a marker to
+  a source entity.
+- The owner-facing source panel inherited that limitation and therefore made
+  every marker review look like a source-attachment task.
+- Because unresolved markers are rendered as source workflow affordances, the
+  absence of an explicit omit action created pressure to attach fake or
+  irrelevant source entities.
+
+change:
+
+- `internal/runtime/vtext.go` now accepts explicit citation-resolution actions:
+  `link_source` and `no_source_needed`.
+- `no_source_needed` removes only the selected unresolved Markdown marker from
+  canonical VText, trims adjacent horizontal whitespace, clears that source
+  gap, does not create a source entity, and records the reviewer reason in
+  `source_repair_resolutions`.
+- Source-backed review remains generic: the UI can label a source as
+  confirming, qualifying, or refuting a claim while still writing a normal
+  `link_source` resolution to the source graph.
+- `frontend/src/lib/VTextSourcePanel.svelte` now presents a review outcome
+  control. Source fields are shown only for source-backed outcomes; the
+  no-source-needed path asks for a reason and sends no `source_entities`.
+
+local proof:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextSourceGapRepair(CreatesRevision|CanOmitNoSourceNeededMarker|PreservesUnrepairedGaps|RejectsUnknownEntity)'`
+  -> passed.
+- `pnpm --dir frontend run build` -> passed.
+- With the local service stack attached:
+  `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js --project=chromium
+  --timeout=120000` -> passed, 8 tests.
+
+belief-state update:
+
+- The source-review contract can now represent all four immediate review
+  outcomes without document-specific branches: confirming source, qualifying
+  source, refuting source, and no source needed.
+- This reduces the chance of fake source entities while preserving the
+  invariant that remaining visible citation markers are transclusion points.
+
+remaining error field:
+
+- This is not the final source UI. The current panel is still an operator
+  repair surface, not a magazine/academic-journal reading surface.
+- Expanded source content still needs a stronger Pretext line-flow
+  implementation: proposal prose should wrap in columns or routed line ranges
+  alongside compact source notes, with content prioritized over metadata and no
+  top-bunched source deck.
+- Arbitrary web-source cleanup remains incomplete. Reader-mode Markdown should
+  be the preferred durable source artifact, with iframe/Web Lens as fallback
+  when cleaning fails or when a live source view is explicitly useful.

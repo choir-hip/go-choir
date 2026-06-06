@@ -114,6 +114,8 @@
   let sourceReviewTitle = '';
   let sourceReviewURL = '';
   let sourceReviewExcerpt = '';
+  let sourceReviewRelation = 'confirms';
+  let sourceReviewReason = '';
   let sourceReviewStatus = '';
   let selectedSourceEntityID = '';
   let sourceArtifactTitle = '';
@@ -245,6 +247,8 @@
     sourceReviewTitle = '';
     sourceReviewURL = '';
     sourceReviewExcerpt = '';
+    sourceReviewRelation = 'confirms';
+    sourceReviewReason = '';
     sourceReviewStatus = '';
     sourceRepairError = '';
   }
@@ -834,6 +838,8 @@
     sourceReviewTitle = '';
     sourceReviewURL = '';
     sourceReviewExcerpt = '';
+    sourceReviewRelation = 'confirms';
+    sourceReviewReason = '';
     sourceReviewStatus = '';
     sourceArtifactError = '';
     sourceArtifactStatus = '';
@@ -1065,6 +1071,8 @@
     sourceReviewTitle = '';
     sourceReviewURL = '';
     sourceReviewExcerpt = '';
+    sourceReviewRelation = 'confirms';
+    sourceReviewReason = '';
     sourceReviewStatus = '';
     selectedSourceEntityID = '';
     sourceArtifactTitle = '';
@@ -1617,16 +1625,23 @@
     const marker = String(sourceReviewMarker || '').trim();
     const title = String(sourceReviewTitle || '').trim();
     const excerpt = String(sourceReviewExcerpt || '').trim();
+    const relation = String(sourceReviewRelation || 'confirms').trim() || 'confirms';
+    const reason = String(sourceReviewReason || '').trim();
+    const omitsMarker = relation === 'no_source_needed';
     if (!marker) {
       sourceRepairError = 'Choose a citation marker to repair';
       return;
     }
-    if (!title) {
+    if (omitsMarker && !reason) {
+      sourceRepairError = 'Reason is required when no source is needed';
+      return;
+    }
+    if (!omitsMarker && !title) {
       sourceRepairError = 'Source title is required';
       return;
     }
-    if (!excerpt) {
-      sourceRepairError = 'Confirming source excerpt is required';
+    if (!omitsMarker && !excerpt) {
+      sourceRepairError = 'Source excerpt is required';
       return;
     }
     sourceRepairPending = true;
@@ -1643,12 +1658,16 @@
         title,
         excerpt,
         url: sourceReviewURL,
+        relation,
+        reason,
       });
       sourceDiagnosis = null;
       sourceReviewStatus = `Applied source review for ${marker}`;
       sourceReviewTitle = '';
       sourceReviewURL = '';
       sourceReviewExcerpt = '';
+      sourceReviewRelation = 'confirms';
+      sourceReviewReason = '';
       saveStatus = 'Loading repaired source revision...';
       await reloadDocument(revision.revision_id);
       ensureSourceReviewSelection();
@@ -2372,6 +2391,8 @@
           bind:sourceReviewTitle
           bind:sourceReviewURL
           bind:sourceReviewExcerpt
+          bind:sourceReviewRelation
+          bind:sourceReviewReason
           {sourceReviewStatus}
           bind:selectedSourceEntityID
           bind:sourceArtifactTitle

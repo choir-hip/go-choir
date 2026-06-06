@@ -53,6 +53,8 @@ export async function applySourceReview({
   title,
   excerpt,
   url,
+  relation = 'confirms',
+  reason = '',
 }: {
   docId: string;
   revisionID: string;
@@ -61,6 +63,8 @@ export async function applySourceReview({
   title: string;
   excerpt: string;
   url?: string;
+  relation?: string;
+  reason?: string;
 }): Promise<any> {
   const payload = {
     ...buildSourceReviewPayload({
@@ -69,6 +73,8 @@ export async function applySourceReview({
       excerpt,
       url,
       revisionID,
+      relation,
+      reason,
     }),
     base_revision_id: revisionID,
     author_label: authorLabel,

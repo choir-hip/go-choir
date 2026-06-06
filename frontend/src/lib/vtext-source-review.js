@@ -19,11 +19,27 @@ export function buildSourceReviewPayload({
   excerpt = '',
   url = '',
   revisionID = '',
+  relation = 'confirms',
+  reason = '',
 } = {}) {
   const cleanMarker = String(marker || '').trim();
   const cleanTitle = String(title || '').trim();
   const cleanExcerpt = String(excerpt || '').trim();
   const cleanURL = String(url || '').trim();
+  const cleanRelation = normalizeSourceReviewRelation(relation);
+  const cleanReason = String(reason || '').trim();
+  if (cleanRelation === 'no_source_needed') {
+    return {
+      base_revision_id: revisionID,
+      citation_resolutions: [
+        {
+          marker: cleanMarker,
+          action: 'no_source_needed',
+          reason: cleanReason,
+        },
+      ],
+    };
+  }
   const entityID = sourceReviewEntityID({
     marker: cleanMarker,
     title: cleanTitle,
@@ -52,6 +68,8 @@ export function buildSourceReviewPayload({
           {
             selector_kind: 'text_quote',
             text_quote: cleanExcerpt,
+            relation: cleanRelation,
+            supports: sourceReviewRelationLabel(cleanRelation),
           },
         ],
         display: {
@@ -63,6 +81,7 @@ export function buildSourceReviewPayload({
         evidence: {
           state: 'available',
           research_state: 'owner_supplied',
+          relation: cleanRelation,
         },
         provenance: {
           created_by: 'source_review_panel',
@@ -75,7 +94,27 @@ export function buildSourceReviewPayload({
       {
         marker: cleanMarker,
         entity_id: entityID,
+        action: 'link_source',
       },
     ],
   };
+}
+
+export function normalizeSourceReviewRelation(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['refutes', 'refuting', 'refute'].includes(normalized)) return 'refutes';
+  if (['qualifies', 'qualifying', 'qualify'].includes(normalized)) return 'qualifies';
+  if (['no_source_needed', 'no-source-needed', 'no_source', 'omit', 'remove'].includes(normalized)) return 'no_source_needed';
+  return 'confirms';
+}
+
+function sourceReviewRelationLabel(relation) {
+  switch (relation) {
+    case 'refutes':
+      return 'refutes claim';
+    case 'qualifies':
+      return 'qualifies claim';
+    default:
+      return 'confirms claim';
+  }
 }

@@ -110,6 +110,8 @@ type vtextMarkdownLineageVersion struct {
 type vtextCitationMarkerResolution struct {
 	Marker   string `json:"marker"`
 	EntityID string `json:"entity_id"`
+	Action   string `json:"action,omitempty"`
+	Reason   string `json:"reason,omitempty"`
 }
 
 type resolvedMarkdownLineageVersion struct {
@@ -658,6 +660,8 @@ func buildMarkdownLineageRevisionMetadata(sourcePath string, version vtextMarkdo
 
 var vtextMarkdownLineageCitationRefRE = regexp.MustCompile(`\[(?:\d{1,3}|\^[A-Za-z0-9_-]{1,40})\]`)
 
+const vtextCitationResolutionOmitSentinel = "__vtext_omit_citation__"
+
 func detectMarkdownLineageSourceGaps(content string, resolutions []vtextCitationMarkerResolution) []map[string]any {
 	matches := vtextMarkdownLineageCitationRefRE.FindAllStringIndex(content, -1)
 	if len(matches) == 0 {
@@ -704,6 +708,12 @@ func applyVTextCitationResolutions(content string, resolutions []vtextCitationMa
 			continue
 		}
 		b.WriteString(content[last:match[0]])
+		if entityID == vtextCitationResolutionOmitSentinel {
+			trimTrailingHorizontalSpace(&b)
+			last = match[1]
+			changed = true
+			continue
+		}
 		label := strings.TrimSuffix(strings.TrimPrefix(marker, "["), "]")
 		b.WriteString(fmt.Sprintf("[%s](source:%s)", label, entityID))
 		last = match[1]
@@ -716,15 +726,32 @@ func applyVTextCitationResolutions(content string, resolutions []vtextCitationMa
 	return b.String()
 }
 
+func trimTrailingHorizontalSpace(b *strings.Builder) {
+	value := b.String()
+	trimmed := strings.TrimRight(value, " \t")
+	if len(trimmed) == len(value) {
+		return
+	}
+	b.Reset()
+	b.WriteString(trimmed)
+}
+
 func markdownLineageResolutionMap(resolutions []vtextCitationMarkerResolution) map[string]string {
 	out := map[string]string{}
 	for _, resolution := range resolutions {
 		marker := strings.TrimSpace(resolution.Marker)
 		entityID := strings.TrimSpace(resolution.EntityID)
-		if marker == "" || entityID == "" {
+		action := normalizeVTextCitationResolutionAction(resolution.Action, entityID)
+		if marker == "" {
 			continue
 		}
-		out[marker] = entityID
+		if action == "no_source_needed" {
+			out[marker] = vtextCitationResolutionOmitSentinel
+			continue
+		}
+		if entityID != "" {
+			out[marker] = entityID
+		}
 	}
 	return out
 }
@@ -737,13 +764,22 @@ func markdownLineageResolutionManifest(resolutions []vtextCitationMarkerResoluti
 	for _, resolution := range resolutions {
 		marker := strings.TrimSpace(resolution.Marker)
 		entityID := strings.TrimSpace(resolution.EntityID)
-		if marker == "" || entityID == "" {
+		action := normalizeVTextCitationResolutionAction(resolution.Action, entityID)
+		reason := strings.TrimSpace(resolution.Reason)
+		if marker == "" {
 			continue
 		}
-		out = append(out, map[string]string{
-			"marker":    marker,
-			"entity_id": entityID,
-		})
+		item := map[string]string{
+			"marker": marker,
+			"action": action,
+		}
+		if entityID != "" {
+			item["entity_id"] = entityID
+		}
+		if reason != "" {
+			item["reason"] = reason
+		}
+		out = append(out, item)
 	}
 	return out
 }
@@ -759,7 +795,9 @@ func markdownLineageCitationResolutions(global, local []vtextCitationMarkerResol
 	add := func(resolution vtextCitationMarkerResolution) {
 		resolution.Marker = strings.TrimSpace(resolution.Marker)
 		resolution.EntityID = strings.TrimSpace(resolution.EntityID)
-		if resolution.Marker == "" || resolution.EntityID == "" {
+		resolution.Action = normalizeVTextCitationResolutionAction(resolution.Action, resolution.EntityID)
+		resolution.Reason = strings.TrimSpace(resolution.Reason)
+		if resolution.Marker == "" || (resolution.EntityID == "" && resolution.Action != "no_source_needed") {
 			return
 		}
 		if idx, ok := seen[resolution.Marker]; ok {
@@ -778,6 +816,21 @@ func markdownLineageCitationResolutions(global, local []vtextCitationMarkerResol
 	return out
 }
 
+func normalizeVTextCitationResolutionAction(action, entityID string) string {
+	normalized := strings.ToLower(strings.TrimSpace(action))
+	switch normalized {
+	case "", "source", "source_entity", "link_source", "confirming_source":
+		if strings.TrimSpace(entityID) == "" {
+			return normalized
+		}
+		return "link_source"
+	case "omit", "remove", "remove_marker", "no_source", "no_source_needed", "not_needed":
+		return "no_source_needed"
+	default:
+		return normalized
+	}
+}
+
 func validateMarkdownLineageCitationResolutions(entities []vtextSourceEntity, resolutions []vtextCitationMarkerResolution) error {
 	entityIDs := map[string]bool{}
 	for _, entity := range entities {
@@ -788,11 +841,21 @@ func validateMarkdownLineageCitationResolutions(entities []vtextSourceEntity, re
 	for _, resolution := range resolutions {
 		marker := strings.TrimSpace(resolution.Marker)
 		entityID := strings.TrimSpace(resolution.EntityID)
-		if marker == "" || entityID == "" {
-			return fmt.Errorf("citation resolutions require marker and entity_id")
+		action := normalizeVTextCitationResolutionAction(resolution.Action, entityID)
+		if marker == "" {
+			return fmt.Errorf("citation resolutions require marker")
 		}
 		if !vtextMarkdownLineageCitationRefRE.MatchString(marker) || vtextMarkdownLineageCitationRefRE.FindString(marker) != marker {
 			return fmt.Errorf("citation resolution marker %q is not a supported markdown citation marker", marker)
+		}
+		if action == "no_source_needed" {
+			continue
+		}
+		if action != "link_source" {
+			return fmt.Errorf("citation resolution marker %s has unsupported action %q", marker, resolution.Action)
+		}
+		if entityID == "" {
+			return fmt.Errorf("citation resolution marker %s requires entity_id", marker)
 		}
 		if !entityIDs[entityID] {
 			return fmt.Errorf("citation resolution marker %s references unknown source entity %s", marker, entityID)

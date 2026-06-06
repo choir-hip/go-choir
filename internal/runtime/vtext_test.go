@@ -3960,6 +3960,65 @@ func TestVTextSourceGapRepairPreservesUnrepairedGaps(t *testing.T) {
 	}
 }
 
+func TestVTextSourceGapRepairCanOmitNoSourceNeededMarker(t *testing.T) {
+	h, _, _ := vtextAPISetupWithRuntime(t)
+	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath: "proposals/legal-cloud-no-source-needed.md",
+		Title:      "legal-cloud-no-source-needed.md",
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:   "v44",
+			Content: "Ordinary framing sentence [2].",
+		}},
+	})
+	importW := httptest.NewRecorder()
+	h.HandleVTextRouter(importW, importReq)
+	if importW.Code != http.StatusCreated {
+		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", importW.Code, http.StatusCreated, importW.Body.String())
+	}
+	var imported vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+
+	repairReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
+		CitationResolutions: []vtextCitationMarkerResolution{{
+			Marker: "[2]",
+			Action: "no_source_needed",
+			Reason: "The sentence is structural framing, not a factual claim needing citation.",
+		}},
+	})
+	repairW := httptest.NewRecorder()
+	h.HandleVTextRouter(repairW, repairReq)
+	if repairW.Code != http.StatusCreated {
+		t.Fatalf("repair source gap: status = %d, want %d; body: %s", repairW.Code, http.StatusCreated, repairW.Body.String())
+	}
+	var repaired vtextRevisionResponse
+	if err := json.NewDecoder(repairW.Body).Decode(&repaired); err != nil {
+		t.Fatalf("decode repair response: %v", err)
+	}
+	if repaired.Content != "Ordinary framing sentence." {
+		t.Fatalf("repaired content = %q", repaired.Content)
+	}
+	meta := decodeRevisionMetadata(repaired.Metadata)
+	if _, ok := meta["source_gaps"]; ok {
+		t.Fatalf("source_gaps should be cleared after no-source-needed repair: %#v", meta["source_gaps"])
+	}
+	if _, ok := meta["source_entities"]; ok {
+		t.Fatalf("no-source-needed repair should not invent source_entities: %#v", meta["source_entities"])
+	}
+	manifest, ok := meta["source_repair_resolutions"].([]any)
+	if !ok || len(manifest) != 1 {
+		t.Fatalf("source_repair_resolutions = %#v", meta["source_repair_resolutions"])
+	}
+	item := manifest[0].(map[string]any)
+	if item["marker"] != "[2]" || item["action"] != "no_source_needed" || item["entity_id"] != nil {
+		t.Fatalf("source repair manifest item = %#v", item)
+	}
+	if item["reason"] != "The sentence is structural framing, not a factual claim needing citation." {
+		t.Fatalf("source repair reason = %#v", item["reason"])
+	}
+}
+
 func TestVTextSourceGapRepairRejectsUnknownEntity(t *testing.T) {
 	h, _, _ := vtextAPISetupWithRuntime(t)
 	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{

@@ -21,6 +21,8 @@
   export let sourceReviewTitle = '';
   export let sourceReviewURL = '';
   export let sourceReviewExcerpt = '';
+  export let sourceReviewRelation = 'confirms';
+  export let sourceReviewReason = '';
   export let sourceReviewStatus = '';
   export let selectedSourceEntityID = '';
   export let sourceArtifactTitle = '';
@@ -38,7 +40,17 @@
   $: heading = sourceCandidates.length
     ? `${sourceCandidates.length} source review marker${sourceCandidates.length === 1 ? '' : 's'}`
     : `${sourceEntities.length} represented source${sourceEntities.length === 1 ? '' : 's'}`;
-  $: canApplySourceReview = Boolean(currentDoc && currentRevision && sourceReviewMarker && sourceReviewTitle.trim() && sourceReviewExcerpt.trim());
+  $: sourceReviewOmitsMarker = sourceReviewRelation === 'no_source_needed';
+  $: canApplySourceReview = Boolean(
+    currentDoc
+    && currentRevision
+    && sourceReviewMarker
+    && (
+      sourceReviewOmitsMarker
+        ? sourceReviewReason.trim()
+        : sourceReviewTitle.trim() && sourceReviewExcerpt.trim()
+    ),
+  );
   $: canImportSourceArtifact = Boolean(currentDoc && currentRevision && sourceArtifactURL.trim());
   $: canAttachSourceArtifact = Boolean(currentDoc && currentRevision && sourceArtifactText.trim());
 </script>
@@ -168,23 +180,45 @@
           {/each}
         </div>
         <label class="source-artifact-field">
-          <span>Source title</span>
-          <input data-vtext-source-review-title bind:value={sourceReviewTitle} placeholder="Name the confirming or refuting source" />
+          <span>Review outcome</span>
+          <select data-vtext-source-review-relation bind:value={sourceReviewRelation}>
+            <option value="confirms">Source confirms claim</option>
+            <option value="qualifies">Source qualifies claim</option>
+            <option value="refutes">Source refutes claim</option>
+            <option value="no_source_needed">No source needed</option>
+          </select>
         </label>
-        <label class="source-artifact-field">
-          <span>Source URL</span>
-          <input data-vtext-source-review-url bind:value={sourceReviewURL} placeholder="Optional public source URL" />
-        </label>
-        <label class="source-artifact-field">
-          <span>Confirming excerpt</span>
-          <textarea
-            data-vtext-source-review-excerpt
-            bind:value={sourceReviewExcerpt}
-            spellcheck="true"
-            rows="5"
-            placeholder="Paste the exact source text or concise reader-mode evidence that supports this marker"
-          ></textarea>
-        </label>
+        {#if sourceReviewOmitsMarker}
+          <label class="source-artifact-field">
+            <span>Reason</span>
+            <textarea
+              data-vtext-source-review-reason
+              bind:value={sourceReviewReason}
+              spellcheck="true"
+              rows="3"
+              placeholder="Explain why this marker should be removed instead of sourced"
+            ></textarea>
+          </label>
+        {:else}
+          <label class="source-artifact-field">
+            <span>Source title</span>
+            <input data-vtext-source-review-title bind:value={sourceReviewTitle} placeholder="Name the confirming, qualifying, or refuting source" />
+          </label>
+          <label class="source-artifact-field">
+            <span>Source URL</span>
+            <input data-vtext-source-review-url bind:value={sourceReviewURL} placeholder="Optional public source URL" />
+          </label>
+          <label class="source-artifact-field">
+            <span>Source excerpt</span>
+            <textarea
+              data-vtext-source-review-excerpt
+              bind:value={sourceReviewExcerpt}
+              spellcheck="true"
+              rows="5"
+              placeholder="Paste the exact source text or concise reader-mode evidence for this marker"
+            ></textarea>
+          </label>
+        {/if}
         <div class="source-panel-actions">
           <button
             type="button"
@@ -485,6 +519,7 @@
   }
 
   .source-artifact-field input,
+  .source-artifact-field select,
   .source-artifact-field textarea {
     width: 100%;
     border: 1px solid var(--choir-border-strong);

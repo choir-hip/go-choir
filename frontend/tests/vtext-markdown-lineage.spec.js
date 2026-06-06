@@ -126,7 +126,7 @@ test('Markdown lineage import resolves known citation markers into expandable so
   expect(revision.metadata?.source_gaps).toHaveLength(1);
   expect(revision.metadata?.source_gaps?.[0]?.marker).toBe('[2]');
   expect(revision.metadata?.migration_manifest?.citation_resolutions).toEqual([
-    { marker: '[1]', entity_id: sourceEntityID },
+    { marker: '[1]', action: 'link_source', entity_id: sourceEntityID },
   ]);
 
   const vtextWindow = await openRecentVTextDocument(page, `Legal Cloud Sourced Lineage ${stamp}`);
@@ -468,7 +468,7 @@ test('Migrated source gaps can be repaired as canonical VText revisions', async 
   expect(repaired.metadata?.source).toBe('vtext_source_gap_repair');
   expect(repaired.metadata?.source_gaps).toBeUndefined();
   expect(repaired.metadata?.source_entities).toHaveLength(1);
-  expect(repaired.metadata?.source_repair_resolutions).toEqual([{ marker: '[2]', entity_id: sourceEntityID }]);
+  expect(repaired.metadata?.source_repair_resolutions).toEqual([{ marker: '[2]', action: 'link_source', entity_id: sourceEntityID }]);
 
   const vtextWindow = await openRecentVTextDocument(page, `Source Gap Repair ${stamp}`);
 
@@ -526,6 +526,8 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   expect(repairRequest.method()).toBe('POST');
   const repairPayload = JSON.parse(repairRequest.postData() || '{}');
   expect(repairPayload.source_entities?.[0]?.evidence?.research_state).toBe('owner_supplied');
+  expect(repairPayload.source_entities?.[0]?.evidence?.relation).toBe('confirms');
+  expect(repairPayload.citation_resolutions?.[0]?.action).toBe('link_source');
   const repairResponse = await repairResponsePromise;
   expect(repairResponse.status()).toBe(201);
 
@@ -557,6 +559,83 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   await expect(panelSourceWindow).toContainText(excerpt);
   await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText('available / owner_supplied');
   await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText(/src_review_2_panel_repair_source/);
+});
+
+test('VText Sources panel can mark a citation gap as no source needed', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const stamp = Date.now();
+  const reason = 'This is a framing sentence rather than a factual claim requiring citation.';
+
+  const imported = await fetchJSON(page, '/api/vtext/markdown-lineage/import', {
+    method: 'POST',
+    body: JSON.stringify({
+      source_path: `proposals/panel-no-source-needed-${stamp}.md`,
+      title: `Panel No Source Needed ${stamp}`,
+      versions: [
+        {
+          label: 'v44',
+          source_revision_id: `legacy-panel-no-source-v44-${stamp}`,
+          content: [
+            '# Panel No Source Needed',
+            '',
+            'This ordinary framing sentence should not keep a citation marker [2].',
+          ].join('\n'),
+        },
+      ],
+    }),
+  });
+
+  const vtextWindow = await openRecentVTextDocument(page, `Panel No Source Needed ${stamp}`);
+
+  await vtextWindow.locator('[data-vtext-source-panel]').click();
+  const sourcePanel = vtextWindow.locator('[data-vtext-source-diagnostics]');
+  await expect(sourcePanel).toBeVisible({ timeout: 10000 });
+  await expect(sourcePanel.locator('[data-vtext-source-review-panel]')).toBeVisible();
+  await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toContainText('[2]');
+  await expect(sourcePanel.locator('[data-vtext-source-review-marker].selected')).toContainText('[2]');
+
+  await sourcePanel.locator('[data-vtext-source-review-relation]').selectOption('no_source_needed');
+  await expect(sourcePanel.locator('[data-vtext-source-review-title]')).toHaveCount(0);
+  await expect(sourcePanel.locator('[data-vtext-source-review-excerpt]')).toHaveCount(0);
+  await expect(sourcePanel.locator('[data-vtext-apply-source-review]')).toBeDisabled();
+  await sourcePanel.locator('[data-vtext-source-review-reason]').fill(reason);
+
+  const repairRequestPromise = page.waitForRequest((request) => request.url().includes('/source-repairs'));
+  const repairResponsePromise = page.waitForResponse((response) => response.url().includes('/source-repairs'));
+  await sourcePanel.locator('[data-vtext-apply-source-review]').click();
+  const repairRequest = await repairRequestPromise;
+  expect(repairRequest.method()).toBe('POST');
+  const repairPayload = JSON.parse(repairRequest.postData() || '{}');
+  expect(repairPayload.source_entities || []).toHaveLength(0);
+  expect(repairPayload.citation_resolutions).toEqual([
+    {
+      marker: '[2]',
+      action: 'no_source_needed',
+      reason,
+    },
+  ]);
+  const repairResponse = await repairResponsePromise;
+  expect(repairResponse.status()).toBe(201);
+
+  const revisions = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
+  const latest = revisions.revisions.find((revision) => revision.version_number === 1);
+  expect(latest.content).toContain('This ordinary framing sentence should not keep a citation marker.');
+  expect(latest.content).not.toContain('[2]');
+  expect(latest.metadata?.source_entities).toBeUndefined();
+  expect(latest.metadata?.source_gaps).toBeUndefined();
+  expect(latest.metadata?.source_repair_resolutions).toEqual([
+    {
+      marker: '[2]',
+      action: 'no_source_needed',
+      reason,
+    },
+  ]);
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  await expect(rendered).toContainText('This ordinary framing sentence should not keep a citation marker.');
+  await expect(rendered).not.toContainText('[2]');
+  await expect(rendered.locator('[data-vtext-source-ref]')).toHaveCount(0);
+  await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toHaveCount(0, { timeout: 15000 });
 });
 
 test('VText Sources panel can cancel diagnosis without blocking source review', async ({ desktopSession }) => {
