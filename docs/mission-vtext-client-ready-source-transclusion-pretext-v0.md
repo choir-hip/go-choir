@@ -17,10 +17,10 @@ status: checkpoint_incomplete
 
 last checkpoint:
 
-- Docs checkpoint `0d3c934f3eea8056e6fe6e10a577add56f492a13` records deployed
-  proof for behavior commit `22042971a920e5c14fd45b44f1851c7de035db4e`: imported
-  HTML sources with readable text now persist as reader-mode Markdown content
-  artifacts, not browser-identity artifacts.
+- This mission-doc checkpoint records deployed proof for behavior commit
+  `c996f88b4f45431a5374fa46ddbfc6448c90b444`: constrained text-source expansion
+  now uses a stacked Pretext journal flow instead of falling back to the old
+  expanded source-card/popover path.
 
 current artifact state:
 
@@ -45,6 +45,9 @@ what shipped:
 - Imported HTML sources that produce readable text now persist as
   `text/markdown` content artifacts with `app_hint: content`, while preserving
   original HTML media/provenance metadata and publication snapshot policy.
+- Text-source expansion now has two explicit journal-flow modes:
+  `side-note` when Pretext can route article lines beside the note, and
+  `stacked` when a constrained measure cannot support a side column.
 
 what was proven:
 
@@ -76,6 +79,20 @@ what was proven:
 - Deployed Playwright publication proof passed against `choir.news` and
   verified public content-item sources still publish cleaned reader snapshots
   that preserve original media/provenance metadata for source windows.
+- CI run `27051398011` and FlakeHub run `27051398025` succeeded for
+  `c996f88b4f45431a5374fa46ddbfc6448c90b444`.
+- Node B `/health` reported proxy and sandbox deployed at that SHA on
+  `2026-06-06T03:32:57Z`.
+- Deployed Playwright source-flow proof passed against `choir.news` for both
+  the existing wide `side-note` journal flow and the new constrained `stacked`
+  journal flow. The stacked proof verified no old popover/card DOM, zero routed
+  side lines, a minimal source note after the measured article lines, and no
+  source metadata chrome such as `source available`.
+- Comet Computer Use state showed the owner-authenticated legal-cloud proposal
+  route still open on staging after deploy, with
+  `My version of choir_private_legal_cloud_proposal.vtext`, the full proposal
+  heading, source markers in article flow, and reader-mode source windows
+  available.
 
 unproven or partial claims:
 
@@ -101,31 +118,29 @@ remaining error field:
   iframe/Web Lens as fallback.
 - Continue simplification in `VTextEditor.svelte`, source artifact state, and
   `internal/runtime/vtext.go` without changing the source graph contract.
-- Reduce remaining generic card/pill layering outside the Pretext journal note
-  and implement expanded source wrapping through Pretext line-flow, not card
-  stacking. Pretext's mission-critical role is the magazine/academic-journal
-  layout: article text should continue in readable columns or routed line
-  ranges alongside the source note, with the source presented as content rather
-  than metadata chrome.
+- Continue reducing generic card/pill layering in inactive fallback surfaces,
+  source facts, and owner repair controls. The active text-source expansion path
+  is now journal-flow rather than card fallback, but media previews and repair
+  panels still need a separate simplification pass.
 
 highest-impact remaining uncertainty:
 
-- Whether the next UI pass can route article text around expanded source notes
-  with Pretext line ranges in a magazine/academic-journal layout while keeping
-  source content minimal, readable, and policy-preserving.
+- Whether the source-flow surface can now be simplified enough to remove the
+  remaining old expanded-card CSS safely, without breaking media previews,
+  keyboard accessibility, or source-open affordances.
 
 next executable probe:
 
-- Continue source realism by improving the source layout and acquisition paths:
-  implement Pretext line-flow wrapping for expanded source notes, convert
-  failed or noisy web captures into cleaned Markdown reader artifacts before
-  iframe fallback, and keep citation/source review claim-based rather than
-  JSON/operator-based.
+- Continue source realism by simplifying the remaining source surfaces:
+  prune old expanded-card CSS where text-source journal flow has replaced it,
+  keep media previews explicitly scoped, convert failed or noisy web captures
+  into cleaned Markdown reader artifacts before iframe fallback, and keep
+  citation/source review claim-based rather than JSON/operator-based.
 
 suggested resume goal string:
 
 ```text
-/goal Continue docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md from checkpoint 1ba47646. Keep Pretext as the magazine/journal line-flow mechanism for article prose around minimal source notes. Before code, document any newly found source-layout/source-acquisition/source-window problem. Next improve expanded source wrapping and cleaned Markdown reader artifacts while preserving canonical VText, source transclusions, source publication policy, Markdown export, CI, Node B deploy, and Comet staging proof.
+/goal Continue docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md from checkpoint c996f88b. Keep Pretext as the magazine/journal line-flow mechanism for article prose around minimal source notes. Before code, document any newly found source-layout/source-acquisition/source-window problem. Next simplify the remaining old source-card/media fallback surfaces and improve cleaned Markdown reader artifacts while preserving canonical VText, source transclusions, source publication policy, Markdown export, CI, Node B deploy, and Comet staging proof.
 ```
 
 evidence artifact refs:
@@ -136,9 +151,9 @@ evidence artifact refs:
 rollback refs:
 
 - Last deployed behavior-changing commit:
-  `22042971`.
+  `c996f88b`.
 - Last docs checkpoint:
-  `0d3c934f3eea8056e6fe6e10a577add56f492a13`.
+  this mission-doc revision for `c996f88b`.
 
 ## Goal String
 
@@ -7851,3 +7866,111 @@ next repair:
   Pretext article lines, and a minimal source note after the affected text.
 - Keep media previews and truly unsupported blocks on their existing path until
   a separate documented problem justifies changing them.
+
+## 2026-06-06 Repair: Constrained Source Expansion Uses Stacked Journal Flow
+
+status: deployed_verified_checkpoint_incomplete
+
+root cause:
+
+- The source-flow implementation had a strong Pretext side-note path but treated
+  "no room for a side column" as a mount failure.
+- `VTextEditor.svelte` leaves the clicked source reference expanded before the
+  requestAnimationFrame mount attempt completes. When mount failed, old
+  `.vtext-source-ref[data-expanded="true"]` CSS became the active fallback.
+- That fallback was structurally different from the journal flow: it rendered
+  an inline-grid source card/popover with rounded chrome and source fact pills
+  instead of a measured article-flow projection.
+
+change:
+
+- `mountSourceJournalFlow` now has explicit source-flow modes:
+  `side-note` for routed lines beside the note and `stacked` for constrained
+  measures where text can be measured but the note cannot occupy a side column.
+- The stacked mode reuses the Pretext line materialization path, marks
+  `data-vtext-source-flow-mode="stacked"`, sets routed line count to `0`, and
+  places the minimal source note after the affected measured article lines.
+- The old expanded source-card path remains available only for media/unsupported
+  surfaces that are not yet covered by this documented repair.
+
+local proof:
+
+- `pnpm --dir frontend run build` -> passed.
+- With the local service stack attached:
+  `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText (lays out expanded
+  text sources as noncanonical journal flow|uses stacked journal flow instead
+  of old source card when side routing is unavailable)" --project=chromium
+  --timeout=180000` -> passed, 2 tests.
+- Full local source-entities file:
+  `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js --project=chromium
+  --timeout=180000` -> passed, 7 tests, including content source windows and
+  table autosave roundtrip coverage.
+
+CI and deploy:
+
+- Problem checkpoint `af190a95` (`docs: document source flow card fallback
+  gap`) was committed before behavior changes.
+- Behavior commit `c996f88b4f45431a5374fa46ddbfc6448c90b444`
+  (`fix: use stacked journal flow for constrained source notes`) was pushed to
+  `origin/main`.
+- CI run `27051398011` passed: frontend build, Go vet/build, non-runtime Go
+  tests, runtime shards, integration-tagged smoke, and Node B deploy.
+- FlakeHub publish run `27051398025` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `c996f88b4f45431a5374fa46ddbfc6448c90b444`, deployed at
+  `2026-06-06T03:32:57Z`.
+
+deployed proof:
+
+- `BASE_URL=https://choir.news PLAYWRIGHT_BASE_URL=https://choir.news
+  CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText (lays out expanded
+  text sources as noncanonical journal flow|uses stacked journal flow instead
+  of old source card when side routing is unavailable)" --project=chromium
+  --timeout=180000` -> passed.
+- The deployed wide-flow proof verifies the existing `side-note` journal path:
+  routed lines stay clear of the note, the second paragraph can route beside
+  the note, source facts are not shown in the note, and nested citation markers
+  remount to their own source note without duplicating expanded popovers.
+- The deployed constrained-flow proof verifies the new `stacked` mode:
+  `data-vtext-source-flow-mode="stacked"`, routed line count `0`, no old
+  `.vtext-source-ref[data-expanded="true"] .vtext-source-ref-popover` DOM, the
+  source note appears after measured article lines, and the note does not
+  expose `source available` metadata chrome.
+
+Comet owner-account state:
+
+- Computer Use was available and Comet was running as `ai.perplexity.comet`.
+- Comet stayed owner-authenticated on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`
+  after the `c996f88b` deploy.
+- The legal-cloud proposal route displayed
+  `My version of choir_private_legal_cloud_proposal.vtext`, the full proposal
+  heading, source markers in article flow, and reader-mode source windows for
+  ABA Model Rule 1.6 and ABA Formal Opinion 512.
+- The constrained stacked-flow geometry itself was proved through deployed
+  Playwright because Comet does not currently expose a deterministic way to
+  force the owner legal-cloud publication into the exact constrained reader
+  measure without resizing/mutating the owner's active desktop layout.
+
+belief-state update:
+
+- Text-source expansion now has one product vocabulary: journal flow. It can be
+  a side note when line routing has room, or a stacked note when it does not.
+- The old expanded source-card CSS is still present, but it is no longer the
+  fallback for ordinary text sources whose article text Pretext can measure.
+
+remaining error field:
+
+- The remaining old expanded-card CSS should be simplified or scoped to media
+  previews and genuinely unsupported source surfaces.
+- The source note still opens separate source windows correctly, but the owner
+  surface can accumulate many open source windows; window lifecycle and source
+  switching need a later product pass.
+- The source acquisition path still needs stronger arbitrary URL cleanup into
+  Markdown reader artifacts and typed claim/source review beyond operator-grade
+  repair controls.
