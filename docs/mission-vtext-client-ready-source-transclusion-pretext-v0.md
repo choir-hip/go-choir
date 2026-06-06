@@ -7801,3 +7801,53 @@ remaining error field:
 - The source review panel is still too operator-grade. The next product pass
   should review claims and sources in typed outcomes, then keep visible article
   markers as source transclusion points only when they improve the proposal.
+
+## 2026-06-06 Problem: Source Expansion Falls Back To Old Card Path When Side Flow Cannot Route
+
+status: documented_pending_repair
+
+new evidence:
+
+- `frontend/src/lib/vtext-source-flow.ts` uses Pretext line ranges for the
+  strong desktop source-flow path, but `mountSourceJournalFlow` returns `false`
+  when the container is below `SOURCE_FLOW_MIN_WIDTH` or when the measured note
+  leaves no usable side column.
+- When `mountSourceJournalFlow` returns `false`, `VTextEditor.svelte` leaves
+  the clicked `.vtext-source-ref` expanded. The old CSS path in
+  `VTextEditor.svelte` then renders an inline-grid source ref with an embedded
+  popover card.
+- That fallback still carries the earlier UI vocabulary: rounded source cards,
+  nested popover chrome, pill-shaped source facts/open buttons, and article text
+  that no longer participates in the journal-flow layout.
+- The current geometry test proves side-note routing on a wide viewport. It
+  does not prove the no-side-room path avoids the old card fallback.
+
+current interpretation:
+
+- The product has two source expansion surfaces for text sources: the intended
+  Pretext journal flow and the old inline-card expansion. The latter is now
+  architectural residue, not a deliberate reading experience.
+- Narrow screens cannot literally wrap columns beside the source note, but they
+  should still use a journal-flow projection: preserve article text as measured
+  readable lines and place a minimal source note after the relevant text, rather
+  than reactivating the old card/popover path.
+
+risk:
+
+- The user-visible experience can regress to exactly the source-card layering
+  the mission is trying to remove whenever side-note routing is unavailable.
+- Tests can stay green while mobile or constrained owner windows still show a
+  non-journal source expansion.
+- Keeping the old fallback active makes later simplification harder because the
+  system must preserve two expanded-source DOM contracts.
+
+next repair:
+
+- Make `mountSourceJournalFlow` produce a stacked journal-flow fallback for
+  text sources when side-note routing is unavailable but Pretext can still
+  measure the affected article block.
+- Mark the flow mode explicitly (`side-note` or `stacked`) and verify that the
+  stacked mode has no old popover/card DOM, no routed side lines, full-width
+  Pretext article lines, and a minimal source note after the affected text.
+- Keep media previews and truly unsupported blocks on their existing path until
+  a separate documented problem justifies changing them.
