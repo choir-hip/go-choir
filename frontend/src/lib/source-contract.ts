@@ -18,6 +18,13 @@ export const SOURCE_OPEN_SURFACES = {
   image: 'image',
 } as const;
 
+export const READER_ARTIFACT_STATES = {
+  ready: 'reader_snapshot_ready',
+  notPublicationSafe: 'not_publication_safe',
+  boundedExcerptOnly: 'bounded_excerpt_only',
+  importFailed: 'import_failed',
+} as const;
+
 export type SourceOpenPlanInput = {
   requestedOpenSurface?: unknown;
   targetKind?: unknown;
@@ -100,6 +107,46 @@ export function sourceEvidenceStateLabel(value: unknown): string {
       return 'Unavailable source';
     default:
       return 'Evidence unclassified';
+  }
+}
+
+export function normalizeReaderArtifactState(value: unknown): string {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  switch (normalized) {
+    case READER_ARTIFACT_STATES.ready:
+    case 'ready':
+    case 'snapshot_ready':
+      return READER_ARTIFACT_STATES.ready;
+    case READER_ARTIFACT_STATES.notPublicationSafe:
+    case 'publication_blocked':
+    case 'not_safe_for_publication':
+      return READER_ARTIFACT_STATES.notPublicationSafe;
+    case READER_ARTIFACT_STATES.boundedExcerptOnly:
+    case 'excerpt_only':
+    case 'bounded_excerpt':
+      return READER_ARTIFACT_STATES.boundedExcerptOnly;
+    case READER_ARTIFACT_STATES.importFailed:
+    case 'failed':
+    case 'fetch_failed':
+    case 'source_import_failed':
+      return READER_ARTIFACT_STATES.importFailed;
+    default:
+      return '';
+  }
+}
+
+export function readerArtifactStateLabel(value: unknown): string {
+  switch (normalizeReaderArtifactState(value)) {
+    case READER_ARTIFACT_STATES.ready:
+      return 'Reader snapshot ready';
+    case READER_ARTIFACT_STATES.notPublicationSafe:
+      return 'Not publication safe';
+    case READER_ARTIFACT_STATES.boundedExcerptOnly:
+      return 'Bounded excerpt only';
+    case READER_ARTIFACT_STATES.importFailed:
+      return 'Source import failed';
+    default:
+      return '';
   }
 }
 

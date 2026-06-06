@@ -2,6 +2,8 @@ import { youtubeEmbedURL } from './media-utils.js';
 import {
   normalizeSourceEvidenceState,
   normalizeSourceOpenSurface,
+  normalizeReaderArtifactState,
+  readerArtifactStateLabel,
   sourceOpenPlan,
   sourceEvidenceStateLabel,
 } from './source-contract.js';
@@ -9,6 +11,8 @@ import {
 export {
   normalizeSourceEvidenceState,
   normalizeSourceOpenSurface,
+  normalizeReaderArtifactState,
+  readerArtifactStateLabel,
   sourceOpenPlan,
   sourceEvidenceStateLabel,
 } from './source-contract.js';

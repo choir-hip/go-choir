@@ -1,7 +1,9 @@
 import { test, expect } from './helpers/fixtures.js';
 import {
   mediaRefToSourceEntity,
+  normalizeReaderArtifactState,
   normalizeSourceEvidenceState,
+  readerArtifactStateLabel,
   sourceOpenPlan,
   sourceEntityInlineExcerptText,
   sourceEntityOpenPlan,
@@ -63,6 +65,9 @@ test('source evidence states normalize to typed reader labels', () => {
   expect(sourceEvidenceStateLabel('blocked_by_access')).toBe('Blocked by access');
   expect(sourceEvidenceStateLabel('fetch_failed')).toBe('Unavailable source');
   expect(sourceEvidenceStateLabel('reader_snapshot_ready')).toBe('Evidence unclassified');
+  expect(normalizeReaderArtifactState('reader_snapshot_ready')).toBe('reader_snapshot_ready');
+  expect(readerArtifactStateLabel('reader_snapshot_ready')).toBe('Reader snapshot ready');
+  expect(readerArtifactStateLabel('bounded_excerpt_only')).toBe('Bounded excerpt only');
 
   const mediaEntity = mediaRefToSourceEntity({ kind: 'image', url: 'https://example.com/source.png' });
   expect(mediaEntity?.evidence?.state).toBe('candidate');
@@ -580,9 +585,9 @@ test('published source readers prefer publication snapshots over loaded content 
           'It is more stable than the target content item and is the public source contract.',
         ].join('\n'),
       },
-      evidence: {
-        state: 'available',
-        research_state: 'confirmed',
+      reader_snapshot_status: {
+        state: 'reader_snapshot_ready',
+        truncated: false,
       },
       provenance: {
         created_by: 'browser-test',
@@ -630,6 +635,10 @@ test('published source readers prefer publication snapshots over loaded content 
   const viewer = sourceWindow.locator('[data-content-viewer][data-source-reader-mode="true"]');
   await expect(viewer).toBeVisible({ timeout: 10000 });
   await expect(viewer.locator('[data-content-evidence]')).toContainText('Reference');
+  await expect(viewer.locator('.source-kicker')).toContainText('Reader snapshot ready');
+  await expect(viewer.locator('.source-kicker')).not.toContainText('Evidence unclassified');
+  await expect(viewer.locator('[data-content-evidence]')).toContainText('Reader artifact');
+  await expect(viewer.locator('[data-content-evidence]')).toContainText('Reader snapshot ready');
   await expect(viewer.locator('[data-content-evidence]')).not.toContainText('SHA-256');
   const reader = viewer.locator('[data-content-reader-markdown]');
   await expect(reader.locator('h2')).toContainText('Publication reader snapshot');

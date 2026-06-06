@@ -5,8 +5,10 @@
   import { renderMarkdownBlocks } from './vtext-markdown-renderer';
   import {
     normalizeSourceEvidenceState,
+    readerArtifactStateLabel,
     sourceEntityExcerptText,
     sourceEntityReaderSnapshotText,
+    sourceEntityReaderSnapshotStatus,
     sourceEvidenceResearchLabel,
     sourceEvidenceState,
     sourceEvidenceStateLabel,
@@ -45,8 +47,10 @@
   $: sourceOpenPlan = appContext?.sourceOpenPlan || {};
   $: allowLiveImport = !!appContext?.allowLiveImport || !!sourceOpenPlan.liveOriginal;
   $: sourceState = sourceEvidenceState(sourceEntity)
-    || normalizeSourceEvidenceState(sourceEntity?.reader_snapshot_status?.state || item?.provenance?.state || '');
+    || normalizeSourceEvidenceState(sourceEntity?.provenance?.evidence_state || item?.provenance?.evidence_state || item?.provenance?.source_evidence_state || '');
   $: sourceStateLabel = sourceEvidenceStateLabel(sourceState);
+  $: readerArtifactStatus = sourceEntityReaderSnapshotStatus(sourceEntity);
+  $: readerArtifactStatusLabel = readerArtifactStateLabel(readerArtifactStatus?.state);
   $: sourceResearchLabel = sourceEvidenceResearchLabel(sourceEntity?.evidence?.research_state);
 
   async function loadContentItem() {
@@ -116,9 +120,10 @@
         <p class="eyebrow">{appHint} content</p>
       {/if}
       <h2>{title}</h2>
-      {#if isSourceReader && (sourceState || mediaType)}
+      {#if isSourceReader && (sourceState || readerArtifactStatusLabel || mediaType)}
         <p class="source-kicker">
           {#if sourceState}<span>{sourceStateLabel}</span>{/if}
+          {#if readerArtifactStatusLabel}<span>{readerArtifactStatusLabel}</span>{/if}
           {#if mediaType}<span>{mediaType}</span>{/if}
         </p>
       {/if}
@@ -173,6 +178,18 @@
             <div>
               <dt>SHA-256</dt>
               <dd>{item.content_hash}</dd>
+            </div>
+          {/if}
+          {#if readerArtifactStatusLabel}
+            <div>
+              <dt>Reader artifact</dt>
+              <dd>{readerArtifactStatusLabel}</dd>
+            </div>
+          {/if}
+          {#if readerArtifactStatus?.truncated}
+            <div>
+              <dt>Snapshot</dt>
+              <dd>Truncated for publication readers</dd>
             </div>
           {/if}
         </dl>
