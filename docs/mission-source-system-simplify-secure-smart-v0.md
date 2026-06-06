@@ -2848,6 +2848,54 @@ Residual risk: this closes the backend evidence-state implementation drift, but
 it is not yet a generated/shared frontend contract and does not yet cover
 ReaderArtifact, selector, or open-plan structs.
 
+### Problem 17: Shared Internal Source Contract Was Omitted From Deploy Source Closures
+
+Status: `documented_before_fix`.
+
+Confirmed evidence:
+
+```text
+behavior commit: 38d0c969b57e84dc9e11626277fb2857324af22d
+CI run: 27064439772
+FlakeHub run: 27064439773 passed
+Node B deploy job: 79882795542 failed
+deploy failure:
+  internal/platform/source_metadata.go:8:2: cannot find module providing package github.com/yusefmosiah/go-choir/internal/sourcecontract: import lookup disabled by -mod=vendor
+  internal/runtime/vtext.go:50:2: cannot find module providing package github.com/yusefmosiah/go-choir/internal/sourcecontract: import lookup disabled by -mod=vendor
+```
+
+Observed behavior:
+
+- normal Go CI accepted `internal/sourcecontract`;
+- the staging deploy Nix builds filtered each service source closure to a
+  service-specific `internalDirs` list;
+- the new shared package was not present in the platform/runtime service source
+  closures, so deploy-time Nix package builds for host services and guest
+  images failed even though Go tests passed.
+
+Why this matters:
+
+The source-system convergence work depends on small shared contracts rather
+than duplicated switches in runtime, platform, frontend, Source Viewer, Web
+Lens, publication, and export. If adding a shared internal package can pass Go
+CI while failing only in Node B deploy packaging, the landing loop has a blind
+spot exactly where shared source contracts should be safest.
+
+Acceptance for fix:
+
+- add `internal/sourcecontract` to every Nix service source closure that imports
+  runtime or platform code using the contract;
+- add deploy-impact classification for `internal/sourcecontract/*` so future
+  edits rebuild and redeploy the affected service pointers and guest image;
+- prove the filtered Nix packages build locally for at least the failing
+  platform/runtime service closures before pushing;
+- push the fix, monitor CI and staging deploy, and verify staging reports the
+  fixed commit identity.
+
+Remaining error field: this is a deploy packaging and impact-classification
+gap, not a flaw in the evidence-state semantics. It must be fixed before the
+shared backend source evidence contract can be accepted on staging.
+
 ## Suggested `/goal`
 
 ```text
