@@ -3509,6 +3509,33 @@ document-scoped owner mutation proof with durable screenshot/trace capture and
 explicit rollback references, plus the broader publication/export and final
 review requirements.
 
+Owner legal-proposal source-open UI proof in Comet on 2026-06-06:
+
+- The authenticated Choir tab loaded
+  `https://choir.news/?owner_bounded_edit=93d9f819` and displayed
+  `choir_private_legal_cloud_proposal.vtext` at `v94`, `Primary draft Latest`.
+- The visible document title was
+  `Proposal for [Redacted]: A Private Legal Cloud`; the first two inline source
+  markers were visible in the opening section.
+- Clicking the first marker expanded an inline transclusion for
+  `ABA Formal Opinion 512: Generative Artificial Intelligence Tools`, showing a
+  source excerpt and explicit `Open source` / `Collapse source` controls.
+- Clicking `Open source` opened a new source-reader window titled
+  `ABA Formal Opinion 512: Generative Artificial Intelligence Tools`.
+- The source-reader window rendered content-forward reader text, reported
+  `Available source text/markdown`, showed an `Open original` action to the ABA
+  PDF URL, displayed the reader-mode note and source citation, and exposed
+  collapsible `Source evidence`, `Source entity`, and `Provenance` details.
+- The Comet desk showed this as a fourth in-app window with a source attachment
+  chip, not a Web Lens/browser iframe. This supports the requirement that
+  durable legal-proposal source artifacts default to Source Viewer while
+  preserving explicit original inspection.
+
+Residual risk: this proves one owner legal-proposal content-item style source
+open from inline transclusion to Source Viewer. It does not by itself prove
+guest publication opens for the same proposal, every source kind, or the final
+publication/export metadata packet.
+
 ### Problem 14: Open-Surface Aliases Can Defeat Explicit Web Lens Routing
 
 Status: `accepted_on_staging_for_open_surface_aliases`.
