@@ -2507,6 +2507,77 @@ Result:
 The staging proof used public browser-authenticated `/api/vtext/*` and
 `/api/content/*` product routes. It did not use internal or test-only routes.
 
+### Problem 20: Source Open-Surface Normalization Is Still Frontend-Only
+
+Status: `documented_before_fix`.
+
+problem: the mission now has a shared `internal/sourcecontract` package for
+typed evidence states and source-fetch policy, but source open-surface routing
+is still normalized only in the frontend. Runtime source producers emit
+different aliases for the same durable reader intent (`"source"` for
+Source Service items, `"content"` for `ContentItem` artifacts, and app hints
+for media refs). Platform publication stores `display.open_surface` raw in
+`publication_source_entities.open_surface`. The frontend later interprets
+`source`, `content`, `reader`, and `source_viewer` as Source Viewer, and
+interprets `browser`, `web`, `web_lens`, `live`, `original`, and
+`live_original` as explicit live/original Web Lens inspection. That keeps the
+core source-opening contract outside the backend systems that publish, export,
+verify, or migrate source entities.
+
+affected contract/invariant: `source-external-data-publication.md` and this
+mission require one source opening contract across VText, Source Viewer, Web
+Lens, publication, and export. Source Viewer must be the default for durable
+artifacts, while Web Lens/original inspection must be explicit. If only the
+browser frontend knows that `"content"` is a Source Viewer alias, backend
+publication/export metadata can preserve ambiguous or stale aliases and
+verifiers cannot distinguish a durable reader artifact from a live web
+inspection request without reimplementing frontend heuristics.
+
+confirmed evidence:
+
+```text
+internal/sourcecontract/evidence.go:
+  shared contract currently defines typed evidence-state normalization only.
+
+internal/runtime/vtext_media_sources.go:
+  sourceServiceItemRefToSourceEntity emits display.open_surface "source".
+  contentItemRefToSourceEntity emits display.open_surface "content".
+  sourceEntityOpenSurface returns raw media app hints before local defaults.
+
+internal/runtime/vtext.go:
+  attachSourceArtifactToVText rewrites blank/"source" open surfaces to
+  "content" after binding a ContentItem artifact.
+
+internal/platform/source_metadata.go:
+  normalizePublicationSourceEntity stores firstString(display, "open_surface")
+  without shared normalization.
+
+frontend/src/lib/vtext-source-renderer.ts:
+  normalizeSourceOpenSurface and sourceEntityOpenPlan are the only audited code
+  that collapse aliases into Source Viewer vs live/original Web Lens routing.
+```
+
+acceptance for fix:
+
+- add shared backend source open-surface normalization with canonical values for
+  durable Source Viewer, explicit Web Lens/live-original, VText publication, and
+  media/video;
+- make runtime source entity producers use the shared canonical values instead
+  of emitting `"content"` as a private alias for Source Viewer;
+- make platform publication normalize `display.open_surface` before persisting
+  publication source records;
+- align frontend open-plan normalization with the same canonical values while
+  preserving existing user behavior: durable URL/content/source-service sources
+  open in Source Viewer by default, and explicit Web Lens/live/original requests
+  open the browser/Web Lens surface;
+- prove with focused backend and browser-path tests, then land through CI,
+  staging deploy identity, and deployed product-path source-open acceptance.
+
+remaining error field: this problem is about open-surface contract convergence.
+It does not by itself solve selector-rich publication projection, source reader
+layout, legal proposal table preservation, owner Comet passkey renewal, or
+publication access policy for private source snapshots.
+
 ### Problem 12: Owner URL Source Repairs Default To Web Lens
 
 Status: `documented_before_fix`.
