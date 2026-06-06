@@ -11,9 +11,7 @@
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import {
     acceptVTextMerge,
-    attachVTextSourceArtifacts,
     cancelAgentRevision,
-    createContentItem,
     createDocument,
     createRevision,
     ensureDocumentManifest,
@@ -26,8 +24,6 @@
     openDocumentStream,
     previewVTextMerge,
     publishVText,
-    repairVTextSourceGaps,
-    importContentURL,
     resolvePublication,
     restoreVTextRevision,
     semanticCompareVText,
@@ -36,14 +32,18 @@
   } from './vtext.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
   import { previewVTextDocument } from './public-preview-data';
-  import { buildSourceReviewPayload } from './vtext-source-review.js';
+  import {
+    applySourceReview,
+    attachSourceContentItem,
+    createSourceContentItem,
+    importSourceContentItem,
+  } from './vtext-source-actions';
   import VTextSourcePanel from './VTextSourcePanel.svelte';
   import { sourceEntityLaunchPayload } from './vtext-source-launcher';
   import {
     mediaRefToSourceEntity,
     publicationBundleSourceEntities as publicationBundleSourceEntitiesFromRenderer,
     sourceEntityID,
-    selectorTextQuote,
     sourceEntityTargetURL,
     sourceEntityTitle,
   } from './vtext-source-renderer';
@@ -254,16 +254,6 @@
     sourceReviewMarker = candidates[0] || '';
   }
 
-  function sourceReviewPayload() {
-    return buildSourceReviewPayload({
-      marker: sourceReviewMarker,
-      title: sourceReviewTitle,
-      excerpt: sourceReviewExcerpt,
-      url: sourceReviewURL,
-      revisionID: currentRevision?.revision_id || '',
-    });
-  }
-
   function selectedSourceEntity() {
     return sourceEntities.find((entity) => sourceEntityID(entity) === selectedSourceEntityID) || sourceEntities[0] || null;
   }
@@ -283,29 +273,6 @@
     if (sourceEntities.length > 0) {
       prepareSourceArtifactForm(sourceEntities[0]);
     }
-  }
-
-  function contentItemPayloadForSource(entity, text) {
-    const title = sourceArtifactTitle.trim() || sourceEntityTitle(entity);
-    const sourceURL = sourceArtifactURL.trim() || sourceEntityTargetURL(entity);
-    return {
-      source_type: 'text',
-      media_type: 'text/markdown',
-      app_hint: 'content',
-      title,
-      source_url: sourceURL,
-      canonical_url: sourceURL,
-      text_content: text,
-      metadata: {
-        source_entity_id: sourceEntityID(entity),
-        created_from: 'vtext_source_artifact_ui',
-      },
-      provenance: {
-        rights_scope: 'public_source',
-        publish_source_snapshot: true,
-        untrusted_source_text: true,
-      },
-    };
   }
 
   function publicationBundleSourceEntities(bundle = publishedBundle) {
@@ -1667,14 +1634,15 @@
     sourceReviewStatus = 'Applying source review...';
     saveStatus = 'Repairing sources...';
     try {
-      const payload = {
-        ...sourceReviewPayload(),
-        base_revision_id: currentRevision.revision_id,
-        author_label: getAuthorLabel(),
-      };
       sourceReviewStatus = 'Sending source review...';
-      const revision = await repairVTextSourceGaps(currentDoc.doc_id, {
-        ...payload,
+      const revision = await applySourceReview({
+        docId: currentDoc.doc_id,
+        revisionID: currentRevision.revision_id,
+        authorLabel: getAuthorLabel(),
+        marker,
+        title,
+        excerpt,
+        url: sourceReviewURL,
       });
       sourceDiagnosis = null;
       sourceReviewStatus = `Applied source review for ${marker}`;
@@ -1698,24 +1666,6 @@
     }
   }
 
-  async function attachContentItemToSelectedSource(item, entity = selectedSourceEntity()) {
-    if (!currentDoc?.doc_id || !currentRevision?.revision_id || !sourceEntityID(entity) || !item?.content_id) {
-      throw new Error('Choose a source and readable content item first');
-    }
-    const revision = await attachVTextSourceArtifacts(currentDoc.doc_id, {
-      base_revision_id: currentRevision.revision_id,
-      author_label: getAuthorLabel(),
-      attachments: [{
-        entity_id: sourceEntityID(entity),
-        content_id: item.content_id,
-        text_quote: selectorTextQuote(entity),
-      }],
-    });
-    sourceDiagnosis = null;
-    await reloadDocument(revision.revision_id);
-    return revision;
-  }
-
   async function handleImportAndAttachSourceArtifact() {
     const entity = selectedSourceEntity();
     if (!currentDoc?.doc_id || !currentRevision?.revision_id || !entity || sourceArtifactPending) return;
@@ -1733,9 +1683,21 @@
     sourceArtifactStatus = 'Importing source URL...';
     saveStatus = 'Importing source artifact...';
     try {
-      const item = await importContentURL(sourceURL, sourceArtifactTitle.trim() || sourceEntityTitle(entity));
+      const item = await importSourceContentItem({
+        entity,
+        title: sourceArtifactTitle,
+        sourceURL,
+      });
       sourceArtifactStatus = 'Attaching imported source...';
-      await attachContentItemToSelectedSource(item, entity);
+      const revision = await attachSourceContentItem({
+        docId: currentDoc.doc_id,
+        revisionID: currentRevision.revision_id,
+        authorLabel: getAuthorLabel(),
+        entity,
+        contentItem: item,
+      });
+      sourceDiagnosis = null;
+      await reloadDocument(revision.revision_id);
       sourceArtifactStatus = `Attached imported source to ${sourceEntityTitle(entity)}`;
       saveStatus = `Attached source artifact in ${versionLabel}`;
     } catch (err) {
@@ -1768,9 +1730,22 @@
     sourceArtifactStatus = 'Creating source artifact...';
     saveStatus = 'Creating source artifact...';
     try {
-      const item = await createContentItem(contentItemPayloadForSource(entity, text));
+      const item = await createSourceContentItem({
+        entity,
+        title: sourceArtifactTitle,
+        sourceURL: sourceArtifactURL,
+        text,
+      });
       sourceArtifactStatus = 'Attaching source artifact...';
-      await attachContentItemToSelectedSource(item, entity);
+      const revision = await attachSourceContentItem({
+        docId: currentDoc.doc_id,
+        revisionID: currentRevision.revision_id,
+        authorLabel: getAuthorLabel(),
+        entity,
+        contentItem: item,
+      });
+      sourceDiagnosis = null;
+      await reloadDocument(revision.revision_id);
       sourceArtifactText = '';
       sourceArtifactStatus = `Attached source artifact to ${sourceEntityTitle(entity)}`;
       saveStatus = `Attached source artifact in ${versionLabel}`;

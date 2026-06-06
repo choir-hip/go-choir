@@ -6662,7 +6662,7 @@ belief-state update:
 
 ## 2026-06-06 Problem: Source Artifact Attach UI Fails With Method Not Allowed
 
-status: documented_pending_root_cause
+status: root_caused_local_verified
 
 new evidence:
 
@@ -6698,3 +6698,51 @@ next root-cause probe:
   source-attachment leg, or desktop/proxy routing around those requests.
 - Fix the real routing/payload problem and keep the new UI test as regression
   coverage.
+
+root cause:
+
+- The failing Playwright run was exercising a stale local dev stack, not the
+  current source tree.
+- The running proxy process was a Go build-cache binary started at
+  `2026-06-05 20:25:12` and reported build identity `local`; the sandbox route
+  source in the worktree already accepted
+  `POST /api/vtext/documents/{id}/source-attachments`.
+- Focused backend proof with the comprehensive tag passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextSourceArtifactAttachment'`.
+- After restarting the local service stack from the current worktree through
+  `CHOIR_SERVICES_FOREGROUND=1 nix develop -c ./start-services.sh`, the same
+  product-path Playwright proof sent `POST /api/content/items` and
+  `POST /api/vtext/documents/{id}/source-attachments`; both returned `201`.
+
+resulting change:
+
+- Added the source artifact attach Playwright test as regression coverage for
+  the owner source panel.
+- Extracted typed source review, source import, content-item creation, and
+  source attachment writes from `VTextEditor.svelte` into
+  `frontend/src/lib/vtext-source-actions.ts`.
+- This is a simplification pass, not a new parallel repair path: the editor
+  delegates source writes to one helper module, while the source panel keeps the
+  owner workflow and the runtime remains the canonical VText writer.
+
+local proof:
+
+- `pnpm --dir frontend run build` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText source panel attaches
+  readable text" --project=chromium --timeout=120000` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextSourceArtifactAttachment'` -> passed.
+
+deployment status:
+
+- pending commit, push, CI, Node B deploy, staging identity, deployed
+  Playwright proof, and Comet owner proof.

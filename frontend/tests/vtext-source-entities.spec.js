@@ -209,6 +209,122 @@ test('VText opens content-item text sources as reader-mode markdown', async ({ d
   await expect(sourceWindow.locator('[data-content-evidence]')).toContainText('SHA-256');
 });
 
+test('VText source panel attaches readable text to an existing source entity', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  await page.evaluate(async () => {
+    await fetch('/api/desktop/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windows: [], active_window_id: '' }),
+    });
+  });
+  await page.reload();
+  await expect(page.locator('[data-desktop]')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-window]')).toHaveCount(0);
+
+  const created = await page.evaluate(async () => {
+    const title = `Source Artifact Attach Fixture ${Date.now()}`;
+    const docRes = await fetch('/api/vtext/documents', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
+    const doc = await docRes.json();
+    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: '# Source Artifact Attach Fixture\n\nThis claim will receive a readable source artifact [1](source:src-attach-text).',
+        author_kind: 'user',
+        author_label: 'browser-test',
+        metadata: {
+          source_entities: [
+            {
+              entity_id: 'src-attach-text',
+              kind: 'web_source',
+              label: 'Attachable source fixture',
+              target: {
+                target_kind: 'url',
+                url: 'https://example.com/attachable-source-fixture',
+                canonical_url: 'https://example.com/attachable-source-fixture',
+              },
+              selectors: [
+                {
+                  selector_kind: 'text_quote',
+                  text_quote: 'Readable attachment confirms the cited claim.',
+                },
+              ],
+              display: {
+                inline_mode: 'embedded_excerpt',
+                expanded_mode: 'source_card',
+                open_surface: 'source',
+                default_collapsed: true,
+              },
+              evidence: {
+                state: 'available',
+                research_state: 'pending',
+              },
+              provenance: {
+                created_by: 'browser-test',
+                rights_scope: 'public_source',
+                untrusted_source_text: true,
+              },
+            },
+          ],
+        },
+      }),
+    });
+    if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);
+    return doc;
+  });
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+
+  await vtextWindow.locator('[data-vtext-source-panel]').click();
+  const sourcePanel = vtextWindow.locator('[data-vtext-source-diagnostics]');
+  await expect(sourcePanel).toBeVisible({ timeout: 10000 });
+  await sourcePanel.locator('[data-vtext-source-artifact-text]').fill([
+    '# Attached readable source',
+    '',
+    'Readable attachment confirms the cited claim.',
+    '',
+    '- The attachment is a reader artifact.',
+  ].join('\n'));
+
+  const createRequest = page.waitForRequest((request) => request.url().includes('/api/content/items'));
+  const createResponse = page.waitForResponse((response) => response.url().includes('/api/content/items'));
+  const attachRequest = page.waitForRequest((request) => request.url().includes('/source-attachments'));
+  const attachResponse = page.waitForResponse((response) => response.url().includes('/source-attachments'));
+  await sourcePanel.locator('[data-vtext-attach-source-artifact]').click();
+  expect((await createRequest).method()).toBe('POST');
+  const contentResponse = await createResponse;
+  expect(contentResponse.status()).toBe(201);
+  const attachment = await attachRequest;
+  expect(attachment.method()).toBe('POST');
+  const attachmentPayload = JSON.parse(attachment.postData() || '{}');
+  expect(attachmentPayload.attachments?.[0]?.entity_id).toBe('src-attach-text');
+  const sourceAttachmentResponse = await attachResponse;
+  expect(sourceAttachmentResponse.status()).toBe(201);
+  await expect(sourcePanel).toContainText('Attached source artifact to Attachable source fixture', { timeout: 15000 });
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-attach-text"]').first();
+  await expect(citation).toBeVisible({ timeout: 10000 });
+  await citation.click();
+  await rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source]').click();
+  const sourceWindow = page.locator('[data-content-viewer]').last();
+  await expect(sourceWindow).toBeVisible({ timeout: 10000 });
+  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Attached readable source');
+  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Readable attachment confirms the cited claim.');
+});
+
 test('VText lays out expanded text sources as noncanonical journal flow', async ({ desktopSession }) => {
   const { page } = desktopSession;
   await page.setViewportSize({ width: 1440, height: 980 });
