@@ -209,6 +209,8 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 				CanonicalURL: "https://example.com/source",
 				TextContent:  "Cleaned URL source text that is longer than the bounded citation excerpt.",
 				ContentHash:  "hash-url-source",
+				Metadata:     json.RawMessage(`{"retrieval_strategy":"direct_http_then_readability_lite"}`),
+				Provenance:   json.RawMessage(`{"warnings":["extracted text is low-content","used html readable fallback"]}`),
 			})
 		default:
 			t.Fatalf("sandbox path: got %s", r.URL.Path)
@@ -251,6 +253,20 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 	}
 	if !strings.Contains(metadata, "reader_snapshot_ready") {
 		t.Fatalf("platform metadata missing reader snapshot status: %s", metadata)
+	}
+	status := publicationReaderSnapshotStatus(t, gotPlatformReq.Metadata, "src-url")
+	if status["quality"] != "warning" {
+		t.Fatalf("reader snapshot quality = %#v, want warning", status["quality"])
+	}
+	if status["retrieval_strategy"] != "direct_http_then_readability_lite" {
+		t.Fatalf("reader snapshot retrieval_strategy = %#v", status["retrieval_strategy"])
+	}
+	if status["warning_count"] != float64(2) {
+		t.Fatalf("reader snapshot warning_count = %#v, want 2", status["warning_count"])
+	}
+	warnings, ok := status["warnings"].([]any)
+	if !ok || len(warnings) != 2 || warnings[0] != "extracted text is low-content" {
+		t.Fatalf("reader snapshot warnings = %#v", status["warnings"])
 	}
 	if !strings.Contains(metadata, "bounded excerpt") {
 		t.Fatalf("platform metadata lost bounded transclusion selector: %s", metadata)
@@ -423,6 +439,26 @@ func TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots(t *testing.T
 
 func publicationReaderSnapshot(t *testing.T, raw json.RawMessage, entityID string) map[string]any {
 	t.Helper()
+	entity := publicationSourceEntity(t, raw, entityID)
+	snapshot, ok := entity["reader_snapshot"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity %s reader_snapshot = %#v, want object", entityID, entity["reader_snapshot"])
+	}
+	return snapshot
+}
+
+func publicationReaderSnapshotStatus(t *testing.T, raw json.RawMessage, entityID string) map[string]any {
+	t.Helper()
+	entity := publicationSourceEntity(t, raw, entityID)
+	status, ok := entity["reader_snapshot_status"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity %s reader_snapshot_status = %#v, want object", entityID, entity["reader_snapshot_status"])
+	}
+	return status
+}
+
+func publicationSourceEntity(t *testing.T, raw json.RawMessage, entityID string) map[string]any {
+	t.Helper()
 	var metadata map[string]any
 	if err := json.Unmarshal(raw, &metadata); err != nil {
 		t.Fatalf("decode publication metadata: %v", err)
@@ -436,11 +472,7 @@ func publicationReaderSnapshot(t *testing.T, raw json.RawMessage, entityID strin
 		if !ok || entity["entity_id"] != entityID {
 			continue
 		}
-		snapshot, ok := entity["reader_snapshot"].(map[string]any)
-		if !ok {
-			t.Fatalf("entity %s reader_snapshot = %#v, want object", entityID, entity["reader_snapshot"])
-		}
-		return snapshot
+		return entity
 	}
 	t.Fatalf("source entity %s not found in metadata: %s", entityID, string(raw))
 	return nil

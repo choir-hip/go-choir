@@ -27,6 +27,7 @@
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import {
     renderInlineMarkdown,
+    sourceEntitySnapshotWarnings,
     sourceEntitySnapshotText,
     sourceEntityTitle,
   } from './vtext-source-renderer.ts';
@@ -39,6 +40,7 @@
   const initialTarget = appContext?.initialUrl || appContext?.sourceUrl || '';
   const sourceEntity = appContext?.sourceEntity || null;
   const initialSourceSnapshot = sourceEntitySnapshotText(sourceEntity);
+  const initialSourceSnapshotWarnings = sourceEntitySnapshotWarnings(sourceEntity);
   let urlInput = initialTarget || 'https://en.wikipedia.org';
   let currentUrl = initialTarget ? normalizeUrl(initialTarget) : '';
   let loading = false;
@@ -52,7 +54,7 @@
   let backendHTML = '';
   let backendLinks = [];
   let backendScreenshotPNG = '';
-  let backendWarnings = [];
+  let backendWarnings = initialSourceSnapshotWarnings;
   let showingSnapshot = !!initialSourceSnapshot;
   let controlSelector = '';
   let controlValue = '';
@@ -214,7 +216,7 @@
       backendHTML = '';
       backendLinks = [];
       backendScreenshotPNG = '';
-      backendWarnings = [];
+      backendWarnings = initialSourceSnapshotWarnings;
       showingSnapshot = true;
     } else {
       showingSnapshot = false;
@@ -418,6 +420,7 @@
     if (initialSourceSnapshot) {
       backendSnapshot = initialSourceSnapshot;
       snapshotMode = 'source_entity';
+      backendWarnings = initialSourceSnapshotWarnings;
       showingSnapshot = true;
     }
   }

@@ -187,6 +187,7 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
       provenance: {
         rights_scope: 'public_source',
         created_by: 'browser-test',
+        warnings: ['extracted text is low-content'],
       },
     }),
   });
@@ -254,6 +255,8 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
   expect(entity.reader_snapshot?.snapshot_kind).toBe('cleaned_reader_markdown');
   expect(entity.reader_snapshot?.media_type).toBe('text/markdown');
   expect(entity.reader_snapshot?.original_media_type).toBe('text/html');
+  expect(entity.reader_snapshot_status?.quality).toBe('warning');
+  expect(entity.reader_snapshot_status?.warnings).toContain('extracted text is low-content');
   expect(resolved.transclusions?.[0]?.snapshot_text).toBe(excerpt);
 
   await page.goto(`${baseURL}${publish.route_path}`);
@@ -270,6 +273,7 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
   const sourceWindow = page.locator('[data-browser-app]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
   await expect(sourceWindow).toContainText('Source reader snapshot');
+  await expect(sourceWindow.locator('[data-browser-snapshot-warnings]')).toContainText('extracted text is low-content');
   await expect(sourceWindow.locator('[data-browser-reader-markdown]')).toContainText('Full cleaned reader source detail');
   await expect(sourceWindow.locator('[data-browser-iframe]')).toHaveCount(0);
 
@@ -288,6 +292,7 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
     const guestSourceWindow = guestPage.locator('[data-browser-app]').last();
     await expect(guestSourceWindow).toBeVisible({ timeout: 10000 });
     await expect(guestSourceWindow).toContainText('Source reader snapshot');
+    await expect(guestSourceWindow.locator('[data-browser-snapshot-warnings]')).toContainText('extracted text is low-content');
     await expect(guestSourceWindow.locator('[data-browser-reader-markdown]')).toContainText('Full cleaned reader source detail');
     await expect(guestSourceWindow.locator('[data-browser-iframe]')).toHaveCount(0);
   } finally {

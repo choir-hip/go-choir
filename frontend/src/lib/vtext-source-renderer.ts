@@ -67,6 +67,20 @@ export function sourceEntitySnapshotText(entity: any): string {
   return sourceEntityReaderSnapshotText(entity) || sourceEntityExcerptText(entity);
 }
 
+export function sourceEntityReaderSnapshotStatus(entity: any): any {
+  const record = sourceEntityRecord(entity);
+  return entity?.reader_snapshot_status || record?.reader_snapshot_status || null;
+}
+
+export function sourceEntitySnapshotWarnings(entity: any): string[] {
+  const status = sourceEntityReaderSnapshotStatus(entity);
+  const warnings = Array.isArray(status?.warnings) ? status.warnings : [];
+  return warnings
+    .map((warning: unknown) => String(warning || '').trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
 export function sourceEntityDisplayPolicy(entity: any): string {
   const record = sourceEntityRecord(entity);
   const raw = String(

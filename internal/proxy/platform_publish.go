@@ -236,6 +236,10 @@ func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, us
 			"text_char_count": len([]rune(text)),
 			"truncated":       truncated,
 		}
+		status = mapValue(entity["reader_snapshot_status"])
+		for key, value := range publicationReaderSnapshotQuality(item) {
+			status[key] = value
+		}
 		changed = true
 	}
 	if !changed {
@@ -383,6 +387,68 @@ func jsonObjectValue(raw json.RawMessage) map[string]any {
 		return nil
 	}
 	return out
+}
+
+func publicationReaderSnapshotQuality(item sandboxContentItem) map[string]any {
+	out := map[string]any{}
+	if item.MediaType != "" {
+		out["original_media_type"] = item.MediaType
+	}
+	if metadata := jsonObjectValue(item.Metadata); metadata != nil {
+		if retrievalStrategy := stringValue(metadata["retrieval_strategy"]); retrievalStrategy != "" {
+			out["retrieval_strategy"] = retrievalStrategy
+		}
+	}
+	warnings := contentItemExtractionWarnings(item)
+	if len(warnings) > 0 {
+		out["warnings"] = warnings
+		out["warning_count"] = len(warnings)
+		out["quality"] = "warning"
+	} else {
+		out["warning_count"] = 0
+		out["quality"] = "cleaned_reader"
+	}
+	return out
+}
+
+func contentItemExtractionWarnings(item sandboxContentItem) []string {
+	provenance := jsonObjectValue(item.Provenance)
+	if provenance == nil {
+		return nil
+	}
+	return compactStringList(provenance["warnings"], 8)
+}
+
+func compactStringList(value any, limit int) []string {
+	values := []string{}
+	seen := map[string]bool{}
+	appendValue := func(raw any) {
+		text := strings.TrimSpace(fmt.Sprint(raw))
+		if text == "" || seen[text] {
+			return
+		}
+		seen[text] = true
+		values = append(values, text)
+	}
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			appendValue(item)
+			if limit > 0 && len(values) >= limit {
+				break
+			}
+		}
+	case []string:
+		for _, item := range typed {
+			appendValue(item)
+			if limit > 0 && len(values) >= limit {
+				break
+			}
+		}
+	case string:
+		appendValue(typed)
+	}
+	return values
 }
 
 func mapValue(value any) map[string]any {
