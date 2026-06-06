@@ -7335,3 +7335,96 @@ next repair:
 - Make Browser/Web Lens source windows show those warning badges for
   publication-carried source snapshots, without turning warnings into article
   prose and without changing iframe fallback behavior.
+
+## 2026-06-06 Repair: Publication Source Snapshot Warnings Surface In Reader
+
+status: deployed_verified_checkpoint_incomplete
+
+root cause:
+
+- Source `ContentItem` records already carried extraction provenance, including
+  `warnings` and retrieval strategy, but publication enrichment discarded that
+  status when creating reader snapshots.
+- Browser/Web Lens could render warnings for backend Obscura snapshots, but the
+  initial publication-carried `source_entity` snapshot path initialized with no
+  warning list.
+
+change:
+
+- `internal/proxy/platform_publish.go` now carries source item quality into
+  `reader_snapshot_status`:
+  - `quality: cleaned_reader` or `quality: warning`;
+  - `warning_count`;
+  - bounded `warnings`;
+  - source `retrieval_strategy` when present;
+  - `original_media_type` alongside the snapshot media contract.
+- `frontend/src/lib/vtext-source-renderer.ts` exposes source snapshot status
+  and warning helpers.
+- `frontend/src/lib/BrowserApp.svelte` initializes publication-carried source
+  snapshots with those warnings and renders them through the existing
+  `[data-browser-snapshot-warnings]` surface.
+- The publication E2E now creates a warning-bearing public source item and
+  asserts both authenticated and guest source windows show the warning while
+  rendering the reader snapshot and no iframe.
+
+local proof:
+
+- `nix develop -c go test ./internal/proxy -run
+  'TestHandleVTextPublicationPublishesPublicURLSourceSnapshots|TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection|TestHandleVTextPublicationRecordsURLSnapshotImportFailureState|TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots'`
+  -> passed.
+- `nix develop -c go test ./internal/proxy` -> passed.
+- `pnpm --dir frontend run build` -> passed.
+
+CI and deploy:
+
+- Problem checkpoint `736d8721` (`docs: document source snapshot warning gap`)
+  was committed before behavior changes.
+- Behavior commit `30b2d07ea955e73a14f8e98c6f37e00f98e8afff`
+  (`fix: surface publication source snapshot warnings`) was pushed to
+  `origin/main`.
+- CI run `27050421560` passed: frontend build, Go vet/build, non-runtime Go
+  tests, runtime shards, integration-tagged smoke, and Node B deploy.
+- FlakeHub publish run `27050421564` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `30b2d07ea955e73a14f8e98c6f37e00f98e8afff`, deployed at
+  `2026-06-06T02:46:09Z`.
+
+deployed proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-service-publication.spec.js -g "publishes public
+  content-item sources with cleaned reader snapshots" --project=chromium
+  --timeout=120000` -> passed.
+- The proof created a public HTML-derived content item with provenance warning
+  `extracted text is low-content`, published it as a VText source entity,
+  resolved the publication bundle, and asserted
+  `reader_snapshot_status.quality = warning` with that warning preserved.
+- The same proof opened authenticated and guest publication source windows,
+  asserted `Source reader snapshot`, asserted the warning was visible in
+  `[data-browser-snapshot-warnings]`, and asserted no iframe rendered while the
+  publication-carried reader snapshot existed.
+
+Comet owner-account state:
+
+- Computer Use remained available on Comet.
+- Comet was owner-authenticated on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The owner legal-cloud publication still rendered as `Published VText
+  document` with citation buttons and existing source windows after this
+  repair. The new warning behavior was proven through the deployed publication
+  E2E because the current owner legal-cloud source artifacts do not necessarily
+  carry warning-bearing provenance.
+
+belief-state update:
+
+- Publication source snapshots now carry both durable reader content and
+  warning status into authorized/public source windows.
+- This makes source-window proof stricter: "source opened" is no longer enough;
+  future proofs should check whether the snapshot is clean, warning-bearing,
+  bounded-excerpt-only, or failed import.
+- Remaining source-quality work should improve acquisition itself: better
+  confidence classification, cleaner arbitrary URL snapshots, and claim/source
+  review that can decide confirming, refuting, qualifying, or no-source-needed
+  states without rendering placeholders in article prose.
