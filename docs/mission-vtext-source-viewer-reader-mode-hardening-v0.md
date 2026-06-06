@@ -1387,3 +1387,32 @@ surface" with "URL browser surface." That made URL presence override the
 semantic `open_surface: "source"` display policy. The repair should preserve
 explicit `open_surface: "browser"` behavior while mapping generic
 `open_surface: "source"` to Source Viewer regardless of URL presence.
+
+## 2026-06-06 Source Viewer Snapshot-Clobber Problem Checkpoint
+
+Status: `documented_before_fix`.
+
+The first source-routing regression test confirmed that the new route opens the
+Source Viewer, but exposed a second issue: a URL-only source entity with a
+reader snapshot still caused `ContentViewer` to attempt `/api/content/import-url`.
+When the URL import returned `404 Not Found`, the Source Viewer showed the import
+error instead of the already-available reader snapshot:
+
+```text
+Source URL routing fixture
+available
+URL import failed: direct_http returned status 404 Not Found
+```
+
+This violates the intended source UX. A source reader snapshot is durable source
+evidence and should be the default Source Viewer content. A failed live URL,
+iframe, or Web Lens attempt must not hide a usable source snapshot. The original
+URL can remain available as an "Open original" action, but Source Viewer should
+not block on live web import when the source entity already carries reader text.
+
+Root-cause belief before code change: `ContentViewer.loadContentItem` only skips
+URL import for published source readers with snapshots. Owner/private source
+windows with `sourceEntity.reader_snapshot.text_content` still attempt live URL
+import, and the error branch wins over the snapshot renderer. The repair should
+skip import whenever a source entity provides reader snapshot text, not only in
+published reader mode.
