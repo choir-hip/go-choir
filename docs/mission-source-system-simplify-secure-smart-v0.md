@@ -841,7 +841,7 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T11:13:00Z, first behavior loops landed,
+last checkpoint: 2026-06-06T11:21:00Z, first behavior loops landed,
 deployed to staging, and Comet owner-authenticated staging capability verified.
 
 current artifact state: documentation checkpoint commit
@@ -852,11 +852,14 @@ partial table structure-preservation coverage. Test commit `98fb4d2c` kept
 comprehensive source import fixtures policy-aware after the SSRF guard started
 blocking loopback fixture servers. The current frontend slice adds an explicit
 source-open plan and pins Source Viewer/Web Lens routing behavior. Behavior
-commit `c3295ae7` has been pushed and deployed to staging.
+commit `c3295ae7` has been pushed and deployed to staging. Docs commit
+`92138e61` recorded the source evidence-state problem before code. Behavior
+commit `a2ee6dd9` adds typed source evidence-state records to VText source gaps
+and source repairs.
 Existing unrelated untracked docs are preserved.
 
 what shipped: behavior commit
-`c3295ae74914ca304b4c88f7266e974882864c83` was pushed to `origin/main` and
+`a2ee6dd905d8402409e13187bb44f325bf01b517` was pushed to `origin/main` and
 deployed to staging. A later docs-only checkpoint may not appear in Node B
 health because docs-only changes intentionally do not trigger deploy.
 
@@ -906,6 +909,26 @@ what was proven:
   `npm run e2e -- deployed-origin-auth-shell.spec.js -g "deployed frontend build identity matches proxy health identity"`.
 - Deployed source-open acceptance passed:
   `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-source-entities.spec.js -g "VText source URL opens Source Viewer unless browser is explicitly requested"`.
+- Source evidence-state local checks passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownLineage|TestVTextSourceGapRepair'`
+  and `npm run build` in `frontend`.
+- Local browser lineage proof against `localhost:4173` initially failed two
+  response-metadata assertions because the already-running local backend still
+  served old runtime code; the frontend request-payload assertion passed there.
+  The updated runtime behavior was then proven on staging after deploy.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27060866683`
+  completed successfully for `a2ee6dd9`, including runtime shards, non-runtime
+  tests, frontend build, vet/build, and the Node B staging deploy job.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27060866687`
+  completed successfully.
+- Staging health at `https://choir.news/health` reported proxy and upstream
+  commit/deployed_commit
+  `a2ee6dd905d8402409e13187bb44f325bf01b517` with deployed_at
+  `2026-06-06T11:20:47Z`.
+- Deployed evidence-state/source-gap acceptance passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-markdown-lineage.spec.js -g "Migrated source gaps can be repaired|VText Sources panel applies source-gap repair|VText Sources panel can mark a citation gap as no source needed"`.
 
 unproven or partial claims:
 
@@ -919,8 +942,10 @@ unproven or partial claims:
   `View > Developer > Allow JavaScript from Apple Events` would allow structured
   extraction.
 - CI, deploy identity, and a focused staging source-open acceptance proof have
-  been produced for the first behavior slice. The broader mission proofs
-  requested by the goal remain incomplete.
+  been produced for the first behavior slice. CI, deploy identity, and focused
+  staging evidence-state/source-gap acceptance proof have been produced for the
+  second behavior slice. The broader mission proofs requested by the goal remain
+  incomplete.
 
 belief-state changes:
 
@@ -941,6 +966,9 @@ belief-state changes:
 - Publication now preserves multi-selector entities as a typed selector set in
   transclusion source-selector JSON while retaining the existing single-selector
   shape for compatibility.
+- VText source gaps now carry typed `evidence_state: candidate`; source repairs
+  preserve typed relation states such as `confirms`; no-source-needed repairs
+  carry `evidence_state: no_source_needed` in repair resolution metadata.
 
 remaining error field:
 
@@ -952,8 +980,10 @@ remaining error field:
   export consumers still need broader selector-rich proof.
 - Published source windows depend on frontend reconstruction of publication
   records and reader snapshots.
-- Source evidence states exist in several ad hoc forms and still include
-  missing/gap-oriented UI paths instead of one typed evidence-state contract.
+- Source evidence states are partially typed for Markdown lineage gaps and
+  owner source repairs, but researcher updates, Source Service, publication,
+  export, stale/blocked/unavailable states, and shared frontend/backend schema
+  convergence remain incomplete.
 - Table structure preservation now has broader partial-context tests, but the
   v70-v78 staging root-cause comparison is still blocked on structured
   extraction from the authenticated staging revision history.
@@ -966,15 +996,16 @@ fix, with shared contract types designed in the same pass so the fix does not
 create another isolated policy path.
 
 next executable probe: either enable a bounded structured extraction route for
-the legal proposal v70-v78 comparison, or continue local convergence by
-introducing shared `SourceOpenPlan` / source entity normalization tests and
-moving frontend source opening away from renderer heuristics.
+the legal proposal v70-v78 comparison, or continue evidence-state convergence
+by routing researcher/source-service/publication/export records through the same
+typed source evidence contract.
 
 suggested resume goal string: continue
 `docs/mission-source-system-simplify-secure-smart-v0.md` from commits
-`bf7e52df`, `068b6b5f`, and `61b89e93` by extracting or otherwise proving the
-legal proposal v70-v78 table transition, then converging `SourceOpenPlan` and
-source entity normalization without document-specific fixes.
+`bf7e52df`, `068b6b5f`, `61b89e93`, `c3295ae7`, and `a2ee6dd9` by extracting
+or otherwise proving the legal proposal v70-v78 table transition, then
+converging source entity/evidence normalization without document-specific
+fixes.
 
 evidence artifact refs:
 
@@ -993,12 +1024,18 @@ evidence artifact refs:
 - Comet structured extraction blocker:
   `osascript -e 'tell application "Comet" to execute active tab of front window javascript "document.body.innerText"'`
   failed because JavaScript from Apple Events is disabled.
-- Behavior/test commits: `068b6b5f`, `61b89e93`, `98fb4d2c`, `c3295ae7`.
+- Behavior/test commits: `068b6b5f`, `61b89e93`, `98fb4d2c`, `c3295ae7`,
+  `92138e61`, `a2ee6dd9`.
 - Frontend source-open slice: `sourceEntityOpenPlan`, `ContentViewer`
   live-import guard, and focused Playwright routing proof.
 - CI/deploy evidence: GitHub Actions run `27060657873`; FlakeHub publish run
   `27060657872`; staging health deployed commit
   `c3295ae74914ca304b4c88f7266e974882864c83`.
+- Evidence-state slice: typed VText source gap and repair evidence metadata,
+  GitHub Actions run `27060866683`, FlakeHub publish run `27060866687`,
+  staging health deployed commit
+  `a2ee6dd905d8402409e13187bb44f325bf01b517`, deployed Playwright proof for
+  repaired gaps and no-source-needed repairs.
 
 rollback refs: current branch `main`, starting commit
 `1af0e8459b78fb31a18fee933a54f6f716a9b067`.
