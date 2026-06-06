@@ -499,6 +499,12 @@
     const draft = loadLocalDraft();
     if (!draft || typeof draft.content !== 'string') return false;
     const savedContent = currentRevision?.content || '';
+    const draftParentRevisionId = String(draft.parent_revision_id || '').trim();
+    const currentRevisionId = String(currentRevision?.revision_id || '').trim();
+    if (draftParentRevisionId && currentRevisionId && draftParentRevisionId !== currentRevisionId) {
+      saveStatus = 'Autosaved draft skipped; newer version loaded';
+      return false;
+    }
     if (draft.content === savedContent) {
       clearLocalDraft();
       return false;

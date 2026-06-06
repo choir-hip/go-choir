@@ -198,6 +198,95 @@ test('vtext autosaves dirty text without advancing versions when the head moves'
   await expect(page.locator('[data-vtext-new-version]')).toHaveCount(1);
 });
 
+test('vtext does not restore stale local draft over a newer canonical table head', async ({ page, authenticator }) => {
+  await registerAndLoadDesktop(page, authenticator, uniqueEmail());
+  const stamp = Date.now();
+  const created = await page.evaluate(async (stampValue) => {
+    const docRes = await fetch('/api/vtext/documents', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: `Stale Draft Table ${stampValue}` }),
+    });
+    if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
+    const doc = await docRes.json();
+
+    const staleContent = [
+      '# Stale Draft Table',
+      '',
+      'Intro paragraph.',
+      '',
+      'Term',
+      'Definition',
+      'Vector database',
+      'Stores embeddings for retrieval.',
+    ].join('\n');
+    const firstRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: staleContent,
+        author_kind: 'user',
+        author_label: 'browser-test',
+        metadata: { source: 'stale_draft_parent' },
+      }),
+    });
+    if (!firstRes.ok) throw new Error(`create first revision failed: ${firstRes.status}`);
+    const first = await firstRes.json();
+
+    const sessionRes = await fetch('/auth/session', { credentials: 'include' });
+    if (!sessionRes.ok) throw new Error(`session failed: ${sessionRes.status}`);
+    const session = await sessionRes.json();
+    const owner = session.user?.id || session.user?.email || 'guest';
+    localStorage.setItem(`choir:vtext:draft:${owner}:${doc.doc_id}`, JSON.stringify({
+      doc_id: doc.doc_id,
+      parent_revision_id: first.revision_id,
+      content: staleContent,
+      updated_at: new Date().toISOString(),
+    }));
+
+    const currentContent = [
+      '# Stale Draft Table',
+      '',
+      'Intro paragraph.',
+      '',
+      '| Term | Definition |',
+      '| --- | --- |',
+      '| Vector database | Stores embeddings for retrieval. |',
+      '| Source entity | A citation-backed source object. |',
+    ].join('\n');
+    const secondRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: currentContent,
+        author_kind: 'user',
+        author_label: 'browser-test',
+        parent_revision_id: first.revision_id,
+        metadata: { source: 'current_table_head' },
+      }),
+    });
+    if (!secondRes.ok) throw new Error(`create current revision failed: ${secondRes.status}`);
+    const second = await secondRes.json();
+    return { doc, first, second, title: doc.title };
+  }, stamp);
+
+  await page.reload();
+  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 10000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
+  await expect(rendered).toContainText('Source entity');
+  await expect(vtextWindow.locator('[data-vtext-save-status]')).toContainText('Autosaved draft skipped; newer version loaded');
+  await expect(vtextWindow.locator('[data-vtext-state]')).toContainText('Latest');
+});
+
 test('vtext compares historical version and accepts merge preview as next revision', async ({ page, authenticator }) => {
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
   const fileName = `semantic-merge-${Date.now()}.md`;
