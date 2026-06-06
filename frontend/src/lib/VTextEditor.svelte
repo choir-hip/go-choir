@@ -57,6 +57,7 @@
   export let windowId = '';
 
   const dispatch = createEventDispatcher();
+  const SOURCE_STRUCTURE_DISPLAY_LIMIT = 24;
 
   let loading = true;
   let submitting = false;
@@ -198,7 +199,7 @@
 
   function sourceStructureEvidence(diagnosis = sourceDiagnosis) {
     const structures = Array.isArray(diagnosis?.revision_structures) ? diagnosis.revision_structures : [];
-    return structures.slice(0, 8).map((structure) => ({
+    return structures.slice(0, SOURCE_STRUCTURE_DISPLAY_LIMIT).map((structure) => ({
       revisionID: structure?.revision_id || '',
       version: typeof structure?.version_number === 'number' ? `v${structure.version_number}` : '',
       contentHash: structure?.content_hash || '',

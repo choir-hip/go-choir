@@ -802,30 +802,33 @@ test('VText Sources panel shows bounded revision structure without body text', a
         vtext_path: '',
         document: doc,
         revisions: [],
-        revision_structures: [{
-          revision_id: 'rev-structure-ui',
-          doc_id: doc.doc_id,
-          version_number: 0,
-          author_kind: 'user',
-          author_label: 'browser-test',
-          created_at: '2026-06-06T11:40:00.000Z',
-          content_hash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          line_count: 6,
-          non_empty_line_count: 4,
-          heading_count: 1,
-          source_marker_count: 1,
-          table_count: 1,
-          table_row_count: 3,
-          tables: [{
-            index: 0,
-            start_line: 3,
-            end_line: 5,
-            column_count: 2,
-            row_count: 3,
-            has_separator: true,
-            signature: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-          }],
-        }],
+        revision_structures: Array.from({ length: 18 }, (_, index) => {
+          const version = 87 - index;
+          return {
+            revision_id: `rev-structure-ui-v${version}`,
+            doc_id: doc.doc_id,
+            version_number: version,
+            author_kind: 'user',
+            author_label: 'browser-test',
+            created_at: '2026-06-06T11:40:00.000Z',
+            content_hash: `sha256:${String(version).padStart(64, 'a')}`,
+            line_count: 6,
+            non_empty_line_count: 4,
+            heading_count: 1,
+            source_marker_count: version >= 83 ? 1 : 0,
+            table_count: 1,
+            table_row_count: 3,
+            tables: [{
+              index: 0,
+              start_line: 3,
+              end_line: 5,
+              column_count: 2,
+              row_count: 3,
+              has_separator: true,
+              signature: `sha256:${String(version).padStart(64, 'b')}`,
+            }],
+          };
+        }),
         runs: [],
         events: [],
         messages: [],
@@ -844,6 +847,8 @@ test('VText Sources panel shows bounded revision structure without body text', a
     await expect(structureSummary).toContainText('bounded summaries');
     await expect(structureSummary).toContainText('tables');
     await expect(structureSummary).toContainText('sources');
+    await expect(structureSummary).toContainText('v78');
+    await expect(structureSummary).toContainText('v70');
     const structureRevision = structureSummary.locator('[data-vtext-structure-revision]').first();
     await expect(structureRevision).toContainText('table 1');
     await expect(structureRevision).toContainText('2c/3r');
