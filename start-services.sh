@@ -54,6 +54,46 @@ VMCTL_PID=$!
 [ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ] || disown "$VMCTL_PID"
 wait_for_url "http://127.0.0.1:${VMCTL_PORT}/health" vmctl || exit 1
 
+PLATFORM_DOLT_PID=""
+PLATFORMD_PID=""
+if [ "${CHOIR_ENABLE_PLATFORMD:-1}" = "1" ]; then
+  DOLT_BIN="${DOLT_BIN:-$(command -v dolt || true)}"
+  if [ -z "$DOLT_BIN" ] && command -v nix >/dev/null 2>&1; then
+    DOLT_OUT="$(nix build --no-link --print-out-paths nixpkgs#dolt 2>/dev/null | head -n 1 || true)"
+    if [ -n "$DOLT_OUT" ] && [ -x "$DOLT_OUT/bin/dolt" ]; then
+      DOLT_BIN="$DOLT_OUT/bin/dolt"
+    fi
+  fi
+  if [ -z "$DOLT_BIN" ]; then
+    echo "platformd startup requires dolt; enter nix develop or set DOLT_BIN=/path/to/dolt"
+    exit 1
+  fi
+  export PLATFORMD_PORT="${PLATFORMD_PORT:-8086}"
+  export PLATFORM_DOLT_PORT="${PLATFORM_DOLT_PORT:-13306}"
+  export PLATFORM_DOLT_DIR="${PLATFORM_DOLT_DIR:-/tmp/go-choir-m2/platform-dolt}"
+  export PLATFORM_DOLT_DB_DIR="${PLATFORM_DOLT_DB_DIR:-${PLATFORM_DOLT_DIR}/platform}"
+  export PLATFORMD_ARTIFACTS_ROOT="${PLATFORMD_ARTIFACTS_ROOT:-/tmp/go-choir-m2/platform-artifacts}"
+  export PLATFORMD_DOLT_DSN="${PLATFORMD_DOLT_DSN:-root@tcp(127.0.0.1:${PLATFORM_DOLT_PORT})/platform?parseTime=true&multiStatements=true&clientFoundRows=true}"
+  mkdir -p "$PLATFORM_DOLT_DB_DIR" "$PLATFORMD_ARTIFACTS_ROOT"
+  (
+    export HOME="$PLATFORM_DOLT_DIR"
+    cd "$PLATFORM_DOLT_DB_DIR"
+    "$DOLT_BIN" config --global --add user.name "Choir Platform" >/dev/null 2>&1 || true
+    "$DOLT_BIN" config --global --add user.email "platform@choir.local" >/dev/null 2>&1 || true
+    if [ ! -d .dolt ]; then
+      "$DOLT_BIN" init >/dev/null
+    fi
+    exec "$DOLT_BIN" sql-server --host 127.0.0.1 --port "$PLATFORM_DOLT_PORT"
+  ) > platform-dolt.log 2>&1 &
+  PLATFORM_DOLT_PID=$!
+  [ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ] || disown "$PLATFORM_DOLT_PID"
+
+  nohup go run ./cmd/platformd > platformd.log 2>&1 &
+  PLATFORMD_PID=$!
+  [ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ] || disown "$PLATFORMD_PID"
+  wait_for_url "http://127.0.0.1:${PLATFORMD_PORT}/health" platformd 90 1 || exit 1
+fi
+
 RUNTIME_GATEWAY_TOKEN="$(curl -sf -X POST \
   http://127.0.0.1:8084/provider/v1/credentials/issue \
   -H "Content-Type: application/json" \
@@ -76,7 +116,7 @@ SANDBOX_PID=$!
 wait_for_url http://127.0.0.1:8081/health auth || exit 1
 wait_for_url http://127.0.0.1:8085/health sandbox || exit 1
 
-export PROXY_PORT=8082 PROXY_SANDBOX_URL="http://127.0.0.1:8085" PROXY_VMCTL_URL="${PROXY_VMCTL_URL:-http://127.0.0.1:${VMCTL_PORT}}" PROXY_VMCTL_TIMEOUT="${PROXY_VMCTL_TIMEOUT:-180s}"
+export PROXY_PORT=8082 PROXY_SANDBOX_URL="http://127.0.0.1:8085" PROXY_VMCTL_URL="${PROXY_VMCTL_URL:-http://127.0.0.1:${VMCTL_PORT}}" PROXY_PLATFORMD_URL="${PROXY_PLATFORMD_URL:-http://127.0.0.1:${PLATFORMD_PORT:-8086}}" PROXY_VMCTL_TIMEOUT="${PROXY_VMCTL_TIMEOUT:-180s}"
 nohup go run ./cmd/proxy > proxy.log 2>&1 &
 PROXY_PID=$!
 [ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ] || disown "$PROXY_PID"
@@ -89,7 +129,7 @@ wait_for_url http://localhost:4173 frontend || exit 1
 echo "Services started successfully"
 if [ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ]; then
   cleanup_services() {
-    kill "$FRONTEND_PID" "$PROXY_PID" "$SANDBOX_PID" "$VMCTL_PID" "$GATEWAY_PID" "$AUTH_PID" 2>/dev/null || true
+    kill "$FRONTEND_PID" "$PROXY_PID" "$SANDBOX_PID" "$PLATFORMD_PID" "$PLATFORM_DOLT_PID" "$VMCTL_PID" "$GATEWAY_PID" "$AUTH_PID" 2>/dev/null || true
   }
   trap cleanup_services INT TERM EXIT
   wait

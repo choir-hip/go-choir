@@ -42,6 +42,7 @@
             devPkgs.go
             devPkgs.pkg-config
             devPkgs.icu
+            devPkgs.dolt
           ];
           shellHook = ''
             export PKG_CONFIG_PATH="${devPkgs.icu.dev}/lib/pkgconfig:${devPkgs.icu}/lib/pkgconfig''${PKG_CONFIG_PATH:+:''${PKG_CONFIG_PATH}}"
