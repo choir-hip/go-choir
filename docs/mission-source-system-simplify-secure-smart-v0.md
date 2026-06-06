@@ -5929,6 +5929,61 @@ It reduces the stale/blocked/researcher-state fixture gap and has CI
 acceptance. It does not add exhaustive connector/media source producer coverage
 or non-public publication semantics.
 
+### Problem 35: Platform Publication Metadata Can Preserve Raw Reader Artifact Aliases
+
+Status: `documented_pending_fix`.
+
+problem: the prior reader-artifact contract repair normalized
+`reader_snapshot_status.state` in the proxy publication enrichment path, but
+`internal/platform/source_metadata.go` still accepts VText publication
+`metadata.source_entities` directly and only normalizes selector kind, evidence
+state, display policy, and open surface. If a caller supplies
+`reader_snapshot_status.state` as an alias such as `snapshot-ready`,
+`publication blocked`, or `source_import_failed`, platform publication can
+store and export that raw alias inside the public source entity JSON while the
+adjacent top-level publication fields look canonical.
+
+affected contract/invariant: reader artifact state is a shared source-system
+contract used by VText, Source Viewer, Web Lens, publication, and export. A
+publication/export consumer should not need to know whether source metadata
+entered through proxy enrichment, VText durable metadata, source service, or a
+future connector in order to interpret `reader_snapshot_status.state`.
+
+confirmed evidence:
+
+```text
+internal/platform/source_metadata.go:
+  normalizePublicationSourceEntity normalizes selectors via
+  sourcecontract.NormalizeSelector, evidence via NormalizeEvidenceState, and
+  display.open_surface via NormalizeOpenSurface.
+
+internal/platform/source_metadata.go:
+  the same function copies the source entity JSON into EntityJSON after the
+  open-surface rewrite, but it does not inspect or normalize
+  reader_snapshot_status.state.
+
+internal/sourcecontract/reader_artifact.go:
+  NormalizeReaderArtifactState already provides the canonical backend contract,
+  so this is an integration omission rather than a missing vocabulary.
+```
+
+acceptance for fix:
+
+- normalize `reader_snapshot_status.state` through
+  `sourcecontract.NormalizeReaderArtifactState` in platform publication source
+  metadata before source entity JSON is stored;
+- preserve other reader snapshot fields such as `quality`, `warnings`,
+  `reason`, `snapshot_text`, and `content_hash`;
+- add platform publication/export verifier coverage that combines target kind,
+  reader artifact state alias, selector kind alias, open-surface alias, and
+  evidence state in one source-contract matrix;
+- prove both publication bundle and canonical Markdown export metadata contain
+  canonical reader artifact states and selector/open/evidence values.
+
+remaining error field: this should be fixed in the platform normalization path,
+not by adding another frontend fallback. The broader owner/guest/private/public
+visibility matrix remains a follow-up even after this repair.
+
 ## Suggested `/goal`
 
 ```text
