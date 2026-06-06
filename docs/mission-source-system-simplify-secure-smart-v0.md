@@ -5696,18 +5696,20 @@ source metadata proof, screenshots/traces, final hard review, and PDF report.
 
 ### Staging Proof Checkpoint: Publication Source Records, Snapshots, Guest Opens, And Export Metadata
 
-Status: `staging_playwright_publication_source_proof_passed_owner_comet_unproven`.
+Status: `staging_playwright_publication_source_proof_passed_owner_comet_separately_confirmed`.
 
 claim: deployed staging now has product-path proof for publication source
 records and source opens for synthetic authenticated author plus unauthenticated
 guest readers across source-service, content-item, and URL-backed source
 shapes.
 
-scope and limitation: this is not the owner `yusefnathanson@me.com`
-computer-use/Comet proof. The Playwright fixture authenticated as
+scope and limitation: this Playwright run itself is not the owner
+`yusefnathanson@me.com` computer-use/Comet proof. The Playwright fixture authenticated as
 `playwright-state-1780771357494-jmjup4@example.com` on `https://choir.news`.
 It proves the deployed API/browser product path for a test author and guest
-readers, but owner-specific Comet/session capability remains unproven.
+readers. Owner-specific Comet/session capability remains separately confirmed
+by the earlier owner legal-proposal proof and by the fresh Computer Use state
+below.
 
 evidence:
 
@@ -5718,6 +5720,26 @@ deployed commit under test:
 staging health:
   proxy deployed_commit=2af0dbb75e5def609988a09b1b96edf1c7bf9520
   upstream deployed_commit=2af0dbb75e5def609988a09b1b96edf1c7bf9520
+
+fresh Computer Use / Comet capability check:
+  app=/Applications/Comet.app
+  bundle_id=ai.perplexity.comet
+  observed_url=choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pubb26d816ed
+  session.authenticated=true
+  session.user.email=yusefnathanson@me.com
+  session.user.id=5bd6de97-3b58-408c-bf89-c42c81b083de
+  observed_doc_id=f93cea62-f833-4dae-b414-8e44783d8cbe
+  observed_user_version=96
+  observed_user_revision_id=5a5532d8-0ff3-44d6-aeef-5ea6cbc08798
+  observed_source_entities=7
+  observed_source_markers=7
+  observed_has_appendix=true
+  observed_has_table=true
+  observed_has_row2=true
+  limitation: current page also showed a pending revise loop plus one
+    document revisions poll that returned 401 authentication required; this
+    matches the previously documented proof-path limitation and should not be
+    used as fresh acceptance evidence for revision polling.
 
 command:
   PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js
@@ -5751,10 +5773,13 @@ behavior proven:
   controls such as "Open source" and "Close".
 
 remaining error field: this closes a broad staging proof slice for synthetic
-author plus guest publication/source behavior. It still does not prove the
-owner legal cloud proposal, bounded table edits, owner Comet authentication,
-screenshots/traces, no-source-needed/stale/blocked researcher states, or final
-hard-review/PDF deliverables.
+author plus guest publication/source behavior and refreshes owner Comet
+capability evidence. The owner legal proposal, bounded table edits, source
+metadata export, hard review, and PDF deliverables already have earlier
+checkpoint evidence in this mission doc. Remaining work should focus on
+auditing whether any source-system shared-contract gaps, stale/blocked
+researcher-state gaps, dead/weak code paths, or final residual-risk packaging
+still lack current evidence.
 
 ## Suggested `/goal`
 
