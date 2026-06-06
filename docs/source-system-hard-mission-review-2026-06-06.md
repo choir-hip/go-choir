@@ -137,6 +137,12 @@ PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vt
 Result: 3 passed.
 
 ```text
+nix develop -c go test ./internal/platform -run TestPublicationExportPreservesCanonicalEvidenceStateMatrix -count=1
+```
+
+Result: passed.
+
+```text
 npm --prefix frontend run build
 ```
 
@@ -228,14 +234,15 @@ Evidence:
 Severity: medium.
 
 The mission has owner and guest Source Viewer proof for focused URL-backed,
-content-item, and source-service-style publication records. It does not prove
-every future source producer, media target, connector source, or stale/blocked
-access branch.
+content-item, and source-service-style publication records. It now also has a
+platform verifier that sends every canonical evidence state through publication
+bundle and export metadata. It does not prove every future source producer,
+media target, connector source, or non-public access branch.
 
 Recommended next move:
 
-- add a generated fixture matrix for source target kind, evidence state, reader
-  artifact state, open surface, and publication visibility.
+- extend the current fixture matrix across source target kind, reader artifact
+  state, open surface, and publication visibility.
 
 ### Finding 2: Generated Source Contract Narrows, But Does Not Eliminate, Drift Risk
 
@@ -318,8 +325,8 @@ consolidation, after a separate documented problem or refactor plan.
 
 - Generated source-contract coverage is still narrower than a full IDL for every
   future source producer/consumer shape.
-- Source Service and connector-like future records need broader fixture
-  coverage.
+- Source Service and connector-like future records still need broader fixture
+  coverage beyond the current source-service/content-item/URL-backed slices.
 - Non-public publication semantics remain unimplemented by design.
 - Direct proof scripts can bypass product auth-renewal behavior and should not
   be used as product-path auth evidence.
@@ -342,11 +349,11 @@ consolidation, after a separate documented problem or refactor plan.
 
 ## Next Realism Axis
 
-Build one broader generated fixture/verifier matrix that crosses:
+Build one broader generated fixture/verifier matrix that extends the new
+evidence-state publication/export verifier across:
 
 - source target kind;
 - reader artifact state;
-- evidence state;
 - selector kind;
 - open surface;
 - owner versus guest;

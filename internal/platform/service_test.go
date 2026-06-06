@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	embedded "github.com/dolthub/driver"
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 )
 
 func openTestPlatformStore(t *testing.T) (*Store, string) {
@@ -77,6 +78,44 @@ func decodePublicationExportMetadata(t *testing.T, raw json.RawMessage) publicat
 		t.Fatalf("decode export metadata: %v\n%s", err, string(raw))
 	}
 	return out
+}
+
+func evidenceStateBySourceEntityID(t *testing.T, transclusions []PublicationTransclusion) map[string]map[string]any {
+	t.Helper()
+	out := make(map[string]map[string]any, len(transclusions))
+	for _, transclusion := range transclusions {
+		var selector struct {
+			EvidenceState map[string]any `json:"evidence_state"`
+		}
+		if err := json.Unmarshal(transclusion.SourceSelector, &selector); err != nil {
+			t.Fatalf("decode source selector for %s: %v\n%s", transclusion.SourceEntityID, err, string(transclusion.SourceSelector))
+		}
+		out[transclusion.SourceEntityID] = selector.EvidenceState
+	}
+	return out
+}
+
+func assertPublishedEvidenceState(t *testing.T, surface, want string, got map[string]any) {
+	t.Helper()
+	if got["state"] != want {
+		t.Fatalf("%s evidence state = %#v, want state %q", surface, got, want)
+	}
+	if researchState := got["research_state"]; researchState != fmt.Sprintf("research_%s", want) {
+		t.Fatalf("%s evidence research_state = %#v, want research_%s", surface, got, want)
+	}
+	if uncertainty := got["uncertainty"]; uncertainty != fmt.Sprintf("uncertainty for %s", want) {
+		t.Fatalf("%s evidence uncertainty = %#v, want uncertainty for %s", surface, got, want)
+	}
+	switch want {
+	case sourcecontract.EvidenceStateConfirms, sourcecontract.EvidenceStateRefutes, sourcecontract.EvidenceStateQualifies:
+		if got["relation"] != want {
+			t.Fatalf("%s evidence relation = %#v, want %q", surface, got, want)
+		}
+	default:
+		if _, ok := got["relation"]; ok {
+			t.Fatalf("%s non-relational evidence should not carry relation: %#v", surface, got)
+		}
+	}
 }
 
 func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
@@ -328,6 +367,96 @@ func TestBuildPublicationSourceMetadataPreservesSelectorSet(t *testing.T) {
 	}
 	if selectorSet.EvidenceState["state"] != "confirms" || selectorSet.EvidenceState["relation"] != "confirms" || selectorSet.EvidenceState["research_state"] != "owner_supplied" {
 		t.Fatalf("selector set evidence state = %#v from %s", selectorSet.EvidenceState, string(transclusion.SourceSelector))
+	}
+}
+
+func TestPublicationExportPreservesCanonicalEvidenceStateMatrix(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	svc := NewService(store, filepath.Join(root, "artifacts"))
+
+	states := []string{
+		sourcecontract.EvidenceStateCandidate,
+		sourcecontract.EvidenceStateAvailable,
+		sourcecontract.EvidenceStateConfirms,
+		sourcecontract.EvidenceStateRefutes,
+		sourcecontract.EvidenceStateQualifies,
+		sourcecontract.EvidenceStateNoSourceNeeded,
+		sourcecontract.EvidenceStateStale,
+		sourcecontract.EvidenceStateBlockedByAccess,
+		sourcecontract.EvidenceStateUnavailable,
+	}
+	sourceEntities := make([]map[string]any, 0, len(states))
+	contentLines := []string{"# Evidence state matrix", ""}
+	for i, state := range states {
+		entityID := fmt.Sprintf("src-evidence-%s", strings.ReplaceAll(state, "_", "-"))
+		quote := fmt.Sprintf("Evidence state %s survives publication.", state)
+		contentLines = append(contentLines, fmt.Sprintf("%s [%d](source:%s)", quote, i+1, entityID))
+		sourceEntities = append(sourceEntities, map[string]any{
+			"entity_id": entityID,
+			"kind":      "source_service_item",
+			"label":     fmt.Sprintf("Evidence %s source", state),
+			"target": map[string]any{
+				"target_kind": "source_service_item",
+				"item_id":     fmt.Sprintf("source-item-%s", strings.ReplaceAll(state, "_", "-")),
+			},
+			"selectors": []map[string]any{{
+				"selector_kind": "text_quote",
+				"text_quote":    quote,
+				"content_hash":  fmt.Sprintf("hash-%s", state),
+			}},
+			"display": map[string]any{
+				"inline_mode":  "embedded_excerpt",
+				"open_surface": "source",
+			},
+			"evidence": map[string]any{
+				"state":          state,
+				"relation":       state,
+				"research_state": fmt.Sprintf("research_%s", state),
+				"uncertainty":    fmt.Sprintf("uncertainty for %s", state),
+			},
+		})
+	}
+	metadata, err := json.Marshal(map[string]any{"source_entities": sourceEntities})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+		OwnerID:          "user-1",
+		SourceDocID:      "doc-evidence-matrix",
+		SourceRevisionID: "rev-evidence-matrix",
+		Title:            "Evidence State Matrix",
+		Content:          strings.Join(contentLines, "\n"),
+		Metadata:         metadata,
+		RequestedBy:      "user-1",
+	})
+	if err != nil {
+		t.Fatalf("PublishVText: %v", err)
+	}
+
+	bundle, err := svc.GetPublicationBundleByRoute(context.Background(), resp.RoutePath)
+	if err != nil {
+		t.Fatalf("GetPublicationBundleByRoute: %v", err)
+	}
+	if len(bundle.SourceEntities) != len(states) || len(bundle.Transclusions) != len(states) {
+		t.Fatalf("bundle source metadata count entities=%d transclusions=%d want=%d", len(bundle.SourceEntities), len(bundle.Transclusions), len(states))
+	}
+
+	exported, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "md")
+	if err != nil {
+		t.Fatalf("ExportPublicationByRoute md: %v", err)
+	}
+	exportedMetadata := decodePublicationExportMetadata(t, exported.Metadata)
+	if len(exportedMetadata.SourceEntities) != len(states) || len(exportedMetadata.Transclusions) != len(states) {
+		t.Fatalf("export source metadata count entities=%d transclusions=%d want=%d", len(exportedMetadata.SourceEntities), len(exportedMetadata.Transclusions), len(states))
+	}
+
+	bundleEvidence := evidenceStateBySourceEntityID(t, bundle.Transclusions)
+	exportEvidence := evidenceStateBySourceEntityID(t, exportedMetadata.Transclusions)
+	for _, state := range states {
+		entityID := fmt.Sprintf("src-evidence-%s", strings.ReplaceAll(state, "_", "-"))
+		assertPublishedEvidenceState(t, "bundle", state, bundleEvidence[entityID])
+		assertPublishedEvidenceState(t, "export", state, exportEvidence[entityID])
 	}
 }
 

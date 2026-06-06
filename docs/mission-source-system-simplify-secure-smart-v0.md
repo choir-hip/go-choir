@@ -5781,6 +5781,67 @@ auditing whether any source-system shared-contract gaps, stale/blocked
 researcher-state gaps, dead/weak code paths, or final residual-risk packaging
 still lack current evidence.
 
+### Contract Verifier Checkpoint: Publication Evidence-State Matrix
+
+Status: `local_contract_matrix_verifier_passed_pending_ci`.
+
+claim: the platform publication/export contract now has a focused verifier for
+the complete canonical source-evidence vocabulary, including non-happy states
+that were previously represented mostly by individual slices.
+
+why this matters: the mission requires replacing missing-source placeholders
+with typed evidence states such as `confirms`, `refutes`, `qualifies`,
+`no_source_needed`, `stale`, and `blocked_by_access`. Earlier tests proved
+normalization and selected publication paths, but the hard-review residual risk
+called for broader fixture-matrix coverage. This verifier publishes a VText with
+all canonical evidence states and checks both publication bundle metadata and
+canonical Markdown export metadata.
+
+new verifier:
+
+```text
+internal/platform/service_test.go:
+  TestPublicationExportPreservesCanonicalEvidenceStateMatrix
+```
+
+states covered:
+
+```text
+candidate
+available
+confirms
+refutes
+qualifies
+no_source_needed
+stale
+blocked_by_access
+unavailable
+```
+
+assertions:
+
+- every state survives publication transclusion source selectors;
+- every state survives canonical export transclusion metadata;
+- relational states preserve `relation`;
+- non-relational states do not acquire a fake `relation`;
+- researcher-style `research_state` and `uncertainty` fields survive for each
+  state.
+
+local verification:
+
+```text
+nix develop -c go test ./internal/platform -run TestPublicationExportPreservesCanonicalEvidenceStateMatrix -count=1
+  -> ok
+
+nix develop -c go test ./internal/sourcecontract ./internal/platform ./internal/proxy -run 'TestNormalize|TestBuildPublication|TestHandleVTextPublication|TestExport|TestSourceContractSchema|TestPublicationExportPreservesCanonicalEvidenceStateMatrix' -count=1
+  -> ok
+```
+
+remaining error field: this is a local verifier expansion, not new staging
+behavior. It reduces the stale/blocked/researcher-state fixture gap but remains
+pending CI. It does not add exhaustive connector/media source producer coverage
+or non-public publication semantics.
+
 ## Suggested `/goal`
 
 ```text
