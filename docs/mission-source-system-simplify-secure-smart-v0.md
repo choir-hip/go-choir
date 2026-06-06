@@ -6183,6 +6183,51 @@ remaining proof required: push the behavior commit, monitor CI and FlakeHub,
 confirm Node B deployed identity, and run a deployed product-path proof for
 public versus unlisted/private publication resolve/search/export.
 
+### Problem 37: Public Publication Proxy Turns Platform Policy Misses Into 502
+
+Status: `documented_pending_fix`.
+
+problem: after Problem 36, platformd can return `sql.ErrNoRows`/404 for
+publication routes that are inactive, nonexistent, or no longer public according
+to `access_policy.visibility`. The public proxy helper
+`getPlatformJSON` treats every non-2xx platformd response as an upstream error,
+so `/api/platform/publications/resolve` and `/api/platform/publications/export`
+would return `502 failed to resolve/export publication` for expected public
+policy misses. That hides the policy decision behind an infrastructure-shaped
+failure.
+
+affected contract/invariant: a public reader should see a not-found or typed
+policy-denial response when a route is not public. A 502 implies platformd or
+gateway degradation, which is false for a deliberate private/unlisted
+publication policy miss and makes staging acceptance ambiguous.
+
+confirmed evidence:
+
+```text
+internal/platform/handlers.go:
+  HandleInternalResolvePublication and HandleInternalExportPublication map
+  sql.ErrNoRows to http.NotFound.
+
+internal/proxy/platform_public.go:
+  getPlatformJSON returns an error for any platformd response outside 2xx.
+
+internal/proxy/platform_public.go:
+  HandlePlatformPublicationResolve and HandlePlatformPublicationExport map that
+  error to http.StatusBadGateway with "failed to resolve publication" or
+  "failed to export publication".
+```
+
+acceptance for fix:
+
+- preserve existing successful 2xx proxy behavior;
+- propagate platformd 404 as public 404 for publication resolve/export;
+- keep genuine platformd transport/decode failures as 502;
+- add proxy handler tests for publication resolve/export not-found propagation;
+- rerun deployed public/private/unlisted publication proof after deploy.
+
+remaining error field: this is a proxy status-mapping fix. It does not add a
+future authenticated private publication reader path.
+
 ## Suggested `/goal`
 
 ```text
