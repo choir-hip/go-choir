@@ -5308,6 +5308,69 @@ or connector record. It converts the highest-risk mirrored constants into one
 cross-runtime verifier matrix and leaves schema generation as a future
 architecture simplification rather than a correctness blocker.
 
+### Problem 33: Source Contract Testdata Triggers Staging Deploy
+
+Status: `documented_before_classifier_fix`.
+
+problem: the shared source-contract verifier checkpoint changed only
+documentation, frontend tests, Go tests, and a test fixture under
+`internal/sourcecontract/testdata/source_contract_matrix.json`, but the
+deploy-impact classifier required a Node B staging deploy, vmctl restart, and
+active VM refresh.
+
+affected contract/invariant: test fixtures and test-only verifier data should
+not promote or refresh staging runtime state unless they are packaged into a
+deployed host, frontend, guest image, or runtime asset. Staging deploy identity
+should represent runtime artifact changes, not verifier-only matrix data.
+
+evidence:
+
+```text
+commit:
+  5855acd2a9475de6c0423de1d195512eb3dfdf53
+
+CI run:
+  https://github.com/choir-hip/go-choir/actions/runs/27069970346
+
+deploy-impact output:
+  docs/mission-source-system-simplify-secure-smart-v0.md -> ignored (docs/workflow/test artifact)
+  frontend/tests/vtext-source-entities.spec.js -> ignored (docs/workflow/test artifact)
+  internal/sourcecontract/matrix_test.go -> ignored (docs/workflow/test artifact)
+  internal/sourcecontract/testdata/source_contract_matrix.json -> shared source contract dependency: runtime/platform service pointers + active VM refresh
+
+classification result:
+  deploy_needed=true
+  deploy_host=true
+  deploy_frontend=false
+  deploy_host_service=true
+  deploy_vmctl_restart=true
+  deploy_active_vm_refresh=true
+  host_services=gateway,platformd,proxy,sandbox,sourcecycled
+
+deploy result:
+  Node B deploy job 79897420194 completed successfully.
+
+staging health after deploy:
+  proxy and upstream deployed_commit=5855acd2a9475de6c0423de1d195512eb3dfdf53
+  deployed_at=2026-06-06T18:11:10Z
+  status=ok, upstream=ok, vmctl_status=ok
+```
+
+suspected owner: `.github/scripts/deploy-impact-classify`.
+
+why local/UI-only fix is insufficient: this is a CI/deploy classifier behavior.
+The local source-contract matrix tests passed, but the platform still consumed a
+staging deploy cycle and refreshed live runtime state for a verifier fixture.
+
+planned fix:
+
+- classify `internal/**/testdata/**` as test-only unless a future package
+  explicitly embeds that path in deployed runtime assets;
+- keep non-test source contract files such as `internal/sourcecontract/*.go` as
+  deployed shared contract dependencies;
+- add classifier regression coverage for testdata under a deployed package and
+  for a real sourcecontract `.go` file control.
+
 ## Suggested `/goal`
 
 ```text
