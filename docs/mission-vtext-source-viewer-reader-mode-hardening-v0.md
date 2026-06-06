@@ -233,6 +233,31 @@ guest/public proof problem checkpoint:
   - `pnpm --dir frontend exec playwright test
     tests/vtext-source-entities.spec.js` passed all 8 tests.
   - `pnpm --dir frontend build` passed.
+- Behavior follow-up landed in commit
+  `9be193eaa2e2a155653f5e8e1c30ae760221e155`. CI run
+  `27053665973` passed, including non-runtime Go tests, integration smoke,
+  runtime shards 0-3, frontend build, Go vet/build, and Node B deploy.
+  FlakeHub publish run `27053665978` passed. Staging `/health` reported proxy
+  and sandbox deployed at `9be193eaa2e2a155653f5e8e1c30ae760221e155`,
+  deployed at `2026-06-06T05:23:54Z`.
+- Deployed guest proof on the actual owner publication used a fresh
+  unauthenticated Playwright context with empty storage state and confirmed
+  `Guest published VText` was visible.
+- The guest proof opened two source markers in
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`:
+  ABA Formal Opinion 512 and non-ABA OVHcloud Hosted Private Cloud. Both opened
+  readable source windows from publication-carried source snapshots. The ABA
+  window contained "The ABA Standing Committee on Ethics and Professional
+  Responsibility..." and did not render the shorter selector quote as the body.
+  The OVH window contained "OVHcloud describes Hosted Private Cloud as a
+  VMware-based private cloud service family..." and did not render the shorter
+  selector quote as the body.
+- Geometry proof from the deployed guest run:
+  - ABA source reader bottom `655.828125`, source evidence top `680.828125`,
+    overlap `false`.
+  - OVH source reader bottom `632.203125`, source evidence top `657.203125`,
+    overlap `false`.
+  No `[data-auth-overlay]` appeared during the guest source-window proof.
 
 current artifact state:
 
