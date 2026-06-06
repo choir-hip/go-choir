@@ -127,6 +127,31 @@ simplification implementation checkpoint:
   - `pnpm --dir frontend exec playwright test
     tests/vtext-source-entities.spec.js` passed all 7 tests.
   - `pnpm --dir frontend build` passed.
+- Behavior-changing simplification landed in commit
+  `96fe4b6d04c71b883cbb439937e61aae764d2843`.
+- CI run `27053309226` passed all required jobs: non-runtime Go tests,
+  integration smoke, runtime shards 0-3, frontend build, and Go vet/build.
+  FlakeHub publish run `27053309229` also passed.
+- Node B staging `/health` reported deployed commit
+  `96fe4b6d04c71b883cbb439937e61aae764d2843`, deployed at
+  `2026-06-06T05:05:43Z`.
+- Authenticated Comet proof on the owner publication
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` after
+  the deploy showed Computer Use click support available again, the published
+  reader loading under the deployed bundle, and the ABA Model Rule 1.6 inline
+  source note expanded as a right-side journal note while surrounding proposal
+  prose continued in the main reading column.
+- The same Comet proof foregrounded the ABA Model Rule 1.6 source window under
+  the deployed bundle. The source window showed the content-first reader shape:
+  title and `Open original`, source text, reader-mode note, source citation,
+  then collapsed `Source evidence` below the reader body. This preserved the
+  previous text-on-text fix after removing the imperative measurement shim.
+- Limitation: the Comet coordinate path was unreliable for expanding the
+  already-open source window's `Source evidence` disclosure in this final
+  deployed proof pass; earlier deployed proof at `518c5fcc` did expand source
+  evidence without overlap, and local geometry tests cover the expanded
+  apparatus after the simplification. Guest/public source-window proof is
+  still outstanding and must not be claimed complete.
 
 current artifact state:
 
