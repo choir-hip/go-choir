@@ -1479,4 +1479,29 @@ local proof:
 
   nix develop -c scripts/go-test-runtime-shards
   result: passed
+
+commit/deploy proof:
+  commit dd02cc4d283feaf16b4d1cf4bbd24790f4af5ffb
+  GitHub Actions CI 27076046933 passed.
+  FlakeHub publish 27076046941 passed.
+  Node B deploy job 79913572759 passed.
+  /health reported proxy and sandbox deployed_commit
+  dd02cc4d283feaf16b4d1cf4bbd24790f4af5ffb, deployed_at
+  2026-06-06T22:49:31Z.
+
+staging proof:
+  CHOIR_DEPLOYED_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-appagent-revision-staging.tmp.spec.js
+  first verifier attempt: failed waiting for the already-loaded desktop DOM to
+  flip to data-authenticated=true after browser-side passkey registration;
+  this did not reach the VText revise endpoint.
+  second verifier attempt: passed after narrowing the verifier to check
+  /auth/session for the authenticated browser session before calling VText
+  APIs. The temporary spec was deleted after the run.
+
+  The proof registered a browser passkey session through the deployed product
+  auth path, created a VText document and user revision through deployed
+  /api/vtext product APIs, called deployed /revise and received HTTP 202 with
+  a loop_id/doc_id, then called deployed /cancel and received HTTP 200 with a
+  resumable cancelled/no_pending_revision state.
 ```
