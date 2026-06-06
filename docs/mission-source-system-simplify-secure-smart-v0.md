@@ -3996,6 +3996,71 @@ Residual risk: the frontend open-plan behavior now has one contract module.
 The broader mission still needs a backend/shared or generated `SourceOpenPlan`
 schema plus shared ReaderArtifact and SourceSelector contracts.
 
+### Problem 25: Reader Snapshot Status Is Being Used As Source Evidence State
+
+Status: `documented_before_fix`.
+
+problem: publication enrichment writes `reader_snapshot_status.state` values
+such as `reader_snapshot_ready`, `not_publication_safe`,
+`bounded_excerpt_only`, and `import_failed` to describe reader-artifact
+availability. Those are artifact/readability states, not claim-evidence
+states. The frontend Source Viewer currently falls back from real source
+evidence to `reader_snapshot_status.state`, so a successful publication reader
+snapshot can render as `Evidence unclassified` instead of keeping evidence
+state separate from reader snapshot availability.
+
+affected contract/invariant: the source contract distinguishes evidence
+states (`confirms`, `refutes`, `qualifies`, `candidate`, `stale`,
+`blocked_by_access`, `unavailable`, `no_source_needed`) from reader artifact
+availability and publication-safety state. VText, Source Viewer, Web Lens,
+publication, and export should not let `ReaderArtifact` workflow labels leak
+into claim-evidence UI or source-intelligence state machines.
+
+confirmed evidence:
+
+```text
+internal/proxy/platform_publish.go:
+  enrichVTextPublicationMetadata writes reader_snapshot_status.state values:
+  reader_snapshot_ready, not_publication_safe, bounded_excerpt_only, and
+  import_failed.
+
+frontend/src/lib/ContentViewer.svelte:
+  sourceState falls back to
+  normalizeSourceEvidenceState(sourceEntity?.reader_snapshot_status?.state ||
+  item?.provenance?.state || '') after sourceEvidenceState(sourceEntity).
+
+frontend/src/lib/source-contract.ts:
+  normalizeSourceEvidenceState intentionally rejects reader_snapshot_ready and
+  unknown tokens, so the fallback produces no canonical evidence state and the
+  UI label becomes Evidence unclassified.
+
+frontend/tests/vtext-source-entities.spec.js:
+  already asserts sourceEvidenceStateLabel('reader_snapshot_ready') is
+  Evidence unclassified, proving the token is outside the evidence vocabulary.
+
+frontend/tests/vtext-source-service-publication.spec.js:
+  currently expects published URL-backed source entities to carry
+  reader_snapshot_status.state == reader_snapshot_ready.
+```
+
+acceptance for fix:
+
+- define a frontend reader-artifact status contract separate from evidence
+  states, including current publication states and labels;
+- update Source Viewer/Content Viewer source-reader UI to display canonical
+  evidence state only from source evidence/provenance evidence fields, not from
+  `reader_snapshot_status.state`;
+- show reader snapshot availability/truncation/warnings through the separate
+  reader artifact status path;
+- add focused frontend tests proving `reader_snapshot_ready` is a reader
+  status, not a source evidence state, and that published reader snapshots do
+  not render as `Evidence unclassified`.
+
+remaining error field: this is a frontend reader-artifact contract
+consolidation slice. It does not yet create backend/generated `ReaderArtifact`
+schemas or remove all raw selector maps, but it stops one confirmed
+cross-contract leak in the Source Viewer surface.
+
 ## Suggested `/goal`
 
 ```text
