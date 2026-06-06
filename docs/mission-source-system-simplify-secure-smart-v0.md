@@ -4836,7 +4836,7 @@ promotion, rollback, or Choir-in-Choir behavior.
 
 ### Problem 31: Local Harness Changes Trigger Full Staging Deploy And Early Identity Stamp
 
-Status: `documented_before_fix`.
+Status: `classifier_fixed_identity_stamp_open`.
 
 problem: a local-only harness change to `start-services.sh` triggered the
 conservative full staging deploy path, including host OS, frontend, ordinary
@@ -4912,6 +4912,23 @@ planned proof:
   only after successful install/restart/health probes, or expose a separate
   `deploy_in_progress`/`target_commit` distinction;
 - rerun classifier proof and CI for the deploy-impact change.
+
+classifier fix and proof:
+
+- `.github/scripts/deploy-impact-classify` now treats `start-services.sh` as
+  ignored local developer service harness.
+- `bash -n .github/scripts/deploy-impact-classify` passed.
+- Exact changed-set proof for `README.md`, `start-services.sh`, and this
+  mission doc now returns `deploy_needed=false` with explanation
+  `start-services.sh -> ignored (local developer service harness)`.
+- Control proof for `internal/runtime/content.go` still returns
+  `deploy_needed=true` with `host_services=gateway,sandbox`.
+
+remaining error field: the local harness deploy-impact overclassification is
+fixed. The early deploy identity stamping concern remains open: `/health`
+reported the target commit while the deploy job was still in progress, so
+future acceptance reports should pair health identity with terminal deploy job
+status until the deploy script exposes a post-success identity distinction.
 
 ## Suggested `/goal`
 

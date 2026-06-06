@@ -91,6 +91,10 @@ mark_host_os_only() {
 
 for path in "${changed[@]}"; do
   case "$path" in
+    start-services.sh)
+      add_explanation "$path -> ignored (local developer service harness)"
+      continue
+      ;;
     docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go)
       add_explanation "$path -> ignored (docs/workflow/test artifact)"
       continue
