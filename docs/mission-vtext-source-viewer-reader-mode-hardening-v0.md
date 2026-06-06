@@ -60,6 +60,14 @@ new evidence:
   `/var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_SCTK33/Screenshot 2026-06-05 at 23.50.02.png`
   shows the expanded `Source evidence` disclosure covering multiple lines of
   source prose and metadata.
+- Owner screenshot
+  `/var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_Laklqc/Screenshot 2026-06-05 at 23.58.32.png`
+  shows the same source-window overlap pattern on an OVHCloud source, proving
+  this is not specific to ABA Formal Opinion 512.
+- Owner screenshot
+  `/var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_kjek9s/Screenshot 2026-06-05 at 23.59.22.png`
+  shows the article-side Pretext note has enough vertical space for more
+  source content, but the transclusion body is still a one-sentence stub.
 - `frontend/src/lib/ContentViewer.svelte` renders the opened source as a
   flex-column utility page: hero header, `Open source` header link, reader
   article, then card-like `details.provenance` blocks.
@@ -70,9 +78,13 @@ new evidence:
 remaining error field:
 
 - Source viewer text-on-text overlap must be fixed and covered by visual or
-  geometry proof.
+  geometry proof across several source windows, not only the ABA Formal Opinion
+  512 example.
 - Source viewer UI must become a content-first source reader, not a dashboard
   of app chrome and metadata cards.
+- Article-side transclusion notes should show enough source substance for the
+  common no-window path: users often click source points to inspect support
+  inline without opening a separate source window and disrupting reading flow.
 - Source window lifecycle should not accumulate duplicate windows for the same
   source during owner/client review.
 - Source acquisition still needs a first-class cleaned Markdown reader pipeline
@@ -92,15 +104,18 @@ highest-impact remaining uncertainty:
 
 next executable probe:
 
-- Build a minimal reproduction for the ABA Formal Opinion source window, first
-  against staging with Comet if practical, otherwise with a local fixture that
-  preserves the same `ContentViewer` payload shape. Measure collision
-  rectangles for reader text, `details` summaries, and expanded evidence rows.
+- Build minimal reproductions for the ABA Formal Opinion source window and at
+  least one non-ABA source window, first against staging with Comet if
+  practical, otherwise with local fixtures that preserve the same
+  `ContentViewer` payload shape. Measure collision rectangles for reader text,
+  `details` summaries, and expanded evidence rows. Also measure article-side
+  transclusion note height and content density so the note uses available
+  space without becoming a full source window.
 
 suggested resume goal string:
 
 ```text
-/goal Run docs/mission-vtext-source-viewer-reader-mode-hardening-v0.md as a Codex-operated MissionGradient mission. Start from deployed commit eef70b6a. Preserve canonical VText, source entities, citation transclusions, source publication policy, Markdown export, and staging proof. First reproduce and fix the ABA Formal Opinion 512 source viewer text-on-text regression with geometry/visual proof, then simplify source viewer/source flow code paths and remove weak/dead abstractions while keeping the legal-cloud proposal source graph and opened source windows working for owner and guest readers.
+/goal Run docs/mission-vtext-source-viewer-reader-mode-hardening-v0.md as a Codex-operated MissionGradient mission. Start from deployed commit eef70b6a. Preserve canonical VText, source entities, citation transclusions, source publication policy, Markdown export, and staging proof. First reproduce and fix the generic source viewer text-on-text regression across multiple source windows with geometry/visual proof. Then make article-side transclusion notes show more useful source substance for readers who inspect citations inline without opening separate source windows. Run cognitive transforms and gstack review/design-review for adversarial perspective before and after the first working fix, then simplify source viewer/source flow code paths and remove weak/dead abstractions while keeping the legal-cloud proposal source graph and opened source windows working for owner and guest readers.
 ```
 
 rollback refs:
@@ -114,8 +129,10 @@ rollback refs:
 This mission begins because the opened source viewer now has a newly observed
 visual corruption:
 
-> Source evidence and source metadata disclosure boxes overlap the source prose
-> in the opened ABA Formal Opinion 512 source window.
+> Source evidence and source metadata disclosure boxes overlap source prose in
+> opened source windows. The problem appears across multiple source artifacts,
+> including ABA Formal Opinion 512 and OVHCloud Hosted Private Cloud service
+> offerings.
 
 This is not just a CSS polish bug. The visible failure means an authorized
 reader can open a source from a published VText and be unable to read the
@@ -127,7 +144,7 @@ docs commit.
 
 ## Adversarial Findings
 
-### P0 - Source Viewer Text-On-Text Regression
+### P0 - Generic Source Viewer Text-On-Text Regression
 
 The screenshot evidence shows source body text, disclosure summaries, and
 expanded metadata rendered in the same visual region. This is a reader failure,
@@ -144,7 +161,28 @@ Likely implicated surface:
 
 Acceptance implication: source-window proof must include bounding-box or
 screenshot checks for no overlap with all disclosures closed and with `Source
-evidence` expanded.
+evidence` expanded, across at least two materially different source windows.
+
+### P0 - Article-Side Transclusion Notes Underuse Their Reading Surface
+
+The article-side Pretext note is meant to let users inspect source support
+without leaving the reading flow. The current note often shows a one-sentence
+stub even when the side-note allocation has room for more useful source
+content. That pushes users toward opening separate source windows, which is
+more disruptive and does not match the expected reading pattern.
+
+Evidence:
+
+- The OVHCloud article screenshot shows a tall right-side source note with only
+  title, one sentence, and actions, while the surrounding proposal text keeps
+  flowing beside it.
+- The user explicitly clarified that many readers will click source points but
+  not open source windows.
+
+Direction: inline transclusion notes should include a richer bounded excerpt:
+enough source substance to evaluate the claim in context, while preserving the
+opened source window as the place for the full reader artifact, provenance, and
+source URL.
 
 ### P1 - Source Windows Still Lead With App Chrome Instead Of Evidence
 
@@ -266,6 +304,28 @@ can actually read them. Add geometry/pixel checks for:
 - long URLs and hashes wrap without escaping their container;
 - 720px and wide desktop windows remain readable;
 - repeated opening focuses or reuses the existing source window.
+- article-side source notes use available side-note/stacked-note space for
+  more than a one-sentence stub when the source snapshot has more relevant
+  text.
+
+### P2 - The Next Run Needs Explicit Adversarial Review Loops
+
+This mission should not proceed as a single bug fix. Before implementation,
+run cognitive transforms and gstack review/design-review to reframe the
+problem, identify adjacent defects, and find simplification opportunities.
+After the first working fix and proof, run the same adversarial pass again
+against the diff and the visual result.
+
+Required review posture:
+
+- Use the Cognitive Transform Portfolio to change the next probe, verifier, or
+  scope; do not use it as decorative analysis.
+- Use gstack review posture for code-surface risks, dead paths, ownership
+  confusion, trust-boundary mistakes, and missing tests.
+- Use gstack design-review posture for visual hierarchy, text overlap,
+  source-note density, interaction flow, and client-readiness.
+- Convert any newly found behavior problem into a docs checkpoint before
+  fixing it.
 
 ## Cognitive Transforms
 
@@ -273,13 +333,15 @@ Current uncertainty or obstacle:
 
 After 11 hours of mission work, the system is close enough to encourage narrow
 patches: adjust a margin, hide a disclosure, or shrink one card. That would
-repair the screenshot while leaving the deeper source-reader contract weak.
+repair one screenshot while leaving the deeper source-reader and inline
+transclusion contracts weak.
 
 Selected transforms:
 
 1. Audience-Level Translation - A client opening a citation does not want to
-   see app scaffolding. They want the source, enough context to trust it, and a
-   clean way back to the proposal.
+   see app scaffolding. A client clicking a citation inline also may not want
+   a new window at all. They want enough evidence in the note to keep reading,
+   plus a clean path to the full source when needed.
 2. Depth Extraction - The deep feature is not "cards expand." The feature is
    inspectable source-backed claims with stable source identity, selectors,
    publication policy, and readable evidence surfaces.
@@ -295,28 +357,38 @@ Route-changing insights:
 - The first implementation target is not "make the disclosure box prettier";
   it is "make the opened source reader a reliable projection of the source
   artifact."
-- The verifier must include readability geometry, not only text presence.
+- The inline source note target is not "show a source card"; it is "give the
+  reader enough bounded evidence to decide whether to keep reading or open the
+  full source."
+- The verifier must include readability geometry and source-note content
+  density, not only text presence.
 - Source-window dedupe is part of client-readiness because review sessions can
   involve tens or hundreds of source opens.
+- Adversarial review is part of the mission control loop, not an optional
+  after-action report.
 
 Changed plan:
 
 - implementation: fix `ContentViewer` source-reader layout and metadata
-  hierarchy, then decide whether to extract a dedicated `SourceReader`
+  hierarchy, enrich article-side transclusion notes from bounded source
+  snapshots, then decide whether to extract a dedicated `SourceReader`
   component rather than adding more modes to the generic content app.
 - verifier/evidence: use Comet staging proof for the actual legal-cloud
   proposal when possible, and add Playwright geometry checks for collision-free
-  source windows.
-- scope: include source-window lifecycle, not just one ABA source screenshot.
+  source windows plus inline-note density checks.
+- scope: include source-window lifecycle, inline transclusion substance, and
+  multiple source artifacts, not just one ABA source screenshot.
 - stopping condition: the owner and guest legal-cloud publication can open
   source windows that read cleanly, expose permitted source snapshots, avoid
-  duplicate-window clutter, and preserve article-side Pretext journal flow.
+  duplicate-window clutter, and preserve article-side Pretext journal flow with
+  more useful inline source content.
 
 Next high-information action:
 
-- Reproduce the screenshot in a controlled test fixture using the same ABA
-  Formal Opinion 512 source payload, then add a failing geometry assertion
-  before changing layout code.
+- Reproduce the source-window overlap with at least two source payloads and
+  reproduce the one-sentence inline-note underuse with a source snapshot that
+  contains more relevant text. Add failing geometry/content assertions before
+  changing layout code.
 
 ## Real Artifact
 
@@ -352,25 +424,31 @@ projection layer.
 1. Source reader fidelity:
    text presence -> collision-free reader -> metadata appendix -> source
    selectors/highlights -> multi-page/source-specific readers.
-2. Source acquisition:
+2. Inline transclusion usefulness:
+   one-sentence stub -> bounded multi-sentence excerpt -> selector-aware
+   quote/context -> richer note tuned to available Pretext space.
+3. Source acquisition:
    manual artifact -> Web Lens content artifact -> cleaned Markdown pipeline
    -> policy-aware Source Service itemization.
-3. Source UI density:
+4. Source UI density:
    card stack -> quiet journal note -> content-first source window -> academic
    reader with compact footnote/provenance affordances.
-4. Lifecycle:
+5. Lifecycle:
    unlimited duplicate windows -> source-identity reuse -> explicit comparison
    mode for duplicate opens.
-5. Verification:
+6. Verification:
    text assertions -> geometry assertions -> Comet owner proof -> owner and
    guest publication proof -> export/source policy proof.
 
 ## Dense Feedback
 
-- Playwright fixture for ABA Formal Opinion 512 source reader with closed and
-  expanded metadata disclosures.
+- Playwright fixtures for at least two source readers with closed and expanded
+  metadata disclosures, including a non-ABA source such as OVHCloud.
 - Screenshot or bounding-box proof that source text and metadata do not
   overlap.
+- Article-side Pretext proof that source notes render more than a one-sentence
+  stub when the source snapshot has relevant additional text and the note has
+  available space.
 - Deployed `choir.news` proof on the owner legal-cloud publication using
   authenticated Comet where possible.
 - Guest/public proof that source windows open publication-carried source
@@ -384,7 +462,9 @@ projection layer.
 ## Forbidden Shortcuts
 
 - Do not hide the failing metadata blocks without preserving provenance access.
-- Do not patch only ABA Formal Opinion 512.
+- Do not patch only ABA Formal Opinion 512 or any other named source.
+- Do not force users to open a new source window just to get useful evidence
+  for a normal inline citation click.
 - Do not replace source windows with iframe-only previews.
 - Do not add another source-card layer to solve a card-layer problem.
 - Do not use rendered DOM as export source.
@@ -396,6 +476,9 @@ projection layer.
 
 - Decide whether `ContentViewer` should extract a dedicated source-reader
   component.
+- Decide whether source-note excerpt selection belongs in source rendering,
+  source materialization, or a shared selector/excerpt helper. Avoid another
+  one-off truncation path.
 - Remove or fence old source-ref popover/expanded-card paths that are no
   longer used for text sources.
 - Reuse one Markdown reader renderer between content source windows and Web
@@ -411,12 +494,16 @@ projection layer.
 Mission is complete only when:
 
 - the new text-on-text source viewer regression is reproduced, fixed, and
-  covered by geometry or screenshot proof;
-- the owner legal-cloud publication opens ABA Formal Opinion 512 and at least
-  one other source as readable source windows on staging;
+  covered by geometry or screenshot proof across multiple source windows;
+- article-side transclusion notes show useful bounded source substance for
+  readers who do not open source windows, without becoming full source dumps;
+- the owner legal-cloud publication opens multiple source windows, including a
+  non-ABA source, as readable source windows on staging;
 - the same publication exposes permitted sources to guest/public readers;
 - Pretext article-side source flow still passes deployed proof;
 - source-window duplicate behavior is resolved or explicitly fenced;
+- cognitive-transform and gstack review/design-review passes are recorded with
+  issues found, issues fixed, and residual risks;
 - simplification removes or fences weak/dead source UI paths without regressing
   source graph behavior;
 - commit -> push main -> CI -> Node B deploy -> staging identity -> deployed
