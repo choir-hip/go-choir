@@ -159,6 +159,108 @@ docs commit.
 
 ## Adversarial Findings
 
+### Cognitive Transform And GStack Review Pass - 2026-06-06
+
+Skills applied:
+
+- `cognitive-transform-portfolio`: selected transforms that changed the next
+  route rather than only explaining the bug.
+- `gstack-autoplan`: used the CEO/design/engineering/DX review structure for a
+  whole-mission/current-state review rather than a narrow PR diff review.
+- `gstack-design-review`: used the live visual-audit criteria against the
+  source reader and article-side citation surfaces.
+- `gstack-review`: used the scope-drift and missing-requirements checks; since
+  `main` has no active feature-branch diff after the table slice landed, the
+  useful output is mission/current-state review rather than "nothing to
+  review."
+
+Route-changing cognitive transforms:
+
+- Real object: this is not a `ContentViewer` styling bug. The real object is a
+  source-inspection instrument attached to a canonical VText source graph.
+- Load-bearing variable: the time and disruption between clicking a citation
+  and understanding the evidence. Metadata visibility matters, but only after
+  the reader can understand the source.
+- Deep version of "source cards": citation markers are transclusion points, not
+  decorative badges. Expanded inline notes should carry enough bounded source
+  substance to support the claim in place; opened windows should be full source
+  readers with provenance as apparatus.
+- Verification transform: source proof cannot stop at "text is visible."
+  Geometry and overlap assertions must cover opened source windows the same way
+  the existing Pretext tests cover article-side note wrapping.
+- Simplification transform: the right simplification is shared source excerpt
+  and source reader ownership. The wrong simplification is deleting metadata or
+  hiding reader failures with CSS.
+
+GStack CEO review findings:
+
+- The legal-cloud proposal is client-facing. If source windows overlap text,
+  inline source notes show skeletal excerpts, or duplicate source windows pile
+  up, the artifact reads as a demo rather than a professional deliverable.
+- The whole mission should keep the long proposal's content and source graph
+  equivalent while improving source inspection, not chase a narrow ABA/OVH
+  screenshot fix.
+- The table repair is valuable but only a slice. The next acceptance proof must
+  return to the owner publication and prove the citation/source behavior that a
+  client will actually inspect.
+
+GStack design review findings:
+
+- Opened source windows have a false hierarchy: large app title, eyebrow,
+  duplicate heading, and rounded disclosure cards compete with the source text.
+- The user-visible failure is not merely "overlap"; it is reader-mode
+  authorship confusion. The source viewer looks like a file metadata app, while
+  the desired UX is closer to an academic/journal source apparatus.
+- Article-side Pretext flow is directionally right because it wraps prose around
+  a note, but the note content is underfilled. The available space should be
+  used for a bounded multi-sentence excerpt and source context.
+- Metadata should become compact apparatus: source URL/action, evidence state,
+  and provenance should remain inspectable without being the first visual layer
+  readers have to parse.
+
+GStack engineering review findings:
+
+- `ContentViewer.svelte` is currently both generic media/file viewer and source
+  reader. Its generic metadata blocks are the direct owner of the source-window
+  overlap failure and should be split or given a dedicated source-reader mode.
+- `vtext-source-flow.ts` builds article-side notes from exactly one compact
+  quote extracted from the hidden popover. There is no shared excerpt-selection
+  layer that can use reader snapshot text, selector quote, available note space,
+  and publication policy together.
+- `vtext-source-launcher.ts` sets `allowMultiple: true`, causing duplicate
+  source windows by default. That may be useful for explicit comparison, but it
+  is bad default behavior for client review.
+- Existing source tests already contain useful geometry assertions for Pretext
+  side-note routing, but opened source-window tests only assert text presence
+  and SHA visibility. The next code pass should add source-window geometry
+  tests before/with the fix.
+- Search hygiene: generated `frontend/dist` output is not tracked, but it is
+  present locally and can drown source searches unless excluded. Keep review
+  commands scoped to `frontend/src`, `frontend/tests`, and runtime packages.
+
+GStack DX/current-state findings:
+
+- The mission has strong docs, but there is no single command/report yet that
+  tells a future agent "source window source-reader QA status." Add or reuse
+  focused tests with names that encode the source-reader contract.
+- Current proof relies on Comet plus API/Playwright fragments. That is
+  acceptable for staging, but every acceptance note must distinguish local,
+  deployed, owner-authenticated, and guest/public proof.
+
+Changed plan:
+
+- Implement the next source UX repair as a source-reader/source-excerpt
+  architecture pass, not a narrow `details` margin patch.
+- Add opened source-window geometry proof across at least ABA and OVH-like text
+  sources before claiming the visual failure fixed.
+- Make inline source excerpts bounded but richer by reusing source snapshot
+  text where policy allows, with the opened source window remaining the full
+  reader.
+- Dedupe source windows by source identity by default, leaving any explicit
+  comparison behavior for a later/visible affordance.
+- After the source-reader fix works, run a simplification pass that removes or
+  fences old popover/card paths and stale duplicated source rendering logic.
+
 ### P0 - Generic Source Viewer Text-On-Text Regression
 
 The screenshot evidence shows source body text, disclosure summaries, and
