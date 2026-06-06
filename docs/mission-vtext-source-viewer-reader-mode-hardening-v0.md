@@ -265,6 +265,39 @@ cell delimiters through edit/save/revise/export, and prefer structured VText
 table blocks over renderer-only recovery. Do not special-case `Work product`,
 Appendix A, or glossary rows.
 
+Implementation checkpoint on 2026-06-06:
+
+- Commit `7c5dec1c7ed52e7fc6bc352907e86b191dee36f0` changed the Markdown
+  renderer and VText revision stabilization to tolerate and normalize
+  table-shaped rows adjacent to existing Markdown tables, including rows that
+  start with `|` but are missing the final delimiter. The implementation also
+  parses escaped pipe characters as cell content rather than as extra column
+  separators. It does not name the legal-cloud document, glossary, appendix,
+  or `Work product`.
+- Focused local regression proof passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextMarkdownStructureStabilizationRepairsMalformedTableTailRow|TestVTextMarkdownTableRowParserHandlesEscapedPipes|TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTable'`.
+- Frontend build proof passed: `pnpm --dir frontend build`.
+- Partial-Markdown renderer probe against the real
+  `frontend/src/lib/vtext-markdown-renderer.ts` showed:
+  final-row-missing-trailing-pipe and middle-row-missing-trailing-pipe both
+  render inside a `table`; escaped pipe renders as literal cell text; pipe-led
+  prose with fewer than two cells remains paragraph text.
+- CI run `27052504250` passed for commit
+  `7c5dec1c7ed52e7fc6bc352907e86b191dee36f0`.
+- FlakeHub publish run `27052504263` passed for the same commit.
+- Staging health at `https://choir.news/health` reports deployed commit
+  `7c5dec1c7ed52e7fc6bc352907e86b191dee36f0`, deployed at
+  `2026-06-06T04:26:37Z`.
+- Authenticated Comet proof on the owner publication
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`
+  showed the deployed `Published VText` reader rendering `Work product` as the
+  final row inside the Appendix A glossary table, followed by `---` and
+  `End of Proposal` outside the table. This proves the deployed renderer
+  safety net covers the current owner artifact. It does not by itself prove
+  future focus/edit/save/revise structural preservation under all table edits;
+  that remains a required next-axis acceptance item.
+
 ### P1 - Source Windows Still Lead With App Chrome Instead Of Evidence
 
 The current source viewer opens with an eyebrow, a huge duplicate title, and a
