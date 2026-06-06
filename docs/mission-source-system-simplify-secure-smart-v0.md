@@ -841,19 +841,21 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T16:55Z, deployed behavior commit
-`ef119260ecbeef3cb5f7b61287386f0f79fa7be9` moves reader artifact workflow
-state into the backend shared source contract and makes platform publication
-metadata use that contract for `reader_snapshot_status.state`. It followed docs
-checkpoint `c336890f`, passed focused backend and frontend tests, GitHub
-Actions CI, FlakeHub publish, Node B deploy, staging health identity, and the
-full deployed publication source-service Playwright file on `https://choir.news`.
-Earlier behavior commit `c7210d27` remains the frontend selector-set quote
-extraction proof, `eb14edde` remains the backend SourceSelector normalization
-proof, `efd47e1c` remains the frontend ReaderArtifact status/evidence
-separation proof, `b5c6a78f` remains the frontend SourceOpenPlan consolidation
-proof, and `41b2135f` remains the evidence/open-surface normalizer
-consolidation proof.
+last checkpoint: 2026-06-06T17:00Z, deployed behavior commit
+`213f0cbc465a63a4968819fa706880708bd57d7f` routes YouTube transcript
+acquisition through the shared source-fetch policy, including configured
+provider endpoints, InnerTube player requests, watch-page caption discovery, and
+caption-track downloads. It followed docs checkpoint `2e72f622`, passed focused
+local comprehensive runtime/sourcefetch tests, GitHub Actions CI, FlakeHub
+publish, Node B deploy, staging health identity, deployed content-substrate
+Playwright proof, and an authenticated deployed product API probe that rejected
+loopback URL import with `source URL host is not allowed`. Earlier behavior
+commit `ef119260` remains the backend ReaderArtifact status contract proof,
+`c7210d27` remains the frontend selector-set quote extraction proof,
+`eb14edde` remains the backend SourceSelector normalization proof, `efd47e1c`
+remains the frontend ReaderArtifact status/evidence separation proof,
+`b5c6a78f` remains the frontend SourceOpenPlan consolidation proof, and
+`41b2135f` remains the evidence/open-surface normalizer consolidation proof.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -920,16 +922,22 @@ frontend source helpers normalize selector aliases and read nested publication
 selector sets. Docs checkpoint `c336890f` records the backend reader artifact
 status contract gap before behavior commit `ef119260` adds shared backend
 reader artifact constants/alias normalization and uses them in platform
-publication enrichment.
+publication enrichment. Docs checkpoint `2e72f622` records the YouTube
+transcript source-fetch policy bypass before behavior commit `213f0cbc`
+routes that acquisition path through `sourcefetch`.
 Existing unrelated untracked docs are preserved.
 
 what shipped: latest behavior commit
-`ef119260ecbeef3cb5f7b61287386f0f79fa7be9` was pushed to `origin/main` and
-deployed to staging. It adds `internal/sourcecontract` reader artifact states
-and alias normalization for `reader_snapshot_ready`, `not_publication_safe`,
-`bounded_excerpt_only`, and `import_failed`, then makes platform publication
-enrichment emit canonical `reader_snapshot_status.state` values through that
-shared backend contract. Prior behavior
+`213f0cbc465a63a4968819fa706880708bd57d7f` was pushed to `origin/main` and
+deployed to staging. It replaces plain transcript `http.Client` instances with
+`sourcefetch.Client`, validates each transcript provider/player/watch/caption
+URL before request creation, and requires local transcript fixtures to opt into
+the sourcefetch private-network test override. Prior behavior
+`ef119260ecbeef3cb5f7b61287386f0f79fa7be9` adds `internal/sourcecontract`
+reader artifact states and alias normalization for `reader_snapshot_ready`,
+`not_publication_safe`, `bounded_excerpt_only`, and `import_failed`, then makes
+platform publication enrichment emit canonical `reader_snapshot_status.state`
+values through that shared backend contract. Prior behavior
 `c7210d27dcb311149d56b90911b664f8a1589394` adds frontend SourceSelector helpers
 that normalize selector aliases and flatten `selector_set.selectors`, then
 makes Source Viewer quote extraction inspect entity selectors, reader
@@ -1155,6 +1163,29 @@ what was proven:
   The three-test file covered source-service publication/export metadata,
   cleaned public content-item reader snapshots, and public URL-backed reader
   snapshots for guests.
+- YouTube transcript source-fetch policy local checks passed:
+  `nix develop -c go test ./internal/sourcefetch`,
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestFetchYouTubeTranscript|TestContentImportURLStoresConfiguredTranscriptItem|TestYouTubeJSON3CaptionURLForcesFormat' -count=1`,
+  and
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLDedupesYouTubeSourcePackets|TestFetchYouTubeTranscript|TestContentImportURLStoresConfiguredTranscriptItem|TestYouTubeJSON3CaptionURLForcesFormat|TestChooseYouTubeCaptionTrackPrefersHumanEnglish|TestParseYouTubeTranscriptProviderPayloadHandlesNestedTranscript' -count=1`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27068249237`
+  completed successfully for `213f0cbc`, including Go gates, runtime shards, and
+  Node B staging deploy job `79892865383`.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27068249238`
+  completed successfully for `213f0cbc`.
+- Staging health after that deploy reported `status: "ok"`,
+  `vmctl_status: "ok"`, and proxy/upstream deployed_commit
+  `213f0cbc465a63a4968819fa706880708bd57d7f`, deployed_at
+  `2026-06-06T16:55:13Z`.
+- Deployed content-substrate source acquisition smoke passed:
+  `GO_CHOIR_RUN_CONTENT_SUBSTRATE=1 PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/content-substrate-routing.spec.js`.
+- Authenticated deployed product API probe against `https://choir.news`
+  registered `playwright-state-1780765029487-7rov2y@example.com`, called
+  `POST /api/content/import-url` with
+  `http://127.0.0.1:1/source-policy-proof`, and received HTTP 502 with
+  `{"error":"source URL host is not allowed"}`.
 - Source evidence-state local checks passed:
   `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownLineage|TestVTextSourceGapRepair'`
   and `npm run build` in `frontend`.
@@ -4568,7 +4599,7 @@ bounded-edit proof.
 
 ### Problem 29: YouTube Transcript Acquisition Bypasses Source Fetch Policy
 
-Status: `documented_before_fix`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: the runtime URL import path now validates ordinary URL-backed source
 imports through `internal/sourcefetch`, but the YouTube transcript acquisition
@@ -4632,6 +4663,50 @@ acceptance for fix:
   the override;
 - preserve existing YouTube transcript success tests under the explicit test
   override.
+
+implementation and acceptance evidence:
+
+```text
+documentation checkpoint:
+  2e72f622 docs: record youtube transcript fetch policy gap
+
+behavior commit:
+  213f0cbc465a63a4968819fa706880708bd57d7f
+
+implementation:
+  internal/runtime/content.go now builds transcript provider, InnerTube player,
+  watch-page, and caption-track requests through newSourceFetchRequest, which
+  calls sourcefetch.ValidateURL before http.NewRequestWithContext.
+  The same paths now use sourcefetch.Client so redirects, proxy disabling, and
+  dial-time DNS/IP validation match ordinary URL import.
+
+local proof:
+  nix develop -c go test ./internal/sourcefetch
+  result: passed
+
+  nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestFetchYouTubeTranscript|TestContentImportURLStoresConfiguredTranscriptItem|TestYouTubeJSON3CaptionURLForcesFormat' -count=1
+  result: passed
+
+  nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLDedupesYouTubeSourcePackets|TestFetchYouTubeTranscript|TestContentImportURLStoresConfiguredTranscriptItem|TestYouTubeJSON3CaptionURLForcesFormat|TestChooseYouTubeCaptionTrackPrefersHumanEnglish|TestParseYouTubeTranscriptProviderPayloadHandlesNestedTranscript' -count=1
+  result: passed
+
+landing proof:
+  GitHub Actions CI run 27068249237: success
+  FlakeHub run 27068249238: success
+  Node B deploy job 79892865383: success
+  https://choir.news/health:
+    proxy/upstream deployed_commit 213f0cbc465a63a4968819fa706880708bd57d7f
+    deployed_at 2026-06-06T16:55:13Z
+
+deployed proof:
+  GO_CHOIR_RUN_CONTENT_SUBSTRATE=1 PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/content-substrate-routing.spec.js
+  result: 1 passed
+
+  authenticated product API probe:
+    POST /api/content/import-url
+    body: {"url":"http://127.0.0.1:1/source-policy-proof"}
+    result: HTTP 502 {"error":"source URL host is not allowed"}
+```
 
 remaining error field: this closes a concrete source-acquisition policy bypass
 for YouTube transcript imports. It does not complete robots/TOS/rate policy,
