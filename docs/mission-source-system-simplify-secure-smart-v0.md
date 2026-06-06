@@ -841,13 +841,13 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T12:50:44Z, deployed behavior commit `d404e6ec`
-preserves durable VText source metadata across user-authored saves, including
-the browser/user-save parent of an app-agent revise. CI, FlakeHub, Node B
-deploy, staging health identity, deployed product-path synthetic acceptance,
-and fresh owner-authenticated Comet proof all passed for the represented-source
-metadata class. The owner proof also confirmed a narrower remaining
-appendix-table materialization problem before any follow-up table fix.
+last checkpoint: 2026-06-06T15:10Z, deployed behavior commit
+`6a141811fd6c8ff97d4aa98f6a98bb30e59f8603` preserves text-like file import
+metadata across the first durable VText revision. CI, FlakeHub, Node B deploy,
+staging health identity, and deployed Playwright product-path acceptance passed
+for imported Markdown and imported plain text advancing from source artifact to
+canonical `.vtext` with Markdown export. Current owner Comet proof remains
+limited by the passkey renewal overlay documented in commit `d5df7db7`.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -896,11 +896,17 @@ appendix table from 49 to 50 rows.
 Existing unrelated untracked docs are preserved.
 
 what shipped: latest behavior commit
-`d404e6ecd4b16bfd4a907924c16846b82e3d26ff` was pushed to `origin/main` and
-deployed to staging. Earlier behavior commit
-`93d9f8197747c7526e11a730f6dab3932af82d75` remains the stale-draft recovery
-fix. Later docs-only checkpoints may not appear in Node B health because
-docs-only changes intentionally do not trigger deploy.
+`6a141811fd6c8ff97d4aa98f6a98bb30e59f8603` was pushed to `origin/main` and
+deployed to staging. It adds text-like file-open migration manifests, carries
+`import_manifest` and `migration_manifest` through durable user/appagent
+revisions, and makes canonical `.vtext` aliases win as a document's source
+path while preserving original file aliases. Earlier behavior commits
+`3f48a1ad34af7945e4b5e764a9064a6c1c7c9c44`,
+`d404e6ecd4b16bfd4a907924c16846b82e3d26ff`, and
+`93d9f8197747c7526e11a730f6dab3932af82d75` remain relevant rollback refs for
+source-fetch policy, source metadata carry-forward, and stale-draft recovery.
+Later docs-only checkpoints may not appear in Node B health because docs-only
+changes intentionally do not trigger deploy.
 
 what was proven:
 
@@ -1197,7 +1203,8 @@ unproven or partial claims:
   because it does not retry through frontend `fetchWithRenewal`.
 - CI, deploy identity, and focused staging acceptance proof have been produced
   for the source-open, evidence-state/source-gap, publication/export source
-  metadata, and bounded diagnosis-structure slices. The broader mission proofs
+  metadata, bounded diagnosis-structure, shared source-fetch policy, and
+  text-like import metadata continuity slices. The broader mission proofs
   requested by the goal remain incomplete.
 
 belief-state changes:
@@ -1255,9 +1262,12 @@ belief-state changes:
   source metadata carry-forward and table normalization path, not patch this
   document by hand.
 - User-authored VText revisions now inherit durable parent metadata, including
-  `source_entities`, before app-agent revise. This should repair the empty
-  represented-source list for future owner transitions, but it does not mutate
-  already-created v88/v89 and still requires a fresh owner legal-proposal proof.
+  `source_entities`, before app-agent revise. Text-like imported documents now
+  also carry `import_manifest` and `migration_manifest` from v0 into the first
+  durable revision, with deployed proof for Markdown and plain text. These
+  fixes do not mutate already-created owner legal-proposal revisions and still
+  require a fresh owner legal-proposal proof after the passkey session is
+  renewed.
 
 remaining error field:
 
@@ -1294,26 +1304,26 @@ remaining error field:
   the edited prose region. This is documented as Problem 10 before any
   follow-up structure fix.
 
-highest-impact remaining uncertainty: whether to introduce the shared source
-contract package first and route all callers through it, or to land the SSRF
-policy broker first and then converge source normalization. Current bias:
-documented safety risk makes the URL fetch policy the first behavior-changing
-fix, with shared contract types designed in the same pass so the fix does not
-create another isolated policy path.
+highest-impact remaining uncertainty: owner legal-proposal proof is blocked on
+renewing the Comet passkey session, but useful parallel work remains in the
+shared source contract/open-surface/export convergence slices. The largest
+product uncertainty after that remains the legal proposal's exact table
+survival and source metadata through a fresh owner edit/revise cycle.
 
-next executable probe: root-cause Problem 10 in the general VText
-structure-preservation path. Compare restore v90, user-save v91, and app-agent
-v92 materialization against the existing v70-v78 and v87-v89 evidence. Focus on
-why a browser-rendered table round trip gains an extra row even when the prose
-edit is above the appendix and source metadata is preserved.
+next executable probe: if owner Comet is renewed, run the legal proposal
+product-path proof for true `.vtext`, table survival, source opens, bounded
+edit, publication/export metadata, and rollback refs. If Comet remains
+passkey-blocked, continue the unblocked convergence work by reducing remaining
+source entity/open-surface/export contract duplication across runtime,
+platform, and frontend.
 
 suggested resume goal string: continue
 `docs/mission-source-system-simplify-secure-smart-v0.md` from behavior commit
-`d404e6ecd4b16bfd4a907924c16846b82e3d26ff` and this docs checkpoint by
-root-causing Problem 10, the remaining table row/signature drift after
-source-rich restore plus bounded owner edit/revise. Preserve the proven
-source-entity carry-forward/opening behavior while repairing the general table
-materialization path.
+`6a141811fd6c8ff97d4aa98f6a98bb30e59f8603` and this docs checkpoint. First
+attempt owner Comet renewal/proof if available; otherwise continue the next
+unblocked source-contract convergence slice while preserving the proven
+source-fetch policy, source-entity carry-forward, table normalization, and
+text-like import metadata behavior.
 
 evidence artifact refs:
 
@@ -1380,6 +1390,16 @@ evidence artifact refs:
   `27061255486`, staging health deployed commit
   `c7f439616105564810b82dabe4873b079cfd2343`, deployed Playwright/Node
   product-path proof for no-content revision structure summaries.
+- Shared source-fetch policy slice: docs commit `86260b6b`, behavior commit
+  `3f48a1ad34af7945e4b5e764a9064a6c1c7c9c44`, deploy-proof docs commit
+  `82d47280`, CI run `27065234996`, FlakeHub run `27065235002`, staging
+  health deployed commit `3f48a1ad34af7945e4b5e764a9064a6c1c7c9c44`, and
+  deployed public `/api/content/import-url` loopback rejection proof.
+- Text-like import metadata slice: docs commit `4f6f5830`, behavior commit
+  `6a141811fd6c8ff97d4aa98f6a98bb30e59f8603`, CI run `27065789129`,
+  FlakeHub run `27065789119`, staging health deployed commit
+  `6a141811fd6c8ff97d4aa98f6a98bb30e59f8603`, and deployed Playwright proof
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-markdown-lineage.spec.js -g 'Imported (Markdown|plain text)'`.
 
 rollback refs: current branch `main`, starting commit
 `1af0e8459b78fb31a18fee933a54f6f716a9b067`.
@@ -2449,6 +2469,43 @@ internal/runtime/vtext.go -> gateway/sandbox service pointers
 internal/runtime/runtime.go -> gateway/sandbox service pointers
 internal/store/vtext.go -> gateway/sandbox shared runtime dependency
 ```
+
+deployed evidence:
+
+```text
+behavior commit:
+  6a141811fd6c8ff97d4aa98f6a98bb30e59f8603
+
+GitHub Actions:
+  CI run 27065789129: completed success
+    Deploy to Staging (Node B): completed success at 2026-06-06T15:08:59Z
+  FlakeHub run 27065789119: completed success
+
+staging /health:
+  proxy commit/deployed_commit:
+    6a141811fd6c8ff97d4aa98f6a98bb30e59f8603
+  sandbox upstream commit/deployed_commit:
+    6a141811fd6c8ff97d4aa98f6a98bb30e59f8603
+  deployed_at:
+    2026-06-06T15:08:36Z
+```
+
+deployed product-path acceptance:
+
+```text
+Base URL: https://choir.news
+Auth path: temporary Playwright/WebAuthn staging user via public /auth routes
+Command:
+  CHOIR_AUTH_STATE=/tmp/choir-text-import-metadata.storage.json \
+  CHOIR_AUTH_META=/tmp/choir-text-import-metadata.meta.json \
+  PLAYWRIGHT_BASE_URL=https://choir.news \
+  npm --prefix frontend run e2e -- tests/vtext-markdown-lineage.spec.js -g 'Imported (Markdown|plain text)'
+Result:
+  2 passed
+```
+
+The staging proof used public browser-authenticated `/api/vtext/*` and
+`/api/content/*` product routes. It did not use internal or test-only routes.
 
 ### Problem 12: Owner URL Source Repairs Default To Web Lens
 
