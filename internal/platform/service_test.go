@@ -296,6 +296,53 @@ func TestBuildPublicationSourceMetadataPreservesSelectorSet(t *testing.T) {
 	}
 }
 
+func TestBuildPublicationSourceMetadataNormalizesLegacyEvidenceAliases(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "pending", raw: "pending", want: "candidate"},
+		{name: "error", raw: "error", want: "unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			metadata, _ := json.Marshal(map[string]any{
+				"source_entities": []map[string]any{{
+					"entity_id": "src-" + tc.name,
+					"kind":      "source_service_item",
+					"target": map[string]any{
+						"target_kind": "source_service_item",
+						"item_id":     "source-item-" + tc.name,
+					},
+					"selectors": []map[string]any{{
+						"selector_kind": "text_quote",
+						"text_quote":    "Legacy state source excerpt.",
+					}},
+					"evidence": map[string]any{
+						"state": tc.raw,
+					},
+				}},
+			})
+
+			got, err := buildPublicationSourceMetadata(PublishVTextRequest{Metadata: metadata})
+			if err != nil {
+				t.Fatalf("buildPublicationSourceMetadata: %v", err)
+			}
+			if len(got.Transclusions) != 1 {
+				t.Fatalf("transclusions = %d, want 1: %#v", len(got.Transclusions), got.Transclusions)
+			}
+			var selector map[string]any
+			if err := json.Unmarshal(got.Transclusions[0].SourceSelector, &selector); err != nil {
+				t.Fatalf("decode source selector: %v", err)
+			}
+			evidenceState := mapValue(selector["evidence_state"])
+			if evidenceState["state"] != tc.want {
+				t.Fatalf("selector evidence state = %#v, want %q from %s", evidenceState, tc.want, string(got.Transclusions[0].SourceSelector))
+			}
+		})
+	}
+}
+
 func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	artifactsRoot := filepath.Join(root, "artifacts")

@@ -241,6 +241,10 @@ func normalizePublicationEvidenceState(value string) string {
 		return "blocked_by_access"
 	case "not_needed", "no-source-needed", "no_source":
 		return "no_source_needed"
+	case "pending", "needs_source", "source_needed":
+		return "candidate"
+	case "error", "failed", "fetch_failed":
+		return "unavailable"
 	default:
 		return ""
 	}

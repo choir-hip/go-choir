@@ -591,7 +591,7 @@ func mergeVTextSourceEntity(existing, incoming vtextSourceEntity) vtextSourceEnt
 	if !existing.Display.DefaultCollapsed {
 		existing.Display.DefaultCollapsed = incoming.Display.DefaultCollapsed
 	}
-	if existing.Evidence.State == "" || existing.Evidence.State == "pending" {
+	if existing.Evidence.State == "" || existing.Evidence.State == "candidate" || existing.Evidence.State == "pending" {
 		existing.Evidence.State = incoming.Evidence.State
 	}
 	if existing.Evidence.ResearchState == "" {
@@ -664,10 +664,10 @@ func sourceEntityOpenSurface(kind string, ref vtextMediaSourceRef) string {
 
 func sourceEntityEvidenceState(ref vtextMediaSourceRef) string {
 	if ref.ContentID == "" {
-		return "pending"
+		return "candidate"
 	}
 	if strings.EqualFold(ref.TranscriptAvailability, "error") {
-		return "error"
+		return "unavailable"
 	}
 	return "available"
 }

@@ -2750,6 +2750,44 @@ remaining error field: this is a backend canonical-metadata convergence step.
 It does not yet create a single exported shared source schema package for all
 runtime/platform/frontend consumers.
 
+### 2026-06-06 Runtime Source Evidence State Canonicalization
+
+Status: `local_correctness_passed_pending_ci_deploy`.
+
+Implementation:
+
+- `internal/runtime/vtext_media_sources.go` now writes `candidate` for
+  unresolved media-derived source entities instead of `pending`.
+- Transcript/source acquisition errors now map to `unavailable` rather than an
+  out-of-contract `error` state.
+- Runtime source entity merge treats both legacy `pending` and current
+  `candidate` as replaceable unresolved states when better evidence arrives.
+- `internal/platform/source_metadata.go` accepts legacy `pending` and `error`
+  aliases when projecting publication source selector evidence, mapping them to
+  `candidate` and `unavailable` respectively.
+
+Local verification:
+
+```text
+nix develop -c go test -tags comprehensive ./internal/runtime -run TestMediaSourceRefToSourceEntityUsesTypedEvidenceStates -count=1
+result: passed
+
+nix develop -c go test ./internal/platform -run TestBuildPublicationSourceMetadataNormalizesLegacyEvidenceAliases -count=1
+result: passed
+```
+
+What this proves locally:
+
+- canonical runtime VText source entity metadata no longer emits `pending` or
+  `error` for the media-derived source states covered by the test;
+- an unresolved source can later merge into `available`;
+- publication/export projection preserves legacy `pending` and `error` source
+  metadata as typed evidence states instead of dropping the state.
+
+Residual risk: CI, deploy, and staging health identity are still pending for
+this behavior commit. This is still a convergence step, not a single shared
+source schema package across all language boundaries.
+
 ## Suggested `/goal`
 
 ```text

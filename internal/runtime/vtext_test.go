@@ -6545,6 +6545,41 @@ func TestMarkVTextMediaSourceRefsResearchState(t *testing.T) {
 	}
 }
 
+func TestMediaSourceRefToSourceEntityUsesTypedEvidenceStates(t *testing.T) {
+	candidate := mediaSourceRefToSourceEntity(vtextMediaSourceRef{
+		Kind:         "image",
+		CanonicalURL: "https://example.com/pending-source.png",
+	})
+	if candidate.Evidence.State != "candidate" {
+		t.Fatalf("candidate evidence state = %q, want candidate: %#v", candidate.Evidence.State, candidate)
+	}
+
+	unavailable := mediaSourceRefToSourceEntity(vtextMediaSourceRef{
+		Kind:                   "youtube",
+		CanonicalURL:           "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+		ContentID:              "content-youtube",
+		TranscriptAvailability: "error",
+	})
+	if unavailable.Evidence.State != "unavailable" {
+		t.Fatalf("unavailable evidence state = %q, want unavailable: %#v", unavailable.Evidence.State, unavailable)
+	}
+
+	existing := vtextSourceEntity{
+		EntityID: "src-candidate",
+		Kind:     "image",
+		Evidence: vtextSourceEntityEvidence{State: "candidate"},
+	}
+	incoming := vtextSourceEntity{
+		EntityID: "src-candidate",
+		Kind:     "image",
+		Evidence: vtextSourceEntityEvidence{State: "available"},
+	}
+	merged := mergeVTextSourceEntity(existing, incoming)
+	if merged.Evidence.State != "available" {
+		t.Fatalf("merged evidence state = %q, want available: %#v", merged.Evidence.State, merged)
+	}
+}
+
 // TestVTextAgentRevisionDocumentNotFound verifies that requesting an
 // agent revision for a non-existent document returns 404.
 func TestVTextAgentRevisionDocumentNotFound(t *testing.T) {
