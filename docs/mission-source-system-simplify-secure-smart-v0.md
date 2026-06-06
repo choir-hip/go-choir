@@ -841,15 +841,17 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T16:11Z, deployed behavior commit
-`efd47e1c9ae56caee0de38b25d2419febf111de6` separates frontend reader snapshot
-status from source evidence state. It followed docs checkpoint `2eefc0bd`,
-passed focused local frontend tests, frontend build, GitHub Actions CI,
+last checkpoint: 2026-06-06T16:22Z, deployed behavior commit
+`eb14eddeba7e93e671c3026eada9b18221549a53` moves backend source selector kind
+normalization into `internal/sourcecontract` and makes platform publication use
+that contract before storing/exporting source selectors. It followed docs
+checkpoint `acebbfba`, passed focused local Go tests, GitHub Actions CI,
 FlakeHub publish, Node B deploy, staging health identity, and deployed
-Playwright proof that `reader_snapshot_ready` renders as reader artifact
-status instead of `Evidence unclassified`. Earlier behavior commit `b5c6a78f`
-remains the frontend SourceOpenPlan consolidation proof, and `41b2135f`
-remains the evidence/open-surface normalizer consolidation proof.
+Playwright proof that source-service publication/export canonicalizes selector
+aliases while preserving selector sets. Earlier behavior commit `efd47e1c`
+remains the frontend ReaderArtifact status/evidence separation proof,
+`b5c6a78f` remains the frontend SourceOpenPlan consolidation proof, and
+`41b2135f` remains the evidence/open-surface normalizer consolidation proof.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -908,14 +910,21 @@ drift before behavior commit `b5c6a78f` moved generic open-plan resolution into
 the same frontend source-contract module. Docs checkpoint `2eefc0bd` records
 the reader snapshot/evidence-state drift before behavior commit `efd47e1c`
 separates reader artifact status labels from source evidence labels in Source
-Viewer.
+Viewer. Docs checkpoint `acebbfba` records raw source selector drift before
+behavior commit `eb14edde` adds shared backend selector kind normalization for
+publication/export.
 Existing unrelated untracked docs are preserved.
 
 what shipped: latest behavior commit
-`efd47e1c9ae56caee0de38b25d2419febf111de6` was pushed to `origin/main` and
-deployed to staging. It separates frontend reader snapshot workflow state from
-source evidence state so Source Viewer shows publication reader artifact
-readiness without rendering `Evidence unclassified`. Prior behavior
+`eb14eddeba7e93e671c3026eada9b18221549a53` was pushed to `origin/main` and
+deployed to staging. It adds a shared backend SourceSelector kind contract and
+uses it in platform publication/export so selector aliases become canonical
+`text_quote`, `table_range`, `page_range`, and `whole_resource` values while
+preserving selector payloads and selector sets. Prior behavior
+`efd47e1c9ae56caee0de38b25d2419febf111de6` separates frontend reader snapshot
+workflow state from source evidence state so Source Viewer shows publication
+reader artifact readiness without rendering `Evidence unclassified`. Prior
+behavior
 `b5c6a78fd2079869f9b7cb91cabc76ecb43feeec` consolidates frontend source
 open-plan resolution into the dedicated frontend source-contract module while
 preserving the existing renderer export for current callers. Prior behavior
@@ -1068,6 +1077,25 @@ what was proven:
   `2026-06-06T16:09:51Z`.
 - Deployed reader snapshot/evidence separation proof passed:
   `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize|published source readers prefer publication snapshots'`.
+- Source selector normalization local checks passed:
+  `nix develop -c go test ./internal/sourcecontract ./internal/platform -run 'TestNormalizeSelector|TestBuildPublicationSourceMetadataPreservesSelectorSet|TestBuildPublicationSourceMetadataDefaultsMissingSelectorKind'`
+  and
+  `nix develop -c go test ./internal/platform -run 'TestBuildPublicationSourceMetadata|TestPublishVTextCreatesImmutablePublicRecords'`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27067369110`
+  completed successfully for `eb14edde`, including Go gates and Node B staging
+  deploy. The frontend build job was skipped by impact detection because this
+  slice changed backend selector contract code and backend tests.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27067369106`
+  completed successfully.
+- Staging health after that deploy reported `status: "ok"`,
+  `vmctl_status: "ok"`, and proxy/upstream deployed_commit
+  `eb14eddeba7e93e671c3026eada9b18221549a53`, deployed_at
+  `2026-06-06T16:17:17Z`.
+- Deployed selector publication/export proof passed with tracked regression
+  test commit `322740c6` sending alias selector kinds:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g 'publishes source-service source entities as expandable transclusions and canonical exports'`.
 - Source evidence-state local checks passed:
   `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownLineage|TestVTextSourceGapRepair'`
   and `npm run build` in `frontend`.
@@ -1390,8 +1418,10 @@ remaining error field:
 - Source entity normalization remains duplicated; source opening has a local
   frontend plan but is not yet shared with runtime/platform/export contracts.
 - Publication selector-set projection and export source metadata are locally and
-  staging proven for source-service-style sources; broader selector-rich
-  guest/content-item/legal-proposal export proof remains incomplete.
+  staging proven for source-service-style sources, and backend publication now
+  canonicalizes selector kind aliases through `internal/sourcecontract`;
+  broader selector-rich guest/content-item/legal-proposal export proof remains
+  incomplete.
 - Published source windows depend on frontend reconstruction of publication
   records and reader snapshots.
 - Source evidence states are typed for Markdown lineage gaps, owner source
@@ -4144,7 +4174,7 @@ generated `ReaderArtifact` schemas and SourceSelector contract convergence.
 
 ### Problem 26: Publication Source Selectors Still Pass Through Raw Selector Kinds
 
-Status: `documented_before_fix`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: publication source metadata now preserves selector sets, but the
 selector contract is still implemented as raw map handling in
@@ -4199,6 +4229,68 @@ remaining error field: this is a backend SourceSelector convergence slice. It
 does not yet generate frontend TypeScript schemas or resolve selector text
 through Source Service, but it moves publication/export selector identity out
 of platform-local raw map logic.
+
+Fix evidence:
+
+```text
+documentation checkpoint: acebbfba docs: record raw source selector drift
+behavior commit: eb14eddeba7e93e671c3026eada9b18221549a53
+regression test commit: 322740c6 test: cover publication selector aliases
+```
+
+Implementation:
+
+- Added `internal/sourcecontract/selector.go` with canonical selector kind
+  constants and normalization for common alias spellings.
+- Added `internal/sourcecontract/selector_test.go` coverage for missing,
+  spaced, hyphenated, and custom selector kinds.
+- Updated `internal/platform/source_metadata.go` so publication source
+  metadata canonicalizes selectors before writing single-selector or
+  selector-set JSON.
+- Extended `internal/platform/service_test.go` to prove selector aliases
+  normalize while selector payloads, selector sets, evidence state, snapshot
+  text, and content hashes are preserved.
+- Updated the source-service publication Playwright fixture to submit alias
+  selector kinds and assert canonical selector output in publication resolve
+  and export metadata.
+
+Local verification:
+
+```text
+nix develop -c go test ./internal/sourcecontract ./internal/platform -run 'TestNormalizeSelector|TestBuildPublicationSourceMetadataPreservesSelectorSet|TestBuildPublicationSourceMetadataDefaultsMissingSelectorKind'
+result: passed
+
+nix develop -c go test ./internal/platform -run 'TestBuildPublicationSourceMetadata|TestPublishVTextCreatesImmutablePublicRecords'
+result: passed
+```
+
+CI/deploy evidence:
+
+```text
+CI run: https://github.com/choir-hip/go-choir/actions/runs/27067369110
+CI result: passed, including Go gates and Node B deploy
+FlakeHub run: https://github.com/choir-hip/go-choir/actions/runs/27067369106
+FlakeHub result: passed
+Node B deploy job: 79890543587 passed
+staging status: ok
+staging vmctl_status: ok
+staging proxy deployed_commit: eb14eddeba7e93e671c3026eada9b18221549a53
+staging sandbox deployed_commit: eb14eddeba7e93e671c3026eada9b18221549a53
+staging deployed_at: 2026-06-06T16:17:17Z
+```
+
+Deployed acceptance proof:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g 'publishes source-service source entities as expandable transclusions and canonical exports'
+result: 1 passed
+```
+
+Residual risk: backend publication/export now canonicalizes selector kind
+identity through `internal/sourcecontract`. The broader mission still needs a
+generated or otherwise single-source frontend/backend SourceSelector schema,
+Source Service selector resolution, and legal-proposal/content-item guest
+selector-rich proof.
 
 ## Suggested `/goal`
 
