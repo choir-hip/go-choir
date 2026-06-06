@@ -841,8 +841,8 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T11:38:00Z, first behavior loops landed and
-Comet owner-authenticated staging capability verified.
+last checkpoint: 2026-06-06T11:13:00Z, first behavior loops landed,
+deployed to staging, and Comet owner-authenticated staging capability verified.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -851,10 +851,14 @@ and selector-set publication projection. Test commit `61b89e93` added broader
 partial table structure-preservation coverage. Test commit `98fb4d2c` kept
 comprehensive source import fixtures policy-aware after the SSRF guard started
 blocking loopback fixture servers. The current frontend slice adds an explicit
-source-open plan and pins Source Viewer/Web Lens routing behavior.
+source-open plan and pins Source Viewer/Web Lens routing behavior. Behavior
+commit `c3295ae7` has been pushed and deployed to staging.
 Existing unrelated untracked docs are preserved.
 
-what shipped: local commits only; nothing pushed or deployed yet.
+what shipped: behavior commit
+`c3295ae74914ca304b4c88f7266e974882864c83` was pushed to `origin/main` and
+deployed to staging. A later docs-only checkpoint may not appear in Node B
+health because docs-only changes intentionally do not trigger deploy.
 
 what was proven:
 
@@ -887,6 +891,21 @@ what was proven:
   `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURL'`,
   `npm run build` in `frontend`, and
   `npm run e2e -- vtext-source-entities.spec.js -g "VText source URL opens Source Viewer unless browser is explicitly requested"`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27060657873`
+  completed successfully for `c3295ae7`, including runtime shards, non-runtime
+  tests, frontend build, vet/build, and the Node B staging deploy job.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27060657872`
+  completed successfully.
+- Staging health at `https://choir.news/health` reported proxy and upstream
+  commit/deployed_commit
+  `c3295ae74914ca304b4c88f7266e974882864c83` with deployed_at
+  `2026-06-06T11:11:00Z`.
+- Deployed acceptance passed:
+  `npm run e2e -- deployed-origin-auth-shell.spec.js -g "deployed frontend build identity matches proxy health identity"`.
+- Deployed source-open acceptance passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-source-entities.spec.js -g "VText source URL opens Source Viewer unless browser is explicitly requested"`.
 
 unproven or partial claims:
 
@@ -899,8 +918,9 @@ unproven or partial claims:
   off." A bounded product diagnosis/export endpoint or enabling
   `View > Developer > Allow JavaScript from Apple Events` would allow structured
   extraction.
-- No CI run, deploy identity, or staging acceptance proof has been produced yet
-  for this run's commits.
+- CI, deploy identity, and a focused staging source-open acceptance proof have
+  been produced for the first behavior slice. The broader mission proofs
+  requested by the goal remain incomplete.
 
 belief-state changes:
 
@@ -973,9 +993,12 @@ evidence artifact refs:
 - Comet structured extraction blocker:
   `osascript -e 'tell application "Comet" to execute active tab of front window javascript "document.body.innerText"'`
   failed because JavaScript from Apple Events is disabled.
-- Behavior/test commits: `068b6b5f`, `61b89e93`, `98fb4d2c`.
+- Behavior/test commits: `068b6b5f`, `61b89e93`, `98fb4d2c`, `c3295ae7`.
 - Frontend source-open slice: `sourceEntityOpenPlan`, `ContentViewer`
   live-import guard, and focused Playwright routing proof.
+- CI/deploy evidence: GitHub Actions run `27060657873`; FlakeHub publish run
+  `27060657872`; staging health deployed commit
+  `c3295ae74914ca304b4c88f7266e974882864c83`.
 
 rollback refs: current branch `main`, starting commit
 `1af0e8459b78fb31a18fee933a54f6f716a9b067`.
