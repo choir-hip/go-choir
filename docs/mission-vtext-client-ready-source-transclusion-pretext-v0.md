@@ -5702,3 +5702,41 @@ deployed evidence still needed:
 - Use Computer Use on Comet as primary staging proof that a public reader can
   expand a source note and open the cleaned reader source window without iframe
   dependence.
+
+## 2026-06-06 Problem: Source-Open Verifier Targets Hidden Pretext Owner
+
+status: documented_before_fix
+
+evidence:
+
+- After deploying `bb3e1ff8`, the staging publication E2E
+  `vtext-source-service-publication.spec.js -g "publishes public content-item
+  sources with cleaned reader snapshots"` timed out before the guest assertion.
+- The failing action was scoped as
+  `citation.locator('[data-vtext-open-source]').click()`.
+- Playwright resolved an `Open source` button, but reported it was not visible.
+- The accessibility snapshot from the same failure showed a visible journal
+  note containing:
+  - `ABA Formal Opinion 512 cleaned source`;
+  - the bounded source excerpt;
+  - a visible `Open source` button;
+  - a visible `Collapse source` action.
+
+root-cause belief:
+
+- The user-visible source action is present in the mounted Pretext journal note.
+- The old verifier still scoped the open-source action to the original
+  `[data-vtext-source-ref]` owner node. That owner is intentionally hidden or
+  remounted when `data-source-flow-mounted="true"` so Pretext can route prose
+  around the journal note.
+- This is a test/topology mismatch created by the journal-flow architecture,
+  not evidence that the product-visible button disappeared.
+
+intended repair:
+
+- Update the verifier to click the visible source action inside the rendered
+  source note or published reader, not the hidden owner clone.
+- Keep the production data attributes stable; do not add a test-only route or a
+  parallel source-open mechanism.
+- Re-run the deployed E2E to reach the authenticated and guest source-window
+  assertions.
