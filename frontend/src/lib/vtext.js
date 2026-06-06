@@ -424,15 +424,19 @@ export function openDocumentStream(docId, { onEvent, onError } = {}) {
   return source;
 }
 
-export async function publishVText(docId, { revisionId = '', slug = '' } = {}) {
+export async function publishVText(docId, { revisionId = '', slug = '', accessPolicy = null, exportPolicy = null } = {}) {
+  const payload = {
+    doc_id: docId,
+    revision_id: revisionId,
+    slug,
+  };
+  if (accessPolicy && typeof accessPolicy === 'object') payload.access_policy = accessPolicy;
+  if (exportPolicy && typeof exportPolicy === 'object') payload.export_policy = exportPolicy;
+
   const res = await fetchWithRenewal(platformPath('/vtext/publications'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      doc_id: docId,
-      revision_id: revisionId,
-      slug,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {

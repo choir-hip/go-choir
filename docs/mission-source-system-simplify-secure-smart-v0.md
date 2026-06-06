@@ -5007,7 +5007,7 @@ status until the deploy script exposes a post-success identity distinction.
 
 ### Problem 32: Owner Publish API Cannot Explicitly Set Publication Policy
 
-Status: `documented_before_fix`.
+Status: `fixed_locally_pending_deploy`.
 
 problem: the real legal proposal publication proof intentionally needed a
 guest-readable artifact, and the owner-authenticated publish endpoint created
@@ -5071,6 +5071,35 @@ planned proof:
   rejected;
 - add or update frontend tests/API helpers so intentional public guest proof can
   pass explicit public policy instead of relying on hidden defaults.
+
+fix and local proof:
+
+- `internal/proxy/platform_publish.go` now accepts optional `access_policy` and
+  `export_policy` JSON objects on `POST /api/platform/vtext/publications`,
+  rejects non-object policy values at the owner proxy boundary, and forwards
+  valid policy JSON to platformd.
+- `frontend/src/lib/vtext.js` `publishVText` now accepts `accessPolicy` and
+  `exportPolicy` options and includes them in the product publish request when
+  provided.
+- `frontend/tests/vtext-source-service-publication.spec.js` now sends explicit
+  public access/export policy for the source-service publication proof, so the
+  deliberate guest-readable acceptance fixture no longer relies on hidden
+  platform defaults.
+- Focused local checks passed:
+  `nix develop -c go test ./internal/proxy -run 'TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection|TestHandleVTextPublicationRejectsMalformedPolicy' -count=1`,
+  `nix develop -c go test ./internal/proxy ./internal/platform -run 'TestHandleVTextPublication|TestPublishVTextCreatesImmutablePublicRecords|TestBuildPublicationSourceMetadata|TestPublicationExport' -count=1`,
+  and `npm --prefix frontend run build`.
+- Attempted local Playwright proof
+  `npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities"`
+  failed before exercising the app because no local server was listening on
+  `http://localhost:4173/`. Deployed proof remains required after CI/Node B
+  deploy.
+
+remaining error field: this closes the API-contract gap for explicit policy
+forwarding, but it does not yet add owner-visible publish policy controls or
+change the default policy. Until those land, UI publish actions still default to
+the current platform policy unless the document revision metadata or caller
+explicitly supplies policy.
 
 ## Suggested `/goal`
 

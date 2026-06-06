@@ -93,7 +93,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-1","revision_id":"rev-2","slug":"my-note"}`))
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-1","revision_id":"rev-2","slug":"my-note","access_policy":{"visibility":"unlisted","route":"public"},"export_policy":{"copy_allowed":true,"download_allowed":false,"formats":["md"]}}`))
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	req.Header.Set("X-Authenticated-User", "attacker")
 	w := httptest.NewRecorder()
@@ -108,6 +108,12 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	}
 	if gotPlatformReq.SourceDocID != "doc-1" || gotPlatformReq.SourceRevisionID != "rev-2" {
 		t.Fatalf("platform source mismatch: %#v", gotPlatformReq)
+	}
+	if !strings.Contains(string(gotPlatformReq.AccessPolicy), `"visibility":"unlisted"`) || !strings.Contains(string(gotPlatformReq.AccessPolicy), `"route":"public"`) {
+		t.Fatalf("platform access policy not forwarded: %s", string(gotPlatformReq.AccessPolicy))
+	}
+	if !strings.Contains(string(gotPlatformReq.ExportPolicy), `"download_allowed":false`) || !strings.Contains(string(gotPlatformReq.ExportPolicy), `"formats":["md"]`) {
+		t.Fatalf("platform export policy not forwarded: %s", string(gotPlatformReq.ExportPolicy))
 	}
 	if gotPlatformReq.Content != "public projection content" {
 		t.Fatalf("platform content: got %q", gotPlatformReq.Content)
@@ -131,6 +137,45 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	}
 	if resp.PublicURL != "https://choir.news/pub/vtext/my-note-pub1" {
 		t.Fatalf("public url: got %q", resp.PublicURL)
+	}
+}
+
+func TestHandleVTextPublicationRejectsMalformedPolicy(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+
+	platformdCalled := false
+	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		platformdCalled = true
+	}))
+	defer platformd.Close()
+
+	h, err := NewHandler(&Config{
+		Port:              "0",
+		SandboxURL:        "http://127.0.0.1:1",
+		AuthPublicKeyPath: "/unused/in/test",
+		PlatformdURL:      platformd.URL,
+	}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-1","access_policy":["public"],"export_policy":{"download_allowed":true}}`))
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
+	w := httptest.NewRecorder()
+
+	h.HandleVTextPublication(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status: got %d body %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "access_policy must be a JSON object") {
+		t.Fatalf("error body = %s", w.Body.String())
+	}
+	if platformdCalled {
+		t.Fatalf("platformd was called for malformed policy")
 	}
 }
 

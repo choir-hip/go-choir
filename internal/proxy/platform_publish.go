@@ -18,9 +18,11 @@ import (
 const maxPublishedSourceSnapshotRunes = 20000
 
 type publishVTextRequest struct {
-	DocID      string `json:"doc_id"`
-	RevisionID string `json:"revision_id,omitempty"`
-	Slug       string `json:"slug,omitempty"`
+	DocID        string          `json:"doc_id"`
+	RevisionID   string          `json:"revision_id,omitempty"`
+	Slug         string          `json:"slug,omitempty"`
+	AccessPolicy json.RawMessage `json:"access_policy,omitempty"`
+	ExportPolicy json.RawMessage `json:"export_policy,omitempty"`
 }
 
 type sandboxVTextDocument struct {
@@ -88,6 +90,16 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 		h.lifecycle.record("platform_publish.total", "bad_request", time.Since(started))
 		return
 	}
+	if err := validateOptionalJSONObject(req.AccessPolicy, "access_policy"); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		h.lifecycle.record("platform_publish.total", "bad_request", time.Since(started))
+		return
+	}
+	if err := validateOptionalJSONObject(req.ExportPolicy, "export_policy"); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		h.lifecycle.record("platform_publish.total", "bad_request", time.Since(started))
+		return
+	}
 
 	desktopID := requestDesktopID(r)
 	resolveStarted := time.Now()
@@ -152,6 +164,8 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 		Citations:        rev.Citations,
 		Metadata:         enrichedMetadata,
 		Slug:             req.Slug,
+		AccessPolicy:     req.AccessPolicy,
+		ExportPolicy:     req.ExportPolicy,
 		RequestedBy:      authResult.UserID,
 	}
 	platformResp, status, err := h.postPlatformPublication(r, platformReq)
@@ -174,6 +188,20 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, status, platformResp)
 	h.lifecycle.record("platform_publish.platformd", lifecycleHTTPStatus(status), time.Since(started))
 	h.lifecycle.record("platform_publish.total", "published", time.Since(started))
+}
+
+func validateOptionalJSONObject(raw json.RawMessage, label string) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	if !json.Valid(raw) {
+		return fmt.Errorf("%s must be valid JSON", label)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return fmt.Errorf("%s must be a JSON object", label)
+	}
+	return nil
 }
 
 func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, userID string, raw json.RawMessage) (json.RawMessage, error) {

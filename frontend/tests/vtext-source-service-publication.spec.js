@@ -110,6 +110,15 @@ test('publishes source-service source entities as expandable transclusions and c
     body: JSON.stringify({
       doc_id: doc.doc_id,
       slug: `source-service-publication-${Date.now()}`,
+      access_policy: {
+        visibility: 'public',
+        route: 'public',
+      },
+      export_policy: {
+        copy_allowed: true,
+        download_allowed: true,
+        formats: ['txt', 'md', 'html'],
+      },
     }),
   });
   expect(publish.route_path).toMatch(/^\/pub\/vtext\//);
