@@ -2389,6 +2389,81 @@ proof after the table restore fix, shared source contract consolidation across
 runtime/platform/frontend/export, adversarial/cognitive review, dead-path
 pruning, and the hard mission review report plus PDF.
 
+### 2026-06-06 Fresh Owner Comet Legal Proposal Structure Proof
+
+Status: `owner_authenticated_comet_legal_proposal_structure_reconfirmed`.
+
+Staging/identity evidence:
+
+- Computer Use controlled `/Applications/Comet.app/` (`ai.perplexity.comet`) on
+  `https://choir.news/?draft_recovery=93d9f819`.
+- The Choir passkey renewal flow accepted `yusefnathanson@me.com`; the browser
+  presented a passkey sheet for `choir.news` and that owner email, and the
+  authenticated Choir desktop booted successfully.
+- The authenticated Comet desktop opened
+  `choir_private_legal_cloud_proposal.vtext` as the legal proposal window.
+
+Legal proposal evidence after deployed table-restore repair:
+
+- The legal proposal loaded as `v92`, `Primary draft Latest`.
+- The Sources panel reported `7 represented sources`.
+- Source Viewer durable artifact windows were open for source records including
+  `NixOS reproducible configuration and rollback` and
+  `Qdrant similarity search documentation`; these opened as Source Viewer
+  reader artifacts, not Web Lens/browser windows.
+- The Sources diagnosis panel reported:
+  - `80 revisions`;
+  - `80 runs`;
+  - current `v92`;
+  - `21 tables`;
+  - `70 source markers`;
+  - `24 bounded summaries`.
+- Current `v92` structure was `1` table, `50` rows, `7` sources, content hash
+  `sha256:f21ce9be51fb`, and appendix table
+  `L269-L318`, `2 c/50 r`, `sha256:a86643578fed`.
+- `v91` structure was also `1` table, `50` rows, `7` sources, content hash
+  `sha256:f241be40dcf5`, and appendix table
+  `L269-L318`, `2 c/50 r`, `sha256:01178718c7ae`.
+- The historical comparison window still exposed the original regression:
+  `v70` had `1` table and `50` rows; `v71`, `v75`, `v76`, `v77`, and `v78`
+  had `0` tables; later recovered revisions such as `v87` had `1` table and
+  `49` rows; the repaired latest legal proposal now sits at a canonical
+  `50`-row table head.
+
+What this proves:
+
+- Fresh Comet owner authentication for `yusefnathanson@me.com` works on staging.
+- The actual owner legal proposal is currently a true VText document with
+  source-bearing metadata visible through the product UI.
+- The deployed restore/table normalization work left the legal proposal current
+  head at `v92` with represented sources and a stable 50-row appendix table
+  across the latest two revisions.
+- The source open default for durable legal proposal source artifacts remains
+  Source Viewer.
+
+Proof limitation discovered:
+
+- A prompt entered through the global command prompt saying
+  `In the open VText document choir_private_legal_cloud_proposal.vtext...`
+  was routed as a new VText request instead of a scoped edit to the already-open
+  legal proposal window. It created a separate transient/durable VText window
+  titled from the prompt and produced a short first-draft proposal. This is not
+  accepted as legal-proposal edit proof.
+- The limitation is a product-path routing ambiguity, not evidence of a table
+  regression. It should be fixed or avoided before using the global prompt bar
+  for owner legal-proposal acceptance. The safer next proof path is to use the
+  legal proposal's own window controls or an authenticated product endpoint
+  that explicitly addresses the legal proposal document id.
+
+Residual risk: this closes the fresh Comet owner-authentication and current
+legal-proposal structure observation gap, and it gives concrete post-repair
+table/source evidence for `v91`/`v92`. It does not yet satisfy the full
+post-repair owner bounded-edit acceptance because the attempted global-prompt
+edit targeted a new VText artifact. Remaining mission work includes a properly
+scoped owner legal-proposal bounded edit/revise proof, shared source contract
+consolidation across runtime/platform/frontend/export, adversarial/cognitive
+review, dead-path pruning, and the hard mission review report plus PDF.
+
 ## Suggested `/goal`
 
 ```text
