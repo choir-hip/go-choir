@@ -68,6 +68,11 @@ new evidence:
   `/var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_kjek9s/Screenshot 2026-06-05 at 23.59.22.png`
   shows the article-side Pretext note has enough vertical space for more
   source content, but the transclusion body is still a one-sentence stub.
+- Owner screenshot
+  `/var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_tX1uyi/Screenshot 2026-06-06 at 00.03.37.png`
+  shows the Appendix glossary table rendering correctly until the final
+  `Work product` entry, which falls out of table formatting and renders as
+  prose beginning with a pipe character.
 - `frontend/src/lib/ContentViewer.svelte` renders the opened source as a
   flex-column utility page: hero header, `Open source` header link, reader
   article, then card-like `details.provenance` blocks.
@@ -85,6 +90,9 @@ remaining error field:
 - Article-side transclusion notes should show enough source substance for the
   common no-window path: users often click source points to inspect support
   inline without opening a separate source window and disrupting reading flow.
+- Appendix glossary/table formatting consistency still has a narrower
+  regression: a final row can fall out of the rendered table even after the
+  earlier full `TermDefinition` collapse was repaired.
 - Source window lifecycle should not accumulate duplicate windows for the same
   source during owner/client review.
 - Source acquisition still needs a first-class cleaned Markdown reader pipeline
@@ -110,12 +118,14 @@ next executable probe:
   `ContentViewer` payload shape. Measure collision rectangles for reader text,
   `details` summaries, and expanded evidence rows. Also measure article-side
   transclusion note height and content density so the note uses available
-  space without becoming a full source window.
+  space without becoming a full source window. Reproduce the appendix glossary
+  final-row fall-out and inspect whether the canonical content lost the row's
+  trailing table delimiter or whether render normalization is too strict.
 
 suggested resume goal string:
 
 ```text
-/goal Run docs/mission-vtext-source-viewer-reader-mode-hardening-v0.md as a Codex-operated MissionGradient mission. Start from deployed commit eef70b6a. Preserve canonical VText, source entities, citation transclusions, source publication policy, Markdown export, and staging proof. First reproduce and fix the generic source viewer text-on-text regression across multiple source windows with geometry/visual proof. Then make article-side transclusion notes show more useful source substance for readers who inspect citations inline without opening separate source windows. Run cognitive transforms and gstack review/design-review for adversarial perspective before and after the first working fix, then simplify source viewer/source flow code paths and remove weak/dead abstractions while keeping the legal-cloud proposal source graph and opened source windows working for owner and guest readers.
+/goal Run docs/mission-vtext-source-viewer-reader-mode-hardening-v0.md as a Codex-operated MissionGradient mission. Start from deployed commit eef70b6a. Preserve canonical VText, source entities, citation transclusions, source publication policy, Markdown export, and staging proof. First reproduce and fix the generic source viewer text-on-text regression across multiple source windows with geometry/visual proof. Then make article-side transclusion notes show more useful source substance for readers who inspect citations inline without opening separate source windows. Also reproduce the appendix glossary final-row table-formatting loss and repair formatting consistency through general VText/Markdown structure preservation, not a glossary hardcode. Run cognitive transforms and gstack review/design-review for adversarial perspective before and after the first working fix, then simplify source viewer/source flow code paths and remove weak/dead abstractions while keeping the legal-cloud proposal source graph and opened source windows working for owner and guest readers.
 ```
 
 rollback refs:
@@ -183,6 +193,31 @@ Direction: inline transclusion notes should include a richer bounded excerpt:
 enough source substance to evaluate the claim in context, while preserving the
 opened source window as the place for the full reader artifact, provenance, and
 source URL.
+
+### P1 - Appendix Glossary Final Row Falls Out Of Table Formatting
+
+The legal-cloud proposal still has a table consistency problem even though the
+earlier whole-table `TermDefinition` collapse was repaired. In the appendix
+glossary, the final `Work product` entry renders as prose with visible pipe
+characters instead of remaining in the table.
+
+Likely mechanism:
+
+- `frontend/src/lib/vtext-markdown-renderer.ts` only treats a line as a table
+  row when the trimmed line starts with `|` and ends with `|`.
+- The screenshot shows the row beginning with `| Work product |`, but it does
+  not visibly keep the final trailing delimiter. If the canonical row is
+  missing the final `|`, the renderer flushes the table and renders the line as
+  a paragraph.
+- Existing tests cover full table preservation and collapse recovery, but do
+  not appear to cover a malformed or delimiter-damaged final row after a long
+  table.
+
+Direction: repair this as a general formatting-consistency problem. The system
+should normalize table-shaped rows adjacent to known tables, preserve trailing
+cell delimiters through edit/save/revise/export, and prefer structured VText
+table blocks over renderer-only recovery. Do not special-case `Work product`,
+Appendix A, or glossary rows.
 
 ### P1 - Source Windows Still Lead With App Chrome Instead Of Evidence
 
@@ -307,6 +342,9 @@ can actually read them. Add geometry/pixel checks for:
 - article-side source notes use available side-note/stacked-note space for
   more than a one-sentence stub when the source snapshot has more relevant
   text.
+- long tables preserve every row through render/edit/save/revise/export,
+  including a final row whose Markdown delimiter shape is damaged or
+  normalized late.
 
 ### P2 - The Next Run Needs Explicit Adversarial Review Loops
 
@@ -360,6 +398,8 @@ Route-changing insights:
 - The inline source note target is not "show a source card"; it is "give the
   reader enough bounded evidence to decide whether to keep reading or open the
   full source."
+- Formatting consistency is not "make this one row blue." It is "preserve
+  document structure until the last row, last cell, and export projection."
 - The verifier must include readability geometry and source-note content
   density, not only text presence.
 - Source-window dedupe is part of client-readiness because review sessions can
@@ -371,13 +411,16 @@ Changed plan:
 
 - implementation: fix `ContentViewer` source-reader layout and metadata
   hierarchy, enrich article-side transclusion notes from bounded source
-  snapshots, then decide whether to extract a dedicated `SourceReader`
+  snapshots, repair table-row consistency through shared structure
+  preservation, then decide whether to extract a dedicated `SourceReader`
   component rather than adding more modes to the generic content app.
 - verifier/evidence: use Comet staging proof for the actual legal-cloud
   proposal when possible, and add Playwright geometry checks for collision-free
-  source windows plus inline-note density checks.
+  source windows plus inline-note density checks and table-row preservation
+  checks.
 - scope: include source-window lifecycle, inline transclusion substance, and
-  multiple source artifacts, not just one ABA source screenshot.
+  multiple source artifacts, plus appendix table consistency, not just one ABA
+  source screenshot.
 - stopping condition: the owner and guest legal-cloud publication can open
   source windows that read cleanly, expose permitted source snapshots, avoid
   duplicate-window clutter, and preserve article-side Pretext journal flow with
@@ -387,8 +430,9 @@ Next high-information action:
 
 - Reproduce the source-window overlap with at least two source payloads and
   reproduce the one-sentence inline-note underuse with a source snapshot that
-  contains more relevant text. Add failing geometry/content assertions before
-  changing layout code.
+  contains more relevant text. Reproduce the appendix glossary final-row
+  fall-out from canonical content or a faithful fixture. Add failing
+  geometry/content/table assertions before changing layout code.
 
 ## Real Artifact
 
@@ -403,6 +447,9 @@ future research.
 - VText is canonical. Markdown is import/export projection after v0 -> v1.
 - Citation markers are transclusion points backed by `source_entities`
   metadata.
+- Tables are VText document structure, not decorative Markdown. Import/export
+  may use Markdown table syntax, but render/edit/save/revise should preserve
+  table rows and cells consistently.
 - Hidden metadata must not render as prose.
 - Source text is untrusted evidence, never prompt instructions.
 - Publication exposes only permitted source snapshots and explains omissions.
@@ -427,16 +474,19 @@ projection layer.
 2. Inline transclusion usefulness:
    one-sentence stub -> bounded multi-sentence excerpt -> selector-aware
    quote/context -> richer note tuned to available Pretext space.
-3. Source acquisition:
+3. Table/format structure consistency:
+   markdown-string table -> normalized table-shaped rows -> structured VText
+   table blocks -> consistent render/edit/save/revise/export projection.
+4. Source acquisition:
    manual artifact -> Web Lens content artifact -> cleaned Markdown pipeline
    -> policy-aware Source Service itemization.
-4. Source UI density:
+5. Source UI density:
    card stack -> quiet journal note -> content-first source window -> academic
    reader with compact footnote/provenance affordances.
-5. Lifecycle:
+6. Lifecycle:
    unlimited duplicate windows -> source-identity reuse -> explicit comparison
    mode for duplicate opens.
-6. Verification:
+7. Verification:
    text assertions -> geometry assertions -> Comet owner proof -> owner and
    guest publication proof -> export/source policy proof.
 
@@ -449,6 +499,9 @@ projection layer.
 - Article-side Pretext proof that source notes render more than a one-sentence
   stub when the source snapshot has relevant additional text and the note has
   available space.
+- Appendix glossary proof that the final `Work product` row remains in the
+  table on staging, and a generic regression fixture proving final-row table
+  preservation without relying on glossary-specific terms.
 - Deployed `choir.news` proof on the owner legal-cloud publication using
   authenticated Comet where possible.
 - Guest/public proof that source windows open publication-carried source
@@ -465,6 +518,9 @@ projection layer.
 - Do not patch only ABA Formal Opinion 512 or any other named source.
 - Do not force users to open a new source window just to get useful evidence
   for a normal inline citation click.
+- Do not patch `Work product`, Appendix A, or glossary rows by name.
+- Do not treat renderer leniency as a substitute for preserving canonical
+  table structure through VText revisions.
 - Do not replace source windows with iframe-only previews.
 - Do not add another source-card layer to solve a card-layer problem.
 - Do not use rendered DOM as export source.
@@ -479,6 +535,9 @@ projection layer.
 - Decide whether source-note excerpt selection belongs in source rendering,
   source materialization, or a shared selector/excerpt helper. Avoid another
   one-off truncation path.
+- Decide whether Markdown table normalization belongs at import, revision
+  stabilization, renderer parse, export, or a shared VText structure layer.
+  Prefer one structural owner over scattered table heuristics.
 - Remove or fence old source-ref popover/expanded-card paths that are no
   longer used for text sources.
 - Reuse one Markdown reader renderer between content source windows and Web
@@ -497,6 +556,8 @@ Mission is complete only when:
   covered by geometry or screenshot proof across multiple source windows;
 - article-side transclusion notes show useful bounded source substance for
   readers who do not open source windows, without becoming full source dumps;
+- the appendix glossary final row remains inside the table on staging, and the
+  regression fix is generic to table-shaped document structure;
 - the owner legal-cloud publication opens multiple source windows, including a
   non-ABA source, as readable source windows on staging;
 - the same publication exposes permitted sources to guest/public readers;
