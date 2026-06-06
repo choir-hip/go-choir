@@ -5616,3 +5616,37 @@ residual risk:
   wrapping, but it is not the full source UX. Remaining work includes better
   source acquisition, cleaner source-window fallbacks for arbitrary web
   sources, operator-only diagnostics, and richer claim-level source review.
+
+## 2026-06-06 Problem: Guest Source Windows Can Drop Published Snapshots
+
+status: documented_before_code
+
+problem:
+
+- Published VText source windows must let every authorized reader inspect the
+  sources permitted by publication policy.
+- `BrowserApp.svelte` already initializes URL-backed source windows with
+  `sourceEntitySnapshotText(sourceEntity)`, which includes published reader
+  snapshots and transclusion excerpts.
+- But when a reader is unauthenticated, `enterGuestMode()` switches to
+  `guest_iframe`, sets `showingSnapshot = false`, and calls
+  `clearBackendSnapshots()`. That drops the public source snapshot and sends
+  the reader toward iframe preview instead.
+
+why this matters:
+
+- The user explicitly called out iframe/Web Lens fragility and asked for
+  cleaned Markdown reader content as the primary source presentation. For
+  published VText, a public reader should not need authenticated Web Lens or a
+  successful iframe load to see the publication-carried source evidence.
+- This is generic source-window behavior, not specific to the legal-cloud
+  proposal or any ABA source.
+
+intended repair:
+
+- Preserve source-entity snapshots in guest mode.
+- Keep iframe/page preview available as a fallback/action, but make the
+  publication-carried source snapshot the default when present.
+- Add a regression proving an unauthenticated/public BrowserApp source window
+  shows `Source reader snapshot`, renders Markdown reader text, and does not
+  create an iframe when a source snapshot exists.
