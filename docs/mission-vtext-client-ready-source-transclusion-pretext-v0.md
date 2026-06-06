@@ -6659,3 +6659,42 @@ belief-state update:
 - Remaining source-workflow simplification should focus on extracting the
   typed source review/import write functions out of `VTextEditor.svelte` without
   reintroducing a parallel repair path.
+
+## 2026-06-06 Problem: Source Artifact Attach UI Fails With Method Not Allowed
+
+status: documented_pending_root_cause
+
+new evidence:
+
+- While extracting typed source review/import helpers out of
+  `VTextEditor.svelte`, I added a focused Playwright product-path test for the
+  existing source artifact `Attach text` button.
+- The test created a VText document with an existing source entity, opened the
+  owner source panel, entered readable source text, and clicked `Attach text`.
+- The panel showed `method not allowed` and the save status reported
+  `Source attachment failed`.
+- The failure happened before any reader source window could be opened.
+
+current observations:
+
+- The frontend path is intended to create a content item through
+  `POST /api/content/items`, then attach it through
+  `POST /api/vtext/documents/{id}/source-attachments`.
+- Runtime routing code and backend tests show that both routes exist for POST.
+- Existing backend source-attachment tests also prove that attaching a stored
+  content item to an existing source entity can preserve document content and
+  update the source entity target to a content item.
+
+risk:
+
+- The source artifact panel has been treated as a functional owner path, but
+  this UI proof shows at least the `Attach text` branch currently fails.
+- Without this path, owner-entered readable source artifacts cannot reliably
+  replace noisy web/iframe fallback for arbitrary source gaps.
+
+next root-cause probe:
+
+- Identify whether the 405 comes from the content-item create leg, the
+  source-attachment leg, or desktop/proxy routing around those requests.
+- Fix the real routing/payload problem and keep the new UI test as regression
+  coverage.
