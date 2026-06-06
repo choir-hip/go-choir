@@ -729,6 +729,23 @@ local verification:
 single-implementation check:
   rg confirmed the moved lineage helpers now resolve only in
   internal/runtime/vtext_lineage.go.
+
+commit:
+  3d0f1f93582e9c588a7249140b128f6ad809b1a8
+
+CI/deploy:
+  GitHub Actions CI 27075142458 passed.
+  FlakeHub publish 27075142462 passed.
+  Node B deploy job 79911195730 passed.
+  /health reported proxy and sandbox deployed_commit
+  3d0f1f93582e9c588a7249140b128f6ad809b1a8, deployed_at
+  2026-06-06T22:06:01Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-markdown-lineage.spec.js -g
+  'Markdown lineage import resolves known citation markers|Imported Markdown advances|Imported plain text advances'
+  result: 3 passed.
 ```
 
 ### Performance Checks
