@@ -748,6 +748,49 @@ staging proof:
   result: 3 passed.
 ```
 
+Next backend extraction target: VText source repair and source artifact
+attachment handlers. The core source-entity type and normalization helpers
+already live in `internal/runtime/vtext_media_sources.go`; after the lineage
+extraction, `internal/runtime/vtext.go` still owns the HTTP handlers that
+repair citation gaps and attach readable content items to existing source
+entities, plus the helper that applies source artifact attachments. No new
+behavior problem is confirmed; this is a same-package handler extraction to
+keep source-repair route behavior together while preserving the existing
+source entity contract and `internal/sourcecontract` normalization path.
+
+Acceptance for this extraction:
+
+- source repair and source artifact attachment handlers move out of
+  `internal/runtime/vtext.go`;
+- source entity types and normalization remain in
+  `internal/runtime/vtext_media_sources.go`;
+- sourcecontract remains the only source/evidence/open-surface normalizer;
+- revision write order, emitted VText document events, and HTTP responses stay
+  unchanged;
+- focused source repair/import tests and runtime shard tests pass;
+- staging proof exercises source-gap repair through the deployed product path.
+
+Result: `internal/runtime/vtext_source_repairs.go` now owns the source-gap
+repair route, source artifact attachment route, and attachment application
+helper. `internal/runtime/vtext.go` keeps the surrounding compare/merge and
+restore handlers; source entity types and normalization stay in
+`internal/runtime/vtext_media_sources.go`.
+
+```text
+internal/runtime/vtext.go                   4065 lines
+internal/runtime/vtext_source_repairs.go     336 lines
+internal/runtime/vtext_lineage.go            504 lines
+internal/runtime/vtext_import.go             810 lines
+
+local verification:
+  nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVText(ImportMarkdownLineage|SourceGap|SourceArtifact|ImportedMarkdown|PlainTextImport)'
+  result: passed.
+
+  nix develop -c scripts/go-test-runtime-shards
+  result: passed.
+```
+
 ### Performance Checks
 
 - Local focused backend check:
