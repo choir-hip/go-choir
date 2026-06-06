@@ -72,6 +72,49 @@ func TestContentImportURLCreatesProvenanceRecord(t *testing.T) {
 	}
 }
 
+func TestContentImportURLCleansReaderChrome(t *testing.T) {
+	_, handler := testAPISetup(t)
+	article := strings.Repeat("This source paragraph is durable article evidence about private cloud infrastructure, jurisdiction, hosting controls, and operational reliability. ", 8)
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html><html><head><title>Noisy Reader Source</title></head><body>
+			<div id="cookie-banner"><h2>This website uses cookies</h2><button>Allow all cookies</button><button>Allow necessary cookies</button></div>
+			<header><nav>Community Jobs About us Login Console</nav></header>
+			<div class="location-selector"><p>Choose your location settings</p><label>Language</label><select><option>English</option></select><button>Save settings</button></div>
+			<main>
+				<h1>Noisy Reader Source</h1>
+				<form role="search"><label>Search for:</label><input value="query"></form>
+				<article><p>` + article + `</p></article>
+			</main>
+			<footer>Privacy policy and footer links</footer>
+		</body></html>`))
+	}))
+	defer source.Close()
+
+	body := `{"url":` + strconvQuote(source.URL) + `,"query":"noisy reader source"}`
+	req := authenticatedRequest(http.MethodPost, "/api/content/import-url", body, "user-content")
+	w := httptest.NewRecorder()
+	handler.HandleContentImportURL(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	var item struct {
+		TextContent string `json:"text_content"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	for _, noisy := range []string{"This website uses cookies", "Allow all cookies", "Choose your location settings", "Community Jobs", "Search for:", "Privacy policy and footer"} {
+		if strings.Contains(item.TextContent, noisy) {
+			t.Fatalf("text_content leaked reader chrome %q: %q", noisy, item.TextContent)
+		}
+	}
+	if !strings.Contains(item.TextContent, "durable article evidence about private cloud infrastructure") {
+		t.Fatalf("text_content missing article evidence: %q", item.TextContent)
+	}
+}
+
 func TestContentImportURLUsesSearXNGAlternateWhenPrimaryLowContent(t *testing.T) {
 	_, handler := testAPISetup(t)
 	alternate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

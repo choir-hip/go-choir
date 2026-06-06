@@ -5896,3 +5896,41 @@ intended repair:
   low-quality; do not mark a snapshot as ready just because raw text exists.
 - Add regression coverage with generic noisy HTML fixtures, not legal-cloud or
   source-ID special cases.
+
+## 2026-06-06 Local Repair: Structured Reader Cleanup
+
+status: local_verified_pending_deploy
+
+change:
+
+- `extractReadableHTML` now parses HTML with `golang.org/x/net/html` instead
+  of relying only on global tag stripping.
+- The extractor prefers `article`/`main` candidates, falls back to `body`, and
+  skips common reader chrome nodes such as scripts, nav/header/footer/aside,
+  forms, buttons, selects, dialogs, and nodes with cookie/consent/banner/menu
+  style attributes.
+- A conservative line filter removes common consent/location/search boilerplate
+  after text extraction.
+- Attribute matching was kept token-based for broad words such as `nav` and
+  `search` so legitimate content like `innovation` or `research` is not
+  removed by substring accident.
+- The existing regex extractor remains only as a parse-failure fallback.
+
+tests:
+
+- Added `TestContentImportURLCleansReaderChrome`, a generic noisy HTML fixture
+  with cookie banner, nav/header, location selector, search form, article, and
+  footer.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestContentImportURL(CreatesProvenanceRecord|CleansReaderChrome|UsesSearXNGAlternateWhenPrimaryLowContent)$'`
+  -> passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestContent'` -> passed.
+- `nix develop -c go test ./internal/runtime -run '^$'` -> passed compile-only.
+
+deployment proof still needed:
+
+- Push this generic cleanup, wait for CI/Node B deploy, verify deployed commit
+  identity, then create or refresh a source-backed publication that imports a
+  noisy HTML source and prove the published source window opens the cleaned
+  reader text rather than cookie/nav scaffolding.
