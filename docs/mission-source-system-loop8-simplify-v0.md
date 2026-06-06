@@ -496,6 +496,22 @@ local focused Playwright:
   after `nix develop -c ./start-services.sh` and a persistent Vite session,
   `/auth/register/begin` returned 500 and the auth service was no longer
   listening on 127.0.0.1:8081. Staging proof remains required after deploy.
+
+commit:
+  8633cc96f502a9354bd9d1b42673eb13e7b5537b
+
+CI/deploy:
+  GitHub Actions CI 27074176202 passed.
+  FlakeHub publish 27074176189 passed.
+  Node B deploy job 79908640783 passed.
+  /health reported proxy and sandbox deployed_commit
+  8633cc96f502a9354bd9d1b42673eb13e7b5537b, deployed_at
+  2026-06-06T21:20:42Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-authoring-history.spec.js
+  result: 2 passed.
 ```
 
 ### Performance Checks
