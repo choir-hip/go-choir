@@ -26,8 +26,47 @@ func TestNormalizeTableShapedRowsRepairsFinalRowMissingDelimiter(t *testing.T) {
 	}
 }
 
+func TestNormalizeTableShapedRowsRepairsBlankSeparatedFinalRow(t *testing.T) {
+	content := strings.Join([]string{
+		"# Proposal",
+		"",
+		"| Term | Definition |",
+		"| --- | --- |",
+		"| Vector search | Similarity lookup. |",
+		"",
+		"| Work product | Durable output.",
+		"",
+		"---",
+	}, "\n")
+
+	got, changed := NormalizeTableShapedRows(content)
+	if !changed {
+		t.Fatalf("NormalizeTableShapedRows changed = false")
+	}
+	if !strings.Contains(got, "| Vector search | Similarity lookup. |\n| Work product | Durable output. |") {
+		t.Fatalf("normalized content did not rejoin blank-separated row:\n%s", got)
+	}
+}
+
 func TestNormalizeTableShapedRowsIgnoresOrdinaryPipedParagraph(t *testing.T) {
 	content := "This is not a table | and should not gain a final delimiter."
+	got, changed := NormalizeTableShapedRows(content)
+	if changed {
+		t.Fatalf("NormalizeTableShapedRows unexpectedly changed content:\n%s", got)
+	}
+	if got != content {
+		t.Fatalf("content changed:\ngot  %q\nwant %q", got, content)
+	}
+}
+
+func TestNormalizeTableShapedRowsIgnoresDifferentWidthRowAfterTable(t *testing.T) {
+	content := strings.Join([]string{
+		"| Term | Definition |",
+		"| --- | --- |",
+		"| Vector search | Similarity lookup. |",
+		"",
+		"| Not a continuation | has | too many cells",
+	}, "\n")
 	got, changed := NormalizeTableShapedRows(content)
 	if changed {
 		t.Fatalf("NormalizeTableShapedRows unexpectedly changed content:\n%s", got)

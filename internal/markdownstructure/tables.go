@@ -3,41 +3,83 @@ package markdownstructure
 import "strings"
 
 // NormalizeTableShapedRows repairs table rows that keep the leading pipe and
-// cell separators but lost the final delimiter while inside a Markdown table.
+// cell separators but lost the final delimiter while inside or immediately
+// after a Markdown table. It also removes small blank gaps before recovered
+// continuation rows so the exported Markdown remains a valid table block.
 func NormalizeTableShapedRows(content string) (string, bool) {
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
 	changed := false
+	normalized := make([]string, 0, len(lines))
 	inTable := false
 	tableHasSeparator := false
-	for i, line := range lines {
+	tableColumnCount := 0
+	pendingBlanks := 0
+
+	flushPendingBlanks := func() {
+		for ; pendingBlanks > 0; pendingBlanks-- {
+			normalized = append(normalized, "")
+		}
+	}
+
+	for _, line := range lines {
 		strictCells := TableRowCells(line)
 		if strictCells != nil {
+			if pendingBlanks > 0 {
+				if inTable && tableHasSeparator && len(strictCells) == tableColumnCount {
+					pendingBlanks = 0
+					changed = true
+				} else {
+					flushPendingBlanks()
+					inTable = false
+					tableHasSeparator = false
+					tableColumnCount = 0
+				}
+			}
 			inTable = true
+			tableColumnCount = len(strictCells)
 			if IsTableSeparatorCells(strictCells) {
 				tableHasSeparator = true
 			}
+			normalized = append(normalized, line)
 			continue
 		}
 		if strings.TrimSpace(line) == "" {
+			if inTable && tableHasSeparator && pendingBlanks < 2 {
+				pendingBlanks++
+				continue
+			}
+			flushPendingBlanks()
+			normalized = append(normalized, line)
 			inTable = false
 			tableHasSeparator = false
+			tableColumnCount = 0
 			continue
 		}
 		if !inTable || !tableHasSeparator {
+			flushPendingBlanks()
+			normalized = append(normalized, line)
 			continue
 		}
-		if TableShapedRowCells(line) == nil {
+		shapedCells := TableShapedRowCells(line)
+		if shapedCells == nil || len(shapedCells) != tableColumnCount {
+			flushPendingBlanks()
+			normalized = append(normalized, line)
 			inTable = false
 			tableHasSeparator = false
+			tableColumnCount = 0
 			continue
 		}
-		lines[i] = strings.TrimRight(line, " \t") + " |"
+		if pendingBlanks > 0 {
+			pendingBlanks = 0
+		}
+		normalized = append(normalized, strings.TrimRight(line, " \t")+" |")
 		changed = true
 	}
+	flushPendingBlanks()
 	if !changed {
 		return content, false
 	}
-	return strings.Join(lines, "\n"), true
+	return strings.Join(normalized, "\n"), true
 }
 
 func TableRowCells(line string) []string {

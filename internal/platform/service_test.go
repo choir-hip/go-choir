@@ -141,6 +141,7 @@ func TestPublicationMarkdownExportNormalizesMalformedTableTailRows(t *testing.T)
 		"| Term | Definition |",
 		"| --- | --- |",
 		"| Vector database | Stores embeddings for retrieval. |",
+		"",
 		"| Work product | Durable, reviewable output of professional work",
 		"",
 		"---",
@@ -163,6 +164,9 @@ func TestPublicationMarkdownExportNormalizesMalformedTableTailRows(t *testing.T)
 	exported, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "md")
 	if err != nil {
 		t.Fatalf("ExportPublicationByRoute md: %v", err)
+	}
+	if strings.Contains(exported.Content, "| Vector database | Stores embeddings for retrieval. |\n\n| Work product |") {
+		t.Fatalf("markdown export left a blank gap inside the table:\n%s", exported.Content)
 	}
 	if !strings.Contains(exported.Content, "| Work product | Durable, reviewable output of professional work |") {
 		t.Fatalf("markdown export did not repair final table delimiter:\n%s", exported.Content)
