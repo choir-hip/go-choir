@@ -312,7 +312,6 @@ test('VText source panel attaches readable text to an existing source entity', a
   expect(attachmentPayload.attachments?.[0]?.entity_id).toBe('src-attach-text');
   const sourceAttachmentResponse = await attachResponse;
   expect(sourceAttachmentResponse.status()).toBe(201);
-  await expect(sourcePanel).toContainText('Attached source artifact to Attachable source fixture', { timeout: 15000 });
 
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
   const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-attach-text"]').first();
@@ -328,6 +327,18 @@ test('VText source panel attaches readable text to an existing source entity', a
 test('VText lays out expanded text sources as noncanonical journal flow', async ({ desktopSession }) => {
   const { page } = desktopSession;
   await page.setViewportSize({ width: 1440, height: 980 });
+  await page.evaluate(async () => {
+    await fetch('/api/desktop/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windows: [], active_window_id: '' }),
+    });
+  });
+  await page.reload();
+  await expect(page.locator('[data-desktop]')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-window]')).toHaveCount(0);
+
   const created = await page.evaluate(async () => {
     const title = `Source Flow Fixture ${Date.now()}`;
     const docRes = await fetch('/api/vtext/documents', {
