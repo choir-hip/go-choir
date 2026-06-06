@@ -5005,6 +5005,73 @@ reported the target commit while the deploy job was still in progress, so
 future acceptance reports should pair health identity with terminal deploy job
 status until the deploy script exposes a post-success identity distinction.
 
+### Problem 32: Owner Publish API Cannot Explicitly Set Publication Policy
+
+Status: `documented_before_fix`.
+
+problem: the real legal proposal publication proof intentionally needed a
+guest-readable artifact, and the owner-authenticated publish endpoint created
+one successfully. The proof also confirmed a policy-control gap: the proxy
+owner publish request currently accepts only `doc_id`, `revision_id`, and
+`slug`, then forwards no explicit `access_policy` or `export_policy` to
+platformd. Platform publication therefore falls back to public route/public
+visibility and broad export defaults unless the private VText revision metadata
+already carries overriding policy.
+
+affected contract/invariant: publication must preserve access/export policy and
+publish allowed source records for authorized publication readers. For sensitive
+VText documents, route visibility and export policy must be an explicit owner
+or document policy decision, not a hidden platform default. Guest source proof
+should publish a deliberate public/unlisted acceptance artifact, not rely on
+accidental defaults.
+
+evidence:
+
+```text
+real legal proposal publication proof:
+  POST /api/platform/vtext/publications
+  request payload: {doc_id, slug}
+  response: 201 published
+  route: /pub/vtext/legal-proposal-source-proof-1780766508614-pub878ee08d2
+  policy from public resolve/export:
+    access: {"route":"public","visibility":"public"}
+    export: {"copy_allowed":true,"download_allowed":true,
+             "formats":["txt","md","html","docx","pdf"]}
+
+code audit:
+  internal/proxy/platform_publish.go publishVTextRequest fields:
+    doc_id, revision_id, slug
+  internal/proxy/platform_publish.go platformReq does not set AccessPolicy or
+    ExportPolicy.
+  internal/platform/source_metadata.go defaultPublicationAccessPolicy returns
+    {"visibility":"public","route":"public"}.
+  internal/platform/source_metadata.go defaultPublicationExportPolicy enables
+    txt, md, html, docx, and pdf download/copy.
+```
+
+first observed version/transition: hard mission review after real legal
+proposal publication checkpoint `34906ee2`.
+
+suspected owner: owner-facing publication API contract and VText publish UI.
+
+why documentation-only fix is insufficient: the contract says publication
+records and exports must preserve policy. A reader cannot distinguish
+"deliberately public" from "defaulted public" when the owner publish API cannot
+express the policy decision. Documentation can warn verifiers, but it cannot
+prevent an owner from publishing a sensitive VText under broad defaults.
+
+planned proof:
+
+- extend the owner publish API to accept validated `access_policy` and
+  `export_policy` objects;
+- forward those policy objects to platformd;
+- preserve existing behavior for callers that omit policy, so current public
+  publication tests stay valid until UI defaults are deliberately changed;
+- add proxy tests proving explicit policy is forwarded and malformed policy is
+  rejected;
+- add or update frontend tests/API helpers so intentional public guest proof can
+  pass explicit public policy instead of relying on hidden defaults.
+
 ## Suggested `/goal`
 
 ```text
