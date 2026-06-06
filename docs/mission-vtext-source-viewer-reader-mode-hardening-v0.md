@@ -1282,3 +1282,76 @@ treated the blank line as the end of table context and therefore did not repair
 the final delimiter. The next repair should generalize table-structure recovery
 for table-shaped continuation rows near a preceding confirmed table, while still
 avoiding ordinary pipe-containing prose.
+
+## 2026-06-06 Deployed Markdown Export Table-Tail Fix Evidence
+
+Status: `accepted_on_staging`.
+
+Repair made after the documentation checkpoint:
+
+- Updated the shared Markdown table normalizer to preserve table context across
+  a small blank gap only when the following row is table-shaped and has the same
+  column count as the preceding confirmed table.
+- Removed the blank gap while repairing the missing trailing delimiter, so the
+  exported Markdown is a valid contiguous table block rather than merely a row
+  that happens to start and end with pipes.
+- Added regression coverage for the actual blank-separated table-tail shape and
+  a mismatched-width guardrail that leaves non-continuation pipe rows unchanged.
+
+Local verification:
+
+```text
+nix develop -c go test ./internal/markdownstructure
+nix develop -c go test ./internal/platform -run 'TestPublicationMarkdownExportNormalizesMalformedTableTailRows'
+nix develop -c go test ./internal/markdownstructure ./internal/platform -run 'TestPublicationMarkdownExportNormalizesMalformedTableTailRows|TestNormalizeTableShapedRows'
+```
+
+Landing evidence:
+
+```text
+Fix commit: 532798571532074befdd2984f5ff5dc127a0578f
+CI run: 27054515347
+Node B deploy job: 79856294400
+FlakeHub publish run: 27054515344
+Health proxy deployed_commit: 532798571532074befdd2984f5ff5dc127a0578f
+Health sandbox deployed_commit: 532798571532074befdd2984f5ff5dc127a0578f
+Health deployed_at: 2026-06-06T06:06:03Z
+```
+
+Deployed owner-publication export proof:
+
+```text
+GET https://choir.news/api/platform/publications/export?route=/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6&format=md
+format md
+filename choir-private-legal-cloud-proposal-vtext-pub270a62fb6.md
+content_hash_present True
+length 38399
+format is md: True
+filename is markdown: True
+content hash present: True
+proposal title retained: True
+work product row present: True
+work product row has trailing delimiter: True
+work product row rejoined to glossary: True
+no open source ui label: True
+no close ui label: True
+source evidence retained: True
+```
+
+Accepted tail:
+
+```markdown
+| **Vector database** | A database optimized for storing and searching numerical vectors (embeddings), enabling similarity search. |
+| **Vector search** | A search technique that finds items similar to a query by comparing their vector representations in a high-dimensional space. |
+| **Work product** | Durable, reviewable output of professional work—drafts, memos, briefs, letters, tables, cited research—as opposed to ephemeral chat responses. |
+
+---
+
+*End of Proposal*
+```
+
+Residual risk: the repair remains a Markdown-table structural recovery heuristic,
+not a full Markdown parser. It is intentionally constrained by confirmed table
+context, a short blank gap, and matching column count. A later VText-native table
+node would be a stronger canonical representation and would reduce dependence on
+Markdown renderer recovery behavior.
