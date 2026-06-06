@@ -6950,3 +6950,51 @@ next root-cause probe:
 - Keep the published-reader role regression in the existing deployed
   publication proof path, and use staging for acceptance if local service
   coverage remains incomplete.
+
+## 2026-06-06 Repair: Published Reader Uses Article Semantics
+
+status: local_verified_pending_deploy
+
+root cause:
+
+- `VTextEditor.svelte` used one rendered document surface for both authoring
+  and published/read-only viewing.
+- That surface always carried `role="textbox"`, `aria-multiline="true"`, and a
+  focusable authoring tab stop even when the publication was read-only.
+- Source-flow controls were visually correct, but assistive tooling interpreted
+  the whole rendered reader as one text-entry value.
+
+change:
+
+- Split the rendered surface into explicit branches:
+  - published/read-only VText renders as `<article
+    data-vtext-published-reader contenteditable="false"
+    aria-label="Published VText document">`;
+  - authoring, historical, and editable VText continue through the textbox
+    branch used by the editor and agent-revision tests.
+- Added publication regression coverage that the published reader is an
+  article element, not a textbox, has no authoring tab stop, and that text
+  export remains free of `Open source`/`Close` source-control copy.
+
+local proof:
+
+- `pnpm --dir frontend run build` -> passed with no Svelte a11y warnings from
+  this change.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-agent-revision.spec.js -g "prompt button submits"
+  --project=chromium --timeout=120000` -> passed, preserving editable textbox
+  behavior.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed, preserving Pretext/journal source flow.
+- The local full publication regression still cannot complete because
+  `POST /api/platform/vtext/publications` returns the documented local `502`
+  verifier gap. Staging remains the acceptance environment for the publication
+  semantics proof.
+
+deployment status:
+
+- pending commit, push, CI, Node B deploy, staging health identity, deployed
+  publication regression proof, and Comet owner proof that the published
+  legal-cloud reader is no longer exposed as a textbox.

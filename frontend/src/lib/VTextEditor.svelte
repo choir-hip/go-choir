@@ -2091,6 +2091,8 @@
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
   $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly;
+  $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published VText document' : 'VText document';
+  $: editorSurfaceAriaMultiline = isPublishedReadOnly ? undefined : 'true';
   $: sourceGaps = revisionSourceGaps(currentRevision);
   $: sourceEntities = revisionSourceEntities(currentRevision, publishedBundle);
   $: sourceCandidates = sourceRepairCandidates(editorValue, sourceGaps);
@@ -2517,32 +2519,51 @@
         </section>
       {/if}
 
-      <div
-        class="rendered-doc editable-doc"
-        class:readonly={isEditorReadOnly}
-        class:published-readonly={isPublishedReadOnly}
-        data-vtext-editor-area
-        data-vtext-rendered
-        data-vtext-published-reader={publishedBundle ? '' : undefined}
-        data-publication-id={publishedBundle?.publication?.id || undefined}
-        data-publication-version-id={publishedBundle?.version?.id || undefined}
-        data-content-hash={publishedBundle?.version?.content_hash || undefined}
-        data-source-revision-hash={publishedBundle?.version?.source_revision_hash || undefined}
-        bind:this={editorSurface}
-        contenteditable={!isEditorReadOnly}
-        tabindex="0"
-        role="textbox"
-        aria-multiline="true"
-        aria-label="VText document"
-        spellcheck="true"
-        on:focus={handleEditorFocus}
-        on:pointerdown={handleEditorPointerDown}
-        on:click={handleEditorClick}
-        on:keydown={handleEditorKeydown}
-        on:input={handleEditorInput}
-        on:blur={handleEditorBlur}
-        on:scroll={handleDocumentScroll}
-      ></div>
+      {#if isPublishedReadOnly}
+        <article
+          class="rendered-doc editable-doc readonly published-readonly"
+          data-vtext-editor-area
+          data-vtext-rendered
+          data-vtext-published-reader={publishedBundle ? '' : undefined}
+          data-publication-id={publishedBundle?.publication?.id || undefined}
+          data-publication-version-id={publishedBundle?.version?.id || undefined}
+          data-content-hash={publishedBundle?.version?.content_hash || undefined}
+          data-source-revision-hash={publishedBundle?.version?.source_revision_hash || undefined}
+          bind:this={editorSurface}
+          contenteditable="false"
+          aria-label={editorSurfaceAriaLabel}
+          spellcheck="false"
+          on:pointerdown={handleEditorPointerDown}
+          on:click={handleEditorClick}
+          on:keydown={handleEditorKeydown}
+          on:scroll={handleDocumentScroll}
+        ></article>
+      {:else}
+        <div
+          class="rendered-doc editable-doc"
+          class:readonly={isEditorReadOnly}
+          data-vtext-editor-area
+          data-vtext-rendered
+          data-publication-id={publishedBundle?.publication?.id || undefined}
+          data-publication-version-id={publishedBundle?.version?.id || undefined}
+          data-content-hash={publishedBundle?.version?.content_hash || undefined}
+          data-source-revision-hash={publishedBundle?.version?.source_revision_hash || undefined}
+          bind:this={editorSurface}
+          contenteditable={!isEditorReadOnly}
+          tabindex="0"
+          role="textbox"
+          aria-multiline={editorSurfaceAriaMultiline}
+          aria-label={editorSurfaceAriaLabel}
+          spellcheck="true"
+          on:focus={handleEditorFocus}
+          on:pointerdown={handleEditorPointerDown}
+          on:click={handleEditorClick}
+          on:keydown={handleEditorKeydown}
+          on:input={handleEditorInput}
+          on:blur={handleEditorBlur}
+          on:scroll={handleDocumentScroll}
+        ></div>
+      {/if}
     </div>
   {/if}
 

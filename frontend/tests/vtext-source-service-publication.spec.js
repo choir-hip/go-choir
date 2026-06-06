@@ -119,11 +119,28 @@ test('publishes source-service source entities as expandable transclusions and c
   expect(exported.content).toContain(`# ${title}`);
   expect(exported.content_hash).toBeTruthy();
   expect(exported.filename).toMatch(/\.md$/);
+  const textExport = await fetchJSON(page, `/api/platform/publications/export?route=${encodeURIComponent(publish.route_path)}&format=txt`);
+  expect(textExport.content).toContain(excerpt);
+  expect(textExport.content).not.toContain('Open source');
+  expect(textExport.content).not.toContain('Close');
 
   await page.goto(`${baseURL}${publish.route_path}`);
   const publishedReader = page.locator('[data-vtext-published-reader]').last();
   await expect(publishedReader).toBeVisible({ timeout: 15_000 });
   await expect(publishedReader).toHaveAttribute('data-publication-version-id', publish.publication_version_id);
+  await expect(publishedReader).toHaveAttribute('contenteditable', 'false');
+  await expect(publishedReader).toHaveAttribute('aria-label', 'Published VText document');
+  await expect(publishedReader).not.toHaveAttribute('aria-multiline', 'true');
+  const publishedSurfaceSemantics = await publishedReader.evaluate((node) => ({
+    tagName: node.tagName.toLowerCase(),
+    role: node.getAttribute('role') || '',
+    tabIndexAttribute: node.getAttribute('tabindex') || '',
+  }));
+  expect(publishedSurfaceSemantics).toEqual({
+    tagName: 'article',
+    role: '',
+    tabIndexAttribute: '',
+  });
   const citation = publishedReader.locator('[data-vtext-source-ref]').first();
   await expect(citation).toHaveAttribute('data-vtext-citation-transclusion', '');
   await citation.click();
