@@ -7180,3 +7180,45 @@ next action:
   and location selectors, the system should create a cleaned Markdown reader
   snapshot with provenance and render that snapshot by default, with iframe as
   fallback rather than the primary reader experience.
+
+## 2026-06-06 Problem: Publication Reader Snapshot Media Type Drift
+
+status: documented_pending_repair
+
+new evidence:
+
+- The publication enrichment path in `internal/proxy/platform_publish.go`
+  creates `reader_snapshot.snapshot_kind = cleaned_reader_markdown` from a
+  source `ContentItem`'s cleaned text content.
+- The same snapshot payload currently copies `reader_snapshot.media_type` from
+  the original source item.
+- For URL-backed HTML sources, tests and deployed behavior show those source
+  items often have original media types such as `text/html; charset=utf-8`,
+  even though the publication snapshot text has already passed through the
+  cleaned reader-text pipeline.
+
+current interpretation:
+
+- This is a generic source-projection bug. The reader snapshot is not a live
+  HTML page and should not advertise itself as one.
+- The original HTTP/content media type is still important provenance, but it
+  should be carried separately from the publication reader snapshot's rendered
+  media type.
+- Leaving this ambiguous makes it easier for future source windows or exports
+  to fall back toward iframe/page-preview semantics when the durable artifact
+  is actually cleaned Markdown reader text.
+
+risk:
+
+- Published readers and source windows may make the wrong rendering or fallback
+  choice for HTML-derived source snapshots.
+- Source-quality reporting cannot cleanly distinguish a full cleaned reader
+  artifact from a bounded excerpt or raw HTML capture.
+
+next repair:
+
+- In publication snapshot enrichment, project the reader snapshot as
+  `media_type: text/markdown` and preserve the source item's original media
+  type as `original_media_type`.
+- Add proxy tests so HTML-derived source snapshots prove both fields and do not
+  regress the private-source or import-failure publication policy.
