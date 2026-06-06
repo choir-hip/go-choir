@@ -595,6 +595,14 @@ staging proof:
   result: 2 passed.
 ```
 
+Next extraction target: VText compare/merge panel chrome. The parent still
+must own compare/merge API calls, selected suggestion state, preview adoption,
+and editor content replacement. The panel itself is presentational chrome:
+heading, status, retry affordance, summary, selected suggestion checkboxes,
+and preview provenance chips. No new behavior problem is confirmed; this is a
+bounded extraction to remove markup/CSS coupling from `VTextEditor.svelte`
+without moving model/provider semantics or merge state transitions.
+
 ### Performance Checks
 
 - Local focused backend check:

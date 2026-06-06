@@ -38,6 +38,7 @@
     createSourceContentItem,
     importSourceContentItem,
   } from './vtext-source-actions';
+  import VTextCompareMergePanel from './VTextCompareMergePanel.svelte';
   import VTextPublicationResult from './VTextPublicationResult.svelte';
   import VTextSourcePanel from './VTextSourcePanel.svelte';
   import VTextToolbar from './VTextToolbar.svelte';
@@ -689,13 +690,9 @@
     return index >= 0 ? versionLabelForRevision(target, index) : 'latest';
   }
 
-  function suggestionSelected(id) {
-    return selectedMergeSuggestionIds.includes(id);
-  }
-
   function toggleMergeSuggestion(id) {
     if (!id) return;
-    if (suggestionSelected(id)) {
+    if (selectedMergeSuggestionIds.includes(id)) {
       selectedMergeSuggestionIds = selectedMergeSuggestionIds.filter((item) => item !== id);
     } else {
       selectedMergeSuggestionIds = [...selectedMergeSuggestionIds, id];
@@ -2296,73 +2293,19 @@
         />
       {/if}
 
-      {#if compareResult || mergePreview || comparePending || mergePending || compareError}
-        <section class="compare-panel" class:compare-panel-error={compareError && !comparePending && !mergePending} data-vtext-compare-panel>
-          <div class="compare-heading">
-            <div>
-              <p class="eyebrow">{compareError ? 'Compare failed' : mergePreview ? 'Merge preview' : `What changed since ${versionLabel}`}</p>
-              <h3>
-                {#if mergePending}
-                  Model merge in progress
-                {:else if comparePending}
-                  Model compare in progress
-                {:else if compareError}
-                  Could not compare {versionLabel} to {compareTargetVersionLabel()}
-                {:else}
-                  {mergePreview ? `Merged into ${nextVersionLabel}` : `Compare ${versionLabel} → ${compareTargetVersionLabel()}`}
-                {/if}
-              </h3>
-            </div>
-            {#if mergePreview}
-              <span class="compare-chip">from {versionLabel}</span>
-            {/if}
-          </div>
-          {#if comparePending || mergePending}
-            <div class="compare-working" role="status" aria-live="polite">
-              <span class="work-pulse" aria-hidden="true"></span>
-              <span>{mergePending ? 'Building a reviewable merge preview with the configured VText model.' : 'Comparing versions with the configured VText model.'}</span>
-            </div>
-          {/if}
-          {#if compareError && !comparePending && !mergePending}
-            <div class="compare-error" role="alert" data-vtext-compare-error>
-              <span>{compareError}</span>
-              <button type="button" class="secondary-action" on:click={handleCompareToDraft}>
-                Retry compare
-              </button>
-            </div>
-          {/if}
-          {#if compareResult?.summary?.length}
-            <div class="compare-summary">
-              {#each compareResult.summary as finding}
-                <span>{finding}</span>
-              {/each}
-            </div>
-          {/if}
-          {#if compareResult?.suggestions?.length && !mergePreview}
-            <div class="merge-suggestions">
-              {#each compareResult.suggestions as suggestion}
-                <label class="merge-suggestion" data-vtext-merge-suggestion>
-                  <input
-                    type="checkbox"
-                    checked={suggestionSelected(suggestion.id)}
-                    on:change={() => toggleMergeSuggestion(suggestion.id)}
-                  />
-                  <span>
-                    <strong>{suggestion.label}</strong>
-                    <small>{suggestion.status} · {suggestion.description}</small>
-                  </span>
-                </label>
-              {/each}
-            </div>
-          {:else if mergePreview?.suggestions?.length}
-            <div class="provenance-strip">
-              {#each mergePreview.suggestions as suggestion}
-                <span>{suggestion.label}</span>
-              {/each}
-            </div>
-          {/if}
-        </section>
-      {/if}
+      <VTextCompareMergePanel
+        {compareResult}
+        {mergePreview}
+        {comparePending}
+        {mergePending}
+        {compareError}
+        {versionLabel}
+        {nextVersionLabel}
+        compareTargetVersionLabel={compareTargetVersionLabel()}
+        {selectedMergeSuggestionIds}
+        on:retry-compare={handleCompareToDraft}
+        on:toggle-suggestion={(event) => toggleMergeSuggestion(event.detail)}
+      />
 
       <VTextPublicationResult
         {publishResult}
@@ -2463,121 +2406,6 @@
     flex-direction: column;
   }
 
-  .compare-panel {
-    flex: 0 0 auto;
-    display: grid;
-    gap: 0.75rem;
-    padding: 0.8rem 0.95rem;
-    border-bottom: 1px solid var(--choir-border-strong);
-    background: var(--choir-surface-raised);
-    color: var(--choir-text-primary);
-  }
-
-  .compare-panel-error {
-    border-bottom-color: var(--choir-status-danger);
-  }
-
-  .compare-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.8rem;
-    min-width: 0;
-  }
-
-  .compare-heading h3 {
-    margin: 0.12rem 0 0;
-    color: var(--choir-text-primary);
-    font-size: 0.92rem;
-    line-height: 1.2;
-  }
-
-  .compare-chip {
-    flex: 0 0 auto;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 999px;
-    padding: 0.34rem 0.55rem;
-    color: var(--choir-text-accent);
-    font-size: 0.68rem;
-    font-weight: 720;
-  }
-
-  .compare-working {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-width: 0;
-    color: var(--choir-text-secondary);
-    font-size: 0.74rem;
-    line-height: 1.35;
-  }
-
-  .compare-error {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.65rem;
-    color: var(--choir-text-primary);
-    font-size: 0.74rem;
-    line-height: 1.35;
-  }
-
-  .compare-error span {
-    flex: 1 1 18rem;
-    min-width: 0;
-  }
-
-  .compare-summary,
-  .provenance-strip {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.42rem 0.8rem;
-    color: var(--choir-text-secondary);
-    font-size: 0.72rem;
-    line-height: 1.35;
-  }
-
-  .merge-suggestions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.48rem;
-  }
-
-  .merge-suggestion {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.48rem;
-    min-width: 0;
-    padding: 0.56rem 0.62rem;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 0.5rem;
-    background: var(--choir-state-selected);
-    color: var(--choir-text-primary);
-    cursor: pointer;
-  }
-
-  .merge-suggestion input {
-    flex: 0 0 auto;
-    margin-top: 0.1rem;
-  }
-
-  .merge-suggestion span {
-    min-width: 0;
-    display: grid;
-    gap: 0.18rem;
-  }
-
-  .merge-suggestion strong {
-    font-size: 0.76rem;
-    line-height: 1.2;
-  }
-
-  .merge-suggestion small {
-    color: var(--choir-text-secondary);
-    font-size: 0.66rem;
-    line-height: 1.25;
-  }
-
   .work-banner {
     flex: 0 0 auto;
     display: flex;
@@ -2630,7 +2458,6 @@
     }
   }
 
-  .secondary-action,
   .update-pill,
   .primary-action {
     border: 1px solid var(--choir-border-strong);
@@ -2639,18 +2466,6 @@
     cursor: pointer;
     backdrop-filter: blur(10px);
     transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
-  }
-
-  .secondary-action {
-    border-radius: 999px;
-    min-width: 5.8rem;
-    height: 2.1rem;
-    padding: 0.62rem 0.84rem;
-    font-size: 0.78rem;
-    font-weight: 720;
-    color: var(--choir-text-accent);
-    line-height: 1;
-    white-space: nowrap;
   }
 
   .rendered-doc {
@@ -3038,7 +2853,6 @@
     backdrop-filter: blur(10px);
   }
 
-  .secondary-action:hover:enabled,
   .update-pill:hover:enabled,
   .primary-action:hover:enabled {
     transform: translateY(-1px);
@@ -3046,7 +2860,6 @@
     border-color: var(--choir-border-strong);
   }
 
-  .secondary-action:disabled,
   .update-pill:disabled,
   .primary-action:disabled {
     opacity: 0.46;
@@ -3068,22 +2881,6 @@
   @media (max-width: 768px) {
     .rendered-doc {
       padding: 1rem;
-    }
-
-    .secondary-action {
-      padding: 0.5rem 0.64rem;
-      font-size: 0.72rem;
-    }
-
-    .compare-panel {
-      padding: 0.68rem 0.72rem;
-      gap: 0.6rem;
-    }
-
-    .compare-summary,
-    .provenance-strip,
-    .merge-suggestions {
-      grid-template-columns: minmax(0, 1fr);
     }
 
     .update-pill {
