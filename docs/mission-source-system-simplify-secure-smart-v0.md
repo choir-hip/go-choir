@@ -841,16 +841,18 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T16:22Z, deployed behavior commit
-`eb14eddeba7e93e671c3026eada9b18221549a53` moves backend source selector kind
-normalization into `internal/sourcecontract` and makes platform publication use
-that contract before storing/exporting source selectors. It followed docs
-checkpoint `acebbfba`, passed focused local Go tests, GitHub Actions CI,
-FlakeHub publish, Node B deploy, staging health identity, and deployed
-Playwright proof that source-service publication/export canonicalizes selector
-aliases while preserving selector sets. Earlier behavior commit `efd47e1c`
-remains the frontend ReaderArtifact status/evidence separation proof,
-`b5c6a78f` remains the frontend SourceOpenPlan consolidation proof, and
+last checkpoint: 2026-06-06T16:45Z, deployed behavior commit
+`c7210d27dcb311149d56b90911b664f8a1589394` makes the frontend source contract
+normalize selector kind aliases and flatten nested publication selector sets,
+then makes Source Viewer quote extraction read publication transclusion
+`source_selector` records. It followed docs checkpoint `5df2732f`, passed
+focused frontend tests, `npm --prefix frontend run build`, GitHub Actions CI,
+FlakeHub publish, Node B deploy, and deployed Playwright proof on
+`https://choir.news` that Source Viewer renders a publication transclusion
+selector-set quote even when flat entity selectors are absent. Earlier behavior
+commit `eb14edde` remains the backend SourceSelector normalization proof,
+`efd47e1c` remains the frontend ReaderArtifact status/evidence separation
+proof, `b5c6a78f` remains the frontend SourceOpenPlan consolidation proof, and
 `41b2135f` remains the evidence/open-surface normalizer consolidation proof.
 
 current artifact state: documentation checkpoint commit
@@ -912,15 +914,23 @@ the reader snapshot/evidence-state drift before behavior commit `efd47e1c`
 separates reader artifact status labels from source evidence labels in Source
 Viewer. Docs checkpoint `acebbfba` records raw source selector drift before
 behavior commit `eb14edde` adds shared backend selector kind normalization for
-publication/export.
+publication/export. Docs checkpoint `5df2732f` records the frontend
+selector-set quote extraction drift before behavior commit `c7210d27` makes
+frontend source helpers normalize selector aliases and read nested publication
+selector sets.
 Existing unrelated untracked docs are preserved.
 
 what shipped: latest behavior commit
-`eb14eddeba7e93e671c3026eada9b18221549a53` was pushed to `origin/main` and
-deployed to staging. It adds a shared backend SourceSelector kind contract and
-uses it in platform publication/export so selector aliases become canonical
-`text_quote`, `table_range`, `page_range`, and `whole_resource` values while
-preserving selector payloads and selector sets. Prior behavior
+`c7210d27dcb311149d56b90911b664f8a1589394` was pushed to `origin/main` and
+deployed to staging. It adds frontend SourceSelector helpers that normalize
+selector aliases and flatten `selector_set.selectors`, then makes Source
+Viewer quote extraction inspect entity selectors, reader selectors, and
+publication transclusion `source_selector` records. Prior behavior
+`eb14eddeba7e93e671c3026eada9b18221549a53` adds a shared backend
+SourceSelector kind contract and uses it in platform publication/export so
+selector aliases become canonical `text_quote`, `table_range`, `page_range`,
+and `whole_resource` values while preserving selector payloads and selector
+sets. Prior behavior
 `efd47e1c9ae56caee0de38b25d2419febf111de6` separates frontend reader snapshot
 workflow state from source evidence state so Source Viewer shows publication
 reader artifact readiness without rendering `Evidence unclassified`. Prior
@@ -1096,6 +1106,27 @@ what was proven:
 - Deployed selector publication/export proof passed with tracked regression
   test commit `322740c6` sending alias selector kinds:
   `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g 'publishes source-service source entities as expandable transclusions and canonical exports'`.
+- Frontend selector-set extraction local checks passed:
+  `npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source selectors normalize|published source entity quote falls back'`,
+  `npm --prefix frontend run build`, and
+  `npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source selectors normalize|published source entity quote falls back|Source Viewer renders publication transclusion selector-set quote'`
+  against the local product surface started with `nix develop -c env
+  CHOIR_SERVICES_FOREGROUND=1 ./start-services.sh`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27067629159`
+  completed successfully for `c7210d27`, including Go gates, frontend build job
+  `79891163989`, and Node B staging deploy job `79891235101`.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27067629132`
+  completed successfully.
+- Staging health was observed after deploy with `status: "ok"`,
+  `vmctl_status: "ok"`, and proxy/upstream deployed_commit
+  `c7210d27dcb311149d56b90911b664f8a1589394`, deployed_at
+  `2026-06-06T16:28:37Z`. A later unauthenticated `/api/health` probe returned
+  HTTP 401, so this checkpoint records that current public health visibility is
+  limited without an authenticated/product health path.
+- Deployed frontend selector-set proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source selectors normalize|published source entity quote falls back|Source Viewer renders publication transclusion selector-set quote'`.
 - Source evidence-state local checks passed:
   `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownLineage|TestVTextSourceGapRepair'`
   and `npm run build` in `frontend`.
@@ -4294,7 +4325,7 @@ selector-rich proof.
 
 ### Problem 27: Frontend Source Quote Extraction Ignores Publication SourceSelector Sets
 
-Status: `documented_before_fix`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: backend publication now stores selector-rich `source_selector` records
 on publication transclusions, including canonical `selector_set` values, but
@@ -4341,6 +4372,37 @@ acceptance for fix:
   before selector fallback;
 - add focused frontend tests proving selector-set quotes are read from
   publication transclusions even when flat entity selectors are absent.
+
+fix evidence:
+
+```text
+docs checkpoint:
+  5df2732f docs: record frontend selector-set drift
+
+behavior:
+  c7210d27 fix: read publication selector sets in source viewer
+
+changed paths:
+  frontend/src/lib/source-contract.ts
+  frontend/src/lib/vtext-source-renderer.ts
+  frontend/tests/vtext-source-entities.spec.js
+
+local checks:
+  npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source selectors normalize|published source entity quote falls back'
+  npm --prefix frontend run build
+  npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source selectors normalize|published source entity quote falls back|Source Viewer renders publication transclusion selector-set quote'
+
+CI/deploy:
+  GitHub Actions run 27067629159: success for c7210d27
+  frontend build job 79891163989: success
+  Node B deploy job 79891235101: success
+  FlakeHub run 27067629132: success
+  staging identity observed after deploy: c7210d27dcb311149d56b90911b664f8a1589394
+
+deployed proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source selectors normalize|published source entity quote falls back|Source Viewer renders publication transclusion selector-set quote'
+  result: 3 passed
+```
 
 remaining error field: this is a frontend SourceSelector convergence slice. It
 does not yet generate a single schema from the backend contract or resolve
