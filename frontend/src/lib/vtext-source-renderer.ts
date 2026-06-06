@@ -87,10 +87,9 @@ function boundedExcerpt(value: unknown, maxChars = 520): string {
 }
 
 export function sourceEntityInlineExcerptText(entity: any, maxChars = 520): string {
-  const readerSnapshot = sourceEntityReaderSnapshotText(entity);
   const selectedExcerpt = sourceEntityExcerptText(entity);
-  if (readerSnapshot) return boundedExcerpt(readerSnapshot, maxChars);
-  return boundedExcerpt(selectedExcerpt, maxChars);
+  const readerSnapshot = sourceEntityReaderSnapshotText(entity);
+  return boundedExcerpt(selectedExcerpt || readerSnapshot, maxChars);
 }
 
 export function sourceEntityReaderSnapshotStatus(entity: any): any {

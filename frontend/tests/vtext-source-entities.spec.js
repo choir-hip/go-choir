@@ -1,4 +1,5 @@
 import { test, expect } from './helpers/fixtures.js';
+import { sourceEntityInlineExcerptText } from '../src/lib/vtext-source-renderer.ts';
 import { buildSourceReviewPayload } from '../src/lib/vtext-source-review.js';
 
 test('source review URL repairs default to Source Viewer open surface', () => {
@@ -22,6 +23,24 @@ test('source review URL repairs default to Source Viewer open surface', () => {
       open_surface: 'source',
     },
   });
+});
+
+test('source inline excerpts prefer selected transclusion over full reader snapshot', () => {
+  const entity = {
+    entity_id: 'src-inline-reader-snapshot',
+    label: 'Inline reader snapshot fixture',
+    transclusion: {
+      snapshot_text: 'Selected bounded citation excerpt.',
+    },
+    reader_snapshot: {
+      text_content: [
+        'Selected bounded citation excerpt.',
+        'Full cleaned reader source detail should remain in the source window instead of the inline note.',
+      ].join('\n\n'),
+    },
+  };
+
+  expect(sourceEntityInlineExcerptText(entity)).toBe('Selected bounded citation excerpt.');
 });
 
 test('VText renders source entities as expandable sources and opens owning media surface', async ({ desktopSession }) => {
