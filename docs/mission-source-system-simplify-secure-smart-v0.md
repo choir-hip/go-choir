@@ -2569,6 +2569,62 @@ Residual risk: this closes Problem 14 at the frontend routing boundary. It is
 still not the full cross-language shared source schema; runtime/platform/export
 normalization should continue converging toward a single documented contract.
 
+### Problem 15: Source Evidence States Still Render As Raw Or Incomplete UI States
+
+Status: `documented_before_fix`.
+
+affected contract/invariant: missing-source placeholders must be replaced with
+typed evidence states and researcher-backed
+`confirms`/`refutes`/`qualifies`/`no_source_needed`/`stale`/`blocked_by_access`
+states that are visible through VText, Source Viewer, publication, and export.
+
+problem: the metadata paths now carry typed evidence states, but the frontend
+does not yet render them as a shared user-facing contract. The Source Viewer
+kicker prints raw state strings such as `confirms`, the Source entity details
+print raw `state / research_state`, VText source chips show only title/kind,
+and media-derived source entities can still emit `pending`, which is outside
+the current mission evidence-state vocabulary. This leaves the product with
+typed metadata but not a reliable owner/guest-visible evidence-state language.
+
+evidence: code audit after open-surface alias deployment found:
+
+- `frontend/src/lib/ContentViewer.svelte` computes `sourceState` from
+  `sourceEntity.evidence.state`, `reader_snapshot_status.state`, or content
+  provenance, then renders it directly in the Source Viewer header.
+- The same component renders Source entity evidence as
+  `{sourceEntity.evidence.state || 'available'} /
+  {sourceEntity.evidence.research_state || 'unclassified'}`.
+- `frontend/src/lib/VTextSourcePanel.svelte` lists source entity chips with
+  only title and kind, so states such as `confirms`, `refutes`, `qualifies`,
+  `stale`, or `blocked_by_access` are not visible before opening the source.
+- `frontend/src/lib/vtext-source-renderer.ts` maps missing media content ids to
+  `evidence.state: pending`, while the documented normalized states are
+  `candidate`, `available`, `confirms`, `refutes`, `qualifies`,
+  `no_source_needed`, `stale`, `blocked_by_access`, and `unavailable`.
+
+why this matters: publication/export metadata can now preserve selector-rich
+source evidence, but a reader still sees raw implementation tokens or no state
+at all in the main source surfaces. That weakens the mission requirement that
+source status be expressed as first-class evidence rather than as missing-source
+or placeholder language.
+
+first observed version/transition: current `main` after deployed commit
+`e378712ace52e2282e4be8557cbbd676da840dcf` and proof commit `18fff41f`.
+
+acceptance for fix:
+
+- introduce one frontend evidence-state normalizer/label helper for VText,
+  Source Viewer, and publication-local source entities;
+- render source chips with a compact typed evidence label;
+- render Source Viewer evidence with normalized labels and raw token-free
+  owner/guest copy;
+- map media-source pending state to the typed `candidate` state;
+- preserve current publication/export metadata and Source Viewer default
+  behavior.
+
+remaining error field: this is a frontend/user-surface contract fix and does
+not replace the broader backend/runtime/platform shared schema consolidation.
+
 ## Suggested `/goal`
 
 ```text
