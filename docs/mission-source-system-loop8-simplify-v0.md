@@ -423,6 +423,39 @@ not move until staging-rich-export behavior has remained stable through at
 least one more cleanup pass; otherwise the package move will obscure renderer
 bugs.
 
+### Refactor Execution Evidence
+
+2026-06-06: after staging proof for professional rich exports, the publication
+export renderer was split without changing behavior:
+
+```text
+internal/platform/export_formats.go                 69 lines
+internal/platform/export_docx.go                   253 lines
+internal/platform/export_html.go                   186 lines
+internal/platform/export_pdf.go                    291 lines
+internal/platform/export_helpers.go                 42 lines
+internal/platform/publication_document_tables.go    39 lines
+```
+
+The extraction keeps `internal/platform/export_formats.go` as route/export
+orchestration and moves format-specific rendering into separate files. Shared
+source-manifest JSON, script escaping, XML/PDF escaping, and clamping helpers
+live in `export_helpers.go`; Markdown-table recognition used by the
+`PublicationDocument` projection lives in `publication_document_tables.go`.
+
+No new export contract or source metadata path was introduced. HTML, DOCX, and
+PDF still consume the same `PublicationDocument`, source manifest, and export
+profile helpers. This is intentionally a package-in-place cleanup before any
+future `internal/publicationexport` move, so renderer bugs remain easy to
+attribute.
+
+focused verification:
+
+```text
+nix develop -c go test ./internal/platform ./internal/sourcecontract
+result: passed.
+```
+
 ### Performance Checks
 
 - Local focused backend check:
