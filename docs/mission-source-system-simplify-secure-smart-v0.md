@@ -1952,6 +1952,38 @@ Remaining proof required: deploy this repair, rerun staging acceptance, and
 perform a fresh owner-authenticated bounded edit/revise on the legal proposal
 to confirm v90-style 49-row table shape no longer materializes as 50 rows.
 
+Deployed proof:
+
+```text
+behavior commit: e15c499e0997d45d6c2bd80cb5160fb455852510
+CI run: 27064922342 passed
+FlakeHub run: 27064922344 passed
+Node B deploy job: 79884076196 passed
+staging proxy deployed_commit: e15c499e0997d45d6c2bd80cb5160fb455852510
+staging sandbox deployed_commit: e15c499e0997d45d6c2bd80cb5160fb455852510
+staging deployed_at: 2026-06-06T14:30:55Z
+
+staging acceptance:
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-duplicate-table-separator.tmp.spec.js
+result: passed
+```
+
+The temporary Playwright spec used the authenticated staging product path to
+create a source-backed VText, open it in the real editor, inject a
+separator-like DOM row into the rendered table, dispatch the editor `input`
+event, press the product `Revise` button so the frontend serializer saved a user
+revision, and verify the saved revision contained one canonical separator row,
+preserved the appendix table body, preserved the prose edit, and carried the
+source entity metadata forward. The temporary spec was deleted after proof.
+
+Acceptance level reached: `staging_synthetic_duplicate_separator_repair`.
+
+Residual risk: this proves the duplicate-separator browser-save class on
+staging. It does not yet prove the full owner legal-proposal v90/v91/v92 class
+with Comet, a fresh bounded edit/revise, exact 49-row appendix survival,
+Source Viewer openability, and publication/export metadata after the deployed
+repair.
+
 ### 2026-06-06 Restore Table-Tail Fix Evidence
 
 Status: `accepted_on_staging_for_restore_transition`.
