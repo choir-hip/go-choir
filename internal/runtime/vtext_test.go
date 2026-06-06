@@ -5132,7 +5132,7 @@ func TestVTextDiagnosisReportsCurrentRevisionVersion(t *testing.T) {
 		OwnerID:          "user-1",
 		AuthorKind:       types.AuthorAppAgent,
 		AuthorLabel:      "appagent",
-		Content:          "Second revision content",
+		Content:          "## Appendix\n\n| Owner | State |\n| --- | --- |\n| Legal cloud | Preserved [source](source:src-legal-cloud) |\n",
 		Citations:        json.RawMessage("[]"),
 		Metadata:         json.RawMessage(`{"source":"edit_vtext"}`),
 		ParentRevisionID: baseRevisionID,
@@ -5159,6 +5159,61 @@ func TestVTextDiagnosisReportsCurrentRevisionVersion(t *testing.T) {
 	}
 	if len(resp.Revisions) == 0 || resp.Revisions[0].RevisionID != "rev-diagnosis-v1" || resp.Revisions[0].VersionNumber != 1 {
 		t.Fatalf("diagnosis revisions = %+v, want latest v1 first", resp.Revisions)
+	}
+	if len(resp.RevisionStructures) == 0 || resp.RevisionStructures[0].RevisionID != "rev-diagnosis-v1" {
+		t.Fatalf("diagnosis revision structures = %+v, want latest v1 first", resp.RevisionStructures)
+	}
+	structure := resp.RevisionStructures[0]
+	if structure.ContentHash == "" || structure.HeadingCount != 1 || structure.SourceMarkerCount != 1 {
+		t.Fatalf("diagnosis structure counts/hash = %+v", structure)
+	}
+	if structure.TableCount != 1 || structure.TableRowCount != 3 || len(structure.Tables) != 1 {
+		t.Fatalf("diagnosis table structure = %+v", structure)
+	}
+	if table := structure.Tables[0]; table.StartLine != 3 || table.EndLine != 5 || table.ColumnCount != 2 || table.RowCount != 3 || !table.HasSeparator || table.Signature == "" {
+		t.Fatalf("diagnosis table signature = %+v", table)
+	}
+}
+
+func TestVTextDiagnosisCanOmitRevisionContentForStructureEvidence(t *testing.T) {
+	h, s := vtextAPISetup(t)
+	docID, baseRevisionID := createDocWithUserRevision(t, h)
+	if err := s.CreateRevision(context.Background(), types.Revision{
+		RevisionID:       "rev-diagnosis-structure-only",
+		DocID:            docID,
+		OwnerID:          "user-1",
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      "owner",
+		Content:          "| Term | Meaning |\n| --- | --- |\n| Work product | Durable output |\n",
+		Citations:        json.RawMessage("[]"),
+		Metadata:         json.RawMessage(`{"source":"owner_edit"}`),
+		ParentRevisionID: baseRevisionID,
+		CreatedAt:        time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("create structure revision: %v", err)
+	}
+
+	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID+"/diagnosis?limit=10&include_content=false", nil)
+	w := httptest.NewRecorder()
+	h.HandleVTextDiagnosis(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("diagnosis status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp vtextDiagnosisResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode diagnosis: %v", err)
+	}
+	if len(resp.Revisions) != 0 {
+		t.Fatalf("diagnosis include_content=false returned full revisions: %+v", resp.Revisions)
+	}
+	if len(resp.RevisionStructures) == 0 {
+		t.Fatalf("diagnosis include_content=false omitted structure summaries: %+v", resp)
+	}
+	if got := resp.RevisionStructures[0]; got.RevisionID != "rev-diagnosis-structure-only" || got.TableCount != 1 || got.ContentHash == "" {
+		t.Fatalf("diagnosis structure-only summary = %+v", got)
+	}
+	if strings.Contains(w.Body.String(), "Work product") || strings.Contains(w.Body.String(), "Durable output") {
+		t.Fatalf("diagnosis include_content=false leaked revision body: %s", w.Body.String())
 	}
 }
 
