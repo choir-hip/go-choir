@@ -1984,6 +1984,23 @@ with Comet, a fresh bounded edit/revise, exact 49-row appendix survival,
 Source Viewer openability, and publication/export metadata after the deployed
 repair.
 
+Fresh owner Comet proof limitation after this deploy:
+
+```text
+Comet app: /Applications/Comet.app, bundle ai.perplexity.comet
+current URL: https://choir.news/?draft_recovery=93d9f819
+current visible state: passkey sign-in overlay
+message: "Your session ended. Use your passkey to continue."
+blocking proof: fresh owner-authenticated legal-proposal bounded edit/revise
+```
+
+Computer Use can still see and operate Comet, but the current Comet session is
+not owner-authenticated. Earlier owner-authenticated Comet proof remains valid
+for its timestamp, but it is stale for proving the deployed
+`e15c499e0997d45d6c2bd80cb5160fb455852510` repair against the real legal
+proposal. I did not create a passkey or bypass the passkey ceremony. The next
+owner proof requires the owner to renew the Comet passkey session first.
+
 ### 2026-06-06 Restore Table-Tail Fix Evidence
 
 Status: `accepted_on_staging_for_restore_transition`.
