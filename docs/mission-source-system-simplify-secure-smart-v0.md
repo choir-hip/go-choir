@@ -2347,6 +2347,70 @@ The acceptance used a browser-created authenticated session and the public
 `/api/content/import-url` product route. It did not call
 `/internal/source-service/*` directly and did not seed success records.
 
+### Problem 19: Text-Like Import Migration Manifests Do Not Survive The First Durable Revision
+
+Status: `documented_before_fix`.
+
+problem: the VText file-open path already creates a canonical `.vtext` document
+title for imported files and preserves an original `ContentItem`, but the
+migration metadata is incomplete at the exact transition required by this
+mission. Markdown file open creates a `migration_manifest` only on the initial
+v0 revision. `migration_manifest` is not included in `durableMetadataKeys`, so
+the first user/appagent durable revision (`v0 -> v1`) does not automatically
+carry the manifest forward unless a caller happens to resubmit it. Non-Markdown
+text-like imports such as `.txt` and `text/html` do not get any
+`migration_manifest` at file-open time, even though they use the same
+VText projection path and should be auditable as text-like source-to-VText
+migrations with export back to Markdown available.
+
+affected contract/invariant: the mission stopping condition says imported
+Markdown/text/other text documents become canonical `.vtext` by the first
+durable revision, with export back to Markdown still available. The
+requirements contract treats VText metadata as the canonical source identity
+that must survive revise, history, publication, and export. If the migration
+manifest disappears at v1, verifiers and future publication/export code cannot
+prove that the current canonical VText head came from a particular imported
+text-like source artifact and projection adapter.
+
+confirmed evidence:
+
+```text
+internal/runtime/vtext.go:
+  buildFileOpenVTextMetadata adds migration_manifest only when source ext is
+  md/markdown.
+
+internal/runtime/runtime.go:
+  durableMetadataKeys contains source_path and canonical_vtext_source_path,
+  but not migration_manifest or import_manifest.
+
+frontend/tests/vtext-markdown-lineage.spec.js:
+  "Imported Markdown advances from v0 source artifact to canonical .vtext with
+  Markdown export" checks v1 canonical_vtext_source_path and export content,
+  but does not prove migration_manifest survives into v1.
+
+frontend/tests/vtext-document-stream.spec.js:
+  text/plain reopen coverage proves stable aliasing and v0 content, but not
+  v1 migration metadata or Markdown export for text-like imports.
+```
+
+acceptance for fix:
+
+- create a file-open migration manifest for all text-like imports that project
+  to canonical VText (`text/markdown`, `text/plain`, `text/html`);
+- preserve `migration_manifest` and `import_manifest` across user and appagent
+  durable revisions unless an explicit revision supplies a stronger value;
+- add focused backend coverage for `.txt -> .vtext -> v1` showing canonical
+  `.vtext` alias, original `.txt` alias, migration/import metadata on v1, and
+  Markdown export;
+- extend browser-path coverage for imported Markdown/text first durable
+  revision metadata;
+- land through CI, staging deploy, and product-path acceptance without using
+  internal/test-only routes for deployed proof.
+
+remaining error field: this does not create or migrate the owner legal cloud
+proposal itself. It closes the generic text-like import metadata continuity
+needed before owner/legal-proposal migration proof can be trusted.
+
 ### Problem 12: Owner URL Source Repairs Default To Web Lens
 
 Status: `documented_before_fix`.
