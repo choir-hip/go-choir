@@ -62,7 +62,7 @@ export function buildSourceReviewPayload({
         },
         evidence: {
           state: 'available',
-          research_state: 'confirmed',
+          research_state: 'owner_supplied',
         },
         provenance: {
           created_by: 'source_review_panel',

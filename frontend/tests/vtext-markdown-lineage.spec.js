@@ -524,6 +524,8 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   await sourcePanel.locator('[data-vtext-apply-source-review]').click();
   const repairRequest = await repairRequestPromise;
   expect(repairRequest.method()).toBe('POST');
+  const repairPayload = JSON.parse(repairRequest.postData() || '{}');
+  expect(repairPayload.source_entities?.[0]?.evidence?.research_state).toBe('owner_supplied');
   const repairResponse = await repairResponsePromise;
   expect(repairResponse.status()).toBe(201);
 
@@ -542,6 +544,7 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toContainText(sourceLabel);
   await expect(sourceWindow).toContainText(excerpt);
+  await expect(sourceWindow.locator('[data-source-entity]')).toContainText('available / owner_supplied');
   await expect(sourceWindow.locator('[data-source-entity]')).toContainText(/src_review_2_panel_repair_source/);
   await page.locator('[data-window-app-id="content"]').last().locator('[data-window-close]').click();
   await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows, { timeout: 10000 });
@@ -552,6 +555,7 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   const panelSourceWindow = page.locator('[data-content-viewer]').last();
   await expect(panelSourceWindow).toContainText(sourceLabel);
   await expect(panelSourceWindow).toContainText(excerpt);
+  await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText('available / owner_supplied');
   await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText(/src_review_2_panel_repair_source/);
 });
 

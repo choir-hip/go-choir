@@ -6375,3 +6375,41 @@ belief-state update:
 - `VTextEditor.svelte` still owns the source repair/import/write functions and
   diagnostic JSON affordance. Those remain the highest-value simplification
   targets, but they are riskier because they touch canonical write paths.
+
+## 2026-06-06 Correctness Pass: Manual Source Review State
+
+status: local_verified_pending_deploy
+
+documented problem:
+
+- The hard review identified a P1 semantic shortcut: the owner-facing source
+  review form accepted pasted source evidence and marked it as
+  `research_state: confirmed`.
+- That overstated the provenance of the evidence. `confirmed` should be
+  reserved for researcher/source-service verified source acquisition, while
+  owner-entered evidence should be visibly distinct.
+
+change:
+
+- `buildSourceReviewPayload()` now marks owner-entered source review evidence as
+  `research_state: owner_supplied`.
+- The existing source-panel Playwright proof now asserts the outbound
+  `/source-repairs` request carries `owner_supplied` and that both opened source
+  windows render `available / owner_supplied` in their source entity metadata.
+
+local proof:
+
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> passed.
+- `pnpm --dir frontend run build` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+
+deployment proof still needed:
+
+- Commit and push the metadata-state correction, wait for CI and Node B deploy,
+  confirm staging identity, then repeat deployed source review/source-window
+  proof.
