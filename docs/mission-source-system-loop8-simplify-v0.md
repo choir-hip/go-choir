@@ -1900,4 +1900,28 @@ local focused proof:
 local shard proof:
   nix develop -c scripts/go-test-runtime-shards
   result: passed.
+
+commit/deploy proof:
+  commit 8c465e30210db923f4288f2261a16793f725297c
+  GitHub Actions CI 27077262831 passed.
+  FlakeHub publish 27077262835 passed.
+  Node B deploy job 79916718143 passed.
+  /health reported proxy and sandbox deployed_commit
+  8c465e30210db923f4288f2261a16793f725297c, deployed_at
+  2026-06-06T23:50:48Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000
+  npm --prefix frontend run e2e --
+  tests/vtext-structure-extraction-staging.tmp.spec.js
+  result: 1 passed; temporary spec and Playwright .last-run.json were deleted
+  after the run.
+
+  The proof created a real VText document through deployed product APIs,
+  created a source-backed table-bearing revision, saved an owner edit that
+  omitted the appendix table and verified deployed structure stabilization
+  restored the table and carried source_entities forward, created a newer head,
+  verified stale parent save rejection, then allowed a stale user draft rebase
+  and verified the resulting revision preserved both head/user content,
+  appendix table rows, rebase metadata, and source entity metadata.
 ```
