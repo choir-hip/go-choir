@@ -215,6 +215,7 @@
             "internal/platform"
             "internal/proxy"
             "internal/server"
+            "internal/sourcecontract"
             "internal/types"
             "internal/vmctl"
           ];
@@ -264,6 +265,7 @@
             "internal/sandbox"
             "internal/server"
             "internal/sourceapi"
+            "internal/sourcecontract"
             "internal/store"
             "internal/types"
             "internal/vmctl"
@@ -278,6 +280,7 @@
             "internal/markdownstructure"
             "internal/platform"
             "internal/server"
+            "internal/sourcecontract"
           ];
         };
         sourcecycled = mkGoService {
@@ -295,6 +298,7 @@
             "internal/sandbox"
             "internal/server"
             "internal/sourceapi"
+            "internal/sourcecontract"
             "internal/sources"
             "internal/store"
             "internal/types"
@@ -315,6 +319,7 @@
             "internal/sandbox"
             "internal/server"
             "internal/sourceapi"
+            "internal/sourcecontract"
             "internal/store"
             "internal/types"
             "internal/vmctl"
