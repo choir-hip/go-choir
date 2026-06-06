@@ -424,6 +424,7 @@ func TestYouTubeJSON3CaptionURLForcesFormat(t *testing.T) {
 }
 
 func TestFetchYouTubeTranscriptUsesConfiguredProvider(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	t.Setenv("CHOIR_YOUTUBE_TRANSCRIPT_PROVIDER", "gettranscript")
 	t.Setenv("CHOIR_YOUTUBE_TRANSCRIPT_API_KEY", "secret")
 	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -462,6 +463,7 @@ func TestFetchYouTubeTranscriptUsesConfiguredProvider(t *testing.T) {
 }
 
 func TestContentImportURLStoresConfiguredTranscriptItem(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	t.Setenv("CHOIR_YOUTUBE_TRANSCRIPT_PROVIDER", "gettranscript")
 	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("videoId") != "jNQXAC9IVRw" {
@@ -529,6 +531,7 @@ func TestContentImportURLStoresConfiguredTranscriptItem(t *testing.T) {
 }
 
 func TestFetchYouTubeTranscriptUsesInnerTubeAndroidFallback(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	var source *httptest.Server
 	source = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -571,6 +574,65 @@ func TestFetchYouTubeTranscriptUsesInnerTubeAndroidFallback(t *testing.T) {
 	}
 	if got.Text != "InnerTube line." {
 		t.Fatalf("text = %q", got.Text)
+	}
+}
+
+func TestFetchConfiguredYouTubeTranscriptRejectsForbiddenProviderURL(t *testing.T) {
+	got := fetchConfiguredYouTubeTranscript(context.Background(), "jNQXAC9IVRw", youtubeTranscriptProviderConfig{
+		Name:    "generic",
+		BaseURL: "http://127.0.0.1:1/transcript",
+	})
+	if got.Availability != "unavailable" {
+		t.Fatalf("availability = %q, want unavailable", got.Availability)
+	}
+	if !strings.Contains(got.Error, "source URL host is not allowed") {
+		t.Fatalf("error = %q, want source fetch policy rejection", got.Error)
+	}
+}
+
+func TestFetchYouTubeTranscriptFromInnerTubeRejectsForbiddenPlayerURL(t *testing.T) {
+	t.Setenv("CHOIR_YOUTUBE_INNERTUBE_PLAYER_URL", "http://127.0.0.1:1/player")
+	got := fetchYouTubeTranscriptFromInnerTube(context.Background(), "dQw4w9WgXcQ")
+	if got.Availability != "unavailable" {
+		t.Fatalf("availability = %q, want unavailable", got.Availability)
+	}
+	if !strings.Contains(got.Error, "source URL host is not allowed") {
+		t.Fatalf("error = %q, want source fetch policy rejection", got.Error)
+	}
+}
+
+func TestFetchYouTubeTranscriptFromInnerTubeRejectsForbiddenCaptionURL(t *testing.T) {
+	previous := sourcefetch.SetAllowPrivateNetworkForTests(true)
+	t.Cleanup(func() {
+		sourcefetch.SetAllowPrivateNetworkForTests(previous)
+	})
+	var source *httptest.Server
+	source = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/player":
+			sourcefetch.SetAllowPrivateNetworkForTests(false)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"playabilityStatus": {"status": "OK"},
+				"captions": {"playerCaptionsTracklistRenderer": {"captionTracks": [
+					{"baseUrl": "` + source.URL + `/caption?fmt=srv3&lang=en", "languageCode": "en", "kind": ""}
+				]}}
+			}`))
+		case "/caption":
+			t.Fatal("forbidden caption URL should not be requested")
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer source.Close()
+	t.Setenv("CHOIR_YOUTUBE_INNERTUBE_PLAYER_URL", source.URL+"/player")
+
+	got := fetchYouTubeTranscriptFromInnerTube(context.Background(), "dQw4w9WgXcQ")
+	if got.Availability != "unavailable" {
+		t.Fatalf("availability = %q, want unavailable", got.Availability)
+	}
+	if !strings.Contains(got.Error, "source URL host is not allowed") {
+		t.Fatalf("error = %q, want source fetch policy rejection", got.Error)
 	}
 }
 

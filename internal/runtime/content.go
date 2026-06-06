@@ -665,7 +665,7 @@ func fetchYouTubeTranscriptFromInnerTube(ctx context.Context, videoID string) yo
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	client := &http.Client{Timeout: 8 * time.Second}
+	client := sourcefetch.Client(8 * time.Second)
 	playerURL := youtubeInnerTubePlayerEndpoint()
 	body, _ := json.Marshal(map[string]any{
 		"context": map[string]any{
@@ -680,7 +680,7 @@ func fetchYouTubeTranscriptFromInnerTube(ctx context.Context, videoID string) yo
 		},
 		"videoId": videoID,
 	})
-	req, err := http.NewRequestWithContext(fetchCtx, http.MethodPost, playerURL, bytes.NewReader(body))
+	req, err := newSourceFetchRequest(fetchCtx, http.MethodPost, playerURL, bytes.NewReader(body))
 	if err != nil {
 		result.Error = err.Error()
 		return result
@@ -726,7 +726,7 @@ func fetchYouTubeTranscriptFromInnerTube(ctx context.Context, videoID string) yo
 		return result
 	}
 	captionURL := youtubeJSON3CaptionURL(track.BaseURL)
-	captionReq, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, captionURL, nil)
+	captionReq, err := newSourceFetchRequest(fetchCtx, http.MethodGet, captionURL, nil)
 	if err != nil {
 		result.Error = err.Error()
 		return result
@@ -783,9 +783,9 @@ func fetchYouTubeTranscriptFromCaptionTracks(ctx context.Context, videoID string
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	client := &http.Client{Timeout: 6 * time.Second}
+	client := sourcefetch.Client(6 * time.Second)
 	watchURL := "https://www.youtube.com/watch?v=" + url.QueryEscape(videoID) + "&hl=en"
-	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, watchURL, nil)
+	req, err := newSourceFetchRequest(fetchCtx, http.MethodGet, watchURL, nil)
 	if err != nil {
 		result.Error = err.Error()
 		return result
@@ -833,7 +833,7 @@ func fetchYouTubeTranscriptFromCaptionTracks(ctx context.Context, videoID string
 		return result
 	}
 	captionURL := youtubeJSON3CaptionURL(track.BaseURL)
-	captionReq, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, captionURL, nil)
+	captionReq, err := newSourceFetchRequest(fetchCtx, http.MethodGet, captionURL, nil)
 	if err != nil {
 		result.Error = err.Error()
 		return result
@@ -933,7 +933,7 @@ func fetchConfiguredYouTubeTranscript(ctx context.Context, videoID string, cfg y
 		return result
 	}
 	applyYouTubeTranscriptProviderAuth(req, cfg)
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := sourcefetch.Client(10 * time.Second).Do(req)
 	if err != nil {
 		result.Error = err.Error()
 		return result
@@ -976,7 +976,7 @@ func buildYouTubeTranscriptProviderRequest(ctx context.Context, videoID string, 
 	switch provider {
 	case "youtube-transcript-io":
 		body, _ := json.Marshal(map[string]any{"ids": []string{videoID}})
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewReader(body))
+		req, err := newSourceFetchRequest(ctx, http.MethodPost, baseURL, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
 		}
@@ -984,7 +984,7 @@ func buildYouTubeTranscriptProviderRequest(ctx context.Context, videoID string, 
 		return req, nil
 	case "generic-post":
 		body, _ := json.Marshal(map[string]any{"video_id": videoID, "url": canonicalURL})
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewReader(body))
+		req, err := newSourceFetchRequest(ctx, http.MethodPost, baseURL, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
 		}
@@ -1004,8 +1004,15 @@ func buildYouTubeTranscriptProviderRequest(ctx context.Context, videoID string, 
 			q.Set("videoId", videoID)
 		}
 		parsed.RawQuery = q.Encode()
-		return http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+		return newSourceFetchRequest(ctx, http.MethodGet, parsed.String(), nil)
 	}
+}
+
+func newSourceFetchRequest(ctx context.Context, method, targetURL string, body io.Reader) (*http.Request, error) {
+	if err := sourcefetch.ValidateURL(targetURL); err != nil {
+		return nil, err
+	}
+	return http.NewRequestWithContext(ctx, method, targetURL, body)
 }
 
 func applyYouTubeTranscriptProviderAuth(req *http.Request, cfg youtubeTranscriptProviderConfig) {
