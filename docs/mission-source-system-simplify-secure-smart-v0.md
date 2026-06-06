@@ -841,16 +841,15 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T15:56Z, deployed behavior commit
-`41b2135f7d72c21ee3ddccf6a7deb9053b8ad6b3` moves frontend evidence-state and
-open-surface normalization into `frontend/src/lib/source-contract.ts`, aligns
-frontend legacy evidence aliases with backend `internal/sourcecontract`, and
-stops unknown evidence tokens from leaking raw UI labels. It followed docs
-checkpoint `bb9d1614`, passed focused frontend tests, frontend build, GitHub
-Actions CI, FlakeHub publish, Node B deploy, staging health identity, and
-deployed Playwright proof for source evidence/open-plan normalization.
-Earlier behavior commits `53dd9b34` and `a7e7e821` remain the latest
-publication export metadata and local startup harness proofs.
+last checkpoint: 2026-06-06T16:01Z, deployed behavior commit
+`b5c6a78fd2079869f9b7cb91cabc76ecb43feeec` moves frontend source open-plan
+resolution into `frontend/src/lib/source-contract.ts` while keeping entity
+shape extraction in `vtext-source-renderer.ts`. It followed docs checkpoint
+`22e685d6`, passed focused frontend tests, frontend build, GitHub Actions CI,
+FlakeHub publish, Node B deploy, staging health identity, and deployed
+Playwright proof for Source Viewer/Web Lens/media/VText open-plan routing.
+Earlier behavior commit `41b2135f` remains the evidence/open-surface
+normalizer consolidation proof.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -904,13 +903,18 @@ platformd and local Platform Dolt from `start-services.sh`, with Dolt declared
 in the dev shell. Docs checkpoint `bb9d1614` records the frontend source
 contract drift before behavior commit `41b2135f` extracted a frontend
 source-contract helper module and aligned evidence/open-surface aliases with
-the backend contract.
+the backend contract. Docs checkpoint `22e685d6` records the frontend open-plan
+drift before behavior commit `b5c6a78f` moved generic open-plan resolution into
+the same frontend source-contract module.
 Existing unrelated untracked docs are preserved.
 
 what shipped: latest behavior commit
-`41b2135f7d72c21ee3ddccf6a7deb9053b8ad6b3` was pushed to `origin/main` and
-deployed to staging. It consolidates frontend source evidence/open-surface
-normalization into a dedicated frontend source-contract module. Prior behavior
+`b5c6a78fd2079869f9b7cb91cabc76ecb43feeec` was pushed to `origin/main` and
+deployed to staging. It consolidates frontend source open-plan resolution into
+the dedicated frontend source-contract module while preserving the existing
+renderer export for current callers. Prior behavior
+`41b2135f7d72c21ee3ddccf6a7deb9053b8ad6b3` consolidates frontend source
+evidence/open-surface normalization into that module. Prior behavior
 commit `53dd9b34d694ecd04c354cc1e614c12d87245631` adds policy and retrieval
 context to canonical publication export metadata while preserving existing
 public source entities/transclusions and the private-material-omitted claim.
@@ -1027,6 +1031,21 @@ what was proven:
   `2026-06-06T15:54:42Z`.
 - Deployed frontend source-contract proof passed:
   `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize|source open plans normalize'`.
+- Frontend open-plan contract local checks passed:
+  `npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source open plans normalize'`
+  and `npm --prefix frontend run build`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27066961353`
+  completed successfully for `b5c6a78f`, including Node B staging deploy.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27066961328`
+  completed successfully.
+- Staging health after that deploy reported `status: "ok"`,
+  `vmctl_status: "ok"`, and proxy/upstream deployed_commit
+  `b5c6a78fd2079869f9b7cb91cabc76ecb43feeec`, deployed_at
+  `2026-06-06T15:59:57Z`.
+- Deployed frontend open-plan contract proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source open plans normalize'`.
 - Source evidence-state local checks passed:
   `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownLineage|TestVTextSourceGapRepair'`
   and `npm run build` in `frontend`.
@@ -3919,6 +3938,63 @@ remaining error field: this is a frontend open-plan consolidation slice. It
 does not yet create backend/shared generated `SourceOpenPlan` structs or cover
 ReaderArtifact/SourceSelector contracts, but it removes another renderer-owned
 behavior rule from the source opening path.
+
+Fix evidence:
+
+```text
+documentation checkpoint: 22e685d6 docs: record frontend open plan drift
+behavior commit: b5c6a78fd2079869f9b7cb91cabc76ecb43feeec
+```
+
+Implementation:
+
+- Added `SourceOpenPlanInput`, `SourceOpenPlan`, and `sourceOpenPlan` to
+  `frontend/src/lib/source-contract.ts`.
+- `frontend/src/lib/vtext-source-renderer.ts` now extracts entity shape
+  details and delegates Source Viewer/Web Lens/media/VText routing decisions to
+  `sourceOpenPlan`.
+- The existing `sourceEntityOpenPlan` export remains stable for VText source
+  rendering and launcher callers.
+- `frontend/tests/vtext-source-entities.spec.js` now covers both the
+  renderer-level source entity API and the contract-level resolver for
+  source-service durable targets, explicit browser/Web Lens requests, and
+  publication-version VText routing.
+
+Local verification:
+
+```text
+npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source open plans normalize'
+result: 1 passed
+
+npm --prefix frontend run build
+result: passed
+```
+
+CI/deploy evidence:
+
+```text
+CI run: https://github.com/choir-hip/go-choir/actions/runs/27066961353
+CI result: passed, including Go gates, frontend build, and Node B deploy
+FlakeHub run: https://github.com/choir-hip/go-choir/actions/runs/27066961328
+FlakeHub result: passed
+Node B deploy job: 79889468929 passed
+staging status: ok
+staging vmctl_status: ok
+staging proxy deployed_commit: b5c6a78fd2079869f9b7cb91cabc76ecb43feeec
+staging sandbox deployed_commit: b5c6a78fd2079869f9b7cb91cabc76ecb43feeec
+staging deployed_at: 2026-06-06T15:59:57Z
+```
+
+Deployed acceptance proof:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source open plans normalize'
+result: 1 passed
+```
+
+Residual risk: the frontend open-plan behavior now has one contract module.
+The broader mission still needs a backend/shared or generated `SourceOpenPlan`
+schema plus shared ReaderArtifact and SourceSelector contracts.
 
 ## Suggested `/goal`
 
