@@ -2278,7 +2278,7 @@ source-system review.
 
 ### Problem 11: Source-Cycle Fetchers Bypass The Runtime Source-Fetch SSRF Policy
 
-Status: `documented_before_fix`.
+Status: `deployed_with_local_behavior_proof_and_staging_identity`.
 
 problem: the runtime URL import path has a dedicated source-fetch HTTP client
 and validation path that rejects localhost, private networks, link-local
@@ -2386,7 +2386,7 @@ connectors.
 
 ### Problem 18: Runtime And Source Service Still Carry Parallel Source-Fetch Policy Implementations
 
-Status: `documented_before_fix`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: after the source-cycle SSRF repair, Choir still has two independent
 source-fetch policy implementations. `internal/runtime/content.go` defines
@@ -2547,7 +2547,7 @@ The acceptance used a browser-created authenticated session and the public
 
 ### Problem 19: Text-Like Import Migration Manifests Do Not Survive The First Durable Revision
 
-Status: `documented_before_fix`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: the VText file-open path already creates a canonical `.vtext` document
 title for imported files and preserves an original `ContentItem`, but the
@@ -2687,7 +2687,7 @@ The staging proof used public browser-authenticated `/api/vtext/*` and
 
 ### Problem 20: Source Open-Surface Normalization Is Still Frontend-Only
 
-Status: `documented_before_fix`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: the mission now has a shared `internal/sourcecontract` package for
 typed evidence states and source-fetch policy, but source open-surface routing
@@ -3004,7 +3004,7 @@ health is degraded, even if the new commit identity is already visible.
 
 ### Problem 12: Owner URL Source Repairs Default To Web Lens
 
-Status: `documented_before_fix`.
+Status: `accepted_on_staging_for_url_repair_open_surface`.
 
 problem: the owner source-review repair path still creates URL-backed source
 entities with `display.open_surface: "browser"`. That means an owner-supplied
@@ -3117,7 +3117,7 @@ and final adversarial/cognitive review remain open mission work.
 
 ### Problem 13: Published Inline Source Notes Leak Full Reader Snapshots
 
-Status: `documented_before_fix`.
+Status: `accepted_on_staging_for_published_inline_snapshot_boundaries`.
 
 problem: a published VText source note for a public content-item source can
 render the full cleaned reader snapshot inline beside the article instead of
@@ -3377,7 +3377,7 @@ review, dead-path pruning, and the hard mission review report plus PDF.
 
 ### Problem 14: Open-Surface Aliases Can Defeat Explicit Web Lens Routing
 
-Status: `documented_before_fix`.
+Status: `accepted_on_staging_for_open_surface_aliases`.
 
 affected contract/invariant: source opening must keep Source Viewer as the
 default for durable artifacts while allowing Web Lens only when the source
@@ -3482,7 +3482,7 @@ normalization should continue converging toward a single documented contract.
 
 ### Problem 15: Source Evidence States Still Render As Raw Or Incomplete UI States
 
-Status: `documented_before_fix`.
+Status: `accepted_on_staging_for_source_evidence_state_ui`.
 
 affected contract/invariant: missing-source placeholders must be replaced with
 typed evidence states and researcher-backed
@@ -3607,7 +3607,7 @@ remains a separate consolidation axis.
 
 ### Problem 16: Runtime Source Entity Evidence Can Still Persist Out-Of-Contract States
 
-Status: `documented_before_fix`.
+Status: `accepted_on_staging_for_runtime_source_evidence_states`.
 
 affected contract/invariant: VText `source_entities` are canonical revision
 metadata and should use the shared evidence-state vocabulary preserved through
