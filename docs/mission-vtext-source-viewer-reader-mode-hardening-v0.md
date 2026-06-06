@@ -1176,3 +1176,35 @@ nix build .#packages.x86_64-linux.sandbox .#packages.x86_64-linux.platformd .#pa
 could not run on the local `aarch64-darwin` machine because no
 `x86_64-linux` builder was available. The packaging fix therefore requires CI
 and Node B deploy proof before acceptance.
+
+## 2026-06-06 Runtime Nix Vendor Closure Problem Checkpoint
+
+Status: `documented_before_fix`.
+
+Commit `44de82dcebb05cd1c86c2cc8ddd1d8bf73e7788f` repaired the missing local
+`internal/markdownstructure` source closure problem. CI Go tests, runtime
+shards, frontend build, and Go build passed, and Node B then progressed to the
+host NixOS closure build. That build failed in the sandbox package with a
+different missing import:
+
+```text
+CI run: 27054120147
+Deploy job: 79855083318
+Failure phase: Host NixOS closure build
+Primary error:
+internal/runtime/browser.go:26:2: cannot find module providing package
+golang.org/x/net/html: import lookup disabled by -mod=vendor
+```
+
+Root-cause belief before fix: `golang.org/x/net v0.52.0` is present in
+`go.mod` and `go.sum`, and ordinary CI Go builds can compile it. The failing
+path is specific to Nix `buildGoModule` package closures. The runtime browser
+Markdown-alternate work introduced a real runtime dependency on
+`golang.org/x/net/html`, but at least the sandbox Nix `vendorHash` still points
+to a vendored dependency closure that predates that dependency. Because Nix
+uses `-mod=vendor`, the build cannot fall back to `go.mod` resolution.
+
+Stopping impact: mission cannot be complete until the runtime-bearing Nix
+service package vendor closures are updated, Node B deploy succeeds, staging
+reports the accepted SHA, and the owner-publication Markdown export proof passes
+against the deployed service.
