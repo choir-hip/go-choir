@@ -3738,6 +3738,63 @@ fixed for the current shared backend source evidence contract. Residual risk:
 future shared source packages outside `internal/sourcecontract` still need an
 explicit source-closure and deploy-impact entry when introduced.
 
+### Problem 23: Frontend Source Contract Still Duplicates Backend Evidence And Open-Surface Normalization
+
+Status: `documented_before_fix`.
+
+problem: backend runtime/platform paths now share evidence-state and
+open-surface normalization through `internal/sourcecontract`, but the frontend
+still carries separate switch statements in
+`frontend/src/lib/vtext-source-renderer.ts`. The duplicated frontend evidence
+normalizer already diverges from the backend contract: backend maps legacy
+`error`, `failed`, and `fetch_failed` to `unavailable`, while the frontend
+returns raw normalized tokens for those values. The frontend label helper also
+has a `reader_snapshot_ready` state outside the mission evidence vocabulary.
+
+affected contract/invariant: VText, Source Viewer, Web Lens, publication, and
+export must share one source contract for typed evidence states and open
+surface routing. If the frontend accepts or displays states that backend
+publication/export normalizes differently, owner/guest surfaces can show raw or
+out-of-contract evidence language even when canonical metadata and export
+metadata are correct.
+
+confirmed evidence:
+
+```text
+internal/sourcecontract/evidence.go:
+  NormalizeEvidenceState maps error/failed/fetch_failed -> unavailable and
+  unknown tokens -> empty string.
+
+frontend/src/lib/vtext-source-renderer.ts:
+  normalizeSourceEvidenceState handles pending/no-source-needed/access-blocked
+  aliases but falls through to the raw normalized token for error/fetch_failed.
+  sourceEvidenceStateLabel has a reader_snapshot_ready branch outside the
+  documented evidence vocabulary.
+
+frontend/tests/vtext-source-entities.spec.js:
+  current evidence-state tests cover pending/no-source-needed/access-blocked
+  but do not assert error/fetch_failed or unknown-token behavior.
+```
+
+acceptance for fix:
+
+- move frontend source evidence/open-surface constants and normalizers into a
+  small dedicated frontend source-contract module used by VText, Source
+  Viewer, Source Viewer launch, publication-local source entities, and Web
+  Lens/open-plan code paths;
+- align frontend evidence aliases with `internal/sourcecontract`, including
+  `error`, `failed`, and `fetch_failed` mapping to `unavailable`, and unknown
+  tokens returning no canonical state rather than raw UI text;
+- keep explicit Web Lens/live aliases distinct from durable Source Viewer
+  aliases;
+- add focused frontend tests for the backend-aligned aliases and existing
+  source-open behavior.
+
+remaining error field: this is a frontend contract-consolidation slice. It
+does not generate a single cross-language schema or cover ReaderArtifact and
+selector structs yet, but it removes one active duplicated normalization path
+from the user-facing source surfaces.
+
 ## Suggested `/goal`
 
 ```text
