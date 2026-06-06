@@ -7428,3 +7428,43 @@ belief-state update:
   confidence classification, cleaner arbitrary URL snapshots, and claim/source
   review that can decide confirming, refuting, qualifying, or no-source-needed
   states without rendering placeholders in article prose.
+
+## 2026-06-06 Problem: Source Review Cannot Mark No Source Needed
+
+status: documented_pending_repair
+
+new evidence:
+
+- `frontend/src/lib/VTextSourcePanel.svelte` exposes source review fields for
+  marker, title, optional URL, and confirming excerpt only.
+- `frontend/src/lib/vtext-source-review.js` always builds a new source entity
+  and a citation resolution from the selected marker to that entity.
+- `internal/runtime/vtext.go` validates every source-gap citation resolution as
+  `marker + entity_id` and rejects resolutions without a known source entity.
+- `applyVTextCitationResolutions` can only rewrite `[n]` to
+  `[n](source:ENTITY_ID)`. It cannot intentionally remove an unresolved marker
+  when review determines that no source is needed.
+
+current interpretation:
+
+- The current source review workflow can confirm a claim, and the UI copy
+  hints at refuting sources, but the actual product contract cannot represent
+  the explicit no-source-needed outcome requested by the mission.
+- Without an omit/no-source-needed resolution, an owner has to either leave a
+  repairable gap forever or attach a fake/unnecessary source, which violates
+  the invariant that visible citation markers are real transclusion points.
+
+risk:
+
+- The product can pressure reviewers toward invented citations for claims that
+  should simply have no marker.
+- The legal-cloud proposal could look over-cited or carry source artifacts that
+  do not actually improve the article.
+
+next repair:
+
+- Add a generic source-gap resolution action for `no_source_needed`/omit that
+  removes the unresolved marker from canonical VText, clears the corresponding
+  source gap, and records the explicit resolution reason in revision metadata.
+- Keep source-backed resolutions unchanged and do not create fake source
+  entities for omitted markers.
