@@ -2683,6 +2683,70 @@ verified that a URL-backed durable source opens Source Viewer by default while
 an explicit Web Lens request opens the browser/Web Lens path. It did not use
 internal or test-only routes.
 
+### Problem 21: Publication Export Metadata Omits Policy And Retrieval Context
+
+Status: `documented_before_fix`.
+
+problem: canonical publication export metadata already includes public source
+entities and transclusions, but it omits the publication access/export policy
+and the retrieval source/span records that define the canonical public artifact
+context. `ExportPublicationByRoute` correctly checks the publication export
+policy before producing bytes, and the publication bundle carries
+`bundle.Policy` plus retrieval span records. However,
+`publicationExportMetadata` serializes only the content/projection hashes,
+source revision hash, artifact manifest id, source entities, and transclusions.
+A downloaded Markdown/HTML/DOCX/PDF artifact therefore cannot prove which
+publication policy authorized the export or which retrieval source/span refs
+anchor the exported public artifact without resolving the live publication
+route again.
+
+affected contract/invariant: `source-external-data-publication.md` requires
+publication/export to preserve access policy, export policy, hashes, source
+metadata, transclusion records, and canonical artifact metadata without reading
+from rendered DOM. Export bytes are durable evidence artifacts. If the export
+metadata excludes policy and retrieval context, downstream verifiers cannot
+audit that copy/download obeyed the publication policy or tie the export back to
+the canonical retrieval source/span records embedded in the publication.
+
+confirmed evidence:
+
+```text
+internal/platform/service.go:
+  ExportPublicationByRoute resolves the publication bundle and calls
+  publicationExportAllowed(bundle.Policy.Export, format) before exporting.
+
+internal/platform/types.go:
+  PublicationBundle contains Policy and Retrieval records.
+
+internal/platform/export_formats.go:
+  publicationExportMetadata writes schema, format, publication ids,
+  route_path, content_hash, source_revision_hash, projection_hash,
+  artifact_manifest_id, source_entities, and transclusions, but not
+  access_policy, export_policy, or retrieval source/span refs.
+
+internal/platform/service_test.go:
+  export tests assert source_entities/transclusions/evidence_state but do not
+  require policy or retrieval refs in the exported metadata.
+```
+
+acceptance for fix:
+
+- include publication access/export policy in canonical export metadata for all
+  export formats;
+- include public retrieval source/span refs in canonical export metadata so the
+  export can be tied back to the immutable public retrieval artifact;
+- keep private source revision material omitted, preserving the existing
+  `private_material_omitted` claim;
+- add focused platform coverage for Markdown/HTML export metadata;
+- ensure DOCX/PDF embedded custom/XMP metadata inherit the same envelope;
+- land through CI, staging deploy identity, and deployed product-path
+  publication export proof.
+
+remaining error field: this fixes the export metadata envelope only. It does
+not add new source reader snapshots, change public route access semantics,
+repair legal proposal table structure, or complete guest proof for every source
+kind.
+
 ### Problem 12: Owner URL Source Repairs Default To Web Lens
 
 Status: `documented_before_fix`.
