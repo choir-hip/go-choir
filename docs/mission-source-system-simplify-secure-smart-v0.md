@@ -1517,6 +1517,54 @@ planned proof: render a larger bounded structure window from the existing
 frontend regression test that includes v70, redeploy, and re-run Comet owner
 inspection to confirm v78 through v70 are visible with table signatures.
 
+### Problem 7: Stale Local VText Draft Can Mask Repaired Canonical Structure
+
+problem: after the canonical legal proposal head was repaired to v87 with a
+49-row appendix table, the owner-authenticated Comet editor still showed
+`Unsaved edit` and rendered the appendix glossary in collapsed prose form
+(`Term`, `Definition`, row text) inside the editable document surface. The
+Sources diagnosis panel on the same window reported v87 with `1` table,
+`49` rows, and table signature `sha256:a80c30b628c7`. The editor draft and
+canonical head therefore disagreed inside one product window, and saving or
+revising from that stale draft could reintroduce the table-loss regression.
+
+affected contract/invariant: canonical VText revisions are the source of truth.
+Browser local draft recovery must not silently override a newer canonical head,
+especially when the recovered draft is based on an older revision and has lost
+document structure. Owner legal-proposal proof cannot safely mutate the real
+document while a stale collapsed draft is auto-restored over the repaired head.
+
+evidence: Computer Use in Comet on `https://choir.news` showed the
+`choir_private_legal_cloud_proposal.vtext` window at v87 with `Unsaved edit`.
+The Sources diagnosis panel in the same window showed `24 bounded summaries`,
+v87 table count `1`, row count `49`, table line range `L269-L317`, and table
+signature `sha256:a80c30b628c7`. The editable document text area exposed by the
+accessibility tree showed the Appendix A glossary as plain lines beginning
+`Term`, `Definition`, `32B / 70B / 120B-class models`, etc., not as a Markdown
+pipe table. Code inspection showed `restoreLocalDraftIfNewer()` restores any
+localStorage draft whose content differs from the current revision and does not
+check the stored `parent_revision_id` against the current head revision.
+
+first observed version/transition: staging at deployed commit
+`bfd23fa088d754039f679adf0a526abbdee73a64`, Comet owner session after the
+appendix-table stabilization repair was deployed.
+
+suspected owner: frontend VText local draft restore and revision/head
+synchronization.
+
+why local/API-only fix is insufficient: the dangerous state is browser-local
+and owner-session-specific. Backend stabilization can repair a submitted draft,
+but it cannot prevent the product editor from presenting stale collapsed
+content as the active owner draft. The restore policy must prevent stale drafts
+from masking a newer canonical head before the user saves or revises.
+
+planned proof: add a frontend regression test that seeds a local draft with an
+older `parent_revision_id`, advances the canonical document head to a version
+with a Markdown table, reopens the document, and verifies the editor renders
+the current table head instead of auto-restoring the stale collapsed draft.
+Then redeploy and re-open the owner legal proposal in Comet to verify v87 no
+longer shows the collapsed appendix draft as an unsaved edit.
+
 ## Suggested `/goal`
 
 ```text
