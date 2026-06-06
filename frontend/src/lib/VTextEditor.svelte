@@ -2195,6 +2195,7 @@
   $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly;
   $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published VText document' : 'VText document';
   $: editorSurfaceAriaMultiline = isPublishedReadOnly ? undefined : 'true';
+  $: revisionLineLabel = isViewingHistorical ? 'Historical' : 'Latest';
   $: if (publishMenuOpen && (!currentDoc || isPublishedMode || loading || submitting || agentPending || !!mergePreview)) publishMenuOpen = false;
   $: sourceGaps = revisionSourceGaps(currentRevision);
   $: sourceEntities = revisionSourceEntities(currentRevision, publishedBundle);
@@ -2294,7 +2295,7 @@
         >
           &gt;
         </button>
-        <span class="draft-line" data-vtext-draft-line>Primary draft</span>
+        <span class="draft-line" data-vtext-draft-line>{revisionLineLabel}</span>
       </div>
 
       <div class="doc-state" data-vtext-state>
@@ -2432,7 +2433,7 @@
             {/if}
             <div class="publish-menu-wrap">
               <button
-                class="secondary-action"
+                class="secondary-action publish-action"
                 data-vtext-publish
                 aria-haspopup="menu"
                 aria-expanded={publishMenuOpen}
@@ -2747,10 +2748,11 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.55rem;
-    padding: 0.58rem 0.72rem;
+    min-height: 3.7rem;
+    padding: 0.5rem 0.72rem;
     border-bottom: 1px solid var(--choir-border-strong);
     background: var(--choir-state-selected);
-    max-height: 4.2rem;
+    max-height: 3.7rem;
     overflow: visible;
     transition:
       opacity 180ms ease,
@@ -2799,6 +2801,7 @@
     align-items: center;
     gap: 0.42rem;
     min-width: 0;
+    flex-wrap: nowrap;
   }
 
   .doc-actions {
@@ -2995,7 +2998,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 2.3rem;
+    width: 3.1rem;
     height: 1.95rem;
     padding: 0 0.6rem;
     border-radius: 999px;
@@ -3011,7 +3014,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    max-width: 9rem;
+    width: 7.6rem;
     height: 1.95rem;
     padding: 0 0.72rem;
     border-radius: 999px;
@@ -3057,10 +3060,18 @@
 
   .secondary-action {
     border-radius: 999px;
+    min-width: 5.8rem;
+    height: 2.1rem;
     padding: 0.62rem 0.84rem;
     font-size: 0.78rem;
     font-weight: 720;
     color: var(--choir-text-accent);
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .publish-action {
+    min-width: 7.4rem;
   }
 
   .secondary-action.danger {
@@ -3447,9 +3458,9 @@
     flex: 0 0 auto;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.7rem;
-    align-items: start;
-    padding: 0.72rem 0.86rem;
+    gap: 0.65rem;
+    align-items: center;
+    padding: 0.58rem 0.78rem;
     border-bottom: 1px solid var(--choir-border-strong);
     background: var(--choir-state-selected);
   }
@@ -3474,16 +3485,16 @@
   }
 
   .public-link {
-    display: inline-block;
-    max-width: min(34rem, 100%);
+    display: block;
+    max-width: min(28rem, 100%);
     color: var(--choir-text-accent);
     font-size: 0.84rem;
     font-weight: 720;
-    line-height: 1.35;
+    line-height: 1.2;
     overflow: hidden;
-    overflow-wrap: anywhere;
     text-overflow: ellipsis;
     text-decoration: none;
+    white-space: nowrap;
   }
 
   .public-link:hover,
@@ -3494,9 +3505,10 @@
 
   .publication-actions {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+    flex-wrap: nowrap;
+    gap: 0.42rem;
     align-items: center;
+    min-width: 0;
   }
 
   .publication-actions .primary-action {

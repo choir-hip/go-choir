@@ -19,10 +19,14 @@ test('vtext uses the document surface as the window and exposes version navigati
   const editor = page.locator('[data-vtext-editor-area]');
   const prev = page.locator('[data-vtext-prev]');
   const next = page.locator('[data-vtext-next]');
+  const toolbar = page.locator('[data-vtext-toolbar]');
+  const revisionLine = page.locator('[data-vtext-draft-line]');
 
   await expect(editor).toBeVisible();
+  await expect(revisionLine).toContainText('Latest');
   await expect(prev).toBeDisabled();
   await expect(next).toBeDisabled();
+  const latestToolbarHeight = await toolbar.evaluate((el) => Math.round(el.getBoundingClientRect().height));
 
   await editor.fill('Version zero content.\n\nExpand this into a better document.');
   await page.locator('[data-vtext-prompt]').click();
@@ -30,6 +34,11 @@ test('vtext uses the document surface as the window and exposes version navigati
   await expect(page.locator('[data-vtext-save-status]')).toContainText(/First draft ready|Agent created next version/, { timeout: 10000 });
   await expect(prev).toBeEnabled();
   await expect(next).toBeDisabled();
+
+  await prev.click();
+  await expect(revisionLine).toContainText('Historical');
+  const historicalToolbarHeight = await toolbar.evaluate((el) => Math.round(el.getBoundingClientRect().height));
+  expect(historicalToolbarHeight).toBe(latestToolbarHeight);
 });
 
 test('vtext publish keeps policy behind the publish menu and forwards policy', async ({ desktopSession }) => {
