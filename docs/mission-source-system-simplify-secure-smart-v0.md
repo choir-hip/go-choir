@@ -841,9 +841,10 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T11:41:00Z, bounded VText diagnosis structure
-summaries landed, deployed to staging, and focused product-path staging
-acceptance passed.
+last checkpoint: 2026-06-06T11:56:00Z, bounded VText diagnosis structure
+summaries are available through the owner-authenticated VText Sources panel,
+but the panel currently renders only eight summaries and therefore stops at
+v80 for the legal proposal instead of covering the required v70-v78 window.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -862,11 +863,13 @@ public source entities/transclusions in canonical export metadata. Docs commit
 `bef6ed34` recorded the VText diagnosis structure-evidence gap before code.
 Behavior commit `c7f43961` adds bounded VText revision structure summaries to
 the owner-authenticated diagnosis route and supports `include_content=false`
-for no-body verifier extraction.
+for no-body verifier extraction. Behavior commit `c49064e4` surfaces bounded
+diagnosis structures in the VText Sources panel and requests
+`include_content=false` from the frontend.
 Existing unrelated untracked docs are preserved.
 
 what shipped: behavior commit
-`c7f439616105564810b82dabe4873b079cfd2343` was pushed to `origin/main` and
+`c49064e4ea34571fc5fccfddc0838e9714dc1331` was pushed to `origin/main` and
 deployed to staging. A later docs-only checkpoint may not appear in Node B
 health because docs-only changes intentionally do not trigger deploy.
 
@@ -981,22 +984,48 @@ what was proven:
   verified `revision_count: 0`, no body text leak, `table_count: 1`,
   `table_row_count: 3`, `source_marker_count: 1`, and non-empty content/table
   hashes.
+- Frontend diagnosis-surface local checks passed: `npm run build` in
+  `frontend` and
+  `npm run e2e -- vtext-markdown-lineage.spec.js -g "VText Sources panel (can cancel diagnosis|shows structured edit evidence|shows bounded revision structure)"`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27061439441`
+  completed successfully for `c49064e4`, including runtime shards,
+  non-runtime tests, frontend build, vet/build, and Node B staging deploy.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27061439422`
+  completed successfully.
+- Staging health at `https://choir.news/health` reported proxy and upstream
+  commit/deployed_commit
+  `c49064e4ea34571fc5fccfddc0838e9714dc1331` with deployed_at
+  `2026-06-06T11:48:24Z`.
+- Deployed frontend diagnosis-surface acceptance passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-markdown-lineage.spec.js -g "VText Sources panel shows bounded revision structure without body text"`.
+- Owner-authenticated Comet product-path proof passed for the legal proposal:
+  Comet loaded `https://choir.news`, opened
+  `choir_private_legal_cloud_proposal.vtext` at v87, opened Sources, invoked
+  Diagnosis, and rendered bounded no-body structure cards. The visible summary
+  reported `80 revisions`, `80 runs`, `v87`, `17 tables`, and
+  `35 source markers`. The first visible cards covered v87 through v80 with
+  compact table signatures and hashes. Direct raw navigation to the same
+  diagnosis API returned `{"error":"authentication required"}`, reinforcing
+  that the app-shell `fetchWithRenewal` path is required for owner proof.
 
 unproven or partial claims:
 
 - Exact v70-v78 revision comparison for the legal proposal is not yet complete,
   but the blocking extraction affordance now exists on staging for newly proven
-  product-path documents. Comet can load the authenticated revisions API for
+  product-path documents and for the legal proposal app surface. Comet can load
+  the authenticated revisions API for
   `f93cea62-f833-4dae-b414-8e44783d8cbe`, but the response contains full
   revision content and is too bulky for reliable accessibility-tree extraction.
   Comet exposes a Chromium AppleScript tab API, but JavaScript from Apple Events
   is disabled, producing: "Executing JavaScript through AppleScript is turned
   off." A later direct API probe also showed `/auth/session` can renew and
   prove identity while `/api/*` navigation can still return unauthenticated,
-  because it does not retry through frontend `fetchWithRenewal`. A bounded
-  product diagnosis/export endpoint, app-surface instrumentation, or enabling
-  `View > Developer > Allow JavaScript from Apple Events` would allow
-  structured extraction.
+  because it does not retry through frontend `fetchWithRenewal`. The current
+  app-surface diagnosis view renders only eight bounded summaries, so the
+  visible owner proof stops at v80 and does not cover the required v70-v78
+  window.
 - CI, deploy identity, and focused staging acceptance proof have been produced
   for the source-open, evidence-state/source-gap, publication/export source
   metadata, and bounded diagnosis-structure slices. The broader mission proofs
@@ -1029,7 +1058,9 @@ belief-state changes:
   the public `source_entities` and `transclusions` records.
 - VText diagnosis now has a bounded structure mode that can compare revision
   identity, content hashes, heading/source-marker counts, and compact table
-  signatures without returning full private revision bodies.
+  signatures without returning full private revision bodies. The route returns
+  enough data, but the current product panel truncates the rendered summaries
+  to eight.
 
 remaining error field:
 
@@ -1048,8 +1079,8 @@ remaining error field:
   shared frontend/backend schema convergence remain incomplete.
 - Table structure preservation now has broader partial-context tests and a
   deployed bounded diagnosis extraction route; the actual owner legal proposal
-  v70-v78 comparison still needs to be run through that route or an
-  owner-authenticated app-surface probe.
+  v70-v78 comparison still needs an app-surface render window wide enough to
+  include those versions.
 
 highest-impact remaining uncertainty: whether to introduce the shared source
 contract package first and route all callers through it, or to land the SSRF
@@ -1058,12 +1089,12 @@ documented safety risk makes the URL fetch policy the first behavior-changing
 fix, with shared contract types designed in the same pass so the fix does not
 create another isolated policy path.
 
-next executable probe: use the deployed bounded diagnosis structure route, via
-an authenticated product/app-surface path, to extract and compare the legal
-proposal v70-v78 table signatures for
-`f93cea62-f833-4dae-b414-8e44783d8cbe`; then repair the general
-structure-preservation path if the comparison identifies a remaining transition
-not covered by current tests.
+next executable probe: widen the bounded diagnosis structure panel beyond the
+current eight-card cap, redeploy, then use the owner-authenticated
+product/app-surface path to extract and compare the legal proposal v70-v78
+table signatures for `f93cea62-f833-4dae-b414-8e44783d8cbe`; then repair the
+general structure-preservation path if the comparison identifies a remaining
+transition not covered by current tests.
 
 suggested resume goal string: continue
 `docs/mission-source-system-simplify-secure-smart-v0.md` from commits
@@ -1356,6 +1387,48 @@ bounded revision structure summaries: version/revision identity, content hash,
 line/heading/table/source-marker counts, compact table signatures, and no full
 content. Add runtime tests proving diagnosis includes structure summaries and
 omits private revision bodies when requested with a bounded structure mode.
+
+### Problem 6: VText Diagnosis Panel Truncates Before Required Revision Window
+
+problem: the deployed owner-authenticated VText Sources diagnosis panel renders
+only eight bounded revision structure summaries, even when the backend returns
+up to 80 structures. For the legal proposal at v87, the visible app surface
+therefore shows v87 through v80 and cannot expose the required v70-v78 table
+transition.
+
+affected contract/invariant: root-cause work for the legal proposal appendix
+table regression must compare v70-v78 through product/control evidence, not by
+direct database access or full private revision dumps. The owner app surface
+must render enough bounded structure evidence to inspect that window.
+
+evidence: deployed staging commit
+`c49064e4ea34571fc5fccfddc0838e9714dc1331` passed CI, FlakeHub, Node B deploy
+identity, and focused Playwright acceptance for bounded diagnosis rendering.
+Computer Use in Comet opened `choir_private_legal_cloud_proposal.vtext` at v87,
+opened Sources, clicked Diagnosis, and rendered `80 revisions`, `80 runs`,
+`17 tables`, and `35 source markers`, but the rendered bounded summaries were
+limited to eight cards: v87, v86, v85, v84, v83, v82, v81, and v80. Direct raw
+navigation to
+`/api/vtext/documents/f93cea62-f833-4dae-b414-8e44783d8cbe/diagnosis?limit=10000&include_content=false`
+returned `{"error":"authentication required"}`, so the app surface remains the
+available owner-authenticated proof path.
+
+first observed version/transition: current staging behavior at
+`c49064e4ea34571fc5fccfddc0838e9714dc1331` during the owner Comet diagnosis
+panel probe.
+
+suspected owner: VText diagnosis product UI.
+
+why local/API-only fix is insufficient: the backend already returns bounded
+structure data without full content, and mocked frontend tests prove the
+component can render a structure summary. The failing realism axis is the
+owner-authenticated product panel's visible revision window for the actual
+legal proposal.
+
+planned proof: render a larger bounded structure window from the existing
+`revision_structures` payload, keep the no-body diagnosis request, add a
+frontend regression test that includes v70, redeploy, and re-run Comet owner
+inspection to confirm v78 through v70 are visible with table signatures.
 
 ## Suggested `/goal`
 
