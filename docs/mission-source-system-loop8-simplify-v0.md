@@ -1556,4 +1556,22 @@ local proof:
 
   npm --prefix frontend run build
   result: passed
+
+commit/deploy proof:
+  commit 6613bf043065fe9ee8892536b3e63eb1f9f25570
+  GitHub Actions CI 27076266993 passed.
+  FlakeHub publish 27076266994 passed.
+  Node B deploy job 79914158820 passed.
+  /health reported proxy and sandbox deployed_commit
+  6613bf043065fe9ee8892536b3e63eb1f9f25570, deployed_at
+  2026-06-06T23:00:39Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000
+  npm --prefix frontend run e2e -- tests/vtext-authoring-history.spec.js
+  result: 2 passed.
+
+  The deployed proof exercised VText version navigation, stable toolbar height
+  across latest/historical labels, and publish menu policy payload construction
+  against the shipped frontend bundle.
 ```
