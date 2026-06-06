@@ -65,6 +65,7 @@ func decodeBase64(value string) ([]byte, error) {
 type publicationExportMetadataEnvelope struct {
 	AccessPolicy           json.RawMessage           `json:"access_policy"`
 	ExportPolicy           json.RawMessage           `json:"export_policy"`
+	ExportProfile          publicationExportProfile  `json:"export_profile"`
 	Retrieval              RetrievalBundle           `json:"retrieval"`
 	PrivateMaterialOmitted bool                      `json:"private_material_omitted"`
 	SourceEntities         []PublicationSourceEntity `json:"source_entities"`
@@ -262,6 +263,9 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	if docxMetadata.SourceManifest.Schema != "choir.publication_sources.v1" || len(docxMetadata.SourceManifest.Sources) != 1 {
 		t.Fatalf("docx source manifest metadata = %#v", docxMetadata.SourceManifest)
 	}
+	if docxMetadata.ExportProfile.ID != "default-professional" || docxMetadata.ExportProfile.CitationPlacement != "inline_marker_appendix" || !docxMetadata.ExportProfile.MetadataPolicy.EmbedSourceManifest {
+		t.Fatalf("docx export profile metadata = %#v", docxMetadata.ExportProfile)
+	}
 	docxBytes, err := decodeBase64(docxExport.ContentBase64)
 	if err != nil {
 		t.Fatalf("decode docx base64: %v", err)
@@ -301,7 +305,7 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	if !strings.Contains(parts["word/_rels/document.xml.rels"], `Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"`) || !strings.Contains(parts["word/_rels/document.xml.rels"], `Target="https://example.com/export-proof"`) || !strings.Contains(parts["word/_rels/document.xml.rels"], `TargetMode="External"`) {
 		t.Fatalf("docx relationships missing external source hyperlink: %s", parts["word/_rels/document.xml.rels"])
 	}
-	if !strings.Contains(parts["word/styles.xml"], "default-professional") && !strings.Contains(parts["word/styles.xml"], "Heading1") {
+	if !strings.Contains(parts["word/styles.xml"], "Heading1") || !strings.Contains(parts["word/styles.xml"], `w:sz w:val="32"`) {
 		t.Fatalf("docx styles missing default professional style definitions: %s", parts["word/styles.xml"])
 	}
 	if !strings.Contains(parts["docProps/custom.xml"], resp.PublicationVersionID) || !strings.Contains(parts["docProps/custom.xml"], resp.ContentHash) {
@@ -309,6 +313,9 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	}
 	if !strings.Contains(parts["docProps/custom.xml"], "ChoirExportProfile") || !strings.Contains(parts["docProps/custom.xml"], "default-professional") {
 		t.Fatalf("docx custom properties missing export profile: %s", parts["docProps/custom.xml"])
+	}
+	if !strings.Contains(parts["docProps/custom.xml"], "ChoirCitationPlacement") || !strings.Contains(parts["docProps/custom.xml"], "inline_marker_appendix") || !strings.Contains(parts["docProps/custom.xml"], "ChoirMetadataPolicy") {
+		t.Fatalf("docx custom properties missing export profile policy: %s", parts["docProps/custom.xml"])
 	}
 	if !strings.Contains(parts["docProps/custom.xml"], `access_policy`) || !strings.Contains(parts["docProps/custom.xml"], `retrieval`) {
 		t.Fatalf("docx custom properties missing export metadata envelope: %s", parts["docProps/custom.xml"])
@@ -328,6 +335,9 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	if !pdfMetadata.PrivateMaterialOmitted || !strings.Contains(string(pdfMetadata.ExportPolicy), `"download_allowed":true`) || pdfMetadata.Retrieval.SourceID == "" {
 		t.Fatalf("pdf export metadata = %#v access=%s export=%s", pdfMetadata, string(pdfMetadata.AccessPolicy), string(pdfMetadata.ExportPolicy))
 	}
+	if pdfMetadata.ExportProfile.ID != "default-professional" || pdfMetadata.ExportProfile.SourceDetailLevel != "labels_snapshots_manifest" {
+		t.Fatalf("pdf export profile metadata = %#v", pdfMetadata.ExportProfile)
+	}
 	pdfBytes, err := decodeBase64(pdfExport.ContentBase64)
 	if err != nil {
 		t.Fatalf("decode pdf base64: %v", err)
@@ -342,7 +352,7 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	if !strings.Contains(pdfText, "private legal cloud") || !strings.Contains(pdfText, "Sources") || !strings.Contains(pdfText, "This source snapshot must survive rich export.") || !strings.Contains(pdfText, "choir.publication_sources.v1") {
 		t.Fatalf("pdf missing rendered content/source manifest: %.800s", pdfText)
 	}
-	if !strings.Contains(pdfText, `access_policy`) || !strings.Contains(pdfText, `choir.publication_sources.v1`) {
+	if !strings.Contains(pdfText, `access_policy`) || !strings.Contains(pdfText, `choir.publication_sources.v1`) || !strings.Contains(pdfText, `inline_marker_appendix`) {
 		t.Fatalf("pdf embedded metadata missing policy/source manifest: %.400s", pdfText)
 	}
 }
@@ -1019,6 +1029,9 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	if !strings.Contains(exported.Content, `choir-export-profile" content="default-professional"`) || !strings.Contains(exported.Content, `.vtext-table`) {
 		t.Fatalf("html export missing default professional profile: %s", exported.Content)
 	}
+	if !strings.Contains(exported.Content, `id="choir-export-profile"`) || !strings.Contains(exported.Content, `"citation_placement": "inline_marker_appendix"`) || !strings.Contains(exported.Content, `"metadata_policy"`) {
+		t.Fatalf("html export missing embedded export profile contract: %s", exported.Content)
+	}
 	if strings.Contains(exported.Content, "# Legal Cloud") || strings.Contains(exported.Content, "**") || strings.Contains(exported.Content, "(source:src-entity-fed-rates)") {
 		t.Fatalf("html export leaked raw markdown syntax: %s", exported.Content)
 	}
@@ -1031,6 +1044,9 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	}
 	if exportedMetadata.SourceManifest.Schema != "choir.publication_sources.v1" || len(exportedMetadata.SourceManifest.Sources) != 1 {
 		t.Fatalf("export source manifest = %#v from %s", exportedMetadata.SourceManifest, string(exported.Metadata))
+	}
+	if exportedMetadata.ExportProfile.ID != "default-professional" || exportedMetadata.ExportProfile.Typography.MaxWidthPX == 0 || exportedMetadata.ExportProfile.CitationPlacement != "inline_marker_appendix" {
+		t.Fatalf("html export profile metadata = %#v from %s", exportedMetadata.ExportProfile, string(exported.Metadata))
 	}
 	if !strings.Contains(string(exportedMetadata.AccessPolicy), `"visibility":"public"`) || !strings.Contains(string(exportedMetadata.ExportPolicy), `"download_allowed":true`) {
 		t.Fatalf("export policy metadata access=%s export=%s", string(exportedMetadata.AccessPolicy), string(exportedMetadata.ExportPolicy))

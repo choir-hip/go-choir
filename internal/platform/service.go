@@ -796,7 +796,7 @@ func formatPublicationExportContent(bundle *PublicationBundle, format string) st
 		normalized, _ := markdownstructure.NormalizeTableShapedRows(content)
 		return normalized
 	case "html":
-		return renderPublicationHTML(buildPublicationDocument(bundle))
+		return renderPublicationHTML(buildPublicationDocument(bundle), defaultPublicationExportProfile())
 	default:
 		return content
 	}

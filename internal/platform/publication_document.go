@@ -35,18 +35,6 @@ type publicationInline struct {
 	SourceID string
 }
 
-type publicationExportProfile struct {
-	ID   string
-	Name string
-}
-
-func defaultPublicationExportProfile() publicationExportProfile {
-	return publicationExportProfile{
-		ID:   "default-professional",
-		Name: "Default Professional",
-	}
-}
-
 type publicationSourceManifest struct {
 	Schema                 string                          `json:"schema"`
 	PublicationID          string                          `json:"publication_id"`

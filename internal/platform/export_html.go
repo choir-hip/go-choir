@@ -2,14 +2,14 @@ package platform
 
 import (
 	"encoding/json"
+	"fmt"
 	"html"
 	"strconv"
 	"strings"
 )
 
-func renderPublicationHTML(doc PublicationDocument) string {
+func renderPublicationHTML(doc PublicationDocument, profile publicationExportProfile) string {
 	manifestJSON := publicationSourceManifestJSON(doc.Manifest)
-	profile := defaultPublicationExportProfile()
 	ordinals := publicationSourceOrdinals(doc)
 	var b strings.Builder
 	b.WriteString("<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>")
@@ -17,7 +17,9 @@ func renderPublicationHTML(doc PublicationDocument) string {
 	b.WriteString(`</title><meta name="generator" content="Choir">`)
 	b.WriteString(`<meta name="choir-export-profile" content="`)
 	b.WriteString(html.EscapeString(profile.ID))
-	b.WriteString(`"><style>`)
+	b.WriteString(`"><script type="application/json" id="choir-export-profile">`)
+	b.WriteString(safeScriptJSON(publicationExportProfileJSON(profile)))
+	b.WriteString(`</script><style>`)
 	b.WriteString(publicationHTMLProfileCSS(profile))
 	b.WriteString(`</style>`)
 	b.WriteString(`<script type="application/ld+json">`)
@@ -132,28 +134,38 @@ func renderHTMLInlines(inlines []publicationInline, ordinals map[string]int) str
 }
 
 func publicationHTMLProfileCSS(profile publicationExportProfile) string {
-	return `:root{color-scheme:light;--choir-text:#171717;--choir-muted:#5f6673;--choir-rule:#d6dbe3;--choir-accent:#1d4f91;--choir-source-bg:#f7f9fc}` +
-		`html{background:#f4f5f7}` +
-		`body{margin:0;color:var(--choir-text);font:16px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}` +
-		`.vtext-publication{box-sizing:border-box;max-width:820px;margin:42px auto;padding:56px 64px;background:#fff;box-shadow:0 1px 8px rgba(15,23,42,.08)}` +
-		`h1{font-size:30px;line-height:1.18;margin:0 0 24px;font-weight:750;letter-spacing:0}` +
-		`h2{font-size:22px;line-height:1.28;margin:34px 0 14px;font-weight:720;letter-spacing:0}` +
-		`h3{font-size:18px;line-height:1.35;margin:28px 0 10px;font-weight:700;letter-spacing:0}` +
-		`h4,h5,h6{font-size:16px;line-height:1.4;margin:24px 0 8px;font-weight:700;letter-spacing:0}` +
-		`p{margin:0 0 16px}` +
-		`ul{margin:0 0 16px 1.25rem;padding:0}` +
-		`li{margin:0 0 8px}` +
-		`.vtext-table{border-collapse:collapse;width:100%;margin:22px 0 28px;font-size:14px;line-height:1.45}` +
-		`.vtext-table th,.vtext-table td{border:1px solid var(--choir-rule);padding:9px 11px;vertical-align:top;text-align:left}` +
-		`.vtext-table th{background:#f1f4f8;font-weight:700}` +
-		`.vtext-source-ref{color:var(--choir-accent);text-decoration:none;border-bottom:1px solid rgba(29,79,145,.28)}` +
-		`.vtext-source-ref sup{font-size:.72em;line-height:0;margin-left:2px}` +
-		`.vtext-sources{margin-top:44px;padding-top:22px;border-top:1px solid var(--choir-rule);font-size:14px;color:#2f3744}` +
-		`.vtext-sources h2{font-size:18px;margin:0 0 14px}` +
-		`.vtext-sources ol{padding-left:1.35rem}` +
-		`.vtext-sources li{margin-bottom:14px}` +
-		`.vtext-sources blockquote{margin:8px 0 0;padding:10px 12px;background:var(--choir-source-bg);border-left:3px solid var(--choir-rule);color:var(--choir-muted)}` +
-		`@media(max-width:760px){.vtext-publication{margin:0;padding:32px 22px;box-shadow:none}h1{font-size:26px}}`
+	fontStack := firstNonEmpty(profile.Typography.FontStack, `-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif`)
+	bodySize := clampInt(profile.Typography.BodySizePX, 12, 24)
+	lineHeight := float64(clampInt(profile.Typography.LineHeightPct, 120, 200)) / 100
+	maxWidth := clampInt(profile.Typography.MaxWidthPX, 560, 1100)
+	titleSize := clampInt(firstNonZero(profile.Headings.TitleSizePX, profile.Headings.H1SizePX, 30), 22, 54)
+	h2Size := clampInt(firstNonZero(profile.Headings.H2SizePX, 22), 16, 42)
+	h3Size := clampInt(firstNonZero(profile.Headings.H3SizePX, 18), 14, 34)
+	borderColor := firstNonEmpty(profile.Table.BorderColor, "#d6dbe3")
+	headerFill := firstNonEmpty(profile.Table.HeaderFill, "#f1f4f8")
+	return fmt.Sprintf(`:root{color-scheme:light;--choir-text:#171717;--choir-muted:#5f6673;--choir-rule:%s;--choir-accent:#1d4f91;--choir-source-bg:#f7f9fc;--choir-table-head:%s}`+
+		`html{background:#f4f5f7}`+
+		`body{margin:0;color:var(--choir-text);font:%dpx/%.2f %s}`+
+		`.vtext-publication{box-sizing:border-box;max-width:%dpx;margin:42px auto;padding:56px 64px;background:#fff;box-shadow:0 1px 8px rgba(15,23,42,.08)}`+
+		`h1{font-size:%dpx;line-height:1.18;margin:0 0 24px;font-weight:750;letter-spacing:0}`+
+		`h2{font-size:%dpx;line-height:1.28;margin:34px 0 14px;font-weight:720;letter-spacing:0}`+
+		`h3{font-size:%dpx;line-height:1.35;margin:28px 0 10px;font-weight:700;letter-spacing:0}`+
+		`h4,h5,h6{font-size:16px;line-height:1.4;margin:24px 0 8px;font-weight:700;letter-spacing:0}`+
+		`p{margin:0 0 16px}`+
+		`ul{margin:0 0 16px 1.25rem;padding:0}`+
+		`li{margin:0 0 8px}`+
+		`.vtext-table{border-collapse:collapse;width:100%%;margin:22px 0 28px;font-size:14px;line-height:1.45}`+
+		`.vtext-table th,.vtext-table td{border:1px solid var(--choir-rule);padding:9px 11px;vertical-align:top;text-align:left}`+
+		`.vtext-table th{background:var(--choir-table-head);font-weight:700}`+
+		`.vtext-source-ref{color:var(--choir-accent);text-decoration:none;border-bottom:1px solid rgba(29,79,145,.28)}`+
+		`.vtext-source-ref sup{font-size:.72em;line-height:0;margin-left:2px}`+
+		`.vtext-sources{margin-top:44px;padding-top:22px;border-top:1px solid var(--choir-rule);font-size:14px;color:#2f3744}`+
+		`.vtext-sources h2{font-size:18px;margin:0 0 14px}`+
+		`.vtext-sources ol{padding-left:1.35rem}`+
+		`.vtext-sources li{margin-bottom:14px}`+
+		`.vtext-sources blockquote{margin:8px 0 0;padding:10px 12px;background:var(--choir-source-bg);border-left:3px solid var(--choir-rule);color:var(--choir-muted)}`+
+		`@media(max-width:760px){.vtext-publication{margin:0;padding:32px 22px;box-shadow:none}h1{font-size:26px}}`,
+		borderColor, headerFill, bodySize, lineHeight, fontStack, maxWidth, titleSize, h2Size, h3Size)
 }
 
 func publicationJSONLD(doc PublicationDocument) string {

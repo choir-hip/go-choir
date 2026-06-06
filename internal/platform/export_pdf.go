@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-func buildPublicationPDF(bundle *PublicationBundle, doc PublicationDocument) ([]byte, error) {
+func buildPublicationPDF(bundle *PublicationBundle, doc PublicationDocument, profile publicationExportProfile) ([]byte, error) {
 	title := doc.Title
 	pages := renderPublicationPDFPages(doc)
-	xmp := pdfMetadataXML(bundle, doc)
+	xmp := pdfMetadataXML(bundle, doc, profile)
 	pageCount := len(pages)
 	if pageCount == 0 {
 		pages = []string{pdfTextOp(50, 740, "F2", 18, title)}
@@ -279,12 +279,13 @@ func pdfWinAnsiText(text string) string {
 	return b.String()
 }
 
-func pdfMetadataXML(bundle *PublicationBundle, doc PublicationDocument) string {
+func pdfMetadataXML(bundle *PublicationBundle, doc PublicationDocument, profile publicationExportProfile) string {
 	manifestJSON := publicationSourceManifestJSON(doc.Manifest)
 	return `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>` +
 		`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
 		`<rdf:Description rdf:about="" xmlns:choir="https://choir.news/ns/publication-export/1.0/" choir:publicationId="` + xmlEscape(bundle.Publication.ID) + `" choir:publicationVersionId="` + xmlEscape(bundle.Version.ID) + `" choir:routePath="` + xmlEscape(bundle.Route.Path) + `" choir:contentHash="` + xmlEscape(bundle.Version.ContentHash) + `">` +
 		`<choir:exportSchema>choir.publication_export.v0</choir:exportSchema>` +
+		`<choir:exportProfile>` + xmlEscape(publicationExportProfileJSON(profile)) + `</choir:exportProfile>` +
 		`<choir:sourceManifest>` + xmlEscape(manifestJSON) + `</choir:sourceManifest>` +
 		`</rdf:Description></rdf:RDF></x:xmpmeta>` +
 		`<?xpacket end="w"?>`

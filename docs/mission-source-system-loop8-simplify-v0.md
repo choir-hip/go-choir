@@ -1667,3 +1667,69 @@ staging proof:
   relationships in word/_rels/document.xml.rels, no visible internal source ID
   or raw Markdown leakage, and customXml/item1.xml source manifest recovery.
 ```
+
+## Loop 8 Export Profile Contract Target
+
+Status: `documented_before_code`.
+
+Next rich-export simplification target: make the default professional export
+profile a real shared contract instead of an `ID`/`Name` marker plus scattered
+renderer constants. This is required before broader package movement because
+firm-specific export support should plug into one profile object for
+typography, heading scale, table style, citation placement, source detail
+level, headers/footers, and metadata embedding policy.
+
+This is a behavior-preserving contract extraction with small metadata
+improvement. The default profile should keep the current professional visual
+shape, but HTML, DOCX, PDF, export metadata, and embedded manifests should all
+name the same profile and policy fields. Do not introduce a user-selectable
+profile UI yet; the mission target is the render/export spine that future UI
+or firm configuration can safely call.
+
+acceptance:
+
+- one `publicationExportProfile` struct defines ID/name plus typography,
+  heading, table, citation, source detail, page, header/footer, and metadata
+  policy fields;
+- HTML, DOCX, PDF, and export metadata consume the same profile object rather
+  than separate ad hoc constants;
+- default output remains compatible with current staging-proven export
+  behavior;
+- platform tests assert the default-professional profile and its policy fields
+  survive in rich export metadata and embedded document metadata;
+- no source/publication access policy, source manifest, or SSRF behavior
+  changes.
+
+local implementation/evidence:
+
+```text
+change:
+  internal/platform/publication_export_profile.go defines the default
+  professional profile contract: typography, heading scale, table style,
+  citation placement, source detail level, page/header/footer hooks, and
+  metadata embedding policy.
+
+  buildPublicationExportBytes now computes one profile and passes it through
+  export metadata plus HTML, DOCX, and PDF renderers. HTML embeds the profile
+  as JSON and derives profile CSS from it. DOCX writes profile policy into
+  custom properties and derives Word style sizes from it. PDF embeds the same
+  profile JSON in XMP metadata. Direct HTML fallback rendering uses the same
+  default profile.
+
+local proof:
+  gofmt -w internal/platform/publication_export_profile.go \
+    internal/platform/publication_document.go internal/platform/export_formats.go \
+    internal/platform/export_html.go internal/platform/export_docx.go \
+    internal/platform/export_pdf.go internal/platform/export_helpers.go \
+    internal/platform/service.go internal/platform/service_test.go
+  git diff --check
+  result: passed
+
+  nix develop -c go test ./internal/platform -run
+  'TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestPublishVTextCreatesImmutablePublicRecords'
+  -count=1 -v
+  result: passed
+
+  nix develop -c go test ./internal/platform ./internal/sourcecontract
+  result: passed
+```

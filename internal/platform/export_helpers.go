@@ -14,6 +14,22 @@ func publicationSourceManifestJSON(manifest publicationSourceManifest) string {
 	return string(raw)
 }
 
+func publicationExportProfileJSON(profile publicationExportProfile) string {
+	raw, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
+}
+
+func publicationMetadataPolicyString(policy publicationExportMetadataPolicy) string {
+	raw, err := json.Marshal(policy)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
+}
+
 func safeScriptJSON(value string) string {
 	value = strings.ReplaceAll(value, "</", `<\/`)
 	value = strings.ReplaceAll(value, "<!--", `<\!--`)
@@ -39,4 +55,13 @@ func clampInt(v, min, max int) int {
 		return max
 	}
 	return v
+}
+
+func firstNonZero(values ...int) int {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
 }

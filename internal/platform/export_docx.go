@@ -12,9 +12,8 @@ import (
 	"time"
 )
 
-func buildPublicationDOCX(bundle *PublicationBundle, doc PublicationDocument, metadata json.RawMessage) ([]byte, error) {
+func buildPublicationDOCX(bundle *PublicationBundle, doc PublicationDocument, metadata json.RawMessage, profile publicationExportProfile) ([]byte, error) {
 	manifestJSON := publicationSourceManifestJSON(doc.Manifest)
-	profile := defaultPublicationExportProfile()
 	rels := docxDocumentRelationships(doc)
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -28,6 +27,9 @@ func buildPublicationDOCX(bundle *PublicationBundle, doc PublicationDocument, me
 			"ChoirRoutePath":            bundle.Route.Path,
 			"ChoirContentHash":          bundle.Version.ContentHash,
 			"ChoirExportProfile":        profile.ID,
+			"ChoirCitationPlacement":    profile.CitationPlacement,
+			"ChoirSourceDetailLevel":    profile.SourceDetailLevel,
+			"ChoirMetadataPolicy":       publicationMetadataPolicyString(profile.MetadataPolicy),
 			"ChoirExportMetadata":       string(metadata),
 			"ChoirSourceManifestSchema": doc.Manifest.Schema,
 		}),
@@ -35,7 +37,7 @@ func buildPublicationDOCX(bundle *PublicationBundle, doc PublicationDocument, me
 		"customXml/_rels/item1.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
 			`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`,
 		"word/document.xml":            docxDocumentXML(doc, rels),
-		"word/styles.xml":              docxStylesXML(),
+		"word/styles.xml":              docxStylesXML(profile),
 		"word/_rels/document.xml.rels": docxDocumentRelsXML(rels),
 	}
 	for name, content := range files {
@@ -232,14 +234,19 @@ func docxSourceManifestXML(manifestJSON string) string {
 		`</json></choirSourceManifest>`
 }
 
-func docxStylesXML() string {
+func docxStylesXML(profile publicationExportProfile) string {
+	bodyHalfPoints := strconv.Itoa(clampInt(profile.Typography.BodySizePX*2, 18, 32))
+	titleHalfPoints := strconv.Itoa(clampInt(firstNonZero(profile.Headings.TitleSizePX, 30)*2, 44, 84))
+	h1HalfPoints := strconv.Itoa(clampInt(firstNonZero(profile.Headings.H1SizePX, 30)*2, 40, 76))
+	h2HalfPoints := strconv.Itoa(clampInt(firstNonZero(profile.Headings.H2SizePX, 22)*2, 32, 64))
+	h3HalfPoints := strconv.Itoa(clampInt(firstNonZero(profile.Headings.H3SizePX, 18)*2, 28, 52))
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
 		`<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-		`<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="180" w:line="300" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="22"/></w:rPr></w:style>` +
-		`<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:spacing w:before="0" w:after="280"/></w:pPr><w:rPr><w:b/><w:sz w:val="34"/></w:rPr></w:style>` +
-		`<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="360" w:after="160"/></w:pPr><w:rPr><w:b/><w:sz w:val="30"/></w:rPr></w:style>` +
-		`<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="280" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/></w:rPr></w:style>` +
-		`<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="220" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style>` +
+		`<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="180" w:line="300" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="` + bodyHalfPoints + `"/></w:rPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:spacing w:before="0" w:after="280"/></w:pPr><w:rPr><w:b/><w:sz w:val="` + titleHalfPoints + `"/></w:rPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="360" w:after="160"/></w:pPr><w:rPr><w:b/><w:sz w:val="` + h1HalfPoints + `"/></w:rPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="280" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="` + h2HalfPoints + `"/></w:rPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="220" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="` + h3HalfPoints + `"/></w:rPr></w:style>` +
 		`<w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="360" w:hanging="180"/><w:spacing w:after="120"/></w:pPr></w:style>` +
 		`<w:style w:type="paragraph" w:styleId="SourceAppendix"><w:name w:val="Source Appendix"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="120"/></w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:style>` +
 		`</w:styles>`

@@ -15,29 +15,30 @@ func buildPublicationExportBytes(bundle *PublicationBundle, format string) (publ
 	if bundle == nil {
 		return publicationExportBytes{}, fmt.Errorf("publication bundle is required")
 	}
-	metadata := publicationExportMetadata(bundle, format)
+	profile := defaultPublicationExportProfile()
+	metadata := publicationExportMetadata(bundle, format, profile)
 	doc := buildPublicationDocument(bundle)
 	switch format {
 	case "docx":
-		content, err := buildPublicationDOCX(bundle, doc, metadata)
+		content, err := buildPublicationDOCX(bundle, doc, metadata, profile)
 		if err != nil {
 			return publicationExportBytes{}, err
 		}
 		return publicationExportBytes{content: content, metadata: metadata}, nil
 	case "pdf":
-		content, err := buildPublicationPDF(bundle, doc)
+		content, err := buildPublicationPDF(bundle, doc, profile)
 		if err != nil {
 			return publicationExportBytes{}, err
 		}
 		return publicationExportBytes{content: content, metadata: metadata}, nil
 	case "html":
-		return publicationExportBytes{content: []byte(renderPublicationHTML(doc)), metadata: metadata}, nil
+		return publicationExportBytes{content: []byte(renderPublicationHTML(doc, profile)), metadata: metadata}, nil
 	default:
 		return publicationExportBytes{content: []byte(formatPublicationExportContent(bundle, format)), metadata: metadata}, nil
 	}
 }
 
-func publicationExportMetadata(bundle *PublicationBundle, format string) json.RawMessage {
+func publicationExportMetadata(bundle *PublicationBundle, format string, profile publicationExportProfile) json.RawMessage {
 	if bundle == nil {
 		return json.RawMessage("{}")
 	}
@@ -53,7 +54,8 @@ func publicationExportMetadata(bundle *PublicationBundle, format string) json.Ra
 		"projection_hash":          bundle.Version.ProjectionHash,
 		"artifact_manifest_id":     bundle.Artifact.ManifestID,
 		"generated_at":             time.Now().UTC().Format(time.RFC3339Nano),
-		"provenance_scope":         "public_publication_version_only",
+		"export_profile":           profile,
+		"provenance_scope":         profile.MetadataPolicy.PrivateScope,
 		"private_material_omitted": true,
 		"access_policy":            json.RawMessage(firstNonEmpty(string(bundle.Policy.Access), "{}")),
 		"export_policy":            json.RawMessage(firstNonEmpty(string(bundle.Policy.Export), "{}")),
