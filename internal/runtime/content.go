@@ -30,6 +30,8 @@ import (
 const maxImportedContentBytes = 2 * 1024 * 1024
 const maxStoredExtractedText = 300 * 1024
 
+var sourceFetchAllowPrivateNetworkForTests bool
+
 type contentItemListResponse struct {
 	Items []types.ContentItem `json:"items"`
 }
@@ -1585,10 +1587,10 @@ func validateSourceFetchURL(raw string) error {
 	if host == "" {
 		return fmt.Errorf("url host is required")
 	}
-	if sourceFetchHostnameBlocked(host) {
+	if sourceFetchHostnameBlocked(host) && !sourceFetchAllowPrivateNetworkForTests {
 		return fmt.Errorf("source URL host is not allowed")
 	}
-	if ip := net.ParseIP(host); ip != nil && sourceFetchIPBlocked(ip) {
+	if ip := net.ParseIP(host); ip != nil && sourceFetchIPBlocked(ip) && !sourceFetchAllowPrivateNetworkForTests {
 		return fmt.Errorf("source URL host is not allowed")
 	}
 	return nil
@@ -1599,11 +1601,11 @@ func validateSourceFetchHost(ctx context.Context, resolver *net.Resolver, host s
 	if host == "" {
 		return fmt.Errorf("source fetch host is required")
 	}
-	if sourceFetchHostnameBlocked(host) {
+	if sourceFetchHostnameBlocked(host) && !sourceFetchAllowPrivateNetworkForTests {
 		return fmt.Errorf("source fetch host resolves to forbidden address")
 	}
 	if ip := net.ParseIP(host); ip != nil {
-		if sourceFetchIPBlocked(ip) {
+		if sourceFetchIPBlocked(ip) && !sourceFetchAllowPrivateNetworkForTests {
 			return fmt.Errorf("source fetch host resolves to forbidden address")
 		}
 		return nil
@@ -1616,7 +1618,7 @@ func validateSourceFetchHost(ctx context.Context, resolver *net.Resolver, host s
 		return fmt.Errorf("source fetch resolve host: no addresses")
 	}
 	for _, addr := range addrs {
-		if sourceFetchIPBlocked(addr.IP) {
+		if sourceFetchIPBlocked(addr.IP) && !sourceFetchAllowPrivateNetworkForTests {
 			return fmt.Errorf("source fetch host resolves to forbidden address")
 		}
 	}

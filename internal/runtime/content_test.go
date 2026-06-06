@@ -15,7 +15,17 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+func allowPrivateSourceFetchForTest(t *testing.T) {
+	t.Helper()
+	previous := sourceFetchAllowPrivateNetworkForTests
+	sourceFetchAllowPrivateNetworkForTests = true
+	t.Cleanup(func() {
+		sourceFetchAllowPrivateNetworkForTests = previous
+	})
+}
+
 func TestContentImportURLCreatesProvenanceRecord(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	_, handler := testAPISetup(t)
 	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -80,6 +90,7 @@ func TestContentImportURLCreatesProvenanceRecord(t *testing.T) {
 }
 
 func TestContentImportURLCleansReaderChrome(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	_, handler := testAPISetup(t)
 	article := strings.Repeat("This source paragraph is durable article evidence about private cloud infrastructure, jurisdiction, hosting controls, and operational reliability. ", 8)
 	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -128,6 +139,7 @@ func TestContentImportURLCleansReaderChrome(t *testing.T) {
 }
 
 func TestContentImportURLUsesSearXNGAlternateWhenPrimaryLowContent(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	_, handler := testAPISetup(t)
 	alternate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -192,6 +204,7 @@ func TestContentImportURLUsesSearXNGAlternateWhenPrimaryLowContent(t *testing.T)
 }
 
 func TestContentImportURLRefreshesEmptyExistingReadableItem(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	rt, handler := testAPISetup(t)
 	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -247,6 +260,7 @@ func TestContentImportURLRefreshesEmptyExistingReadableItem(t *testing.T) {
 }
 
 func TestContentImportURLRefreshesLegacyBrowserIdentityReaderItem(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	rt, handler := testAPISetup(t)
 	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
