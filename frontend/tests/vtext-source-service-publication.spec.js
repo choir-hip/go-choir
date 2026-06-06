@@ -179,7 +179,7 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
     body: JSON.stringify({
       source_type: 'extracted_url',
       media_type: 'text/html; charset=utf-8',
-      app_hint: 'browser',
+      app_hint: 'content',
       title: 'ABA Formal Opinion 512 cleaned source',
       source_url: 'https://www.americanbar.org/groups/professional_responsibility/publications/ethics_opinions/aba-formal-opinion-512/',
       canonical_url: 'https://www.americanbar.org/groups/professional_responsibility/publications/ethics_opinions/aba-formal-opinion-512/',

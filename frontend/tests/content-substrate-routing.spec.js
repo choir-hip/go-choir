@@ -105,8 +105,10 @@ test('prompt bar routes bare content references and product APIs record extracti
   });
   expect(imported.content_id).toBeTruthy();
   expect(imported.source_type).toBe('extracted_url');
-  expect(imported.media_type).toBe('text/html');
-  expect(imported.app_hint).toBe('browser');
+  expect(imported.media_type).toBe('text/markdown');
+  expect(imported.app_hint).toBe('content');
+  expect(imported.metadata.original_media_type).toBe('text/html');
+  expect(imported.metadata.reader_artifact_kind).toBe('cleaned_reader_markdown');
   expect(imported.content_hash).toMatch(/^[a-f0-9]{64}$/);
   expect(imported.text_content).toContain('Example Domain');
   expect(provenanceRungs(imported)).toEqual(expect.arrayContaining(['direct_http', 'readability_lite']));

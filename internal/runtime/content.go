@@ -342,20 +342,35 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 		"candidates":     candidates,
 		"hash_algorithm": "sha256",
 	})
-	metadata, _ := json.Marshal(map[string]any{
+	sourceMediaType := selected.MediaType
+	sourceAppHint := appHintForMedia(sourceMediaType, selected.URL, "")
+	originalMediaType := ""
+	if isHTMLMedia(selected.MediaType) && strings.TrimSpace(selected.Text) != "" {
+		originalMediaType = selected.MediaType
+		sourceMediaType = "text/markdown"
+		sourceAppHint = "content"
+	}
+
+	metadataFields := map[string]any{
 		"query":              query,
 		"http_status":        selected.StatusCode,
 		"http_content_type":  selected.ContentType,
 		"retrieval_strategy": retrievalStrategy(rungs),
-	})
+		"raw_content_hash":   selected.RawHash,
+	}
+	if originalMediaType != "" {
+		metadataFields["original_media_type"] = originalMediaType
+		metadataFields["reader_artifact_kind"] = "cleaned_reader_markdown"
+	}
+	metadata, _ := json.Marshal(metadataFields)
 	sourceType := "extracted_url"
 	if !isHTMLMedia(selected.MediaType) && !isTextMedia(selected.MediaType) {
 		sourceType = "url"
 	}
 	itemReq := contentCreateRequest{
 		SourceType:   sourceType,
-		MediaType:    selected.MediaType,
-		AppHint:      appHintForMedia(selected.MediaType, selected.URL, ""),
+		MediaType:    sourceMediaType,
+		AppHint:      sourceAppHint,
 		Title:        selected.Title,
 		SourceURL:    normalizedURL,
 		CanonicalURL: selected.URL,
@@ -574,7 +589,13 @@ func (rt *Runtime) findExistingURLContentItem(ctx context.Context, ownerID, cano
 
 func reusableImportedURLContent(item types.ContentItem) bool {
 	mediaType := normalizeMediaType(item.MediaType)
-	if isHTMLMedia(mediaType) || isTextMedia(mediaType) {
+	if isHTMLMedia(mediaType) {
+		return false
+	}
+	if strings.TrimSpace(item.AppHint) == "browser" && strings.TrimSpace(item.TextContent) != "" && isTextMedia(mediaType) {
+		return false
+	}
+	if isTextMedia(mediaType) {
 		return strings.TrimSpace(item.TextContent) != ""
 	}
 	return true
@@ -1618,7 +1639,7 @@ func appHintForMedia(mediaType, sourceURL, filePath string) string {
 
 func normalizeAppHint(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "vtext", "browser", "files", "pdf", "epub", "image", "video", "audio", "podcast":
+	case "vtext", "browser", "content", "files", "pdf", "epub", "image", "video", "audio", "podcast":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "files"

@@ -37,6 +37,7 @@ func TestContentImportURLCreatesProvenanceRecord(t *testing.T) {
 		AppHint     string         `json:"app_hint"`
 		Title       string         `json:"title"`
 		TextContent string         `json:"text_content"`
+		Metadata    map[string]any `json:"metadata"`
 		Provenance  map[string]any `json:"provenance"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &item); err != nil {
@@ -45,17 +46,23 @@ func TestContentImportURLCreatesProvenanceRecord(t *testing.T) {
 	if item.ContentID == "" {
 		t.Fatal("content_id is empty")
 	}
-	if item.MediaType != "text/html" {
-		t.Fatalf("media_type = %q, want text/html", item.MediaType)
+	if item.MediaType != "text/markdown" {
+		t.Fatalf("media_type = %q, want text/markdown", item.MediaType)
 	}
-	if item.AppHint != "browser" {
-		t.Fatalf("app_hint = %q, want browser", item.AppHint)
+	if item.AppHint != "content" {
+		t.Fatalf("app_hint = %q, want content", item.AppHint)
 	}
 	if item.Title != "Extraction Proof" {
 		t.Fatalf("title = %q", item.Title)
 	}
 	if !strings.Contains(item.TextContent, "readable text and provenance") {
 		t.Fatalf("text_content missing extracted text: %q", item.TextContent)
+	}
+	if item.Metadata["original_media_type"] != "text/html" || item.Metadata["reader_artifact_kind"] != "cleaned_reader_markdown" {
+		t.Fatalf("metadata missing reader identity: %#v", item.Metadata)
+	}
+	if item.Metadata["raw_content_hash"] == "" {
+		t.Fatalf("metadata missing raw_content_hash: %#v", item.Metadata)
 	}
 	if item.Provenance["hash_algorithm"] != "sha256" {
 		t.Fatalf("provenance hash_algorithm = %#v", item.Provenance["hash_algorithm"])
@@ -100,6 +107,8 @@ func TestContentImportURLCleansReaderChrome(t *testing.T) {
 	}
 
 	var item struct {
+		MediaType   string `json:"media_type"`
+		AppHint     string `json:"app_hint"`
 		TextContent string `json:"text_content"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &item); err != nil {
@@ -112,6 +121,9 @@ func TestContentImportURLCleansReaderChrome(t *testing.T) {
 	}
 	if !strings.Contains(item.TextContent, "durable article evidence about private cloud infrastructure") {
 		t.Fatalf("text_content missing article evidence: %q", item.TextContent)
+	}
+	if item.MediaType != "text/markdown" || item.AppHint != "content" {
+		t.Fatalf("reader artifact identity = %s/%s, want text/markdown/content", item.MediaType, item.AppHint)
 	}
 }
 
@@ -147,6 +159,8 @@ func TestContentImportURLUsesSearXNGAlternateWhenPrimaryLowContent(t *testing.T)
 
 	var item struct {
 		CanonicalURL string         `json:"canonical_url"`
+		MediaType    string         `json:"media_type"`
+		AppHint      string         `json:"app_hint"`
 		Title        string         `json:"title"`
 		TextContent  string         `json:"text_content"`
 		Metadata     map[string]any `json:"metadata"`
@@ -157,6 +171,9 @@ func TestContentImportURLUsesSearXNGAlternateWhenPrimaryLowContent(t *testing.T)
 	}
 	if item.CanonicalURL != alternate.URL {
 		t.Fatalf("canonical_url = %q, want alternate %q", item.CanonicalURL, alternate.URL)
+	}
+	if item.MediaType != "text/markdown" || item.AppHint != "content" {
+		t.Fatalf("alternate reader identity = %s/%s, want text/markdown/content", item.MediaType, item.AppHint)
 	}
 	if item.Title != "Alternate Source" {
 		t.Fatalf("title = %q", item.Title)
@@ -210,6 +227,8 @@ func TestContentImportURLRefreshesEmptyExistingReadableItem(t *testing.T) {
 
 	var item struct {
 		ContentID   string `json:"content_id"`
+		MediaType   string `json:"media_type"`
+		AppHint     string `json:"app_hint"`
 		Title       string `json:"title"`
 		TextContent string `json:"text_content"`
 	}
@@ -219,8 +238,65 @@ func TestContentImportURLRefreshesEmptyExistingReadableItem(t *testing.T) {
 	if item.ContentID == "empty-existing" {
 		t.Fatalf("empty existing content item was reused")
 	}
+	if item.MediaType != "text/markdown" || item.AppHint != "content" {
+		t.Fatalf("refreshed reader identity = %s/%s, want text/markdown/content", item.MediaType, item.AppHint)
+	}
 	if item.Title != "Refreshed Source" || !strings.Contains(item.TextContent, "readable body text") {
 		t.Fatalf("refreshed import = %#v", item)
+	}
+}
+
+func TestContentImportURLRefreshesLegacyBrowserIdentityReaderItem(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html><html><head><title>Reader Identity Source</title></head><body><main><p>` + strings.Repeat("This source now has durable reader text for citation source windows. ", 10) + `</p></main></body></html>`))
+	}))
+	defer source.Close()
+
+	now := time.Now().UTC()
+	if err := rt.Store().CreateContentItem(context.Background(), types.ContentItem{
+		ContentID:    "legacy-browser-readable",
+		OwnerID:      "user-content",
+		SourceType:   "extracted_url",
+		MediaType:    "text/html",
+		AppHint:      "browser",
+		Title:        "Legacy Browser Readable",
+		SourceURL:    source.URL,
+		CanonicalURL: source.URL,
+		TextContent:  "Old readable text stored with browser identity.",
+		ContentHash:  contentHash("Old readable text stored with browser identity."),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}); err != nil {
+		t.Fatalf("seed legacy content item: %v", err)
+	}
+
+	body := `{"url":` + strconvQuote(source.URL) + `,"query":"reader identity source"}`
+	req := authenticatedRequest(http.MethodPost, "/api/content/import-url", body, "user-content")
+	w := httptest.NewRecorder()
+	handler.HandleContentImportURL(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	var item struct {
+		ContentID string         `json:"content_id"`
+		MediaType string         `json:"media_type"`
+		AppHint   string         `json:"app_hint"`
+		Metadata  map[string]any `json:"metadata"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if item.ContentID == "legacy-browser-readable" {
+		t.Fatalf("legacy browser-identity source item was reused")
+	}
+	if item.MediaType != "text/markdown" || item.AppHint != "content" {
+		t.Fatalf("reader identity = %s/%s, want text/markdown/content", item.MediaType, item.AppHint)
+	}
+	if item.Metadata["original_media_type"] != "text/html" || item.Metadata["reader_artifact_kind"] != "cleaned_reader_markdown" {
+		t.Fatalf("metadata missing original reader identity: %#v", item.Metadata)
 	}
 }
 
@@ -256,6 +332,23 @@ func TestContentCreateSupportsDurableMediaReferences(t *testing.T) {
 	}
 	if !strings.Contains(listW.Body.String(), item.ContentID) {
 		t.Fatalf("list response missing content id %s: %s", item.ContentID, listW.Body.String())
+	}
+
+	readerBody := `{"source_type":"text","media_type":"text/markdown","app_hint":"content","title":"Reader Source","text_content":"Durable source reader text."}`
+	readerReq := authenticatedRequest(http.MethodPost, "/api/content/items", readerBody, "user-content")
+	readerW := httptest.NewRecorder()
+	handler.HandleContentCreate(readerW, readerReq)
+	if readerW.Code != http.StatusCreated {
+		t.Fatalf("reader status = %d body=%s", readerW.Code, readerW.Body.String())
+	}
+	var reader struct {
+		AppHint string `json:"app_hint"`
+	}
+	if err := json.Unmarshal(readerW.Body.Bytes(), &reader); err != nil {
+		t.Fatalf("decode reader response: %v", err)
+	}
+	if reader.AppHint != "content" {
+		t.Fatalf("manual reader app_hint = %q, want content", reader.AppHint)
 	}
 }
 
