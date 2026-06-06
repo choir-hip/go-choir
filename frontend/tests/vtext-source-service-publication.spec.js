@@ -148,7 +148,9 @@ test('publishes source-service source entities as expandable transclusions and c
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
   await expect(citation.locator('[data-vtext-inline-transclusion]')).not.toContainText(itemID);
-  const openSource = citation.locator('[data-vtext-open-source]');
+  const journalOpenSource = publishedReader.locator('[data-vtext-source-flow-note] [data-vtext-open-source]').first();
+  const inlineOpenSource = citation.locator('[data-vtext-open-source]');
+  const openSource = await journalOpenSource.isVisible().catch(() => false) ? journalOpenSource : inlineOpenSource;
   await expect(openSource).toBeVisible();
 
   const initialSourceWindows = await page.locator('[data-content-viewer]').count();
