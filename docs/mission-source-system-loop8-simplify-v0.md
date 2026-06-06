@@ -637,6 +637,16 @@ staging proof:
   result: 2 passed.
 ```
 
+Next backend extraction target: VText file-open projection, original-artifact
+preservation metadata, and `.vtext` shortcut manifest helpers. This is the
+first `internal/runtime/vtext.go` cleanup from the documented backend
+extraction order. The HTTP handlers and revision mutation flow should remain
+in place for now; only pure helper types/functions should move into
+`internal/runtime/vtext_import.go` in the same package. No new behavior problem
+is confirmed; this is a behavior-preserving module boundary around import
+projection semantics, source-path canonicalization, original file preservation,
+DOCX/PDF/text projection, and manifest path allocation.
+
 ### Performance Checks
 
 - Local focused backend check:
