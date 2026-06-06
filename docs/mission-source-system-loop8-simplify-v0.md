@@ -647,6 +647,42 @@ is confirmed; this is a behavior-preserving module boundary around import
 projection semantics, source-path canonicalization, original file preservation,
 DOCX/PDF/text projection, and manifest path allocation.
 
+Result: `internal/runtime/vtext_import.go` now owns file-open projection
+types/helpers, original content-item preservation metadata, text/DOCX/PDF
+projection helpers, `.vtext` shortcut file generation, manifest path
+allocation, and export filename normalization. `internal/runtime/vtext.go`
+retains the HTTP handlers and revision mutation flow.
+
+```text
+internal/runtime/vtext.go          4871 lines
+internal/runtime/vtext_import.go    810 lines
+
+local verification:
+  nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVText(OpenFile|PlainTextImport|ImportedMarkdown|ImportMarkdownLineage|EnsureManifest|APICreateRevisionCanonicalizesAliasedImportedDocumentTitle)'
+  result: passed.
+
+  nix develop -c go test ./internal/runtime
+  result: passed.
+
+commit:
+  f03bf14af91499a00fe055fb75160ca6cb44d2ba
+
+CI/deploy:
+  GitHub Actions CI 27074885597 passed.
+  FlakeHub publish 27074885607 passed.
+  Node B deploy job 79910525028 passed.
+  /health reported proxy and sandbox deployed_commit
+  f03bf14af91499a00fe055fb75160ca6cb44d2ba, deployed_at
+  2026-06-06T21:53:51Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-markdown-lineage.spec.js -g
+  'Markdown lineage import resolves known citation markers|Imported Markdown advances|Imported plain text advances'
+  result: 3 passed.
+```
+
 ### Performance Checks
 
 - Local focused backend check:
