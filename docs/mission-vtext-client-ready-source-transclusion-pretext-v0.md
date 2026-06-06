@@ -5436,3 +5436,26 @@ contract implication:
   prerequisite for source review.
 - Source review, source gaps, and source entity repair remain available while
   diagnosis is pending or cancelled.
+
+deployed hardening evidence:
+
+- Behavior commit `3964703ca7589d364b71101cda1f816244e04ad3`
+  (`fix: bound vtext source diagnosis`) was pushed to `main`.
+- GitHub Actions CI run `27046515713` completed successfully.
+- FlakeHub run `27046515740` completed successfully.
+- `https://choir.news/health` reported both proxy and sandbox at deployed
+  commit `3964703ca7589d364b71101cda1f816244e04ad3`, deployed at
+  `2026-06-06T00:03:47Z`.
+- Deployed staging proof:
+  `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "cancel diagnosis|VText
+  Sources panel applies source-gap repair" --project=chromium --timeout=120000`
+  -> `2 passed (19.0s)`.
+
+residual risk:
+
+- This hardening bounds the weak Diagnosis path but does not yet remove the
+  diagnostic JSON surface from normal reader/editor UX or replace manual source
+  review with researched confirming/refuting source acquisition.
