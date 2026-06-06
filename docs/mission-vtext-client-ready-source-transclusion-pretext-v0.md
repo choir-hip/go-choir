@@ -6746,3 +6746,35 @@ deployment status:
 
 - pending commit, push, CI, Node B deploy, staging identity, deployed
   Playwright proof, and Comet owner proof.
+
+## 2026-06-06 Problem: Source Attach Proof Relied On Transient Panel Copy
+
+status: documented_pending_test_repair
+
+new evidence:
+
+- After `73ab8c52bab7d6d233e1f29c6754994da71201dc` deployed to staging,
+  the new deployed source-attachment proof clicked `Attach text` in the owner
+  source panel.
+- The browser observed both write requests as successful:
+  `POST /api/content/items` returned `201`, and
+  `POST /api/vtext/documents/{id}/source-attachments` returned `201`.
+- The test then failed because it expected the source panel to retain the
+  transient copy `Attached source artifact to Attachable source fixture`.
+- On staging the panel returned to its neutral state after the document reload,
+  so the verifier stopped before checking the durable citation/source-window
+  behavior.
+
+current interpretation:
+
+- This is not evidence that source attachment failed; the product-path writes
+  both succeeded.
+- The test was coupled to ephemeral status copy instead of the durable contract:
+  the source entity target should become a content item, the citation should
+  expand through the journal/source-flow surface, and `Open source` should open
+  the attached reader-mode markdown artifact.
+
+next action:
+
+- Repair the verifier to assert the durable post-attachment behavior and keep
+  request status assertions for the two write legs.
