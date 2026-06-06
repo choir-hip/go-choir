@@ -5507,7 +5507,7 @@ mission axes.
 
 ### Problem 34: Nix Deploy Source Closures Exclude Source Contract Schema Assets
 
-Status: `source_closure_fix_staging_health_verified_pending_deploy_job_terminal`.
+Status: `closed_source_closure_fix_deployed`.
 
 problem: commit `519c5e9560370d1dccb459f70eba04a544339ae5` passed GitHub Go
 tests, runtime shards, frontend build, integration smoke, and FlakeHub publish,
@@ -5638,6 +5638,7 @@ fix commit:
 
 CI run:
   https://github.com/choir-hip/go-choir/actions/runs/27070479996
+  conclusion=success
 
 pre-deploy jobs:
   Detect Staging Deploy Impact -> success
@@ -5661,26 +5662,37 @@ staging health observed while deploy job was still in progress:
   upstream deployed_commit=2af0dbb75e5def609988a09b1b96edf1c7bf9520
   upstream deployed_at=2026-06-06T18:34:33Z
 
+terminal Node B deploy evidence:
+  Deploy to Staging (Node B), job 79898767522 -> success
+  deploy started=2026-06-06T18:34:29Z
+  deploy completed=2026-06-06T18:41:22Z
+  host service pointers updated for gateway, platformd, proxy, sandbox,
+    sourcecycled, vmctl
+  ordinary guest image deployed
+  playwright guest image deployed
+  vmctl restart completed
+  active interactive computers refreshed
+  health smoke passed for ports 8081, 8082, 8083, 8084, 8086, 8087
+  public frontend asset graph passed
+  final deploy log line: Staging deploy complete
+
 focused staging-base source-contract proof:
   PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'frontend source contract stays aligned with shared matrix|source evidence states normalize|source open plans normalize|source selectors normalize'
   -> 4 passed
 ```
 
-current deploy ambiguity: at 2026-06-06T18:38:30Z, GitHub still reported the
+resolved deploy ambiguity: at 2026-06-06T18:38:30Z, GitHub still reported the
 `Deploy to Staging (Node B)` job `79898767522` as `in_progress`, with the
 `Deploy to staging` step open, even though `/health` already reported the fix
-commit for proxy and upstream. Do not treat this as terminal deploy acceptance
-until the workflow reaches a terminal conclusion. If the job remains open past
-the normal deploy window, document a separate deploy-observability problem
-before changing behavior.
+commit for proxy and upstream. The job later completed successfully at
+2026-06-06T18:41:22Z. The observed lag was active computer refresh time, not a
+stuck deploy.
 
-remaining error field: Problem 34 has deployed-service identity and focused
-staging-base contract proof for the fix commit, but still lacks terminal Node B
-deploy-job acceptance and deploy log evidence. The broader mission still lacks
-owner/guest source opens, URL-backed/content-item/source-service-style source
-proof, legal proposal table survival, bounded table edit proof, publication and
-export source metadata proof, screenshots/traces, final hard review, and PDF
-report.
+remaining error field: Problem 34 is closed for the source-contract schema
+asset/source-closure failure. The broader mission still lacks owner/guest
+source opens, URL-backed/content-item/source-service-style source proof, legal
+proposal table survival, bounded table edit proof, publication and export
+source metadata proof, screenshots/traces, final hard review, and PDF report.
 
 ## Suggested `/goal`
 
