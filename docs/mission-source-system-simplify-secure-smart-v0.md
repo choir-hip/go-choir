@@ -841,19 +841,19 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T16:45Z, deployed behavior commit
-`c7210d27dcb311149d56b90911b664f8a1589394` makes the frontend source contract
-normalize selector kind aliases and flatten nested publication selector sets,
-then makes Source Viewer quote extraction read publication transclusion
-`source_selector` records. It followed docs checkpoint `5df2732f`, passed
-focused frontend tests, `npm --prefix frontend run build`, GitHub Actions CI,
-FlakeHub publish, Node B deploy, and deployed Playwright proof on
-`https://choir.news` that Source Viewer renders a publication transclusion
-selector-set quote even when flat entity selectors are absent. Earlier behavior
-commit `eb14edde` remains the backend SourceSelector normalization proof,
-`efd47e1c` remains the frontend ReaderArtifact status/evidence separation
-proof, `b5c6a78f` remains the frontend SourceOpenPlan consolidation proof, and
-`41b2135f` remains the evidence/open-surface normalizer consolidation proof.
+last checkpoint: 2026-06-06T16:55Z, deployed behavior commit
+`ef119260ecbeef3cb5f7b61287386f0f79fa7be9` moves reader artifact workflow
+state into the backend shared source contract and makes platform publication
+metadata use that contract for `reader_snapshot_status.state`. It followed docs
+checkpoint `c336890f`, passed focused backend and frontend tests, GitHub
+Actions CI, FlakeHub publish, Node B deploy, staging health identity, and the
+full deployed publication source-service Playwright file on `https://choir.news`.
+Earlier behavior commit `c7210d27` remains the frontend selector-set quote
+extraction proof, `eb14edde` remains the backend SourceSelector normalization
+proof, `efd47e1c` remains the frontend ReaderArtifact status/evidence
+separation proof, `b5c6a78f` remains the frontend SourceOpenPlan consolidation
+proof, and `41b2135f` remains the evidence/open-surface normalizer
+consolidation proof.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -917,15 +917,23 @@ behavior commit `eb14edde` adds shared backend selector kind normalization for
 publication/export. Docs checkpoint `5df2732f` records the frontend
 selector-set quote extraction drift before behavior commit `c7210d27` makes
 frontend source helpers normalize selector aliases and read nested publication
-selector sets.
+selector sets. Docs checkpoint `c336890f` records the backend reader artifact
+status contract gap before behavior commit `ef119260` adds shared backend
+reader artifact constants/alias normalization and uses them in platform
+publication enrichment.
 Existing unrelated untracked docs are preserved.
 
 what shipped: latest behavior commit
-`c7210d27dcb311149d56b90911b664f8a1589394` was pushed to `origin/main` and
-deployed to staging. It adds frontend SourceSelector helpers that normalize
-selector aliases and flatten `selector_set.selectors`, then makes Source
-Viewer quote extraction inspect entity selectors, reader selectors, and
-publication transclusion `source_selector` records. Prior behavior
+`ef119260ecbeef3cb5f7b61287386f0f79fa7be9` was pushed to `origin/main` and
+deployed to staging. It adds `internal/sourcecontract` reader artifact states
+and alias normalization for `reader_snapshot_ready`, `not_publication_safe`,
+`bounded_excerpt_only`, and `import_failed`, then makes platform publication
+enrichment emit canonical `reader_snapshot_status.state` values through that
+shared backend contract. Prior behavior
+`c7210d27dcb311149d56b90911b664f8a1589394` adds frontend SourceSelector helpers
+that normalize selector aliases and flatten `selector_set.selectors`, then
+makes Source Viewer quote extraction inspect entity selectors, reader
+selectors, and publication transclusion `source_selector` records. Prior behavior
 `eb14eddeba7e93e671c3026eada9b18221549a53` adds a shared backend
 SourceSelector kind contract and uses it in platform publication/export so
 selector aliases become canonical `text_quote`, `table_range`, `page_range`,
@@ -1127,6 +1135,26 @@ what was proven:
   limited without an authenticated/product health path.
 - Deployed frontend selector-set proof passed:
   `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source selectors normalize|published source entity quote falls back|Source Viewer renders publication transclusion selector-set quote'`.
+- Reader artifact backend contract local checks passed:
+  `nix develop -c go test ./internal/sourcecontract ./internal/proxy -run 'TestNormalizeReaderArtifactState|TestHandleVTextPublicationPublishesPublicURLSourceSnapshots|TestHandleVTextPublicationRecordsURLSnapshotImportFailureState' -count=1`
+  and
+  `npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize'`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27067967888`
+  completed successfully for `ef119260`, including Go gates, runtime shards, and
+  Node B staging deploy job `79892137375`.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27067967886`
+  completed successfully for `ef119260`.
+- Staging health after that deploy reported `status: "ok"`,
+  `vmctl_status: "ok"`, and proxy/upstream deployed_commit
+  `ef119260ecbeef3cb5f7b61287386f0f79fa7be9`, deployed_at
+  `2026-06-06T16:43:18Z`.
+- Deployed publication reader artifact/source snapshot proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js`.
+  The three-test file covered source-service publication/export metadata,
+  cleaned public content-item reader snapshots, and public URL-backed reader
+  snapshots for guests.
 - Source evidence-state local checks passed:
   `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownLineage|TestVTextSourceGapRepair'`
   and `npm run build` in `frontend`.
@@ -4448,7 +4476,7 @@ Viewer/repair path from silently ignoring selector-rich publication metadata.
 
 ### Problem 28: Reader Artifact Status Is Still A Frontend-Only Source Contract
 
-Status: `documented_before_fix`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: the mission now separates source evidence state from reader artifact
 workflow state in the frontend, but the backend shared source contract does not
@@ -4501,6 +4529,38 @@ acceptance for fix:
   emits canonical reader artifact states;
 - preserve frontend behavior and add/keep a frontend parity test showing reader
   artifact states remain separate from source evidence states.
+
+implementation and acceptance evidence:
+
+```text
+behavior commit:
+  ef119260ecbeef3cb5f7b61287386f0f79fa7be9
+
+implementation:
+  internal/sourcecontract/reader_artifact.go defines canonical reader artifact
+  states and alias normalization.
+  internal/proxy/platform_publish.go uses the shared reader artifact contract
+  while enriching publication reader_snapshot_status metadata.
+
+local proof:
+  nix develop -c go test ./internal/sourcecontract ./internal/proxy -run 'TestNormalizeReaderArtifactState|TestHandleVTextPublicationPublishesPublicURLSourceSnapshots|TestHandleVTextPublicationRecordsURLSnapshotImportFailureState' -count=1
+  result: passed
+
+  npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize'
+  result: passed
+
+landing proof:
+  GitHub Actions CI run 27067967888: success
+  FlakeHub run 27067967886: success
+  Node B deploy job 79892137375: success
+  https://choir.news/health:
+    proxy/upstream deployed_commit ef119260ecbeef3cb5f7b61287386f0f79fa7be9
+    deployed_at 2026-06-06T16:43:18Z
+
+deployed proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js
+  result: 3 passed
+```
 
 remaining error field: this closes one more shared source-contract gap but does
 not generate a cross-language schema or finish owner legal-proposal
