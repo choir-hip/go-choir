@@ -4566,6 +4566,77 @@ remaining error field: this closes one more shared source-contract gap but does
 not generate a cross-language schema or finish owner legal-proposal
 bounded-edit proof.
 
+### Problem 29: YouTube Transcript Acquisition Bypasses Source Fetch Policy
+
+Status: `documented_before_fix`.
+
+problem: the runtime URL import path now validates ordinary URL-backed source
+imports through `internal/sourcefetch`, but the YouTube transcript acquisition
+subpath still creates plain `http.Client` instances and does not validate every
+provider/caption URL before opening it. `fetchConfiguredYouTubeTranscript`
+builds a request from `CHOIR_YOUTUBE_TRANSCRIPT_API_URL` and sends it through
+`(&http.Client{Timeout: 10 * time.Second}).Do(req)`. `fetchYouTubeTranscriptFromInnerTube`
+uses `&http.Client{Timeout: 8 * time.Second}` for both the configurable
+`CHOIR_YOUTUBE_INNERTUBE_PLAYER_URL` endpoint and the caption URL returned by
+YouTube. `fetchYouTubeTranscriptFromCaptionTracks` likewise uses
+`&http.Client{Timeout: 6 * time.Second}` for watch and caption-track requests.
+That means one source import mode can bypass the SSRF-safe dialer, redirect
+policy, proxy disabling, and URL validation that the rest of URL import and the
+source-service adapters now use.
+
+affected contract/invariant: source acquisition must be policy-checked and
+SSRF-safe before text becomes a reader artifact, VText source entity, or
+publication snapshot. YouTube/video transcript acquisition is still source
+acquisition; treating it as media-specific helper plumbing creates a security
+exception to the mission's unified evidence supply chain.
+
+confirmed evidence:
+
+```text
+internal/runtime/content.go:
+  ImportURLContent validates normalized URL with sourcefetch.ValidateURL and
+  uses sourcefetch.Client for ordinary URL import.
+
+  fetchYouTubeTranscriptFromInnerTube:
+    client := &http.Client{Timeout: 8 * time.Second}
+    playerURL := youtubeInnerTubePlayerEndpoint()
+    captionURL := youtubeJSON3CaptionURL(track.BaseURL)
+
+  fetchYouTubeTranscriptFromCaptionTracks:
+    client := &http.Client{Timeout: 6 * time.Second}
+    captionURL := youtubeJSON3CaptionURL(track.BaseURL)
+
+  fetchConfiguredYouTubeTranscript:
+    resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+
+internal/sourcefetch/policy.go:
+  sourcefetch.Client disables proxy use, validates redirect targets, and
+  validates dial-time DNS/IP resolution against forbidden local/private targets.
+
+internal/runtime/content_test.go:
+  existing YouTube transcript tests use local httptest provider endpoints,
+  which currently require no policy validation override because the transcript
+  helpers bypass sourcefetch entirely.
+```
+
+acceptance for fix:
+
+- route configured transcript providers, InnerTube player requests, watch-page
+  caption discovery, and caption-track downloads through `sourcefetch.Client`;
+- validate each provider, player, watch, and caption URL before creating or
+  sending requests;
+- keep tests able to use local httptest endpoints only by explicitly enabling
+  the sourcefetch test override;
+- add focused regression coverage proving local/private configured provider,
+  configurable InnerTube endpoint, and caption-track URLs are rejected without
+  the override;
+- preserve existing YouTube transcript success tests under the explicit test
+  override.
+
+remaining error field: this closes a concrete source-acquisition policy bypass
+for YouTube transcript imports. It does not complete robots/TOS/rate policy,
+connector policy, or the broader generated source-contract schema work.
+
 ## Suggested `/goal`
 
 ```text
