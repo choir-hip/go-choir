@@ -17,8 +17,8 @@ status: checkpoint_incomplete
 
 last checkpoint:
 
-- Docs checkpoint `bf0edd7a` records deployed proof for simplification commit
-  `85ae3990d4736388111e297c38f00288aca35617`.
+- Docs checkpoint `fbe5a82ef6ee26763d07ceabfa105d2dcb6e0223` records deployed
+  proof for source-flow stylesheet simplification commit `bd27c07e`.
 
 current artifact state:
 
@@ -36,17 +36,21 @@ what shipped:
 - Source windows prefer cleaned reader Markdown with provenance and diagnostics
   demoted behind disclosure.
 - Legacy noncanonical VText editor file write-through was removed.
+- Source-flow styling was extracted out of the monolithic VText editor and now
+  lives with the Pretext source-flow surface.
 
 what was proven:
 
-- CI run `27044299886` and FlakeHub run `27044299892` succeeded for
-  `85ae3990d4736388111e297c38f00288aca35617`.
+- CI run `27046935553` and FlakeHub run `27046935544` succeeded for
+  `fbe5a82ef6ee26763d07ceabfa105d2dcb6e0223`.
 - Node B `/health` reported proxy and sandbox deployed at that SHA on
-  `2026-06-05T22:54:47Z`.
-- Comet staging proof opened the deployed legal-cloud route, expanded an inline
-  source marker, and kept the opened source window in reader-mode source
-  presentation.
-- Public Markdown export remained 38,398 bytes with compact `source:` markers,
+  `2026-06-06T00:18:09Z`.
+- Comet staging proof opened the deployed legal-cloud route, expanded the ABA
+  Formal Opinion source marker into a minimal right-side journal note with
+  proposal prose wrapped beside it, and opened the reader-mode source window.
+- Deployed Playwright geometry proof passed for the source-flow journal layout.
+- Public Markdown export remained available with 38,449 content bytes, compact
+  `source:` markers,
   no `missing source` prose, and `private_material_omitted: true`.
 
 unproven or partial claims:
@@ -67,12 +71,12 @@ belief-state changes:
 
 remaining error field:
 
-- Reduce card/pill/rounded-rectangle layering in the inline source note.
 - Replace operator-grade source repair controls with typed claim/source review.
 - Improve Obscura/web-source cleanup into Markdown reader artifacts and keep
   iframe/Web Lens as fallback.
 - Continue simplification in `VTextEditor.svelte`, source artifact state, and
   `internal/runtime/vtext.go` without changing the source graph contract.
+- Reduce remaining generic card/pill layering outside the Pretext journal note.
 
 highest-impact remaining uncertainty:
 
@@ -82,16 +86,15 @@ highest-impact remaining uncertainty:
 
 next executable probe:
 
-- Make a documented design/engineering pass over the source-note surface:
-  inspect current Pretext flow code, identify removable chrome and dead helper
-  paths, then implement the smallest generic source-note component split that
-  improves magazine/journal wrapping without changing citation/source data
-  semantics.
+- Continue source realism by improving the source acquisition/cleanup path:
+  convert failed or noisy web captures into cleaned Markdown reader artifacts
+  before iframe fallback, and keep citation/source review claim-based rather
+  than JSON/operator-based.
 
 suggested resume goal string:
 
 ```text
-/goal Continue docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md from checkpoint bf0edd7a. Treat Pretext as the magazine/journal line-flow mechanism for article prose around minimal source notes, not as card styling. Before code, document any newly found source-UI/source-acquisition problem. Then simplify the source-note/editor code while preserving canonical VText, source transclusions, reader-mode source windows, Markdown export, CI, Node B deploy, Comet staging proof, and publication source policy.
+/goal Continue docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md from checkpoint fbe5a82e. Keep Pretext as the magazine/journal line-flow mechanism for article prose around minimal source notes. Before code, document any newly found source-acquisition/source-window problem. Next improve cleaned Markdown reader artifacts and fallback behavior for arbitrary web sources while preserving canonical VText, source transclusions, source publication policy, Markdown export, CI, Node B deploy, and Comet staging proof.
 ```
 
 evidence artifact refs:
@@ -102,8 +105,8 @@ evidence artifact refs:
 rollback refs:
 
 - Last deployed behavior-changing commit:
-  `85ae3990d4736388111e297c38f00288aca35617`.
-- Last docs checkpoint: `bf0edd7a`.
+  `bd27c07e`.
+- Last docs checkpoint: `fbe5a82e`.
 
 ## Goal String
 
@@ -5561,3 +5564,55 @@ contract implication:
 - The Pretext journal-flow styling now lives with the Pretext source-flow
   module, which makes the remaining magazine/journal source-note tuning easier
   to reason about without adding another card abstraction.
+
+## 2026-06-06 Deployed Proof: Source Flow Stylesheet Extraction
+
+status: deployed_simplification_checkpoint_incomplete
+
+deployment evidence:
+
+- Head commit `fbe5a82ef6ee26763d07ceabfa105d2dcb6e0223` was pushed to
+  `origin/main`. The behavior-changing commit in this slice is
+  `bd27c07e` (`refactor: move vtext source flow styles`).
+- GitHub Actions CI run `27046935553` completed successfully, including
+  frontend build, Go gates, runtime shards, and `Deploy to Staging (Node B)`.
+- FlakeHub run `27046935544` completed successfully.
+- `https://choir.news/health` reported both proxy and sandbox at deployed
+  commit `fbe5a82ef6ee26763d07ceabfa105d2dcb6e0223`, deployed at
+  `2026-06-06T00:18:09Z`.
+
+Comet staging proof:
+
+- Computer Use on Comet reloaded
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` after the
+  deploy.
+- The owner/public legal-cloud VText rehydrated with the full proposal,
+  collapsed numbered source markers, and existing source reader windows.
+- Clicking the `ABA Formal Opinion 512` marker expanded a minimal right-side
+  journal note. Proposal prose wrapped in the left reading column beside the
+  note; the note did not present as a rounded card/pill stack.
+- Clicking `Open source` in that note opened a reader-mode source window for
+  `ABA Formal Opinion 512: Generative Artificial Intelligence Tools`.
+
+automated deployed proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> `1 passed (13.9s)`.
+- Current export proof:
+  `curl -sS 'https://choir.news/api/platform/publications/export?route=/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6&format=md'`
+  returned filename `choir-private-legal-cloud-proposal-vtext-pub270a62fb6.md`,
+  media type `text/markdown; charset=utf-8`, Markdown content length `38449`
+  bytes, compact `source:` markers including `source:src_aba_formal_op_512`
+  and `source:src_aba_rule_16`, no `missing source`, and
+  `metadata.private_material_omitted: true`.
+
+residual risk:
+
+- This extraction simplifies ownership and preserves the current magazine-style
+  wrapping, but it is not the full source UX. Remaining work includes better
+  source acquisition, cleaner source-window fallbacks for arbitrary web
+  sources, operator-only diagnostics, and richer claim-level source review.
