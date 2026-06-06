@@ -3618,6 +3618,98 @@ func TestVTextMarkdownStructureStabilizationRepairsMalformedTableTailRow(t *test
 	}
 }
 
+func TestVTextMarkdownStructureStabilizationHandlesPartialTableContexts(t *testing.T) {
+	parentContent := strings.Join([]string{
+		"# Appendix",
+		"",
+		"| Term | Definition |",
+		"| --- | --- |",
+		"| Agent | Multi-step worker. |",
+		"| Work product | Durable output. |",
+		"| Vector database | Stores embeddings for retrieval. |",
+		"",
+		"---",
+	}, "\n")
+	tests := []struct {
+		name      string
+		userLines []string
+		want      []string
+	}{
+		{
+			name: "table row has no trailing delimiter before document end",
+			userLines: []string{
+				"# Appendix",
+				"",
+				"| Term | Definition |",
+				"| --- | --- |",
+				"| Agent | Multi-step worker. |",
+				"| Work product | Durable output. |",
+				"| Vector database | Stores embeddings for retrieval.",
+			},
+			want: []string{"| Vector database | Stores embeddings for retrieval. |"},
+		},
+		{
+			name: "table row has no trailing delimiter before horizontal rule",
+			userLines: []string{
+				"# Appendix",
+				"",
+				"| Term | Definition |",
+				"| --- | --- |",
+				"| Agent | Multi-step worker. |",
+				"| Work product | Durable output. |",
+				"| Vector database | Stores embeddings for retrieval.",
+				"",
+				"---",
+			},
+			want: []string{"| Vector database | Stores embeddings for retrieval. |", "\n---"},
+		},
+		{
+			name: "pipe-prefixed row remains part of table after a small blank gap",
+			userLines: []string{
+				"# Appendix",
+				"",
+				"| Term | Definition |",
+				"| --- | --- |",
+				"| Agent | Multi-step worker. |",
+				"| Work product | Durable output. |",
+				"",
+				"| Vector database | Stores embeddings for retrieval.",
+				"",
+				"---",
+			},
+			want: []string{"| Work product | Durable output. |\n| Vector database | Stores embeddings for retrieval. |"},
+		},
+		{
+			name: "bounded table cell edit preserves table identity",
+			userLines: []string{
+				"# Appendix",
+				"",
+				"| Term | Definition |",
+				"| --- | --- |",
+				"| Agent | Multi-step autonomous worker. |",
+				"| Work product | Durable output. |",
+				"| Vector database | Stores embeddings for retrieval. |",
+				"",
+				"---",
+			},
+			want: []string{"| Agent | Multi-step autonomous worker. |", "| Vector database | Stores embeddings for retrieval. |"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stabilized, _ := stabilizeVTextUserMarkdownStructures(parentContent, strings.Join(tt.userLines, "\n"))
+			for _, want := range tt.want {
+				if !strings.Contains(stabilized, want) {
+					t.Fatalf("stabilized content missing %q:\n%s", want, stabilized)
+				}
+			}
+			if strings.Contains(stabilized, "TermDefinition") {
+				t.Fatalf("stabilized content retained collapsed table artifact:\n%s", stabilized)
+			}
+		})
+	}
+}
+
 func TestVTextMarkdownTableRowParserHandlesEscapedPipes(t *testing.T) {
 	cells := markdownstructure.TableRowCells(`| Term \| Alias | Definition with \| symbol |`)
 	if len(cells) != 2 {
