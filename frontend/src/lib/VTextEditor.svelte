@@ -49,6 +49,7 @@
   } from './vtext-source-renderer';
   import { renderMarkdownBlocks } from './vtext-markdown-renderer';
   import { clearSourceJournalFlows, mountSourceJournalFlow } from './vtext-source-flow';
+  import './vtext-source-flow.css';
 
   export let currentUser = null;
   export let authenticated = false;
@@ -3678,19 +3679,6 @@
     vertical-align: baseline;
   }
 
-  .rendered-doc :global(.vtext-source-ref[data-source-flow-mounted="true"]) {
-    display: inline-flex;
-    grid-template-columns: none;
-    min-width: 1.1rem;
-    max-width: none;
-    margin: 0 0.04rem;
-    border-radius: 50%;
-    padding: 0;
-    font-size: 0.62em;
-    line-height: 1;
-    vertical-align: super;
-  }
-
   .rendered-doc :global(.vtext-source-ref:focus-visible) {
     outline: 2px solid var(--choir-state-active-glow);
     outline-offset: 2px;
@@ -3730,10 +3718,6 @@
     box-shadow: none;
   }
 
-  .rendered-doc :global(.vtext-source-ref[data-source-flow-mounted="true"] .vtext-source-ref-popover) {
-    display: none;
-  }
-
   .rendered-doc :global(.vtext-source-ref-popover strong),
   .rendered-doc :global(.vtext-source-ref-popover span) {
     display: block;
@@ -3742,164 +3726,6 @@
   .rendered-doc :global(.vtext-source-ref:not([data-expanded="true"]):hover .vtext-source-ref-popover),
   .rendered-doc :global(.vtext-source-ref:not([data-expanded="true"]):focus .vtext-source-ref-popover) {
     display: block;
-  }
-
-  .rendered-doc :global([data-vtext-source-flow-hidden]) {
-    display: none !important;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-flow) {
-    position: relative;
-    margin: 0.28rem 0 1.05rem;
-    color: var(--choir-text-primary);
-    font: inherit;
-    line-height: var(--vtext-source-flow-line-height);
-  }
-
-  .rendered-doc :global(.vtext-source-journal-lines) {
-    position: absolute;
-    inset: 0;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-line) {
-    position: absolute;
-    display: block;
-    min-height: var(--vtext-source-flow-line-height);
-    color: var(--choir-text-primary);
-    font: inherit;
-    line-height: var(--vtext-source-flow-line-height);
-    white-space: pre;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-fragment) {
-    display: inline;
-    white-space: pre;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-fragment--source .vtext-source-ref) {
-    vertical-align: super;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-flow .vtext-source-ref-popover) {
-    display: none !important;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-note) {
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 1;
-    display: block;
-    width: var(--vtext-source-flow-note-width);
-    max-width: calc(100% - var(--vtext-source-flow-gap) - 12rem);
-    min-height: calc(var(--vtext-source-flow-line-height) * 7);
-    margin: 0;
-    border-left: 2px solid var(--choir-border-strong);
-    padding: 0.08rem 0 0.16rem 0.86rem;
-    color: var(--choir-text-primary);
-    background: transparent;
-    font-size: 0.86rem;
-    font-weight: 540;
-    line-height: 1.35;
-    text-transform: none;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-cite) {
-    display: block;
-    color: var(--choir-text-accent);
-    font-size: 0.94rem;
-    font-weight: 760;
-    font-style: normal;
-    line-height: 1.22;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-body.vtext-transclusion-body--compact) {
-    display: grid;
-    gap: 0.34rem;
-    margin-top: 0.36rem;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-note .vtext-transclusion-quote) {
-    border-left: 0;
-    padding: 0;
-    background: transparent;
-    color: var(--choir-text-primary);
-    font-size: 0.86rem;
-    font-weight: 600;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-actions) {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: baseline;
-    margin-top: 0.42rem;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-note .vtext-source-facts) {
-    display: block;
-    color: var(--choir-text-muted);
-    font-size: 0.72rem;
-    font-weight: 600;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-note .vtext-source-facts span) {
-    display: inline;
-    border: 0;
-    border-radius: 0;
-    padding: 0;
-    color: inherit;
-    background: transparent;
-    font-size: inherit;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-note .vtext-source-facts span + span::before) {
-    content: "; ";
-  }
-
-  .rendered-doc :global(.vtext-source-journal-note .vtext-source-open),
-  .rendered-doc :global(.vtext-source-journal-note .vtext-source-flow-close) {
-    margin-top: 0;
-    border: 0;
-    border-radius: 0;
-    padding: 0;
-    width: fit-content;
-    color: var(--choir-text-accent);
-    background: transparent;
-    font: inherit;
-    font-size: 0.78rem;
-    font-weight: 760;
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
-    cursor: pointer;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-note .vtext-source-flow-close) {
-    color: var(--choir-text-muted);
-    font-weight: 640;
-  }
-
-  @media (max-width: 720px) {
-    .rendered-doc :global(.vtext-source-journal-flow) {
-      height: auto !important;
-    }
-
-    .rendered-doc :global(.vtext-source-journal-lines) {
-      position: static;
-    }
-
-    .rendered-doc :global(.vtext-source-journal-line) {
-      position: static;
-      display: inline;
-      white-space: normal;
-    }
-
-    .rendered-doc :global(.vtext-source-journal-note) {
-      position: static;
-      width: auto;
-      max-width: none;
-      margin: 0.52rem 0;
-    }
   }
 
   .rendered-doc :global(code) {
