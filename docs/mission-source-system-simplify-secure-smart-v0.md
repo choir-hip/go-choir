@@ -948,6 +948,14 @@ what was proven:
   `2026-06-06T11:29:03Z`.
 - Deployed publication/export source metadata acceptance passed:
   `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-source-service-publication.spec.js -g "publishes source-service source entities"`.
+- Follow-up Comet extraction probe confirmed the owner session still reports
+  authenticated at `/auth/session`, but direct navigation to protected
+  `/api/vtext/.../history` and `/api/auth/session` returns
+  `{"error":"authentication required"}`. Direct API page loads do not exercise
+  the frontend `fetchWithRenewal` path, so Comet is useful for visible
+  product-path proof but unreliable for bounded structured JSON extraction
+  without app-surface instrumentation, JavaScript execution permission, or a
+  product diagnosis/export affordance.
 
 unproven or partial claims:
 
@@ -957,9 +965,12 @@ unproven or partial claims:
   revision content and is too bulky for reliable accessibility-tree extraction.
   Comet exposes a Chromium AppleScript tab API, but JavaScript from Apple Events
   is disabled, producing: "Executing JavaScript through AppleScript is turned
-  off." A bounded product diagnosis/export endpoint or enabling
-  `View > Developer > Allow JavaScript from Apple Events` would allow structured
-  extraction.
+  off." A later direct API probe also showed `/auth/session` can renew and
+  prove identity while `/api/*` navigation can still return unauthenticated,
+  because it does not retry through frontend `fetchWithRenewal`. A bounded
+  product diagnosis/export endpoint, app-surface instrumentation, or enabling
+  `View > Developer > Allow JavaScript from Apple Events` would allow
+  structured extraction.
 - CI, deploy identity, and focused staging acceptance proof have been produced
   for the source-open, evidence-state/source-gap, and publication/export source
   metadata slices. The broader mission proofs requested by the goal remain
