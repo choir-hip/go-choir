@@ -508,6 +508,121 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
 });
 
+test('VText uses stacked journal flow instead of old source card when side routing is unavailable', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.evaluate(async () => {
+    await fetch('/api/desktop/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windows: [], active_window_id: '' }),
+    });
+  });
+  await page.reload();
+  await expect(page.locator('[data-desktop]')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-window]')).toHaveCount(0);
+
+  const created = await page.evaluate(async () => {
+    const title = `Stacked Source Flow Fixture ${Date.now()}`;
+    const docRes = await fetch('/api/vtext/documents', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
+    const doc = await docRes.json();
+    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: [
+          '# Stacked Source Flow Fixture',
+          '',
+          'This constrained measure still needs the source note to read like journal evidence rather than an expanded card [1](source:src-stacked-flow), while the article text remains the main object being read.',
+          '',
+          'A second paragraph proves the original source card path is not needed just because a side column is unavailable.',
+        ].join('\n'),
+        author_kind: 'user',
+        author_label: 'browser-test',
+        metadata: {
+          source_entities: [
+            {
+              entity_id: 'src-stacked-flow',
+              kind: 'content_item',
+              label: 'Stacked journal source fixture',
+              target: {
+                target_kind: 'url',
+                url: 'https://example.com/stacked-source-flow',
+                canonical_url: 'https://example.com/stacked-source-flow',
+              },
+              selectors: [
+                {
+                  selector_kind: 'text_quote',
+                  text_quote: 'Stacked source notes should remain content-first without reusing the old expanded card surface.',
+                },
+              ],
+              display: {
+                inline_mode: 'embedded_excerpt',
+                expanded_mode: 'source_card',
+                open_surface: 'source',
+                default_collapsed: true,
+              },
+              evidence: { state: 'available', research_state: 'confirmed' },
+              provenance: { created_by: 'browser-test', rights_scope: 'public_source' },
+            },
+          ],
+        },
+      }),
+    });
+    if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);
+    return doc;
+  });
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  await rendered.evaluate((node) => {
+    const element = /** @type {HTMLElement} */ (node);
+    element.style.width = '560px';
+    element.style.maxWidth = '560px';
+  });
+  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-stacked-flow"]').first();
+  await expect(citation).toBeVisible({ timeout: 10000 });
+  await citation.click();
+
+  const flow = rendered.locator('[data-vtext-source-flow]');
+  await expect(flow).toBeVisible({ timeout: 5000 });
+  await expect(flow).toHaveAttribute('data-vtext-source-flow-mode', 'stacked');
+  await expect(flow).toHaveAttribute('data-vtext-source-flow-routed-lines', '0');
+  await expect(citation).toHaveAttribute('data-source-flow-mounted', 'true');
+  await expect(flow.locator('[data-vtext-source-ref-popover]')).toHaveCount(0);
+  await expect(flow.locator('[data-vtext-source-flow-note]')).toContainText('Stacked journal source fixture');
+  await expect(flow.locator('[data-vtext-source-flow-note]')).not.toContainText('source available');
+
+  const geometry = await flow.evaluate((node) => {
+    const flowBox = node.getBoundingClientRect();
+    const note = node.querySelector('[data-vtext-source-flow-note]');
+    const lines = Array.from(node.querySelectorAll('.vtext-source-journal-line'));
+    const noteBox = note?.getBoundingClientRect();
+    const lastLineBottom = Math.max(...lines.map((line) => line.getBoundingClientRect().bottom - flowBox.top));
+    const lineLayerHasOldCard = !!node.querySelector('.vtext-source-ref[data-expanded="true"] .vtext-source-ref-popover');
+    return {
+      lineCount: lines.length,
+      noteAfterLines: !!noteBox && noteBox.top - flowBox.top >= lastLineBottom - 1,
+      lineLayerHasOldCard,
+    };
+  });
+  expect(geometry.lineCount).toBeGreaterThan(0);
+  expect(geometry.noteAfterLines).toBe(true);
+  expect(geometry.lineLayerHasOldCard).toBe(false);
+});
+
 test('VText autosave roundtrips rendered markdown tables without flattening cells', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const created = await page.evaluate(async () => {

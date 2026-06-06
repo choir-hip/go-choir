@@ -35,6 +35,8 @@ export type SourceJournalFlowLayout = {
   usedNarrowLines: number;
 };
 
+export type SourceJournalFlowMode = 'side-note' | 'stacked';
+
 export type SourceJournalFlowOptions = {
   text: string;
   containerWidth: number;
@@ -327,12 +329,13 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   if (!sourceRef || !paragraph || !popover || sourceRef.querySelector?.('iframe, img')) return false;
 
   const containerWidth = Math.floor(paragraph.clientWidth || paragraph.getBoundingClientRect?.().width || 0);
-  if (containerWidth < options.minWidth) return false;
+  if (containerWidth < MIN_LINE_WIDTH) return false;
 
   const text = sourceFlowText(paragraph, sourceRef).replace(/\s+/g, ' ').trim();
   if (!text) return false;
 
-  const noteWidth = Math.min(340, Math.max(260, Math.floor(containerWidth * 0.34)));
+  const minNoteWidth = Math.min(260, containerWidth);
+  const noteWidth = Math.min(340, Math.max(minNoteWidth, Math.floor(containerWidth * 0.34)));
   const paragraphGap = Math.max(8, Math.round(options.lineHeight * 0.55));
   const flow = document.createElement('div');
   flow.setAttribute('data-vtext-source-flow', '');
@@ -360,22 +363,32 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   paragraph.insertAdjacentElement('beforebegin', flow);
 
   const measuredHeight = Math.ceil(note.getBoundingClientRect().height || 0);
-  const layoutOptions = {
+  const sideLayoutOptions = {
     blocks: [],
     containerWidth,
     noteWidth,
-    noteHeight: measuredHeight,
+    noteHeight: containerWidth >= options.minWidth ? measuredHeight : 0,
     gap: options.gap,
     lineHeight: options.lineHeight,
     paragraphGap,
     font: sourceFlowFont(paragraph),
   };
-  const { blocks, layout } = collectSourceFlowBlocks(paragraph, sourceRef, layoutOptions);
+  let mode: SourceJournalFlowMode = 'side-note';
+  let { blocks, layout } = collectSourceFlowBlocks(paragraph, sourceRef, sideLayoutOptions);
 
-  if (layout.lines.length === 0 || layout.usedNarrowLines === 0) {
+  if (layout.lines.length > 0 && layout.usedNarrowLines === 0) {
+    mode = 'stacked';
+    ({ blocks, layout } = collectSourceFlowBlocks(paragraph, sourceRef, {
+      ...sideLayoutOptions,
+      noteHeight: 0,
+    }));
+  }
+
+  if (layout.lines.length === 0) {
     flow.remove();
     return false;
   }
+  flow.setAttribute('data-vtext-source-flow-mode', mode);
   flow.setAttribute('data-vtext-source-flow-lines', String(layout.lines.length));
   flow.setAttribute('data-vtext-source-flow-routed-lines', String(layout.usedNarrowLines));
 
@@ -384,7 +397,7 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   for (const line of layout.lines) {
     const lineNode = document.createElement('span');
     lineNode.className = 'vtext-source-journal-line';
-    if (line.y < layout.noteHeight) {
+    if (mode === 'side-note' && line.y < layout.noteHeight) {
       lineNode.setAttribute('data-vtext-source-flow-line-beside-note', '');
     }
     lineNode.setAttribute('data-vtext-source-flow-line-width', String(Math.ceil(line.width)));
@@ -414,8 +427,14 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
     }
     lineLayer.append(lineNode);
   }
-  flow.append(lineLayer);
-  flow.style.height = `${Math.ceil(layout.height)}px`;
+  if (mode === 'stacked') {
+    flow.append(lineLayer, note);
+    flow.style.setProperty('--vtext-source-flow-stacked-note-top', `${Math.ceil(layout.height + paragraphGap)}px`);
+    flow.style.height = `${Math.ceil(layout.height + paragraphGap + measuredHeight)}px`;
+  } else {
+    flow.append(lineLayer);
+    flow.style.height = `${Math.ceil(layout.height)}px`;
+  }
   blocks.forEach((block) => block.element?.setAttribute('data-vtext-source-flow-hidden', ''));
   sourceRef.setAttribute('data-source-flow-mounted', 'true');
   return true;

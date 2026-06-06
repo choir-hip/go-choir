@@ -73,6 +73,16 @@
   text-transform: none;
 }
 
+.rendered-doc .vtext-source-journal-flow[data-vtext-source-flow-mode="stacked"] .vtext-source-journal-note {
+  top: var(--vtext-source-flow-stacked-note-top);
+  right: auto;
+  left: 0;
+  width: min(34rem, 100%);
+  max-width: none;
+  min-height: 0;
+  border-left-width: 2px;
+}
+
 .rendered-doc .vtext-source-journal-cite {
   display: block;
   color: var(--choir-text-accent);
@@ -140,5 +150,9 @@
     width: auto;
     max-width: none;
     margin: 0.52rem 0;
+  }
+
+  .rendered-doc .vtext-source-journal-flow[data-vtext-source-flow-mode="stacked"] .vtext-source-journal-note {
+    width: auto;
   }
 }
