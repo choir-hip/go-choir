@@ -187,6 +187,15 @@ commit 7f576d1a9e316ded3741af39d0d1e019bf085ee9:
 commit aa5902c42f65e834590e54a3b2617ce2819c8bd5:
   the same staging proof failed because data-vtext-recent intercepted
   data-vtext-publish.
+
+user screenshots:
+  /var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_2qmOee/Screenshot 2026-06-06 at 15.34.18.png
+  /var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_YPcG5o/Screenshot 2026-06-06 at 15.36.06.png
+  show that the publish menu is visually transparent, overlaps the document
+  title, and exposes route/source/download policy metadata that is not useful
+  at the owner decision point. After publishing, the published-result header
+  opens while the stale publish menu can remain visually present, colliding
+  with the published header/download controls.
 ```
 
 acceptance:
@@ -194,6 +203,11 @@ acceptance:
 - publish menu and confirmation are clickable on staging;
 - recent panel cannot intercept toolbar actions once a document surface is
   active;
+- publish menu is opaque and compact;
+- publish menu presents user-relevant consequence text and commands, not raw
+  route/source/download metadata;
+- successful publish closes the menu before showing the published-result
+  header;
 - the focused staging Playwright proof passes without force-clicking.
 
 ### Problem L8-2: VText Toolbar Layout Changes Across Version Labels
