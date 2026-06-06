@@ -2186,6 +2186,75 @@ shared source acquisition policy module used by runtime URL import, source
 service adapters, Web Lens import, publication source snapshots, and future
 connectors.
 
+### Problem 18: Runtime And Source Service Still Carry Parallel Source-Fetch Policy Implementations
+
+Status: `documented_before_fix`.
+
+problem: after the source-cycle SSRF repair, Choir still has two independent
+source-fetch policy implementations. `internal/runtime/content.go` defines
+`sourceFetchHTTPClient`, `validateSourceFetchURL`, `validateSourceFetchHost`,
+`sourceFetchIPBlocked`, and `sourceFetchHostnameBlocked` for browser-public URL
+imports. `internal/sources/fetch_policy.go` defines near-identical functions
+for RSS/GDELT source service adapters. The tests in
+`internal/runtime/source_fetch_policy_test.go` and
+`internal/sources/fetch_policy_test.go` duplicate the same security cases.
+
+affected contract/invariant: `docs/source-external-data-publication.md`
+requires acquisition policy to be a shared source-system contract, not a local
+implementation detail of one route. The MissionGradient objective also requires
+source acquisition to be policy-checked and SSRF-safe across VText, Source
+Viewer, Web Lens, publication, export, and source service paths. Parallel
+policy code creates a drift surface where a future exception, hostname block,
+redirect limit, DNS validation rule, or test-only private-network allowance can
+land in one acquisition path but not the other.
+
+confirmed evidence:
+
+```text
+internal/runtime/content.go:
+  sourceFetchHTTPClient
+  validateSourceFetchURL
+  validateSourceFetchHost
+  sourceFetchIPBlocked
+  sourceFetchHostnameBlocked
+
+internal/sources/fetch_policy.go:
+  sourceFetchHTTPClient
+  validateSourceFetchURL
+  validateSourceFetchHost
+  sourceFetchIPBlocked
+  sourceFetchHostnameBlocked
+
+duplicated tests:
+  internal/runtime/source_fetch_policy_test.go
+  internal/sources/fetch_policy_test.go
+```
+
+why this matters: the source system is trying to converge source entity,
+reader artifact, selector, evidence, open-surface, publication, and export
+behavior into shared contracts. Keeping SSRF policy duplicated contradicts the
+same convergence principle that motivated `internal/sourcecontract`, and it is
+a higher-risk drift surface because the duplicated code protects a network
+boundary.
+
+acceptance for fix:
+
+- add a shared backend source-fetch policy package with URL validation,
+  DNS/IP validation, redirect limits, proxy-disabled HTTP client construction,
+  and test-only private-network allowance;
+- route runtime URL import and source service RSS/GDELT acquisition through the
+  shared package without weakening the existing blocked-target tests;
+- preserve configurable timeouts for runtime imports and source service
+  adapters;
+- update Nix service source closures and deploy-impact classification for the
+  shared package before deploy, avoiding the Problem 17 packaging gap;
+- run focused runtime and source-service policy tests, push, monitor CI and
+  staging deploy, and verify staging commit identity.
+
+remaining error field: this will not finish robots/TOS/rate policy or Web Lens
+snapshot policy. It closes the current duplicated SSRF/source-fetch policy
+implementation surface for runtime URL import and source service adapters.
+
 ### Problem 12: Owner URL Source Repairs Default To Web Lens
 
 Status: `documented_before_fix`.
