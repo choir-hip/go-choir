@@ -841,11 +841,13 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T12:27:10Z, VText local draft recovery now prefers
-the non-empty canonical VText head over any differing browser-local draft. The
-repair is deployed to staging and product-path proven with synthetic
-authenticated documents plus owner-authenticated Comet reload of the legal
-proposal.
+last checkpoint: 2026-06-06T12:34:31Z, owner-authenticated Comet product proof
+created a bounded legal-proposal edit/revise transition from v87 to v89. The
+workflow now loads the canonical head instead of a stale browser-local draft,
+but it exposed a narrower source/structure regression: v89 is stable and
+latest after reload, yet the Sources panel reports `0 represented sources`
+while bounded diagnosis reports 7 sources, and the appendix table row count
+shifted from v87's 49 rows to v88/v89's 50 rows.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -874,12 +876,16 @@ Docs commit `9ad53d03` records the legal proposal v70-v78 diagnosis evidence
 before the structure-preservation fix. Behavior commit `bfd23fa0` repairs the
 general omitted-parent-table preservation path for unrelated partial-context
 VText edits and adds focused runtime regression coverage. Docs commits
-`746d506c`, `7ec67227`, `b879c5df`, and `8e04af2c` record the table
-preservation evidence and the two stale-draft recovery gaps before behavior
-fixes. Behavior commits `5c61a6b8`, `465c599c`, and `93d9f819` progressively
-tighten VText local draft recovery: older-parent drafts are skipped,
-table-flattened same-head drafts are skipped, and any differing browser-local
-draft is skipped when a non-empty canonical revision exists.
+`746d506c`, `7ec67227`, `b879c5df`, `8e04af2c`, and `ce02e45f` record the
+table preservation evidence, the two stale-draft recovery gaps, and the final
+canonical-draft recovery proof before this owner bounded edit/revise checkpoint.
+Behavior commits `5c61a6b8`, `465c599c`, and `93d9f819` progressively tighten
+VText local draft recovery: older-parent drafts are skipped, table-flattened
+same-head drafts are skipped, and any differing browser-local draft is skipped
+when a non-empty canonical revision exists.
+The current docs-only checkpoint records the owner bounded edit/revise proof
+and the newly confirmed post-revise source/structure problem before any
+follow-up behavior fix.
 Existing unrelated untracked docs are preserved.
 
 what shipped: behavior commit
@@ -1115,6 +1121,30 @@ what was proven:
   `Primary draft Latest`, no `Unsaved edit`, and status
   `Autosaved draft skipped; canonical version loaded`. No owner mutation was
   performed.
+- Owner-authenticated Comet bounded edit/revise proof partially passed after
+  navigating the staging tab to
+  `https://choir.news/?owner_bounded_edit=93d9f819`: using browser find and
+  keyboard text entry, the top sentence `A private legal cloud solves this.`
+  was changed to `A private legal cloud addresses this.` without using a
+  whole-document accessibility `set_value`. Pressing the product `Revise`
+  control created user revision v88 and app-agent revision v89 for run
+  `8fd9eb3c-e...d2e201`; the trace/toast stream showed app-agent id
+  `f93cea62-f833-4dae-b414-8e44783d8cbe`, an `edit_vtext` tool error, tool
+  output receipt, and run completion.
+- During that owner proof, the UI remained stuck at `Revising...` on v89 after
+  the trace reported completion, with Sources/Publish disabled. A plain page
+  reload cleared the stale app state and reloaded v89 as `Primary draft Latest`
+  with Sources/Publish enabled. This is a product-state refresh weakness, but
+  not the next behavior target unless it recurs without reload recovery.
+- The same owner proof confirmed a narrower source/structure regression that
+  must be documented before fixing: v89 Sources reported `0 represented
+  sources` and `No source entities are available in this revision`, while the
+  bounded diagnosis panel for the same v89 reported 7 sources, 49 source
+  markers, 1 table, and 50 rows. v88 also reported 1 table/50 rows. The prior
+  canonical v87 reported 1 table/49 rows, 7 sources, table range `L269-L317`,
+  and table signature `sha256:a80c30b628c7`; v88/v89 reported table range
+  `L269-L318` and new signatures (`sha256:01178718c7ae` for v88,
+  `sha256:a86643578fed` for v89).
 
 unproven or partial claims:
 
@@ -1184,6 +1214,13 @@ belief-state changes:
   revision. The owner legal proposal now reloads in Comet as v87 `Latest`
   rather than `Unsaved edit`, with the stale browser-local draft skipped before
   any owner save/revise action.
+- Owner bounded edit/revise no longer loses the appendix table completely, but
+  it still fails the stricter mission contract: the source entity list is empty
+  in the Sources panel after the app-agent revision even though diagnosis still
+  counts sources/markers, and the table row count/signature changed across a
+  prose-only top-of-document edit. The next repair must root-cause the general
+  source metadata carry-forward and table normalization path, not patch this
+  document by hand.
 
 remaining error field:
 
@@ -1201,12 +1238,15 @@ remaining error field:
   updates, Source Service records, stale/blocked/unavailable product flows, and
   shared frontend/backend schema convergence remain incomplete.
 - Table structure preservation now has broader partial-context tests, a
-  deployed bounded diagnosis extraction route, and a deployed authenticated
+  deployed bounded diagnosis extraction route, a deployed authenticated
   synthetic proof for omitted-parent-table restoration versus explicit
-  deletion. The actual owner legal proposal is no longer blocked by stale
-  local-draft masking, but it still needs a product-path bounded edit/revise
-  proof showing the repaired path preserves the legal proposal appendix table
-  through a real owner workflow.
+  deletion, and an owner product-path bounded edit/revise proof. The owner
+  proof shows the table survives as a table, but not with exact structure:
+  v87's 49-row appendix becomes 50 rows in v88/v89 after a prose-only edit.
+- VText source representation has a newly confirmed owner regression: v89
+  diagnosis still sees 7 sources/49 markers, but the Sources panel reports
+  `0 represented sources` and cannot choose/open source entities for the
+  latest revision.
 
 highest-impact remaining uncertainty: whether to introduce the shared source
 contract package first and route all callers through it, or to land the SSRF
@@ -1215,19 +1255,20 @@ documented safety risk makes the URL fetch policy the first behavior-changing
 fix, with shared contract types designed in the same pass so the fix does not
 create another isolated policy path.
 
-next executable probe: run an owner product-path bounded edit/revise proof on
-`choir_private_legal_cloud_proposal.vtext` that edits nearby prose without
-touching the appendix table, then verify through the bounded diagnosis panel
-and export/publication metadata that the appendix table survives. If that
-passes, resume source-contract convergence; if it fails, document the newly
-confirmed narrower legal-proposal workflow problem before the next fix.
+next executable probe: root-cause the documented v87->v88->v89 owner
+transition by comparing revision metadata/source entity carry-forward and table
+normalization for user-save v88 versus app-agent v89. Add focused tests that a
+prose-only edit/revise preserves source entities represented in the Sources
+panel and keeps the appendix table row signature stable unless the table was
+explicitly edited. Only then apply the behavior fix and redeploy for a new
+owner Comet proof.
 
 suggested resume goal string: continue
 `docs/mission-source-system-simplify-secure-smart-v0.md` from behavior commit
-`93d9f8197747c7526e11a730f6dab3932af82d75` and docs checkpoint `8e04af2c` by
-running an owner product-path bounded legal-proposal edit/revise proof, then
-verifying appendix table survival through bounded diagnosis and continuing
-source entity/evidence normalization without document-specific fixes.
+`93d9f8197747c7526e11a730f6dab3932af82d75`, docs checkpoint `ce02e45f`, and
+this docs checkpoint by root-causing/fixing Problem 9: owner legal-proposal v89
+has empty represented sources despite diagnosis source counts, and a prose-only
+v87->v88->v89 transition changes the appendix table from 49 to 50 rows.
 
 evidence artifact refs:
 
@@ -1257,6 +1298,16 @@ evidence artifact refs:
   `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-document-stream.spec.js -g "stale local draft|same-head local draft|differing local draft"`,
   and owner Comet URL `https://choir.news/?draft_recovery=93d9f819` showing
   v87 `Latest` with `Autosaved draft skipped; canonical version loaded`.
+- Owner bounded edit/revise evidence: Comet URL
+  `https://choir.news/?owner_bounded_edit=93d9f819`, document
+  `choir_private_legal_cloud_proposal.vtext`, rollback refs v87 (pre-edit,
+  1 table/49 rows, 7 sources, table signature `sha256:a80c30b628c7`), v88
+  (user save, 1 table/50 rows, 7 sources, table signature
+  `sha256:01178718c7ae`), and v89 (app-agent revision, 1 table/50 rows,
+  diagnosis 7 sources/49 markers but Sources panel `0 represented sources`,
+  table signature `sha256:a86643578fed`). Revise run handle
+  `8fd9eb3c-e...d2e201`; app-agent trace id
+  `f93cea62-f833-4dae-b414-8e44783d8cbe`.
 - Frontend source-open slice: `sourceEntityOpenPlan`, `ContentViewer`
   live-import guard, and focused Playwright routing proof.
 - CI/deploy evidence: GitHub Actions run `27060657873`; FlakeHub publish run
@@ -1670,6 +1721,72 @@ head with ordinary prose does not auto-restore a differing local draft. Keep
 draft cleanup/skip status observable, redeploy, and reload the owner legal
 proposal in Comet to verify the window no longer shows `Unsaved edit` or
 `Autosaved draft restored` before attempting a bounded owner edit/revise proof.
+
+### Problem 9: Owner Prose-Only VText Revise Drops Represented Sources And Changes Table Shape
+
+problem: after the stale-draft fixes, an owner-authenticated product-path
+bounded edit/revise on the legal cloud proposal no longer flattened the
+appendix table away, but it still failed the stricter source/structure
+contract. The latest app-agent revision v89 rendered as `Primary draft Latest`
+after reload, but the Sources panel reported `0 represented sources` and
+`No source entities are available in this revision` even though the bounded
+diagnosis for the same revision reported 7 sources and 49 source markers. The
+appendix table also changed from v87's 49-row signature to a v88/v89 50-row
+signature after an edit to unrelated top-of-document prose.
+
+affected contract/invariant: a VText user save and app-agent revise operation
+that edits prose outside a table must preserve source entities, source marker
+openability, and existing table structure unless the edit explicitly changes
+those structures. Bounded diagnosis and the Sources panel must agree about
+whether source entities are represented and openable for a revision.
+
+evidence: on staging deployed commit
+`93d9f8197747c7526e11a730f6dab3932af82d75`, Computer Use in owner-authenticated
+Comet navigated to `https://choir.news/?owner_bounded_edit=93d9f819`. The
+legal proposal loaded as `choir_private_legal_cloud_proposal.vtext` v87,
+`Primary draft Latest`. Using browser find and keyboard typing, the sentence
+`A private legal cloud solves this.` was replaced with
+`A private legal cloud addresses this.` without using whole-document
+accessibility replacement and without touching the appendix. Pressing the
+product `Revise` control created user revision v88 and app-agent revision v89.
+The app trace showed run handle `8fd9eb3c-e...d2e201`, app-agent id
+`f93cea62-f833-4dae-b414-8e44783d8cbe`, an `edit_vtext` tool error, tool
+output receipt, and run completion. The UI temporarily remained stuck in
+`Revising...` with Sources/Publish disabled until a normal page reload, after
+which v89 loaded as `Primary draft Latest`.
+
+bounded diagnosis after reload showed v87 with 1 table/49 rows, 7 sources,
+table range `L269-L317`, and table signature `sha256:a80c30b628c7`; v88 with
+1 table/50 rows, 7 sources, table range `L269-L318`, and table signature
+`sha256:01178718c7ae`; and v89 with 1 table/50 rows, 7 sources, table range
+`L269-L318`, and table signature `sha256:a86643578fed`. The same v89 Sources
+panel displayed `0 represented sources`, despite source labels still appearing
+inline in the rendered document and diagnosis reporting 49 source markers.
+
+first observed version/transition: staging owner Comet workflow from v87 to
+v88/v89 on June 6, 2026, after behavior commit
+`93d9f8197747c7526e11a730f6dab3932af82d75` was deployed and the stale
+browser-local draft was skipped.
+
+suspected owner: VText save/revise source metadata carry-forward and structure
+normalization. The row-count shift may be in Markdown table parser/export
+normalization between editor save and app-agent edit, while the represented
+source loss likely sits in revision metadata source-entity projection or
+frontend source-entity extraction after app-agent revisions.
+
+why local/API-only fix is insufficient: the failure was exposed by the real
+owner legal proposal, Comet session state, editor save, app-agent revise, and
+Sources panel/diagnosis surfaces together. A synthetic backend table test is
+not enough; the repaired path must prove the full product transition and the
+source-open surface.
+
+planned proof: add focused regression coverage for a source-backed VText with
+an appendix table where a prose-only user save and app-agent-style edit preserve
+represented source entities and exact table shape. Then redeploy, run a fresh
+owner Comet bounded edit/revise proof, and verify Sources shows represented
+source entities, diagnosis row counts/signatures remain stable, Source Viewer
+opens still work, and publication/export metadata includes the preserved source
+records.
 
 ## Suggested `/goal`
 
