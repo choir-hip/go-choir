@@ -7266,6 +7266,10 @@ CI and deploy:
 - `https://choir.news/health` reported proxy and sandbox deployed at
   `4767a5b7850875ddba7217be272a61de89225ef2`, deployed at
   `2026-06-06T02:33:36Z`.
+- Verifier-only commit `ff5d47516df9b3c32d5a9d374ec174ec3d42bb96`
+  (`test: assert publication reader snapshot media`) was pushed after the
+  deployed proof. CI run `27050250993` passed; FlakeHub run `27050251004`
+  passed; staging deploy was skipped as expected for the test-only change.
 
 deployed proof:
 
