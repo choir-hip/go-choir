@@ -552,6 +552,18 @@ staging proof:
   result: 2 passed.
 ```
 
+Next extraction target: editor DOM-to-Markdown serialization. After toolbar and
+publication-result extraction, `VTextEditor.svelte` still owns low-level
+serialization helpers that convert the contenteditable DOM back into canonical
+Markdown, including inline mark/link/source preservation, table row
+normalization, heading/list/blockquote/code handling, and horizontal rules.
+This is core document-surface behavior rather than editor orchestration. No new
+behavior problem is confirmed; this is a bounded behavior-preserving extraction
+to reduce the monolith and give the serialization path a focused unit surface.
+The child/helper module must not import Svelte state, source acquisition, or
+publication contracts. It should accept a DOM root and return Markdown using
+the same current projection semantics.
+
 ### Performance Checks
 
 - Local focused backend check:
