@@ -6074,7 +6074,7 @@ producer matrix remains open.
 
 ### Problem 36: Publication Visibility Policy Is Stored But Not Enforced For Resolve/Search
 
-Status: `documented_pending_fix`.
+Status: `fixed_with_local_policy_proof_pending_ci_deploy`.
 
 problem: `access_policy.visibility` and route policy are stored in
 `publication_policies` and export metadata, but platform route resolution and
@@ -6137,6 +6137,51 @@ acceptance for fix:
 remaining error field: this fix should close public-surface leakage for stored
 private/unlisted policies. It will not implement full private/password/role
 gated reader access; that remains a future authorized publication surface.
+
+fix and proof:
+
+```text
+behavior:
+  internal/platform/service.go now checks publication_policies.access_policy_json
+  before public route resolution returns a bundle. Public route resolution only
+  allows visibility=public with route omitted or route=public.
+
+  ExportPublicationByRoute inherits the same public-route policy check because
+  it resolves through GetPublicationBundleByRoute before building export bytes.
+
+  SearchPublished now joins publication_policies, skips non-public policy rows
+  before reading blobs/snippets, and therefore excludes unlisted/private
+  records from public retrieval search.
+
+verifier:
+  internal/platform/service_test.go adds
+  TestPublicationPublicSurfacesEnforceVisibilityPolicy.
+
+assertions:
+  public publication resolve/export/search still works;
+  unlisted and private publication public resolve return sql.ErrNoRows;
+  unlisted and private public export return sql.ErrNoRows;
+  unlisted and private unique search tokens do not appear in public retrieval
+  search results.
+
+local checks:
+  gofmt -w internal/platform/service.go internal/platform/service_test.go
+  nix develop -c go test ./internal/platform -run 'TestPublicationPublicSurfacesEnforceVisibilityPolicy|TestPublishVTextCreatesImmutablePublicRecords|TestPublicationExportPreservesSourceContractMatrix' -count=1
+    -> ok
+  nix develop -c go test ./internal/sourcecontract ./internal/platform ./internal/proxy -run 'TestNormalize|TestBuildPublication|TestHandleVTextPublication|TestExport|TestPublicationPublicSurfacesEnforceVisibilityPolicy|TestPublishVTextCreatesImmutablePublicRecords|TestPublicationExportPreserves' -count=1
+    -> ok
+
+deploy-impact:
+  deploy_needed=true
+  deploy_host=true
+  deploy_host_service=true
+  host_services=platformd,proxy
+  frontend/guest/vmctl/host_os deploy flags=false
+```
+
+remaining proof required: push the behavior commit, monitor CI and FlakeHub,
+confirm Node B deployed identity, and run a deployed product-path proof for
+public versus unlisted/private publication resolve/search/export.
 
 ## Suggested `/goal`
 

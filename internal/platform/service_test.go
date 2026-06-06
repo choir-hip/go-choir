@@ -1066,3 +1066,83 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 		t.Fatalf("citation edge count: got %d, want at least 2", citationsCount)
 	}
 }
+
+func TestPublicationPublicSurfacesEnforceVisibilityPolicy(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	svc := NewService(store, filepath.Join(root, "artifacts"))
+
+	publishWithVisibility := func(t *testing.T, visibility string) *PublishVTextResponse {
+		t.Helper()
+		accessPolicy, _ := json.Marshal(map[string]any{
+			"visibility": visibility,
+			"route":      "public",
+		})
+		resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+			OwnerID:          "user-1",
+			SourceDocID:      "doc-" + visibility,
+			SourceRevisionID: "rev-" + visibility,
+			Title:            "Visibility " + visibility,
+			Content:          fmt.Sprintf("Visibility policy proof %s unique-token-%s", visibility, visibility),
+			AccessPolicy:     accessPolicy,
+			RequestedBy:      "user-1",
+		})
+		if err != nil {
+			t.Fatalf("PublishVText %s: %v", visibility, err)
+		}
+		return resp
+	}
+
+	publicResp := publishWithVisibility(t, "public")
+	unlistedResp := publishWithVisibility(t, "unlisted")
+	privateResp := publishWithVisibility(t, "private")
+
+	publicBundle, err := svc.GetPublicationBundleByRoute(context.Background(), publicResp.RoutePath)
+	if err != nil {
+		t.Fatalf("GetPublicationBundleByRoute public: %v", err)
+	}
+	if !strings.Contains(publicBundle.Artifact.Content, "unique-token-public") {
+		t.Fatalf("public bundle content = %q", publicBundle.Artifact.Content)
+	}
+	if _, err := svc.GetPublicationBundleByRoute(context.Background(), unlistedResp.RoutePath); err != sql.ErrNoRows {
+		t.Fatalf("unlisted public resolve err = %v, want sql.ErrNoRows", err)
+	}
+	if _, err := svc.GetPublicationBundleByRoute(context.Background(), privateResp.RoutePath); err != sql.ErrNoRows {
+		t.Fatalf("private public resolve err = %v, want sql.ErrNoRows", err)
+	}
+
+	publicExport, err := svc.ExportPublicationByRoute(context.Background(), publicResp.RoutePath, "md")
+	if err != nil {
+		t.Fatalf("ExportPublicationByRoute public: %v", err)
+	}
+	if !strings.Contains(publicExport.Content, "unique-token-public") {
+		t.Fatalf("public export content = %q", publicExport.Content)
+	}
+	if _, err := svc.ExportPublicationByRoute(context.Background(), unlistedResp.RoutePath, "md"); err != sql.ErrNoRows {
+		t.Fatalf("unlisted public export err = %v, want sql.ErrNoRows", err)
+	}
+	if _, err := svc.ExportPublicationByRoute(context.Background(), privateResp.RoutePath, "md"); err != sql.ErrNoRows {
+		t.Fatalf("private public export err = %v, want sql.ErrNoRows", err)
+	}
+
+	publicSearch, err := svc.SearchPublished(context.Background(), "unique-token-public")
+	if err != nil {
+		t.Fatalf("SearchPublished public: %v", err)
+	}
+	if len(publicSearch.Results) != 1 || publicSearch.Results[0].RoutePath != publicResp.RoutePath {
+		t.Fatalf("public search results = %#v, want route %s", publicSearch.Results, publicResp.RoutePath)
+	}
+	unlistedSearch, err := svc.SearchPublished(context.Background(), "unique-token-unlisted")
+	if err != nil {
+		t.Fatalf("SearchPublished unlisted: %v", err)
+	}
+	if len(unlistedSearch.Results) != 0 {
+		t.Fatalf("unlisted search leaked results: %#v", unlistedSearch.Results)
+	}
+	privateSearch, err := svc.SearchPublished(context.Background(), "unique-token-private")
+	if err != nil {
+		t.Fatalf("SearchPublished private: %v", err)
+	}
+	if len(privateSearch.Results) != 0 {
+		t.Fatalf("private search leaked results: %#v", privateSearch.Results)
+	}
+}

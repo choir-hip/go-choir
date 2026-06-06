@@ -316,15 +316,18 @@ WHERE pr.route_path = ? AND pr.state = 'active' AND p.state = 'published'`, rout
 	if err != nil {
 		return nil, err
 	}
+	policy, err := s.publicationPolicy(ctx, rec.PublicationVersionID)
+	if err != nil {
+		return nil, err
+	}
+	if !publicationAccessPolicyAllowsPublicRoute(policy.Access) {
+		return nil, sql.ErrNoRows
+	}
 	sourceEntities, err := s.publicationSourceEntities(ctx, rec.PublicationVersionID)
 	if err != nil {
 		return nil, err
 	}
 	transclusions, err := s.publicationTransclusions(ctx, rec.PublicationVersionID)
-	if err != nil {
-		return nil, err
-	}
-	policy, err := s.publicationPolicy(ctx, rec.PublicationVersionID)
 	if err != nil {
 		return nil, err
 	}
@@ -416,13 +419,14 @@ func (s *Service) SearchPublished(ctx context.Context, query string) (*Retrieval
 	rows, err := s.store.db.QueryContext(ctx, `
 SELECT p.publication_id, p.title, pr.route_path, pv.publication_version_id,
        pv.content_hash, pv.source_revision_hash, ab.storage_ref,
-       rs.source_id, rsp.span_id
+       rs.source_id, rsp.span_id, pp.access_policy_json
 FROM publications p
 JOIN publication_versions pv ON pv.publication_version_id = p.latest_version_id
 JOIN public_routes pr ON pr.target_id = p.publication_id AND pr.target_version_id = pv.publication_version_id
 JOIN artifact_blobs ab ON ab.artifact_manifest_id = pv.artifact_manifest_id
 JOIN retrieval_sources rs ON rs.content_hash = pv.content_hash AND rs.state = 'active'
 JOIN retrieval_spans rsp ON rsp.source_id = rs.source_id AND rsp.source_version_id = pv.publication_version_id
+JOIN publication_policies pp ON pp.publication_version_id = pv.publication_version_id
 WHERE p.state = 'published' AND pr.state = 'active'
 ORDER BY pv.published_at DESC`)
 	if err != nil {
@@ -442,10 +446,14 @@ ORDER BY pv.published_at DESC`)
 			StorageRef           string
 			SourceID             string
 			SpanID               string
+			AccessPolicy         string
 		}
 		if err := rows.Scan(&rec.PublicationID, &rec.Title, &rec.RoutePath, &rec.PublicationVersionID,
-			&rec.ContentHash, &rec.SourceRevisionHash, &rec.StorageRef, &rec.SourceID, &rec.SpanID); err != nil {
+			&rec.ContentHash, &rec.SourceRevisionHash, &rec.StorageRef, &rec.SourceID, &rec.SpanID, &rec.AccessPolicy); err != nil {
 			return nil, fmt.Errorf("platform retrieval: scan source: %w", err)
+		}
+		if !publicationAccessPolicyAllowsPublicRoute(json.RawMessage(rec.AccessPolicy)) {
+			continue
 		}
 		contentBytes, err := s.readBlob(rec.StorageRef)
 		if err != nil {
@@ -761,6 +769,22 @@ func publicationExportAllowed(raw json.RawMessage, format string) bool {
 		}
 	}
 	return false
+}
+
+func publicationAccessPolicyAllowsPublicRoute(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var policy struct {
+		Visibility string `json:"visibility"`
+		Route      string `json:"route"`
+	}
+	if err := json.Unmarshal(raw, &policy); err != nil {
+		return false
+	}
+	visibility := strings.TrimSpace(strings.ToLower(policy.Visibility))
+	route := strings.TrimSpace(strings.ToLower(policy.Route))
+	return visibility == "public" && (route == "" || route == "public")
 }
 
 func formatPublicationExportContent(bundle *PublicationBundle, format string) string {
