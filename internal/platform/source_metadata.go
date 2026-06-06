@@ -155,8 +155,9 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 		}
 		display["open_surface"] = openSurface
 		m["display"] = display
-		raw = mustJSONRaw(m)
 	}
+	normalizePublicationReaderSnapshotStatus(m)
+	raw = mustJSONRaw(m)
 	targetKind := firstNonEmpty(firstString(target, "target_kind"), firstString(m, "target_kind"))
 	targetID := firstNonEmpty(
 		firstString(target, "item_id"),
@@ -256,6 +257,19 @@ func publicationSourceEvidenceState(entity map[string]any) map[string]any {
 
 func normalizePublicationEvidenceState(value string) string {
 	return sourcecontract.NormalizeEvidenceState(value)
+}
+
+func normalizePublicationReaderSnapshotStatus(entity map[string]any) {
+	status := mapValue(entity["reader_snapshot_status"])
+	if len(status) == 0 {
+		return
+	}
+	normalized := sourcecontract.NormalizeReaderArtifactState(firstString(status, "state"))
+	if normalized == "" {
+		return
+	}
+	status["state"] = normalized
+	entity["reader_snapshot_status"] = status
 }
 
 func normalizePublicationDisplayPolicy(raw string, display map[string]any, selector map[string]any) string {

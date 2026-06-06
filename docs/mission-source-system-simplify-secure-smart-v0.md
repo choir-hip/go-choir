@@ -5931,7 +5931,7 @@ or non-public publication semantics.
 
 ### Problem 35: Platform Publication Metadata Can Preserve Raw Reader Artifact Aliases
 
-Status: `documented_pending_fix`.
+Status: `fixed_with_local_contract_proof_pending_ci_deploy`.
 
 problem: the prior reader-artifact contract repair normalized
 `reader_snapshot_status.state` in the proxy publication enrichment path, but
@@ -5983,6 +5983,53 @@ acceptance for fix:
 remaining error field: this should be fixed in the platform normalization path,
 not by adding another frontend fallback. The broader owner/guest/private/public
 visibility matrix remains a follow-up even after this repair.
+
+fix and proof:
+
+```text
+behavior:
+  internal/platform/source_metadata.go now normalizes
+  reader_snapshot_status.state through
+  sourcecontract.NormalizeReaderArtifactState before source entity JSON is
+  stored for publication/export. Unknown states are left unchanged rather than
+  being coerced into an evidence state.
+
+verifier:
+  internal/platform/service_test.go adds
+  TestPublicationExportPreservesSourceContractMatrix.
+
+covered local matrix:
+  target kinds: url, source_service_item, content_item, publication_version
+  reader artifact aliases: snapshot-ready, bounded excerpt,
+    publication blocked, source_import_failed
+  selector aliases: text quote, table-range, page range, data release vintage
+  open-surface aliases: content, source-viewer, web-lens, publication-version
+  evidence aliases/states: confirmed, qualifying, access blocked, fetch_failed
+
+assertions:
+  publication bundle and Markdown export metadata both preserve canonical
+  target identity, canonical open surface, canonical reader artifact state,
+  canonical selector kind, canonical evidence state, selected snapshot text,
+  content hash, and non-state reader snapshot fields such as quality.
+
+local checks:
+  gofmt -w internal/platform/source_metadata.go internal/platform/service_test.go
+  nix develop -c go test ./internal/platform -run 'TestPublicationExportPreserves(SourceContractMatrix|CanonicalEvidenceStateMatrix)' -count=1
+    -> ok
+  nix develop -c go test ./internal/sourcecontract ./internal/platform ./internal/proxy -run 'TestNormalize|TestBuildPublication|TestHandleVTextPublication|TestExport|TestSourceContractSchema|TestPublicationExportPreserves' -count=1
+    -> ok
+
+deploy-impact:
+  deploy_needed=true
+  deploy_host=true
+  deploy_host_service=true
+  host_services=platformd,proxy
+  frontend/guest/vmctl/host_os deploy flags=false
+```
+
+remaining proof required: push the behavior commit, monitor CI and FlakeHub,
+confirm Node B deploy identity for the new behavior commit, and run the focused
+deployed publication/export contract proof on staging.
 
 ## Suggested `/goal`
 

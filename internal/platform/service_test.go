@@ -95,6 +95,22 @@ func evidenceStateBySourceEntityID(t *testing.T, transclusions []PublicationTran
 	return out
 }
 
+func sourceEntitiesBySourceEntityID(entities []PublicationSourceEntity) map[string]PublicationSourceEntity {
+	out := make(map[string]PublicationSourceEntity, len(entities))
+	for _, entity := range entities {
+		out[entity.SourceEntityID] = entity
+	}
+	return out
+}
+
+func transclusionsBySourceEntityID(transclusions []PublicationTransclusion) map[string]PublicationTransclusion {
+	out := make(map[string]PublicationTransclusion, len(transclusions))
+	for _, transclusion := range transclusions {
+		out[transclusion.SourceEntityID] = transclusion
+	}
+	return out
+}
+
 func assertPublishedEvidenceState(t *testing.T, surface, want string, got map[string]any) {
 	t.Helper()
 	if got["state"] != want {
@@ -116,6 +132,67 @@ func assertPublishedEvidenceState(t *testing.T, surface, want string, got map[st
 			t.Fatalf("%s non-relational evidence should not carry relation: %#v", surface, got)
 		}
 	}
+}
+
+func assertPublishedSourceContractCase(t *testing.T, surface string, tc publicationSourceContractCase, entity PublicationSourceEntity, transclusion PublicationTransclusion) {
+	t.Helper()
+	if entity.SourceEntityID == "" {
+		t.Fatalf("%s missing source entity for %s", surface, tc.entityID)
+	}
+	if transclusion.SourceEntityID == "" {
+		t.Fatalf("%s missing transclusion for %s", surface, tc.entityID)
+	}
+	if entity.TargetKind != tc.targetKind || entity.TargetID != tc.targetID {
+		t.Fatalf("%s target = %s/%s, want %s/%s", surface, entity.TargetKind, entity.TargetID, tc.targetKind, tc.targetID)
+	}
+	if entity.OpenSurface != tc.wantOpenSurface {
+		t.Fatalf("%s open surface = %q, want %q", surface, entity.OpenSurface, tc.wantOpenSurface)
+	}
+	var entityJSON map[string]any
+	if err := json.Unmarshal(entity.Entity, &entityJSON); err != nil {
+		t.Fatalf("%s decode entity json for %s: %v\n%s", surface, tc.entityID, err, string(entity.Entity))
+	}
+	display := mapValue(entityJSON["display"])
+	if display["open_surface"] != tc.wantOpenSurface {
+		t.Fatalf("%s entity json open surface = %#v, want %q from %s", surface, display["open_surface"], tc.wantOpenSurface, string(entity.Entity))
+	}
+	status := mapValue(entityJSON["reader_snapshot_status"])
+	if status["state"] != tc.wantReaderState {
+		t.Fatalf("%s reader snapshot status = %#v, want state %q from %s", surface, status, tc.wantReaderState, string(entity.Entity))
+	}
+	if status["quality"] != tc.readerQuality {
+		t.Fatalf("%s reader snapshot quality = %#v, want %q from %s", surface, status["quality"], tc.readerQuality, string(entity.Entity))
+	}
+	var selector map[string]any
+	if err := json.Unmarshal(transclusion.SourceSelector, &selector); err != nil {
+		t.Fatalf("%s decode source selector for %s: %v\n%s", surface, tc.entityID, err, string(transclusion.SourceSelector))
+	}
+	if selector["selector_kind"] != tc.wantSelectorKind {
+		t.Fatalf("%s selector kind = %#v, want %q from %s", surface, selector["selector_kind"], tc.wantSelectorKind, string(transclusion.SourceSelector))
+	}
+	assertPublishedEvidenceState(t, surface, tc.wantEvidenceState, mapValue(selector["evidence_state"]))
+	if transclusion.SnapshotText != tc.quote || transclusion.ContentHash != tc.contentHash {
+		t.Fatalf("%s transclusion snapshot/hash = %#v, want %q/%q", surface, transclusion, tc.quote, tc.contentHash)
+	}
+}
+
+type publicationSourceContractCase struct {
+	entityID          string
+	kind              string
+	targetKind        string
+	targetID          string
+	target            map[string]any
+	rawReaderState    string
+	wantReaderState   string
+	readerQuality     string
+	rawSelectorKind   string
+	wantSelectorKind  string
+	rawOpenSurface    string
+	wantOpenSurface   string
+	rawEvidenceState  string
+	wantEvidenceState string
+	quote             string
+	contentHash       string
 }
 
 func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
@@ -457,6 +534,161 @@ func TestPublicationExportPreservesCanonicalEvidenceStateMatrix(t *testing.T) {
 		entityID := fmt.Sprintf("src-evidence-%s", strings.ReplaceAll(state, "_", "-"))
 		assertPublishedEvidenceState(t, "bundle", state, bundleEvidence[entityID])
 		assertPublishedEvidenceState(t, "export", state, exportEvidence[entityID])
+	}
+}
+
+func TestPublicationExportPreservesSourceContractMatrix(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	svc := NewService(store, filepath.Join(root, "artifacts"))
+
+	cases := []publicationSourceContractCase{
+		{
+			entityID:          "src-url-reader-ready",
+			kind:              "web_source",
+			targetKind:        "url",
+			targetID:          "https://example.com/source-ready",
+			target:            map[string]any{"target_kind": "url", "url": "https://example.com/source-ready"},
+			rawReaderState:    "snapshot-ready",
+			wantReaderState:   sourcecontract.ReaderArtifactStateReady,
+			readerQuality:     "ok",
+			rawSelectorKind:   "text quote",
+			wantSelectorKind:  sourcecontract.SelectorKindTextQuote,
+			rawOpenSurface:    "content",
+			wantOpenSurface:   sourcecontract.OpenSurfaceSource,
+			rawEvidenceState:  "confirmed",
+			wantEvidenceState: sourcecontract.EvidenceStateConfirms,
+			quote:             "URL source reader artifact is ready.",
+			contentHash:       "hash-url-ready",
+		},
+		{
+			entityID:          "src-service-bounded",
+			kind:              "source_service_item",
+			targetKind:        "source_service_item",
+			targetID:          "source-item-bounded",
+			target:            map[string]any{"target_kind": "source_service_item", "item_id": "source-item-bounded"},
+			rawReaderState:    "bounded excerpt",
+			wantReaderState:   sourcecontract.ReaderArtifactStateBoundedExcerptOnly,
+			readerQuality:     "warning",
+			rawSelectorKind:   "table-range",
+			wantSelectorKind:  sourcecontract.SelectorKindTableRange,
+			rawOpenSurface:    "source-viewer",
+			wantOpenSurface:   sourcecontract.OpenSurfaceSource,
+			rawEvidenceState:  "qualifying",
+			wantEvidenceState: sourcecontract.EvidenceStateQualifies,
+			quote:             "Source-service table range is bounded.",
+			contentHash:       "hash-service-bounded",
+		},
+		{
+			entityID:          "src-content-blocked",
+			kind:              "content_item",
+			targetKind:        "content_item",
+			targetID:          "content-blocked",
+			target:            map[string]any{"target_kind": "content_item", "content_id": "content-blocked"},
+			rawReaderState:    "publication blocked",
+			wantReaderState:   sourcecontract.ReaderArtifactStateNotPublicationSafe,
+			readerQuality:     "blocked",
+			rawSelectorKind:   "page range",
+			wantSelectorKind:  sourcecontract.SelectorKindPageRange,
+			rawOpenSurface:    "web-lens",
+			wantOpenSurface:   sourcecontract.OpenSurfaceWebLens,
+			rawEvidenceState:  "access blocked",
+			wantEvidenceState: sourcecontract.EvidenceStateBlockedByAccess,
+			quote:             "Content item reader artifact is blocked.",
+			contentHash:       "hash-content-blocked",
+		},
+		{
+			entityID:          "src-publication-vtext",
+			kind:              "published_vtext",
+			targetKind:        "publication_version",
+			targetID:          "pubver-123",
+			target:            map[string]any{"target_kind": "publication_version", "publication_version_id": "pubver-123"},
+			rawReaderState:    "source_import_failed",
+			wantReaderState:   sourcecontract.ReaderArtifactStateImportFailed,
+			readerQuality:     "error",
+			rawSelectorKind:   "data release vintage",
+			wantSelectorKind:  sourcecontract.SelectorKindDataVintage,
+			rawOpenSurface:    "publication-version",
+			wantOpenSurface:   sourcecontract.OpenSurfaceVText,
+			rawEvidenceState:  "fetch_failed",
+			wantEvidenceState: sourcecontract.EvidenceStateUnavailable,
+			quote:             "Published VText source import failed.",
+			contentHash:       "hash-publication-vtext",
+		},
+	}
+
+	sourceEntities := make([]map[string]any, 0, len(cases))
+	contentLines := []string{"# Source contract matrix", ""}
+	for i, tc := range cases {
+		contentLines = append(contentLines, fmt.Sprintf("%s [%d](source:%s)", tc.quote, i+1, tc.entityID))
+		sourceEntities = append(sourceEntities, map[string]any{
+			"entity_id": tc.entityID,
+			"kind":      tc.kind,
+			"label":     fmt.Sprintf("Source contract case %d", i+1),
+			"target":    tc.target,
+			"selectors": []map[string]any{{
+				"selector_kind": tc.rawSelectorKind,
+				"text_quote":    tc.quote,
+				"content_hash":  tc.contentHash,
+			}},
+			"display": map[string]any{
+				"inline_mode":  "embedded_excerpt",
+				"open_surface": tc.rawOpenSurface,
+			},
+			"reader_snapshot_status": map[string]any{
+				"state":    tc.rawReaderState,
+				"quality":  tc.readerQuality,
+				"warnings": []string{"preserve warning text"},
+			},
+			"evidence": map[string]any{
+				"state":          tc.rawEvidenceState,
+				"relation":       tc.rawEvidenceState,
+				"research_state": fmt.Sprintf("research_%s", tc.wantEvidenceState),
+				"uncertainty":    fmt.Sprintf("uncertainty for %s", tc.wantEvidenceState),
+			},
+		})
+	}
+	metadata, err := json.Marshal(map[string]any{"source_entities": sourceEntities})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+		OwnerID:          "user-1",
+		SourceDocID:      "doc-source-contract-matrix",
+		SourceRevisionID: "rev-source-contract-matrix",
+		Title:            "Source Contract Matrix",
+		Content:          strings.Join(contentLines, "\n"),
+		Metadata:         metadata,
+		RequestedBy:      "user-1",
+	})
+	if err != nil {
+		t.Fatalf("PublishVText: %v", err)
+	}
+
+	bundle, err := svc.GetPublicationBundleByRoute(context.Background(), resp.RoutePath)
+	if err != nil {
+		t.Fatalf("GetPublicationBundleByRoute: %v", err)
+	}
+	if len(bundle.SourceEntities) != len(cases) || len(bundle.Transclusions) != len(cases) {
+		t.Fatalf("bundle source metadata count entities=%d transclusions=%d want=%d", len(bundle.SourceEntities), len(bundle.Transclusions), len(cases))
+	}
+
+	exported, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "md")
+	if err != nil {
+		t.Fatalf("ExportPublicationByRoute md: %v", err)
+	}
+	exportedMetadata := decodePublicationExportMetadata(t, exported.Metadata)
+	if len(exportedMetadata.SourceEntities) != len(cases) || len(exportedMetadata.Transclusions) != len(cases) {
+		t.Fatalf("export source metadata count entities=%d transclusions=%d want=%d", len(exportedMetadata.SourceEntities), len(exportedMetadata.Transclusions), len(cases))
+	}
+
+	bundleEntities := sourceEntitiesBySourceEntityID(bundle.SourceEntities)
+	bundleTransclusions := transclusionsBySourceEntityID(bundle.Transclusions)
+	exportEntities := sourceEntitiesBySourceEntityID(exportedMetadata.SourceEntities)
+	exportTransclusions := transclusionsBySourceEntityID(exportedMetadata.Transclusions)
+	for _, tc := range cases {
+		assertPublishedSourceContractCase(t, "bundle", tc, bundleEntities[tc.entityID], bundleTransclusions[tc.entityID])
+		assertPublishedSourceContractCase(t, "export", tc, exportEntities[tc.entityID], exportTransclusions[tc.entityID])
 	}
 }
 
