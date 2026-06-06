@@ -841,15 +841,15 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T16:01Z, deployed behavior commit
-`b5c6a78fd2079869f9b7cb91cabc76ecb43feeec` moves frontend source open-plan
-resolution into `frontend/src/lib/source-contract.ts` while keeping entity
-shape extraction in `vtext-source-renderer.ts`. It followed docs checkpoint
-`22e685d6`, passed focused frontend tests, frontend build, GitHub Actions CI,
+last checkpoint: 2026-06-06T16:11Z, deployed behavior commit
+`efd47e1c9ae56caee0de38b25d2419febf111de6` separates frontend reader snapshot
+status from source evidence state. It followed docs checkpoint `2eefc0bd`,
+passed focused local frontend tests, frontend build, GitHub Actions CI,
 FlakeHub publish, Node B deploy, staging health identity, and deployed
-Playwright proof for Source Viewer/Web Lens/media/VText open-plan routing.
-Earlier behavior commit `41b2135f` remains the evidence/open-surface
-normalizer consolidation proof.
+Playwright proof that `reader_snapshot_ready` renders as reader artifact
+status instead of `Evidence unclassified`. Earlier behavior commit `b5c6a78f`
+remains the frontend SourceOpenPlan consolidation proof, and `41b2135f`
+remains the evidence/open-surface normalizer consolidation proof.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -905,14 +905,20 @@ contract drift before behavior commit `41b2135f` extracted a frontend
 source-contract helper module and aligned evidence/open-surface aliases with
 the backend contract. Docs checkpoint `22e685d6` records the frontend open-plan
 drift before behavior commit `b5c6a78f` moved generic open-plan resolution into
-the same frontend source-contract module.
+the same frontend source-contract module. Docs checkpoint `2eefc0bd` records
+the reader snapshot/evidence-state drift before behavior commit `efd47e1c`
+separates reader artifact status labels from source evidence labels in Source
+Viewer.
 Existing unrelated untracked docs are preserved.
 
 what shipped: latest behavior commit
-`b5c6a78fd2079869f9b7cb91cabc76ecb43feeec` was pushed to `origin/main` and
-deployed to staging. It consolidates frontend source open-plan resolution into
-the dedicated frontend source-contract module while preserving the existing
-renderer export for current callers. Prior behavior
+`efd47e1c9ae56caee0de38b25d2419febf111de6` was pushed to `origin/main` and
+deployed to staging. It separates frontend reader snapshot workflow state from
+source evidence state so Source Viewer shows publication reader artifact
+readiness without rendering `Evidence unclassified`. Prior behavior
+`b5c6a78fd2079869f9b7cb91cabc76ecb43feeec` consolidates frontend source
+open-plan resolution into the dedicated frontend source-contract module while
+preserving the existing renderer export for current callers. Prior behavior
 `41b2135f7d72c21ee3ddccf6a7deb9053b8ad6b3` consolidates frontend source
 evidence/open-surface normalization into that module. Prior behavior
 commit `53dd9b34d694ecd04c354cc1e614c12d87245631` adds policy and retrieval
@@ -1046,6 +1052,22 @@ what was proven:
   `2026-06-06T15:59:57Z`.
 - Deployed frontend open-plan contract proof passed:
   `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source open plans normalize'`.
+- Reader snapshot/evidence separation local checks passed:
+  `npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize|published source readers prefer publication snapshots'`
+  and `npm --prefix frontend run build`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27067193187`
+  completed successfully for `efd47e1c`, including Go gates, frontend build,
+  and the Node B staging deploy job.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27067193193`
+  completed successfully.
+- Staging health after that deploy reported `status: "ok"`,
+  `vmctl_status: "ok"`, and proxy/upstream deployed_commit
+  `efd47e1c9ae56caee0de38b25d2419febf111de6`, deployed_at
+  `2026-06-06T16:09:51Z`.
+- Deployed reader snapshot/evidence separation proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize|published source readers prefer publication snapshots'`.
 - Source evidence-state local checks passed:
   `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownLineage|TestVTextSourceGapRepair'`
   and `npm run build` in `frontend`.
@@ -1375,7 +1397,9 @@ remaining error field:
 - Source evidence states are typed for Markdown lineage gaps, owner source
   repairs, publication transclusion selectors, and export metadata. Researcher
   updates, Source Service records, stale/blocked/unavailable product flows, and
-  shared frontend/backend schema convergence remain incomplete.
+  shared frontend/backend schema convergence remain incomplete. Source Viewer
+  now keeps publication reader snapshot readiness separate from evidence-state
+  labels, but backend/generated `ReaderArtifact` schemas are still incomplete.
 - Table structure preservation now has broader partial-context tests, a
   deployed bounded diagnosis extraction route, a deployed authenticated
   synthetic proof for omitted-parent-table restoration versus explicit
@@ -3998,7 +4022,7 @@ schema plus shared ReaderArtifact and SourceSelector contracts.
 
 ### Problem 25: Reader Snapshot Status Is Being Used As Source Evidence State
 
-Status: `documented_before_fix`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: publication enrichment writes `reader_snapshot_status.state` values
 such as `reader_snapshot_ready`, `not_publication_safe`,
@@ -4060,6 +4084,63 @@ remaining error field: this is a frontend reader-artifact contract
 consolidation slice. It does not yet create backend/generated `ReaderArtifact`
 schemas or remove all raw selector maps, but it stops one confirmed
 cross-contract leak in the Source Viewer surface.
+
+Fix evidence:
+
+```text
+documentation checkpoint: 2eefc0bd docs: record reader snapshot evidence-state drift
+behavior commit: efd47e1c9ae56caee0de38b25d2419febf111de6
+```
+
+Implementation:
+
+- Added frontend reader artifact status constants, normalization, and labels to
+  `frontend/src/lib/source-contract.ts`.
+- Re-exported those helpers through `frontend/src/lib/vtext-source-renderer.ts`
+  for existing source-renderer callers.
+- Updated `frontend/src/lib/ContentViewer.svelte` so `sourceState` no longer
+  falls back to `reader_snapshot_status.state`; Source Viewer now displays
+  reader snapshot readiness/truncation through a separate reader artifact
+  status path.
+- Added frontend regression coverage proving `reader_snapshot_ready` remains
+  outside the source evidence vocabulary while rendering as `Reader snapshot
+  ready` in published Source Viewer fixtures.
+
+Local verification:
+
+```text
+npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize|published source readers prefer publication snapshots'
+result: 2 passed
+
+npm --prefix frontend run build
+result: passed
+```
+
+CI/deploy evidence:
+
+```text
+CI run: https://github.com/choir-hip/go-choir/actions/runs/27067193187
+CI result: passed, including Go gates, frontend build, and Node B deploy
+FlakeHub run: https://github.com/choir-hip/go-choir/actions/runs/27067193193
+FlakeHub result: passed
+Node B deploy job: 79890092169 passed
+staging status: ok
+staging vmctl_status: ok
+staging proxy deployed_commit: efd47e1c9ae56caee0de38b25d2419febf111de6
+staging sandbox deployed_commit: efd47e1c9ae56caee0de38b25d2419febf111de6
+staging deployed_at: 2026-06-06T16:09:51Z
+```
+
+Deployed acceptance proof:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'source evidence states normalize|published source readers prefer publication snapshots'
+result: 2 passed
+```
+
+Residual risk: Source Viewer no longer treats reader snapshot workflow state as
+claim evidence state. The broader mission still needs backend/shared or
+generated `ReaderArtifact` schemas and SourceSelector contract convergence.
 
 ## Suggested `/goal`
 
