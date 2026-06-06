@@ -841,13 +841,13 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T12:34:31Z, owner-authenticated Comet product proof
-created a bounded legal-proposal edit/revise transition from v87 to v89. The
-workflow now loads the canonical head instead of a stale browser-local draft,
-but it exposed a narrower source/structure regression: v89 is stable and
-latest after reload, yet the Sources panel reports `0 represented sources`
-while bounded diagnosis reports 7 sources, and the appendix table row count
-shifted from v87's 49 rows to v88/v89's 50 rows.
+last checkpoint: 2026-06-06T12:46:10Z, behavior commit `d404e6ec` preserves
+durable VText source metadata across user-authored saves, including the
+browser/user-save parent of an app-agent revise. CI, FlakeHub, Node B deploy,
+staging health identity, and deployed product-path synthetic acceptance all
+passed. The real owner legal-proposal v89 remains a documented evidence ref;
+the next owner proof must verify the repaired path on a fresh legal-proposal
+transition and check the exact appendix table row/signature behavior.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -885,13 +885,17 @@ same-head drafts are skipped, and any differing browser-local draft is skipped
 when a non-empty canonical revision exists.
 The current docs-only checkpoint records the owner bounded edit/revise proof
 and the newly confirmed post-revise source/structure problem before any
-follow-up behavior fix.
+follow-up behavior fix. Behavior commit `d404e6ec` fixes the first confirmed
+root cause by carrying durable parent metadata such as `source_entities`
+forward into ordinary user revisions before app-agent revise.
 Existing unrelated untracked docs are preserved.
 
-what shipped: behavior commit
-`93d9f8197747c7526e11a730f6dab3932af82d75` was pushed to `origin/main` and
-deployed to staging. A later docs-only checkpoint may not appear in Node B
-health because docs-only changes intentionally do not trigger deploy.
+what shipped: latest behavior commit
+`d404e6ecd4b16bfd4a907924c16846b82e3d26ff` was pushed to `origin/main` and
+deployed to staging. Earlier behavior commit
+`93d9f8197747c7526e11a730f6dab3932af82d75` remains the stale-draft recovery
+fix. Later docs-only checkpoints may not appear in Node B health because
+docs-only changes intentionally do not trigger deploy.
 
 what was proven:
 
@@ -1145,6 +1149,30 @@ what was proven:
   and table signature `sha256:a80c30b628c7`; v88/v89 reported table range
   `L269-L318` and new signatures (`sha256:01178718c7ae` for v88,
   `sha256:a86643578fed` for v89).
+- Focused local checks for the metadata carry-forward fix passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextUserSaveAndAgentRevisePreserveSourcesAndTableShape'` and
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextImportMarkdownLineageResolvesCitationMarkers|TestVTextSourceGapRepairCreatesRevision|TestVTextMarkdownStructureStabilization|TestVTextMarkdownTableRowParserHandlesEscapedPipes|TestVTextAgentRevisionPromotesResearcherContentRefsToSourceEntities'`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27062590481`
+  completed successfully for `d404e6ec`, including runtime shards,
+  non-runtime tests, integration smoke, vet/build, aggregate Go gate, and Node
+  B staging deploy.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27062590491`
+  completed successfully.
+- Staging health at `https://choir.news/health` reported proxy and upstream
+  commit/deployed_commit
+  `d404e6ecd4b16bfd4a907924c16846b82e3d26ff` with deployed_at
+  `2026-06-06T12:43:38Z`.
+- Deployed synthetic product-path acceptance passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-source-metadata-carry-forward.tmp.spec.js`.
+  The temporary spec created a fresh source-backed VText through the
+  authenticated browser session, created a user revision without
+  `source_entities` in request metadata, verified the deployed response carried
+  the source entity forward, and verified bounded diagnosis preserved the
+  source marker and appendix table row count/signature across the user save.
+  The temporary spec was deleted after proof and is not part of the tracked
+  suite.
 
 unproven or partial claims:
 
@@ -1221,6 +1249,10 @@ belief-state changes:
   prose-only top-of-document edit. The next repair must root-cause the general
   source metadata carry-forward and table normalization path, not patch this
   document by hand.
+- User-authored VText revisions now inherit durable parent metadata, including
+  `source_entities`, before app-agent revise. This should repair the empty
+  represented-source list for future owner transitions, but it does not mutate
+  already-created v88/v89 and still requires a fresh owner legal-proposal proof.
 
 remaining error field:
 
@@ -1246,7 +1278,10 @@ remaining error field:
 - VText source representation has a newly confirmed owner regression: v89
   diagnosis still sees 7 sources/49 markers, but the Sources panel reports
   `0 represented sources` and cannot choose/open source entities for the
-  latest revision.
+  latest revision. Behavior commit `d404e6ec` fixes the user-save metadata
+  carry-forward class for future revisions; a fresh owner proof must confirm
+  the real legal-proposal path now shows represented source entities after a
+  new bounded edit/revise.
 
 highest-impact remaining uncertainty: whether to introduce the shared source
 contract package first and route all callers through it, or to land the SSRF
@@ -1255,20 +1290,20 @@ documented safety risk makes the URL fetch policy the first behavior-changing
 fix, with shared contract types designed in the same pass so the fix does not
 create another isolated policy path.
 
-next executable probe: root-cause the documented v87->v88->v89 owner
-transition by comparing revision metadata/source entity carry-forward and table
-normalization for user-save v88 versus app-agent v89. Add focused tests that a
-prose-only edit/revise preserves source entities represented in the Sources
-panel and keeps the appendix table row signature stable unless the table was
-explicitly edited. Only then apply the behavior fix and redeploy for a new
-owner Comet proof.
+next executable probe: run a fresh owner-authenticated Comet bounded
+legal-proposal edit/revise after deployed commit `d404e6ec`. Verify the latest
+revision's Sources panel shows represented source entities, source opens still
+route to Source Viewer, and bounded diagnosis keeps the appendix table row
+count/signature stable. If source representation passes but row/signature still
+changes, document that narrower table-normalization problem before the next
+behavior fix.
 
 suggested resume goal string: continue
 `docs/mission-source-system-simplify-secure-smart-v0.md` from behavior commit
-`93d9f8197747c7526e11a730f6dab3932af82d75`, docs checkpoint `ce02e45f`, and
-this docs checkpoint by root-causing/fixing Problem 9: owner legal-proposal v89
-has empty represented sources despite diagnosis source counts, and a prose-only
-v87->v88->v89 transition changes the appendix table from 49 to 50 rows.
+`d404e6ecd4b16bfd4a907924c16846b82e3d26ff` and this docs checkpoint by running
+a fresh owner Comet legal-proposal bounded edit/revise proof. Confirm source
+entity representation/opening after user-save metadata carry-forward, then
+separately confirm or document any remaining table row/signature drift.
 
 evidence artifact refs:
 
@@ -1308,6 +1343,13 @@ evidence artifact refs:
   table signature `sha256:a86643578fed`). Revise run handle
   `8fd9eb3c-e...d2e201`; app-agent trace id
   `f93cea62-f833-4dae-b414-8e44783d8cbe`.
+- Source metadata carry-forward fix: behavior commit
+  `d404e6ecd4b16bfd4a907924c16846b82e3d26ff`, CI run `27062590481`, FlakeHub
+  run `27062590491`, staging health deployed_commit
+  `d404e6ecd4b16bfd4a907924c16846b82e3d26ff`, deployed_at
+  `2026-06-06T12:43:38Z`, local focused comprehensive runtime tests above,
+  and deployed temporary Playwright acceptance
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-source-metadata-carry-forward.tmp.spec.js`.
 - Frontend source-open slice: `sourceEntityOpenPlan`, `ContentViewer`
   live-import guard, and focused Playwright routing proof.
 - CI/deploy evidence: GitHub Actions run `27060657873`; FlakeHub publish run
