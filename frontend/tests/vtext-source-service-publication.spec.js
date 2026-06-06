@@ -251,6 +251,9 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
   const resolved = await fetchJSON(page, `/api/platform/publications/resolve?route=${encodeURIComponent(publish.route_path)}`);
   const entity = resolved.source_entities?.[0]?.entity || {};
   expect(entity.reader_snapshot?.text_content).toContain('Full cleaned reader source detail');
+  expect(entity.reader_snapshot?.snapshot_kind).toBe('cleaned_reader_markdown');
+  expect(entity.reader_snapshot?.media_type).toBe('text/markdown');
+  expect(entity.reader_snapshot?.original_media_type).toBe('text/html');
   expect(resolved.transclusions?.[0]?.snapshot_text).toBe(excerpt);
 
   await page.goto(`${baseURL}${publish.route_path}`);
