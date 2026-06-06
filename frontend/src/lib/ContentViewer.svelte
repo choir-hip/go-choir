@@ -3,6 +3,7 @@
   import { createEventDispatcher } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { renderMarkdownBlocks } from './vtext-markdown-renderer';
+  import { sourceEntityExcerptText, sourceEntityReaderSnapshotText } from './vtext-source-renderer';
 
   export let appContext = {};
 
@@ -14,20 +15,23 @@
 
   $: sourceEntity = appContext?.sourceEntity || null;
   $: sourceEntityTarget = sourceEntity?.target || {};
-  $: sourceEntitySelectors = Array.isArray(sourceEntity?.selectors) ? sourceEntity.selectors : [];
-  $: sourceEntitySnapshot = sourceEntity?.transclusion?.snapshot_text ||
-    sourceEntitySelectors.map((selector) => selector?.text_quote || '').find(Boolean) ||
-    '';
+  $: sourceEntityReaderSnapshot = sourceEntityReaderSnapshotText(sourceEntity);
+  $: sourceEntityFallbackSnapshot = sourceEntityExcerptText(sourceEntity);
   $: sourceUrl = item?.source_url || appContext?.sourceUrl || '';
   $: filePath = item?.file_path || appContext?.filePath || '';
   $: mediaType = item?.media_type || appContext?.mediaType || '';
   $: appHint = item?.app_hint || appContext?.appHint || appContext?.appId || 'files';
   $: title = item?.title || sourceEntity?.label || appContext?.windowTitle || appContext?.title || appHint;
+  $: isPublishedSourceReader = !!(appContext?.publishedRoutePath || appContext?.publishedGuest);
   $: displayUrl = filePath ? apiFileURL(filePath) : sourceUrl;
   $: embedUrl = mediaType === 'video/youtube' || /youtube\.com|youtu\.be/.test(sourceUrl)
     ? youtubeEmbedURL(sourceUrl)
     : '';
-  $: readerText = String(item?.text_content || sourceEntitySnapshot || '').trim();
+  $: readerText = String(
+    isPublishedSourceReader
+      ? sourceEntityReaderSnapshot || item?.text_content || sourceEntityFallbackSnapshot
+      : item?.text_content || sourceEntityReaderSnapshot || sourceEntityFallbackSnapshot
+  ).trim();
   $: readerHTML = renderMarkdownBlocks(readerText, [], { headingLevelOffset: 1, wrapTables: true });
   $: hasReaderText = readerText.length > 0;
   $: isSourceReader = hasReaderText && (appHint === 'content' || !!sourceEntity);

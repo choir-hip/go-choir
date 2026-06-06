@@ -153,6 +153,63 @@ simplification implementation checkpoint:
   apparatus after the simplification. Guest/public source-window proof is
   still outstanding and must not be claimed complete.
 
+guest/public proof problem checkpoint:
+
+- A fresh unauthenticated Playwright context opened the owner publication
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` on
+  staging and saw `Guest published VText`, proving the probe was not using the
+  authenticated Comet owner session.
+- The guest publication exposes public source markers for ABA Formal Opinion
+  512, ABA Model Rule 1.6, Hetzner data centers, OVHcloud Hosted Private
+  Cloud, NixOS rollback, GDPR Article 32, and Qdrant search.
+- The public resolve API for the same route carries fuller
+  `reader_snapshot.text_content` for the ABA and OVH source entities. Example:
+  ABA Formal Opinion 512 includes the fuller reader summary beginning "The ABA
+  Standing Committee on Ethics and Professional Responsibility published
+  Formal Opinion 512..."; OVH includes the fuller reader summary beginning
+  "# OVHcloud Hosted Private Cloud Service Offerings".
+- The guest inline ABA source note used the fuller cleaned reader text, but
+  opening the ABA source window showed only the shorter selector quote:
+  "Lawyers using generative artificial intelligence tools must consider duties
+  including competence, confidentiality, communication, supervision, candor,
+  and reasonable fees."
+- Root-cause hypothesis before code: `ContentViewer` loads the target content
+  item by `content_id` and prefers `item.text_content` over the publication
+  source entity's `reader_snapshot.text_content`. For public source windows,
+  that can replace the publication-carried reader snapshot with an older,
+  shorter, or selector-like content body. The general repair should make source
+  readers prefer the source entity's own reader snapshot, then fall back to
+  transclusion/selector text and loaded content items. This is not
+  source-specific and preserves VText publication snapshots as the public
+  source contract.
+- Fix applied locally after the documentation checkpoint: `ContentViewer`
+  now distinguishes published source readers from live/editable content source
+  readers. Published source readers prefer
+  `sourceEntity.reader_snapshot.text_content`, then loaded content-item text,
+  then transclusion/selector fallback. Live content-item source windows keep
+  the previous behavior: loaded content-item text first, then source snapshots
+  as fallback.
+- Regression coverage added:
+  `VText published source readers prefer publication snapshots over loaded
+  content items` launches a source window with both a target content item and a
+  publication reader snapshot, waits for source evidence to prove the content
+  item loaded, and asserts the rendered reader still shows the publication
+  snapshot rather than the mutable content-item body or selector quote.
+- Local verification:
+  - `pnpm --dir frontend exec playwright test
+    tests/vtext-source-entities.spec.js -g "content-item text
+    sources|published source readers"` passed 2 tests.
+  - `pnpm --dir frontend exec playwright test
+    tests/vtext-source-entities.spec.js` passed all 8 tests.
+  - `pnpm --dir frontend build` passed.
+- Attempted local publication regression
+  `pnpm --dir frontend exec playwright test
+  tests/vtext-source-service-publication.spec.js -g "publishes public
+  content-item sources"` did not reach the source-window assertion because the
+  local publish endpoint returned `502 {"error":"failed to publish vtext"}`.
+  That is recorded as a local harness/server limitation for this slice, not as
+  deployed guest proof.
+
 current artifact state:
 
 - The legal-cloud proposal is a canonical `.vtext` publication with source

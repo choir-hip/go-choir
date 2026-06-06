@@ -255,6 +255,129 @@ test('VText opens content-item text sources as reader-mode markdown', async ({ d
   await expect(page.locator('[data-content-viewer][data-source-reader-mode="true"]')).toHaveCount(1);
 });
 
+test('published source readers prefer publication snapshots over loaded content items', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  await page.evaluate(async () => {
+    await fetch('/api/desktop/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windows: [], active_window_id: '' }),
+    });
+  });
+  await page.reload();
+  await expect(page.locator('[data-desktop]')).toBeVisible({ timeout: 10000 });
+
+  const created = await page.evaluate(async () => {
+    const contentRes = await fetch('/api/content/items', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source_type: 'extracted_url',
+        media_type: 'text/markdown',
+        app_hint: 'content',
+        title: 'Published snapshot fallback source',
+        source_url: 'https://example.com/published-snapshot-fallback',
+        canonical_url: 'https://example.com/published-snapshot-fallback',
+        text_content: [
+          '# Mutable content item body',
+          '',
+          'This loaded content item body is deliberately different from the publication snapshot.',
+        ].join('\n'),
+        provenance: {
+          rights_scope: 'public_source',
+          created_by: 'browser-test',
+        },
+      }),
+    });
+    if (!contentRes.ok) throw new Error(`create content item failed: ${contentRes.status}`);
+    const item = await contentRes.json();
+    const sourceEntity = {
+      entity_id: 'src-published-snapshot-fallback',
+      kind: 'content_item',
+      label: 'Published snapshot fallback source',
+      publication_route_path: '/pub/vtext/published-snapshot-fixture',
+      target: {
+        target_kind: 'content_item',
+        content_id: item.content_id,
+        url: item.source_url,
+        canonical_url: item.canonical_url,
+      },
+      selectors: [
+        {
+          selector_kind: 'text_quote',
+          text_quote: 'Selector quote is only a final fallback.',
+          content_hash: item.content_hash,
+        },
+      ],
+      reader_snapshot: {
+        text_content: [
+          '# Publication reader snapshot',
+          '',
+          'This publication-carried reader snapshot must remain the source-window body for published readers.',
+          '',
+          'It is more stable than the target content item and is the public source contract.',
+        ].join('\n'),
+      },
+      evidence: {
+        state: 'available',
+        research_state: 'confirmed',
+      },
+      provenance: {
+        created_by: 'browser-test',
+        rights_scope: 'public_source',
+        untrusted_source_text: true,
+      },
+    };
+    const windows = [
+      {
+        window_id: 'published-source-reader-fixture',
+        app_id: 'content',
+        title: 'Published snapshot fallback source',
+        geometry: { x: 80, y: 80, width: 820, height: 620 },
+        mode: 'normal',
+        z_index: 20,
+        app_context: {
+          windowTitle: 'Published snapshot fallback source',
+          title: 'Published snapshot fallback source',
+          sourceUrl: item.source_url,
+          contentId: item.content_id,
+          content_id: item.content_id,
+          mediaType: 'text/markdown',
+          appHint: 'content',
+          sourceEntity,
+          sourceEntityId: sourceEntity.entity_id,
+          publishedRoutePath: sourceEntity.publication_route_path,
+          publishedGuest: true,
+          singletonKey: `source:${sourceEntity.entity_id}`,
+        },
+      },
+    ];
+    const stateRes = await fetch('/api/desktop/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windows, active_window_id: 'published-source-reader-fixture' }),
+    });
+    if (!stateRes.ok) throw new Error(`desktop state save failed: ${stateRes.status}`);
+    return { contentID: item.content_id };
+  });
+
+  await page.reload();
+  const sourceWindow = page.locator('[data-window][data-window-id="published-source-reader-fixture"]');
+  await expect(sourceWindow).toBeVisible({ timeout: 10000 });
+  const viewer = sourceWindow.locator('[data-content-viewer][data-source-reader-mode="true"]');
+  await expect(viewer).toBeVisible({ timeout: 10000 });
+  await expect(viewer.locator('[data-content-evidence]')).toContainText('SHA-256');
+  const reader = viewer.locator('[data-content-reader-markdown]');
+  await expect(reader.locator('h2')).toContainText('Publication reader snapshot');
+  await expect(reader).toContainText('publication-carried reader snapshot must remain');
+  await expect(reader).not.toContainText('Mutable content item body');
+  await expect(reader).not.toContainText('Selector quote is only a final fallback');
+  await expect(reader).not.toContainText(created.contentID);
+});
+
 test('VText source panel attaches readable text to an existing source entity', async ({ desktopSession }) => {
   const { page } = desktopSession;
   await page.evaluate(async () => {
