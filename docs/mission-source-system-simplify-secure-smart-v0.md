@@ -5267,6 +5267,24 @@ cognitive review, pruning weak or duplicate source-system paths, final hard
 mission report plus PDF, and any broader shared-contract gaps that the review
 still identifies.
 
+## Hard mission review report
+
+Status: `checkpoint_report_published`.
+
+The adversarial/cognitive hard review was written to
+`docs/source-system-hard-mission-review-2026-06-06.md` and rendered to iCloud
+Drive at:
+
+`~/Library/Mobile Documents/com~apple~CloudDocs/Choir Mission Reports/source-system-hard-mission-review-2026-06-06.pdf`
+
+PDF text extraction passed with the expected title, table of contents, verdict,
+hard findings, residual risks, rollback refs, and next realism axis. The report
+does not claim full mission completion. It records the accepted source-system
+correctness checkpoint and preserves residual risks around manually mirrored
+Go/TypeScript source contracts, broader source-service fixture coverage,
+future non-public publication semantics, direct proof-script auth limitations,
+desktop screenshot capture, and the deploy identity stamp distinction.
+
 ## Suggested `/goal`
 
 ```text
