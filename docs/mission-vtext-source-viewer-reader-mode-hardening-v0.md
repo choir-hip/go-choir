@@ -236,6 +236,29 @@ Empirical renderer probe on 2026-06-06, using the real
   accepts it, but the fallback table validity path drops empty cells when
   deciding whether the block is a valid table.
 
+Authenticated staging diagnosis on 2026-06-06, using Comet and
+`/api/vtext/documents/f93cea62-f833-4dae-b414-8e44783d8cbe/diagnosis?limit=160`,
+shows this is not only a strict-renderer problem:
+
+- The live owner document is `choir_private_legal_cloud_proposal.vtext`, current
+  version `v87`, current revision
+  `4d2a9034-0cd3-4af2-b160-01c9f265eb19`.
+- `v70` had 50 strict pipe-table rows and the final `Work product` row ended
+  with ` |`.
+- `v71` collapsed the glossary into the `TermDefinition**...` artifact.
+- `v72` through `v74` restored 49 strict rows plus one table-shaped final row,
+  but the final `Work product` row no longer had the closing pipe.
+- `v75` through `v78` collapsed again into `TermDefinition`, preserving only
+  the malformed table-shaped `Work product` line.
+- `v79` through `v87` restored 49 strict rows plus that same malformed final
+  line; therefore the screenshot at `v87` is a persistent canonical/projection
+  corruption, not just a visual renderer decision.
+
+Cognitive-transform route change: treat this as structure preservation across
+canonical VText, editable DOM, Markdown import/export, and revision repair.
+Renderer tolerance is useful as a reader safety net, but it is insufficient if
+save/revise/export continue to persist delimiter-damaged table rows.
+
 Direction: repair this as a general formatting-consistency problem. The system
 should normalize table-shaped rows adjacent to known tables, preserve trailing
 cell delimiters through edit/save/revise/export, and prefer structured VText
