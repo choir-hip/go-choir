@@ -4142,6 +4142,64 @@ Residual risk: Source Viewer no longer treats reader snapshot workflow state as
 claim evidence state. The broader mission still needs backend/shared or
 generated `ReaderArtifact` schemas and SourceSelector contract convergence.
 
+### Problem 26: Publication Source Selectors Still Pass Through Raw Selector Kinds
+
+Status: `documented_before_fix`.
+
+problem: publication source metadata now preserves selector sets, but the
+selector contract is still implemented as raw map handling in
+`internal/platform/source_metadata.go`. `selector_kind` values from VText
+metadata are copied into publication transclusion and export metadata without
+canonical normalization. That means legacy or human-authored forms such as
+`text quote`, `table-range`, `page range`, or an omitted selector kind can
+survive into public `source_selector_json` even though consumers and tests
+expect canonical contract values such as `text_quote`, `table_range`,
+`page_range`, and `whole_resource`.
+
+affected contract/invariant: source selectors must be shared contracts used by
+VText, Source Viewer, Web Lens, publication, and export. Publication should
+preserve selector richness while canonicalizing selector identity so guest
+readers, exports, and future Source Service resolution do not need to
+understand every legacy spelling independently.
+
+confirmed evidence:
+
+```text
+docs/source-external-data-publication.md:
+  lists selector kinds such as whole resource, text quote, page range,
+  timestamp range, table range, table cell, and data vintage as contract
+  concepts.
+
+internal/platform/source_metadata.go:
+  normalizePublicationSourceEntity reads selectors as []any, chooses the first
+  raw selector map, and marshalPublicationSourceSelector copies selector maps
+  directly into source_selector_json or selector_set without normalizing
+  selector_kind.
+
+internal/platform/service_test.go and
+frontend/tests/vtext-source-service-publication.spec.js:
+  currently prove canonical selector_set preservation only when inputs already
+  use canonical underscore selector_kind values.
+```
+
+acceptance for fix:
+
+- add a shared backend SourceSelector contract helper under
+  `internal/sourcecontract` that normalizes selector kind aliases and preserves
+  selector payload fields;
+- make platform publication source metadata use that helper for single
+  selectors and selector sets;
+- default missing selector kinds to `whole_resource`;
+- preserve selector-set richness, evidence state attachment, snapshot text, and
+  content hash behavior;
+- add focused backend tests proving alias normalization in publication and
+  export metadata.
+
+remaining error field: this is a backend SourceSelector convergence slice. It
+does not yet generate frontend TypeScript schemas or resolve selector text
+through Source Service, but it moves publication/export selector identity out
+of platform-local raw map logic.
+
 ## Suggested `/goal`
 
 ```text
