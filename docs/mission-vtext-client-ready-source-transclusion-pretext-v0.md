@@ -6911,3 +6911,42 @@ next root-cause probe:
 - Add a regression proof that a published/read-only VText surface is not exposed
   as a textbox and that source-flow controls are not treated as the document
   value.
+
+## 2026-06-06 Problem: Local Publication Proof Lacks Platform Service Coverage
+
+status: documented_pending_root_cause
+
+new evidence:
+
+- While verifying the published-reader role repair locally, the focused
+  Playwright publication proof
+  `frontend/tests/vtext-source-service-publication.spec.js -g "publishes
+  source-service source entities"` failed at
+  `POST /api/platform/vtext/publications`.
+- The local response was `502 {"error":"failed to publish vtext"}`.
+- The local `start-services.sh` stack starts auth, gateway, vmctl, sandbox,
+  proxy, and frontend, but it does not obviously start the same full platform
+  publication service path used by staging.
+
+current interpretation:
+
+- This is a local verifier coverage gap, not yet evidence that deployed
+  publication is broken.
+- Publication behavior has been successfully proved on staging in earlier
+  control intervals, so the current repair should use staging as the
+  authoritative proof for publication semantics unless the local 502 reproduces
+  there.
+
+risk:
+
+- A local product-path test that silently depends on undeclared platform
+  services can waste debugging effort and obscure whether a behavior regression
+  is real.
+
+next root-cause probe:
+
+- Inspect the local service logs/config to confirm whether platform publication
+  is intentionally absent locally.
+- Keep the published-reader role regression in the existing deployed
+  publication proof path, and use staging for acceptance if local service
+  coverage remains incomplete.
