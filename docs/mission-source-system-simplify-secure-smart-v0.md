@@ -2204,6 +2204,51 @@ larger source-system contract convergence: publication/export selector
 richness, shared source acquisition policy, guest publication source-open proof,
 and final adversarial/cognitive review remain open mission work.
 
+### Problem 13: Published Inline Source Notes Leak Full Reader Snapshots
+
+Status: `documented_before_fix`.
+
+problem: a published VText source note for a public content-item source can
+render the full cleaned reader snapshot inline beside the article instead of
+the bounded selected citation excerpt. The full reader artifact should be
+available when opening Source Viewer, but the inline transclusion should remain
+selector-bounded and content-forward.
+
+affected contract/invariant: selector-rich transclusions and source snapshots
+serve different surfaces. Inline/journal transclusions should preserve the
+selected quote or transclusion snapshot as the in-flow evidence. Durable reader
+snapshots should survive publication for the Source Viewer/full source window,
+not replace bounded inline citation material.
+
+evidence from deployed staging:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes public content-item sources with cleaned reader snapshots"
+result: failed
+failure: source note contained "Full cleaned reader source detail" even though
+the test expected the inline note to contain only the selected excerpt before
+opening the full source window.
+```
+
+code audit: `frontend/src/lib/vtext-source-renderer.ts` implements
+`sourceEntityInlineExcerptText` by preferring `sourceEntityReaderSnapshotText`
+before `sourceEntityExcerptText`. Once publication enrichment adds a
+`reader_snapshot`, compact inline rendering therefore chooses the full reader
+snapshot over the transclusion `snapshot_text`/selector quote.
+
+first observed version/transition: staging deployed commit
+`5344749d4f1651f88518310ff0d0d32be30dc522` on 2026-06-06 while auditing the
+publication source snapshot path after owner URL source repair.
+
+suspected owner: frontend source transclusion rendering in
+`frontend/src/lib/vtext-source-renderer.ts`.
+
+planned proof: change compact inline excerpt selection to prefer the
+transclusion/selector excerpt and fall back to a bounded reader snapshot only
+when no selected excerpt exists; rerun the publication snapshot test against
+staging after deployment and confirm the inline note remains bounded while the
+full reader snapshot opens from the source window.
+
 ## Suggested `/goal`
 
 ```text
