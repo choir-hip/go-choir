@@ -841,14 +841,20 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T15:24Z, deployed behavior commit
-`fab6b25b0d3d0092d9f7f55c672373216291657b` converges source open-surface
-normalization through the shared source contract, runtime source entity
-producers, platform publication metadata, and frontend source-open planning.
-CI, FlakeHub, Node B deploy, staging health identity, and deployed Playwright
-product-path acceptance passed for default Source Viewer opening versus
-explicit Web Lens opening. Current owner Comet proof remains limited by the
-passkey renewal overlay documented in commit `d5df7db7`.
+last checkpoint: 2026-06-06T15:47Z, deployed behavior commit
+`53dd9b34d694ecd04c354cc1e614c12d87245631` adds publication export policy and
+retrieval context to canonical export metadata. It followed docs checkpoint
+`a4165abb`, passed focused platform tests, frontend build, GitHub Actions CI,
+FlakeHub publish, Node B deploy, staging health identity, and deployed
+Playwright product-path publication export proof. Follow-up dev-harness commit
+`a7e7e82143bf88c77a7c67a758d1bee0f2f8e023` updates local
+`start-services.sh` to launch platformd/Platform Dolt by default; it passed CI
+and FlakeHub, deployed to Node B, reached staging health identity, and the same
+deployed publication export proof passed against the current staging commit.
+During the deploy, health briefly returned 502/degraded while vmctl was
+unavailable; this transient acceptance-boundary ambiguity is recorded as
+Problem 22. Current owner Comet proof remains limited by the passkey renewal
+overlay documented in commit `d5df7db7`.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -894,15 +900,29 @@ docs-only checkpoint records the fresh owner Comet proof: restoring source-rich
 v87 as v90, making a bounded prose edit that created v91, and app-agent revise
 to v92 preserved represented sources and source opening but still changed the
 appendix table from 49 to 50 rows.
+Docs checkpoint `a4165abb` records the publication export metadata gap before
+code. Behavior commit `53dd9b34` includes publication access/export policy and
+retrieval source/span context in Markdown/HTML/DOCX/PDF export metadata. Dev
+harness commit `a7e7e821` answers the local startup question by starting
+platformd and local Platform Dolt from `start-services.sh`, with Dolt declared
+in the dev shell.
 Existing unrelated untracked docs are preserved.
 
 what shipped: latest behavior commit
-`fab6b25b0d3d0092d9f7f55c672373216291657b` was pushed to `origin/main` and
-deployed to staging. It adds shared source open-surface normalization, makes
-runtime durable source producers emit canonical `source`, normalizes platform
-publication open-surface metadata, and aligns frontend source-open planning so
-durable source artifacts still open Source Viewer by default while explicit
-Web Lens/live/original aliases open the live inspection path. Prior behavior
+`53dd9b34d694ecd04c354cc1e614c12d87245631` was pushed to `origin/main` and
+deployed to staging. It adds policy and retrieval context to canonical
+publication export metadata while preserving existing public source
+entities/transclusions and the private-material-omitted claim. Follow-up
+dev-harness commit `a7e7e82143bf88c77a7c67a758d1bee0f2f8e023` was also pushed
+to `origin/main`; it updates local startup only and passed CI, FlakeHub, Node B
+deploy, staging health identity, and the same deployed publication export proof.
+Prior behavior
+commit `fab6b25b0d3d0092d9f7f55c672373216291657b` adds shared source
+open-surface normalization, makes runtime durable source producers emit
+canonical `source`, normalizes platform publication open-surface metadata, and
+aligns frontend source-open planning so durable source artifacts still open
+Source Viewer by default while explicit Web Lens/live/original aliases open the
+live inspection path. Prior behavior
 commit `6a141811fd6c8ff97d4aa98f6a98bb30e59f8603` adds text-like file-open
 migration manifests, carries `import_manifest` and `migration_manifest` through
 durable user/appagent revisions, and makes canonical `.vtext` aliases win as a
@@ -961,6 +981,37 @@ what was proven:
   `npm run e2e -- deployed-origin-auth-shell.spec.js -g "deployed frontend build identity matches proxy health identity"`.
 - Deployed source-open acceptance passed:
   `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- vtext-source-entities.spec.js -g "VText source URL opens Source Viewer unless browser is explicitly requested"`.
+- Publication export metadata fix local checks passed:
+  `nix develop -c go test ./internal/platform -run 'TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestPublicationMarkdownExportNormalizesMalformedTableTailRows|TestPublishVTextCreatesImmutablePublicRecords' -count=1`
+  and `npm --prefix frontend run build`.
+- Local product-path browser proof passed after the local startup harness was
+  repaired to launch platformd:
+  `npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities as expandable transclusions and canonical exports"`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27066359739`
+  completed successfully for `53dd9b34`, including Node B staging deploy.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27066359741`
+  completed successfully for `53dd9b34`.
+- Staging health after that deploy reported proxy and upstream
+  commit/deployed_commit
+  `53dd9b34d694ecd04c354cc1e614c12d87245631` with deployed_at
+  `2026-06-06T15:33:39Z`.
+- Deployed publication export metadata proof passed:
+  `CHOIR_AUTH_STATE=/tmp/choir-export-metadata.storage.json CHOIR_AUTH_META=/tmp/choir-export-metadata.meta.json PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities as expandable transclusions and canonical exports"`.
+- Follow-up CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27066513637`
+  passed Go/runtime/frontend gates for `a7e7e821`, and FlakeHub run
+  `https://github.com/choir-hip/go-choir/actions/runs/27066513615`
+  completed successfully. Node B deploy completed successfully at
+  2026-06-06T15:45:36Z.
+- Staging health after the follow-up deploy reported `status: "ok"`,
+  `vmctl_status: "ok"`, and proxy/upstream deployed_commit
+  `a7e7e82143bf88c77a7c67a758d1bee0f2f8e023`, deployed_at
+  `2026-06-06T15:40:27Z`.
+- Deployed publication export metadata proof passed again on the current
+  `a7e7e821` staging identity:
+  `CHOIR_AUTH_STATE=/tmp/choir-export-metadata-a7.storage.json CHOIR_AUTH_META=/tmp/choir-export-metadata-a7.meta.json PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities as expandable transclusions and canonical exports"`.
 - Source evidence-state local checks passed:
   `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownLineage|TestVTextSourceGapRepair'`
   and `npm run build` in `frontend`.
@@ -2685,7 +2736,7 @@ internal or test-only routes.
 
 ### Problem 21: Publication Export Metadata Omits Policy And Retrieval Context
 
-Status: `documented_before_fix`.
+Status: `fixed_deployed`.
 
 problem: canonical publication export metadata already includes public source
 entities and transclusions, but it omits the publication access/export policy
@@ -2746,6 +2797,91 @@ remaining error field: this fixes the export metadata envelope only. It does
 not add new source reader snapshots, change public route access semantics,
 repair legal proposal table structure, or complete guest proof for every source
 kind.
+
+fix evidence:
+
+- docs checkpoint `a4165abb` recorded this problem before code.
+- behavior commit `53dd9b34d694ecd04c354cc1e614c12d87245631` added
+  `access_policy`, `export_policy`, and `retrieval` to canonical publication
+  export metadata for Markdown/HTML/DOCX/PDF.
+- local focused platform tests passed:
+  `nix develop -c go test ./internal/platform -run 'TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestPublicationMarkdownExportNormalizesMalformedTableTailRows|TestPublishVTextCreatesImmutablePublicRecords' -count=1`.
+- frontend build passed: `npm --prefix frontend run build`.
+- local product-path export proof passed after the local harness fix:
+  `npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities as expandable transclusions and canonical exports"`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27066359739` and
+  FlakeHub run
+  `https://github.com/choir-hip/go-choir/actions/runs/27066359741` completed
+  successfully.
+- Node B staging health reported proxy/upstream deployed_commit
+  `53dd9b34d694ecd04c354cc1e614c12d87245631`, deployed_at
+  `2026-06-06T15:33:39Z`.
+- deployed product-path proof passed on `https://choir.news`:
+  `CHOIR_AUTH_STATE=/tmp/choir-export-metadata.storage.json CHOIR_AUTH_META=/tmp/choir-export-metadata.meta.json PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities as expandable transclusions and canonical exports"`.
+
+### Problem 22: Node B Deploy Temporarily Reached New Commit Identity While Remaining Degraded
+
+Status: `documented_observed_transient_no_code_change`.
+
+problem: after follow-up dev-harness commit
+`a7e7e82143bf88c77a7c67a758d1bee0f2f8e023`, the GitHub Actions CI run passed
+all Go/runtime/frontend gates and the staging health endpoint reported the new
+proxy/upstream commit identity while the Node B deploy job was still
+`in_progress` and staging health reported `status: "degraded"` with
+`vmctl_status: "unavailable"`. A prior health probe during the same deploy also
+returned `502 Bad Gateway`. The deploy later completed successfully and health
+returned to `ok`, so this is not currently a live blocker. It is still an
+acceptance-boundary behavior to carry forward: deploy identity can partially
+move forward before the acceptance environment is fully healthy and before the
+deploy job reaches a terminal success/failure state.
+
+affected contract/invariant: the repo contract requires behavior-changing
+missions to monitor CI, monitor staging deploy, verify deployed commit identity,
+and run deployed acceptance proof. A deploy that exposes the new commit in
+health while remaining degraded creates an ambiguous acceptance boundary: the
+build identity is visible, but the deploy loop is not complete and vmctl-backed
+product proof is not available.
+
+confirmed evidence:
+
+```text
+GitHub Actions:
+  run https://github.com/choir-hip/go-choir/actions/runs/27066513637
+  head SHA a7e7e82143bf88c77a7c67a758d1bee0f2f8e023
+  Go/runtime/frontend gate jobs: success
+  Deploy to Staging (Node B): in_progress at 2026-06-06T15:47Z;
+    success at 2026-06-06T15:45:36Z when re-queried after GitHub status
+    propagation caught up
+
+FlakeHub:
+  run https://github.com/choir-hip/go-choir/actions/runs/27066513615
+  conclusion: success
+
+Staging health during deploy:
+  status: degraded
+  vmctl_status: unavailable
+  build.commit/deployed_commit: a7e7e82143bf88c77a7c67a758d1bee0f2f8e023
+  upstream_build.commit/deployed_commit: a7e7e82143bf88c77a7c67a758d1bee0f2f8e023
+  deployed_at: 2026-06-06T15:40:27Z
+
+Staging health after deploy completion:
+  status: ok
+  vmctl_status: ok
+  build.commit/deployed_commit: a7e7e82143bf88c77a7c67a758d1bee0f2f8e023
+  upstream_build.commit/deployed_commit: a7e7e82143bf88c77a7c67a758d1bee0f2f8e023
+```
+
+current handling: no deployment code is changed in this slice. Treat this as a
+documented transient/residual risk for future deploy-proof logic. The
+publication export metadata behavior is proven on the prior healthy Node B
+deploy for `53dd9b34` and again on the current `a7e7e821` staging identity.
+
+remaining error field: determine whether the deploy job is waiting for vmctl
+health, whether vmctl is independently down, or whether the deploy pipeline can
+leave the environment serving a new commit while acceptance remains degraded.
+Do not claim a clean deployed acceptance checkpoint for a future commit while
+health is degraded, even if the new commit identity is already visible.
 
 ### Problem 12: Owner URL Source Repairs Default To Web Lens
 
