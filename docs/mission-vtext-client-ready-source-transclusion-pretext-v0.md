@@ -6413,3 +6413,57 @@ deployment proof still needed:
 - Commit and push the metadata-state correction, wait for CI and Node B deploy,
   confirm staging identity, then repeat deployed source review/source-window
   proof.
+
+## 2026-06-06 Deployed Proof: Manual Source Review State
+
+status: deployed_verified
+
+commit:
+
+- `36e88b3c3606676c4c25b136e212de52b7f5238b` (`fix: mark manual source
+  review owner supplied`) was pushed to `origin/main`.
+
+CI and deploy:
+
+- GitHub Actions CI run `27048743138` completed successfully.
+- The CI run included successful frontend build, Go runtime shards, Go
+  non-runtime tests, Go vet/build, integration smoke, and Node B staging deploy.
+- FlakeHub publish run `27048743133` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `36e88b3c3606676c4c25b136e212de52b7f5238b`, deployed at
+  `2026-06-06T01:29:01Z`.
+
+deployed automated proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> passed.
+- That proof now asserts the owner source-review request sends
+  `research_state: owner_supplied` and that both opened source windows render
+  `available / owner_supplied`.
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+
+deployed Comet owner proof:
+
+- Computer Use was available and Comet remained owner-authenticated on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The legal-cloud publication still loaded with the expanded ABA Formal Opinion
+  512 journal note beside article text.
+- Existing researched source windows remained inspectable from Comet. The
+  `owner_supplied` classification itself is proven by the deployed source-review
+  Playwright path because the legal-cloud publication's current sources are
+  researcher/source-service backed, not newly pasted owner evidence.
+
+belief-state update:
+
+- Manual source review no longer overclaims researcher-confirmed evidence.
+- Remaining high-value source workflow risks are diagnostic JSON still being
+  owner-visible and source repair/import write logic still living in the large
+  editor module.
