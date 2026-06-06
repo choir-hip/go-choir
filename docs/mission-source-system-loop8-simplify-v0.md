@@ -683,6 +683,54 @@ staging proof:
   result: 3 passed.
 ```
 
+Next backend extraction target: Markdown lineage and source-gap helper
+contracts. After the file-open/import helper extraction, `internal/runtime/vtext.go`
+still owns the Markdown lineage import request/response helper types,
+lineage-revision metadata construction, unresolved citation-marker detection,
+citation resolution projection, source-gap filtering, source-repair evidence
+normalization, original Markdown snapshot preservation, lineage summary
+building, and content-item backed lineage resolution. These helpers are
+semantically one boundary around durable Markdown-to-VText revision lineage and
+repairable citation gaps. No new behavior problem is confirmed; this is a
+behavior-preserving same-package extraction to reduce the runtime monolith
+without moving HTTP handler flow, database write ordering, sourcecontract
+normalization, or source/publication policy semantics.
+
+Acceptance for this extraction:
+
+- `internal/runtime/vtext_lineage.go` owns lineage/source-gap helper logic;
+- `internal/runtime/vtext.go` keeps route handlers and revision mutations;
+- no duplicate source/evidence state contract is introduced;
+- focused Markdown lineage/import/source-repair tests pass;
+- runtime package tests pass or any blocker is documented precisely;
+- behavior-changing staging proof is only required if the extraction changes
+  product behavior or deployed handler semantics.
+
+Result: `internal/runtime/vtext_lineage.go` now owns Markdown lineage
+metadata, citation-marker detection/projection, source-gap filtering,
+source-repair evidence normalization, Markdown snapshot content-item
+construction, lineage summaries, and content-item backed lineage resolution.
+`internal/runtime/vtext.go` retains the import/source-repair handlers and
+revision mutation sequence.
+
+```text
+internal/runtime/vtext.go           4385 lines
+internal/runtime/vtext_lineage.go    504 lines
+internal/runtime/vtext_import.go     810 lines
+
+local verification:
+  nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVText(OpenFile|PlainTextImport|ImportedMarkdown|ImportMarkdownLineage|SourceGap|EnsureManifest|APICreateRevisionCanonicalizesAliasedImportedDocumentTitle)'
+  result: passed.
+
+  nix develop -c scripts/go-test-runtime-shards
+  result: passed.
+
+single-implementation check:
+  rg confirmed the moved lineage helpers now resolve only in
+  internal/runtime/vtext_lineage.go.
+```
+
 ### Performance Checks
 
 - Local focused backend check:
