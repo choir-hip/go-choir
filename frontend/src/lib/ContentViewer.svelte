@@ -1,5 +1,5 @@
 <script>
-  import { afterUpdate, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { createEventDispatcher } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { renderMarkdownBlocks } from './vtext-markdown-renderer';
@@ -11,9 +11,6 @@
   let item = appContext?.contentItem || null;
   let loading = false;
   let error = '';
-  let readerShellEl;
-  let readerShellMinHeight = 0;
-  let measureQueued = false;
 
   $: sourceEntity = appContext?.sourceEntity || null;
   $: sourceEntityTarget = sourceEntity?.target || {};
@@ -35,25 +32,6 @@
   $: hasReaderText = readerText.length > 0;
   $: isSourceReader = hasReaderText && (appHint === 'content' || !!sourceEntity);
   $: sourceState = sourceEntity?.evidence?.state || sourceEntity?.reader_snapshot_status?.state || item?.provenance?.state || '';
-
-  function measureReader() {
-    measureQueued = false;
-    if (!readerShellEl) {
-      readerShellMinHeight = 0;
-      return;
-    }
-    const shellBox = readerShellEl.getBoundingClientRect();
-    const descendantBottoms = Array.from(readerShellEl.querySelectorAll('*') || [])
-      .map((child) => child.getBoundingClientRect().bottom - shellBox.top);
-    const nextShellHeight = Math.ceil(Math.max(readerShellEl.scrollHeight || 0, ...descendantBottoms, 0));
-    if (nextShellHeight && Math.abs(nextShellHeight - readerShellMinHeight) > 1) readerShellMinHeight = nextShellHeight;
-  }
-
-  function queueMeasureReader() {
-    if (measureQueued || typeof requestAnimationFrame !== 'function') return;
-    measureQueued = true;
-    requestAnimationFrame(measureReader);
-  }
 
   async function loadContentItem() {
     const contentId = appContext?.contentId || appContext?.content_id || '';
@@ -110,9 +88,7 @@
 
   onMount(() => {
     loadContentItem();
-    queueMeasureReader();
   });
-  afterUpdate(queueMeasureReader);
 </script>
 
 <section class="content-viewer" class:source-reader-mode={isSourceReader} data-content-viewer data-content-app={appHint} data-source-reader-mode={isSourceReader ? 'true' : 'false'}>
@@ -139,7 +115,7 @@
   {:else if error}
     <p class="error" role="alert">{error}</p>
   {:else}
-    <div class:preview-shell={!hasReaderText || appHint === 'image' || appHint === 'audio' || appHint === 'video' || appHint === 'pdf'} class:reader-shell={hasReaderText} bind:this={readerShellEl} style={readerShellMinHeight ? `min-height: ${readerShellMinHeight}px` : ''}>
+    <div class:preview-shell={!hasReaderText || appHint === 'image' || appHint === 'audio' || appHint === 'video' || appHint === 'pdf'} class:reader-shell={hasReaderText}>
       {#if appHint === 'image' && displayUrl}
         <img src={displayUrl} alt={title} />
       {:else if appHint === 'audio' && displayUrl}
@@ -282,7 +258,7 @@
 
   .reader-shell {
     display: flow-root;
-    height: max-content;
+    flex: none;
     min-height: 0;
   }
 
@@ -309,9 +285,7 @@
   }
 
   .source-reader {
-    contain: layout;
     display: flow-root;
-    height: max-content;
     max-width: 76ch;
     padding: 2px 0 4px;
     color: var(--choir-text-primary);
@@ -355,12 +329,11 @@
   }
 
   .source-reader :global(table) {
-    display: block;
-    width: 100%;
+    width: max-content;
+    min-width: 100%;
     border-collapse: collapse;
     margin: 1.1em 0;
     font-size: 0.95em;
-    overflow-x: auto;
   }
 
   .source-reader :global(.table-scroll) {
@@ -393,6 +366,7 @@
 
   .source-apparatus {
     display: grid;
+    flex: none;
     gap: 6px;
     max-width: 76ch;
     padding-top: 8px;

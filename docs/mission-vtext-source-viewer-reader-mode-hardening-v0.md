@@ -102,6 +102,32 @@ post-fix adversarial review checkpoint:
   same geometry tests, source-window singleton behavior, and media preview
   behavior.
 
+simplification implementation checkpoint:
+
+- Investigation during the simplification found that removing the measurement
+  shim made the focused source-reader geometry test fail: the reader article
+  bottom was below the reader-shell bottom, so expanded `Source evidence`
+  could begin before the visible table ended.
+- Root cause: `ContentViewer` is a flex column and the source reader shell was
+  allowed to shrink. The deployed measurement shim had compensated by forcing
+  a measured `min-height`; the structural fix is to make the reader shell and
+  source apparatus non-shrinking flex items so normal document flow determines
+  their vertical position.
+- Code simplification removed the `afterUpdate` import, `readerShellEl`,
+  `readerShellMinHeight`, `measureQueued`, `measureReader`, and
+  `requestAnimationFrame` measurement path from `ContentViewer.svelte`.
+- Source-reader tables now keep the `.table-scroll` wrapper as the horizontal
+  overflow owner while the table itself participates in normal table layout.
+- Verification:
+  - `pnpm --dir frontend exec playwright test
+    tests/vtext-source-entities.spec.js -g "content-item text sources"` passed.
+  - `pnpm --dir frontend exec playwright test
+    tests/vtext-source-entities.spec.js -g "roundtrips rendered markdown
+    tables"` passed after a prior full-suite desktop-readiness timeout.
+  - `pnpm --dir frontend exec playwright test
+    tests/vtext-source-entities.spec.js` passed all 7 tests.
+  - `pnpm --dir frontend build` passed.
+
 current artifact state:
 
 - The legal-cloud proposal is a canonical `.vtext` publication with source
