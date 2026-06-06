@@ -1643,4 +1643,27 @@ local proof:
 
   nix develop -c go test ./internal/platform ./internal/sourcecontract
   result: passed
+
+commit/deploy proof:
+  commit 5e9722e1fe0117bf6b1093e80667a7da273ae8e3
+  GitHub Actions CI 27076516017 passed.
+  FlakeHub publish 27076516030 passed.
+  Node B deploy job 79914793840 passed.
+  /health reported proxy and sandbox deployed_commit
+  5e9722e1fe0117bf6b1093e80667a7da273ae8e3, deployed_at
+  2026-06-06T23:12:52Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000
+  npm --prefix frontend run e2e --
+  tests/rich-export-docx-url-staging.tmp.spec.js
+  result: 1 passed; temporary spec and Playwright .last-run.json were deleted
+  after the run.
+
+  The proof created a VText document with a URL-backed source entity whose URL
+  lived under nested target metadata, published it through deployed product
+  APIs, exported DOCX, unzipped the package, and verified
+  word/document.xml native hyperlinks/provenance, external hyperlink
+  relationships in word/_rels/document.xml.rels, no visible internal source ID
+  or raw Markdown leakage, and customXml/item1.xml source manifest recovery.
 ```
