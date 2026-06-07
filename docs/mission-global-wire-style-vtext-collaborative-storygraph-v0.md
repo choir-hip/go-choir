@@ -2015,3 +2015,99 @@ Next executable probe:
   and UI control. Approval should create a normal VText revision with citations
   and provenance, update the existing `GlobalWireStoryProjection`, and preserve
   user-owned fork/edit invariants.
+
+## Projection Approval Relation Slice Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What changed:
+
+- Added reviewer-controlled approval and rejection for Global Wire projection
+  reviews.
+- Approval now creates a normal VText revision on the existing
+  ProjectionStory document, carries draft citations and provenance metadata,
+  updates the durable `global_wire_story_projections` relation, and records the
+  approved Story VText doc/revision on the projection review.
+- Rejection records review state without changing the platform projection
+  relation.
+- The Global Wire app now exposes approve/reject controls on draft-created
+  projection reviews and refreshes the News projection surface after approval.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `a84f0014d86a4fd18019f1878ea21e4bb2a9d8b6f`.
+- Behavior commit:
+  `d549a94cd9e0276a713903bcf83d913358c683c8`.
+- CI run `27083852391`: success, including frontend build, runtime shards,
+  Go vet/build, non-runtime tests, integration smoke, and staging deploy.
+- FlakeHub run `27083852398`: success.
+- Staging health at `2026-06-07T05:33:13Z` reported proxy and sandbox
+  `deployed_commit` =
+  `d549a94cd9e0276a713903bcf83d913358c683c8`.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  and `npm run build` in `frontend/`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  with 1 passed. The path exercised owner contribution, reconciliation,
+  StoryGraph candidate promotion, projection draft creation, projection draft
+  approval, approved ProjectionStory VText revision retrieval, and News story
+  projection visibility.
+
+Invariants preserved:
+
+- Every story/projection artifact remains a normal editable VText.
+- User-owned edits, forks, and contributions remain separate from platform
+  stories and are not mutated by approval.
+- Approval advances the platform projection relation only through an explicit
+  reviewer-controlled product transition.
+- Style.vtext remains a citeable source artifact on the projection relation
+  and review record.
+- News remains non-oracle and provenance-rich: approval carries source,
+  candidate, promotion, style, draft, and review provenance into the approved
+  revision metadata.
+- Graph nodes remain story headlines with source-neighborhood semantics.
+- The Global Wire app still renders the core views in Future Noir, Carbon
+  Kintsugi, and London Salmon.
+
+Belief-state update:
+
+- The current proven trajectory is now:
+  live/source evidence -> StoryGraph story/source neighborhood -> user-owned
+  contribution -> reconciliation decision -> graph candidate -> promotion ->
+  projection-review obligation -> ordinary ProjectionStory draft VText ->
+  reviewer approval -> ordinary ProjectionStory revision -> durable
+  StoryGraph + Style.vtext projection relation -> News app view -> Ask Choir
+  handoff.
+- This closes the largest prior topology gap: projection review is now a
+  provenance-preserving state transition rather than a detached draft artifact.
+- The approved projection text is intentionally low-resolution and still reads
+  like a review artifact. The next quality axis should improve source refresh,
+  classification, style composition, or editorial update semantics without
+  weakening the VText/provenance invariants.
+
+Remaining error field:
+
+- Source refresh is still request-triggered and low-resolution, not a
+  scheduled 24/7 ingestion worker with source-service recency semantics.
+- There is still no claim extraction, contradiction classifier, story
+  clustering, front-page prominence revision, or dedicated research
+  reconciliation workbench.
+- Style.vtext can be selected and cited but cannot yet be composed, replaced,
+  forked, or proposed through a full style-revision workflow.
+- There is no dedicated update-feed/newsletter/publication queue beyond the
+  approved projection relation becoming visible in the News app.
+- Autoradio remains a prompt-bar/VText handoff rather than a dedicated audio
+  playback or scheduling subsystem.
+
+Next executable probe:
+
+- Use a cognitive-transform pass before choosing the next overnight axis. The
+  highest-value candidates are:
+  source-service-backed scheduled ingestion and update classification,
+  Style.vtext composition/replacement workflow, or claim extraction plus
+  reconciliation-ready research workbench.
