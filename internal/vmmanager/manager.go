@@ -2082,6 +2082,7 @@ func tapReachableHostServicePorts() []string {
 	return []string{
 		"8083", // vmctl
 		"8084", // gateway
+		"8085", // host sandbox runtime lifecycle evidence
 		"8087", // maild draft persistence
 		"8787", // source service retrieval
 	}
