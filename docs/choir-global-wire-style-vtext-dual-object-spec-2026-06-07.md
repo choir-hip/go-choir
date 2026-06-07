@@ -62,10 +62,11 @@ quality.
   entities, processor notes, reconciler notes, and timelines are overlays over
   VTexts and source records.
 - All UI views must work in Futuristic Noir, Carbon Fiber Kintsugi, and London Salmon.
-- Low-resolution implementation must preserve topology: source ingestion,
-  processors, reconcilers, researcher reuse, VText agent reuse, Style.vtext
-  routing, story/article VTexts, user ownership, VText traversal/indexing,
-  publication feeds, and app views.
+- Delivery implementation must preserve topology while raising resolution:
+  source ingestion, processors, reconcilers, researcher reuse, VText agent
+  reuse, Style.vtext routing, story/article VTexts, user ownership, VText
+  traversal/indexing, publication feeds, and app views move as one product
+  object.
 
 ## Product Runtime
 
@@ -254,8 +255,8 @@ VTexts before introducing new graph-shaped authority.
 An explicit index may be useful for performance and discovery. It should index
 VTexts and VText versions, not merely extracted facts, because future surfaces
 such as Autoradio will need to turn paths through VText graph space into a
-single fluid narrative. Autoradio itself is beyond this mission; TTS/STT model
-work has not started and should not distract the first SourceMaxx slice.
+single fluid narrative. Autoradio itself is beyond this delivery run; TTS/STT
+model work has not started and should not distract SourceMaxx shipping.
 
 Index design rules:
 
@@ -385,14 +386,15 @@ The user contribution may improve the user's own published version immediately.
 It does not automatically become the platform story.
 
 The public `choir.news` platform should eventually surface a feed of published
-user-owned VTexts. That feed is part of the publication object, even if the
-first SourceMaxx mission prioritizes platform Global Wire ingestion,
-processing, and readable article output before full user-publication discovery.
+user-owned VTexts. That feed is part of the publication object, even if this
+delivery run prioritizes platform Global Wire ingestion, processing, and
+readable article output before full user-publication discovery.
 
 ## News App Views
 
-The News app is a minimal VText-centered newsroom collection surface. It should
-transclude VTexts rather than replacing the VText app.
+The News app is a focused VText-centered newsroom collection surface. It should
+transclude VTexts rather than replacing the VText app. Focused does not mean
+unfinished: the delivered surface should feel intentional, readable, and nice.
 
 Required views:
 
@@ -516,8 +518,10 @@ classify or route the update into work such as:
 
 ## Implementation Trajectory
 
-Start at the lowest honest resolution of the whole object and increase realism
-without changing topology.
+Build topology, not ladder. Start with the whole product object at the highest
+workable resolution, then raise realism along the axes below until staging has
+delivered behavior or a true blocker is recorded. Do not ship an underpowered
+demo, parallel demo, or isolated UI polish path.
 
 Resolution axes:
 
@@ -535,11 +539,12 @@ Resolution axes:
 - clean newspaper UI across themes;
 - product-path and staging evidence.
 
-## Non-Goals For The First Mission
+## Deferred Or Out Of Scope For This Delivery Run
 
 - Clustering or embeddings as a prerequisite.
 - Full final merge/reconciliation UX.
 - Full published-user-VText discovery feed.
+- Autoradio and TTS/STT model exploration.
 - Real-person impersonation.
 - Detector optimization.
 - Theme-specific feature divergence.

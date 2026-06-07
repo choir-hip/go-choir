@@ -1,6 +1,7 @@
 # Mission: Global Wire SourceMaxx Newsroom Runtime
 
-**Status:** rewritten MissionGradient mission after architecture correction.
+**Status:** ambitious MissionGradient delivery mission after architecture and
+design-language correction.
 **Requirements contract:** `docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md`  
 **Prior mission context:** `docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md`  
 **Created:** 2026-06-07
@@ -9,7 +10,7 @@
 ## Goal String
 
 ```text
-/goal Run docs/mission-global-wire-sourcemaxx-publication-system-v0.md as an overnight MissionGradient mission. Redesign and deliver Global Wire as a SourceMaxx newsroom runtime: continuous high-volume source ingestion feeds long-running processors with hot-context/KV-cache continuity; processors compact themselves as needed while preserving handles to full source content; reconcilers review the article/story corpus, source state, processor notes, researcher packets, contradictions, consensus, drift, and open questions; existing researcher agents perform additional evidence work; existing VText agents write and revise normal article/story VTexts from processor notes, reconciler notes, researcher packets, and matched deep Style.vtext artifacts. A story/article is a VText; do not create a separate story object taxonomy. Processor notes, reconciler notes, and researcher packets should also be represented as VTexts where practical, so early reasoning can become the v0/v1 seed for later article versions. VText is the provenance-bearing object: sources, multimedia transclusions, Style.vtext citations, authoring context, and source references are per-version, and native VText versioning backed by DoltDB carries the version provenance. VText indexes may help navigation, discovery, and future VText-path narration, but they must index VTexts/versions/transclusions and must not replace or override VText-native version/source provenance. Processors and reconcilers use the same agentic loop/tool model as other Choir agents: they can take tool calls, request researchers, receive research results through durable state, and request VText work without becoming standalone researcher/writer systems. Build toward hundreds of GDELT/RSS/Telegram/search SourceItems per 15 minutes or faster where feasible, with durable source ingestion, dedupe, routing, processor/reconciler records, user-owned VText forks/edits/publications, publication-quality Style.vtext projections, and clean newspaper-style Global Wire views with no nested scrolling panels, repeated card wall, story boxes, or story border lines. Keep the News app minimal: readable newspaper columns, source chronology with filters, compact provenance/style disclosure, and per-article VText open affordances for full reading/editing/forking; every article must be openable as a VText, but do not repeat `Open in VText` label text on every item. Mobile is a responsive Global Wire app inside the Choir web desktop/shell, not a native phone app. Do not build a heavy contribution dashboard, bespoke story reader, or Autoradio surface when the VText app already owns reading/editing and TTS/STT work is still a later horizon. Plan for a later choir.news feed of published user-owned VTexts. Do not require clustering or embeddings in the first architecture pass; defer them until the processor/reconciler loop is proven. Do not run every style over every story by default; VText agents should select, rank, mix, compose, withhold, or let users customize Style.vtexts based on story fit, audience, source state, publication need, and user context. Delete or replace architecture/UI/data paths that encode the wrong object, including one-result refresh bottlenecks, frontend-only preview authority, shallow style tabs, redundant artifact panels, fake story object classes, and standalone researcher/writer implementations that bypass existing agents. Preserve these invariants: every story/article is a normal editable VText; user edits/forks/contributions/publications are user-owned and never mutate platform stories; platform corrections/updates are ordinary new VText versions through explicit candidate/review/version records; Style.vtext is a citeable/selectable/composable/replaceable source artifact; projections preserve evidence and cite per-version source/style lineage; news remains non-oracle with uncertainty, contrary evidence, source standing, gaps, corrections, and change history inspectable; durable VText indexes are accelerators over VTexts/versions/transclusions and do not replace live processor/reconciler cognition or VText-native provenance; existing researcher and VText agents are reused unless a documented invariant proves they cannot serve the role; all views work in Futuristic Noir, Carbon Fiber Kintsugi, and London Salmon; product-path/staging proof is required before claiming behavior. Use staging/product-path proof for source volume, processor/reconciler behavior, existing researcher/VText agent reuse, ownership boundaries, Style.vtext quality/routing, readable UI, and deployed commit identity. Update this mission doc with checkpoint/resumption state before stopping.
+/goal Run docs/mission-global-wire-sourcemaxx-publication-system-v0.md as an overnight MissionGradient delivery mission. Redesign and deliver Global Wire as a SourceMaxx newsroom runtime that reaches shipped, staging-proven product status unless a true blocker remains after root-cause investigation, alternate architecture routes, and product-path probes. Operate topology-not-ladder: reject underpowered partial-demo framing; build the full object at the highest workable resolution, preserve every invariant, and raise realism along the bottleneck axes until the product is genuinely nice. Continuous high-volume source ingestion feeds long-running processors with hot-context/KV-cache continuity; processors compact themselves as needed while preserving handles to full source content; reconcilers review the article/story corpus, source state, processor notes, researcher packets, contradictions, consensus, drift, and open questions; existing researcher agents perform additional evidence work; existing VText agents write and revise normal article/story VTexts from processor notes, reconciler notes, researcher packets, and matched deep Style.vtext artifacts. A story/article is a VText; do not create a separate story object taxonomy. Processor notes, reconciler notes, and researcher packets should also be represented as VTexts where practical, so early reasoning can become the v0/v1 seed for later article versions. VText is the provenance-bearing object: sources, multimedia transclusions, Style.vtext citations, authoring context, and source references are per-version, and native VText versioning backed by DoltDB carries the version provenance. VText indexes may help navigation, discovery, and future VText-path narration, but they must index VTexts/versions/transclusions and must not replace or override VText-native version/source provenance. Processors and reconcilers use the same agentic loop/tool model as other Choir agents: they can take tool calls, request researchers, receive research results through durable state, and request VText work without becoming standalone researcher/writer systems. Deliver hundreds of GDELT/RSS/Telegram/search SourceItems per 15 minutes or the strongest provider-limited live/source cadence that staging can honestly support, with durable source ingestion, dedupe, routing, processor/reconciler records, user-owned VText forks/edits/publications, publication-quality Style.vtext projections, and clean newspaper-style Global Wire views with no nested scrolling panels, repeated card wall, story boxes, or story border lines. Keep the News app focused and excellent: readable newspaper columns, source chronology with filters, compact provenance/style disclosure, and per-article VText open affordances for full reading/editing/forking; every article must be openable as a VText, but do not repeat `Open in VText` label text on every item. Mobile is a responsive Global Wire app inside the Choir web desktop/shell, not a native phone app. Do not build a heavy contribution dashboard, bespoke story reader, or Autoradio surface when the VText app already owns reading/editing and TTS/STT work is still a later horizon. Plan for a later choir.news feed of published user-owned VTexts without letting that horizon block this delivery. Do not require clustering or embeddings for delivery; defer them until the processor/reconciler loop is proven. Do not run every style over every story by default; VText agents should select, rank, mix, compose, withhold, or let users customize Style.vtexts based on story fit, audience, source state, publication need, and user context. Delete or replace architecture/UI/data paths that encode the wrong object, including one-result refresh bottlenecks, frontend-only preview authority, shallow style tabs, redundant artifact panels, fake story object classes, and standalone researcher/writer implementations that bypass existing agents. Preserve these invariants: every story/article is a normal editable VText; user edits/forks/contributions/publications are user-owned and never mutate platform stories; platform corrections/updates are ordinary new VText versions through explicit candidate/review/version records; Style.vtext is a citeable/selectable/composable/replaceable source artifact; projections preserve evidence and cite per-version source/style lineage; news remains non-oracle with uncertainty, contrary evidence, source standing, gaps, corrections, and change history inspectable; durable VText indexes are accelerators over VTexts/versions/transclusions and do not replace live processor/reconciler cognition or VText-native provenance; existing researcher and VText agents are reused unless a documented invariant proves they cannot serve the role; all views work in Futuristic Noir, Carbon Fiber Kintsugi, and London Salmon; product-path/staging proof is required before claiming behavior. Use staging/product-path proof for source volume, processor/reconciler behavior, existing researcher/VText agent reuse, ownership boundaries, Style.vtext quality/routing, readable UI, and deployed commit identity. Do not stop at docs, local proof, API record existence, or a partial demo if authorized work remains. Update this mission doc with checkpoint/resumption state before stopping.
 ```
 
 ## Why This Mission Exists
@@ -47,7 +48,9 @@ of the work when existing paths encode the wrong newsroom object.
 ## Cognitive Transform Set
 
 Current obstacle: the product has been treated like a data surface and graph
-slice, while the missing system is a live newsroom cognition loop.
+slice, while the missing system is a live newsroom cognition loop. The newer
+obstacle is over-correcting into developer-style timidity: proving local
+behavior instead of delivering the product object.
 
 Selected transforms:
 
@@ -73,17 +76,29 @@ Selected transforms:
 7. **Subtractive product design:** a clean newspaper column over real source
    breadth is more correct than a busy dashboard exposing repeated internal
    artifacts.
+8. **Topology not ladder:** the mission should not climb from fake demo to real
+   object. Build the same production object at a workable resolution, then
+   raise resolution aggressively along source volume, agent continuity,
+   VText writing, style quality, and staging proof.
+9. **Make it nice:** correctness is not enough. Publication output, source
+   chronology, VText affordances, typography, and three-theme behavior must be
+   good enough that the shipped surface feels intentional rather than merely
+   functional.
 
 Changed route:
 
-- Build source volume plus processor and reconciler contracts before UI
-  expansion, while keeping reconcilers corpus-oriented rather than
-  fetch-cycle-oriented.
+- Deliver the full SourceMaxx newsroom object, not a throwaway slice: source
+  volume, processors, reconcilers, researcher reuse, VText reuse, Style.vtext
+  routing, user-owned VText boundaries, VText traversal indexes, and readable
+  Global Wire UI move together.
+- Use short control loops for evidence, but keep the target ambitious:
+  product-shaped behavior on staging with a quality pass before stopping.
 - Reuse existing researcher and VText agents as the evidence and writing path.
 - Treat durable VText indexes as navigation/query accelerators over VTexts,
   versions, sources, and transclusions, not the authority for provenance or the
   whole intelligence.
-- Prove readable publication output, not just API record creation.
+- Prove readable publication output, not just API record creation, and do a
+  final simplification/design pass before claiming delivered status.
 
 ## Real Artifact
 
@@ -108,6 +123,10 @@ source registry and fetch loops
 The mission is incomplete if any core edge is missing: source intake,
 processors, reconcilers, researcher reuse, VText reuse, Style.vtext routing,
 ownership boundaries, or readable publication output.
+
+The desired result is `delivered`: committed, pushed, CI/deploy observed,
+staging identity verified, product-path behavior proven, and the owner-facing
+Global Wire surface nice enough to use without apologizing for the architecture.
 
 ## Value Criterion
 
@@ -136,6 +155,10 @@ The product moves uphill when:
   over all stories;
 - publication output is genuinely readable and useful;
 - the app presents news in clear columns, not nested panels or repeated cards;
+- all articles can open as VTexts through a quiet repeated affordance rather
+  than noisy label text;
+- typography, spacing, source chronology, and three-theme behavior match
+  [Choir Design Language](./choir-design-language-2026-06-07.md);
 - staging proof shows the actual product path, not local-only or test-only
   behavior.
 
@@ -184,8 +207,8 @@ Responsibilities:
   VText agents;
 - ownership, native VText versioning, rollback refs, and publication indexes.
 
-Clustering and embeddings are not required for the first pass. They are later
-realism axes once the processor/reconciler loop is proven.
+Clustering and embeddings are not required for delivery. They are later
+realism axes after the processor/reconciler loop is proven.
 
 ### Processors
 
@@ -361,10 +384,11 @@ VTexts rather than replacing the VText app:
 - controls are compact and predictable;
 - all three themes preserve readability and capability.
 
-Do not build a contribution surface inside the News app for the first slice.
+Do not build a contribution surface inside the News app for this delivery run.
 Contributions are user-owned VText/source/style artifacts. The platform should
 eventually surface a feed of user-published VTexts on `choir.news`, but that is
-not the first UI priority unless it becomes the highest-value proof.
+not the UI priority unless it becomes necessary for the delivered SourceMaxx
+newsroom object.
 Do not build Autoradio in this mission; keep only the architectural horizon for
 future VText-path narration.
 
@@ -393,30 +417,42 @@ mission checkpoint or commit message.
 
 ## Homotopy Axes
 
-Increase realism along these axes:
+Raise resolution aggressively while preserving the same product topology. These
+are not rungs or permission to stop low; they are the realism dimensions that
+must converge toward delivered status.
 
-- **Source volume:** a few feeds -> many feeds -> hundreds per 15 minutes ->
-  faster/live where feasible.
-- **Source diversity:** one provider -> GDELT/RSS/Telegram/search -> curated
-  domain/source-class sets.
-- **Freshness:** manual refresh -> scheduled batches -> shorter cadences ->
-  live events where supported.
-- **Processor continuity:** stateless batch handling -> long-running processors
-  -> hot-context/KV-cache preservation -> compaction chains with source refs.
-- **Reconciler realism:** no corpus role -> existing-article review ->
-  contradiction/consensus/question records -> research and VText requests.
-- **Research reuse:** ad hoc evidence notes -> existing researcher requests ->
-  source-backed evidence packets used by VText agents.
-- **VText reuse:** app-local prose -> existing VText agent write/revise
-  requests -> normal article/story VText versions.
-- **Style depth:** short style source -> publication-quality Style.vtext ->
-  composition/replacement/revision.
-- **Style routing:** manual choice -> story-fit ranking ->
-  select/compose/withhold -> user/publication override with provenance.
-- **UI readability:** panel wall -> newspaper columns -> responsive
-  publication/workbench across themes.
-- **Product proof:** local checks -> product-path API -> staging source volume
-  -> browser screenshots -> deployed acceptance record.
+- **Source volume:** staging should demonstrate hundreds of SourceItems per
+  15-minute window or record a provider/runtime limit with exact evidence and
+  the best live/faster cadence achieved.
+- **Source diversity:** GDELT, many RSS/Atom feeds, many Telegram feeds, search
+  providers, and curated source-class sets should all be represented unless a
+  provider is blocked with root-cause evidence.
+- **Freshness:** scheduled ingestion should run without click-time dependency;
+  live or shorter cadence paths should be used where provider/runtime limits
+  allow.
+- **Processor continuity:** processors should be long-running roles with
+  preserved context, compaction chains, source handles, watch items, and
+  request/result state.
+- **Reconciler realism:** reconcilers should review the existing VText corpus
+  plus new source/processor state, then produce contradiction, consensus,
+  question, update, research, and VText request records.
+- **Research reuse:** existing researcher agents should receive bounded
+  evidence requests and return source-backed packets used by VText agents.
+- **VText reuse:** existing VText agents should write and revise normal
+  article/story VTexts, including processor/reconciler/research note VTexts
+  where useful.
+- **Style depth:** `Style.vtext` artifacts should be publication-grade
+  editorial sources with examples, anti-patterns, applicability, revision, and
+  composition rules.
+- **Style routing:** the system should select, compose, withhold, and explain
+  styles based on story fit, evidence risk, audience, source state, and user
+  context.
+- **UI readability:** Global Wire should be a clean newspaper-like collection
+  surface with source chronology, no story boxes/rules, quiet VText affordances,
+  and responsive Choir web desktop behavior across all themes.
+- **Product proof:** proof should proceed through tests, product-path API,
+  staging source volume, browser screenshots, deployed commit identity, and a
+  durable acceptance record where the platform supports it.
 
 ## Dense Feedback And Verifiers
 
@@ -459,7 +495,8 @@ test-only, or raw mutation endpoints.
 
 ## Stopping Condition
 
-Mark `complete` only when staging proves:
+Mark `complete` only when the mission reaches delivered status and staging
+proves:
 
 - high-volume source ingestion from multiple source classes;
 - durable SourceItem provenance, dedupe, and routing;
@@ -473,21 +510,27 @@ Mark `complete` only when staging proves:
 - user-owned fork/edit behavior;
 - deep Style.vtext artifacts and intelligent style routing;
 - publication-quality VText output;
-- readable newspaper-style Global Wire UI in all three themes;
+- readable newspaper-style Global Wire UI in all three themes, with no story
+  boxes/rules, no nested panels, and quiet per-article VText open affordances;
+- responsive Choir web desktop behavior for mobile-width layouts;
 - CI/deploy/staging identity and product-path acceptance evidence.
 
-Use `checkpoint_incomplete` if useful progress lands but any requirement is not
-proven. Use `blocked_incomplete` only after root-cause investigation,
-alternative routes, cognitive transforms, and the smallest safe next probe are
-recorded.
+Do not stop at a partial demo, a local-only proof, or an API record that has not
+become product behavior. Use `checkpoint_incomplete` only as a handoff after
+substantial delivered progress when an external limit, context boundary, or
+operator boundary prevents continuing in the current run. Use
+`blocked_incomplete` only after root-cause investigation, product-path probes,
+serious alternative architecture routes, cognitive transforms, and the next
+safe executable probe or external authority requirement are recorded.
 
 ## Run Checkpoint & Resumption State
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-07 mission rewritten around SourceMaxx newsroom
-runtime: processors, reconcilers, existing researcher reuse, existing VText
-reuse, deep Style.vtext routing, and readable publication UI.
+last checkpoint: 2026-06-07 mission revised for ambitious delivered status:
+SourceMaxx ingestion, processors, reconcilers, existing researcher reuse,
+existing VText reuse, deep Style.vtext routing, VText-native provenance,
+newspaper UI, and staging/product-path proof.
 
 current artifact state: prior Global Wire slices exist and staging has some
 Source Service-backed paths, StoryGraph/VText/projection/contribution records,
@@ -497,11 +540,16 @@ to manual/source-refresh semantics, the UI is too busy, processors/reconcilers
 do not yet exist as product roles, and Style.vtexts are not yet deep
 publication artifacts. A partial source-refresh batch experiment from the
 superseded route is preserved in
-`stash@{0}` named
+`stash@{1}` named
 `superseded-global-wire-source-refresh-batch-experiment-2026-06-07`.
+The wrong pipeline-shaped processor/reconciler request code is preserved in
+`stash@{0}` named
+`wrong-pipeline-processor-reconciler-request-slice-2026-06-07` and must not be
+reapplied blindly.
 
-what shipped: docs-only mission rewrite unless a later checkpoint says
-otherwise.
+what shipped: docs-only mission/spec/design-language rewrite unless a later
+checkpoint says otherwise. The next run is expected to ship product behavior,
+not another docs-only plan.
 
 what was proven: not yet run under this rewritten mission.
 
@@ -517,7 +565,9 @@ unproven or partial claims:
 - reuse of existing VText agents for article writing/revision;
 - intelligent Style.vtext routing and withholding/deprioritization;
 - publication-quality VText output;
-- readable newspaper UI across all themes.
+- readable newspaper UI across all themes;
+- no story boxes/rules or noisy repeated `Open in VText` labels;
+- responsive Choir web desktop behavior for mobile-width Global Wire.
 
 belief-state changes:
 
@@ -544,29 +594,36 @@ runtime can ingest high-volume GDELT/RSS/Telegram/search batches and feed
 long-running processors with preserved context without deeper source daemon,
 storage, or agent-runtime changes.
 
-next executable probe:
+next executable delivery loop:
 
 1. Inspect `cmd/sourcecycled`, `internal/sources`, source storage, runtime agent
-   role contracts, researcher invocation, VText invocation, and current Global
-   Wire source paths.
-2. Produce a deletion/reuse map for source-refresh, Global Wire UI, existing
-   researcher, existing VText, and VText traversal/index paths.
-3. Decide whether the stashed source-refresh batch experiment belongs as a
-   narrow compatibility fix or should be discarded under the new architecture.
-4. Implement or specify the smallest proof of high-volume SourceItems routed to
-   processors, processor compaction handles, corpus-level reconciler review
-   over existing stories plus new source state, researcher reuse, and VText
-   reuse through product-safe paths.
-5. Redesign Global Wire into readable VText columns plus source chronology and
-   per-article VText open affordances, then verify with browser screenshots
-   across desktop and responsive Choir web desktop layouts.
+   role contracts, researcher invocation, VText invocation, current Global Wire
+   source paths, and theme/UI code. Produce a deletion/reuse map only as a
+   working artifact for the implementation, not as a stopping point.
+2. Replace wrong-object paths while preserving product topology: high-volume
+   source ingestion, durable SourceItems, routing, processor state,
+   reconciler corpus review, researcher request/result reuse, VText
+   write/revision reuse, Style.vtext routing, VText traversal/source indexes,
+   and user-owned VText boundaries.
+3. Discard or selectively mine the stashed source-refresh experiment only if it
+   helps the delivered architecture; do not revive click-time source refresh as
+   the product object.
+4. Build through to staging behavior: tests, commit, push, CI/deploy monitor,
+   staging identity, product-path source volume, processor/reconciler evidence,
+   researcher/VText reuse evidence, ownership evidence, and browser screenshots.
+5. Perform a quality pass before claiming delivery: simplify names and data
+   flows, remove obsolete panels/routes/tests, make Style.vtexts publication
+   quality, and make the Global Wire UI nice in Futuristic Noir, Carbon Fiber
+   Kintsugi, London Salmon, and responsive Choir web desktop layouts.
 
 suggested resume goal string: use the Goal String section above.
 
 evidence artifact refs: none yet for this rewritten mission.
 
 rollback refs: prior branch/worktree state before this mission;
-`stash@{0}` named
+`stash@{1}` named
 `superseded-global-wire-source-refresh-batch-experiment-2026-06-07` preserves
-the abandoned source-refresh batch edits; behavior commits must record their
-own rollback SHAs.
+the abandoned source-refresh batch edits; `stash@{0}` named
+`wrong-pipeline-processor-reconciler-request-slice-2026-06-07` preserves the
+abandoned pipeline-shaped processor/reconciler edits; behavior commits must
+record their own rollback SHAs.
