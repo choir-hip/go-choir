@@ -159,6 +159,50 @@ type GlobalWireSourceRefreshRun struct {
 	UpdatedAt            time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWireClaimRecord is a structured, provisional claim/dispute/evidence-gap
+// artifact tied to refresh and reconciliation evidence. It is not an oracle
+// verdict and does not mutate the platform StoryGraph by itself.
+type GlobalWireClaimRecord struct {
+	ID                   string    `json:"id"`
+	OwnerID              string    `json:"owner_id,omitempty"`
+	StoryID              string    `json:"story_id"`
+	RefreshID            string    `json:"refresh_id,omitempty"`
+	SourceContentID      string    `json:"source_content_id,omitempty"`
+	ContributionID       string    `json:"contribution_id,omitempty"`
+	DecisionID           string    `json:"decision_id,omitempty"`
+	CandidateID          string    `json:"candidate_id,omitempty"`
+	ClaimText            string    `json:"claim_text"`
+	ClaimKind            string    `json:"claim_kind"`
+	UncertaintyState     string    `json:"uncertainty_state"`
+	DisputeState         string    `json:"dispute_state"`
+	EvidenceGap          string    `json:"evidence_gap"`
+	SourceStanding       string    `json:"source_standing"`
+	UpdateClassification string    `json:"update_classification"`
+	Status               string    `json:"status"`
+	CreatedAt            time.Time `json:"created_at,omitempty"`
+	UpdatedAt            time.Time `json:"updated_at,omitempty"`
+}
+
+// GlobalWireResearchTask is the reviewer-facing follow-up generated from a
+// provisional claim/update classification.
+type GlobalWireResearchTask struct {
+	ID                   string    `json:"id"`
+	OwnerID              string    `json:"owner_id,omitempty"`
+	StoryID              string    `json:"story_id"`
+	ClaimID              string    `json:"claim_id,omitempty"`
+	RefreshID            string    `json:"refresh_id,omitempty"`
+	SourceContentID      string    `json:"source_content_id,omitempty"`
+	ContributionID       string    `json:"contribution_id,omitempty"`
+	CandidateID          string    `json:"candidate_id,omitempty"`
+	TaskKind             string    `json:"task_kind"`
+	Prompt               string    `json:"prompt"`
+	Status               string    `json:"status"`
+	Priority             string    `json:"priority"`
+	UpdateClassification string    `json:"update_classification"`
+	CreatedAt            time.Time `json:"created_at,omitempty"`
+	UpdatedAt            time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireProjectionReview records that a StoryGraph change may require a
 // Style.vtext projection to be reviewed or revised.
 type GlobalWireProjectionReview struct {

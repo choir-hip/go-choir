@@ -65,6 +65,8 @@ type globalWireSourceRefreshResponse struct {
 	Contribution *types.GlobalWireContribution           `json:"contribution,omitempty"`
 	Decision     *types.GlobalWireReconciliationDecision `json:"decision,omitempty"`
 	Candidate    *types.GlobalWireGraphUpdateCandidate   `json:"candidate,omitempty"`
+	ClaimRecord  *types.GlobalWireClaimRecord            `json:"claim_record,omitempty"`
+	ResearchTask *types.GlobalWireResearchTask           `json:"research_task,omitempty"`
 }
 
 type globalWireReconciliationResponse struct {
@@ -74,6 +76,8 @@ type globalWireReconciliationResponse struct {
 	Candidates        []types.GlobalWireGraphUpdateCandidate   `json:"candidates"`
 	Promotions        []types.GlobalWireGraphPromotionDecision `json:"promotions"`
 	Refreshes         []types.GlobalWireSourceRefreshRun       `json:"refreshes"`
+	ClaimRecords      []types.GlobalWireClaimRecord            `json:"claim_records"`
+	ResearchTasks     []types.GlobalWireResearchTask           `json:"research_tasks"`
 	ProjectionReviews []types.GlobalWireProjectionReview       `json:"projection_reviews"`
 }
 
@@ -448,6 +452,11 @@ func (h *APIHandler) HandleGlobalWireSourceRefresh(w http.ResponseWriter, r *htt
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
 		return
 	}
+	claimRecord, researchTask, err := h.createGlobalWireClaimResearchArtifacts(r, ownerID, story, item, classification, run, contribution, decision, candidate)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create claim research artifacts"})
+		return
+	}
 	writeAPIJSON(w, http.StatusCreated, globalWireSourceRefreshResponse{
 		Status:       run.Status,
 		Source:       run.Provider,
@@ -458,6 +467,8 @@ func (h *APIHandler) HandleGlobalWireSourceRefresh(w http.ResponseWriter, r *htt
 		Contribution: &contribution,
 		Decision:     &decision,
 		Candidate:    &candidate,
+		ClaimRecord:  &claimRecord,
+		ResearchTask: &researchTask,
 	})
 }
 
@@ -560,6 +571,16 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list source refresh runs"})
 			return
 		}
+		claimRecords, err := h.rt.Store().ListGlobalWireClaimRecords(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list claim records"})
+			return
+		}
+		researchTasks, err := h.rt.Store().ListGlobalWireResearchTasks(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list research tasks"})
+			return
+		}
 		projectionReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
@@ -572,6 +593,8 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			Candidates:        candidates,
 			Promotions:        promotions,
 			Refreshes:         refreshes,
+			ClaimRecords:      claimRecords,
+			ResearchTasks:     researchTasks,
 			ProjectionReviews: projectionReviews,
 		})
 	case http.MethodPost:
@@ -1286,6 +1309,145 @@ func (h *APIHandler) createGlobalWireSourceRefreshArtifacts(r *http.Request, own
 		return types.GlobalWireContribution{}, types.GlobalWireReconciliationDecision{}, types.GlobalWireGraphUpdateCandidate{}, err
 	}
 	return contribution, decision, saved, nil
+}
+
+func (h *APIHandler) createGlobalWireClaimResearchArtifacts(r *http.Request, ownerID string, story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification, run types.GlobalWireSourceRefreshRun, contribution types.GlobalWireContribution, decision types.GlobalWireReconciliationDecision, candidate types.GlobalWireGraphUpdateCandidate) (types.GlobalWireClaimRecord, types.GlobalWireResearchTask, error) {
+	claim := globalWireClaimRecordFromRefresh(ownerID, story, item, classification, run, contribution, decision, candidate)
+	savedClaim, err := h.rt.Store().CreateGlobalWireClaimRecord(r.Context(), claim)
+	if err != nil {
+		return types.GlobalWireClaimRecord{}, types.GlobalWireResearchTask{}, err
+	}
+	task := globalWireResearchTaskFromClaim(ownerID, story, item, classification, run, contribution, candidate, savedClaim)
+	savedTask, err := h.rt.Store().CreateGlobalWireResearchTask(r.Context(), task)
+	if err != nil {
+		return types.GlobalWireClaimRecord{}, types.GlobalWireResearchTask{}, err
+	}
+	return savedClaim, savedTask, nil
+}
+
+func globalWireClaimRecordFromRefresh(ownerID string, story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification, run types.GlobalWireSourceRefreshRun, contribution types.GlobalWireContribution, decision types.GlobalWireReconciliationDecision, candidate types.GlobalWireGraphUpdateCandidate) types.GlobalWireClaimRecord {
+	claimKind := "evidence-update"
+	uncertainty := "requires-review"
+	dispute := "not-yet-assessed"
+	evidenceGap := "Verify whether this SourceItem changes the StoryGraph claim set before changing any platform story."
+	switch classification.UpdateClassification {
+	case "claim-changed":
+		claimKind = "claim-change"
+		uncertainty = "material-change-unverified"
+		dispute = "needs-comparison"
+		evidenceGap = "Compare the imported evidence against existing lead/supporting/contrary source tiers and decide whether the claim should narrow, broaden, or stay unchanged."
+	case "contradiction-added":
+		claimKind = "contradiction"
+		uncertainty = "contrary-evidence-unreviewed"
+		dispute = "disputed"
+		evidenceGap = "Check whether this source materially contradicts, qualifies, or only reframes the current StoryGraph claim set."
+	case "front-page-prominence-changed":
+		claimKind = "prominence-signal"
+		uncertainty = "editorial-weight-unverified"
+		dispute = "not-yet-assessed"
+		evidenceGap = "Verify whether the source changes prominence or urgency without overstating the underlying facts."
+	case "related-story-edge-added":
+		claimKind = "related-edge"
+		uncertainty = "relationship-unverified"
+		dispute = "not-yet-assessed"
+		evidenceGap = "Verify whether the shared source basis is enough to connect this story to a related headline neighborhood."
+	case "source-manifest-update":
+		claimKind = "source-support"
+		uncertainty = "source-standing-unreviewed"
+		dispute = "not-yet-assessed"
+		evidenceGap = "Check source standing, freshness, and whether this belongs in lead, supporting, contrary, or context evidence."
+	}
+	return types.GlobalWireClaimRecord{
+		ID:                   "global-wire-claim-" + uuid.NewString(),
+		OwnerID:              ownerID,
+		StoryID:              story.ID,
+		RefreshID:            run.ID,
+		SourceContentID:      item.ContentID,
+		ContributionID:       contribution.ID,
+		DecisionID:           decision.ID,
+		CandidateID:          candidate.ID,
+		ClaimText:            globalWireClaimTextFromSource(story, item, classification),
+		ClaimKind:            claimKind,
+		UncertaintyState:     uncertainty,
+		DisputeState:         dispute,
+		EvidenceGap:          evidenceGap,
+		SourceStanding:       globalWireSourceStandingLabel(item),
+		UpdateClassification: classification.UpdateClassification,
+		Status:               "research-review-required",
+	}
+}
+
+func globalWireResearchTaskFromClaim(ownerID string, story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification, run types.GlobalWireSourceRefreshRun, contribution types.GlobalWireContribution, candidate types.GlobalWireGraphUpdateCandidate, claim types.GlobalWireClaimRecord) types.GlobalWireResearchTask {
+	taskKind := "source-standing-review"
+	priority := "normal"
+	switch classification.UpdateClassification {
+	case "claim-changed":
+		taskKind = "claim-change-review"
+		priority = "high"
+	case "contradiction-added":
+		taskKind = "dispute-review"
+		priority = "high"
+	case "front-page-prominence-changed":
+		taskKind = "prominence-review"
+		priority = "high"
+	case "related-story-edge-added":
+		taskKind = "related-edge-review"
+	case "source-manifest-update":
+		taskKind = "source-tier-review"
+	}
+	return types.GlobalWireResearchTask{
+		ID:                   "global-wire-research-task-" + uuid.NewString(),
+		OwnerID:              ownerID,
+		StoryID:              story.ID,
+		ClaimID:              claim.ID,
+		RefreshID:            run.ID,
+		SourceContentID:      item.ContentID,
+		ContributionID:       contribution.ID,
+		CandidateID:          candidate.ID,
+		TaskKind:             taskKind,
+		Prompt:               globalWireResearchTaskPrompt(story, item, classification, claim),
+		Status:               "open",
+		Priority:             priority,
+		UpdateClassification: classification.UpdateClassification,
+	}
+}
+
+func globalWireClaimTextFromSource(story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification) string {
+	sourceTitle := firstNonEmptyString(item.Title, item.CanonicalURL, item.SourceURL, "Imported SourceItem")
+	switch classification.UpdateClassification {
+	case "claim-changed":
+		return "Provisional claim-change signal for \"" + story.Headline + "\" from " + sourceTitle + "."
+	case "contradiction-added":
+		return "Provisional contradiction or qualification signal for \"" + story.Headline + "\" from " + sourceTitle + "."
+	case "front-page-prominence-changed":
+		return "Provisional prominence-change signal for \"" + story.Headline + "\" from " + sourceTitle + "."
+	case "related-story-edge-added":
+		return "Provisional related-story edge signal for \"" + story.Headline + "\" from " + sourceTitle + "."
+	default:
+		return "Provisional source-support signal for \"" + story.Headline + "\" from " + sourceTitle + "."
+	}
+}
+
+func globalWireResearchTaskPrompt(story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification, claim types.GlobalWireClaimRecord) string {
+	return strings.Join([]string{
+		"Review this Global Wire refresh before any platform StoryGraph mutation.",
+		"StoryGraph headline: " + story.Headline,
+		"Classification: " + firstNonEmptyString(classification.UpdateClassification, "source-manifest-update"),
+		"Claim state: " + claim.UncertaintyState + " / " + claim.DisputeState,
+		"Source: " + firstNonEmptyString(item.Title, item.CanonicalURL, item.SourceURL, item.ContentID),
+		"Evidence gap: " + claim.EvidenceGap,
+		"Do not treat the source as an oracle; decide source standing, claim impact, contrary evidence, and projection-review needs from cited evidence.",
+	}, " ")
+}
+
+func globalWireSourceStandingLabel(item types.ContentItem) string {
+	if strings.TrimSpace(item.SourceType) != "" {
+		return item.SourceType
+	}
+	if strings.TrimSpace(item.AppHint) != "" {
+		return item.AppHint
+	}
+	return "unreviewed-source"
 }
 
 func classifyGlobalWireSourceRefresh(story types.GlobalWireStory, item types.ContentItem) globalWireSourceUpdateClassification {

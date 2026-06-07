@@ -380,6 +380,9 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	if resp.Status != "candidate-review" || resp.ContentItem == nil || resp.Contribution == nil || resp.Decision == nil || resp.Candidate == nil {
 		t.Fatalf("unexpected source refresh response: %+v", resp)
 	}
+	if resp.ClaimRecord == nil || resp.ResearchTask == nil {
+		t.Fatalf("source refresh did not create structured claim/research state: %+v", resp)
+	}
 	if resp.RefreshRun.SourceContentID != resp.ContentItem.ContentID ||
 		resp.RefreshRun.ContributionID != resp.Contribution.ID ||
 		resp.RefreshRun.DecisionID != resp.Decision.ID ||
@@ -401,6 +404,26 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		resp.Candidate.EdgeKind != "update-relation" ||
 		resp.Candidate.ProjectionAction != "projection-review-required" {
 		t.Fatalf("refresh candidate did not inherit classification: %+v", resp.Candidate)
+	}
+	if resp.ClaimRecord.RefreshID != resp.RefreshRun.ID ||
+		resp.ClaimRecord.SourceContentID != resp.ContentItem.ContentID ||
+		resp.ClaimRecord.ContributionID != resp.Contribution.ID ||
+		resp.ClaimRecord.DecisionID != resp.Decision.ID ||
+		resp.ClaimRecord.CandidateID != resp.Candidate.ID ||
+		resp.ClaimRecord.ClaimKind != "claim-change" ||
+		resp.ClaimRecord.UncertaintyState != "material-change-unverified" ||
+		resp.ClaimRecord.DisputeState != "needs-comparison" ||
+		resp.ClaimRecord.Status != "research-review-required" {
+		t.Fatalf("claim record missing non-oracle refresh lineage: %+v", resp.ClaimRecord)
+	}
+	if resp.ResearchTask.ClaimID != resp.ClaimRecord.ID ||
+		resp.ResearchTask.RefreshID != resp.RefreshRun.ID ||
+		resp.ResearchTask.CandidateID != resp.Candidate.ID ||
+		resp.ResearchTask.TaskKind != "claim-change-review" ||
+		resp.ResearchTask.Status != "open" ||
+		resp.ResearchTask.Priority != "high" ||
+		!strings.Contains(resp.ResearchTask.Prompt, "Do not treat the source as an oracle") {
+		t.Fatalf("research task missing review contract: %+v", resp.ResearchTask)
 	}
 
 	storiesAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
@@ -427,6 +450,12 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	}
 	if len(listResp.Refreshes) != 1 || listResp.Refreshes[0].CandidateID != resp.Candidate.ID {
 		t.Fatalf("refresh run missing from reconciliation list: %+v", listResp.Refreshes)
+	}
+	if len(listResp.ClaimRecords) != 1 || listResp.ClaimRecords[0].ID != resp.ClaimRecord.ID {
+		t.Fatalf("claim record missing from reconciliation list: %+v", listResp.ClaimRecords)
+	}
+	if len(listResp.ResearchTasks) != 1 || listResp.ResearchTasks[0].ClaimID != resp.ClaimRecord.ID {
+		t.Fatalf("research task missing from reconciliation list: %+v", listResp.ResearchTasks)
 	}
 	if listResp.Refreshes[0].UpdateClassification != "claim-changed" {
 		t.Fatalf("refresh classification missing from reconciliation list: %+v", listResp.Refreshes[0])

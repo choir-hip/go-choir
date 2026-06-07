@@ -168,6 +168,8 @@
   let graphUpdateCandidates = [];
   let graphPromotionDecisions = [];
   let sourceRefreshes = [];
+  let claimRecords = [];
+  let researchTasks = [];
   let projectionReviews = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
@@ -207,6 +209,8 @@
       graphUpdateCandidates = [];
       graphPromotionDecisions = [];
       sourceRefreshes = [];
+      claimRecords = [];
+      researchTasks = [];
       projectionReviews = [];
       sourceSearchResults = [];
       sourceSearchStatus = '';
@@ -251,6 +255,8 @@
       graphUpdateCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
       graphPromotionDecisions = Array.isArray(payload.promotions) ? payload.promotions : [];
       sourceRefreshes = Array.isArray(payload.refreshes) ? payload.refreshes : [];
+      claimRecords = Array.isArray(payload.claim_records) ? payload.claim_records : [];
+      researchTasks = Array.isArray(payload.research_tasks) ? payload.research_tasks : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
     } catch {
       contributions = [];
@@ -259,6 +265,8 @@
       graphUpdateCandidates = [];
       graphPromotionDecisions = [];
       sourceRefreshes = [];
+      claimRecords = [];
+      researchTasks = [];
       projectionReviews = [];
     }
   }
@@ -615,6 +623,16 @@
           .filter(Boolean)
           .slice(0, 20);
       }
+      if (payload.claim_record?.id) {
+        claimRecords = [payload.claim_record, ...claimRecords]
+          .filter(Boolean)
+          .slice(0, 30);
+      }
+      if (payload.research_task?.id) {
+        researchTasks = [payload.research_task, ...researchTasks]
+          .filter(Boolean)
+          .slice(0, 30);
+      }
       if (response.status === 201) {
         contributionStatus = `Source refresh classified ${payload.refresh_run?.update_classification || 'candidate evidence'} for review`;
         await loadContributions(selectedStory.id);
@@ -649,6 +667,16 @@
   function candidateProjectionReviews(candidate) {
     const id = candidate?.id || '';
     return projectionReviews.filter((review) => review.candidate_id === id);
+  }
+
+  function candidateClaimRecords(candidate) {
+    const id = candidate?.id || '';
+    return claimRecords.filter((claim) => claim.candidate_id === id);
+  }
+
+  function claimResearchTasks(claim) {
+    const id = claim?.id || '';
+    return researchTasks.filter((task) => task.claim_id === id);
   }
 
   async function createProjectionDraft(review) {
@@ -1119,6 +1147,7 @@
               {@const candidate = contributionCandidate(item)}
               {@const promotion = candidatePromotion(candidate)}
               {@const reviews = candidateProjectionReviews(candidate)}
+              {@const claims = candidateClaimRecords(candidate)}
               <article class="contribution-card" data-global-wire-reconciliation-item>
                 <p><strong>{item.kind.replaceAll('-', ' ')}</strong> · {item.text}</p>
                 <small>{item.research_state || 'pending-researcher-review'}</small>
@@ -1139,6 +1168,24 @@
                       <strong>{candidate.candidate_kind}</strong>
                       <small>{candidate.source_tier} · {candidate.edge_kind} · {candidate.status}</small>
                       <span>{candidate.projection_action}</span>
+                      {#if claims.length}
+                        <div class="claim-research-list" data-global-wire-claim-records>
+                          {#each claims.slice(0, 2) as claim}
+                            {@const tasks = claimResearchTasks(claim)}
+                            <article data-global-wire-claim-record data-global-wire-claim-id={claim.id}>
+                              <strong>{claim.claim_kind}</strong>
+                              <small>{claim.uncertainty_state} · {claim.dispute_state} · {claim.status}</small>
+                              <span>{claim.claim_text}</span>
+                              <em>{claim.evidence_gap}</em>
+                              {#each tasks.slice(0, 2) as task}
+                                <small data-global-wire-research-task>
+                                  {task.task_kind}: {task.status} · {task.priority}
+                                </small>
+                              {/each}
+                            </article>
+                          {/each}
+                        </div>
+                      {/if}
                       {#if promotion}
                         <small data-global-wire-graph-promotion>
                           {promotion.decision}: {promotion.applied_change}
@@ -1734,6 +1781,26 @@
     z-index: 1;
     min-height: 2.1rem;
     padding: 0.35rem 0.65rem;
+  }
+
+  .claim-research-list {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .claim-research-list article {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.4rem;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-card);
+  }
+
+  .claim-research-list em {
+    color: var(--choir-text-muted);
+    font-style: normal;
+    overflow-wrap: anywhere;
   }
 
   .reconciliation-actions {

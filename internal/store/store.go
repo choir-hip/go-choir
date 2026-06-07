@@ -247,6 +247,51 @@ CREATE TABLE IF NOT EXISTS global_wire_source_refresh_runs (
 	KEY idx_global_wire_source_refresh_story (owner_id, story_id, updated_at)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_claim_records (
+	owner_id              VARCHAR(255) NOT NULL,
+	claim_id              VARCHAR(255) NOT NULL,
+	story_id              VARCHAR(255) NOT NULL,
+	refresh_id            VARCHAR(255) NOT NULL DEFAULT '',
+	source_content_id     VARCHAR(255) NOT NULL DEFAULT '',
+	contribution_id       VARCHAR(255) NOT NULL DEFAULT '',
+	decision_id           VARCHAR(255) NOT NULL DEFAULT '',
+	candidate_id          VARCHAR(255) NOT NULL DEFAULT '',
+	claim_text            LONGTEXT NOT NULL DEFAULT '',
+	claim_kind            VARCHAR(255) NOT NULL DEFAULT '',
+	uncertainty_state     VARCHAR(255) NOT NULL DEFAULT '',
+	dispute_state         VARCHAR(255) NOT NULL DEFAULT '',
+	evidence_gap          LONGTEXT NOT NULL DEFAULT '',
+	source_standing       VARCHAR(255) NOT NULL DEFAULT '',
+	update_classification VARCHAR(255) NOT NULL DEFAULT '',
+	status                VARCHAR(255) NOT NULL DEFAULT '',
+	created_at            DATETIME NOT NULL,
+	updated_at            DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, claim_id),
+	KEY idx_global_wire_claim_records_story (owner_id, story_id, updated_at),
+	KEY idx_global_wire_claim_records_refresh (owner_id, refresh_id)
+);
+
+CREATE TABLE IF NOT EXISTS global_wire_research_tasks (
+	owner_id              VARCHAR(255) NOT NULL,
+	task_id               VARCHAR(255) NOT NULL,
+	story_id              VARCHAR(255) NOT NULL,
+	claim_id              VARCHAR(255) NOT NULL DEFAULT '',
+	refresh_id            VARCHAR(255) NOT NULL DEFAULT '',
+	source_content_id     VARCHAR(255) NOT NULL DEFAULT '',
+	contribution_id       VARCHAR(255) NOT NULL DEFAULT '',
+	candidate_id          VARCHAR(255) NOT NULL DEFAULT '',
+	task_kind             VARCHAR(255) NOT NULL DEFAULT '',
+	prompt                LONGTEXT NOT NULL DEFAULT '',
+	status                VARCHAR(255) NOT NULL DEFAULT '',
+	priority              VARCHAR(255) NOT NULL DEFAULT '',
+	update_classification VARCHAR(255) NOT NULL DEFAULT '',
+	created_at            DATETIME NOT NULL,
+	updated_at            DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, task_id),
+	KEY idx_global_wire_research_tasks_story (owner_id, story_id, updated_at),
+	KEY idx_global_wire_research_tasks_claim (owner_id, claim_id)
+);
+
 CREATE TABLE IF NOT EXISTS global_wire_projection_reviews (
 	owner_id           VARCHAR(255) NOT NULL,
 	review_id          VARCHAR(255) NOT NULL,

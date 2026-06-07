@@ -272,10 +272,27 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(sourceRefresh.body.contribution?.research_state).toBe('accepted-for-graph-review');
     expect(sourceRefresh.body.decision?.decision).toBe('accepted');
     expect(sourceRefresh.body.candidate?.status).toBe('candidate-review');
+    expect(sourceRefresh.body.claim_record?.status).toBe('research-review-required');
+    expect(sourceRefresh.body.claim_record?.candidate_id).toBe(sourceRefresh.body.candidate?.id);
+    expect(sourceRefresh.body.claim_record?.uncertainty_state).toBeTruthy();
+    expect(sourceRefresh.body.research_task?.claim_id).toBe(sourceRefresh.body.claim_record?.id);
+    expect(sourceRefresh.body.research_task?.status).toBe('open');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBeTruthy();
     expect(sourceRefresh.body.refresh_run?.storygraph_action).toBeTruthy();
     expect(sourceRefresh.body.refresh_run?.projection_action).toBeTruthy();
     expect(sourceRefresh.body.refresh_run?.candidate_id).toBe(sourceRefresh.body.candidate?.id);
+    const refreshQueue = await page.evaluate(async (candidateId) => {
+      const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
+      if (!res.ok) throw new Error(`load refresh claim queue failed: ${res.status}`);
+      const list = await res.json();
+      const claimRecords = (list.claim_records || []).filter((item) => item.candidate_id === candidateId);
+      const researchTasks = (list.research_tasks || []).filter((item) => claimRecords.some((claim) => claim.id === item.claim_id));
+      return { claimRecords, researchTasks };
+    }, sourceRefresh.body.candidate.id);
+    expect(refreshQueue.claimRecords.length).toBeGreaterThanOrEqual(1);
+    expect(refreshQueue.claimRecords[0].status).toBe('research-review-required');
+    expect(refreshQueue.researchTasks.length).toBeGreaterThanOrEqual(1);
+    expect(refreshQueue.researchTasks[0].status).toBe('open');
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

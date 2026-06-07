@@ -1105,6 +1105,169 @@ func (s *Store) ListGlobalWireSourceRefreshRuns(ctx context.Context, ownerID, st
 	return out, nil
 }
 
+// CreateGlobalWireClaimRecord stores a provisional non-oracle claim/dispute
+// record tied to source refresh and reconciliation evidence.
+func (s *Store) CreateGlobalWireClaimRecord(ctx context.Context, rec types.GlobalWireClaimRecord) (types.GlobalWireClaimRecord, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = rec.CreatedAt
+	}
+	if rec.Status == "" {
+		rec.Status = "research-review-required"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_claim_records (
+			owner_id, claim_id, story_id, refresh_id, source_content_id,
+			contribution_id, decision_id, candidate_id, claim_text, claim_kind,
+			uncertainty_state, dispute_state, evidence_gap, source_standing,
+			update_classification, status, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.StoryID,
+		rec.RefreshID,
+		rec.SourceContentID,
+		rec.ContributionID,
+		rec.DecisionID,
+		rec.CandidateID,
+		sanitizeStoreText(rec.ClaimText),
+		rec.ClaimKind,
+		rec.UncertaintyState,
+		rec.DisputeState,
+		sanitizeStoreText(rec.EvidenceGap),
+		rec.SourceStanding,
+		rec.UpdateClassification,
+		rec.Status,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireClaimRecord{}, fmt.Errorf("create global wire claim record: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireClaimRecords lists provisional claim/dispute/evidence-gap
+// records, optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWireClaimRecords(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireClaimRecord, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, claim_id, story_id, refresh_id, source_content_id,
+	                contribution_id, decision_id, candidate_id, claim_text, claim_kind,
+	                uncertainty_state, dispute_state, evidence_gap, source_standing,
+	                update_classification, status, created_at, updated_at
+	           FROM global_wire_claim_records
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire claim records: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireClaimRecord
+	for rows.Next() {
+		rec, err := scanGlobalWireClaimRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire claim records: %w", err)
+	}
+	return out, nil
+}
+
+// CreateGlobalWireResearchTask stores a reviewer/researcher follow-up task
+// derived from source refresh classification.
+func (s *Store) CreateGlobalWireResearchTask(ctx context.Context, rec types.GlobalWireResearchTask) (types.GlobalWireResearchTask, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = rec.CreatedAt
+	}
+	if rec.Status == "" {
+		rec.Status = "open"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_research_tasks (
+			owner_id, task_id, story_id, claim_id, refresh_id, source_content_id,
+			contribution_id, candidate_id, task_kind, prompt, status, priority,
+			update_classification, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.StoryID,
+		rec.ClaimID,
+		rec.RefreshID,
+		rec.SourceContentID,
+		rec.ContributionID,
+		rec.CandidateID,
+		rec.TaskKind,
+		sanitizeStoreText(rec.Prompt),
+		rec.Status,
+		rec.Priority,
+		rec.UpdateClassification,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireResearchTask{}, fmt.Errorf("create global wire research task: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireResearchTasks lists open/recent research tasks, optionally
+// narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWireResearchTasks(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireResearchTask, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, task_id, story_id, claim_id, refresh_id,
+	                source_content_id, contribution_id, candidate_id, task_kind,
+	                prompt, status, priority, update_classification, created_at, updated_at
+	           FROM global_wire_research_tasks
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire research tasks: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireResearchTask
+	for rows.Next() {
+		rec, err := scanGlobalWireResearchTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire research tasks: %w", err)
+	}
+	return out, nil
+}
+
 // CreateGlobalWireProjectionReview records a projection obligation created by
 // a StoryGraph evidence change.
 func (s *Store) CreateGlobalWireProjectionReview(ctx context.Context, rec types.GlobalWireProjectionReview) (types.GlobalWireProjectionReview, error) {
@@ -1595,6 +1758,87 @@ func scanGlobalWireSourceRefreshRun(row interface{ Scan(...any) error }) (types.
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWireSourceRefreshRun{}, fmt.Errorf("parse global wire source refresh updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireClaimRecord(row interface{ Scan(...any) error }) (types.GlobalWireClaimRecord, error) {
+	var rec types.GlobalWireClaimRecord
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.StoryID,
+		&rec.RefreshID,
+		&rec.SourceContentID,
+		&rec.ContributionID,
+		&rec.DecisionID,
+		&rec.CandidateID,
+		&rec.ClaimText,
+		&rec.ClaimKind,
+		&rec.UncertaintyState,
+		&rec.DisputeState,
+		&rec.EvidenceGap,
+		&rec.SourceStanding,
+		&rec.UpdateClassification,
+		&rec.Status,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireClaimRecord{}, ErrNotFound
+		}
+		return types.GlobalWireClaimRecord{}, fmt.Errorf("scan global wire claim record: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireClaimRecord{}, fmt.Errorf("parse global wire claim record created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireClaimRecord{}, fmt.Errorf("parse global wire claim record updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireResearchTask(row interface{ Scan(...any) error }) (types.GlobalWireResearchTask, error) {
+	var rec types.GlobalWireResearchTask
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.StoryID,
+		&rec.ClaimID,
+		&rec.RefreshID,
+		&rec.SourceContentID,
+		&rec.ContributionID,
+		&rec.CandidateID,
+		&rec.TaskKind,
+		&rec.Prompt,
+		&rec.Status,
+		&rec.Priority,
+		&rec.UpdateClassification,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireResearchTask{}, ErrNotFound
+		}
+		return types.GlobalWireResearchTask{}, fmt.Errorf("scan global wire research task: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireResearchTask{}, fmt.Errorf("parse global wire research task created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireResearchTask{}, fmt.Errorf("parse global wire research task updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()
