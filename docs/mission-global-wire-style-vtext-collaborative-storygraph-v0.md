@@ -5969,3 +5969,98 @@ Next executable probe:
   update classes (`contradiction added`, `claim changed`, `source manifest
   update`, `related story edge`, `projection revision required`) visible as
   reviewable, non-oracle records.
+
+## Overnight Checkpoint - Source Review Signal Normalization Slice - 2026-06-07
+
+Objective state:
+
+- The source-normalization axis has moved from implicit claim/update records to
+  durable, reviewable source-neighborhood signals.
+- `global_wire_source_review_signals` records story, refresh, claim, source
+  content, candidate, update classification, source standing, overlap state,
+  contradiction state, related story id, projection action, evidence refs,
+  rationale, and review status.
+- Source refresh now emits a `source_review_signal` when it creates a
+  non-mutating candidate story VText from source evidence.
+- Reconciliation and source-dossier responses now include
+  `source_review_signals`, and claim dossiers list their
+  `source_review_signal_ids`.
+- Global Wire shows source-review signal counts and rows in source dossiers, so
+  the News app can expose contradiction/overlap/standing/projection-review
+  state without becoming an oracle.
+
+Local proof:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire' -count=1`
+  passed.
+- `npm run build` passed in `frontend`.
+- `git diff --check` passed.
+
+Staging proof:
+
+- Pushed behavior commit:
+  `462d28a88b7e9f33589b59f0b7fe56544a165414`.
+- CI run `27090116691`: success, including staging deploy.
+- FlakeHub run `27090116701`: success.
+- Staging `/health` reported proxy and upstream deployed commit
+  `462d28a88b7e9f33589b59f0b7fe56544a165414`, deployed at
+  `2026-06-07T10:39:40Z`.
+- Public deployed proof:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  returned 4 passed and 1 auth-gated skip.
+- Authenticated deployed proof:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in" --timeout 180000`
+  returned 1 passed. This proof covers the signed-in product path for
+  source-backed refresh, candidate story creation without platform-story
+  mutation, source-review signal creation, reconciliation visibility, source
+  dossier visibility, user-owned fork/contribution, projection review,
+  publication artifacts, delivery/export/public-link/newsletter/Autoradio
+  artifacts, and run acceptance synthesis.
+
+Invariant audit:
+
+- Every story remains a normal editable VText.
+- User edits, forks, and contributions remain owner-owned and do not mutate
+  platform stories.
+- Style.vtext remains a citeable selectable/composable/replacement artifact.
+- News remains non-oracle and provenance-rich; review signals name evidence and
+  review state but do not assert final truth.
+- Graph nodes remain Story VText headlines with source-neighborhood semantics;
+  source-review signals are neighborhood review artifacts, not graph nodes.
+- Global Wire core views continue to render in Future Noir, Carbon Kintsugi,
+  and London Salmon in the deployed public proof.
+
+Belief state:
+
+- The product now has a staging-proven path from live source evidence through
+  StoryGraph, normal Story VTexts, Style.vtext projections, News app views,
+  owner-owned edits/contributions, research/reconciliation records,
+  publication artifacts, public links/newsletter ledger, Autoradio playback
+  packages, and source-neighborhood review signals.
+- This raises the source-normalization/reconciliation axis to
+  `staging-smoke-level` at honest low resolution.
+
+Remaining error field:
+
+- Source normalization is still deterministic and low-resolution; it classifies
+  source refreshes into reviewable signals but does not yet perform multi-source
+  NLP clustering, credibility adjudication, or contradiction resolution.
+- Newsletter remains a ledger, not a real outbound provider send with
+  bounce/open telemetry.
+- Autoradio playback is browser-speech over a durable transcript, not generated
+  audio storage, scheduling, or provider-backed radio playout.
+- No AppChangePackage adoption or owner promote/rollback proof was run for this
+  slice, so this is not `promotion-level`.
+- No whole-mission continuation proof was collected beyond the signed-in test's
+  acceptance synthesis path, so this is not a whole-mission
+  `continuation-level` stop.
+
+Next executable probe:
+
+- Increase realism along either the source-normalization axis or the outbound
+  publication axis. The most direct source route is multi-source clustering:
+  multiple source items per story, dedupe/overlap grouping, contradiction
+  signals across source neighborhoods, and standing changes that can drive
+  Style.vtext replacement review. The most direct publication route is a real
+  newsletter provider delivery path with send receipt, bounce/open telemetry,
+  unsubscribe handling, and source-dossier delivery evidence.
