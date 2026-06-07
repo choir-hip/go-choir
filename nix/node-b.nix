@@ -620,6 +620,8 @@ in
         "SANDBOX_ID=sandbox-m1"
         "SANDBOX_FILES_ROOT=${sandboxFilesDir}"
         "SOURCE_SERVICE_BASE_URL=http://127.0.0.1:8787"
+        "SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085"
+        "SOURCE_SERVICE_RUNTIME_OWNER_ID=global-wire-platform"
         "RUNTIME_SKILLS_ROOT=${goChoirPackages.sandbox}/share/go-choir/skills"
         "RUNTIME_WORKER_REPO_REMOTE=${sourceRepoRemote}"
         "RUNTIME_WORKER_REPO_BASE_SHA=${buildCommit}"

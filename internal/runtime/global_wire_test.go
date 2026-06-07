@@ -465,7 +465,7 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 					RequestID:    "processor_2",
 					ProcessorKey: "processor:conflict:global:telegram",
 					Status:       "queued",
-					RuntimeRunID:  "run_processor_missing_from_request_runtime",
+					RuntimeRunID: "run_processor_missing_from_request_runtime",
 					SourceCount:  38,
 				},
 			},
@@ -529,6 +529,121 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 	}
 	if resp.AuthorityRule == "" || !resp.SourceServiceInternalOnly {
 		t.Fatalf("missing provenance/internal boundary metadata: %+v", resp)
+	}
+}
+
+func TestHandleGlobalWireSourceMaxxStatusResolvesRemoteRuntimeEvidence(t *testing.T) {
+	_, handler := testAPISetup(t)
+	processorRunID := "run_processor_remote_source_maxx"
+	reconcilerRunID := "run_reconciler_remote_source_maxx"
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("missing internal caller header")
+		}
+		if r.URL.Query().Get("owner_id") != "global-wire-platform" {
+			t.Fatalf("owner_id = %q", r.URL.Query().Get("owner_id"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/internal/runtime/runs/" + processorRunID:
+			_ = json.NewEncoder(w).Encode(runStatusResponse{
+				RunID:        processorRunID,
+				AgentID:      "processor:remote",
+				AgentProfile: AgentProfileProcessor,
+				AgentRole:    AgentProfileProcessor,
+				OwnerID:      "global-wire-platform",
+				State:        types.RunCompleted,
+			})
+		case "/internal/runtime/runs/" + processorRunID + "/events":
+			_ = json.NewEncoder(w).Encode(eventListResponse{Events: []types.EventRecord{
+				{Kind: types.EventToolInvoked, Payload: json.RawMessage(`{"tool":"submit_coagent_update"}`)},
+				{Kind: types.EventToolResult, Payload: json.RawMessage(`{"tool":"spawn_agent","output":"{\"profile\":\"researcher\",\"loop_id\":\"child_researcher\"}"}`)},
+				{Kind: types.EventToolResult, Payload: json.RawMessage(`{"tool":"spawn_agent","output":"{\"profile\":\"vtext\",\"loop_id\":\"child_vtext\"}"}`)},
+			}})
+		case "/internal/runtime/runs/" + reconcilerRunID:
+			_ = json.NewEncoder(w).Encode(runStatusResponse{
+				RunID:        reconcilerRunID,
+				AgentID:      "reconciler:story-corpus",
+				AgentProfile: AgentProfileReconciler,
+				AgentRole:    AgentProfileReconciler,
+				OwnerID:      "global-wire-platform",
+				State:        types.RunRunning,
+			})
+		case "/internal/runtime/runs/" + reconcilerRunID + "/events":
+			_ = json.NewEncoder(w).Encode(eventListResponse{Events: []types.EventRecord{
+				{Kind: types.EventToolInvoked, Payload: json.RawMessage(`{"tool":"submit_coagent_update"}`)},
+				{Kind: types.EventToolResult, Payload: json.RawMessage(`{"tool":"spawn_agent","output":"{\"profile\":\"researcher\",\"loop_id\":\"child_researcher_2\"}"}`)},
+			}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer runtimeServer.Close()
+
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/source-service/sourcemaxx/latest" {
+			t.Fatalf("unexpected source service path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(sourceapi.SourceMaxxResponse{
+			Provider: sourceapi.ProviderName,
+			Cycle: sourceapi.CycleSummary{
+				CycleID:    "cycle_remote_runtime",
+				StartedAt:  "2026-06-07T15:35:44Z",
+				EndedAt:    "2026-06-07T15:35:45Z",
+				Status:     "completed",
+				ItemCount:  502,
+				FetchCount: 14,
+			},
+			ProcessorRequests: []sourceapi.ProcessorRequest{{
+				RequestID:    "processor_remote",
+				ProcessorKey: "processor:global_firehose:global:gdelt",
+				Status:       "submitted",
+				RuntimeRunID: processorRunID,
+			}},
+			ReconcilerRequests: []sourceapi.ReconcilerRequest{{
+				RequestID:    "reconciler_remote",
+				Scope:        "story-corpus",
+				Status:       "submitted",
+				RuntimeRunID: reconcilerRunID,
+			}},
+		})
+	}))
+	defer sourceServer.Close()
+
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+	t.Setenv("SOURCE_SERVICE_RUNTIME_BASE_URL", runtimeServer.URL)
+	t.Setenv("SOURCE_SERVICE_RUNTIME_OWNER_ID", "global-wire-platform")
+	t.Setenv("SOURCECYCLED_RUNTIME_BASE_URL", "")
+	t.Setenv("SOURCECYCLED_RUNTIME_OWNER_ID", "")
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/sourcemaxx-status", "", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("sourcemaxx status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp globalWireSourceMaxxStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode sourcemaxx status: %v", err)
+	}
+	if resp.ProcessorRuntimeRunCount != 1 || resp.ProcessorResolvedRunCount != 1 || resp.ProcessorUnresolvedRunCount != 0 {
+		t.Fatalf("processor runtime resolution = %+v", resp)
+	}
+	if resp.ReconcilerRuntimeRunCount != 1 || resp.ReconcilerResolvedRunCount != 1 || resp.ReconcilerUnresolvedRunCount != 0 {
+		t.Fatalf("reconciler runtime resolution = %+v", resp)
+	}
+	if resp.ProcessorRunStateCounts[string(types.RunCompleted)] != 1 || resp.ReconcilerRunStateCounts[string(types.RunRunning)] != 1 {
+		t.Fatalf("run state counts: processor=%+v reconciler=%+v", resp.ProcessorRunStateCounts, resp.ReconcilerRunStateCounts)
+	}
+	if resp.ProcessorUpdateCount != 1 || resp.ReconcilerUpdateCount != 1 {
+		t.Fatalf("update counts: processor=%d reconciler=%d", resp.ProcessorUpdateCount, resp.ReconcilerUpdateCount)
+	}
+	if resp.ProcessorChildProfileCounts[AgentProfileResearcher] != 1 || resp.ProcessorChildProfileCounts[AgentProfileVText] != 1 {
+		t.Fatalf("processor child counts = %+v", resp.ProcessorChildProfileCounts)
+	}
+	if resp.ReconcilerChildProfileCounts[AgentProfileResearcher] != 1 {
+		t.Fatalf("reconciler child counts = %+v", resp.ReconcilerChildProfileCounts)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -132,6 +133,20 @@ type globalWireSourceMaxxStatusResponse struct {
 	Topology                     string         `json:"topology,omitempty"`
 	AuthorityRule                string         `json:"authority_rule,omitempty"`
 	SourceServiceInternalOnly    bool           `json:"source_service_internal_only"`
+}
+
+type sourceMaxxRuntimeEvidenceClient struct {
+	baseURL string
+	ownerID string
+	client  *http.Client
+}
+
+type sourceMaxxResolvedRun struct {
+	RunID        string
+	AgentProfile string
+	State        types.RunState
+	LocalRecord  *types.RunRecord
+	Events       []types.EventRecord
 }
 
 type globalWireReconciliationResponse struct {
@@ -612,9 +627,10 @@ func (h *APIHandler) addSourceMaxxRuntimeEvidence(ctx context.Context, resp *sou
 	if h == nil || h.rt == nil || h.rt.Store() == nil || resp == nil || out == nil {
 		return
 	}
+	runtimeClient := sourceMaxxRuntimeEvidenceClientFromEnv()
 	childRunsByOwner := make(map[string][]types.RunRecord)
 	for _, req := range resp.ProcessorRequests {
-		rec, ok := h.sourceMaxxRuntimeRun(ctx, req.RuntimeRunID)
+		rec, ok := h.sourceMaxxRuntimeRun(ctx, runtimeClient, req.RuntimeRunID)
 		if !ok {
 			if strings.TrimSpace(req.RuntimeRunID) != "" {
 				out.ProcessorUnresolvedRunCount++
@@ -630,7 +646,7 @@ func (h *APIHandler) addSourceMaxxRuntimeEvidence(ctx context.Context, resp *sou
 		addSourceMaxxChildProfileCounts(ctx, h.rt, rec, childRunsByOwner, &out.ProcessorChildProfileCounts)
 	}
 	for _, req := range resp.ReconcilerRequests {
-		rec, ok := h.sourceMaxxRuntimeRun(ctx, req.RuntimeRunID)
+		rec, ok := h.sourceMaxxRuntimeRun(ctx, runtimeClient, req.RuntimeRunID)
 		if !ok {
 			if strings.TrimSpace(req.RuntimeRunID) != "" {
 				out.ReconcilerUnresolvedRunCount++
@@ -651,55 +667,215 @@ func (h *APIHandler) addSourceMaxxRuntimeEvidence(ctx context.Context, resp *sou
 	out.ReconcilerChildProfileCounts = emptyMapToNil(out.ReconcilerChildProfileCounts)
 }
 
-func (h *APIHandler) sourceMaxxRuntimeRun(ctx context.Context, runID string) (types.RunRecord, bool) {
+func sourceMaxxRuntimeEvidenceClientFromEnv() *sourceMaxxRuntimeEvidenceClient {
+	baseURL := strings.TrimRight(strings.TrimSpace(getenvFirst("SOURCE_SERVICE_RUNTIME_BASE_URL", "SOURCECYCLED_RUNTIME_BASE_URL")), "/")
+	if baseURL == "" {
+		return nil
+	}
+	ownerID := strings.TrimSpace(getenvFirst("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID"))
+	if ownerID == "" {
+		ownerID = "global-wire-platform"
+	}
+	return &sourceMaxxRuntimeEvidenceClient{
+		baseURL: baseURL,
+		ownerID: ownerID,
+		client:  &http.Client{Timeout: 5 * time.Second},
+	}
+}
+
+func (h *APIHandler) sourceMaxxRuntimeRun(ctx context.Context, remote *sourceMaxxRuntimeEvidenceClient, runID string) (sourceMaxxResolvedRun, bool) {
 	runID = strings.TrimSpace(runID)
 	if runID == "" {
-		return types.RunRecord{}, false
+		return sourceMaxxResolvedRun{}, false
+	}
+	if remote != nil {
+		if rec, ok := remote.getRun(ctx, runID); ok && isSourceMaxxRuntimeProfile(rec.AgentProfile) {
+			resolved := sourceMaxxResolvedRun{
+				RunID:        rec.RunID,
+				AgentProfile: rec.AgentProfile,
+				State:        rec.State,
+			}
+			resolved.Events, _ = remote.getRunEvents(ctx, runID)
+			return resolved, true
+		}
 	}
 	rec, err := h.rt.Store().GetRun(ctx, runID)
 	if err != nil {
-		return types.RunRecord{}, false
+		return sourceMaxxResolvedRun{}, false
 	}
-	if rec.AgentProfile != AgentProfileProcessor && rec.AgentProfile != AgentProfileReconciler {
-		return types.RunRecord{}, false
+	if !isSourceMaxxRuntimeProfile(rec.AgentProfile) {
+		return sourceMaxxResolvedRun{}, false
 	}
 	if metadataStringValue(rec.Metadata, "request_source") != "sourcecycled" {
-		return types.RunRecord{}, false
+		return sourceMaxxResolvedRun{}, false
 	}
-	return rec, true
+	return sourceMaxxResolvedRun{
+		RunID:        rec.RunID,
+		AgentProfile: rec.AgentProfile,
+		State:        rec.State,
+		LocalRecord:  &rec,
+	}, true
 }
 
-func (h *APIHandler) sourceMaxxWorkerUpdateCount(ctx context.Context, rec types.RunRecord) int {
-	trajectoryID := trajectoryIDForRun(&rec)
+func isSourceMaxxRuntimeProfile(profile string) bool {
+	return profile == AgentProfileProcessor || profile == AgentProfileReconciler
+}
+
+func (c *sourceMaxxRuntimeEvidenceClient) getRun(ctx context.Context, runID string) (runStatusResponse, bool) {
+	if c == nil || strings.TrimSpace(c.baseURL) == "" || strings.TrimSpace(c.ownerID) == "" {
+		return runStatusResponse{}, false
+	}
+	endpoint, err := url.JoinPath(c.baseURL, "/internal/runtime/runs", runID)
+	if err != nil {
+		return runStatusResponse{}, false
+	}
+	values := url.Values{}
+	values.Set("owner_id", c.ownerID)
+	endpoint += "?" + values.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return runStatusResponse{}, false
+	}
+	req.Header.Set("X-Internal-Caller", "true")
+	res, err := c.client.Do(req)
+	if err != nil {
+		return runStatusResponse{}, false
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return runStatusResponse{}, false
+	}
+	var out runStatusResponse
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return runStatusResponse{}, false
+	}
+	return out, true
+}
+
+func (c *sourceMaxxRuntimeEvidenceClient) getRunEvents(ctx context.Context, runID string) ([]types.EventRecord, bool) {
+	if c == nil || strings.TrimSpace(c.baseURL) == "" || strings.TrimSpace(c.ownerID) == "" {
+		return nil, false
+	}
+	endpoint, err := url.JoinPath(c.baseURL, "/internal/runtime/runs", runID, "events")
+	if err != nil {
+		return nil, false
+	}
+	values := url.Values{}
+	values.Set("owner_id", c.ownerID)
+	values.Set("limit", "1000")
+	endpoint += "?" + values.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, false
+	}
+	req.Header.Set("X-Internal-Caller", "true")
+	res, err := c.client.Do(req)
+	if err != nil {
+		return nil, false
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, false
+	}
+	var out eventListResponse
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return nil, false
+	}
+	return out.Events, true
+}
+
+func (h *APIHandler) sourceMaxxWorkerUpdateCount(ctx context.Context, rec sourceMaxxResolvedRun) int {
+	if len(rec.Events) > 0 {
+		return sourceMaxxToolInvocationCount(rec.Events, "submit_coagent_update")
+	}
+	if rec.LocalRecord == nil {
+		return 0
+	}
+	trajectoryID := trajectoryIDForRun(rec.LocalRecord)
 	if strings.TrimSpace(trajectoryID) == "" {
 		return 0
 	}
-	updates, err := h.rt.Store().ListWorkerUpdatesByTrajectory(ctx, rec.OwnerID, trajectoryID, 200)
+	updates, err := h.rt.Store().ListWorkerUpdatesByTrajectory(ctx, rec.LocalRecord.OwnerID, trajectoryID, 200)
 	if err != nil {
 		return 0
 	}
 	return len(updates)
 }
 
-func addSourceMaxxChildProfileCounts(ctx context.Context, rt *Runtime, rec types.RunRecord, byOwner map[string][]types.RunRecord, out *map[string]int) {
-	if rt == nil || rt.Store() == nil || strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.RunID) == "" {
+func addSourceMaxxChildProfileCounts(ctx context.Context, rt *Runtime, rec sourceMaxxResolvedRun, byOwner map[string][]types.RunRecord, out *map[string]int) {
+	if len(rec.Events) > 0 {
+		addSourceMaxxChildProfileCountsFromEvents(rec.Events, out)
 		return
 	}
-	runs, ok := byOwner[rec.OwnerID]
+	if rec.LocalRecord == nil || rt == nil || rt.Store() == nil || strings.TrimSpace(rec.LocalRecord.OwnerID) == "" || strings.TrimSpace(rec.RunID) == "" {
+		return
+	}
+	runs, ok := byOwner[rec.LocalRecord.OwnerID]
 	if !ok {
 		var err error
-		runs, err = rt.Store().ListRunsByOwner(ctx, rec.OwnerID, 1000)
+		runs, err = rt.Store().ListRunsByOwner(ctx, rec.LocalRecord.OwnerID, 1000)
 		if err != nil {
-			byOwner[rec.OwnerID] = nil
+			byOwner[rec.LocalRecord.OwnerID] = nil
 			return
 		}
-		byOwner[rec.OwnerID] = runs
+		byOwner[rec.LocalRecord.OwnerID] = runs
 	}
 	for _, child := range runs {
 		if strings.TrimSpace(child.ParentRunID) != rec.RunID {
 			continue
 		}
 		profile := strings.TrimSpace(child.AgentProfile)
+		if profile == "" {
+			profile = "unknown"
+		}
+		if *out == nil {
+			*out = make(map[string]int)
+		}
+		(*out)[profile]++
+	}
+}
+
+func sourceMaxxToolInvocationCount(events []types.EventRecord, toolName string) int {
+	count := 0
+	for _, ev := range events {
+		if ev.Kind != types.EventToolInvoked {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			continue
+		}
+		if strings.TrimSpace(stringValue(payload["tool"])) == toolName {
+			count++
+		}
+	}
+	return count
+}
+
+func addSourceMaxxChildProfileCountsFromEvents(events []types.EventRecord, out *map[string]int) {
+	for _, ev := range events {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			continue
+		}
+		if strings.TrimSpace(stringValue(payload["tool"])) != "spawn_agent" {
+			continue
+		}
+		output := strings.TrimSpace(stringValue(payload["output"]))
+		if output == "" {
+			continue
+		}
+		var result map[string]any
+		if err := json.Unmarshal([]byte(output), &result); err != nil {
+			continue
+		}
+		profile := strings.TrimSpace(stringValue(result["profile"]))
+		if profile == "" {
+			profile = strings.TrimSpace(stringValue(result["role"]))
+		}
 		if profile == "" {
 			profile = "unknown"
 		}
