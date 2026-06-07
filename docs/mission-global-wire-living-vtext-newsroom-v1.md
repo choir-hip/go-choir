@@ -2,13 +2,13 @@
 
 **Status:** active MissionGradient draft after visual/product correction.  
 **Spec:** `docs/choir-global-wire-living-vtext-newsroom-spec-2026-06-07.md`  
-**Supersedes:** the SourceMaxx-named mission and the first broad-source draft.  
+**Supersedes:** the earlier source-volume-named mission and the first broad-source draft.
 **Created:** 2026-06-07
 
 ## Goal String
 
 ```text
-/goal Run docs/mission-global-wire-living-vtext-newsroom-v1.md. Ship Global Wire as a living VText newsroom: broad multilingual sources, processors/reconcilers, researcher reuse, VText-owned real articles with source/related-VText transclusion, living updates, clean newspaper UI, staging proof.
+/goal Run docs/mission-global-wire-living-vtext-newsroom-v1.md and ship the living VText newsroom on staging.
 ```
 
 ## Mission Identity
@@ -59,9 +59,10 @@ Selected transforms:
 4. **Publication-quality transform:** an outline, source manifest, metadata
    dump, or claim list is not progress unless it is clearly an internal brief.
    The article must read as an article.
-5. **Source-breadth transform:** hundreds of items from a tiny registry is not
-   enough. Source diversity by language, region, source type, beat, outlet
-   class, and long-tail social perspective is the first realism axis.
+5. **Source-breadth transform:** hundreds of items from a narrow registry is
+   not enough. Source diversity by language, region, medium, beat, sector,
+   community, and long-tail social perspective is the first realism axis.
+   Source categories are observability metadata, not hardcoded authority.
 6. **Collection-surface transform:** Global Wire is the newspaper surface. The
    VText app is the article reader/editor/source traversal surface.
 
@@ -88,20 +89,23 @@ languages.
 Acceptance direction:
 
 - maintain GDELT/global-event ingestion;
-- add many RSS/Atom feeds across languages, regions, beats, and outlet/source
-  classes;
+- add many RSS/Atom feeds across languages, regions, beats, communities, and
+  sectors;
 - add many Telegram/public-channel sources where policy-compliant, with an
   explicit bias toward long-tail local, regional, conflict, community,
   technology, finance, and social-sentiment channels;
 - include official, local, regional, specialist, financial/economic,
   conflict/crisis, science/health, climate, culture, technology, industry,
-  hacker/community, and long-tail social sources;
+  hacker/community, open-source, labor, policy, academic, trade, market,
+  shipping/logistics, energy, agriculture, and long-tail social sources;
+- include Hacker News and comparable technical community surfaces, plus
+  non-English technology, science, finance, industrial, and regional media;
 - add many Telegram/public-preview channels for local perspective, social
   sentiment, weak signals, rumor surfaces, and sources ignored by established
   outlets; articles must corroborate these rather than treating them as
-  standalone authority;
-- expose source registry counts by type, language, region, beat, and outlet
-  class;
+  standalone publication support;
+- expose source registry counts by medium, language, region, beat, community,
+  and sector;
 - expose latest-cycle active source count, failed source count, per-source item
   counts, latency, freshness, and errors;
 - keep hundreds of SourceItems per 15 minutes as a low floor, not the finish
@@ -109,6 +113,9 @@ Acceptance direction:
 - do not hardcode source trust tiers or static source standing in the registry;
   track record should be learned over time from outcomes, corroboration,
   corrections, freshness, error history, and researcher/model judgment.
+- use prompting and model context to reason about already-known source
+  reputations when useful, but keep that reasoning soft, inspectable, and
+  revisable rather than encoding permanent tiers in config.
 
 ## Priority 2: VText-Owned Article Lifecycle
 
@@ -189,8 +196,9 @@ Required proof:
 - source registry summarized by type, language, region, beat, and outlet class;
 - latest source cycle proves active source count, per-source item counts,
   failures, latency, freshness, and item volume;
-- GDELT/global event, RSS/Atom, Telegram/public-channel, official, and
-  specialist source classes are actually running;
+- GDELT/global event, RSS/Atom, Telegram/public-channel, Hacker News or
+  comparable technical community, official/public, specialist, industry,
+  finance, science, and regional source categories are actually running;
 - processors receive source batches and preserve source handles;
 - researchers are requested and return source-backed packets;
 - VText agents create/revise article VTexts as owners, not helper tools;
@@ -211,7 +219,7 @@ Required proof:
 - Do not treat 14 sources as adequate.
 - Do not count one high-volume source as source diversity.
 - Do not encode permanent trust tiers or source standing in config.
-- Do not let long-tail social feeds become article authority without
+- Do not let long-tail social feeds become article support without
   corroboration, research, or explicit uncertainty.
 - Do not call outlines, manifests, or claim lists articles.
 - Do not display metadata in article prose.
@@ -240,7 +248,11 @@ Source-health commit `a4370fd4` added cycle-linked fetch records,
 current artifact state: staging source service now runs the expanded registry:
 1 GDELT, 110 RSS/Atom, and 59 Telegram public-preview sources across 15
 language tags, with tech, science, industry, finance, regional, conflict, and
-long-tail social/sentiment sources. The source-health deployed cycle
+long-tail social/sentiment sources. This is materially better than the initial
+tiny registry but still short of the intended breadth: it needs more
+non-English tech/science/finance/industry coverage, Hacker News or comparable
+technical community sources, and more long-tail Telegram/social inputs. The
+source-health deployed cycle
 `cycle_387ee9430ee4e637d7d124a8` at `2026-06-07T19:46:26Z` loaded 170
 configured sources, completed in about 5 seconds, produced 3,893 deduped
 SourceItems, reported 156 successful fetches, 14 failed fetches, 142
@@ -284,10 +296,11 @@ work remains: normalize article lifecycle through VText agents; replace
 source/related lists with transclusions; remove metadata/edit sludge from
 article documents; fix typography and mobile banner overlap.
 
-highest-impact remaining uncertainty: how to turn the source-health stream into
-learned source track-record state without hardcoded editorial tiers, while
-keeping long-tail Telegram/social inputs valuable as sentiment and lead
-discovery rather than article authority.
+highest-impact remaining uncertainty: how to turn source-health, corrections,
+corroboration, freshness, and researcher/model judgment into learned source
+track-record state without hardcoded editorial tiers, while keeping long-tail
+Telegram/social inputs valuable as sentiment and lead discovery rather than
+standalone publication support.
 
 next executable probe: add learned source track-record aggregation and/or clean
 owner-facing source-health copy, then return to VText-owned article generation:

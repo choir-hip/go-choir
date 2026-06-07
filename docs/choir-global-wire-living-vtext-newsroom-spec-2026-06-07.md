@@ -1,7 +1,7 @@
 # Choir Global Wire Living VText Newsroom Spec - 2026-06-07
 
 **Status:** active architecture spec draft after visual/product review.  
-**Supersedes:** the SourceMaxx-named mission/spec and the earlier broad-source
+**Supersedes:** the earlier source-volume-named mission/spec and the earlier broad-source
 draft. Those files remain context; this is the intended object.
 
 ## Thesis
@@ -15,7 +15,10 @@ the VText agent workflow.
 
 The product exists to turn broad, multilingual, high-volume source flow into
 publication-quality living articles whose evidence and related context are
-native VText/source transclusions.
+native VText/source transclusions. It should pull from established outlets,
+wire/event feeds, public institutions, specialist publications, community
+surfaces, and long-tail social channels; source breadth is a reality sensor,
+not a hardcoded authority model.
 
 ## The Correct Object
 
@@ -132,29 +135,38 @@ global firehose plus a few feeds proves the ingestion substrate exists; it does
 not prove a serious newsroom.
 
 The first execution axis is broad, multilingual, policy-compliant source
-coverage.
+coverage. The registry should include categories for observability and routing,
+but those categories must not encode permanent trust tiers.
 
 Required direction:
 
 - keep GDELT or equivalent global event feed ingestion;
-- expand RSS/Atom by region, language, beat, and outlet type;
+- expand RSS/Atom by region, language, beat, sector, community, and medium;
 - expand Telegram/public-channel ingestion where allowed and policy-compliant,
   including long-tail local, regional, conflict, community, tech, finance, and
   social-sentiment channels that established outlets may ignore;
 - include official/public institutional sources, local outlets, specialist
   sources, regional sources, financial/economic sources, crisis/conflict
   sources, science/health sources, industry sources, hacker/community sources,
-  and culture/technology sources;
+  open-source/community sources, policy sources, labor sources, academic
+  sources, trade publications, market sources, logistics/shipping sources,
+  energy sources, agriculture sources, and culture/technology sources;
+- include Hacker News and comparable technical community surfaces;
+- include non-English technology, science, finance, industrial, regional, and
+  specialist media, not only English general news;
 - track active source count, successful source count, failed source count,
   per-source item count, provider latency, freshness, language, region, and
-  outlet/source class;
+  descriptive source category;
 - treat hundreds of SourceItems per 15 minutes as a floor, not the finish line;
 - research source discovery before implementing a large registry expansion.
 - do not hardcode source trust tiers or static source standing in the registry;
   source reliability is learned and reasoned from track record, corroboration,
   correction history, freshness, source behavior, researcher packets, and model
   context. Long-tail social sources are valuable evidence and sentiment, not
-  automatic article authority.
+  automatic article support.
+- use prompting to softly remind models of generally known source reputations
+  when useful, but keep that reasoning visible, revisable, and subordinate to
+  evidence, corroboration, and versioned corrections.
 
 ## Agent Roles
 
@@ -162,7 +174,8 @@ Required direction:
 
 Processors are long-running shared-harness agents that ingest routed
 SourceItems and maintain evolving understanding. They may span topics,
-regions, languages, source classes, events, or load-balanced slices.
+regions, languages, descriptive source categories, events, communities,
+sectors, or load-balanced slices.
 
 They preserve source handles and full-content paths. They should keep hot
 context where possible and compact only as continuity state, preserving source
@@ -251,8 +264,10 @@ Do not claim delivery until staging proof shows:
   sources;
 - latest cycle source count, active source count, failed source count,
   language/region coverage, and per-source item counts;
-- GDELT/global events, RSS/Atom, Telegram/public-channel class sources, and
-  official/specialist sources actually running;
+- GDELT/global events, RSS/Atom, Telegram/public-channel sources, Hacker News
+  or comparable technical community sources, official/public sources,
+  specialist sources, industry sources, finance sources, science sources, and
+  regional/non-English sources actually running;
 - processors and reconcilers as shared-harness profiles;
 - researcher requests/results reused by processors, reconcilers, or VText
   agents;
@@ -275,7 +290,7 @@ Do not claim delivery until staging proof shows:
 - Do not rename source volume into a product layer.
 - Do not count one high-volume feed as source diversity.
 - Do not encode permanent source trust tiers or static standing in config.
-- Do not turn long-tail Telegram/social sentiment into article authority
+- Do not turn long-tail Telegram/social sentiment into article support
   without corroboration, uncertainty, or research.
 - Do not call outlines or manifests articles.
 - Do not make metadata visible in article prose.
