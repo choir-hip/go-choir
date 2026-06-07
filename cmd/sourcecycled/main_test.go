@@ -265,10 +265,12 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 		t.Fatalf("list processors: %v", err)
 	}
 	var submitted, queued int
+	var submittedRunID string
 	for _, req := range processors {
 		switch req.Status {
 		case "submitted":
 			submitted++
+			submittedRunID = req.RuntimeRunID
 		case "queued":
 			queued++
 		}
@@ -276,11 +278,14 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 	if submitted != 1 || queued != len(handoff.ProcessorRequests)-1 {
 		t.Fatalf("processor statuses submitted=%d queued=%d processors=%+v", submitted, queued, processors)
 	}
+	if submittedRunID == "" {
+		t.Fatalf("submitted processor missing runtime run id: %+v", processors)
+	}
 	reconcilers, err := store.ListReconcilerRequests(ctx, cycleID, 10)
 	if err != nil {
 		t.Fatalf("list reconcilers: %v", err)
 	}
-	if len(reconcilers) != 1 || reconcilers[0].Status != "submitted" {
+	if len(reconcilers) != 1 || reconcilers[0].Status != "submitted" || reconcilers[0].RuntimeRunID == "" {
 		t.Fatalf("reconciler status = %+v", reconcilers)
 	}
 }

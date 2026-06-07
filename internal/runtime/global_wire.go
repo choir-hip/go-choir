@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -101,24 +102,32 @@ type globalWireFetchCycleResponse struct {
 }
 
 type globalWireSourceMaxxStatusResponse struct {
-	Status                    string         `json:"status"`
-	Source                    string         `json:"source"`
-	Message                   string         `json:"message,omitempty"`
-	CycleID                   string         `json:"cycle_id,omitempty"`
-	CycleStatus               string         `json:"cycle_status,omitempty"`
-	StartedAt                 string         `json:"started_at,omitempty"`
-	EndedAt                   string         `json:"ended_at,omitempty"`
-	ItemCount                 int            `json:"item_count,omitempty"`
-	FetchCount                int            `json:"fetch_count,omitempty"`
-	ProcessorRequestCount     int            `json:"processor_request_count,omitempty"`
-	ReconcilerRequestCount    int            `json:"reconciler_request_count,omitempty"`
-	ProcessorStatusCounts     map[string]int `json:"processor_status_counts,omitempty"`
-	ReconcilerStatusCounts    map[string]int `json:"reconciler_status_counts,omitempty"`
-	ProcessorKeys             []string       `json:"processor_keys,omitempty"`
-	ReconcilerScopes          []string       `json:"reconciler_scopes,omitempty"`
-	Topology                  string         `json:"topology,omitempty"`
-	AuthorityRule             string         `json:"authority_rule,omitempty"`
-	SourceServiceInternalOnly bool           `json:"source_service_internal_only"`
+	Status                       string         `json:"status"`
+	Source                       string         `json:"source"`
+	Message                      string         `json:"message,omitempty"`
+	CycleID                      string         `json:"cycle_id,omitempty"`
+	CycleStatus                  string         `json:"cycle_status,omitempty"`
+	StartedAt                    string         `json:"started_at,omitempty"`
+	EndedAt                      string         `json:"ended_at,omitempty"`
+	ItemCount                    int            `json:"item_count,omitempty"`
+	FetchCount                   int            `json:"fetch_count,omitempty"`
+	ProcessorRequestCount        int            `json:"processor_request_count,omitempty"`
+	ReconcilerRequestCount       int            `json:"reconciler_request_count,omitempty"`
+	ProcessorStatusCounts        map[string]int `json:"processor_status_counts,omitempty"`
+	ReconcilerStatusCounts       map[string]int `json:"reconciler_status_counts,omitempty"`
+	ProcessorRuntimeRunCount     int            `json:"processor_runtime_run_count,omitempty"`
+	ReconcilerRuntimeRunCount    int            `json:"reconciler_runtime_run_count,omitempty"`
+	ProcessorRunStateCounts      map[string]int `json:"processor_run_state_counts,omitempty"`
+	ReconcilerRunStateCounts     map[string]int `json:"reconciler_run_state_counts,omitempty"`
+	ProcessorUpdateCount         int            `json:"processor_update_count,omitempty"`
+	ReconcilerUpdateCount        int            `json:"reconciler_update_count,omitempty"`
+	ProcessorChildProfileCounts  map[string]int `json:"processor_child_profile_counts,omitempty"`
+	ReconcilerChildProfileCounts map[string]int `json:"reconciler_child_profile_counts,omitempty"`
+	ProcessorKeys                []string       `json:"processor_keys,omitempty"`
+	ReconcilerScopes             []string       `json:"reconciler_scopes,omitempty"`
+	Topology                     string         `json:"topology,omitempty"`
+	AuthorityRule                string         `json:"authority_rule,omitempty"`
+	SourceServiceInternalOnly    bool           `json:"source_service_internal_only"`
 }
 
 type globalWireReconciliationResponse struct {
@@ -515,7 +524,9 @@ func (h *APIHandler) HandleGlobalWireSourceMaxxStatus(w http.ResponseWriter, r *
 		})
 		return
 	}
-	writeAPIJSON(w, http.StatusOK, globalWireSourceMaxxStatusFromAPI(resp))
+	status := globalWireSourceMaxxStatusFromAPI(resp)
+	h.addSourceMaxxRuntimeEvidence(r.Context(), resp, &status)
+	writeAPIJSON(w, http.StatusOK, status)
 }
 
 func globalWireSourceMaxxStatusFromAPI(resp *sourceapi.SourceMaxxResponse) globalWireSourceMaxxStatusResponse {
@@ -581,6 +592,110 @@ func emptyMapToNil(m map[string]int) map[string]int {
 		return nil
 	}
 	return m
+}
+
+func (h *APIHandler) addSourceMaxxRuntimeEvidence(ctx context.Context, resp *sourceapi.SourceMaxxResponse, out *globalWireSourceMaxxStatusResponse) {
+	if h == nil || h.rt == nil || h.rt.Store() == nil || resp == nil || out == nil {
+		return
+	}
+	childRunsByOwner := make(map[string][]types.RunRecord)
+	for _, req := range resp.ProcessorRequests {
+		rec, ok := h.sourceMaxxRuntimeRun(ctx, req.RuntimeRunID)
+		if !ok {
+			continue
+		}
+		out.ProcessorRuntimeRunCount++
+		if out.ProcessorRunStateCounts == nil {
+			out.ProcessorRunStateCounts = make(map[string]int)
+		}
+		out.ProcessorRunStateCounts[normalizedRunState(rec.State)]++
+		out.ProcessorUpdateCount += h.sourceMaxxWorkerUpdateCount(ctx, rec)
+		addSourceMaxxChildProfileCounts(ctx, h.rt, rec, childRunsByOwner, &out.ProcessorChildProfileCounts)
+	}
+	for _, req := range resp.ReconcilerRequests {
+		rec, ok := h.sourceMaxxRuntimeRun(ctx, req.RuntimeRunID)
+		if !ok {
+			continue
+		}
+		out.ReconcilerRuntimeRunCount++
+		if out.ReconcilerRunStateCounts == nil {
+			out.ReconcilerRunStateCounts = make(map[string]int)
+		}
+		out.ReconcilerRunStateCounts[normalizedRunState(rec.State)]++
+		out.ReconcilerUpdateCount += h.sourceMaxxWorkerUpdateCount(ctx, rec)
+		addSourceMaxxChildProfileCounts(ctx, h.rt, rec, childRunsByOwner, &out.ReconcilerChildProfileCounts)
+	}
+	out.ProcessorRunStateCounts = emptyMapToNil(out.ProcessorRunStateCounts)
+	out.ReconcilerRunStateCounts = emptyMapToNil(out.ReconcilerRunStateCounts)
+	out.ProcessorChildProfileCounts = emptyMapToNil(out.ProcessorChildProfileCounts)
+	out.ReconcilerChildProfileCounts = emptyMapToNil(out.ReconcilerChildProfileCounts)
+}
+
+func (h *APIHandler) sourceMaxxRuntimeRun(ctx context.Context, runID string) (types.RunRecord, bool) {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return types.RunRecord{}, false
+	}
+	rec, err := h.rt.Store().GetRun(ctx, runID)
+	if err != nil {
+		return types.RunRecord{}, false
+	}
+	if rec.AgentProfile != AgentProfileProcessor && rec.AgentProfile != AgentProfileReconciler {
+		return types.RunRecord{}, false
+	}
+	if metadataStringValue(rec.Metadata, "request_source") != "sourcecycled" {
+		return types.RunRecord{}, false
+	}
+	return rec, true
+}
+
+func (h *APIHandler) sourceMaxxWorkerUpdateCount(ctx context.Context, rec types.RunRecord) int {
+	trajectoryID := trajectoryIDForRun(&rec)
+	if strings.TrimSpace(trajectoryID) == "" {
+		return 0
+	}
+	updates, err := h.rt.Store().ListWorkerUpdatesByTrajectory(ctx, rec.OwnerID, trajectoryID, 200)
+	if err != nil {
+		return 0
+	}
+	return len(updates)
+}
+
+func addSourceMaxxChildProfileCounts(ctx context.Context, rt *Runtime, rec types.RunRecord, byOwner map[string][]types.RunRecord, out *map[string]int) {
+	if rt == nil || rt.Store() == nil || strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.RunID) == "" {
+		return
+	}
+	runs, ok := byOwner[rec.OwnerID]
+	if !ok {
+		var err error
+		runs, err = rt.Store().ListRunsByOwner(ctx, rec.OwnerID, 1000)
+		if err != nil {
+			byOwner[rec.OwnerID] = nil
+			return
+		}
+		byOwner[rec.OwnerID] = runs
+	}
+	for _, child := range runs {
+		if strings.TrimSpace(child.ParentRunID) != rec.RunID {
+			continue
+		}
+		profile := strings.TrimSpace(child.AgentProfile)
+		if profile == "" {
+			profile = "unknown"
+		}
+		if *out == nil {
+			*out = make(map[string]int)
+		}
+		(*out)[profile]++
+	}
+}
+
+func normalizedRunState(state types.RunState) string {
+	raw := strings.TrimSpace(string(state))
+	if raw == "" {
+		return "unknown"
+	}
+	return raw
 }
 
 // HandleGlobalWireSourceSearch imports configured Source Service evidence into

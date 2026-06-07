@@ -37,6 +37,7 @@ type ProcessorRequest struct {
 	CycleID       string   `json:"cycle_id"`
 	ProcessorKey  string   `json:"processor_key"`
 	Status        string   `json:"status"`
+	RuntimeRunID  string   `json:"runtime_run_id,omitempty"`
 	SourceItemIDs []string `json:"source_item_ids"`
 	SourceCount   int      `json:"source_count"`
 	SourceTypes   []string `json:"source_types,omitempty"`
@@ -52,6 +53,7 @@ type ReconcilerRequest struct {
 	RequestID           string   `json:"request_id"`
 	CycleID             string   `json:"cycle_id"`
 	Status              string   `json:"status"`
+	RuntimeRunID        string   `json:"runtime_run_id,omitempty"`
 	Scope               string   `json:"scope"`
 	SourceItemIDs       []string `json:"source_item_ids"`
 	ProcessorRequestIDs []string `json:"processor_request_ids"`

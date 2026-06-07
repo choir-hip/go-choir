@@ -145,6 +145,7 @@ func createTables(db *sql.DB) error {
 			cycle_id         TEXT NOT NULL,
 			processor_key    TEXT NOT NULL,
 			status           TEXT NOT NULL,
+			runtime_run_id   TEXT NOT NULL DEFAULT '',
 			source_item_ids   TEXT NOT NULL DEFAULT '[]',
 			source_count      INTEGER NOT NULL DEFAULT 0,
 			source_types_json TEXT NOT NULL DEFAULT '[]',
@@ -160,6 +161,7 @@ func createTables(db *sql.DB) error {
 			request_id                 TEXT PRIMARY KEY,
 			cycle_id                   TEXT NOT NULL,
 			status                     TEXT NOT NULL,
+			runtime_run_id             TEXT NOT NULL DEFAULT '',
 			scope                      TEXT NOT NULL,
 			source_item_ids            TEXT NOT NULL DEFAULT '[]',
 			processor_request_ids      TEXT NOT NULL DEFAULT '[]',
@@ -209,6 +211,8 @@ func migrateTables(db *sql.DB) error {
 		`ALTER TABLE items ADD COLUMN release_date TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE items ADD COLUMN created_at TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE issues ADD COLUMN citation_map_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE processor_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE reconciler_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, stmt := range alterStatements {
 		if _, err := db.Exec(stmt); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
@@ -223,6 +227,7 @@ type ProcessorRequest struct {
 	CycleID       string
 	ProcessorKey  string
 	Status        string
+	RuntimeRunID  string
 	SourceItemIDs []string
 	SourceCount   int
 	SourceTypes   []string
@@ -238,6 +243,7 @@ type ReconcilerRequest struct {
 	RequestID           string
 	CycleID             string
 	Status              string
+	RuntimeRunID        string
 	Scope               string
 	SourceItemIDs       []string
 	ProcessorRequestIDs []string
@@ -439,9 +445,9 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 	}
 	defer tx.Rollback()
 	stmt, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO processor_requests (
-		request_id, cycle_id, processor_key, status, source_item_ids, source_count,
+		request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids, source_count,
 		source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -467,7 +473,7 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 		if sourceCount == 0 {
 			sourceCount = len(req.SourceItemIDs)
 		}
-		if _, err := stmt.ExecContext(ctx, req.RequestID, req.CycleID, req.ProcessorKey, status,
+		if _, err := stmt.ExecContext(ctx, req.RequestID, req.CycleID, req.ProcessorKey, status, strings.TrimSpace(req.RuntimeRunID),
 			mustJSON(req.SourceItemIDs), sourceCount, mustJSON(req.SourceTypes), mustJSON(req.Verticals),
 			mustJSON(req.Regions), req.ContinuityRef, req.Prompt, formatTime(createdAt), formatTime(updatedAt)); err != nil {
 			return err
@@ -477,11 +483,23 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 }
 
 func (s *Storage) UpdateProcessorRequestStatus(ctx context.Context, requestID, status string) error {
+	return s.UpdateProcessorRequestRuntimeRun(ctx, requestID, status, "")
+}
+
+func (s *Storage) UpdateProcessorRequestRuntimeRun(ctx context.Context, requestID, status, runtimeRunID string) error {
 	if strings.TrimSpace(requestID) == "" || strings.TrimSpace(status) == "" {
 		return fmt.Errorf("processor request id and status are required")
 	}
-	_, err := s.DB.ExecContext(ctx, `UPDATE processor_requests SET status = ?, updated_at = ? WHERE request_id = ?`,
-		strings.TrimSpace(status), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
+	if strings.TrimSpace(runtimeRunID) == "" {
+		_, err := s.DB.ExecContext(ctx, `UPDATE processor_requests SET status = ?, updated_at = ? WHERE request_id = ?`,
+			strings.TrimSpace(status), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
+		if err != nil {
+			return fmt.Errorf("update processor request status: %w", err)
+		}
+		return nil
+	}
+	_, err := s.DB.ExecContext(ctx, `UPDATE processor_requests SET status = ?, runtime_run_id = ?, updated_at = ? WHERE request_id = ?`,
+		strings.TrimSpace(status), strings.TrimSpace(runtimeRunID), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
 	if err != nil {
 		return fmt.Errorf("update processor request status: %w", err)
 	}
@@ -495,8 +513,8 @@ func (s *Storage) SaveReconcilerRequests(ctx context.Context, requests []Reconci
 	}
 	defer tx.Rollback()
 	stmt, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO reconciler_requests (
-		request_id, cycle_id, status, scope, source_item_ids, processor_request_ids, prompt, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		request_id, cycle_id, status, runtime_run_id, scope, source_item_ids, processor_request_ids, prompt, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -518,7 +536,7 @@ func (s *Storage) SaveReconcilerRequests(ctx context.Context, requests []Reconci
 		if updatedAt.IsZero() {
 			updatedAt = now
 		}
-		if _, err := stmt.ExecContext(ctx, req.RequestID, req.CycleID, status, req.Scope,
+		if _, err := stmt.ExecContext(ctx, req.RequestID, req.CycleID, status, strings.TrimSpace(req.RuntimeRunID), req.Scope,
 			mustJSON(req.SourceItemIDs), mustJSON(req.ProcessorRequestIDs), req.Prompt,
 			formatTime(createdAt), formatTime(updatedAt)); err != nil {
 			return err
@@ -528,11 +546,23 @@ func (s *Storage) SaveReconcilerRequests(ctx context.Context, requests []Reconci
 }
 
 func (s *Storage) UpdateReconcilerRequestStatus(ctx context.Context, requestID, status string) error {
+	return s.UpdateReconcilerRequestRuntimeRun(ctx, requestID, status, "")
+}
+
+func (s *Storage) UpdateReconcilerRequestRuntimeRun(ctx context.Context, requestID, status, runtimeRunID string) error {
 	if strings.TrimSpace(requestID) == "" || strings.TrimSpace(status) == "" {
 		return fmt.Errorf("reconciler request id and status are required")
 	}
-	_, err := s.DB.ExecContext(ctx, `UPDATE reconciler_requests SET status = ?, updated_at = ? WHERE request_id = ?`,
-		strings.TrimSpace(status), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
+	if strings.TrimSpace(runtimeRunID) == "" {
+		_, err := s.DB.ExecContext(ctx, `UPDATE reconciler_requests SET status = ?, updated_at = ? WHERE request_id = ?`,
+			strings.TrimSpace(status), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
+		if err != nil {
+			return fmt.Errorf("update reconciler request status: %w", err)
+		}
+		return nil
+	}
+	_, err := s.DB.ExecContext(ctx, `UPDATE reconciler_requests SET status = ?, runtime_run_id = ?, updated_at = ? WHERE request_id = ?`,
+		strings.TrimSpace(status), strings.TrimSpace(runtimeRunID), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
 	if err != nil {
 		return fmt.Errorf("update reconciler request status: %w", err)
 	}
@@ -550,7 +580,7 @@ func (s *Storage) ListProcessorRequests(ctx context.Context, cycleID string, lim
 		args = append(args, strings.TrimSpace(cycleID))
 	}
 	args = append(args, limit)
-	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, processor_key, status, source_item_ids,
+	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids,
 		source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
 		FROM processor_requests`+where+` ORDER BY created_at DESC LIMIT ?`, args...)
 	if err != nil {
@@ -579,7 +609,7 @@ func (s *Storage) ListReconcilerRequests(ctx context.Context, cycleID string, li
 		args = append(args, strings.TrimSpace(cycleID))
 	}
 	args = append(args, limit)
-	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, status, scope, source_item_ids,
+	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, status, runtime_run_id, scope, source_item_ids,
 		processor_request_ids, prompt, created_at, updated_at
 		FROM reconciler_requests`+where+` ORDER BY created_at DESC LIMIT ?`, args...)
 	if err != nil {
@@ -748,7 +778,7 @@ func (s *Storage) GetItem(ctx context.Context, itemID string) (sources.Item, err
 func scanProcessorRequest(rows interface{ Scan(...any) error }) (ProcessorRequest, error) {
 	var req ProcessorRequest
 	var itemIDs, sourceTypes, verticals, regions, createdAt, updatedAt string
-	if err := rows.Scan(&req.RequestID, &req.CycleID, &req.ProcessorKey, &req.Status, &itemIDs,
+	if err := rows.Scan(&req.RequestID, &req.CycleID, &req.ProcessorKey, &req.Status, &req.RuntimeRunID, &itemIDs,
 		&req.SourceCount, &sourceTypes, &verticals, &regions, &req.ContinuityRef, &req.Prompt,
 		&createdAt, &updatedAt); err != nil {
 		return ProcessorRequest{}, err
@@ -765,7 +795,7 @@ func scanProcessorRequest(rows interface{ Scan(...any) error }) (ProcessorReques
 func scanReconcilerRequest(rows interface{ Scan(...any) error }) (ReconcilerRequest, error) {
 	var req ReconcilerRequest
 	var itemIDs, processorRequestIDs, createdAt, updatedAt string
-	if err := rows.Scan(&req.RequestID, &req.CycleID, &req.Status, &req.Scope, &itemIDs,
+	if err := rows.Scan(&req.RequestID, &req.CycleID, &req.Status, &req.RuntimeRunID, &req.Scope, &itemIDs,
 		&processorRequestIDs, &req.Prompt, &createdAt, &updatedAt); err != nil {
 		return ReconcilerRequest{}, err
 	}

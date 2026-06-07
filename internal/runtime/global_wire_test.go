@@ -326,6 +326,118 @@ func TestHandleGlobalWireSourceSearchReportsUnconfiguredSourceService(t *testing
 }
 
 func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	processorRun := types.RunRecord{
+		RunID:        "run_processor_source_maxx",
+		AgentID:      "processor:processor-global_firehose-global-gdelt",
+		ChannelID:    "channel_source_maxx",
+		AgentProfile: AgentProfileProcessor,
+		AgentRole:    AgentProfileProcessor,
+		OwnerID:      "global-wire-platform",
+		SandboxID:    "sandbox-test",
+		State:        types.RunPending,
+		Prompt:       "Process SourceMaxx GDELT sources.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileProcessor,
+			runMetadataAgentRole:    AgentProfileProcessor,
+			runMetadataTrajectoryID: "trajectory-source-maxx",
+			runMetadataProcessorKey: "processor:global_firehose:global:gdelt",
+			"request_source":        "sourcecycled",
+		},
+	}
+	if err := rt.Store().CreateRun(ctx, processorRun); err != nil {
+		t.Fatalf("CreateRun processor: %v", err)
+	}
+	reconcilerRun := types.RunRecord{
+		RunID:        "run_reconciler_source_maxx",
+		AgentID:      "reconciler:story-corpus",
+		ChannelID:    "channel_source_maxx",
+		AgentProfile: AgentProfileReconciler,
+		AgentRole:    AgentProfileReconciler,
+		OwnerID:      "global-wire-platform",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Reconcile story corpus.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile:    AgentProfileReconciler,
+			runMetadataAgentRole:       AgentProfileReconciler,
+			runMetadataTrajectoryID:    "trajectory-source-maxx",
+			runMetadataReconcilerScope: "story-corpus",
+			"request_source":           "sourcecycled",
+		},
+	}
+	if err := rt.Store().CreateRun(ctx, reconcilerRun); err != nil {
+		t.Fatalf("CreateRun reconciler: %v", err)
+	}
+	childRun := types.RunRecord{
+		RunID:        "run_processor_researcher_child",
+		AgentID:      "researcher:source-maxx-child",
+		ChannelID:    "channel_source_maxx",
+		ParentRunID:  processorRun.RunID,
+		AgentProfile: AgentProfileResearcher,
+		AgentRole:    AgentProfileResearcher,
+		OwnerID:      "global-wire-platform",
+		SandboxID:    "sandbox-test",
+		State:        types.RunCompleted,
+		Prompt:       "Research one source cluster.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		FinishedAt:   &now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileResearcher,
+			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataTrajectoryID: "trajectory-source-maxx",
+		},
+	}
+	if err := rt.Store().CreateRun(ctx, childRun); err != nil {
+		t.Fatalf("CreateRun child researcher: %v", err)
+	}
+	update := types.WorkerUpdateRecord{
+		UpdateID:      "update_processor_source_maxx",
+		OwnerID:       processorRun.OwnerID,
+		AgentID:       processorRun.AgentID,
+		TargetAgentID: processorRun.AgentID,
+		ChannelID:     processorRun.ChannelID,
+		TrajectoryID:  "trajectory-source-maxx",
+		Role:          AgentProfileProcessor,
+		Kind:          "status",
+		Summary:       "Processor consumed source firehose and requested research.",
+		Content:       "Processor consumed source firehose and requested research.",
+		CreatedAt:     now,
+	}
+	message := &types.ChannelMessage{
+		ChannelID:    processorRun.ChannelID,
+		From:         processorRun.AgentID,
+		FromAgentID:  processorRun.AgentID,
+		FromRunID:    processorRun.RunID,
+		ToAgentID:    processorRun.AgentID,
+		TrajectoryID: "trajectory-source-maxx",
+		Role:         AgentProfileProcessor,
+		Content:      update.Content,
+		Timestamp:    now,
+	}
+	delivery := types.InboxDelivery{
+		DeliveryID:   "delivery_processor_source_maxx",
+		OwnerID:      processorRun.OwnerID,
+		ToAgentID:    processorRun.AgentID,
+		FromAgentID:  processorRun.AgentID,
+		FromRunID:    processorRun.RunID,
+		ChannelID:    processorRun.ChannelID,
+		Role:         AgentProfileProcessor,
+		Content:      update.Content,
+		TrajectoryID: "trajectory-source-maxx",
+		CreatedAt:    now,
+	}
+	if _, _, err := rt.Store().DispatchWorkerUpdate(ctx, update, message, delivery); err != nil {
+		t.Fatalf("DispatchWorkerUpdate: %v", err)
+	}
+
 	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/source-service/sourcemaxx/latest" {
 			t.Fatalf("unexpected source service path %s", r.URL.Path)
@@ -346,6 +458,7 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 					RequestID:    "processor_1",
 					ProcessorKey: "processor:global_firehose:global:gdelt",
 					Status:       "submitted",
+					RuntimeRunID: processorRun.RunID,
 					SourceCount:  50,
 				},
 				{
@@ -356,9 +469,10 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 				},
 			},
 			ReconcilerRequests: []sourceapi.ReconcilerRequest{{
-				RequestID: "reconciler_1",
-				Scope:     "story-corpus",
-				Status:    "dispatch_failed",
+				RequestID:    "reconciler_1",
+				Scope:        "story-corpus",
+				Status:       "submitted",
+				RuntimeRunID: reconcilerRun.RunID,
 			}},
 			Metadata: sourceapi.SourceMaxxMetadata{
 				Topology:      "source-items -> processor-handoffs -> corpus-reconciler-handoff",
@@ -371,7 +485,6 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 	t.Setenv("SOURCE_SERVICE_URL", "")
 	t.Setenv("SOURCECYCLED_API_URL", "")
 
-	_, handler := testAPISetup(t)
 	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/sourcemaxx-status", "", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("sourcemaxx status = %d body=%s", w.Code, w.Body.String())
@@ -389,8 +502,20 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 	if resp.ProcessorStatusCounts["submitted"] != 1 || resp.ProcessorStatusCounts["queued"] != 1 {
 		t.Fatalf("unexpected processor status counts: %+v", resp.ProcessorStatusCounts)
 	}
-	if resp.ReconcilerStatusCounts["dispatch_failed"] != 1 {
+	if resp.ReconcilerStatusCounts["submitted"] != 1 {
 		t.Fatalf("unexpected reconciler status counts: %+v", resp.ReconcilerStatusCounts)
+	}
+	if resp.ProcessorRuntimeRunCount != 1 || resp.ReconcilerRuntimeRunCount != 1 {
+		t.Fatalf("unexpected runtime run counts: %+v", resp)
+	}
+	if resp.ProcessorRunStateCounts[string(types.RunPending)] != 1 || resp.ReconcilerRunStateCounts[string(types.RunRunning)] != 1 {
+		t.Fatalf("unexpected runtime run states: processor=%+v reconciler=%+v", resp.ProcessorRunStateCounts, resp.ReconcilerRunStateCounts)
+	}
+	if resp.ProcessorUpdateCount != 1 {
+		t.Fatalf("processor update count = %d, want 1", resp.ProcessorUpdateCount)
+	}
+	if resp.ProcessorChildProfileCounts[AgentProfileResearcher] != 1 {
+		t.Fatalf("processor child profile counts = %+v, want researcher child", resp.ProcessorChildProfileCounts)
 	}
 	if len(resp.ProcessorKeys) != 2 || resp.ProcessorKeys[0] != "processor:global_firehose:global:gdelt" {
 		t.Fatalf("unexpected processor keys: %+v", resp.ProcessorKeys)

@@ -278,7 +278,20 @@ func TestStoragePersistsSourceMaxxHandoffsAndLatestCycleSummary(t *testing.T) {
 	if len(summary.ProcessorRequests) != 1 || summary.ProcessorRequests[0].ProcessorKey != "processor:ai:us:rss" {
 		t.Fatalf("unexpected processor summary: %+v", summary.ProcessorRequests)
 	}
+	if err := store.UpdateProcessorRequestRuntimeRun(ctx, summary.ProcessorRequests[0].RequestID, "submitted", "processor-run-1"); err != nil {
+		t.Fatalf("update processor runtime run: %v", err)
+	}
 	if len(summary.ReconcilerRequests) != 1 || summary.ReconcilerRequests[0].Scope != "story-corpus" {
 		t.Fatalf("unexpected reconciler summary: %+v", summary.ReconcilerRequests)
+	}
+	if err := store.UpdateReconcilerRequestRuntimeRun(ctx, summary.ReconcilerRequests[0].RequestID, "submitted", "reconciler-run-1"); err != nil {
+		t.Fatalf("update reconciler runtime run: %v", err)
+	}
+	summary, err = store.LatestCycleSummary(ctx)
+	if err != nil {
+		t.Fatalf("latest cycle summary after runtime run ids: %v", err)
+	}
+	if summary.ProcessorRequests[0].RuntimeRunID != "processor-run-1" || summary.ReconcilerRequests[0].RuntimeRunID != "reconciler-run-1" {
+		t.Fatalf("runtime run ids not persisted: processors=%+v reconcilers=%+v", summary.ProcessorRequests, summary.ReconcilerRequests)
 	}
 }

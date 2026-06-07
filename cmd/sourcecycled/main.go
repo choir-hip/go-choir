@@ -330,6 +330,7 @@ func sourceAPIProcessorRequests(requests []cycle.ProcessorRequest) []sourceapi.P
 			CycleID:       req.CycleID,
 			ProcessorKey:  req.ProcessorKey,
 			Status:        req.Status,
+			RuntimeRunID:  req.RuntimeRunID,
 			SourceItemIDs: req.SourceItemIDs,
 			SourceCount:   req.SourceCount,
 			SourceTypes:   req.SourceTypes,
@@ -351,6 +352,7 @@ func sourceAPIReconcilerRequests(requests []cycle.ReconcilerRequest) []sourceapi
 			RequestID:           req.RequestID,
 			CycleID:             req.CycleID,
 			Status:              req.Status,
+			RuntimeRunID:        req.RuntimeRunID,
 			Scope:               req.Scope,
 			SourceItemIDs:       req.SourceItemIDs,
 			ProcessorRequestIDs: req.ProcessorRequestIDs,
@@ -420,7 +422,7 @@ func (d *sourceMaxxRuntimeDispatcher) dispatch(ctx context.Context, store *cycle
 		}
 		result.ProcessorSubmitted++
 		result.RunIDs = append(result.RunIDs, run.RunID)
-		_ = store.UpdateProcessorRequestStatus(ctx, req.RequestID, "submitted")
+		_ = store.UpdateProcessorRequestRuntimeRun(ctx, req.RequestID, "submitted", run.RunID)
 	}
 	for _, req := range handoff.ReconcilerRequests {
 		run, err := d.submitReconciler(ctx, req)
@@ -432,7 +434,7 @@ func (d *sourceMaxxRuntimeDispatcher) dispatch(ctx context.Context, store *cycle
 		}
 		result.ReconcilerSubmitted++
 		result.RunIDs = append(result.RunIDs, run.RunID)
-		_ = store.UpdateReconcilerRequestStatus(ctx, req.RequestID, "submitted")
+		_ = store.UpdateReconcilerRequestRuntimeRun(ctx, req.RequestID, "submitted", run.RunID)
 	}
 	return result
 }
