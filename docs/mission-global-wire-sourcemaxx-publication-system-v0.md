@@ -899,6 +899,26 @@ belief-state changes:
   evidence through the same configured runtime endpoint that accepted the
   SourceMaxx submissions, using internal-caller auth over Node B only, instead
   of assuming the current handler's local store owns the submitted run IDs.
+- Commit `4ed111a4e78a9d76945ebc3b40bafa1340303fa0` added that remote
+  runtime lifecycle resolver and Node B host sandbox env for
+  `SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085`. CI, FlakeHub, and
+  staging deploy passed, and `/health` reported the same deployed commit at
+  `2026-06-07T15:48:19Z`. The next product proof still showed unresolved
+  lifecycle joins for cycle `cycle_5b41c5876cc623de9ff30d69`: 686 SourceItems,
+  14 fetches, 17 processor requests, 1 reconciler request, 7 processor runtime
+  IDs, 1 reconciler runtime ID, and all 8 runtime IDs unresolved in
+  `/api/global-wire/sourcemaxx-status`.
+- Node B direct evidence narrowed the failure: `go-choir-sandbox.service` now
+  has both `SOURCE_SERVICE_BASE_URL` and `SOURCE_SERVICE_RUNTIME_BASE_URL`, and
+  `curl -H "X-Internal-Caller: true"
+  http://127.0.0.1:8085/internal/runtime/runs/bd4f63f9-96d5-4b13-bc3e-010f1bebee1e?owner_id=global-wire-platform`
+  returned HTTP 200 for a submitted processor run. The remaining likely root
+  cause is cross-boundary environment wiring: VM boot args pass
+  `choir.source_service_url` into sandbox VMs as `SOURCE_SERVICE_BASE_URL`, but
+  they do not yet pass a matching runtime lifecycle URL/owner into the
+  request-serving VM sandbox. The product route can therefore fetch SourceMaxx
+  cycle summaries while still lacking the remote runtime resolver it needs to
+  walk submitted agent run IDs.
 
 remaining error field:
 
@@ -909,8 +929,9 @@ remaining error field:
   post-fix shared-harness tool loops; clean-cycle internal evidence shows
   processor `submit_coagent_update` and researcher/VText-capable delegation
   calls, but browser-visible product status still cannot resolve detailed
-  lifecycle events through the correct runtime endpoint; publication-quality
-  VText production remains incomplete;
+  lifecycle events from request-serving VM sandboxes because runtime lifecycle
+  URL wiring appears incomplete; publication-quality VText production remains
+  incomplete;
 - deploys can interrupt active SourceMaxx runs because gateway/sandbox restart
   while processor/reconciler loops are mid-inference; provider 429 pressure was
   also observed under the current dispatch volume;
@@ -921,11 +942,12 @@ remaining error field:
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether product-visible lifecycle status
-can follow SourceMaxx runs into the runtime endpoint that actually accepted
-them, then whether the produced processor/reconciler updates and delegated
-researcher/VText children are good enough to create publication-quality VTexts
-with appropriate Style.vtext sources.
+highest-impact remaining uncertainty: whether the request-serving product
+sandbox receives a VM-reachable runtime lifecycle URL/owner for the same runtime
+endpoint that accepted SourceMaxx processor/reconciler submissions, then whether
+the produced processor/reconciler updates and delegated researcher/VText
+children are good enough to create publication-quality VTexts with appropriate
+Style.vtext sources.
 
 next executable delivery loop:
 
