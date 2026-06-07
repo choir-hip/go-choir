@@ -902,6 +902,12 @@
     return sourceDossiers.find((dossier) => dossier.story_id === selectedStoryId) || sourceDossiers[0] || null;
   }
 
+  function sourceDossierMissingFields(dossier) {
+    const storyId = dossier?.story_id || selectedStoryId;
+    const hasNewsletterIssue = newsletterIssues.some((issue) => issue.story_id === storyId);
+    return (dossier?.missing_fields || []).filter((field) => field !== 'newsletter_issues' || !hasNewsletterIssue);
+  }
+
   function noteNewsletterIssueInDossiers(issue, deliveries = []) {
     const issueId = issue?.id || '';
     if (!issueId) return;
@@ -2399,7 +2405,7 @@
                 publications: {(dossier.publication_refs?.artifact_ids || []).length} · deliveries: {(dossier.publication_refs?.delivery_ids || []).length} · newsletter issues: {(dossier.publication_refs?.newsletter_issue_ids || []).length}
               </small>
               <small data-global-wire-source-dossier-provenance>
-                citations: {(dossier.publication_refs?.citation_refs || []).length} · rollback refs: {(dossier.publication_refs?.rollback_refs || []).length} · missing: {(dossier.missing_fields || []).join(', ') || 'none'}
+                citations: {(dossier.publication_refs?.citation_refs || []).length} · rollback refs: {(dossier.publication_refs?.rollback_refs || []).length} · missing: {sourceDossierMissingFields(dossier).join(', ') || 'none'}
               </small>
               {#if (dossier.entity_terms || []).length || (dossier.event_terms || []).length}
                 <small data-global-wire-source-dossier-overlay>
