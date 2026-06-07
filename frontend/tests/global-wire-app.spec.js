@@ -543,6 +543,13 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(publicRead.body.public_link.owner_id || '').toBe('');
     expect(publicRead.body.public_link.export_id).toBe(deliveryExportPayload.export.id);
     expect(publicRead.body.public_link.export_body).toContain(publicationArtifact.body.artifact.body);
+    await page.goto(publicLinkPayload.public_link.route_path);
+    await expect(page.locator('[data-global-wire-public-reader]')).toBeVisible();
+    await expect(page.locator('[data-global-wire-public-publication]')).toContainText(publicLinkPayload.public_link.title);
+    await expect(page.locator('[data-global-wire-public-publication]')).toContainText(publicationArtifact.body.artifact.body);
+    await expect(page.locator('[data-global-wire-public-provenance]')).toContainText('citations:');
+    await expect(page.locator('[data-global-wire-public-citations]')).toContainText('story:story-supply-resilience');
+    await expect(page.locator('[data-global-wire-public-rollback]')).toContainText('delivery_export:');
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

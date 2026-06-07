@@ -50,9 +50,14 @@
   let sessionCheckSeq = 0;
   let lastPrewarmStartedAt = 0;
   let publicRoutePath = '';
+  let globalWirePublicToken = '';
+  let globalWirePublicLink = null;
+  let globalWirePublicStatus = '';
+  let globalWirePublicError = '';
 
   $: isAuthenticated = authState === 'signed_in';
   $: authIntentMessage = getAuthIntentMessage(pendingAuthIntent);
+  $: isGlobalWirePublicReader = !!globalWirePublicToken;
 
   function startAuthenticatedPrewarm() {
     const now = Date.now();
@@ -217,6 +222,30 @@
     return null;
   }
 
+  function globalWirePublicTokenFromPath(pathname) {
+    const prefix = '/global-wire/publications/';
+    if (!pathname.startsWith(prefix)) return '';
+    return decodeURIComponent(pathname.slice(prefix.length).split('/')[0] || '').trim();
+  }
+
+  async function loadGlobalWirePublicLink(token) {
+    if (!token) return;
+    globalWirePublicStatus = 'loading';
+    globalWirePublicError = '';
+    globalWirePublicLink = null;
+    try {
+      const response = await fetch(`/api/global-wire/publication-public-links/${encodeURIComponent(token)}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || `Publication load failed: ${response.status}`);
+      globalWirePublicLink = payload.public_link || null;
+      globalWirePublicStatus = globalWirePublicLink ? 'ready' : 'missing';
+      if (!globalWirePublicLink) globalWirePublicError = 'Publication link not found';
+    } catch (err) {
+      globalWirePublicStatus = 'error';
+      globalWirePublicError = err?.message || 'Publication link failed';
+    }
+  }
+
   function clearConsumedAppIntentFromURL(intent = null) {
     if (typeof window === 'undefined') return;
     if (intent && intent.source !== 'url') return;
@@ -330,7 +359,11 @@
   import { onMount } from 'svelte';
   onMount(() => {
     publicRoutePath = window.location.pathname.startsWith('/pub/vtext/') ? window.location.pathname : '';
+    globalWirePublicToken = globalWirePublicTokenFromPath(window.location.pathname);
     applyTheme(DEFAULT_THEME, false);
+    if (globalWirePublicToken) {
+      void loadGlobalWirePublicLink(globalWirePublicToken);
+    }
     const initialIntent = initialAppIntentFromURL();
     checkSession().then((session) => {
       if (!initialIntent) return;
@@ -387,7 +420,85 @@
 </script>
 
 <div class="app-root" data-theme-id={currentTheme.id} data-auth-state={authState}>
-  {#if authState === 'checking'}
+  {#if isGlobalWirePublicReader}
+    <main class="global-wire-public-reader" data-global-wire-public-reader>
+      <header>
+        <a class="reader-brand" href="/">Choir Global Wire</a>
+        <button
+          type="button"
+          on:click={() => {
+            pendingAuthIntent = {
+              kind: 'app_launch',
+              appId: 'global-wire',
+              appName: 'Global Wire',
+              appContext: { windowTitle: 'Global Wire' },
+            };
+            authOverlayOpen = true;
+          }}
+          data-global-wire-public-sign-in
+        >
+          Sign in
+        </button>
+      </header>
+      {#if globalWirePublicStatus === 'loading' || !globalWirePublicStatus}
+        <section class="global-wire-public-panel">
+          <p data-global-wire-public-status>Loading publication...</p>
+        </section>
+      {:else if globalWirePublicError}
+        <section class="global-wire-public-panel">
+          <p data-global-wire-public-error>{globalWirePublicError}</p>
+        </section>
+      {:else if globalWirePublicLink}
+        <article class="global-wire-public-panel" data-global-wire-public-publication>
+          <div class="reader-kicker">
+            <span>{globalWirePublicLink.status}</span>
+            <span>{globalWirePublicLink.route_path}</span>
+          </div>
+          <h1>{globalWirePublicLink.title}</h1>
+          <pre>{globalWirePublicLink.export_body}</pre>
+          <div class="reader-provenance" data-global-wire-public-provenance>
+            <strong>Provenance</strong>
+            <span>citations: {globalWirePublicLink.citation_count}</span>
+            <span>rollback refs: {globalWirePublicLink.rollback_count}</span>
+            <span>export: {globalWirePublicLink.export_id}</span>
+            <span>delivery: {globalWirePublicLink.delivery_id}</span>
+          </div>
+          <div class="reader-refs">
+            <section data-global-wire-public-citations>
+              <h2>Citations</h2>
+              <p>{(globalWirePublicLink.citation_refs || []).join(' · ')}</p>
+            </section>
+            <section data-global-wire-public-rollback>
+              <h2>Rollback Refs</h2>
+              <p>{(globalWirePublicLink.rollback_refs || []).join(' · ')}</p>
+            </section>
+          </div>
+        </article>
+      {/if}
+    </main>
+    {#if authOverlayOpen && !isAuthenticated}
+      <div class="auth-overlay" data-auth-overlay>
+        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Use a passkey to continue">
+          <button
+            class="auth-overlay-close"
+            data-auth-overlay-close
+            type="button"
+            on:click={clearAuthOverlay}
+            aria-label="Close passkey sign in"
+          >
+            x
+          </button>
+          <AuthEntry
+            {passkeyError}
+            {ceremonyInProgress}
+            intentMessage={authIntentMessage}
+            on:authbegin={handleAuthBegin}
+            on:clearpasskeyerror={handleClearPasskeyError}
+          />
+        </div>
+      </div>
+    {/if}
+  {:else if authState === 'checking'}
     <div class="loading">
       <p>Loading…</p>
     </div>
@@ -458,6 +569,133 @@
     min-height: 100%;
     background: var(--choir-bg);
     color: var(--choir-fg);
+  }
+
+  .global-wire-public-reader {
+    width: 100%;
+    min-height: 100%;
+    overflow: auto;
+    background: var(--choir-bg);
+    color: var(--choir-fg);
+  }
+
+  .global-wire-public-reader header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem clamp(1rem, 4vw, 2.5rem);
+    border-bottom: 1px solid var(--choir-border);
+    background: color-mix(in srgb, var(--choir-bg) 92%, transparent);
+    backdrop-filter: blur(12px);
+  }
+
+  .reader-brand {
+    color: var(--choir-fg);
+    font-size: 0.85rem;
+    font-weight: 780;
+    text-decoration: none;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+  }
+
+  .global-wire-public-reader button {
+    min-height: 2rem;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-control);
+    color: var(--choir-text-primary);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 720;
+    cursor: pointer;
+  }
+
+  .global-wire-public-panel {
+    width: min(920px, calc(100% - 2rem));
+    margin: 1rem auto 2rem;
+    padding: clamp(1rem, 3vw, 2rem);
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-pane);
+    box-shadow: var(--choir-window-shadow);
+  }
+
+  .reader-kicker,
+  .reader-provenance {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.8rem;
+    color: var(--choir-text-secondary);
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+  }
+
+  .global-wire-public-panel h1 {
+    margin: 0.75rem 0 1rem;
+    color: var(--choir-text-primary);
+    font-size: clamp(1.65rem, 3vw, 2.6rem);
+    line-height: 1.08;
+    overflow-wrap: anywhere;
+  }
+
+  .global-wire-public-panel pre {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--choir-text-primary);
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .reader-provenance {
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--choir-border);
+  }
+
+  .reader-refs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+    margin-top: 1rem;
+  }
+
+  .reader-refs section {
+    min-width: 0;
+    padding: 0.65rem;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-card);
+  }
+
+  .reader-refs h2 {
+    margin: 0 0 0.35rem;
+    font-size: 0.8rem;
+    color: var(--choir-text-primary);
+  }
+
+  .reader-refs p {
+    color: var(--choir-text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 720px) {
+    .reader-refs {
+      grid-template-columns: 1fr;
+    }
+
+    .global-wire-public-reader header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
   }
 
   :global(input),
