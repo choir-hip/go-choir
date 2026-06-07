@@ -5639,3 +5639,43 @@ Next executable probe:
 - Normalize dossier slice fields so complete dossiers emit empty arrays where
   the API contract expects list semantics, rerun focused local proofs, push the
   fix, and rerun deployed authenticated proof.
+
+## Problem Checkpoint - Source Dossier UI Stays Stale After Newsletter Issue - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Observed staging evidence:
+
+- Fix commit `b39f7b2f482e8ad7793b52086b67592adc3cb66b`
+  (`fix: normalize global wire dossier missing fields`) deployed to staging.
+- CI run `27088797540`: success.
+- FlakeHub run `27088797538`: success.
+- Staging health reported proxy and upstream deployed commit
+  `b39f7b2f482e8ad7793b52086b67592adc3cb66b`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed proof advanced past the API dossier checks, including
+  newsletter issue refs in `/api/global-wire/source-dossiers`, but failed on the
+  app panel. The rendered source dossier still showed
+  `missing: newsletter_issues` after creating the newsletter issue.
+
+Why this matters:
+
+- The dossier API can be correct while the app remains stale. That weakens the
+  News/reconciliation view invariant: app views should show the current
+  owner-owned research/delivery state after product-path mutations.
+- The bug is a refresh/reconciliation-state issue, not a platform story or
+  source-truth issue.
+
+Root-cause hypothesis:
+
+- `createNewsletterIssue` updates newsletter issue/delivery arrays locally but
+  does not refresh the derived `source_dossiers` projection after the issue is
+  created.
+
+Next executable probe:
+
+- Refresh reconciliation/dossier state after newsletter issue creation, rerun
+  local build and deployed authenticated proof, and then checkpoint the
+  delivered source-dossier slice.
