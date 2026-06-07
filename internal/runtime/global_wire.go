@@ -99,20 +99,21 @@ type globalWireFetchCycleResponse struct {
 }
 
 type globalWireReconciliationResponse struct {
-	Contributions        []types.GlobalWireContribution             `json:"contributions"`
-	SourceItems          map[string]types.ContentItem               `json:"source_items,omitempty"`
-	Decisions            []types.GlobalWireReconciliationDecision   `json:"decisions"`
-	Candidates           []types.GlobalWireGraphUpdateCandidate     `json:"candidates"`
-	Promotions           []types.GlobalWireGraphPromotionDecision   `json:"promotions"`
-	Refreshes            []types.GlobalWireSourceRefreshRun         `json:"refreshes"`
-	ClaimRecords         []types.GlobalWireClaimRecord              `json:"claim_records"`
-	ResearchTasks        []types.GlobalWireResearchTask             `json:"research_tasks"`
-	ExtractionArtifacts  []types.GlobalWireExtractionArtifact       `json:"extraction_artifacts"`
-	ResearchEvidence     []types.GlobalWireResearchTaskEvidence     `json:"research_evidence"`
-	ResearchDecisions    []types.GlobalWireResearchEvidenceDecision `json:"research_decisions"`
-	PublicationUpdates   []types.GlobalWirePublicationUpdate        `json:"publication_updates"`
-	PublicationArtifacts []types.GlobalWirePublicationArtifact      `json:"publication_artifacts"`
-	ProjectionReviews    []types.GlobalWireProjectionReview         `json:"projection_reviews"`
+	Contributions         []types.GlobalWireContribution             `json:"contributions"`
+	SourceItems           map[string]types.ContentItem               `json:"source_items,omitempty"`
+	Decisions             []types.GlobalWireReconciliationDecision   `json:"decisions"`
+	Candidates            []types.GlobalWireGraphUpdateCandidate     `json:"candidates"`
+	Promotions            []types.GlobalWireGraphPromotionDecision   `json:"promotions"`
+	Refreshes             []types.GlobalWireSourceRefreshRun         `json:"refreshes"`
+	ClaimRecords          []types.GlobalWireClaimRecord              `json:"claim_records"`
+	ResearchTasks         []types.GlobalWireResearchTask             `json:"research_tasks"`
+	ExtractionArtifacts   []types.GlobalWireExtractionArtifact       `json:"extraction_artifacts"`
+	ResearchEvidence      []types.GlobalWireResearchTaskEvidence     `json:"research_evidence"`
+	ResearchDecisions     []types.GlobalWireResearchEvidenceDecision `json:"research_decisions"`
+	PublicationUpdates    []types.GlobalWirePublicationUpdate        `json:"publication_updates"`
+	PublicationArtifacts  []types.GlobalWirePublicationArtifact      `json:"publication_artifacts"`
+	PublicationDeliveries []types.GlobalWirePublicationDelivery      `json:"publication_deliveries"`
+	ProjectionReviews     []types.GlobalWireProjectionReview         `json:"projection_reviews"`
 }
 
 type globalWireResearchTaskLifecycleRequest struct {
@@ -194,6 +195,17 @@ type globalWirePublicationArtifactReviewResponse struct {
 	Artifact types.GlobalWirePublicationArtifact `json:"artifact"`
 	Status   string                              `json:"status"`
 	Decision string                              `json:"decision"`
+}
+
+type globalWirePublicationDeliveryRequest struct {
+	ArtifactID string `json:"artifact_id"`
+	Channel    string `json:"channel,omitempty"`
+}
+
+type globalWirePublicationDeliveryResponse struct {
+	Delivery types.GlobalWirePublicationDelivery `json:"delivery"`
+	Artifact types.GlobalWirePublicationArtifact `json:"artifact"`
+	Story    types.GlobalWireStory               `json:"story"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -813,26 +825,32 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list publication artifacts"})
 			return
 		}
+		publicationDeliveries, err := h.rt.Store().ListGlobalWirePublicationDeliveries(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list publication deliveries"})
+			return
+		}
 		projectionReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, globalWireReconciliationResponse{
-			Contributions:        contributions,
-			SourceItems:          h.globalWireContributionSourceItems(r, ownerID, contributions),
-			Decisions:            decisions,
-			Candidates:           candidates,
-			Promotions:           promotions,
-			Refreshes:            refreshes,
-			ClaimRecords:         claimRecords,
-			ResearchTasks:        researchTasks,
-			ExtractionArtifacts:  extractionArtifacts,
-			ResearchEvidence:     researchEvidence,
-			ResearchDecisions:    researchDecisions,
-			PublicationUpdates:   publicationUpdates,
-			PublicationArtifacts: publicationArtifacts,
-			ProjectionReviews:    projectionReviews,
+			Contributions:         contributions,
+			SourceItems:           h.globalWireContributionSourceItems(r, ownerID, contributions),
+			Decisions:             decisions,
+			Candidates:            candidates,
+			Promotions:            promotions,
+			Refreshes:             refreshes,
+			ClaimRecords:          claimRecords,
+			ResearchTasks:         researchTasks,
+			ExtractionArtifacts:   extractionArtifacts,
+			ResearchEvidence:      researchEvidence,
+			ResearchDecisions:     researchDecisions,
+			PublicationUpdates:    publicationUpdates,
+			PublicationArtifacts:  publicationArtifacts,
+			PublicationDeliveries: publicationDeliveries,
+			ProjectionReviews:     projectionReviews,
 		})
 	case http.MethodPost:
 		var req globalWireReconciliationCreateRequest
@@ -1346,6 +1364,58 @@ func (h *APIHandler) HandleGlobalWirePublicationArtifactReviews(w http.ResponseW
 		Status:   artifact.Status,
 		Decision: req.Decision,
 	})
+}
+
+// HandleGlobalWirePublicationDeliveries records owner-scoped delivery/
+// availability evidence for approved publication artifacts.
+func (h *APIHandler) HandleGlobalWirePublicationDeliveries(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		storyID := strings.TrimSpace(r.URL.Query().Get("story_id"))
+		deliveries, err := h.rt.Store().ListGlobalWirePublicationDeliveries(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list publication deliveries"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, map[string]any{
+			"publication_deliveries": deliveries,
+		})
+	case http.MethodPost:
+		var req globalWirePublicationDeliveryRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid publication delivery request"})
+			return
+		}
+		req.ArtifactID = strings.TrimSpace(req.ArtifactID)
+		req.Channel = strings.TrimSpace(req.Channel)
+		if req.ArtifactID == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "artifact_id is required"})
+			return
+		}
+		delivery, artifact, story, err := h.createGlobalWirePublicationDelivery(r, ownerID, req)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "approved publication artifact not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create publication delivery"})
+			return
+		}
+		writeAPIJSON(w, http.StatusCreated, globalWirePublicationDeliveryResponse{
+			Delivery: delivery,
+			Artifact: artifact,
+			Story:    story,
+		})
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
 }
 
 func normalizeGlobalWireReconciliationDecision(value string) string {
@@ -2867,6 +2937,41 @@ func (h *APIHandler) globalWirePublicationFeedItems(r *http.Request, ownerID str
 		})
 	}
 	return items, nil
+}
+
+func (h *APIHandler) createGlobalWirePublicationDelivery(r *http.Request, ownerID string, req globalWirePublicationDeliveryRequest) (types.GlobalWirePublicationDelivery, types.GlobalWirePublicationArtifact, types.GlobalWireStory, error) {
+	artifact, err := h.rt.Store().GetGlobalWirePublicationArtifact(r.Context(), ownerID, req.ArtifactID)
+	if err != nil {
+		return types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, err
+	}
+	if artifact.Status != "publication-approved" {
+		return types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, store.ErrNotFound
+	}
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, artifact.StoryID)
+	if err != nil {
+		return types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, err
+	}
+	channel := firstNonEmptyString(req.Channel, artifact.Channel, "newsletter")
+	deliveryID := "global-wire-publication-delivery-" + uuid.NewString()
+	deliveryRef := fmt.Sprintf("global-wire/%s/publications/%s", artifact.StoryID, deliveryID)
+	rollbackRefs := appendStringIfMissing(artifact.RollbackRefs, "publication_artifact:"+artifact.ID)
+	delivery, err := h.rt.Store().CreateGlobalWirePublicationDelivery(r.Context(), types.GlobalWirePublicationDelivery{
+		ID:            deliveryID,
+		OwnerID:       ownerID,
+		ArtifactID:    artifact.ID,
+		StoryID:       artifact.StoryID,
+		Channel:       channel,
+		Status:        "delivery-ready",
+		DeliveryRef:   deliveryRef,
+		CitationCount: len(artifact.CitationRefs),
+		RollbackCount: len(rollbackRefs),
+		CitationRefs:  artifact.CitationRefs,
+		RollbackRefs:  rollbackRefs,
+	})
+	if err != nil {
+		return types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, err
+	}
+	return delivery, artifact, story, nil
 }
 
 func (h *APIHandler) globalWirePublicationArtifactProjectionReviews(r *http.Request, ownerID string, update types.GlobalWirePublicationUpdate) ([]types.GlobalWireProjectionReview, error) {

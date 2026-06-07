@@ -304,6 +304,25 @@ type GlobalWirePublicationArtifact struct {
 	UpdatedAt           time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWirePublicationDelivery records an owner-approved artifact becoming
+// available through a channel. It is delivery evidence, not a StoryGraph
+// mutation or automatic public syndication.
+type GlobalWirePublicationDelivery struct {
+	ID            string    `json:"id"`
+	OwnerID       string    `json:"owner_id,omitempty"`
+	ArtifactID    string    `json:"artifact_id"`
+	StoryID       string    `json:"story_id"`
+	Channel       string    `json:"channel"`
+	Status        string    `json:"status"`
+	DeliveryRef   string    `json:"delivery_ref"`
+	CitationCount int       `json:"citation_count"`
+	RollbackCount int       `json:"rollback_count"`
+	CitationRefs  []string  `json:"citation_refs"`
+	RollbackRefs  []string  `json:"rollback_refs"`
+	CreatedAt     time.Time `json:"created_at,omitempty"`
+	UpdatedAt     time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
 // fetch cycle should use for one StoryGraph neighborhood.
 type GlobalWireSourceRegistryEntry struct {

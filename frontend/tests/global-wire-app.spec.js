@@ -449,6 +449,19 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(approvePayload.artifact.id).toBe(publicationArtifact.body.artifact.id);
     expect(approvePayload.artifact.status).toBe('publication-approved');
     await expect(app.locator('[data-global-wire-publication-feed-item]').first()).toContainText('publication-approved');
+    const deliveryResponsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/global-wire/publication-deliveries' && response.request().method() === 'POST'
+    );
+    await app.locator('[data-global-wire-create-publication-delivery]').first().click();
+    const deliveryResponse = await deliveryResponsePromise;
+    expect(deliveryResponse.status()).toBe(201);
+    const deliveryPayload = await deliveryResponse.json();
+    expect(deliveryPayload.delivery.artifact_id).toBe(publicationArtifact.body.artifact.id);
+    expect(deliveryPayload.delivery.status).toBe('delivery-ready');
+    expect(deliveryPayload.delivery.delivery_ref).toContain('global-wire/story-supply-resilience/publications/');
+    expect(deliveryPayload.delivery.citation_count).toBeGreaterThanOrEqual(5);
+    await expect(app.locator('[data-global-wire-publication-delivery]').first()).toContainText('delivery-ready');
+    await expect(app.locator('[data-global-wire-publication-delivery-provenance]').first()).toContainText('delivery citations:');
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

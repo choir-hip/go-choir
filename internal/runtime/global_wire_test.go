@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -643,6 +644,42 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("approved publication artifact missing from feed: %+v", approvedFeedResp)
 	}
 
+	deliveryBody := fmt.Sprintf(`{"artifact_id":%q,"channel":"newsletter"}`, artifactResp.Artifact.ID)
+	deliveryW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-deliveries", deliveryBody, "user-alpha")
+	if deliveryW.Code != http.StatusCreated {
+		t.Fatalf("publication delivery status = %d body=%s", deliveryW.Code, deliveryW.Body.String())
+	}
+	var deliveryResp globalWirePublicationDeliveryResponse
+	if err := json.NewDecoder(deliveryW.Body).Decode(&deliveryResp); err != nil {
+		t.Fatalf("decode publication delivery response: %v", err)
+	}
+	if deliveryResp.Delivery.ArtifactID != artifactResp.Artifact.ID ||
+		deliveryResp.Delivery.StoryID != "story-supply-resilience" ||
+		deliveryResp.Delivery.Channel != "newsletter" ||
+		deliveryResp.Delivery.Status != "delivery-ready" ||
+		deliveryResp.Delivery.DeliveryRef == "" ||
+		deliveryResp.Delivery.CitationCount < 5 ||
+		deliveryResp.Delivery.RollbackCount < 5 ||
+		!slices.Contains(deliveryResp.Delivery.RollbackRefs, "publication_artifact:"+artifactResp.Artifact.ID) ||
+		deliveryResp.Artifact.Status != "publication-approved" ||
+		deliveryResp.Story.ID != "story-supply-resilience" {
+		t.Fatalf("publication delivery missing approved artifact lineage: %+v", deliveryResp)
+	}
+	deliveryListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/publication-deliveries?story_id=story-supply-resilience", "", "user-alpha")
+	if deliveryListW.Code != http.StatusOK {
+		t.Fatalf("publication delivery list status = %d body=%s", deliveryListW.Code, deliveryListW.Body.String())
+	}
+	var deliveryListResp struct {
+		PublicationDeliveries []types.GlobalWirePublicationDelivery `json:"publication_deliveries"`
+	}
+	if err := json.NewDecoder(deliveryListW.Body).Decode(&deliveryListResp); err != nil {
+		t.Fatalf("decode publication delivery list response: %v", err)
+	}
+	if len(deliveryListResp.PublicationDeliveries) != 1 ||
+		deliveryListResp.PublicationDeliveries[0].ArtifactID != artifactResp.Artifact.ID {
+		t.Fatalf("publication delivery missing from list: %+v", deliveryListResp)
+	}
+
 	publicationListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
 	if publicationListW.Code != http.StatusOK {
 		t.Fatalf("list reconciliation after publication package status = %d body=%s", publicationListW.Code, publicationListW.Body.String())
@@ -657,8 +694,10 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		len(publicationListResp.PublicationUpdates[0].RollbackRefs) < 4 ||
 		len(publicationListResp.PublicationArtifacts) != 1 ||
 		publicationListResp.PublicationArtifacts[0].UpdateID != publicationResp.Update.ID ||
-		len(publicationListResp.PublicationArtifacts[0].CitationRefs) < 5 {
-		t.Fatalf("publication artifacts missing from reconciliation list: updates=%+v artifacts=%+v", publicationListResp.PublicationUpdates, publicationListResp.PublicationArtifacts)
+		len(publicationListResp.PublicationArtifacts[0].CitationRefs) < 5 ||
+		len(publicationListResp.PublicationDeliveries) != 1 ||
+		publicationListResp.PublicationDeliveries[0].ArtifactID != artifactResp.Artifact.ID {
+		t.Fatalf("publication artifacts missing from reconciliation list: updates=%+v artifacts=%+v deliveries=%+v", publicationListResp.PublicationUpdates, publicationListResp.PublicationArtifacts, publicationListResp.PublicationDeliveries)
 	}
 
 	storiesTaskAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")

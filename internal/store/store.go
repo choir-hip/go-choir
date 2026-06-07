@@ -470,6 +470,25 @@ CREATE TABLE IF NOT EXISTS global_wire_publication_artifacts (
 	KEY idx_global_wire_publication_artifacts_update (owner_id, update_id, updated_at)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_publication_deliveries (
+	owner_id            VARCHAR(255) NOT NULL,
+	delivery_id         VARCHAR(255) NOT NULL,
+	artifact_id         VARCHAR(255) NOT NULL,
+	story_id            VARCHAR(255) NOT NULL,
+	channel             VARCHAR(255) NOT NULL DEFAULT '',
+	status              VARCHAR(255) NOT NULL DEFAULT '',
+	delivery_ref        VARCHAR(255) NOT NULL DEFAULT '',
+	citation_count      INT NOT NULL DEFAULT 0,
+	rollback_count      INT NOT NULL DEFAULT 0,
+	citation_refs_json  LONGTEXT NOT NULL DEFAULT '[]',
+	rollback_refs_json  LONGTEXT NOT NULL DEFAULT '[]',
+	created_at          DATETIME NOT NULL,
+	updated_at          DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, delivery_id),
+	KEY idx_global_wire_publication_deliveries_story (owner_id, story_id, updated_at),
+	KEY idx_global_wire_publication_deliveries_artifact (owner_id, artifact_id, updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivery_id          VARCHAR(255) PRIMARY KEY,
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',

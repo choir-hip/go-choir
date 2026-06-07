@@ -180,6 +180,7 @@
   let researchDecisions = [];
   let publicationUpdates = [];
   let publicationArtifacts = [];
+  let publicationDeliveries = [];
   let publicationFeedItems = [];
   let publicationFeedStatus = '';
   let projectionReviews = [];
@@ -228,6 +229,7 @@
       researchTasks = [];
       extractionArtifacts = [];
       publicationArtifacts = [];
+      publicationDeliveries = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       projectionReviews = [];
@@ -282,6 +284,7 @@
       researchDecisions = Array.isArray(payload.research_decisions) ? payload.research_decisions : [];
       publicationUpdates = Array.isArray(payload.publication_updates) ? payload.publication_updates : [];
       publicationArtifacts = Array.isArray(payload.publication_artifacts) ? payload.publication_artifacts : [];
+      publicationDeliveries = Array.isArray(payload.publication_deliveries) ? payload.publication_deliveries : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
       await loadPublicationFeed(storyId);
       await loadFetchCycles(storyId);
@@ -302,6 +305,7 @@
       researchDecisions = [];
       publicationUpdates = [];
       publicationArtifacts = [];
+      publicationDeliveries = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       projectionReviews = [];
@@ -904,6 +908,11 @@
     return publicationArtifacts.find((artifact) => artifact.update_id === id);
   }
 
+  function publicationDeliveryForArtifact(artifact) {
+    const id = artifact?.id || '';
+    return publicationDeliveries.find((delivery) => delivery.artifact_id === id);
+  }
+
   function selectedPublicationFeedItem() {
     return publicationFeedItems.find((item) => item.story?.id === selectedStory.id || item.artifact?.story_id === selectedStory.id);
   }
@@ -1074,6 +1083,35 @@
       await loadPublicationFeed(selectedStory.id);
     } catch (error) {
       contributionStatus = error?.message || `Publication artifact ${decision} failed`;
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
+  async function createPublicationDelivery(item) {
+    const artifact = item?.artifact || item;
+    if (!authenticated || !artifact?.id) return;
+    reconciliationBusyId = `${artifact.id}:publication-delivery`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/publication-deliveries', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artifact_id: artifact.id,
+          channel: artifact.channel || 'newsletter',
+        }),
+      });
+      if (!response.ok) throw new Error(`Publication delivery failed: ${response.status}`);
+      const payload = await response.json();
+      publicationDeliveries = [payload.delivery, ...publicationDeliveries.filter((delivery) => delivery.id !== payload.delivery?.id)]
+        .filter(Boolean)
+        .slice(0, 30);
+      contributionStatus = `Publication delivery ${payload.delivery?.status || 'created'}`;
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || 'Publication delivery failed';
     } finally {
       reconciliationBusyId = '';
     }
@@ -1582,6 +1620,7 @@
               <span>{publicationFeedStatus || 'ready'} · newsletter</span>
             </div>
             {#each publicationFeedItems.slice(0, 3) as item}
+              {@const delivery = publicationDeliveryForArtifact(item.artifact)}
               <article
                 data-global-wire-publication-feed-item
                 data-global-wire-publication-feed-artifact-id={item.artifact.id}
@@ -1592,7 +1631,28 @@
                 <small data-global-wire-publication-feed-provenance>
                   citations: {item.citation_count} · rollback refs: {item.rollback_count} · source {item.source_item?.title || item.artifact.source_content_id || 'story manifest'}
                 </small>
-                {#if authenticated && item.status === 'publication-review-ready'}
+                {#if delivery}
+                  <small
+                    data-global-wire-publication-delivery
+                    data-global-wire-publication-delivery-id={delivery.id}
+                  >
+                    {delivery.status}: {delivery.channel} · {delivery.delivery_ref}
+                  </small>
+                  <small data-global-wire-publication-delivery-provenance>
+                    delivery citations: {delivery.citation_count} · rollback refs: {delivery.rollback_count}
+                  </small>
+                {:else if authenticated && item.status === 'publication-approved'}
+                  <div class="publication-feed-actions">
+                    <button
+                      type="button"
+                      on:click={() => createPublicationDelivery(item)}
+                      disabled={reconciliationBusyId === `${item.artifact.id}:publication-delivery`}
+                      data-global-wire-create-publication-delivery
+                    >
+                      Deliver
+                    </button>
+                  </div>
+                {:else if authenticated && item.status === 'publication-review-ready'}
                   <div class="publication-feed-actions">
                     <button
                       type="button"
