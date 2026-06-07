@@ -27,6 +27,9 @@ func TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts(t *testing.T) {
 	if story.StoryVTextDoc == "" {
 		t.Fatalf("story has no linked VText doc: %+v", story)
 	}
+	if story.ProjectionVTextDocs["claim-audit-style"] == "" {
+		t.Fatalf("story has no claim-audit projection VText doc: %+v", story.ProjectionVTextDocs)
+	}
 	if len(story.Manifest.Lead) == 0 || len(story.Manifest.Supporting) == 0 || len(story.Manifest.Contrary) == 0 || len(story.Manifest.Context) == 0 {
 		t.Fatalf("story manifest is missing required evidence tiers: %+v", story.Manifest)
 	}
@@ -43,6 +46,10 @@ func TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts(t *testing.T) {
 	docW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/vtext/documents/"+story.StoryVTextDoc, "", "user-global-wire")
 	if docW.Code != http.StatusOK {
 		t.Fatalf("get linked story VText status = %d body=%s", docW.Code, docW.Body.String())
+	}
+	projectionW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/vtext/documents/"+story.ProjectionVTextDocs["claim-audit-style"], "", "user-global-wire")
+	if projectionW.Code != http.StatusOK {
+		t.Fatalf("get linked projection VText status = %d body=%s", projectionW.Code, projectionW.Body.String())
 	}
 	sourceW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/content/items/"+story.Manifest.Lead[0].ContentID, "", "user-global-wire")
 	if sourceW.Code != http.StatusOK {

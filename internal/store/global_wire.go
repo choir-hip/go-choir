@@ -186,7 +186,41 @@ func (s *Store) ListGlobalWireStories(ctx context.Context, ownerID string) ([]ty
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate global wire stories: %w", err)
 	}
+	if err := s.attachGlobalWireProjectionRefs(ctx, ownerID, stories); err != nil {
+		return nil, err
+	}
 	return stories, nil
+}
+
+func (s *Store) attachGlobalWireProjectionRefs(ctx context.Context, ownerID string, stories []types.GlobalWireStory) error {
+	for i := range stories {
+		rows, err := s.readDB.QueryContext(ctx,
+			`SELECT style_id, story_vtext_doc_id
+			   FROM global_wire_story_projections
+			  WHERE owner_id = ? AND story_id = ?`,
+			ownerID,
+			stories[i].ID,
+		)
+		if err != nil {
+			return fmt.Errorf("list global wire projection refs: %w", err)
+		}
+		refs := map[string]string{}
+		for rows.Next() {
+			var styleID, docID string
+			if err := rows.Scan(&styleID, &docID); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("scan global wire projection ref: %w", err)
+			}
+			refs[styleID] = docID
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("close global wire projection refs: %w", err)
+		}
+		if len(refs) > 0 {
+			stories[i].ProjectionVTextDocs = refs
+		}
+	}
+	return nil
 }
 
 func (s *Store) ensureDefaultGlobalWireStories(ctx context.Context, ownerID string) error {
@@ -229,11 +263,59 @@ func (s *Store) ensureDefaultGlobalWireStories(ctx context.Context, ownerID stri
 			return err
 		}
 		sourceBackedStory.StoryVTextDoc = docID
+		projectionDocs, err := s.ensureGlobalWireStoryProjections(ctx, ownerID, sourceBackedStory, styleSources, now)
+		if err != nil {
+			return err
+		}
+		sourceBackedStory.ProjectionVTextDocs = projectionDocs
 		if err := s.UpsertGlobalWireStory(ctx, sourceBackedStory); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Store) ensureGlobalWireStoryProjections(ctx context.Context, ownerID string, story types.GlobalWireStory, styles []types.GlobalWireStyleSource, now time.Time) (map[string]string, error) {
+	out := map[string]string{}
+	for i, style := range styles {
+		text := strings.TrimSpace(story.Projections[style.ID])
+		if text == "" {
+			continue
+		}
+		storyDocID := story.StoryVTextDoc
+		if i > 0 {
+			content := globalWireProjectionVTextContent(story, style, text)
+			docID, err := s.createGlobalWireSeedVText(ctx, ownerID, story.Headline+" - "+style.Label+" projection", content, append([]types.Citation{
+				{ID: "style-source", Type: "vtext", Value: style.SourcePath, Label: style.Title},
+				{ID: "storygraph-node", Type: "storygraph", Value: story.ID, Label: story.Headline},
+			}, globalWireSourceCitations(story)...), map[string]any{
+				"created_from":  "global_wire_style_projection_seed",
+				"storygraph_id": story.ID,
+				"style_id":      style.ID,
+				"style_doc_id":  style.DocID,
+			}, now)
+			if err != nil {
+				return nil, err
+			}
+			storyDocID = docID
+		}
+		out[style.ID] = storyDocID
+		if err := s.UpsertGlobalWireStoryProjection(ctx, types.GlobalWireStoryProjection{
+			ID:          "global-wire-projection-" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ownerID+":"+story.ID+":"+style.ID)).String(),
+			OwnerID:     ownerID,
+			StoryID:     story.ID,
+			StyleID:     style.ID,
+			StyleDocID:  style.DocID,
+			StoryDocID:  storyDocID,
+			ContextJSON: `{"audience":"global-wire","task":"news_projection"}`,
+			Text:        text,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (s *Store) ensureGlobalWireSourceItems(ctx context.Context, ownerID string, story types.GlobalWireStory, now time.Time) (types.GlobalWireStory, error) {
@@ -476,6 +558,35 @@ func globalWireStyleVTextContent(style types.GlobalWireStyleSource) string {
 	}, "\n")
 }
 
+func globalWireProjectionVTextContent(story types.GlobalWireStory, style types.GlobalWireStyleSource, projection string) string {
+	lines := []string{
+		"# " + story.Headline,
+		"",
+		story.Dek,
+		"",
+		"Style source: " + style.Title,
+		"StoryGraph id: " + story.ID,
+		"Projection relation: StoryGraph + Style.vtext + audience/task context -> Story VText",
+		"",
+		"## Projection",
+		"",
+		projection,
+		"",
+		"## Claims Preserved",
+		"",
+	}
+	for _, claim := range story.Claims {
+		lines = append(lines, "- "+claim)
+	}
+	lines = append(lines,
+		"",
+		"## Evidence Invariant",
+		"",
+		"This projection may change framing and salience, but it must not invent evidence, hide contrary evidence, or mutate the platform StoryGraph.",
+	)
+	return strings.Join(lines, "\n")
+}
+
 // UpsertGlobalWireStory persists one StoryGraph node.
 func (s *Store) UpsertGlobalWireStory(ctx context.Context, rec types.GlobalWireStory) error {
 	now := rec.UpdatedAt
@@ -586,6 +697,47 @@ func (s *Store) CreateGlobalWireContribution(ctx context.Context, rec types.Glob
 		return types.GlobalWireContribution{}, fmt.Errorf("create global wire contribution: %w", err)
 	}
 	return rec, nil
+}
+
+// UpsertGlobalWireStoryProjection persists the durable projection relation.
+func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.GlobalWireStoryProjection) error {
+	now := rec.UpdatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	contextJSON := strings.TrimSpace(rec.ContextJSON)
+	if contextJSON == "" {
+		contextJSON = "{}"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_story_projections (
+			owner_id, projection_id, story_id, style_id, style_doc_id,
+			story_vtext_doc_id, context_json, projection_text, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			style_doc_id = VALUES(style_doc_id),
+			story_vtext_doc_id = VALUES(story_vtext_doc_id),
+			context_json = VALUES(context_json),
+			projection_text = VALUES(projection_text),
+			updated_at = VALUES(updated_at)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.StoryID,
+		rec.StyleID,
+		rec.StyleDocID,
+		rec.StoryDocID,
+		contextJSON,
+		sanitizeStoreText(rec.Text),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		now.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return fmt.Errorf("upsert global wire story projection: %w", err)
+	}
+	return nil
 }
 
 // ListGlobalWireContributions lists recent owner-owned contributions, optionally

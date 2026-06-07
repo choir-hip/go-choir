@@ -328,13 +328,14 @@
   }
 
   function openStoryVText() {
+    const projectionDocId = selectedStory.projection_vtext_docs?.[selectedStyle.id] || selectedStory.story_vtext_doc_id || '';
     launchVText({
       title: selectedStory.headline,
       content: storyVTextContent(),
       createdFrom: 'global_wire_story_projection',
       sourcePath: `global-wire/${selectedStory.id}.story.vtext`,
-      docId: selectedStory.story_vtext_doc_id || '',
-      createInitialVersion: !selectedStory.story_vtext_doc_id,
+      docId: projectionDocId,
+      createInitialVersion: !projectionDocId,
     });
   }
 

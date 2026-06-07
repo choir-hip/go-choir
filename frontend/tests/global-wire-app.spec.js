@@ -75,7 +75,9 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     return res.json();
   });
   const leadSource = storyGraph.stories?.[0]?.manifest?.lead?.[0];
+  const auditProjectionDoc = storyGraph.stories?.[0]?.projection_vtext_docs?.['claim-audit-style'];
   expect(leadSource?.content_id).toBeTruthy();
+  expect(auditProjectionDoc).toBeTruthy();
   const sourceItem = await page.evaluate(async (contentId) => {
     const res = await fetch(`/api/content/items/${contentId}`, { credentials: 'include' });
     if (!res.ok) throw new Error(`load SourceItem failed: ${res.status}`);
@@ -83,6 +85,12 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   }, leadSource.content_id);
   expect(sourceItem.app_hint).toBe('global-wire');
   expect(sourceItem.metadata?.schema).toBe('choir.global_wire_source_item.v1');
+  const projectionDoc = await page.evaluate(async (docId) => {
+    const res = await fetch(`/api/vtext/documents/${docId}`, { credentials: 'include' });
+    if (!res.ok) throw new Error(`load projection VText failed: ${res.status}`);
+    return res.json();
+  }, auditProjectionDoc);
+  expect(projectionDoc.document?.title || projectionDoc.title || '').toContain('Audit');
 
   await app.locator('[data-global-wire-fork-story]').click();
   await expect(page.locator('[data-vtext-editor]').last()).toContainText('My Edit');

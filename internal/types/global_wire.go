@@ -34,24 +34,40 @@ type GlobalWireSourceManifest struct {
 
 // GlobalWireStory is the durable StoryGraph node shape consumed by the News app.
 type GlobalWireStory struct {
-	ID            string                   `json:"id"`
-	OwnerID       string                   `json:"owner_id,omitempty"`
-	Headline      string                   `json:"headline"`
-	Dek           string                   `json:"dek"`
-	Freshness     string                   `json:"freshness"`
-	Prominence    int                      `json:"prominence"`
-	Tension       string                   `json:"tension"`
-	ChangeState   string                   `json:"changeState"`
-	NodeTone      string                   `json:"nodeTone"`
-	Related       []string                 `json:"related"`
-	Manifest      GlobalWireSourceManifest `json:"manifest"`
-	Claims        []string                 `json:"claims"`
-	Projections   map[string]string        `json:"projections"`
-	StyleSources  []GlobalWireStyleSource  `json:"style_sources,omitempty"`
-	StoryVTextDoc string                   `json:"story_vtext_doc_id,omitempty"`
-	SourceState   string                   `json:"source_state"`
-	CreatedAt     time.Time                `json:"created_at,omitempty"`
-	UpdatedAt     time.Time                `json:"updated_at,omitempty"`
+	ID                  string                   `json:"id"`
+	OwnerID             string                   `json:"owner_id,omitempty"`
+	Headline            string                   `json:"headline"`
+	Dek                 string                   `json:"dek"`
+	Freshness           string                   `json:"freshness"`
+	Prominence          int                      `json:"prominence"`
+	Tension             string                   `json:"tension"`
+	ChangeState         string                   `json:"changeState"`
+	NodeTone            string                   `json:"nodeTone"`
+	Related             []string                 `json:"related"`
+	Manifest            GlobalWireSourceManifest `json:"manifest"`
+	Claims              []string                 `json:"claims"`
+	Projections         map[string]string        `json:"projections"`
+	ProjectionVTextDocs map[string]string        `json:"projection_vtext_docs,omitempty"`
+	StyleSources        []GlobalWireStyleSource  `json:"style_sources,omitempty"`
+	StoryVTextDoc       string                   `json:"story_vtext_doc_id,omitempty"`
+	SourceState         string                   `json:"source_state"`
+	CreatedAt           time.Time                `json:"created_at,omitempty"`
+	UpdatedAt           time.Time                `json:"updated_at,omitempty"`
+}
+
+// GlobalWireStoryProjection is the durable relation:
+// StoryGraph + Style.vtext + context -> Story VText.
+type GlobalWireStoryProjection struct {
+	ID          string    `json:"id"`
+	OwnerID     string    `json:"owner_id,omitempty"`
+	StoryID     string    `json:"story_id"`
+	StyleID     string    `json:"style_id"`
+	StyleDocID  string    `json:"style_doc_id,omitempty"`
+	StoryDocID  string    `json:"story_vtext_doc_id"`
+	ContextJSON string    `json:"context_json,omitempty"`
+	Text        string    `json:"text"`
+	CreatedAt   time.Time `json:"created_at,omitempty"`
+	UpdatedAt   time.Time `json:"updated_at,omitempty"`
 }
 
 // GlobalWireContribution is a user-owned contribution queued for research and

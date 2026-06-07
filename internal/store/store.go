@@ -160,6 +160,21 @@ CREATE TABLE IF NOT EXISTS global_wire_contributions (
 	KEY idx_global_wire_contributions_story (owner_id, story_id, updated_at)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_story_projections (
+	owner_id           VARCHAR(255) NOT NULL,
+	projection_id      VARCHAR(255) NOT NULL,
+	story_id           VARCHAR(255) NOT NULL,
+	style_id           VARCHAR(255) NOT NULL,
+	style_doc_id       VARCHAR(255) NOT NULL DEFAULT '',
+	story_vtext_doc_id VARCHAR(255) NOT NULL DEFAULT '',
+	context_json       LONGTEXT NOT NULL DEFAULT '{}',
+	projection_text    LONGTEXT NOT NULL DEFAULT '',
+	created_at         DATETIME NOT NULL,
+	updated_at         DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, projection_id),
+	KEY idx_global_wire_story_projections_story (owner_id, story_id, style_id)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivery_id          VARCHAR(255) PRIMARY KEY,
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',
