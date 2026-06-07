@@ -2726,3 +2726,96 @@ Next executable probe:
   Service search per selected story/query when configured, reuse the same
   non-mutating refresh/classification artifact path, and expose cycle evidence
   in the News app without claiming full 24/7 automation.
+
+## Checkpoint - Bounded Source Registry Fetch Cycles Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Artifact advanced:
+
+- Global Wire now has durable `GlobalWireSourceRegistryEntry` and
+  `GlobalWireFetchCycleRun` records.
+- `/api/global-wire/fetch-cycles` can list registry/cycle evidence or run a
+  bounded owner-authenticated cycle over selected StoryGraph headline nodes.
+- A cycle seeds/updates source registry entries from StoryGraph headlines,
+  searches Source Service when configured, records `unavailable`/`no-evidence`
+  states honestly, and reuses the existing non-mutating source-refresh
+  classification path when evidence is found.
+- The cycle records story ids, registry entry ids, refresh-run ids,
+  SourceItem ids, trigger, status, and message.
+- The News app exposes a `Run fetch cycle` control and displays recent cycle
+  and registry evidence in the source/reconciliation surface.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `08a518a2d0bfbb7d5de2f8aa8bcdcf97b10e54f2`.
+- Behavior commit:
+  `b5c4c4da8cd8889c81d2da4d8c64c6e5481d70a3`.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  and `npm run build` in `frontend/`.
+- CI run `27084845252`: success, including runtime shards, Go vet/build,
+  non-runtime tests, integration smoke, frontend build, and staging deploy.
+- FlakeHub run `27084845249`: success.
+- Staging health at `2026-06-07T06:24:55Z` reported proxy and sandbox
+  `deployed_commit` =
+  `b5c4c4da8cd8889c81d2da4d8c64c6e5481d70a3`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium --grep "owner-scoped"`
+  with 1 passed. The proof clicked the app `Run fetch cycle` control and
+  verified fetch-cycle id, StoryGraph story id, registry entry, and refresh-run
+  evidence.
+
+Invariants preserved:
+
+- The fetch cycle is bounded and explicit; it does not claim that a 24/7 worker
+  exists.
+- Source Service evidence still becomes owner-scoped SourceItems before it
+  enters Global Wire review artifacts.
+- Fetch cycles reuse the non-mutating refresh/classification path; they do not
+  rewrite platform StoryGraph stories directly.
+- News remains non-oracle and provenance-rich: cycle, registry, refresh,
+  SourceItem, contribution, candidate, claim, and research-task records are
+  inspectable.
+- Graph nodes remain Story VText headlines; registry entries and fetch cycles
+  are scheduler/source overlays.
+- The required theme views continue to pass on staging.
+
+Belief-state update:
+
+- The product trajectory now includes:
+  source registry -> bounded fetch cycle -> Source Service search ->
+  SourceItem -> source-refresh run -> classification/review artifacts ->
+  StoryGraph candidate/claim/research task -> News app visibility.
+- This closes the narrow gap where ingestion was only manual one-story source
+  refresh.
+- The implementation remains low-resolution: there is no autonomous scheduler,
+  recurrence policy, source standing catalog, dedupe across cycles, or worker
+  assignment lifecycle yet.
+
+Remaining error field:
+
+- There is still no autonomous 24/7 scheduler or recurring source-fetch worker.
+- Claim/event/entity extraction is durable enough to queue review, but not yet
+  a rich structured claim model with entity/event/timeline normalization.
+- Source registry entries are seeded from StoryGraph headlines rather than a
+  curated source catalog with standing policy.
+- Style.vtext composition/replacement is proven, but not yet a full style
+  revision workflow with forks, merge conflict handling, permissions, or
+  publication review.
+- Research tasks exist, but there is not yet a dedicated researcher work queue
+  with assignment, worker evidence packets, completion, or reconciliation merge.
+- There is no dedicated publication/update-feed/newsletter queue.
+- Autoradio remains a prompt-bar/VText handoff rather than a dedicated audio
+  playback or scheduling subsystem.
+
+Next executable probe:
+
+- Highest-value next realism axis is a researcher-task lifecycle: allow the
+  structured research tasks produced by source refresh/fetch cycles to move
+  from `open` to assigned/completed/blocked with evidence packets, then feed
+  reconciliation without mutating platform stories directly.
