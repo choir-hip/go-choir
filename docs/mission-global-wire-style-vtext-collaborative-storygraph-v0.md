@@ -4442,3 +4442,50 @@ Next executable probe:
   Autoradio script artifact sourced from publication artifacts, or a synthesized
   `RunAcceptanceRecord` if the product path can honestly bind this mission to
   trajectory/run evidence.
+
+## Problem Checkpoint - Autoradio Lacks Durable Script Artifact - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transform:
+
+- Treat Autoradio as a citeable renderer over a selected publication artifact,
+  not as a prompt submission side effect.
+- Keep the lowest honest resolution textual and durable: an owner-scoped
+  Autoradio script artifact that carries artifact, story, source, citation, and
+  rollback provenance. Audio generation/playback can be a later renderer over
+  that script.
+
+Observed gap:
+
+- Autoradio currently submits a prompt to `/api/prompt-bar` with publication
+  artifact context when an artifact exists.
+- The product stores no Autoradio script artifact, so the result cannot be
+  listed, inspected, reconciled, rolled back, exported, or used as durable
+  evidence by a researcher/newsletter/audio flow.
+- Reconciliation does not expose Autoradio output artifacts.
+
+Why this matters:
+
+- The spec trajectory ends in newsletters/researchers/Autoradio. A prompt
+  handoff proves traversal intent, but not a product artifact.
+- A durable script artifact raises realism without inventing a full audio
+  system, model job, public route, or playback subsystem.
+- The script must remain non-oracle: it should speak from the selected
+  publication artifact and carry explicit citation/rollback refs.
+
+Remaining error field:
+
+- No `GlobalWireAutoradioScript` or equivalent durable artifact exists.
+- No owner product path materializes an Autoradio script from an approved
+  publication artifact.
+- No News app view lists or inspects Autoradio script artifacts.
+- No reconciliation payload includes Autoradio output artifacts.
+
+Next executable probe:
+
+- Add owner-scoped Autoradio script records over approved publication
+  artifacts, expose `GET/POST /api/global-wire/autoradio-scripts`, render the
+  latest script in the News app, include scripts in reconciliation, and prove
+  on staging that creating a script preserves artifact/story/source/citation/
+  rollback provenance without mutating platform stories or user-owned forks.
