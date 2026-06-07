@@ -10,7 +10,7 @@ or publication-quality `Style.vtext` requirements.
 ## Goal String
 
 ```text
-/goal Run docs/mission-global-wire-sourcemaxx-publication-system-v0.md as an overnight MissionGradient mission. Re-architect Global Wire as a continuous high-volume source ingestion and publication-quality collaborative StoryGraph system, not a click-time source-refresh demo. Deliver the spec in docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md by building SourceMaxx ingestion that can ingest hundreds of GDELT/RSS/Telegram/search SourceItems per 15 minutes or faster where feasible, normalize/dedupe them, cluster them into story source neighborhoods, compute provenance/source-standing/contradiction/relevance/change signals, and feed StoryGraph without oracle mutation. Redesign the News app into clean readable newspaper-style columns with no nested scrolling panels, no repeated card wall, and no low-density artifact repetition. Deepen Style.vtext into citeable publication-grade editorial source artifacts that produce genuinely high-quality VText projections with voice, structure, evidence rules, examples, anti-patterns, revision policy, projection evaluations, and intelligent story-style matching. Do not run every style over every story by default; select, rank, compose, or withhold Style.vtexts based on story domain, audience, source neighborhood, editorial need, and user/publication context. Delete or replace architecture/UI/data paths that encode the wrong object, including one-result refresh bottlenecks, frontend-only preview authority, redundant panels, and shallow style tabs. Preserve all invariants: every story is a normal editable VText; user edits/forks/contributions are user-owned and never mutate platform stories; Style.vtext is selectable/composable/replacable/citeable; news is non-oracle and provenance-rich; graph nodes are Story VText headlines with source-neighborhood semantics; all app views work in Future Noir, Carbon Kintsugi, and London Salmon. Use cognitive transforms before major route changes and before stopping. Use staging/product-path proof for real ingestion volume, StoryGraph propagation, VText ownership, intelligent style matching, publication-quality projections, readable app behavior, and deployed commit identity. Update this mission doc with checkpoint/resumption state before stopping.
+/goal Run docs/mission-global-wire-sourcemaxx-publication-system-v0.md as an overnight MissionGradient mission. Re-architect Global Wire as a continuous high-volume source ingestion and publication-quality collaborative StoryGraph system, not a click-time source-refresh demo. Deliver the spec in docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md by building SourceMaxx ingestion that can ingest hundreds of GDELT/RSS/Telegram/search SourceItems per 15 minutes or faster where feasible, normalize/dedupe them, route them into long-running processors, let processors maintain hot-context/KV-cache understanding with agent-owned compaction, and let reconcilers connect stories, contradictions, and open questions across processors. Reuse existing researcher agents for additional evidence work and existing VText agents for article writing/revision from processor/reconciler briefs plus matched Style.vtext artifacts. Do not require clustering or embeddings in the first architecture pass; defer those until the processor/reconciler loop is proven. Redesign the News app into clean readable newspaper-style columns with no nested scrolling panels, no repeated card wall, and no low-density artifact repetition. Deepen Style.vtext into citeable publication-grade editorial source artifacts that produce genuinely high-quality VText projections with voice, structure, evidence rules, examples, anti-patterns, revision policy, projection evaluations, and intelligent story-style matching. Do not run every style over every story by default; select, rank, compose, or withhold Style.vtexts based on story domain, audience, source neighborhood, editorial need, and user/publication context. Delete or replace architecture/UI/data paths that encode the wrong object, including one-result refresh bottlenecks, frontend-only preview authority, redundant panels, and shallow style tabs. Preserve all invariants: every story is a normal editable VText; user edits/forks/contributions are user-owned and never mutate platform stories; Style.vtext is selectable/composable/replacable/citeable; news is non-oracle and provenance-rich; graph nodes are Story VText headlines with source-neighborhood semantics; all app views work in Future Noir, Carbon Kintsugi, and London Salmon. Use cognitive transforms before major route changes and before stopping. Use staging/product-path proof for real ingestion volume, processor/reconciler behavior, existing researcher and VText agent reuse, VText ownership, intelligent style matching, publication-quality projections, readable app behavior, and deployed commit identity. Update this mission doc with checkpoint/resumption state before stopping.
 ```
 
 ## Why This Is A New Mission
@@ -55,11 +55,18 @@ Selected transforms:
 6. **Editorial routing:** not every story wants every style. The system should
    choose style because it serves a story, audience, source neighborhood, or
    user/publication intent, not because a projection matrix is easy to render.
+7. **Resident cognition:** processors are not stateless summarizers. They are
+   long-running agents that preserve hot context/KV cache, compact when needed,
+   and keep durable handles to full source content and prior compactions.
+8. **Reconciliation as role:** cross-story connections, contradictions, and
+   questions need an explicit live agent role. The durable graph records the
+   projection of that work; it does not replace the work.
 
 Changed plan:
 
 - implementation: start with the ingestion and source-neighborhood substrate,
-  then expose a clean publication surface over it.
+  processor/reconciler agent loop, then expose a clean publication surface over
+  it.
 - verifier/evidence: prove source volume and freshness, not merely one API
   response; prove readable app screenshots, not merely DOM existence.
 - scope: one or a few story neighborhoods are acceptable only if they are fed
@@ -76,9 +83,12 @@ continuous source registry
 -> GDELT/RSS/Telegram/search/provider ingestion
 -> SourceItem batches
 -> normalization, dedupe, source standing, fetch provenance
--> claim/entity/event extraction
--> story clustering and source neighborhoods
--> StoryGraph candidates and durable Story VTexts
+-> simple source routing into processors
+-> long-running processor hot context and compaction chain
+-> reconciler connection/contradiction/question work
+-> existing researcher evidence requests where needed
+-> existing VText agent article/update requests
+-> durable graph records and Story VTexts
 -> publication-quality Style.vtext projections
 -> clean News app columns
 -> user-owned edits, forks, contributions
@@ -101,9 +111,16 @@ The product moves uphill when:
   minutes" with a clear path to faster/live ingestion;
 - SourceItems are durable, deduped, provider-tagged, and traceable to fetch
   runs;
-- source neighborhoods show diversity, contradiction, standing, and update
-  state instead of one deterministic signal;
-- StoryGraph consumes neighborhoods without blindly mutating canonical stories;
+- processors preserve high-context understanding of source flow instead of
+  reconstructing every cycle from summaries;
+- reconcilers surface cross-story connections, contradictions, and open
+  questions;
+- existing researcher agents can be requested by processors, reconcilers, or
+  VText agents;
+- existing VText agents write/update articles from processor/reconciler briefs,
+  research packets, and matched Style.vtext artifacts;
+- durable graph records consume processor/reconciler outputs without blindly
+  mutating canonical stories;
 - Story VTexts are normal editable VTexts;
 - user edits create user-owned forks/versions;
 - `Style.vtext` artifacts are deep enough to shape publication-quality prose;
@@ -155,28 +172,53 @@ Low resolution may begin with configured feeds and deterministic extractors,
 but it must preserve the topology of continuous ingestion. A manual
 `source-refresh` button is a control/debug affordance, not the source system.
 
-### Story Neighborhood Pipeline
+### Processor And Reconciler Pipeline
 
-Source flow should enter a neighborhood pipeline:
+Source flow should enter a processor/reconciler pipeline:
 
 ```text
 SourceItem batch
 -> normalize
 -> dedupe
--> extract claim/entity/event/time/place hints
--> cluster into story neighborhoods
--> compute overlap/contradiction/standing/change/prominence signals
--> create StoryGraph candidates
--> queue research/reconciliation work
+-> simple routing by source, topic hint, geography, language, and load budget
+-> long-running processors absorb sources into hot context
+-> processors compact when context pressure rises while preserving source refs
+-> processors emit briefs, watch items, research requests, and VText requests
+-> reconcilers inspect processor briefs for links, contradictions, and questions
+-> researchers answer targeted evidence requests
+-> VText agents write/revise articles using briefs, research, and Style.vtext
+-> durable graph records lineage, relationships, contradictions, and versions
 ```
 
-The first implementation may use simple deterministic clustering if it records
-the limits honestly. It must not collapse the neighborhood into one signal.
+The first implementation should not require clustering or embeddings. Simple
+routing is enough if processors and reconcilers can maintain useful live
+understanding and durable provenance. Clustering and embeddings are later
+realism axes after the agent loop works.
 
-### StoryGraph And VText
+Processors are not necessarily vertical-specific. A processor may own a broad
+topic, a geographic region, a source class, a developing event family, or a
+temporary load-balanced slice of the firehose. The number of processors should
+be tuned to source volume and LLM budget.
 
-StoryGraph remains the durable evidence and relationship object. Story VTexts
-are readable/editable projections over it.
+Reconcilers are the bridge role. They receive processor briefs and selected
+source/research handles, then ask what connects, what conflicts, and what is
+missing. They can request additional research and can ask VText agents for
+cross-cutting stories or updates.
+
+### Agent Reuse And Durable Graph Records
+
+This mission must reuse Choir's existing researcher agents and VText agents.
+Do not create parallel researcher or writer systems.
+
+Processors and reconcilers may request:
+
+- existing researcher agents for bounded evidence checks, source-standing
+  reviews, additional search, contradiction inspection, and missing context;
+- existing VText agents for new articles, updates, rewrites, and publication
+  packages from processor/reconciler briefs plus Style.vtext.
+
+Durable graph records remain the evidence and relationship projection of the
+agent work. Story VTexts are readable/editable projections over those records.
 
 Canonical story updates require review/candidate records. User edits/forks must
 remain user-owned.
@@ -244,9 +286,12 @@ Audit and delete, replace, or quarantine paths that encode the wrong object:
 - shallow style tabs that do not open/select citeable `Style.vtext` artifacts;
 - projection matrices that run every style over every story without editorial
   routing or story-fit evidence;
-- deterministic single-signal source review paths that erase neighborhoods;
+- deterministic single-signal source review paths that erase processor context
+  or reconciler questions;
+- new standalone researcher/writer implementations that bypass existing
+  researcher or VText agents;
 - tests that only prove a button or singleton response when the product needs
-  source volume and neighborhood behavior.
+  source volume and processor/reconciler behavior.
 
 Follow problem-documentation-first before fixing any newly discovered deployed
 behavior problem. For architectural cleanup that is planned by this mission,
@@ -262,9 +307,11 @@ Increase resolution along these axes without changing object identity:
   domain-specific source sets.
 - **Freshness:** manual refresh -> scheduled 15-minute batches -> faster
   per-source cadence -> live events where available.
-- **Neighborhood richness:** single classification -> clusters -> overlap,
-  contradiction, standing, change, prominence, and source-density signals.
-- **StoryGraph realism:** candidates -> reviewed updates -> timeline and
+- **Processor cognition:** stateless source batches -> long-running processors
+  -> hot-context/KV-cache preservation -> compaction chains with source refs.
+- **Reconciler realism:** no bridge role -> cross-processor contradiction and
+  question detection -> research requests -> related-story records.
+- **Graph realism:** candidate records -> reviewed updates -> timeline and
   related-story graph.
 - **Style depth:** simple style source -> publication-quality Style.vtext ->
   composed/replaced/revised style artifacts.
@@ -282,10 +329,16 @@ Increase resolution along these axes without changing object identity:
 
 Use layered proof:
 
-- focused Go tests for source adapters, batch ingest, dedupe, clustering,
-  neighborhood signal creation, and StoryGraph candidate creation;
+- focused Go tests for source adapters, batch ingest, dedupe, source routing,
+  processor/reconciler request records, and graph candidate creation;
 - ingestion metrics proving item counts, provider counts, dedupe counts,
   freshness windows, and error/backoff behavior;
+- runtime/product evidence that processors preserve context across source
+  batches, compact with source handles, and resume from compaction;
+- runtime/product evidence that reconcilers produce connections,
+  contradictions, questions, and research/VText requests;
+- runtime/product evidence that existing researcher and VText agents receive
+  and act on those requests;
 - product-path API proof through browser-public routes only;
 - staging proof that the deployed source system ingests real or configured
   high-volume sources;
@@ -307,6 +360,10 @@ Use layered proof:
 - Do not let user edits mutate platform stories.
 - Do not treat `Style.vtext` as a short prompt string.
 - Do not run all styles over all stories as the default product behavior.
+- Do not create new researcher or writer agent types when existing researcher
+  and VText agents should be reused.
+- Do not require clustering or embeddings before proving the processor and
+  reconciler loop.
 - Do not ship generic assistant prose as publication-quality content.
 - Do not use internal/test-only routes for product proof.
 - Do not claim staging behavior from local-only evidence.
@@ -318,8 +375,13 @@ Mark `complete` only when staging proves:
 - continuous or scheduled ingestion of high-volume source batches, with a
   documented path to faster/live ingestion;
 - durable SourceItems from multiple source classes;
-- dedupe and story-neighborhood signals;
-- StoryGraph candidate/reconciliation state from source neighborhoods;
+- dedupe and source routing into processors;
+- long-running processor behavior with context preservation and compaction
+  handles;
+- reconciler behavior that surfaces cross-story connections, contradictions,
+  and open questions;
+- existing researcher and VText agent reuse from processor/reconciler requests;
+- graph candidate/reconciliation state from processor/reconciler outputs;
 - normal Story VText and user-owned fork/edit behavior;
 - citeable, deep `Style.vtext` artifacts, intelligent style-story matching,
   and publication-quality projections;
@@ -357,7 +419,8 @@ unproven or partial claims:
 
 - high-volume ingestion of hundreds of source items per 15 minutes;
 - many Telegram/RSS/GDELT sources configured and observed on staging;
-- source-neighborhood clustering over high-volume batches;
+- processor and reconciler agent contracts over high-volume batches;
+- long-running processor context/KV-cache preservation and compaction;
 - intelligent Style.vtext-to-story matching and withholding/deprioritization;
 - publication-quality Style.vtext projections;
 - redesigned readable newspaper UI;
@@ -371,19 +434,25 @@ belief-state changes:
 - Style.vtext quality must be treated as product correctness.
 - Style.vtext routing must be treated as editorial judgment, not exhaustive
   permutation.
+- processors may span multiple verticals; "vertical" is a routing/category
+  concept, not the agent type name.
+- reconcilers are the bridge role for connections, contradictions, and
+  questions across processor outputs.
 
 remaining error field:
 
 - exact current sourcecycled staging configuration and source volume;
 - whether existing source adapters can already support the desired cadence;
 - ingestion storage/performance limits;
-- best clustering boundary between deterministic code, search providers, and
-  researcher/model workflows;
+- processor/reconciler agent contracts, compaction policy, and load budget;
+- best boundary between deterministic routing, processors, reconcilers,
+  existing researchers, and existing VText agents;
 - which current UI components should be deleted versus reused.
 
 highest-impact remaining uncertainty: whether the deployed source system can be
 configured and proven to ingest high-volume GDELT/RSS/Telegram batches on the
-desired cadence without a deeper source daemon/storage redesign.
+desired cadence and feed long-running processors without a deeper source
+daemon/storage/runtime redesign.
 
 next executable probe:
 
@@ -394,9 +463,9 @@ next executable probe:
 2. Inspect `cmd/sourcecycled`, `internal/sources`, source storage, staging
    source configuration, and current Global Wire source-refresh code.
 3. Produce a deletion/reuse map for current Global Wire UI and source paths.
-4. Implement the smallest continuous ingestion proof that records high-volume
-   SourceItem batches and exposes source-neighborhood counts through a
-   product-safe path.
+4. Implement or specify the smallest continuous ingestion proof that records
+   high-volume SourceItem batches, routes them to processors, and records
+   processor/reconciler requests through product-safe paths.
 5. Redesign the Global Wire front page into readable columns over that data.
 
 suggested resume goal string: use the Goal String section above.
