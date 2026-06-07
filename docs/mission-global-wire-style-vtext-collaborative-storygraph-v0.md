@@ -4946,6 +4946,9 @@ Observed evidence:
   resumed the desktop but opened a second Global Wire window when the original
   window had already been restored. Strict locators then saw duplicate
   `data-global-wire-source-standing-policy` elements.
+- Scoping the proof to the active Global Wire window was also too strong,
+  because the same flow opens VText editors and can make Global Wire inactive
+  while still needing to assert its preserved state.
 
 Why this matters:
 
@@ -4967,6 +4970,9 @@ Remaining error field:
   shell.
 - The restoration step must focus an existing Global Wire window when present
   and only open a new one when no active/restored app instance exists.
+- The proof needs a stable single Global Wire window locator, not a broad app
+  locator that matches duplicates and not an active-only locator that disappears
+  when another app receives focus.
 
 Next executable probe:
 
