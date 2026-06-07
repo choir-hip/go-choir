@@ -540,9 +540,13 @@ SourceMaxx desk: front-page article columns, a source chronology column, quiet
 per-article VText affordances, compact Style.vtext controls, no app-local
 theme selector, no contribution dashboard, no Autoradio surface, no repeated
 `Open in VText` label text, no story border lines, and no nested app-panel
-scrolling. Source processing remains too close to manual/source-refresh
-semantics, processors/reconcilers do not yet exist as product roles, and
-Style.vtexts are not yet deep publication artifacts. A partial source-refresh
+scrolling. Sourcecycled now has a SourceMaxx handoff substrate: expanded
+GDELT/RSS/Telegram registry, configurable per-source poll caps, durable
+processor request records, durable corpus-reconciler request records, and an
+internal SourceMaxx latest-cycle endpoint. Processors/reconcilers still do not
+yet execute as resident product agents, source handoffs are not yet connected
+to existing researcher/VText agent request channels, and Style.vtexts are not
+yet deep publication artifacts. A partial source-refresh
 batch experiment from the superseded route is preserved in
 `stash@{1}` named
 `superseded-global-wire-source-refresh-batch-experiment-2026-06-07`.
@@ -553,11 +557,15 @@ reapplied blindly.
 
 what shipped: behavior checkpoint in
 `frontend/src/lib/GlobalWireApp.svelte` and
-`frontend/tests/global-wire-app.spec.js`. The visible Global Wire app now
-projects the mission design language: clean newspaper columns plus source
+`frontend/tests/global-wire-app.spec.js`, followed by a source-runtime
+checkpoint in `cmd/sourcecycled`, `internal/cycle`, `internal/sources`,
+`internal/sourceapi`, and `configs/sources.json`. The visible Global Wire app
+now projects the mission design language: clean newspaper columns plus source
 chronology instead of a dense StoryGraph/contribution/newsletter/Autoradio
 dashboard. Every article has a quiet VText button and fork button. Style.vtext
-routing remains compact and citeable.
+routing remains compact and citeable. Sourcecycled no longer routes every
+cycle through a monolithic LLM issue synthesizer; it persists source items and
+queues processor/reconciler work records by source handles.
 
 what was proven:
 
@@ -584,11 +592,29 @@ what was proven:
 - `nix develop -c go test ./internal/store -run 'TestGlobalWire'` passed with
   no matching tests.
 - `nix develop -c go test ./internal/sources ./cmd/sourcecycled` passed.
+- `nix develop -c go test ./internal/cycle ./internal/sources ./internal/sourceapi ./cmd/sourcecycled`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestGlobalWire|TestSourceSearch|TestResearcher'`
+  passed.
+- Local live sourcecycled proof with
+  `SOURCE_SERVICE_DB_PATH=/tmp/sourcecycled-sourcemaxx-proof.db
+  SOURCE_SERVICE_ADDR=127.0.0.1:9876 nix develop -c go run ./cmd/sourcecycled`
+  loaded 14 configured sources and completed the first cycle at
+  `2026-06-07T13:50:27Z`.
+- Local source service health for that proof reported `item_count: 710` and
+  `fetch_count: 14`.
+- Local `/internal/source-service/sourcemaxx/latest` reported cycle
+  `cycle_b365d40c7c3e7db24a5fa864`, status `completed`, 710 SourceItems, 18
+  queued processor handoffs, and 1 queued `story-corpus` reconciler handoff.
+- Local source-type distribution for that proof was 500 GDELT items, 172 RSS
+  items, and 38 Telegram items. Fetch status was `ok` for all 14 configured
+  sources, with some feeds valid but empty for the cycle (`arxiv:cs_ai`,
+  `rss:nikkei_asia`, `telegram:conflict_monitor`).
 
 unproven or partial claims:
 
-- hundreds of source items per 15 minutes;
-- many GDELT/RSS/Telegram/search sources configured and observed on staging;
+- hundreds of source items per 15 minutes on staging;
+- expanded GDELT/RSS/Telegram source configuration observed on staging;
 - processor contracts and long-running context continuity;
 - processor compaction with handles to full source content;
 - reconciler contracts and corpus-level contradiction/question behavior across
@@ -597,8 +623,8 @@ unproven or partial claims:
 - reuse of existing VText agents for article writing/revision;
 - intelligent Style.vtext routing and withholding/deprioritization;
 - publication-quality VText output;
-- source volume and source-processing behavior on staging beyond the static
-  visible SourceMaxx demo data.
+- source-processing behavior connected to product agents beyond durable queued
+  handoff records.
 
 belief-state changes:
 
@@ -613,43 +639,61 @@ belief-state changes:
   artifact machinery as a dashboard before source breadth and article
   readability were solved. The SourceMaxx surface should stay text-led while
   deeper provenance remains available through VText/source disclosure.
+- The previous sourcecycled loop also optimized the wrong object by attempting
+  direct LLM issue synthesis after polling. The better deterministic boundary
+  is SourceItem ledger plus processor/reconciler handoffs; resident agents and
+  VText agents should perform cognition and publication.
+- GDELT should be routed honestly as a global firehose until processors
+  interpret it. The deterministic router should not pretend a feed-wide
+  vertical label is semantic classification.
 
 remaining error field:
 
-- exact current sourcecycled staging configuration and source volume;
-- source daemon/storage ability to handle hundreds of items per 15 minutes;
+- exact current sourcecycled staging configuration and source volume after
+  deploy;
+- source daemon/storage ability to handle hundreds of items per 15 minutes on
+  staging;
 - processor/reconciler runtime contracts, same-loop tool use, request/result
   channels, and compaction policy;
-- processor load budget and routing scheme;
+- processor load budget and routing scheme after live staging data;
 - current researcher/VText agent invocation contracts for this workflow;
 - deletion/reuse map for current Global Wire backend source paths;
 - backend still uses many `StoryGraph` names and deferred contribution,
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether the deployed source system and
-runtime can ingest high-volume GDELT/RSS/Telegram/search batches and feed
-long-running processors with preserved context without deeper source daemon,
-storage, or agent-runtime changes.
+highest-impact remaining uncertainty: whether staging sourcecycled runs the
+expanded registry and whether queued processor/reconciler handoffs can be
+consumed by resident agents with preserved context and existing researcher/VText
+agent reuse without deeper runtime changes.
 
 next executable delivery loop:
 
-1. Inspect and mutate `cmd/sourcecycled`, `internal/sources`, source storage,
-   runtime agent role contracts, researcher invocation, VText invocation, and
-   current Global Wire backend source paths. Produce a deletion/reuse map only
-   as a working artifact for implementation, not as a stopping point.
-2. Replace wrong-object paths while preserving product topology: high-volume
+1. Commit and push the SourceMaxx source-runtime checkpoint; monitor CI,
+   staging deploy identity, and sourcecycled/source-service behavior.
+2. Probe staging sourcecycled `/internal/source-service/health`,
+   `/internal/source-service/sourcemaxx/latest`, and researcher `source_search`
+   product paths where accessible; record exact source volume, fetch statuses,
+   processor handoffs, and reconciler handoff evidence.
+3. Connect queued processor/reconciler handoffs to resident agent runs using
+   the existing runtime loop and request/result records. Preserve long-running
+   context/compaction handles rather than reconstructing all context from text.
+4. Route processor/reconciler research needs into existing researcher agents
+   and route article/update needs into existing VText agents. Do not create a
+   parallel researcher/writer system.
+5. Replace remaining wrong-object paths while preserving product topology:
+   high-volume
    source ingestion, durable SourceItems, routing, processor state,
    reconciler corpus review, researcher request/result reuse, VText
    write/revision reuse, Style.vtext routing, VText traversal/source indexes,
    and user-owned VText boundaries.
-3. Discard or selectively mine the stashed source-refresh experiment only if it
+6. Discard or selectively mine the stashed source-refresh experiment only if it
    helps the delivered architecture; do not revive click-time source refresh as
    the product object.
-4. Build through to staging behavior: tests, commit, push, CI/deploy monitor,
+7. Build through to staging behavior: tests, commit, push, CI/deploy monitor,
    staging identity, product-path source volume, processor/reconciler evidence,
    researcher/VText reuse evidence, ownership evidence, and browser screenshots.
-5. Perform a quality pass before claiming delivery: simplify names and data
+8. Perform a quality pass before claiming delivery: simplify names and data
    flows, remove obsolete panels/routes/tests, make Style.vtexts publication
    quality, and make the Global Wire UI nice in Futuristic Noir, Carbon Fiber
    Kintsugi, London Salmon, and responsive Choir web desktop layouts.
@@ -657,8 +701,9 @@ next executable delivery loop:
 suggested resume goal string: use the Goal String section above.
 
 evidence artifact refs: local browser screenshot emitted through Browser
-plugin during this run; focused frontend/source test commands and staging
-acceptance command listed above.
+plugin during this run; focused frontend/source test commands, staging
+acceptance command, and local sourcecycled proof DB
+`/tmp/sourcecycled-sourcemaxx-proof.db` listed above.
 
 rollback refs: prior branch/worktree state before this mission;
 `stash@{1}` named
