@@ -2678,3 +2678,51 @@ Next executable probe:
   create a low-resolution source registry and bounded fetch-cycle record that
   can run over story neighborhoods, produce SourceItems/source-refresh runs, and
   leave durable scheduler/fetch evidence without claiming a full 24/7 newsroom.
+
+## Problem Checkpoint - Source Registry And Fetch Cycles Are Not Durable - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- Global Wire can run a bounded source refresh for one StoryGraph node, but it
+  does not yet have a source registry or fetch-cycle object.
+- The spec's target loop starts with `source registry -> fetch cycles / live
+  source ingestion -> normalized SourceItems`. Without a durable registry and
+  cycle record, Global Wire still depends on one-off user/UI refreshes and
+  cannot prove scheduled or repeated ingestion readiness.
+- A real 24/7 worker is not required for the first mission, but the topology
+  must preserve that future path: a cycle should name its source scope, story
+  neighborhood, query basis, trigger, status, refresh-run refs, source-item
+  refs, and residual failure/unavailable state.
+
+Evidence:
+
+- `/api/global-wire/source-refresh` exists for a single story and query.
+- `GlobalWireSourceRefreshRun` records one refresh/classification pass.
+- There is no `GlobalWireSourceRegistryEntry`, no `GlobalWireFetchCycleRun`,
+  no endpoint that runs a bounded cycle over story neighborhoods, and no News
+  app surface showing registry/cycle evidence.
+
+Belief-state update:
+
+- The next topology-preserving improvement is a low-resolution owner-scoped
+  source registry seeded from StoryGraph nodes and a bounded fetch-cycle product
+  path that can run the existing source-refresh classification logic across one
+  or more stories. The cycle must honestly record `unavailable` or
+  `no-evidence` states when Source Service cannot produce evidence.
+
+Remaining error field:
+
+- No durable source registry exists.
+- No durable fetch-cycle run exists.
+- No staging proof shows a cycle producing SourceItems/source-refresh runs or
+  recording honest failure state across a StoryGraph neighborhood.
+
+Next executable probe:
+
+- Add a bounded `/api/global-wire/fetch-cycles` product path. It should list or
+  seed source registry entries from current StoryGraph stories, run Source
+  Service search per selected story/query when configured, reuse the same
+  non-mutating refresh/classification artifact path, and expose cycle evidence
+  in the News app without claiming full 24/7 automation.
