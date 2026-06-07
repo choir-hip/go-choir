@@ -3766,3 +3766,46 @@ Residual risk:
   That stale-active-computer inventory should be investigated separately if it
   blocks owner sessions, but it no longer masks successful staging deployment
   of runtime-only product changes.
+
+## Problem Checkpoint - Publication Artifacts Are Not Feed-Consumable - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Observed gap:
+
+- `GlobalWirePublicationArtifact` rows now exist and are visible in
+  reconciliation, but no feed/newsletter/public-consumption route materializes
+  those rows as a story feed.
+- The News app can display artifact references inside the research queue, but
+  front-page/feed surfaces do not yet consume publication artifacts as output
+  items.
+- Autoradio prompt handoff still uses selected story/projection text, not the
+  publication artifact body with its citation and rollback references.
+
+Why this matters:
+
+- The spec trajectory ends in newsletters, researchers, Autoradio, and
+  reconciliation-ready state. Artifact existence alone is not consumption.
+- The feed must remain non-oracle and provenance-rich. Review-ready output
+  should show citations, scheduler refs, rollback refs, and source neighborhood
+  context without mutating StoryGraph or platform Story VTexts.
+
+Belief-state update:
+
+- The next topology-preserving increment is an owner-scoped publication feed
+  endpoint and News app feed panel over existing artifacts. This increases
+  consumption realism without prematurely declaring a public newsletter
+  delivery contract or bypassing user-owned review.
+
+Remaining error field:
+
+- No `/api/global-wire/publication-feed` route exists.
+- No News app feed view lists review-ready publication artifacts as feed items.
+- Autoradio still does not traverse publication artifacts directly.
+
+Next executable probe:
+
+- Add a read-only feed endpoint over `GlobalWirePublicationArtifact` that
+  returns artifact, story, source-neighborhood, status, citation-count, and
+  rollback-count fields; expose it in the News app; prove locally and on
+  staging.
