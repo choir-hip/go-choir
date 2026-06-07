@@ -3904,3 +3904,48 @@ Next executable probe:
   `publication-artifact -> Autoradio traversal`, `publication-artifact ->
   explicit review/publish contract`, or `existing product evidence ->
   RunAcceptanceRecord` as the next highest-value realism axis.
+
+## Problem Checkpoint - Autoradio Does Not Traverse Publication Artifacts - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transform:
+
+- Treat Autoradio as a renderer of a citeable publication artifact, not a
+  direct prompt over raw story projection text.
+- The load-bearing object for audio/news consumption should be the same
+  review-ready artifact used by the publication feed, because that artifact
+  already carries citation refs, rollback refs, source context, Style.vtext
+  lineage, and non-mutation guardrails.
+
+Observed gap:
+
+- The News app Autoradio action still submits a prompt built from selected
+  StoryGraph projection text and the source manifest.
+- When a `GlobalWirePublicationArtifact` exists for the selected story, the
+  Autoradio prompt does not select it as the primary traversal object.
+- The submitted prompt does not yet include publication artifact id, artifact
+  status/channel/body, citation count, rollback count, or SourceItem context.
+
+Why this matters:
+
+- The spec trajectory is not just artifact creation; it includes downstream
+  News/Autoradio consumption over provenance-rich objects.
+- Prompting from the raw story projection risks losing the exact review-ready
+  artifact and its rollback/citation neighborhood.
+- Autoradio should remain non-oracle: speak from the artifact and name
+  uncertainty/provenance instead of inventing connective tissue.
+
+Remaining error field:
+
+- No artifact-aware Autoradio prompt path exists.
+- The prompt-bar submission proof does not verify artifact traversal.
+- Public/newsletter delivery semantics are still intentionally out of scope
+  until explicit review/publish contracts exist.
+
+Next executable probe:
+
+- Make `storyPromptContext('autoradio')` prefer the latest publication feed
+  item for the selected story when one exists, include artifact provenance in
+  the prompt, and extend deployed owner proof to observe the prompt-bar
+  submission payload.
