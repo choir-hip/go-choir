@@ -22,6 +22,7 @@ let
   authSigningDir = "/var/lib/go-choir/auth-signing";
   frontendCurrent = "/var/www/go-choir/frontend-current";
   sandboxFilesDir = "/var/lib/go-choir/files";
+  sandboxRuntimeDir = "/var/lib/go-choir/runtime";
   sourceServiceDir = "/var/lib/go-choir/source-service";
   mailDir = "/var/lib/go-choir/mail";
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
@@ -619,6 +620,7 @@ in
         "SANDBOX_PORT=8085"
         "SANDBOX_ID=sandbox-m1"
         "SANDBOX_FILES_ROOT=${sandboxFilesDir}"
+        "RUNTIME_STORE_PATH=${sandboxRuntimeDir}/runtime.db"
         "SOURCE_SERVICE_BASE_URL=http://127.0.0.1:8787"
         "SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085"
         "SOURCE_SERVICE_RUNTIME_OWNER_ID=global-wire-platform"
@@ -661,6 +663,7 @@ in
     "d /var/www/go-choir 0755 root root -"
     "d /var/lib/go-choir 0750 root root -"
     "d /var/lib/go-choir/services 0755 root root -"
+    "d ${sandboxRuntimeDir} 0750 root root -"
     "d /var/lib/go-choir/auth 0750 root root -"
     "d /var/lib/go-choir/auth-signing 0750 root root -"
     "d ${mailDir} 0700 root root -"
