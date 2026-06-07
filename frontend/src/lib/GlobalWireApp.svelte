@@ -902,10 +902,23 @@
     return sourceDossiers.find((dossier) => dossier.story_id === selectedStoryId) || sourceDossiers[0] || null;
   }
 
-  function sourceDossierMissingFields(dossier) {
+  function sourceDossierNewsletterIssueIds(dossier) {
     const storyId = dossier?.story_id || selectedStoryId;
-    const hasNewsletterIssue = (dossier?.publication_refs?.newsletter_issue_ids || []).length > 0
-      || newsletterIssues.some((issue) => issue.story_id === storyId);
+    const storyPublicLinkIds = new Set(
+      publicLinks
+        .filter((link) => link?.story_id === storyId)
+        .map((link) => link.id)
+        .filter(Boolean)
+    );
+    const issueIds = newsletterIssues
+      .filter((issue) => issue?.story_id === storyId || (issue?.public_link_ids || []).some((id) => storyPublicLinkIds.has(id)))
+      .map((issue) => issue.id)
+      .filter(Boolean);
+    return Array.from(new Set([...(dossier?.publication_refs?.newsletter_issue_ids || []), ...issueIds]));
+  }
+
+  function sourceDossierMissingFields(dossier) {
+    const hasNewsletterIssue = sourceDossierNewsletterIssueIds(dossier).length > 0;
     return (dossier?.missing_fields || []).filter((field) => field !== 'newsletter_issues' || !hasNewsletterIssue);
   }
 
@@ -2404,7 +2417,7 @@
                 claims: {(dossier.claim_dossiers || []).length} · extractions: {(dossier.extraction_ids || []).length} · tasks: {(dossier.research_task_ids || []).length}
               </small>
               <small data-global-wire-source-dossier-publication>
-                publications: {(dossier.publication_refs?.artifact_ids || []).length} · deliveries: {(dossier.publication_refs?.delivery_ids || []).length} · newsletter issues: {(dossier.publication_refs?.newsletter_issue_ids || []).length}
+                publications: {(dossier.publication_refs?.artifact_ids || []).length} · deliveries: {(dossier.publication_refs?.delivery_ids || []).length} · newsletter issues: {sourceDossierNewsletterIssueIds(dossier).length}
               </small>
               <small data-global-wire-source-dossier-provenance>
                 citations: {(dossier.publication_refs?.citation_refs || []).length} · rollback refs: {(dossier.publication_refs?.rollback_refs || []).length} · missing: {sourceDossierMissingFields(dossier).join(', ') || 'none'}
