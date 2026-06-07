@@ -2531,7 +2531,7 @@ staging proof:
 
 ### Problem 49: Mobile Inline Source Transclusion Expands The Reading Surface Horizontally
 
-status: `fixed_local_proof_pending_deploy`.
+status: `fixed_staging_proven`.
 
 problem: on a phone-width published VText reader, opening an inline source
 transclusion can widen the document/read surface beyond the visual viewport.
@@ -2604,4 +2604,29 @@ local proof:
   "VText lays out expanded text sources as noncanonical journal flow|VText uses stacked journal flow instead of old source card|VText mobile source journal flow stays within the reader width"
   --timeout=90000
   result: 3 passed.
+
+commit/deploy proof:
+  commit 0346495c393f50cf3f93d5f808fb874e9b1c4590
+  GitHub Actions CI 27079260064 passed.
+  FlakeHub publish 27079260070 passed.
+  Node B deploy job 79922158704 passed.
+  /health reported proxy and sandbox deployed_commit
+  0346495c393f50cf3f93d5f808fb874e9b1c4590, deployed_at
+  2026-06-07T01:33:20Z.
+
+staging proof:
+  CHOIR_AUTH_STATE=/tmp/go-choir-mobile-source-flow-staging-auth.json
+  CHOIR_AUTH_META=/tmp/go-choir-mobile-source-flow-staging-auth.meta.json
+  PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000
+  npm --prefix frontend run e2e --
+  tests/vtext-source-entities.spec.js -g
+  "VText lays out expanded text sources as noncanonical journal flow|VText uses stacked journal flow instead of old source card|VText mobile source journal flow stays within the reader width"
+  --timeout=90000
+  result: 3 passed.
+
+  The deployed proof verifies the existing desktop side-note source flow,
+  constrained-width stacked journal flow, and a 390px mobile source-flow case
+  where opening a source transclusion keeps document and rendered-surface
+  scroll width bounded and keeps the flow, note, and following paragraph
+  aligned inside the reader.
 ```
