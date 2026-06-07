@@ -1949,6 +1949,11 @@ var durableMetadataKeys = []string{
 	"media_source_refs",
 	"media_source_research_required",
 	"source_entities",
+	"source_maxx_cycle_id",
+	"source_maxx_request_id",
+	"source_maxx_request_kind",
+	"processor_key",
+	"reconciler_scope",
 	runMetadataOwnerEmail,
 }
 

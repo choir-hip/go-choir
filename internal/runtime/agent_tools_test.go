@@ -2046,9 +2046,12 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	}
 
 	processorRun, err := rt.StartRunWithMetadata(context.Background(), "ingest source batch", "user-alice", map[string]any{
-		runMetadataAgentProfile: "source-processor",
-		runMetadataAgentRole:    "source-processor",
-		runMetadataProcessorKey: "processor:global_firehose:global:gdelt",
+		runMetadataAgentProfile:    "source-processor",
+		runMetadataAgentRole:       "source-processor",
+		runMetadataProcessorKey:    "processor:global_firehose:global:gdelt",
+		"source_maxx_cycle_id":     "cycle-test",
+		"source_maxx_request_id":   "processor-test",
+		"source_maxx_request_kind": "processor",
 	})
 	if err != nil {
 		t.Fatalf("start processor run: %v", err)
@@ -2082,12 +2085,60 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 		t.Fatalf("processor research spawn = %+v, want researcher/researcher", researchSpawn)
 	}
 
-	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
+	spawnVTextRaw, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"write a source-grounded article from this processor brief",
 		"role":"vtext",
 		"channel_id":"global-wire-story-candidate"
-	}`)); err != nil {
+	}`))
+	if err != nil {
 		t.Fatalf("processor spawn vtext: %v", err)
+	}
+	var vtextSpawn struct {
+		AgentID         string         `json:"agent_id"`
+		DocID           string         `json:"doc_id"`
+		SeedRevisionID  string         `json:"seed_revision_id"`
+		LoopID          string         `json:"loop_id"`
+		ChannelID       string         `json:"channel_id"`
+		Profile         string         `json:"profile"`
+		Role            string         `json:"role"`
+		State           types.RunState `json:"state"`
+		CreatedDocument bool           `json:"created_document"`
+	}
+	if err := json.Unmarshal([]byte(spawnVTextRaw), &vtextSpawn); err != nil {
+		t.Fatalf("decode processor vtext spawn: %v", err)
+	}
+	if vtextSpawn.Profile != AgentProfileVText || vtextSpawn.Role != AgentProfileVText {
+		t.Fatalf("processor vtext spawn profile/role = %+v", vtextSpawn)
+	}
+	if vtextSpawn.DocID == "" || vtextSpawn.AgentID != "vtext:"+vtextSpawn.DocID || vtextSpawn.ChannelID != vtextSpawn.DocID {
+		t.Fatalf("processor vtext spawn did not return normal vtext handle: %+v", vtextSpawn)
+	}
+	if !vtextSpawn.CreatedDocument || vtextSpawn.SeedRevisionID == "" || vtextSpawn.LoopID == "" {
+		t.Fatalf("processor vtext spawn missing document/revision/run identity: %+v", vtextSpawn)
+	}
+	doc, err := rt.Store().GetDocument(context.Background(), vtextSpawn.DocID, "user-alice")
+	if err != nil {
+		t.Fatalf("get processor-spawned vtext document: %v", err)
+	}
+	if doc.CurrentRevisionID != vtextSpawn.SeedRevisionID {
+		t.Fatalf("processor-spawned doc head = %q, want seed %q", doc.CurrentRevisionID, vtextSpawn.SeedRevisionID)
+	}
+	seedRev, err := rt.Store().GetRevision(context.Background(), vtextSpawn.SeedRevisionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get processor-spawned seed revision: %v", err)
+	}
+	if seedRev.AuthorKind != types.AuthorAppAgent || !strings.Contains(seedRev.Content, "SourceMaxx Brief") {
+		t.Fatalf("processor seed revision = author %q content %q", seedRev.AuthorKind, seedRev.Content)
+	}
+	vtextRun, err := rt.GetRun(context.Background(), vtextSpawn.LoopID, "user-alice")
+	if err != nil {
+		t.Fatalf("get processor-spawned vtext run: %v", err)
+	}
+	if vtextRun.AgentID != "vtext:"+vtextSpawn.DocID || vtextRun.ChannelID != vtextSpawn.DocID || metadataString(vtextRun.Metadata, "type") != "vtext_agent_revision" {
+		t.Fatalf("processor vtext run is not a vtext revision run: %+v", vtextRun)
+	}
+	if metadataString(vtextRun.Metadata, "source_maxx_cycle_id") != "cycle-test" || metadataString(vtextRun.Metadata, "processor_key") != "processor:global_firehose:global:gdelt" {
+		t.Fatalf("processor vtext run did not preserve SourceMaxx metadata: %+v", vtextRun.Metadata)
 	}
 	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"mutate code",
@@ -2111,12 +2162,37 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 		t.Fatalf("reconciler agent id = %q", reconcilerRun.AgentID)
 	}
 	reconcilerRegistry := rt.ToolRegistryForProfile(AgentProfileReconciler)
-	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
+	reconcilerVTextRaw, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
 		"objective":"draft a correction/update VText from this corpus reconciliation",
 		"role":"vtext",
-		"channel_id":"global-wire-correction"
-	}`)); err != nil {
+		"channel_id":"`+vtextSpawn.DocID+`"
+	}`))
+	if err != nil {
 		t.Fatalf("reconciler spawn vtext: %v", err)
+	}
+	var reconcilerVTextSpawn struct {
+		DocID              string `json:"doc_id"`
+		LoopID             string `json:"loop_id"`
+		ChannelID          string `json:"channel_id"`
+		CreatedDocument    bool   `json:"created_document"`
+		RevisedExistingDoc bool   `json:"revised_existing_doc"`
+		SeedRevisionID     string `json:"seed_revision_id"`
+	}
+	if err := json.Unmarshal([]byte(reconcilerVTextRaw), &reconcilerVTextSpawn); err != nil {
+		t.Fatalf("decode reconciler vtext spawn: %v", err)
+	}
+	if reconcilerVTextSpawn.DocID != vtextSpawn.DocID || reconcilerVTextSpawn.ChannelID != vtextSpawn.DocID {
+		t.Fatalf("reconciler did not target existing vtext doc: %+v", reconcilerVTextSpawn)
+	}
+	if reconcilerVTextSpawn.CreatedDocument || !reconcilerVTextSpawn.RevisedExistingDoc || reconcilerVTextSpawn.SeedRevisionID != "" {
+		t.Fatalf("reconciler existing-doc revision flags wrong: %+v", reconcilerVTextSpawn)
+	}
+	reconcilerVTextRun, err := rt.GetRun(context.Background(), reconcilerVTextSpawn.LoopID, "user-alice")
+	if err != nil {
+		t.Fatalf("get reconciler-spawned vtext run: %v", err)
+	}
+	if reconcilerVTextRun.AgentID != "vtext:"+vtextSpawn.DocID || reconcilerVTextRun.ChannelID != vtextSpawn.DocID || metadataString(reconcilerVTextRun.Metadata, "type") != "vtext_agent_revision" {
+		t.Fatalf("reconciler vtext run is not a vtext revision run: %+v", reconcilerVTextRun)
 	}
 	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
 		"objective":"privileged mutation",

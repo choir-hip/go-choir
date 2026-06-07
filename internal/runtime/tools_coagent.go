@@ -40,6 +40,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 		ChannelID      string `json:"channel_id,omitempty"`
 		Slot           string `json:"slot,omitempty"`
 		Model          string `json:"model,omitempty"`
+		Title          string `json:"title,omitempty"`
 		InitialContent string `json:"initial_content,omitempty"`
 	}
 	allowedTargets := canonicalAllowedDelegateTargets(spec.AllowedDelegateTargets)
@@ -58,9 +59,10 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			"channel_id": map[string]any{"type": "string"},
 			"slot":       map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For vsuper spawning co-super children: use implementation for the candidate writer first; use verifier only after implementation commit/package/blocker evidence exists. Reusing a live slot returns the existing child instead of launching a duplicate."},
 			"model":      map[string]any{"type": "string"},
+			"title":      map[string]any{"type": "string", "description": "For role=vtext from processor or reconciler: optional VText document title for a new article."},
 			"initial_content": map[string]any{
 				"type":        "string",
-				"description": "For role=vtext from conductor only: the complete first document revision to store as v1.",
+				"description": "For role=vtext from processor or reconciler: optional source/brief seed revision for the VText before the VText agent writes the article.",
 			},
 		}, []string{"objective", "role"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -138,6 +140,45 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 					"state":                  "open",
 				})
 			}
+			if (callerProfile == AgentProfileProcessor || callerProfile == AgentProfileReconciler) && profile == AgentProfileVText {
+				parentRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
+				if parentRec == nil {
+					parentRec = &types.RunRecord{
+						RunID:        parentID,
+						OwnerID:      ownerID,
+						AgentID:      stringFromToolContext(ctx, toolCtxAgentID),
+						AgentProfile: callerProfile,
+						AgentRole:    stringFromToolContext(ctx, toolCtxRole),
+						ChannelID:    stringFromToolContext(ctx, toolCtxChannelID),
+					}
+				}
+				decision, err := rt.ensureCoagentVTextRevisionRoute(ctx, parentRec, coagentVTextRouteRequest{
+					CallerProfile:  callerProfile,
+					Role:           role,
+					Profile:        profile,
+					Objective:      in.Objective,
+					Title:          in.Title,
+					ChannelID:      in.ChannelID,
+					InitialContent: in.InitialContent,
+				})
+				if err != nil {
+					return "", err
+				}
+				return toolResultJSON(map[string]any{
+					"agent_id":             "vtext:" + decision.DocID,
+					"doc_id":               decision.DocID,
+					"seed_revision_id":     decision.SeedRevisionID,
+					"loop_id":              decision.RevisionRunID,
+					"revision_loop_id":     decision.RevisionRunID,
+					"channel_id":           decision.DocID,
+					"role":                 role,
+					"profile":              profile,
+					"state":                decision.State,
+					"title":                decision.Title,
+					"created_document":     decision.CreatedDocument,
+					"revised_existing_doc": !decision.CreatedDocument,
+				})
+			}
 			child, err := rt.StartChildRun(ctx, parentID, in.Objective, ownerID, constraints)
 			if err != nil {
 				return "", err
@@ -159,6 +200,238 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			return toolResultJSON(result)
 		},
 	}
+}
+
+type coagentVTextRouteRequest struct {
+	CallerProfile  string
+	Role           string
+	Profile        string
+	Objective      string
+	Title          string
+	ChannelID      string
+	InitialContent string
+}
+
+type coagentVTextRouteDecision struct {
+	DocID           string
+	Title           string
+	SeedRevisionID  string
+	RevisionRunID   string
+	State           types.RunState
+	CreatedDocument bool
+}
+
+func (rt *Runtime) ensureCoagentVTextRevisionRoute(ctx context.Context, parentRec *types.RunRecord, req coagentVTextRouteRequest) (coagentVTextRouteDecision, error) {
+	if rt == nil || rt.store == nil {
+		return coagentVTextRouteDecision{}, fmt.Errorf("runtime store unavailable")
+	}
+	if parentRec == nil {
+		return coagentVTextRouteDecision{}, fmt.Errorf("vtext route requires a parent run")
+	}
+	callerProfile := canonicalAgentProfile(req.CallerProfile)
+	if callerProfile != AgentProfileProcessor && callerProfile != AgentProfileReconciler {
+		return coagentVTextRouteDecision{}, fmt.Errorf("vtext route requires processor or reconciler caller")
+	}
+	ownerID := strings.TrimSpace(parentRec.OwnerID)
+	if ownerID == "" {
+		return coagentVTextRouteDecision{}, fmt.Errorf("owner_id is required")
+	}
+
+	now := time.Now().UTC()
+	doc, created, seedRevisionID, err := rt.coagentVTextTargetDocument(ctx, parentRec, req, now)
+	if err != nil {
+		return coagentVTextRouteDecision{}, err
+	}
+
+	if err := rt.store.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   "vtext:" + doc.DocID,
+		OwnerID:   ownerID,
+		SandboxID: rt.cfg.SandboxID,
+		Profile:   AgentProfileVText,
+		Role:      AgentProfileVText,
+		ChannelID: doc.DocID,
+		CreatedAt: now,
+		UpdatedAt: time.Now().UTC(),
+	}); err != nil {
+		return coagentVTextRouteDecision{}, fmt.Errorf("persist vtext appagent: %w", err)
+	}
+	if _, err := rt.EnsurePersistentSuperAgent(ctx, ownerID); err != nil {
+		return coagentVTextRouteDecision{}, fmt.Errorf("persist persistent super appagent: %w", err)
+	}
+
+	prompt := buildCoagentVTextRevisionPrompt(parentRec, req, doc, created)
+	rec, err := rt.submitVTextAgentRevisionRun(ctx, doc, ownerID, vtextAgentRevisionRequest{
+		Intent: "source_maxx_" + callerProfile + "_article_revision",
+		Prompt: prompt,
+	}, parentRec.RunID, 0)
+	if err != nil {
+		return coagentVTextRouteDecision{}, fmt.Errorf("start vtext article revision: %w", err)
+	}
+
+	return coagentVTextRouteDecision{
+		DocID:           doc.DocID,
+		Title:           doc.Title,
+		SeedRevisionID:  seedRevisionID,
+		RevisionRunID:   rec.RunID,
+		State:           rec.State,
+		CreatedDocument: created,
+	}, nil
+}
+
+func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *types.RunRecord, req coagentVTextRouteRequest, now time.Time) (types.Document, bool, string, error) {
+	ownerID := strings.TrimSpace(parentRec.OwnerID)
+	channelID := strings.TrimSpace(req.ChannelID)
+	if channelID != "" {
+		if doc, err := rt.store.GetDocument(ctx, channelID, ownerID); err == nil {
+			return doc, false, "", nil
+		} else if err != store.ErrNotFound {
+			return types.Document{}, false, "", fmt.Errorf("lookup vtext document %s: %w", channelID, err)
+		}
+	}
+
+	title := coagentVTextTitle(req)
+	doc := types.Document{
+		DocID:     uuid.New().String(),
+		OwnerID:   ownerID,
+		Title:     title,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := rt.store.CreateDocument(ctx, doc); err != nil {
+		return types.Document{}, false, "", fmt.Errorf("create vtext document: %w", err)
+	}
+
+	seedContent := coagentVTextSeedContent(parentRec, req)
+	seedRevisionID := uuid.New().String()
+	seedMeta, _ := json.Marshal(map[string]any{
+		"source":                   "coagent_vtext_seed",
+		"created_from":             canonicalAgentProfile(req.CallerProfile),
+		"parent_loop_id":           parentRec.RunID,
+		"parent_agent_id":          strings.TrimSpace(parentRec.AgentID),
+		"parent_channel_id":        strings.TrimSpace(parentRec.ChannelID),
+		"requested_channel_id":     strings.TrimSpace(req.ChannelID),
+		"seed_prompt":              strings.TrimSpace(req.Objective),
+		"vtext_version":            "v0",
+		"source_maxx_cycle_id":     metadataString(parentRec.Metadata, "source_maxx_cycle_id"),
+		"source_maxx_request_id":   metadataString(parentRec.Metadata, "source_maxx_request_id"),
+		"source_maxx_request_kind": metadataString(parentRec.Metadata, "source_maxx_request_kind"),
+		"processor_key":            metadataString(parentRec.Metadata, runMetadataProcessorKey),
+		"reconciler_scope":         metadataString(parentRec.Metadata, runMetadataReconcilerScope),
+	})
+	seedRev := types.Revision{
+		RevisionID: seedRevisionID,
+		DocID:      doc.DocID,
+		OwnerID:    ownerID,
+		AuthorKind: types.AuthorAppAgent,
+		AuthorLabel: strings.TrimSpace(firstNonEmpty(
+			parentRec.AgentID,
+			canonicalAgentProfile(req.CallerProfile),
+		)),
+		Content:   seedContent,
+		Citations: json.RawMessage("[]"),
+		Metadata:  seedMeta,
+		CreatedAt: now,
+	}
+	if err := rt.store.CreateRevision(ctx, seedRev); err != nil {
+		return types.Document{}, false, "", fmt.Errorf("create vtext seed revision: %w", err)
+	}
+	doc.CurrentRevisionID = seedRevisionID
+	rt.emitVTextDocumentRevisionEventForRun(ctx, parentRec, seedRev)
+	return doc, true, seedRevisionID, nil
+}
+
+func coagentVTextTitle(req coagentVTextRouteRequest) string {
+	if title := strings.TrimSpace(req.Title); title != "" {
+		return title
+	}
+	text := strings.TrimSpace(req.Objective)
+	for _, prefix := range []string{
+		"Write a VText article covering ",
+		"Write a VText article ",
+		"Create VText for ",
+		"draft a correction/update VText from ",
+		"write a source-grounded article from ",
+	} {
+		if rest := strings.TrimSpace(strings.TrimPrefix(text, prefix)); rest != text && rest != "" {
+			text = rest
+			break
+		}
+	}
+	text = strings.Trim(text, " .\n\t")
+	if text == "" {
+		text = "Global Wire article"
+	}
+	if len(text) > 96 {
+		text = strings.TrimSpace(text[:96])
+	}
+	if !strings.HasSuffix(strings.ToLower(text), ".vtext") {
+		text += ".vtext"
+	}
+	return text
+}
+
+func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRequest) string {
+	var b strings.Builder
+	b.WriteString("# ")
+	b.WriteString(strings.TrimSuffix(coagentVTextTitle(req), ".vtext"))
+	b.WriteString("\n\n")
+	b.WriteString("## SourceMaxx Brief\n\n")
+	if initial := strings.TrimSpace(req.InitialContent); initial != "" {
+		b.WriteString(initial)
+	} else {
+		b.WriteString(strings.TrimSpace(req.Objective))
+	}
+	seed := b.String()
+	if seed[len(seed)-1] != '\n' {
+		b.WriteString("\n")
+	}
+	b.WriteString("\n## Provenance\n\n")
+	b.WriteString("- Parent agent: ")
+	b.WriteString(strings.TrimSpace(firstNonEmpty(parentRec.AgentID, canonicalAgentProfile(req.CallerProfile))))
+	b.WriteString("\n- Parent loop: ")
+	b.WriteString(strings.TrimSpace(parentRec.RunID))
+	if cycleID := metadataString(parentRec.Metadata, "source_maxx_cycle_id"); cycleID != "" {
+		b.WriteString("\n- SourceMaxx cycle: ")
+		b.WriteString(cycleID)
+	}
+	if requestID := metadataString(parentRec.Metadata, "source_maxx_request_id"); requestID != "" {
+		b.WriteString("\n- SourceMaxx request: ")
+		b.WriteString(requestID)
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
+func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTextRouteRequest, doc types.Document, created bool) string {
+	var b strings.Builder
+	if created {
+		b.WriteString("Write the first publication-quality article revision for this VText document.")
+	} else {
+		b.WriteString("Revise this existing VText document with the processor/reconciler update.")
+	}
+	b.WriteString("\n\nArticle request:\n")
+	b.WriteString(strings.TrimSpace(req.Objective))
+	if initial := strings.TrimSpace(req.InitialContent); initial != "" {
+		b.WriteString("\n\nProcessor/reconciler brief to preserve as source context:\n")
+		b.WriteString(initial)
+	}
+	b.WriteString("\n\nHard requirements:")
+	b.WriteString("\n- Use edit_vtext to write the canonical VText revision; do not leave the article only in the run result.")
+	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
+	b.WriteString("\n- Preserve source handles and cite source entities or source refs when available.")
+	b.WriteString("\n- If a Style.vtext source is relevant, cite or name the selected style source and explain the editorial fit inside the VText.")
+	b.WriteString("\n- If evidence is insufficient, write the best honest publishable draft with uncertainty and request researcher follow-up rather than inventing facts.")
+	b.WriteString("\n\nDocument: ")
+	b.WriteString(doc.DocID)
+	b.WriteString(" / ")
+	b.WriteString(doc.Title)
+	b.WriteString("\nParent loop: ")
+	b.WriteString(strings.TrimSpace(parentRec.RunID))
+	if cycleID := metadataString(parentRec.Metadata, "source_maxx_cycle_id"); cycleID != "" {
+		b.WriteString("\nSourceMaxx cycle: ")
+		b.WriteString(cycleID)
+	}
+	return b.String()
 }
 
 func normalizeDelegateTargetValue(raw string, allowedTargets []string) string {
