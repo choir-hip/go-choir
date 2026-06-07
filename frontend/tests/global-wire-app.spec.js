@@ -573,10 +573,10 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(autoradioEpisodeQueue.dossier.publication_refs.autoradio_episode_ids).toContain(autoradioEpisodePayload.episode.id);
     await page.evaluate(() => {
       window.__globalWireSpoken = [];
-      window.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) {
+      const TestSpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) {
         this.text = text;
       };
-      window.speechSynthesis = {
+      const testSpeechSynthesis = {
         cancel() {},
         speak(utterance) {
           window.__globalWireSpoken.push(utterance.text);
@@ -584,8 +584,17 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
           if (utterance.onend) utterance.onend();
         },
       };
+      Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+        configurable: true,
+        value: TestSpeechSynthesisUtterance,
+      });
+      Object.defineProperty(window, 'speechSynthesis', {
+        configurable: true,
+        value: testSpeechSynthesis,
+      });
     });
     await app.locator('[data-global-wire-play-autoradio-episode]').first().click();
+    await expect(app.locator('[data-global-wire-autoradio-playback-state]').first()).toContainText('Played');
     const spoken = await page.evaluate(() => window.__globalWireSpoken || []);
     expect(spoken[0]).toContain(autoradioScriptPayload.script.script_body);
     const deliveryExportResponsePromise = page.waitForResponse((response) =>

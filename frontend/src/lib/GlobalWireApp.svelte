@@ -193,6 +193,7 @@
   let publicationFeedStatus = '';
   let publicationDeliveryDetail = null;
   let projectionReviews = [];
+  let autoradioPlaybackStatus = '';
   let selectedDossier = null;
   let selectedDossierNewsletterIssueIds = [];
   let selectedDossierMissingFields = [];
@@ -271,6 +272,7 @@
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
       projectionReviews = [];
+      autoradioPlaybackStatus = '';
       sourceSearchResults = [];
       sourceSearchStatus = '';
       sourceSearchMessage = '';
@@ -364,6 +366,7 @@
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
       projectionReviews = [];
+      autoradioPlaybackStatus = '';
     }
   }
 
@@ -1339,8 +1342,9 @@
 
   function playAutoradioEpisode(episode) {
     if (!episode?.transcript) return;
+    autoradioPlaybackStatus = `Playback requested: ${episode.title}`;
     if (typeof window === 'undefined' || !window.speechSynthesis || !window.SpeechSynthesisUtterance) {
-      contributionStatus = 'Browser speech playback unavailable';
+      autoradioPlaybackStatus = 'Browser speech playback unavailable';
       return;
     }
     window.speechSynthesis.cancel();
@@ -1348,13 +1352,13 @@
     utterance.rate = 0.96;
     utterance.pitch = 0.92;
     utterance.onstart = () => {
-      contributionStatus = `Playing ${episode.title}`;
+      autoradioPlaybackStatus = `Playing ${episode.title}`;
     };
     utterance.onend = () => {
-      contributionStatus = `Played ${episode.title}`;
+      autoradioPlaybackStatus = `Played ${episode.title}`;
     };
     utterance.onerror = () => {
-      contributionStatus = 'Autoradio playback failed';
+      autoradioPlaybackStatus = 'Autoradio playback failed';
     };
     window.speechSynthesis.speak(utterance);
   }
@@ -2027,6 +2031,9 @@
                           >
                             Play
                           </button>
+                          {#if autoradioPlaybackStatus}
+                            <small data-global-wire-autoradio-playback-state>{autoradioPlaybackStatus}</small>
+                          {/if}
                         </div>
                       {:else}
                         <button
@@ -2159,6 +2166,9 @@
                           >
                             Play
                           </button>
+                          {#if autoradioPlaybackStatus}
+                            <small data-global-wire-autoradio-playback-state>{autoradioPlaybackStatus}</small>
+                          {/if}
                         {:else}
                           <button
                             type="button"
