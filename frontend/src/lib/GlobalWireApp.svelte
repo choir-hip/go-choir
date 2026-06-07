@@ -1581,12 +1581,30 @@
 
   .graph-candidate {
     border-left: 3px solid var(--choir-border-strong);
+    position: relative;
   }
 
   .reconciliation-source strong,
   .graph-candidate strong,
   .graph-candidate span {
     overflow-wrap: anywhere;
+  }
+
+  .projection-review-list {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .projection-review-list small {
+    display: block;
+  }
+
+  .projection-review-list button {
+    justify-self: start;
+    position: relative;
+    z-index: 1;
+    min-height: 2.1rem;
+    padding: 0.35rem 0.65rem;
   }
 
   .reconciliation-actions {

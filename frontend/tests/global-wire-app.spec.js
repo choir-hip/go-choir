@@ -114,8 +114,15 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   await expect(page.locator('[data-vtext-editor]').last()).toContainText('User edits create user-owned versions');
 
   await openDeskApp(page, 'global-wire');
-  await app.locator('[data-global-wire-contribution] textarea').fill('Add a local utility filing as a qualifying source before reconciliation.');
+  const contributionText = `Add a local utility filing as a qualifying source before reconciliation (${email}).`;
+  await app.locator('[data-global-wire-contribution] textarea').fill(contributionText);
+  const contributionResponsePromise = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/global-wire/contributions' && response.request().method() === 'POST'
+  );
   await app.locator('[data-global-wire-submit-contribution]').click();
+  const contributionResponse = await contributionResponsePromise;
+  expect(contributionResponse.status()).toBe(201);
+  const queuedContribution = await contributionResponse.json();
   await expect(page.locator('[data-vtext-editor]').last()).toContainText('Research/Reconciliation State');
   await expect(app.locator('[data-global-wire-contribution-list]')).toContainText('pending-researcher-review');
 
@@ -133,8 +140,8 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     if (!res.ok) throw new Error(`list contributions failed: ${res.status}`);
     return res.json();
   });
-  const queuedContribution = (queue.contributions || []).find((item) => item.research_state === 'pending-researcher-review');
-  expect(queuedContribution).toBeTruthy();
+  const listedContribution = (queue.contributions || []).find((item) => item.id === queuedContribution.id);
+  expect(listedContribution).toBeTruthy();
   expect(queuedContribution.source_content_id).toBeTruthy();
   const contributionSource = await page.evaluate(async (contentId) => {
     const res = await fetch(`/api/content/items/${contentId}`, { credentials: 'include' });
@@ -144,11 +151,12 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   expect(contributionSource.metadata?.schema).toBe('choir.global_wire_user_source_contribution.v1');
 
   await openDeskApp(page, 'global-wire');
-  await expect(app.locator('[data-global-wire-reconciliation-source]').first()).toContainText('Contribution source');
-  await app.locator('[data-global-wire-reconcile-accept]').first().evaluate((button) => button.click());
-  await expect(app.locator('[data-global-wire-reconciliation-decision]').first()).toContainText('accepted');
-  await expect(app.locator('[data-global-wire-graph-candidate]').first()).toContainText('source-manifest-update');
-  await expect(app.locator('[data-global-wire-graph-candidate]').first()).toContainText('shared-source-neighborhood');
+  const contributionCard = app.locator('[data-global-wire-reconciliation-item]').filter({ hasText: contributionText });
+  await expect(contributionCard.locator('[data-global-wire-reconciliation-source]')).toContainText('Contribution source');
+  await contributionCard.locator('[data-global-wire-reconcile-accept]').evaluate((button) => button.click());
+  await expect(contributionCard.locator('[data-global-wire-reconciliation-decision]')).toContainText('accepted');
+  await expect(contributionCard.locator('[data-global-wire-graph-candidate]')).toContainText('source-manifest-update');
+  await expect(contributionCard.locator('[data-global-wire-graph-candidate]')).toContainText('shared-source-neighborhood');
 
   const importedSourceQueue = await page.evaluate(async () => {
     const itemRes = await fetch('/api/content/items', {
@@ -264,11 +272,13 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   await candidateCard.locator('[data-global-wire-promote-candidate]').evaluate((button) => button.click());
   await expect(candidateCard.locator('[data-global-wire-graph-promotion]')).toContainText('promoted');
   await expect(candidateCard.locator('[data-global-wire-graph-promotion]')).toContainText('appended source_content_id');
-  await expect(candidateCard.locator('[data-global-wire-projection-review]')).toContainText('projection-review-required');
+  await expect(candidateCard.locator('[data-global-wire-projection-review]').first()).toContainText('projection-review-required');
   const draftResponsePromise = page.waitForResponse((response) =>
     new URL(response.url()).pathname === '/api/global-wire/projection-reviews' && response.request().method() === 'POST'
   );
-  await candidateCard.locator('[data-global-wire-create-projection-draft]').evaluate((button) => button.click());
+  const draftButton = candidateCard.locator('[data-global-wire-create-projection-draft]').first();
+  await expect(draftButton).toBeVisible();
+  await draftButton.click();
   const draftResponse = await draftResponsePromise;
   expect(draftResponse.status()).toBe(201);
   const draftPayload = await draftResponse.json();
