@@ -1,7 +1,7 @@
 # Mission: Global Wire / Style.vtext Collaborative StoryGraph
 
 **Status:** overnight MissionGradient delivery mission, checkpoint-incomplete
-after first frontend slice  
+after publication-artifact slice
 **Requirements contract:** `docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md`  
 **Current context:** `docs/news-system-current-state-and-improvements-2026-06-06.md`,
 `docs/vtext-styleguide-system-research-2026-06-06.md`,
@@ -289,34 +289,59 @@ Stop only when one is true:
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: 2026-06-07 Global Wire scheduler/source-standing slice
-  deployed to staging at 92d37f0267c37329f4534c5b7e41c01bf7180b7a
+last checkpoint: 2026-06-07 Global Wire publication-artifact slice deployed
+  to staging at 92b3b0371bd6f500e4823bd422969267ac16071b
 current artifact state: Choir has a user-facing Global Wire app registered in
   the Desk/mobile app registry and backed by durable Global Wire story,
   Style.vtext, source, reconciliation, candidate, projection review, research,
   publication package, source registry/fetch-cycle, extraction overlay, and
-  source scheduler-run records. The product path now runs:
+  source scheduler-run records. It now also has durable publication artifact
+  records derived from publication packages. The product path now runs:
   live/source-service evidence -> SourceItem -> source-refresh run ->
   StoryGraph headline candidate -> claim record -> extraction overlay ->
   research task/evidence -> research handoff -> projection review ->
-  publication update package -> source standing scheduler evidence -> News app
-  review views. User forks and edits remain owner-owned VTexts and do not
-  mutate platform stories.
+  publication update package -> source standing scheduler evidence ->
+  publication artifact -> News app review views. User forks and edits remain
+  owner-owned VTexts and do not mutate platform stories.
 what shipped:
-  - scheduler/source-standing problem checkpoint commit
-    3590a5d9
-  - scheduler/source-standing behavior commit
-    92d37f0267c37329f4534c5b7e41c01bf7180b7a
-  - source registry cadence/standing policy fields
-  - durable `GlobalWireSourceSchedulerRun` records
-  - scheduler-mode `/api/global-wire/fetch-cycles` behavior
-  - News app scheduler control and source-standing policy display
+  - publication-artifact problem checkpoint commit
+    9debc822
+  - publication-artifact behavior commit
+    92b3b0371bd6f500e4823bd422969267ac16071b
+  - durable `GlobalWirePublicationArtifact` records
+  - `global_wire_publication_artifacts` table
+  - `/api/global-wire/publication-artifacts` GET/POST
+  - reconciliation payload now includes `publication_artifacts`
+  - News app can build and display a publication artifact from a publication
+    update package, including citation and scheduler-ref counts
 what was proven:
   - local `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
     passed
   - local `npm run build` in `frontend/` passed
   - local `git diff --check` passed
-  - CI run 27085880644 passed, including runtime shards, Go vet/build,
+  - CI run 27086145224 passed its Go/runtime/frontend gates; the overall run
+    concluded failure because the Deploy to Staging job failed while refreshing
+    active computers after staging health had already moved to the new commit
+    (`curl` 404/timeouts, ending with "One or more active computer refreshes
+    failed")
+  - FlakeHub publish run 27086145230 passed
+  - `https://choir.news/health` reported deployed commit
+    92b3b0371bd6f500e4823bd422969267ac16071b at
+    2026-06-07T07:30:50Z
+  - deployed public proof:
+    `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test
+    tests/global-wire-app.spec.js` passed 4 tests with 1 auth-gated skip,
+    including Future Noir, Carbon Kintsugi, and London Salmon views
+  - deployed ownership/source/publication proof:
+    `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news
+    npx playwright test tests/global-wire-app.spec.js --grep "signed in"`
+    passed and verified owner-scoped VText fork/contribution, source refresh,
+    extraction artifact creation, research completion, handoff, publication
+    update packaging, publication artifact creation through
+    `/api/global-wire/publication-artifacts`, artifact citation refs,
+    extraction refs, and reconciliation listing
+  - previous scheduler CI run 27085880644 passed, including runtime shards,
+    Go vet/build,
     non-runtime tests, integration smoke, frontend build, and Deploy to Staging
     (Node B)
   - FlakeHub publish run 27085880634 passed
@@ -342,8 +367,8 @@ unproven or partial claims:
     extraction
   - source standing policy is visible and durable, but still thin and not backed
     by a curated source catalog
-  - publication packages are review artifacts, not newsletter/public-route or
-    Autoradio publication
+  - publication artifacts are review-ready output artifacts, not public-route
+    publication, newsletter delivery, or Autoradio playback/scheduling
   - no run acceptance record was synthesized in this checkpoint
 belief-state changes:
   - the scheduler can be represented first as product-visible policy/run
@@ -351,29 +376,39 @@ belief-state changes:
     without changing the artifact topology
   - source standing should remain review input with rationale, not an oracle or
     graph-node type
+  - publication output readiness should be represented as its own citeable
+    artifact before any public publish or Autoradio traversal
 remaining error field: the shipped slice is product-shaped and deployed, but
   still lacks a resident autonomous scheduler worker, curated source standing,
   normalized entity/event/timeline extraction, full Style.vtext revision
-  workflow, newsletter/public-route publication, Autoradio playback/scheduling,
-  and a synthesized RunAcceptanceRecord
+  workflow, public-route/newsletter delivery, Autoradio playback/scheduling,
+  resident 24/7 scheduling, and a synthesized RunAcceptanceRecord
 highest-impact remaining uncertainty: whether the next best realism increase is
-  publication/output readiness or deeper source normalization. Current evidence
-  favors publication/output readiness because the trajectory already has
-  source, claim, extraction, research, handoff, projection, package, and
-  scheduler evidence but no public/newsletter artifact.
-next executable probe: add a low-resolution publication/newsletter artifact
-  created from `GlobalWirePublicationUpdate` packages, citing Story VText,
-  Style.vtext, SourceItems, extraction ids, projection review state, scheduler
-  evidence, and rollback refs; prove it is a review/publication-ready artifact
-  without mutating platform stories
+  public-route/newsletter/Autoradio consumption of publication artifacts or
+  deeper source normalization. Current evidence favors RunAcceptance/publication
+  consumption because the trajectory now has source, claim, extraction,
+  research, handoff, projection, package, scheduler, and artifact evidence but
+  no accepted run record or delivery channel.
+next executable probe: synthesize a `RunAcceptanceRecord` for the proven
+  trajectory at the highest honest level, then either add a low-resolution
+  public/newsletter route over `GlobalWirePublicationArtifact` or wire
+  Autoradio traversal to the artifact body/citations without mutating platform
+  stories.
 suggested resume goal string: see Goal String above
 evidence artifact refs:
+  - GitHub Actions CI run 27086145224
+  - FlakeHub publish run 27086145230
+  - staging health JSON at 2026-06-07T07:30:50Z showing deployed commit
+    92b3b0371bd6f500e4823bd422969267ac16071b
+  - deployed Playwright commands listed in what was proven
   - GitHub Actions CI run 27085880644
   - FlakeHub publish run 27085880634
   - staging health JSON at 2026-06-07T07:17:50Z showing deployed commit
     92d37f0267c37329f4534c5b7e41c01bf7180b7a
   - Playwright commands listed in what was proven
 rollback refs:
+  - publication-artifact behavior commit 92b3b037
+  - publication-artifact problem checkpoint 9debc822
   - scheduler/source-standing problem checkpoint 3590a5d9
   - prior extraction overlay checkpoint a5c7ab4d
   - docs checkpoint b60c1076
@@ -3599,3 +3634,100 @@ Next executable probe:
   projection reviews, SourceItem, extraction ids, scheduler evidence, and
   rollback refs. Expose it in reconciliation/News and prove locally/staging
   that artifact creation does not mutate platform stories.
+
+## Checkpoint - Publication Artifact Path Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Artifact advanced:
+
+- Global Wire now has durable `GlobalWirePublicationArtifact` records derived
+  from `GlobalWirePublicationUpdate` packages.
+- The store now persists publication artifacts with update id, StoryGraph story
+  id, candidate id, Story VText doc id, SourceItem id, channel, status, title,
+  body, Style.vtext doc ids, projection review ids, extraction ids, scheduler
+  run ids, citation refs, rollback refs, and timestamps.
+- `/api/global-wire/publication-artifacts` supports:
+  - `GET` for owner-scoped artifact listing, optionally narrowed by story id.
+  - `POST` to create a `publication-review-ready` artifact from a packaged
+    publication update.
+- `/api/global-wire/reconciliation` now returns `publication_artifacts`.
+- The News app now lets an owner build a publication artifact from a packaged
+  update and displays artifact status, title, citation-ref count, and
+  scheduler-ref count in the existing research/reconciliation view.
+- The artifact body explicitly remains non-oracle: review-ready, not public
+  publication, and not a platform story mutation.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `9debc822`.
+- Behavior commit:
+  `92b3b0371bd6f500e4823bd422969267ac16071b`
+  (`feat: create global wire publication artifacts`).
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`,
+  `npm run build` in `frontend/`, and `git diff --check`.
+- CI run `27086145224`: Go/runtime/frontend gates passed. The overall run
+  concluded failure because Deploy to Staging failed during active-computer
+  refresh after staging health had already moved to the new commit (`curl`
+  404/timeouts, ending with "One or more active computer refreshes failed").
+- FlakeHub run `27086145230`: success.
+- Staging health at `2026-06-07T07:30:50Z` reported deployed commit
+  `92b3b0371bd6f500e4823bd422969267ac16071b`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip, covering Future Noir, Carbon Kintsugi,
+  and London Salmon.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in"`
+  with 1 passed. The proof verified owner-scoped VText fork/contribution,
+  source refresh, extraction artifact creation, research completion, handoff,
+  publication update packaging, publication artifact creation through
+  `/api/global-wire/publication-artifacts`, artifact citation refs, extraction
+  refs, body text preserving the no-mutation invariant, and reconciliation
+  listing.
+
+Invariants preserved:
+
+- Publication artifact creation does not mutate platform stories.
+- Publication artifacts are owner-scoped review/output artifacts, not automatic
+  public publication.
+- Artifact citations include Story VText, source/package/candidate/style/
+  projection/extraction/scheduler refs when present, rather than flattening
+  evidence into oracle prose.
+- News views still pass in Future Noir, Carbon Kintsugi, and London Salmon.
+- User forks/edits remain owner-owned VText versions.
+
+Belief-state update:
+
+- The proven product trajectory is now:
+  SourceItem -> source refresh/fetch/scheduler evidence -> StoryGraph headline
+  candidate -> claim/extraction/research artifacts -> research handoff ->
+  projection review -> publication update package -> publication artifact.
+- A review-ready publication artifact is the right low-resolution predecessor
+  to public newsletter routes and Autoradio traversal. It keeps the artifact
+  citeable and replaceable before any public delivery semantics are added.
+
+Remaining error field:
+
+- Publication artifacts are not yet public newsletter routes, public feed
+  entries, email/newsletter deliveries, or Autoradio scripts/playback.
+- The scheduler is still triggered by product-path/API action, not a resident
+  24/7 worker.
+- Source standing policy is durable and visible, but not yet backed by curated
+  source catalogs or source reputation history.
+- Extraction artifacts remain conservative structured overlays, not normalized
+  entity/event/timeline extraction.
+- Style.vtext composition/replacement is proven, but not yet a full style
+  revision workflow with forks, merge conflict handling, permissions, or
+  publication review.
+- No `RunAcceptanceRecord` has been synthesized for the trajectory.
+
+Next executable probe:
+
+- Synthesize a `RunAcceptanceRecord` from the existing evidence at the highest
+  honest level, then raise publication consumption realism by either adding a
+  low-resolution public/newsletter route over `GlobalWirePublicationArtifact`
+  or wiring Autoradio traversal to artifact body/citations without mutating
+  platform stories.
