@@ -2111,3 +2111,52 @@ Next executable probe:
   source-service-backed scheduled ingestion and update classification,
   Style.vtext composition/replacement workflow, or claim extraction plus
   reconciliation-ready research workbench.
+
+## Problem Checkpoint - Source Refresh Lacks Update Classification - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- The current Source Service refresh path imports live/source-service evidence
+  and creates a non-mutating graph-update candidate, but every successful
+  refresh collapses into the same `candidate-review` state.
+- The spec requires the ingestion/publication loop to classify what a new
+  SourceItem means before it can honestly drive StoryGraph, projection, front
+  page, and research behavior.
+- Without a durable classification, reviewers cannot distinguish a simple
+  source-manifest update from a claim change, contradiction, related-story
+  edge, projection revision, prominence change, or no visible change.
+
+Evidence:
+
+- `HandleGlobalWireSourceRefresh` records refresh status, provider, message,
+  source, contribution, decision, and candidate refs.
+- `GlobalWireSourceRefreshRun` has no update-classification field.
+- `createGlobalWireSourceRefreshArtifacts` always creates a source-kind
+  contribution, an accepted reconciliation decision, and a generic
+  source-manifest graph candidate.
+
+Belief-state update:
+
+- The next topology-preserving improvement is a low-resolution update
+  classifier, not an automatic story rewrite.
+- Classification should be durable on refresh runs and should shape the
+  generated contribution kind, graph candidate kind, source tier, edge kind,
+  projection action, and reviewer message while preserving explicit platform
+  review before StoryGraph mutation.
+
+Remaining error field:
+
+- No durable refresh classification exists.
+- Source refresh cannot currently represent `no visible change`,
+  `claim changed`, `contradiction added`, `related story edge added`,
+  `projection revision required`, or `front-page prominence changed`.
+- The Global Wire app does not surface refresh classification for reviewers.
+
+Next executable probe:
+
+- Add owner-scoped, Source Service-backed refresh classification with durable
+  run fields and visible reconciliation/research queue semantics. The
+  classifier can be heuristic at this resolution, but it must preserve the real
+  ingestion loop topology and never mutate StoryGraph without platform review.
