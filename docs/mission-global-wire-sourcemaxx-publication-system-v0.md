@@ -811,16 +811,39 @@ belief-state changes:
   those roles. The next fix should add processor and reconciler prompt
   defaults/registration in the shared prompt store, not create a separate
   processor/reconciler execution loop.
+- Commit `8209adf3f281674b4d52a401f10c894270a9d271` adds processor and
+  reconciler prompt defaults to the shared runtime prompt store and proves that
+  these SourceMaxx roles load normal shared-harness prompts and tool catalogs.
+  CI run `https://github.com/choir-hip/go-choir/actions/runs/27096467481` and
+  FlakeHub run `https://github.com/choir-hip/go-choir/actions/runs/27096467476`
+  completed successfully. Staging health reported proxy and sandbox commit
+  `8209adf3f281674b4d52a401f10c894270a9d271`, deployed at
+  `2026-06-07T15:17:41Z`.
+- Post-deploy scheduled cycle `cycle_043b6ca2781a54d8b3b4f761` started at
+  `2026-06-07T15:20:44Z` and completed at `2026-06-07T15:20:45Z` with 503
+  SourceItems, 14 fetches, 11 processor requests, and 1 reconciler request.
+  Raw source-service state shows 7 processor `runtime_run_id` values and 1
+  reconciler `runtime_run_id`. Sandbox logs after the cycle show active
+  processor/reconciler shared-harness tool loops and no
+  `unsupported prompt role` failures. The authenticated product status route
+  returns the same cycle and handoff/status counts, but still omits
+  runtime-run aggregate fields because it only increments those fields after it
+  resolves detailed run records from the request-serving runtime store. This
+  is now a narrower product evidence problem, not a source ingestion or prompt
+  role problem: the route should expose product-safe submitted runtime-run
+  lineage counts directly from SourceMaxx request DTOs, while keeping detailed
+  run-state/update/child-profile counts limited to records it can resolve.
 
 remaining error field:
 
 - sustained staging source daemon/storage behavior across repeated cycles,
   including provider-level distribution, freshness, dedupe, and backoff;
-- first-class processor/reconciler shared-harness profiles are present and
-  sourcecycled submits capped staging handoffs to them, but deployed
-  runtime-run aggregate evidence is not yet visible on the product-safe status
-  route; resident output/result quality, compaction continuity, researcher
-  delegation, and VText delegation/publication remain incomplete;
+- first-class processor/reconciler shared-harness profiles are present,
+  sourcecycled submits capped staging handoffs to them, and staging logs show
+  post-fix shared-harness tool loops; product-safe status still needs submitted
+  runtime-run lineage counts even when detailed lifecycle records are not
+  locally resolvable; resident output/result quality, compaction continuity,
+  researcher delegation, and VText delegation/publication remain incomplete;
 - processor load budget and routing scheme after live staging data;
 - current researcher/VText agent invocation contracts for this workflow;
 - deletion/reuse map for current Global Wire backend source paths;
@@ -828,19 +851,20 @@ remaining error field:
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether the deployed SourceMaxx
-submission lineage is visible end to end across sourcecycled storage,
-source-service DTOs, and sandbox runtime storage. Once that is proven, the next
-realism axis is resident output/result quality and publication-quality VText
-production, not source-volume visibility or basic dispatch.
+highest-impact remaining uncertainty: whether the product-safe SourceMaxx
+status projection gives enough owner-visible lineage to distinguish submitted
+runtime runs, unresolved detailed run records, active tool loops, child
+researcher/VText delegation, and produced updates. Sourcecycled storage, DTO
+serialization, and prompt-role execution are now proven on staging; the next
+realism axis is product-visible lifecycle evidence and publication-quality
+VText production, not source-volume visibility or basic dispatch.
 
 next executable delivery loop:
 
-1. Root-cause missing deployed runtime-run aggregate fields without bypassing
-   product boundaries: confirm sourcecycled binary/deploy identity, inspect
-   SourceMaxx request rows for `runtime_run_id`, confirm source-service DTO
-   serialization, and confirm the sandbox runtime store can resolve submitted
-   run IDs under the expected owner/request metadata.
+1. Fix product-safe SourceMaxx status projection so it counts submitted
+   runtime-run lineage directly from non-empty `runtime_run_id` request fields,
+   then separately reports detailed run-state/update/child-profile counts only
+   for runtime records it can resolve.
 2. Keep processors and reconcilers on the shared runtime harness with
    profile-specific prompts/toolsets only. Do not create a separate processor
    service loop to mask lineage gaps.
