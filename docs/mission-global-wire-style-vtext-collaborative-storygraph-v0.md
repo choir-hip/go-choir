@@ -3014,3 +3014,99 @@ Next executable probe:
   review/candidate status where appropriate, exposes decisions in
   reconciliation and News, and proves on staging that platform stories remain
   unchanged.
+
+## Checkpoint - Research Evidence Handoff Decisions Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Artifact advanced:
+
+- Global Wire now has durable `GlobalWireResearchEvidenceDecision` records.
+- `/api/global-wire/research-evidence` can accept or block a completed
+  `GlobalWireResearchTaskEvidence` packet.
+- Accepted evidence creates an explicit handoff decision and may update the
+  linked graph-update candidate review status to `research-evidence-accepted`.
+- Blocked evidence creates an explicit handoff decision and may update the
+  linked graph-update candidate review status to `research-evidence-blocked`.
+- `/api/global-wire/reconciliation` now returns `research_decisions`.
+- The News app shows evidence handoff controls and renders the resulting
+  decision/result state under the research evidence packet.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `b802ff9120c8db05122a71d76dcf520f9716b60f`.
+- Behavior commit:
+  `65777dccf17743d59f59b51066d8ac4695d967cc`.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`,
+  `npm run build` in `frontend/`, and `git diff --check`.
+- CI run `27085208133`: success, including runtime shards, Go vet/build,
+  non-runtime tests, integration smoke, frontend build, and staging deploy.
+- FlakeHub run `27085208129`: success.
+- Staging health at `2026-06-07T06:43:55Z` reported proxy and sandbox
+  `deployed_commit` =
+  `65777dccf17743d59f59b51066d8ac4695d967cc`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium --grep "owner-scoped"`
+  with 1 passed. The proof created source-refresh research artifacts,
+  completed a research task, accepted the completed research evidence through
+  `/api/global-wire/research-evidence`, and verified reconciliation returned a
+  `ready-for-platform-review` handoff decision.
+
+Invariants preserved:
+
+- Research handoff decisions are explicit review artifacts over evidence, not
+  oracle verdicts.
+- The handoff endpoint does not mutate platform StoryGraph manifests or Story
+  VTexts.
+- Candidate status may move to a research-evidence review state, but platform
+  promotion remains a separate explicit candidate-review path.
+- Handoff decisions remain owner-scoped and cite evidence, task, story, claim,
+  SourceItem, and candidate lineage.
+- News remains provenance-rich and non-oracle: it shows completed evidence and
+  reviewer handoff state separately.
+- The required Future Noir, Carbon Kintsugi, and London Salmon app views
+  continue to pass on staging.
+
+Belief-state update:
+
+- The product trajectory now includes:
+  source registry -> bounded fetch cycle -> SourceItem -> source-refresh run ->
+  claim/research task -> research evidence packet -> research handoff decision
+  -> candidate ready/blocked for platform review.
+- This closes the gap where completed research evidence existed but had no
+  reviewer-authorized handoff into reconciliation/publication readiness.
+- The implementation remains low-resolution: handoff can update candidate
+  readiness, but there is not yet a publication/update-feed package that groups
+  accepted candidates, Style.vtext projection reviews, and owner-visible
+  rollback refs into a release-ready news update.
+
+Remaining error field:
+
+- There is no dedicated publication/update-feed/newsletter queue.
+- Platform promotion exists for graph candidates, and projection review exists
+  for Style.vtext outputs, but there is no single publication package tying
+  accepted research, candidate review, projection review, and rollback refs
+  together.
+- There is still no autonomous 24/7 scheduler or recurring source-fetch worker.
+- Claim/event/entity extraction is not yet a rich structured model with
+  entity/event/timeline normalization.
+- Source registry entries are still seeded from StoryGraph headlines rather
+  than a curated source catalog with standing policy.
+- Style.vtext composition/replacement is proven, but not yet a full style
+  revision workflow with forks, merge conflict handling, permissions, or
+  publication review.
+- Autoradio remains a prompt-bar/VText handoff rather than a dedicated audio
+  playback or scheduling subsystem.
+
+Next executable probe:
+
+- Highest-value next realism axis is a low-resolution publication/update queue:
+  package accepted research-evidence handoff decisions, graph candidate review
+  state, Style.vtext projection review state, source lineage, and rollback refs
+  into an owner-visible `GlobalWirePublicationUpdate` artifact without
+  auto-mutating platform stories.
