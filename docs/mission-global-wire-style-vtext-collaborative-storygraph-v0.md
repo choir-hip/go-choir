@@ -857,3 +857,54 @@ Next executable probe:
   StoryGraph candidate evidence or document why staging lacks the required live
   service. If sourcecycled is not deployably available, switch to a
   reconciliation workflow slice rather than faking live ingestion.
+
+## Overnight Problem Checkpoint - Source Service Bridge Gap - 2026-06-07
+
+mission status: `problem_documented_before_fix`
+
+Evidence:
+
+- `cmd/sourcecycled` exposes a standalone Source Service daemon with internal
+  health, search, and item resolution endpoints:
+  `/internal/source-service/health`, `/internal/source-service/search`, and
+  `/internal/source-service/items/{id}`.
+- `internal/sourceapi` defines source-service result identity as
+  `target_kind=source_service_item` plus `item_id`, `source_id`, `fetch_id`,
+  content hash, fetched/published times, URL, and bounded body text.
+- `internal/runtime/tools_research.go` already has a researcher-only
+  `source_search` tool that calls the configured Source Service and presents
+  durable `source_service_item` evidence.
+- VText source-entity handling already preserves `source_service_item:<id>`
+  refs as citeable source entities.
+- Global Wire currently has durable SourceItems, StoryGraph stories, projection
+  VTexts, owner forks, and contribution queues, but it has no browser-public
+  product API that turns Source Service results into Global Wire evidence or
+  contribution candidates.
+
+Problem:
+
+- The next realism axis is not another seeded story. It is the bridge from
+  real Source Service output into Global Wire's collaborative graph workflow.
+- Directly wiring sourcecycled into platform story mutation would violate the
+  non-oracle/news provenance invariant and the user-edit ownership invariant.
+- A browser-public route must not expose internal source-service endpoints
+  directly, and it must not claim live ingestion when the configured service is
+  absent or empty on staging.
+
+Intended fix shape:
+
+- Add a narrow authenticated product route that searches the configured Source
+  Service through the existing runtime client, converts selected results into
+  owner-scoped `ContentItem`s with `source_service_item` provenance, and queues
+  them as Global Wire source contribution candidates when requested.
+- If Source Service is unconfigured or returns no evidence, surface that as
+  explicit provenance-rich unavailability instead of falling back to seeded or
+  invented data.
+- Keep platform StoryGraph stories unchanged. Research/reconciliation can later
+  decide whether a source-service contribution updates a neighborhood.
+
+Remaining alternative:
+
+- If staging lacks a deployable Source Service, the next ship-worthy slice
+  should be an explicit reconciliation workflow over the existing contribution
+  queue rather than a fake live-ingestion loop.
