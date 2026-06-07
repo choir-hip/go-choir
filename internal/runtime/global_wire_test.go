@@ -639,7 +639,7 @@ func TestHandleGlobalWireFetchCycleCreatesRegistryAndRefreshEvidence(t *testing.
 	t.Setenv("SOURCECYCLED_API_URL", "")
 
 	_, handler := testAPISetup(t)
-	body := `{"story_ids":["story-supply-resilience"],"max_stories":1,"max_results":1,"trigger":"test-bounded-cycle"}`
+	body := `{"story_ids":["story-supply-resilience"],"max_stories":1,"max_results":1,"trigger":"test-scheduled-cycle","scheduler_mode":true,"cadence_seconds":1800}`
 	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/fetch-cycles", body, "user-cycle")
 	if w.Code != http.StatusCreated {
 		t.Fatalf("fetch cycle status = %d body=%s", w.Code, w.Body.String())
@@ -649,14 +649,21 @@ func TestHandleGlobalWireFetchCycleCreatesRegistryAndRefreshEvidence(t *testing.
 		t.Fatalf("decode fetch cycle: %v", err)
 	}
 	if resp.FetchCycle.ID == "" ||
-		resp.FetchCycle.Trigger != "test-bounded-cycle" ||
+		resp.FetchCycle.Trigger != "test-scheduled-cycle" ||
 		resp.FetchCycle.Status != "completed" ||
+		resp.SchedulerRun == nil ||
+		resp.SchedulerRun.FetchCycleID != resp.FetchCycle.ID ||
+		resp.SchedulerRun.Status != "scheduled-cycle-recorded" ||
 		len(resp.RegistryEntries) != 1 ||
 		len(resp.RefreshRuns) != 1 ||
 		len(resp.ContentItems) != 1 {
 		t.Fatalf("fetch cycle missing registry/source evidence: %+v", resp)
 	}
 	if resp.RegistryEntries[0].LastCycleID != resp.FetchCycle.ID ||
+		resp.RegistryEntries[0].LastScheduledRunID != resp.SchedulerRun.ID ||
+		resp.RegistryEntries[0].CadenceSeconds != 1800 ||
+		resp.RegistryEntries[0].SourceStandingPolicy == "" ||
+		!strings.Contains(resp.RegistryEntries[0].SourceStandingRationale, "not automatic StoryGraph mutations") ||
 		resp.FetchCycle.RegistryEntryIDs[0] != resp.RegistryEntries[0].ID ||
 		resp.FetchCycle.RefreshRunIDs[0] != resp.RefreshRuns[0].ID ||
 		resp.FetchCycle.SourceContentIDs[0] != resp.ContentItems[0].ContentID {
@@ -683,7 +690,9 @@ func TestHandleGlobalWireFetchCycleCreatesRegistryAndRefreshEvidence(t *testing.
 	}
 	if len(listResp.RegistryEntries) != 1 ||
 		len(listResp.RecentCycles) != 1 ||
-		listResp.RecentCycles[0].ID != resp.FetchCycle.ID {
+		listResp.RecentCycles[0].ID != resp.FetchCycle.ID ||
+		len(listResp.SchedulerRuns) != 1 ||
+		listResp.SchedulerRuns[0].FetchCycleID != resp.FetchCycle.ID {
 		t.Fatalf("fetch cycle not listed durably: %+v", listResp)
 	}
 }

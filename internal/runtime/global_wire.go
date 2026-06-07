@@ -71,10 +71,13 @@ type globalWireSourceRefreshResponse struct {
 }
 
 type globalWireFetchCycleRequest struct {
-	StoryIDs   []string `json:"story_ids,omitempty"`
-	MaxStories int      `json:"max_stories,omitempty"`
-	MaxResults int      `json:"max_results,omitempty"`
-	Trigger    string   `json:"trigger,omitempty"`
+	StoryIDs       []string `json:"story_ids,omitempty"`
+	MaxStories     int      `json:"max_stories,omitempty"`
+	MaxResults     int      `json:"max_results,omitempty"`
+	Trigger        string   `json:"trigger,omitempty"`
+	SchedulerMode  bool     `json:"scheduler_mode,omitempty"`
+	CadenceSeconds int      `json:"cadence_seconds,omitempty"`
+	SchedulerRunID string   `json:"-"`
 }
 
 type globalWireFetchCycleResponse struct {
@@ -83,6 +86,8 @@ type globalWireFetchCycleResponse struct {
 	FetchCycle          types.GlobalWireFetchCycleRun          `json:"fetch_cycle"`
 	RegistryEntries     []types.GlobalWireSourceRegistryEntry  `json:"registry_entries"`
 	RefreshRuns         []types.GlobalWireSourceRefreshRun     `json:"refresh_runs"`
+	SchedulerRun        *types.GlobalWireSourceSchedulerRun    `json:"scheduler_run,omitempty"`
+	SchedulerRuns       []types.GlobalWireSourceSchedulerRun   `json:"scheduler_runs,omitempty"`
 	ContentItems        []types.ContentItem                    `json:"content_items,omitempty"`
 	Contributions       []types.GlobalWireContribution         `json:"contributions,omitempty"`
 	Candidates          []types.GlobalWireGraphUpdateCandidate `json:"candidates,omitempty"`
@@ -562,6 +567,11 @@ func (h *APIHandler) HandleGlobalWireFetchCycles(w http.ResponseWriter, r *http.
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list fetch cycles"})
 			return
 		}
+		schedulerRuns, err := h.rt.Store().ListGlobalWireSourceSchedulerRuns(r.Context(), ownerID, 20)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list source scheduler runs"})
+			return
+		}
 		status := "empty"
 		if len(cycles) > 0 {
 			status = cycles[0].Status
@@ -571,6 +581,7 @@ func (h *APIHandler) HandleGlobalWireFetchCycles(w http.ResponseWriter, r *http.
 			Message:         "Global Wire source registry and recent bounded fetch cycles.",
 			RegistryEntries: registry,
 			RecentCycles:    cycles,
+			SchedulerRuns:   schedulerRuns,
 		})
 	case http.MethodPost:
 		var req globalWireFetchCycleRequest
@@ -592,6 +603,12 @@ func (h *APIHandler) HandleGlobalWireFetchCycles(w http.ResponseWriter, r *http.
 		if req.MaxResults > 10 {
 			req.MaxResults = 10
 		}
+		if req.SchedulerMode {
+			req.SchedulerRunID = "global-wire-source-scheduler-run-" + uuid.NewString()
+			if strings.TrimSpace(req.Trigger) == "" {
+				req.Trigger = "scheduled-source-standing-cycle"
+			}
+		}
 		resp, err := h.runGlobalWireFetchCycle(r, ownerID, req)
 		if err != nil {
 			if err == store.ErrNotFound {
@@ -604,6 +621,14 @@ func (h *APIHandler) HandleGlobalWireFetchCycles(w http.ResponseWriter, r *http.
 		status := http.StatusCreated
 		if resp.FetchCycle.Status == "unavailable" {
 			status = http.StatusServiceUnavailable
+		}
+		if req.SchedulerMode {
+			schedulerRun, err := h.createGlobalWireSourceSchedulerRun(r, ownerID, req, resp)
+			if err != nil {
+				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source scheduler run"})
+				return
+			}
+			resp.SchedulerRun = &schedulerRun
 		}
 		writeAPIJSON(w, status, resp)
 	default:
@@ -1786,13 +1811,18 @@ func (h *APIHandler) runGlobalWireFetchCycle(r *http.Request, ownerID string, re
 	for _, story := range stories {
 		storyIDs = append(storyIDs, story.ID)
 		entry := types.GlobalWireSourceRegistryEntry{
-			ID:          globalWireSourceRegistryEntryID(ownerID, story.ID),
-			OwnerID:     ownerID,
-			StoryID:     story.ID,
-			Query:       story.Headline,
-			SourceScope: "story-neighborhood",
-			Status:      "active",
-			LastCycleID: cycleID,
+			ID:                      globalWireSourceRegistryEntryID(ownerID, story.ID),
+			OwnerID:                 ownerID,
+			StoryID:                 story.ID,
+			Query:                   story.Headline,
+			SourceScope:             "story-neighborhood",
+			Status:                  "active",
+			SourceStandingPolicy:    globalWireSourceStandingPolicy(story),
+			SourceStandingRationale: globalWireSourceStandingRationale(story),
+			CadenceSeconds:          globalWireSourceCadenceSeconds(req),
+			NextDueAt:               time.Now().UTC().Add(time.Duration(globalWireSourceCadenceSeconds(req)) * time.Second),
+			LastCycleID:             cycleID,
+			LastScheduledRunID:      req.SchedulerRunID,
 		}
 		entry, err = h.rt.Store().UpsertGlobalWireSourceRegistryEntry(r.Context(), entry)
 		if err != nil {
@@ -1988,6 +2018,68 @@ func selectGlobalWireFetchCycleStories(stories []types.GlobalWireStory, ids []st
 
 func globalWireSourceRegistryEntryID(ownerID, storyID string) string {
 	return "global-wire-source-registry-" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ownerID+":"+storyID)).String()
+}
+
+func globalWireSourceCadenceSeconds(req globalWireFetchCycleRequest) int {
+	if req.CadenceSeconds > 0 {
+		if req.CadenceSeconds < 900 {
+			return 900
+		}
+		if req.CadenceSeconds > 86400 {
+			return 86400
+		}
+		return req.CadenceSeconds
+	}
+	if req.SchedulerMode {
+		return 3600
+	}
+	return 21600
+}
+
+func globalWireSourceStandingPolicy(story types.GlobalWireStory) string {
+	if len(story.Manifest.Lead) > 0 {
+		return "lead-first-source-standing-review"
+	}
+	if len(story.Manifest.Supporting) > 0 {
+		return "supporting-source-standing-review"
+	}
+	return "context-source-standing-review"
+}
+
+func globalWireSourceStandingRationale(story types.GlobalWireStory) string {
+	leadCount := len(story.Manifest.Lead)
+	supportingCount := len(story.Manifest.Supporting)
+	contraryCount := len(story.Manifest.Contrary)
+	return fmt.Sprintf("Refresh the %q headline neighborhood using source standing as review input: %d lead, %d supporting, %d contrary source(s) currently frame the story. New SourceItems create review artifacts, not automatic StoryGraph mutations.", story.Headline, leadCount, supportingCount, contraryCount)
+}
+
+func (h *APIHandler) createGlobalWireSourceSchedulerRun(r *http.Request, ownerID string, req globalWireFetchCycleRequest, resp globalWireFetchCycleResponse) (types.GlobalWireSourceSchedulerRun, error) {
+	policies := []string{}
+	for _, entry := range resp.RegistryEntries {
+		policies = appendStringIfMissing(policies, firstNonEmptyString(entry.SourceStandingPolicy, "source-standing-review"))
+	}
+	status := "scheduled-cycle-recorded"
+	if resp.FetchCycle.Status == "unavailable" {
+		status = "scheduled-cycle-unavailable"
+	} else if resp.FetchCycle.Status == "completed-with-gaps" {
+		status = "scheduled-cycle-completed-with-gaps"
+	}
+	message := resp.FetchCycle.Message
+	if strings.TrimSpace(message) == "" {
+		message = "Scheduled source-standing cycle recorded; no platform StoryGraph mutation applied."
+	}
+	runID := firstNonEmptyString(req.SchedulerRunID, "global-wire-source-scheduler-run-"+uuid.NewString())
+	return h.rt.Store().CreateGlobalWireSourceSchedulerRun(r.Context(), types.GlobalWireSourceSchedulerRun{
+		ID:               runID,
+		OwnerID:          ownerID,
+		Trigger:          firstNonEmptyString(strings.TrimSpace(req.Trigger), "scheduled-source-standing-cycle"),
+		Status:           status,
+		StoryIDs:         resp.FetchCycle.StoryIDs,
+		RegistryEntryIDs: resp.FetchCycle.RegistryEntryIDs,
+		FetchCycleID:     resp.FetchCycle.ID,
+		StandingPolicies: policies,
+		Message:          message,
+	})
 }
 
 func (h *APIHandler) createGlobalWireClaimResearchArtifacts(r *http.Request, ownerID string, story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification, run types.GlobalWireSourceRefreshRun, contribution types.GlobalWireContribution, decision types.GlobalWireReconciliationDecision, candidate types.GlobalWireGraphUpdateCandidate) (types.GlobalWireClaimRecord, types.GlobalWireResearchTask, types.GlobalWireExtractionArtifact, error) {

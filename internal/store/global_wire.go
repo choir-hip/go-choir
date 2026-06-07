@@ -1575,16 +1575,30 @@ func (s *Store) UpsertGlobalWireSourceRegistryEntry(ctx context.Context, rec typ
 	if rec.Status == "" {
 		rec.Status = "active"
 	}
+	if rec.CadenceSeconds < 0 {
+		rec.CadenceSeconds = 0
+	}
+	var nextDue any
+	if !rec.NextDueAt.IsZero() {
+		nextDue = rec.NextDueAt.UTC().Format(time.RFC3339Nano)
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO global_wire_source_registry (
 			owner_id, registry_id, story_id, query, source_scope, status,
-			last_cycle_id, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			source_standing_policy, source_standing_rationale, cadence_seconds,
+			next_due_at, last_cycle_id, last_scheduled_run_id, created_at,
+			updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 			query = VALUES(query),
 			source_scope = VALUES(source_scope),
 			status = VALUES(status),
+			source_standing_policy = VALUES(source_standing_policy),
+			source_standing_rationale = VALUES(source_standing_rationale),
+			cadence_seconds = VALUES(cadence_seconds),
+			next_due_at = VALUES(next_due_at),
 			last_cycle_id = VALUES(last_cycle_id),
+			last_scheduled_run_id = IF(VALUES(last_scheduled_run_id) = '', last_scheduled_run_id, VALUES(last_scheduled_run_id)),
 			updated_at = VALUES(updated_at)`,
 		rec.OwnerID,
 		rec.ID,
@@ -1592,7 +1606,12 @@ func (s *Store) UpsertGlobalWireSourceRegistryEntry(ctx context.Context, rec typ
 		sanitizeStoreText(rec.Query),
 		rec.SourceScope,
 		rec.Status,
+		sanitizeStoreText(rec.SourceStandingPolicy),
+		sanitizeStoreText(rec.SourceStandingRationale),
+		rec.CadenceSeconds,
+		nextDue,
 		rec.LastCycleID,
+		rec.LastScheduledRunID,
 		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	)
@@ -1609,7 +1628,9 @@ func (s *Store) ListGlobalWireSourceRegistryEntries(ctx context.Context, ownerID
 		limit = 50
 	}
 	query := `SELECT owner_id, registry_id, story_id, query, source_scope, status,
-	                last_cycle_id, created_at, updated_at
+	                source_standing_policy, source_standing_rationale,
+	                cadence_seconds, next_due_at, last_cycle_id,
+	                last_scheduled_run_id, created_at, updated_at
 	           FROM global_wire_source_registry
 	          WHERE owner_id = ?`
 	args := []any{ownerID}
@@ -1719,6 +1740,88 @@ func (s *Store) ListGlobalWireFetchCycleRuns(ctx context.Context, ownerID string
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate global wire fetch cycle runs: %w", err)
+	}
+	return out, nil
+}
+
+// CreateGlobalWireSourceSchedulerRun records the scheduler policy pass that
+// selected source registry entries for a fetch cycle.
+func (s *Store) CreateGlobalWireSourceSchedulerRun(ctx context.Context, rec types.GlobalWireSourceSchedulerRun) (types.GlobalWireSourceSchedulerRun, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = rec.CreatedAt
+	}
+	if rec.Status == "" {
+		rec.Status = "recorded"
+	}
+	storyIDsJSON, err := json.Marshal(rec.StoryIDs)
+	if err != nil {
+		return types.GlobalWireSourceSchedulerRun{}, fmt.Errorf("marshal global wire scheduler story ids: %w", err)
+	}
+	registryIDsJSON, err := json.Marshal(rec.RegistryEntryIDs)
+	if err != nil {
+		return types.GlobalWireSourceSchedulerRun{}, fmt.Errorf("marshal global wire scheduler registry ids: %w", err)
+	}
+	standingPoliciesJSON, err := json.Marshal(rec.StandingPolicies)
+	if err != nil {
+		return types.GlobalWireSourceSchedulerRun{}, fmt.Errorf("marshal global wire scheduler standing policies: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_source_scheduler_runs (
+			owner_id, scheduler_run_id, trigger_kind, status, story_ids_json,
+			registry_ids_json, fetch_cycle_id, standing_policies_json, message,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.Trigger,
+		rec.Status,
+		string(storyIDsJSON),
+		string(registryIDsJSON),
+		rec.FetchCycleID,
+		string(standingPoliciesJSON),
+		sanitizeStoreText(rec.Message),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireSourceSchedulerRun{}, fmt.Errorf("create global wire source scheduler run: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireSourceSchedulerRuns lists recent scheduler-policy passes.
+func (s *Store) ListGlobalWireSourceSchedulerRuns(ctx context.Context, ownerID string, limit int) ([]types.GlobalWireSourceSchedulerRun, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	rows, err := s.readDB.QueryContext(ctx,
+		`SELECT owner_id, scheduler_run_id, trigger_kind, status, story_ids_json,
+		        registry_ids_json, fetch_cycle_id, standing_policies_json,
+		        message, created_at, updated_at
+		   FROM global_wire_source_scheduler_runs
+		  WHERE owner_id = ?
+		  ORDER BY updated_at DESC LIMIT ?`,
+		ownerID,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire source scheduler runs: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireSourceSchedulerRun
+	for rows.Next() {
+		rec, err := scanGlobalWireSourceSchedulerRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire source scheduler runs: %w", err)
 	}
 	return out, nil
 }
@@ -2510,6 +2613,7 @@ func scanGlobalWireResearchEvidenceDecision(row interface{ Scan(...any) error })
 
 func scanGlobalWireSourceRegistryEntry(row interface{ Scan(...any) error }) (types.GlobalWireSourceRegistryEntry, error) {
 	var rec types.GlobalWireSourceRegistryEntry
+	var nextDue sql.NullString
 	var createdAt, updatedAt string
 	err := row.Scan(
 		&rec.OwnerID,
@@ -2518,7 +2622,12 @@ func scanGlobalWireSourceRegistryEntry(row interface{ Scan(...any) error }) (typ
 		&rec.Query,
 		&rec.SourceScope,
 		&rec.Status,
+		&rec.SourceStandingPolicy,
+		&rec.SourceStandingRationale,
+		&rec.CadenceSeconds,
+		&nextDue,
 		&rec.LastCycleID,
+		&rec.LastScheduledRunID,
 		&createdAt,
 		&updatedAt,
 	)
@@ -2528,6 +2637,13 @@ func scanGlobalWireSourceRegistryEntry(row interface{ Scan(...any) error }) (typ
 		}
 		return types.GlobalWireSourceRegistryEntry{}, fmt.Errorf("scan global wire source registry entry: %w", err)
 	}
+	if nextDue.Valid && strings.TrimSpace(nextDue.String) != "" {
+		parsedNextDue, err := time.Parse(time.RFC3339Nano, nextDue.String)
+		if err != nil {
+			return types.GlobalWireSourceRegistryEntry{}, fmt.Errorf("parse global wire source registry next_due_at: %w", err)
+		}
+		rec.NextDueAt = parsedNextDue.UTC()
+	}
 	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
 	if err != nil {
 		return types.GlobalWireSourceRegistryEntry{}, fmt.Errorf("parse global wire source registry created_at: %w", err)
@@ -2535,6 +2651,51 @@ func scanGlobalWireSourceRegistryEntry(row interface{ Scan(...any) error }) (typ
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWireSourceRegistryEntry{}, fmt.Errorf("parse global wire source registry updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireSourceSchedulerRun(row interface{ Scan(...any) error }) (types.GlobalWireSourceSchedulerRun, error) {
+	var rec types.GlobalWireSourceSchedulerRun
+	var storyIDsJSON, registryIDsJSON, standingPoliciesJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.Trigger,
+		&rec.Status,
+		&storyIDsJSON,
+		&registryIDsJSON,
+		&rec.FetchCycleID,
+		&standingPoliciesJSON,
+		&rec.Message,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireSourceSchedulerRun{}, ErrNotFound
+		}
+		return types.GlobalWireSourceSchedulerRun{}, fmt.Errorf("scan global wire source scheduler run: %w", err)
+	}
+	if err := json.Unmarshal([]byte(storyIDsJSON), &rec.StoryIDs); err != nil {
+		return types.GlobalWireSourceSchedulerRun{}, fmt.Errorf("unmarshal global wire scheduler story ids: %w", err)
+	}
+	if err := json.Unmarshal([]byte(registryIDsJSON), &rec.RegistryEntryIDs); err != nil {
+		return types.GlobalWireSourceSchedulerRun{}, fmt.Errorf("unmarshal global wire scheduler registry ids: %w", err)
+	}
+	if err := json.Unmarshal([]byte(standingPoliciesJSON), &rec.StandingPolicies); err != nil {
+		return types.GlobalWireSourceSchedulerRun{}, fmt.Errorf("unmarshal global wire scheduler standing policies: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireSourceSchedulerRun{}, fmt.Errorf("parse global wire scheduler created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireSourceSchedulerRun{}, fmt.Errorf("parse global wire scheduler updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()

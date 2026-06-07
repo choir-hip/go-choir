@@ -356,7 +356,12 @@ CREATE TABLE IF NOT EXISTS global_wire_source_registry (
 	query             LONGTEXT NOT NULL DEFAULT '',
 	source_scope      VARCHAR(255) NOT NULL DEFAULT '',
 	status            VARCHAR(255) NOT NULL DEFAULT '',
+	source_standing_policy LONGTEXT NOT NULL DEFAULT '',
+	source_standing_rationale LONGTEXT NOT NULL DEFAULT '',
+	cadence_seconds  INT NOT NULL DEFAULT 0,
+	next_due_at      DATETIME,
 	last_cycle_id     VARCHAR(255) NOT NULL DEFAULT '',
+	last_scheduled_run_id VARCHAR(255) NOT NULL DEFAULT '',
 	created_at        DATETIME NOT NULL,
 	updated_at        DATETIME NOT NULL,
 	PRIMARY KEY (owner_id, registry_id),
@@ -377,6 +382,22 @@ CREATE TABLE IF NOT EXISTS global_wire_fetch_cycle_runs (
 	updated_at          DATETIME NOT NULL,
 	PRIMARY KEY (owner_id, cycle_id),
 	KEY idx_global_wire_fetch_cycles_updated (owner_id, updated_at)
+);
+
+CREATE TABLE IF NOT EXISTS global_wire_source_scheduler_runs (
+	owner_id              VARCHAR(255) NOT NULL,
+	scheduler_run_id      VARCHAR(255) NOT NULL,
+	trigger_kind          VARCHAR(255) NOT NULL DEFAULT '',
+	status                VARCHAR(255) NOT NULL DEFAULT '',
+	story_ids_json        LONGTEXT NOT NULL DEFAULT '[]',
+	registry_ids_json     LONGTEXT NOT NULL DEFAULT '[]',
+	fetch_cycle_id        VARCHAR(255) NOT NULL DEFAULT '',
+	standing_policies_json LONGTEXT NOT NULL DEFAULT '[]',
+	message               LONGTEXT NOT NULL DEFAULT '',
+	created_at            DATETIME NOT NULL,
+	updated_at            DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, scheduler_run_id),
+	KEY idx_global_wire_source_scheduler_updated (owner_id, updated_at)
 );
 
 CREATE TABLE IF NOT EXISTS global_wire_projection_reviews (
@@ -877,6 +898,11 @@ func (s *Store) bootstrap() error {
 		{"global_wire_projection_reviews", "approved_story_doc_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"global_wire_projection_reviews", "approved_revision_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"global_wire_publication_updates", "extraction_ids_json", "LONGTEXT NOT NULL DEFAULT '[]'"},
+		{"global_wire_source_registry", "source_standing_policy", "LONGTEXT NOT NULL DEFAULT ''"},
+		{"global_wire_source_registry", "source_standing_rationale", "LONGTEXT NOT NULL DEFAULT ''"},
+		{"global_wire_source_registry", "cadence_seconds", "INT NOT NULL DEFAULT 0"},
+		{"global_wire_source_registry", "next_due_at", "DATETIME"},
+		{"global_wire_source_registry", "last_scheduled_run_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"browser_sessions", "html_snapshot", "LONGTEXT NOT NULL DEFAULT ''"},
 		{"browser_sessions", "links_json", "LONGTEXT NOT NULL DEFAULT '[]'"},
 		{"browser_sessions", "screenshot_png_base64", "LONGTEXT NOT NULL DEFAULT ''"},

@@ -412,6 +412,22 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   expect(fetchCycle.refresh_runs?.length || 0).toBeGreaterThanOrEqual(1);
   await expect(app.locator('[data-global-wire-fetch-cycle-status]')).toBeVisible();
   await expect(app.locator('[data-global-wire-fetch-cycle-runs]')).toContainText('story-supply-resilience');
+  await expect(app.locator('[data-global-wire-source-standing-policy]')).toBeVisible();
+
+  const schedulerResponsePromise = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/global-wire/fetch-cycles' && response.request().method() === 'POST'
+  );
+  await app.locator('[data-global-wire-scheduler-cycle]').click();
+  const schedulerResponse = await schedulerResponsePromise;
+  expect([201, 503]).toContain(schedulerResponse.status());
+  const schedulerCycle = await schedulerResponse.json();
+  expect(schedulerCycle.fetch_cycle?.id).toBeTruthy();
+  expect(schedulerCycle.scheduler_run?.fetch_cycle_id).toBe(schedulerCycle.fetch_cycle?.id);
+  expect(schedulerCycle.scheduler_run?.standing_policies?.length || 0).toBeGreaterThanOrEqual(1);
+  expect(schedulerCycle.registry_entries?.[0]?.source_standing_policy).toBeTruthy();
+  expect(schedulerCycle.registry_entries?.[0]?.cadence_seconds).toBeGreaterThanOrEqual(900);
+  await expect(app.locator('[data-global-wire-source-scheduler-run]').first()).toContainText('scheduled-cycle');
+  await expect(app.locator('[data-global-wire-source-schedule-cadence]').first()).toContainText('cadence');
 
   const reconciliation = await page.evaluate(async ({ contributionId, sourceContentId }) => {
     const listRes = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', {

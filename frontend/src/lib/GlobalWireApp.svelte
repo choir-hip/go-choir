@@ -161,6 +161,7 @@
   let fetchCycleBusy = false;
   let fetchCycles = [];
   let sourceRegistryEntries = [];
+  let sourceSchedulerRuns = [];
   let styleSourceStatus = '';
   let styleSourceBusy = false;
   let queueTopSourceResult = true;
@@ -219,6 +220,7 @@
       sourceRefreshes = [];
       fetchCycles = [];
       sourceRegistryEntries = [];
+      sourceSchedulerRuns = [];
       claimRecords = [];
       researchTasks = [];
       extractionArtifacts = [];
@@ -284,6 +286,7 @@
       sourceRefreshes = [];
       fetchCycles = [];
       sourceRegistryEntries = [];
+      sourceSchedulerRuns = [];
       claimRecords = [];
       researchTasks = [];
       extractionArtifacts = [];
@@ -304,9 +307,11 @@
       const payload = await response.json();
       fetchCycles = Array.isArray(payload.recent_cycles) ? payload.recent_cycles : [];
       sourceRegistryEntries = Array.isArray(payload.registry_entries) ? payload.registry_entries : [];
+      sourceSchedulerRuns = Array.isArray(payload.scheduler_runs) ? payload.scheduler_runs : [];
     } catch {
       fetchCycles = [];
       sourceRegistryEntries = [];
+      sourceSchedulerRuns = [];
     }
   }
 
@@ -688,7 +693,7 @@
     }
   }
 
-  async function runFetchCycle() {
+  async function runFetchCycle(schedulerMode = false) {
     if (!authenticated) {
       fetchCycleStatus = 'Sign in to run a bounded source-registry fetch cycle.';
       return;
@@ -704,13 +709,20 @@
           story_ids: [selectedStory.id],
           max_stories: 1,
           max_results: 2,
-          trigger: 'global-wire-app-bounded-cycle',
+          trigger: schedulerMode ? 'global-wire-app-scheduled-standing-cycle' : 'global-wire-app-bounded-cycle',
+          scheduler_mode: schedulerMode,
+          cadence_seconds: schedulerMode ? 3600 : undefined,
         }),
       });
       const payload = await response.json();
       fetchCycleStatus = payload.message || payload.status || `Fetch cycle ${response.status}`;
       if (payload.fetch_cycle?.id) {
         fetchCycles = [payload.fetch_cycle, ...fetchCycles]
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+      if (payload.scheduler_run?.id) {
+        sourceSchedulerRuns = [payload.scheduler_run, ...sourceSchedulerRuns]
           .filter(Boolean)
           .slice(0, 20);
       }
@@ -1338,11 +1350,20 @@
           <button
             type="button"
             class="source-search-button"
-            on:click={runFetchCycle}
+            on:click={() => runFetchCycle(false)}
             disabled={fetchCycleBusy}
             data-global-wire-fetch-cycle
           >
             {fetchCycleBusy ? 'Running...' : 'Run fetch cycle'}
+          </button>
+          <button
+            type="button"
+            class="source-search-button"
+            on:click={() => runFetchCycle(true)}
+            disabled={fetchCycleBusy}
+            data-global-wire-scheduler-cycle
+          >
+            {fetchCycleBusy ? 'Running...' : 'Run source schedule'}
           </button>
           {#if sourceSearchStatus}
             <p class="source-search-status" data-global-wire-source-search-status>
@@ -1359,8 +1380,15 @@
               {fetchCycleStatus}
             </p>
           {/if}
-          {#if fetchCycles.length || sourceRegistryEntries.length}
+          {#if fetchCycles.length || sourceRegistryEntries.length || sourceSchedulerRuns.length}
             <div class="source-search-results" data-global-wire-fetch-cycle-runs>
+              {#each sourceSchedulerRuns.slice(0, 2) as run}
+                <article data-global-wire-source-scheduler-run>
+                  <strong>{run.status}</strong>
+                  <small>{run.trigger} · {(run.standing_policies || []).join(', ')}</small>
+                  <span>{run.message}</span>
+                </article>
+              {/each}
               {#each fetchCycles.slice(0, 2) as cycle}
                 <article>
                   <strong>{cycle.status}</strong>
@@ -1371,8 +1399,16 @@
               {#each sourceRegistryEntries.slice(0, 2) as entry}
                 <article data-global-wire-source-registry-entry>
                   <strong>{entry.source_scope}</strong>
-                  <small>{entry.status} · {entry.story_id}</small>
+                  <small>{entry.status} · {entry.story_id} · {entry.source_standing_policy || 'standing review'}</small>
                   <span>{entry.query}</span>
+                  {#if entry.source_standing_rationale}
+                    <small data-global-wire-source-standing-policy>{entry.source_standing_rationale}</small>
+                  {/if}
+                  {#if entry.cadence_seconds}
+                    <small data-global-wire-source-schedule-cadence>
+                      cadence {entry.cadence_seconds}s · next due {entry.next_due_at || 'pending'}
+                    </small>
+                  {/if}
                 </article>
               {/each}
             </div>

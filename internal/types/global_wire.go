@@ -282,15 +282,20 @@ type GlobalWirePublicationUpdate struct {
 // GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
 // fetch cycle should use for one StoryGraph neighborhood.
 type GlobalWireSourceRegistryEntry struct {
-	ID          string    `json:"id"`
-	OwnerID     string    `json:"owner_id,omitempty"`
-	StoryID     string    `json:"story_id"`
-	Query       string    `json:"query"`
-	SourceScope string    `json:"source_scope"`
-	Status      string    `json:"status"`
-	LastCycleID string    `json:"last_cycle_id,omitempty"`
-	CreatedAt   time.Time `json:"created_at,omitempty"`
-	UpdatedAt   time.Time `json:"updated_at,omitempty"`
+	ID                      string    `json:"id"`
+	OwnerID                 string    `json:"owner_id,omitempty"`
+	StoryID                 string    `json:"story_id"`
+	Query                   string    `json:"query"`
+	SourceScope             string    `json:"source_scope"`
+	Status                  string    `json:"status"`
+	SourceStandingPolicy    string    `json:"source_standing_policy,omitempty"`
+	SourceStandingRationale string    `json:"source_standing_rationale,omitempty"`
+	CadenceSeconds          int       `json:"cadence_seconds,omitempty"`
+	NextDueAt               time.Time `json:"next_due_at,omitempty"`
+	LastCycleID             string    `json:"last_cycle_id,omitempty"`
+	LastScheduledRunID      string    `json:"last_scheduled_run_id,omitempty"`
+	CreatedAt               time.Time `json:"created_at,omitempty"`
+	UpdatedAt               time.Time `json:"updated_at,omitempty"`
 }
 
 // GlobalWireFetchCycleRun records a bounded source-registry cycle. It is
@@ -304,6 +309,23 @@ type GlobalWireFetchCycleRun struct {
 	RegistryEntryIDs []string  `json:"registry_entry_ids"`
 	RefreshRunIDs    []string  `json:"refresh_run_ids"`
 	SourceContentIDs []string  `json:"source_content_ids"`
+	Message          string    `json:"message"`
+	CreatedAt        time.Time `json:"created_at,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at,omitempty"`
+}
+
+// GlobalWireSourceSchedulerRun records a scheduler-policy pass that selected
+// StoryGraph headline neighborhoods for a fetch cycle. It is scheduler
+// evidence, not a claim that platform stories were mutated.
+type GlobalWireSourceSchedulerRun struct {
+	ID               string    `json:"id"`
+	OwnerID          string    `json:"owner_id,omitempty"`
+	Trigger          string    `json:"trigger"`
+	Status           string    `json:"status"`
+	StoryIDs         []string  `json:"story_ids"`
+	RegistryEntryIDs []string  `json:"registry_entry_ids"`
+	FetchCycleID     string    `json:"fetch_cycle_id,omitempty"`
+	StandingPolicies []string  `json:"standing_policies"`
 	Message          string    `json:"message"`
 	CreatedAt        time.Time `json:"created_at,omitempty"`
 	UpdatedAt        time.Time `json:"updated_at,omitempty"`
