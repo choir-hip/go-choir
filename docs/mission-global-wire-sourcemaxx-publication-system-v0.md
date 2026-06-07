@@ -799,6 +799,18 @@ belief-state changes:
   different stores/owners. Do not add another agent architecture to patch
   around this; processors and reconcilers remain shared-harness profiles with
   profile-specific toolsets.
+- Node B root-cause probe clarified the failure. Raw source-service
+  `/internal/source-service/sourcemaxx/latest` for that same cycle includes 7
+  processor `runtime_run_id` values and 1 reconciler `runtime_run_id`, so
+  sourcecycled storage and DTO serialization are working. Sandbox logs show
+  those exact run IDs were created, then immediately failed with
+  `unsupported prompt role "processor"` and `unsupported prompt role
+  "reconciler"`. The actual bug is that the shared runtime harness accepts
+  processor/reconciler profiles at run submission and has tool registries for
+  them, but `PromptStore.promptRoles()` does not register prompt defaults for
+  those roles. The next fix should add processor and reconciler prompt
+  defaults/registration in the shared prompt store, not create a separate
+  processor/reconciler execution loop.
 
 remaining error field:
 
