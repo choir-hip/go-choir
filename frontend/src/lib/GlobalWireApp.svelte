@@ -1550,8 +1550,6 @@
   .contribution-list {
     display: grid;
     gap: 0.4rem;
-    max-height: 12rem;
-    overflow: auto;
   }
 
   .contribution-card {
