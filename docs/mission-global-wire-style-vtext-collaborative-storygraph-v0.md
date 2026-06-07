@@ -4350,3 +4350,95 @@ Next executable probe:
   and a News app detail surface opened from the delivery row; prove through
   deployed owner Playwright that the detail includes delivery, artifact, story,
   source, citation, and rollback evidence.
+
+## Checkpoint - Delivery Detail Publication Surface - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What changed:
+
+- Added owner-scoped delivery detail lookup for
+  `GlobalWirePublicationDelivery`.
+- Added
+  `GET /api/global-wire/publication-deliveries/{deliveryID}` returning the
+  composed delivery record with its publication artifact, StoryGraph story,
+  SourceItem context, citations, and rollback refs.
+- Added a News app `Inspect` action for delivered publication feed rows.
+- Added an owner-visible delivery detail surface that renders delivery ref,
+  story headline, artifact body, source neighborhood context, citation refs,
+  and rollback refs.
+- Extended runtime and deployed Playwright proof so the signed-in product path
+  creates an artifact, approves it, creates a delivery, opens the delivery
+  detail, and verifies provenance in the detail view.
+
+Evidence:
+
+- Problem-first checkpoint commit:
+  `93a51f5f` (`docs: record global wire delivery detail gap`).
+- Behavior commit:
+  `a045d9b85d21d7ca9be3eb4ba067a068537cd43f`
+  (`feat: inspect global wire delivery details`).
+- Local runtime proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`.
+- Local frontend proof passed:
+  `npm run build` in `frontend/`.
+- Diff hygiene passed:
+  `git diff --check`.
+- CI run `27087080149`: success.
+- FlakeHub publish run `27087080153`: success.
+- Staging health after deploy reported proxy and upstream deployed commit
+  `a045d9b85d21d7ca9be3eb4ba067a068537cd43f`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in"`
+  with 1 passed. The proof opens the delivered-publication detail surface and
+  observes delivery ref, artifact body, citation refs, and rollback refs.
+
+Invariants preserved:
+
+- Delivery detail is owner-scoped and inspectable; it is not an unauthenticated
+  public permalink yet.
+- The detail view reads and composes existing delivery/artifact/story/source
+  evidence; it does not mutate platform Story VTexts, StoryGraph records, or
+  user-owned forks.
+- The publication artifact remains the citeable source artifact selected and
+  approved by the owner.
+- News remains non-oracle: the view exposes source, citation, and rollback
+  provenance instead of presenting delivery as unsupported truth.
+- Future Noir, Carbon Kintsugi, and London Salmon view proofs still pass on
+  staging.
+
+Belief-state update:
+
+- The proven product trajectory now reaches:
+  SourceItem -> source refresh/fetch/scheduler evidence -> StoryGraph headline
+  candidate -> extraction/research artifacts -> research handoff ->
+  projection review -> publication update package -> publication artifact ->
+  owner-scoped publication feed item -> Autoradio artifact traversal prompt ->
+  owner artifact approval -> owner-scoped delivery-ready publication record ->
+  owner-scoped delivered-publication detail view.
+- Delivery has crossed from status-row to inspectable publication object. The
+  next realism increase should either make delivery exportable/public under
+  controlled provenance, or make Autoradio produce a durable artifact instead
+  of only a prompt submission.
+
+Remaining error field:
+
+- Delivery detail is authenticated and owner-scoped; there is no public
+  permalink, newsletter issue, email delivery, subscription event, or
+  syndication feed.
+- Autoradio traversal still submits a prompt and does not persist script/audio
+  artifacts.
+- No durable `RunAcceptanceRecord` exists for this mission.
+- Source standing policy, extraction normalization, full Style.vtext revision
+  workflows, and public delivery remain below the full spec target.
+
+Next executable probe:
+
+- Apply cognitive transforms before the next route choice. Highest-value
+  candidates are a provenance-rich public/read-only delivery export, a durable
+  Autoradio script artifact sourced from publication artifacts, or a synthesized
+  `RunAcceptanceRecord` if the product path can honestly bind this mission to
+  trajectory/run evidence.
