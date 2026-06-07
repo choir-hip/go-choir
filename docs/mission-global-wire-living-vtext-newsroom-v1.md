@@ -230,50 +230,56 @@ Global Wire/VText output is wrong-object work: poor desktop typography,
 normal-width layout failure, mobile issues, article stubs, visible metadata,
 source lists, related VText lists, a "My Edit" section, and no native source
 transclusion. 2026-06-07 source architecture correction removed static source
-trust tiers/standing from the registry design and expanded the local registry
-candidate set toward broad RSS/Atom plus long-tail Telegram/social evidence.
+trust tiers/standing from the registry design and expanded the registry toward
+broad RSS/Atom plus long-tail Telegram/social evidence. Staging deployed commit
+`1d4029c5` and sourcecycled loaded 170 configured sources.
 
-current artifact state: staging source service runs and pulls hundreds of
-items per cycle from a small registry. Local source registry work now expands
-configuration from 14 to 170 sources: 1 GDELT, 110 RSS/Atom, and 59 Telegram
-public-preview sources across 15 language tags, with tech, science, industry,
-finance, regional, conflict, and long-tail social/sentiment sources. Global
-Wire has a clean-ish collection surface but still exposes old naming and weak
-typography; opened article VTexts are projection/stub documents rather than
-real living articles.
+current artifact state: staging source service now runs the expanded registry:
+1 GDELT, 110 RSS/Atom, and 59 Telegram public-preview sources across 15
+language tags, with tech, science, industry, finance, regional, conflict, and
+long-tail social/sentiment sources. The first deployed expanded cycle produced
+3,753 deduped SourceItems, 96 processor requests, and 1 reconciler request.
+Global Wire has a clean-ish collection surface but still exposes old naming and
+weak typography; opened article VTexts are projection/stub documents rather
+than real living articles.
 
 what shipped: prior work shipped source service substrate, processor/reconciler
 handoff scaffolding, some VText agent usage, and a cleaner newspaper preview.
 Those are substrate only.
 
-what was proven: source service can ingest GDELT/RSS/Telegram-class items;
-staging can deploy and show Global Wire; the screenshots prove the current
-article/VText object is not acceptable. Local validation checked working
-RSS/Atom and Telegram public-preview URLs before adding them; `nix develop -c
-go test ./internal/sources ./internal/cycle` passed after removing static
-source tiers/standing from config.
+what was proven: source service can ingest GDELT/RSS/Telegram-class items at
+substantially larger breadth; staging can deploy and show Global Wire; the
+screenshots prove the current article/VText object is not acceptable. Local
+validation checked working RSS/Atom and Telegram public-preview URLs before
+adding them; `nix develop -c go test ./internal/sources ./internal/cycle`
+passed after removing static source tiers/standing from config. CI run
+`27102504563` passed and deployed `1d4029c5` to Node B.
 
-unproven or partial claims: broad multilingual source coverage, VText agent as
-article owner, publication-quality articles, native source transclusion,
-related VText transclusion, living updates, reconciler-driven revisions, and
+unproven or partial claims: full source health, learned source track-record
+state, per-source proof surfaces, VText agent as article owner,
+publication-quality articles, native source transclusion, related VText
+transclusion, living updates, reconciler-driven revisions, and
 responsive/typographic quality.
 
 belief-state changes: source breadth and VText ownership are the first
 architectural blockers. UI cleanup alone cannot solve the wrong object.
 
-remaining error field: research/add many multilingual sources; normalize
-article lifecycle through VText agents; replace source/related lists with
-transclusions; remove metadata/edit sludge from article documents; fix
-typography and mobile banner overlap.
+remaining error field: staging logs show 403s for some locally-valid feeds
+from Node B, plus parser failures on ISO-8859-1 feeds and one malformed entity
+feed. Source health is not yet exposed cleanly in the product/API proof surface.
+Next, improve parser tolerance and source health reporting before returning to
+article lifecycle: normalize article lifecycle through VText agents; replace
+source/related lists with transclusions; remove metadata/edit sludge from
+article documents; fix typography and mobile banner overlap.
 
-highest-impact remaining uncertainty: whether the expanded registry runs
-cleanly on staging over full source-service cycles, what per-source failure
-distribution appears, and how to add learned source track-record state without
-turning it into static editorial authority.
+highest-impact remaining uncertainty: how many source failures are transient
+provider/network blocks versus parser limitations, and how to expose learned
+source track-record state without turning it into static editorial authority.
 
-next executable probe: deploy the expanded source registry, observe staging
-source-service cycles, add source proof surfaces for registry/cycle counts and
-learned track-record metrics, then return to VText-owned article generation.
+next executable probe: fix RSS parser charset/leniency where safe, expose
+source proof surfaces for registry/cycle counts and source failures, observe
+another staging source-service cycle, then return to VText-owned article
+generation.
 
 suggested resume goal string: use the Goal String section above.
 
