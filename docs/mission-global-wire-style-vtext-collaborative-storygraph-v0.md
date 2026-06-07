@@ -5679,3 +5679,117 @@ Next executable probe:
 - Refresh reconciliation/dossier state after newsletter issue creation, rerun
   local build and deployed authenticated proof, and then checkpoint the
   delivered source-dossier slice.
+
+## Checkpoint - Source Dossier Reconciliation Projection - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Delivered product slice:
+
+- Added a deterministic owner-scoped source dossier projection for Global Wire
+  stories. The dossier composes manifest tiers, claim dossiers, extraction ids,
+  research task/evidence ids, candidate/contribution/refresh ids, publication
+  refs, newsletter refs, citation refs, rollback refs, and entity/event/timeline
+  overlays.
+- Exposed the projection through `/api/global-wire/source-dossiers` and included
+  it in `/api/global-wire/reconciliation` as `source_dossiers`.
+- Surfaced the selected story dossier in the Global Wire app with manifest tier,
+  claim/extraction/research, publication/newsletter, provenance, and overlay
+  fields.
+- Proved the source/research/publication/newsletter path reaches a
+  reconciliation-ready dossier without mutating platform stories or user-owned
+  VText forks.
+
+Problem and fix lineage:
+
+- Problem checkpoint: `997891b3` (`docs: record global wire dossier gap`).
+- Behavior commit: `b1852595afb9173b25f7df3876cad83eae7f3ea3`
+  (`feat: add global wire source dossiers`).
+- Normalization problem/fix:
+  `c3b1bcff` (`docs: record global wire dossier normalization gap`) and
+  `b39f7b2f482e8ad7793b52086b67592adc3cb66b`
+  (`fix: normalize global wire dossier missing fields`).
+- UI refresh problem/fixes:
+  `c8a554ec` (`docs: record global wire dossier refresh gap`),
+  `c4a55d98ebdb1f35274fc54feaf57b3167dce99e`,
+  `737105a688a6ffbea3d4741b86d9585095646d5c`,
+  `a07be5e60cde3e80b9e745ec6bd0389749599e35`,
+  `c8864732c81a5afbe3c38660dcee45a40a439beb`,
+  `488997f296546d5653a343d781b5d048aca02b96`,
+  `2ad280dd4ab92e3feb06610d7f735eb9f85c875d`,
+  `80e038895f96689778f82a71e7e2b7130b3b7946`, and final deployed fix
+  `9ceff6897d522bc1cf526d41e74b577202e666bc`
+  (`fix: expose global wire dossier reactive dependencies`).
+
+Root cause resolved:
+
+- The backend dossier API was correct after normalization, but the app’s dossier
+  panel stayed stale because some Svelte helper-function calls hid
+  `sourceDossiers`, `newsletterIssues`, and `publicLinks` from the compiler’s
+  dependency graph. The final fix makes the selected dossier and newsletter
+  projections explicit reactive expressions over those arrays.
+
+Local proof:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed while shaping the source-dossier API.
+- `npm run build` passed for the final UI fix.
+- `git diff --check` passed for the final UI fix.
+
+Staging proof:
+
+- Final pushed commit:
+  `9ceff6897d522bc1cf526d41e74b577202e666bc`.
+- CI run `27089462132`: success, including staging deploy.
+- FlakeHub run `27089462114`: success.
+- Staging `/health` reported proxy and upstream deployed commit
+  `9ceff6897d522bc1cf526d41e74b577202e666bc`, deployed at
+  `2026-06-07T10:08:34Z`.
+- Public deployed proof:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  returned 4 passed and 1 auth-gated skip.
+- Authenticated deployed proof:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in" --timeout 180000`
+  returned 1 passed.
+
+Invariant audit:
+
+- Every story remains a normal editable VText.
+- User edits/contributions still create owner-owned VTexts and do not mutate
+  platform stories.
+- Style.vtext remains a citeable selectable/composable/replacement source
+  artifact.
+- News remains non-oracle and provenance-rich; the dossier is a deterministic
+  projection over recorded evidence, not a source-truth decision.
+- Graph nodes remain story headlines with source-neighborhood semantics;
+  entity/event/timeline terms are overlays.
+- The Global Wire views still render in Future Noir, Carbon Kintsugi, and
+  London Salmon, as covered by the deployed public proof.
+
+Belief state:
+
+- The product trajectory now has a reviewable research/reconciliation dossier
+  over the path from live/source-service evidence through StoryGraph,
+  Style.vtext projection, Story VText, News publication views, user-owned
+  contribution/fork state, public link, newsletter issue, and delivery ledger.
+- This is a ship-worthy product slice at `staging-smoke-level` for the dossier
+  axis, not a full spec completion.
+
+Remaining error field:
+
+- No real outbound email provider send or bounce/open telemetry is proven; the
+  newsletter slice is still an owner-scoped delivery ledger.
+- Autoradio/script evidence exists, but playable audio is not proven.
+- Source normalization is deterministic and low-resolution; it is not yet a full
+  NLP/source workbench with contradiction clustering and source credibility
+  adjudication.
+- No AppChangePackage adoption or owner promote/rollback proof was run for this
+  slice, so this is not `promotion-level`.
+- No continuation/run-memory acceptance record was synthesized for the whole
+  overnight mission, so this is not `continuation-level`.
+
+Next executable probe:
+
+- Increase realism along one of three axes: real newsletter provider delivery,
+  playable autoradio/audio, or deeper source normalization with cross-source
+  contradiction/overlap review inside the dossier.
