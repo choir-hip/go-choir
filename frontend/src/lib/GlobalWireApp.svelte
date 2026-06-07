@@ -176,10 +176,15 @@
   $: displayedSourceCount = liveSourceCount || sourceItemCount;
   $: displayedSourceLabel = liveSourceCount ? 'live sources' : 'sources';
   $: displayedSourceSummary = sourceServiceStatus?.status === 'ok'
-    ? `${liveItemCount.toLocaleString()} source items · ${sourceServiceStatus.processor_request_count || 0} processors · ${sourceServiceStatus.reconciler_request_count || 0} reconcilers`
+    ? `${formatCount(liveItemCount, 'source item')} · ${formatCount(sourceServiceStatus.processor_request_count || 0, 'processor')} · ${formatCount(sourceServiceStatus.reconciler_request_count || 0, 'reconciler')}`
     : `${sourceClassCount} source groups · ${stories.length} article VTexts · ${dataSource}`;
   $: chronologyCount = liveItemCount || sourceItemCount;
   $: ownerLabel = authenticated ? (currentUser?.email || 'owner computer') : 'public preview';
+
+  function formatCount(count, singular, plural = `${singular}s`) {
+    const value = Number(count || 0);
+    return `${value.toLocaleString()} ${value === 1 ? singular : plural}`;
+  }
 
   onMount(() => {
     loadGlobalWireVTexts();
@@ -716,7 +721,7 @@
       {/if}
       {#if sourceServiceStatus?.cycle_id}
         <p class="source-status" data-global-wire-source-status>
-          {sourceServiceStatus.cycle_status || sourceServiceStatus.status} · cycle {sourceServiceStatus.cycle_id}
+          {sourceServiceStatus.cycle_status || sourceServiceStatus.status} · {sourceServiceStatus.cycle_id}
         </p>
       {/if}
 
