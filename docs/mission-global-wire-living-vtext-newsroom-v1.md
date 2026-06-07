@@ -627,3 +627,42 @@ neighborhood.
 remaining error field: the visible copy says `1 reconcilers`. Next tiny fix:
 pluralize processor/reconciler labels and simplify the source-cycle line so
 the product surface reads cleanly before continuing deeper source/article work.
+
+## Checkpoint 2026-06-07T22:38Z: source-status copy polish deployed; authenticated reread limited by signed-out reload
+
+objective: land the small visible-copy repair identified in the prior
+product-path proof without pretending the deeper newsroom is done.
+
+what shipped: commit `9b2918711338d7c9f27d8b4368f8f626efd9392d`
+was pushed to `origin/main`. CI run `27106562912` passed Go vet/build,
+integration-tagged smoke, non-runtime tests, all four runtime shards,
+frontend build, aggregate gate, and deploy job `79996768260`. Node B
+`/opt/go-choir` reports git HEAD
+`9b2918711338d7c9f27d8b4368f8f626efd9392d`; auth and proxy health probes
+responded after deploy. A direct local probe to `127.0.0.1:8080` did not
+connect during the post-deploy check, so future staging identity checks should
+prefer the known live platform/proxy health ports or the public build identity
+route rather than assuming that port is always present.
+
+code-level fix: the Global Wire source summary now formats singular/plural
+counts through `formatCount`, so `1 reconciler` is rendered instead of
+`1 reconcilers`; the latest source-cycle line now renders
+`completed · cycle_id` rather than `completed · cycle cycle_id`.
+
+product-path evidence: Comet reload of `https://choir.news/` showed the
+Global Wire launcher in the left desktop icon column, proving the desktop-icon
+slice survives a fresh page load. The same reload landed in the signed-out
+preview state, so the authenticated Global Wire window from the earlier proof
+was not available for rereading the source-status copy after the reload. Do
+not treat this checkpoint as full authenticated UI proof of the copy polish;
+it is deployed code plus signed-out desktop-launcher proof.
+
+remaining error field: the mission remains open. The current shipped product
+still falls short of the intended Global Wire newsroom: source breadth must
+expand materially across multilingual RSS/Atom, GDELT/event streams, Hacker
+News/comparable tech communities, science, finance, industry, local/regional,
+and long-tail Telegram/social feeds; processors and reconcilers must use the
+shared agent harness to request research and VText-owned article revisions;
+articles must become publication-quality living VTexts with native source and
+related-VText transclusion; and the newspaper collection surface plus VText
+mobile toolbar still need visual/product proof across themes and viewports.
