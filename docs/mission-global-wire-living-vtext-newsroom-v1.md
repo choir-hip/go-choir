@@ -60,8 +60,8 @@ Selected transforms:
    dump, or claim list is not progress unless it is clearly an internal brief.
    The article must read as an article.
 5. **Source-breadth transform:** hundreds of items from a tiny registry is not
-   enough. Source diversity by language, region, source type, and standing is
-   the first realism axis.
+   enough. Source diversity by language, region, source type, beat, outlet
+   class, and long-tail social perspective is the first realism axis.
 6. **Collection-surface transform:** Global Wire is the newspaper surface. The
    VText app is the article reader/editor/source traversal surface.
 
@@ -88,17 +88,27 @@ languages.
 Acceptance direction:
 
 - maintain GDELT/global-event ingestion;
-- add many RSS/Atom feeds across languages, regions, beats, and source
-  standings;
-- add many Telegram/public-channel sources where policy-compliant;
+- add many RSS/Atom feeds across languages, regions, beats, and outlet/source
+  classes;
+- add many Telegram/public-channel sources where policy-compliant, with an
+  explicit bias toward long-tail local, regional, conflict, community,
+  technology, finance, and social-sentiment channels;
 - include official, local, regional, specialist, financial/economic,
-  conflict/crisis, science/health, climate, culture, technology, and
-  institutional sources;
-- expose source registry counts by type/language/region/standing;
+  conflict/crisis, science/health, climate, culture, technology, industry,
+  hacker/community, and long-tail social sources;
+- add many Telegram/public-preview channels for local perspective, social
+  sentiment, weak signals, rumor surfaces, and sources ignored by established
+  outlets; articles must corroborate these rather than treating them as
+  standalone authority;
+- expose source registry counts by type, language, region, beat, and outlet
+  class;
 - expose latest-cycle active source count, failed source count, per-source item
   counts, latency, freshness, and errors;
 - keep hundreds of SourceItems per 15 minutes as a low floor, not the finish
   line.
+- do not hardcode source trust tiers or static source standing in the registry;
+  track record should be learned over time from outcomes, corroboration,
+  corrections, freshness, error history, and researcher/model judgment.
 
 ## Priority 2: VText-Owned Article Lifecycle
 
@@ -176,7 +186,7 @@ Required product fixes:
 Required proof:
 
 - source registry expanded substantially beyond 14 configured sources;
-- source registry summarized by type, language, region, and standing;
+- source registry summarized by type, language, region, beat, and outlet class;
 - latest source cycle proves active source count, per-source item counts,
   failures, latency, freshness, and item volume;
 - GDELT/global event, RSS/Atom, Telegram/public-channel, official, and
@@ -200,6 +210,9 @@ Required proof:
 - Do not use the old source-volume label as a product name.
 - Do not treat 14 sources as adequate.
 - Do not count one high-volume source as source diversity.
+- Do not encode permanent trust tiers or source standing in config.
+- Do not let long-tail social feeds become article authority without
+  corroboration, research, or explicit uncertainty.
 - Do not call outlines, manifests, or claim lists articles.
 - Do not display metadata in article prose.
 - Do not list sources/related VTexts where transclusion is required.
@@ -216,12 +229,18 @@ last checkpoint: 2026-06-07 user visual/product review confirmed the current
 Global Wire/VText output is wrong-object work: poor desktop typography,
 normal-width layout failure, mobile issues, article stubs, visible metadata,
 source lists, related VText lists, a "My Edit" section, and no native source
-transclusion.
+transclusion. 2026-06-07 source architecture correction removed static source
+trust tiers/standing from the registry design and expanded the local registry
+candidate set toward broad RSS/Atom plus long-tail Telegram/social evidence.
 
 current artifact state: staging source service runs and pulls hundreds of
-items per cycle from a small registry; Global Wire has a clean-ish collection
-surface but still exposes old naming and weak typography; opened article VTexts
-are projection/stub documents rather than real living articles.
+items per cycle from a small registry. Local source registry work now expands
+configuration from 14 to 170 sources: 1 GDELT, 110 RSS/Atom, and 59 Telegram
+public-preview sources across 15 language tags, with tech, science, industry,
+finance, regional, conflict, and long-tail social/sentiment sources. Global
+Wire has a clean-ish collection surface but still exposes old naming and weak
+typography; opened article VTexts are projection/stub documents rather than
+real living articles.
 
 what shipped: prior work shipped source service substrate, processor/reconciler
 handoff scaffolding, some VText agent usage, and a cleaner newspaper preview.
@@ -229,7 +248,10 @@ Those are substrate only.
 
 what was proven: source service can ingest GDELT/RSS/Telegram-class items;
 staging can deploy and show Global Wire; the screenshots prove the current
-article/VText object is not acceptable.
+article/VText object is not acceptable. Local validation checked working
+RSS/Atom and Telegram public-preview URLs before adding them; `nix develop -c
+go test ./internal/sources ./internal/cycle` passed after removing static
+source tiers/standing from config.
 
 unproven or partial claims: broad multilingual source coverage, VText agent as
 article owner, publication-quality articles, native source transclusion,
@@ -244,13 +266,14 @@ article lifecycle through VText agents; replace source/related lists with
 transclusions; remove metadata/edit sludge from article documents; fix
 typography and mobile banner overlap.
 
-highest-impact remaining uncertainty: what exact source registry expansion can
-be added quickly and policy-safely while preserving source standing,
-multilingual coverage, and provider health.
+highest-impact remaining uncertainty: whether the expanded registry runs
+cleanly on staging over full source-service cycles, what per-source failure
+distribution appears, and how to add learned source track-record state without
+turning it into static editorial authority.
 
-next executable probe: research source expansion candidates, then update the
-source registry and proof endpoints so the first implementation run can prove
-source breadth before returning to article generation.
+next executable probe: deploy the expanded source registry, observe staging
+source-service cycles, add source proof surfaces for registry/cycle counts and
+learned track-record metrics, then return to VText-owned article generation.
 
 suggested resume goal string: use the Goal String section above.
 

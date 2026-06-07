@@ -97,7 +97,7 @@ The existing source embedding/transclusion system is mandatory for news.
 
 Sources should appear as native source points/transclusions that can open into
 source viewer windows or source-specific views, preserving source handles,
-snippets, media, source standing, timestamps, and version-local provenance.
+snippets, media, timestamps, and version-local provenance.
 
 A text-only "Source Manifest" list is insufficient. It can exist as an index
 or debug/proof artifact, but it is not the article experience.
@@ -137,16 +137,24 @@ coverage.
 Required direction:
 
 - keep GDELT or equivalent global event feed ingestion;
-- expand RSS/Atom by region, language, beat, source standing, and outlet type;
-- expand Telegram/public-channel ingestion where allowed and policy-compliant;
+- expand RSS/Atom by region, language, beat, and outlet type;
+- expand Telegram/public-channel ingestion where allowed and policy-compliant,
+  including long-tail local, regional, conflict, community, tech, finance, and
+  social-sentiment channels that established outlets may ignore;
 - include official/public institutional sources, local outlets, specialist
   sources, regional sources, financial/economic sources, crisis/conflict
-  sources, science/health sources, and culture/technology sources;
+  sources, science/health sources, industry sources, hacker/community sources,
+  and culture/technology sources;
 - track active source count, successful source count, failed source count,
   per-source item count, provider latency, freshness, language, region, and
-  source standing;
+  outlet/source class;
 - treat hundreds of SourceItems per 15 minutes as a floor, not the finish line;
 - research source discovery before implementing a large registry expansion.
+- do not hardcode source trust tiers or static source standing in the registry;
+  source reliability is learned and reasoned from track record, corroboration,
+  correction history, freshness, source behavior, researcher packets, and model
+  context. Long-tail social sources are valuable evidence and sentiment, not
+  automatic article authority.
 
 ## Agent Roles
 
@@ -167,7 +175,7 @@ reconciler attention. They do not own canonical articles.
 ### Researchers
 
 Researchers are existing Choir evidence agents. They answer bounded questions,
-inspect source standing, compare accounts, gather missing context, and return
+compare source accounts and track records, gather missing context, and return
 source-backed packets. They do not own article voice.
 
 ### VText Agents
@@ -266,6 +274,9 @@ Do not claim delivery until staging proof shows:
 
 - Do not rename source volume into a product layer.
 - Do not count one high-volume feed as source diversity.
+- Do not encode permanent source trust tiers or static standing in config.
+- Do not turn long-tail Telegram/social sentiment into article authority
+  without corroboration, uncertainty, or research.
 - Do not call outlines or manifests articles.
 - Do not make metadata visible in article prose.
 - Do not list sources or related VTexts where native transclusion is required.

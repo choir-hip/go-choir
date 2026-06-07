@@ -6,10 +6,20 @@
       "type": "gdelt",
       "name": "GDELT 15-Minute Global Event Stream",
       "url": "http://data.gdeltproject.org/gdeltv2/lastupdate.txt",
-      "verticals": ["supply_chain", "conflict", "elections", "ai", "health", "culture"],
-      "languages": ["multi"],
-      "regions": ["global"],
-      "tier": "T1b",
+      "verticals": [
+        "supply_chain",
+        "conflict",
+        "elections",
+        "ai",
+        "health",
+        "culture"
+      ],
+      "languages": [
+        "multi"
+      ],
+      "regions": [
+        "global"
+      ],
       "poll_interval_seconds": 900,
       "max_items_per_poll": 500,
       "rate_limit": "15m poll",
@@ -18,18 +28,22 @@
       "robots_policy": "dataset_feed",
       "auth_policy": "none",
       "store_body_policy": "bounded_metadata",
-      "retention_days": 90,
-      "source_standing": "good_standing"
+      "retention_days": 90
     },
     {
       "id": "telegram:conflict_monitor",
       "type": "telegram",
       "name": "Conflict Monitor (Telegram)",
       "url": "https://t.me/s/conflict_monitor",
-      "verticals": ["conflict"],
-      "languages": ["en"],
-      "regions": ["global"],
-      "tier": "T2",
+      "verticals": [
+        "conflict"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
       "poll_interval_seconds": 900,
       "max_items_per_poll": 100,
       "rate_limit": "15m poll",
@@ -38,18 +52,22 @@
       "robots_policy": "public_preview_only",
       "auth_policy": "none",
       "store_body_policy": "bounded_text",
-      "retention_days": 30,
-      "source_standing": "review"
+      "retention_days": 30
     },
     {
       "id": "arxiv:cs_ai",
       "type": "rss",
       "name": "arXiv cs.AI",
       "url": "https://rss.arxiv.org/rss/cs.AI",
-      "verticals": ["ai"],
-      "languages": ["en"],
-      "regions": ["global"],
-      "tier": "T1a",
+      "verticals": [
+        "ai"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
       "poll_interval_seconds": 3600,
       "max_items_per_poll": 100,
       "rate_limit": "1h poll",
@@ -58,18 +76,22 @@
       "robots_policy": "rss_feed",
       "auth_policy": "none",
       "store_body_policy": "bounded_abstract",
-      "retention_days": 365,
-      "source_standing": "good_standing"
+      "retention_days": 365
     },
     {
       "id": "rss:nikkei_asia",
       "type": "rss",
       "name": "Nikkei Asia",
       "url": "https://asia.nikkei.com/rss/feed/nar",
-      "verticals": ["supply_chain"],
-      "languages": ["en"],
-      "regions": ["asia"],
-      "tier": "T1b",
+      "verticals": [
+        "supply_chain"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
       "poll_interval_seconds": 1800,
       "max_items_per_poll": 100,
       "rate_limit": "30m poll",
@@ -78,19 +100,27 @@
       "robots_policy": "rss_feed",
       "auth_policy": "none",
       "store_body_policy": "excerpt_only",
-      "retention_days": 90,
-      "source_standing": "good_standing"
+      "retention_days": 90
     },
     {
       "id": "official:fed:press",
       "type": "rss",
       "name": "Federal Reserve Press Releases",
       "url": "https://www.federalreserve.gov/feeds/press_all.xml",
-      "verticals": ["macro_policy", "economics", "finance"],
-      "languages": ["en"],
-      "regions": ["us"],
-      "jurisdictions": ["US"],
-      "tier": "T0",
+      "verticals": [
+        "macro_policy",
+        "economics",
+        "finance"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "jurisdictions": [
+        "US"
+      ],
       "poll_interval_seconds": 3600,
       "max_items_per_poll": 100,
       "rate_limit": "1h poll",
@@ -100,18 +130,27 @@
       "auth_policy": "none",
       "store_body_policy": "bounded_release_text",
       "retention_days": 3650,
-      "official": true,
-      "source_standing": "good_standing"
+      "official": true
     },
     {
       "id": "rss:bbc_world",
       "type": "rss",
       "name": "BBC News World",
       "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
-      "verticals": ["conflict", "elections", "macro_policy", "health", "climate", "culture"],
-      "languages": ["en"],
-      "regions": ["global"],
-      "tier": "T1b",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
       "poll_interval_seconds": 900,
       "max_items_per_poll": 100,
       "rate_limit": "15m poll",
@@ -120,18 +159,27 @@
       "robots_policy": "rss_feed",
       "auth_policy": "none",
       "store_body_policy": "excerpt_only",
-      "retention_days": 90,
-      "source_standing": "good_standing"
+      "retention_days": 90
     },
     {
       "id": "rss:aljazeera_all",
       "type": "rss",
       "name": "Al Jazeera All News",
       "url": "https://www.aljazeera.com/xml/rss/all.xml",
-      "verticals": ["conflict", "elections", "macro_policy", "health", "climate", "culture"],
-      "languages": ["en"],
-      "regions": ["global"],
-      "tier": "T1b",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
       "poll_interval_seconds": 900,
       "max_items_per_poll": 100,
       "rate_limit": "15m poll",
@@ -140,18 +188,25 @@
       "robots_policy": "rss_feed",
       "auth_policy": "none",
       "store_body_policy": "excerpt_only",
-      "retention_days": 90,
-      "source_standing": "good_standing"
+      "retention_days": 90
     },
     {
       "id": "rss:france24_en",
       "type": "rss",
       "name": "France 24 English",
       "url": "https://www.france24.com/en/rss",
-      "verticals": ["conflict", "elections", "macro_policy", "culture"],
-      "languages": ["en"],
-      "regions": ["global"],
-      "tier": "T1b",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
       "poll_interval_seconds": 900,
       "max_items_per_poll": 100,
       "rate_limit": "15m poll",
@@ -160,18 +215,26 @@
       "robots_policy": "rss_feed",
       "auth_policy": "none",
       "store_body_policy": "excerpt_only",
-      "retention_days": 90,
-      "source_standing": "good_standing"
+      "retention_days": 90
     },
     {
       "id": "official:un:all_news",
       "type": "rss",
       "name": "UN News All Stories",
       "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml",
-      "verticals": ["conflict", "health", "climate", "humanitarian", "development"],
-      "languages": ["en"],
-      "regions": ["global"],
-      "tier": "T0",
+      "verticals": [
+        "conflict",
+        "health",
+        "climate",
+        "humanitarian",
+        "development"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
       "poll_interval_seconds": 1800,
       "max_items_per_poll": 100,
       "rate_limit": "30m poll",
@@ -181,18 +244,24 @@
       "auth_policy": "none",
       "store_body_policy": "bounded_release_text",
       "retention_days": 365,
-      "official": true,
-      "source_standing": "good_standing"
+      "official": true
     },
     {
       "id": "official:who:news",
       "type": "rss",
       "name": "WHO News",
       "url": "https://www.who.int/rss-feeds/news-english.xml",
-      "verticals": ["health", "public_health", "policy"],
-      "languages": ["en"],
-      "regions": ["global"],
-      "tier": "T0",
+      "verticals": [
+        "health",
+        "public_health",
+        "policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
       "poll_interval_seconds": 1800,
       "max_items_per_poll": 100,
       "rate_limit": "30m poll",
@@ -202,19 +271,27 @@
       "auth_policy": "none",
       "store_body_policy": "bounded_release_text",
       "retention_days": 365,
-      "official": true,
-      "source_standing": "good_standing"
+      "official": true
     },
     {
       "id": "official:ecb:press",
       "type": "rss",
       "name": "European Central Bank Press Releases",
       "url": "https://www.ecb.europa.eu/rss/press.html",
-      "verticals": ["macro_policy", "economics", "finance"],
-      "languages": ["en"],
-      "regions": ["eu"],
-      "jurisdictions": ["EU"],
-      "tier": "T0",
+      "verticals": [
+        "macro_policy",
+        "economics",
+        "finance"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "eu"
+      ],
+      "jurisdictions": [
+        "EU"
+      ],
       "poll_interval_seconds": 3600,
       "max_items_per_poll": 100,
       "rate_limit": "1h poll",
@@ -224,18 +301,24 @@
       "auth_policy": "none",
       "store_body_policy": "bounded_release_text",
       "retention_days": 3650,
-      "official": true,
-      "source_standing": "good_standing"
+      "official": true
     },
     {
       "id": "official:nasa:releases",
       "type": "rss",
       "name": "NASA News Releases",
       "url": "https://www.nasa.gov/news-release/feed/",
-      "verticals": ["science", "space", "technology"],
-      "languages": ["en"],
-      "regions": ["us"],
-      "tier": "T0",
+      "verticals": [
+        "science",
+        "space",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
       "poll_interval_seconds": 3600,
       "max_items_per_poll": 100,
       "rate_limit": "1h poll",
@@ -245,18 +328,23 @@
       "auth_policy": "none",
       "store_body_policy": "bounded_release_text",
       "retention_days": 365,
-      "official": true,
-      "source_standing": "good_standing"
+      "official": true
     },
     {
       "id": "telegram:liveuamap",
       "type": "telegram",
       "name": "Liveuamap Telegram",
       "url": "https://t.me/s/liveuamap",
-      "verticals": ["conflict", "security"],
-      "languages": ["en"],
-      "regions": ["global"],
-      "tier": "T2",
+      "verticals": [
+        "conflict",
+        "security"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
       "poll_interval_seconds": 900,
       "max_items_per_poll": 100,
       "rate_limit": "15m poll",
@@ -265,18 +353,23 @@
       "robots_policy": "public_preview_only",
       "auth_policy": "none",
       "store_body_policy": "bounded_text",
-      "retention_days": 30,
-      "source_standing": "review"
+      "retention_days": 30
     },
     {
       "id": "telegram:rybar",
       "type": "telegram",
       "name": "Rybar Telegram",
       "url": "https://t.me/s/rybar",
-      "verticals": ["conflict", "security"],
-      "languages": ["ru"],
-      "regions": ["global"],
-      "tier": "T2",
+      "verticals": [
+        "conflict",
+        "security"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "global"
+      ],
       "poll_interval_seconds": 900,
       "max_items_per_poll": 100,
       "rate_limit": "15m poll",
@@ -285,8 +378,4260 @@
       "robots_policy": "public_preview_only",
       "auth_policy": "none",
       "store_body_policy": "bounded_text",
-      "retention_days": 30,
-      "source_standing": "review"
+      "retention_days": 30
+    },
+    {
+      "id": "official:cdc:media",
+      "type": "rss",
+      "name": "CDC Newsroom",
+      "url": "https://tools.cdc.gov/api/v2/resources/media/132608.rss",
+      "verticals": [
+        "health",
+        "public_health",
+        "policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 100,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "official": true,
+      "jurisdictions": [
+        "US"
+      ]
+    },
+    {
+      "id": "official:ec:press",
+      "type": "rss",
+      "name": "European Commission Press Corner",
+      "url": "https://ec.europa.eu/commission/presscorner/api/rss?language=en",
+      "verticals": [
+        "macro_policy",
+        "economics",
+        "finance"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "eu"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 100,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "official": true,
+      "jurisdictions": [
+        "EU"
+      ]
+    },
+    {
+      "id": "official:noaa:nhc",
+      "type": "rss",
+      "name": "NOAA National Hurricane Center",
+      "url": "https://www.nhc.noaa.gov/index-at.xml",
+      "verticals": [
+        "climate",
+        "disaster",
+        "science",
+        "public_safety"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 100,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "official": true,
+      "jurisdictions": [
+        "US"
+      ]
+    },
+    {
+      "id": "official:un_fr",
+      "type": "rss",
+      "name": "UN News French",
+      "url": "https://news.un.org/feed/subscribe/fr/news/all/rss.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 100,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "official": true
+    },
+    {
+      "id": "official:un_ru",
+      "type": "rss",
+      "name": "UN News Russian",
+      "url": "https://news.un.org/feed/subscribe/ru/news/all/rss.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 100,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "official": true
+    },
+    {
+      "id": "official:usgs:earthquakes",
+      "type": "rss",
+      "name": "USGS All Earthquakes",
+      "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.atom",
+      "verticals": [
+        "climate",
+        "disaster",
+        "science",
+        "public_safety"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 100,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "official": true
+    },
+    {
+      "id": "official:wto:news",
+      "type": "rss",
+      "name": "WTO News",
+      "url": "https://www.wto.org/library/rss/latest_news_e.xml",
+      "verticals": [
+        "macro_policy",
+        "economics",
+        "finance"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 100,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "official": true
+    },
+    {
+      "id": "rss:abc_au_world",
+      "type": "rss",
+      "name": "ABC Australia World",
+      "url": "https://www.abc.net.au/news/feed/51120/rss.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia_pacific"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:africanews_en",
+      "type": "rss",
+      "name": "Africanews English",
+      "url": "https://www.africanews.com/feed/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "africa"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:africanews_fr",
+      "type": "rss",
+      "name": "Africanews French",
+      "url": "https://fr.africanews.com/feed/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "regions": [
+        "africa"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:agencia_brasil",
+      "type": "rss",
+      "name": "Agencia Brasil",
+      "url": "https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "regions": [
+        "latin_america"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:allafrica_top",
+      "type": "rss",
+      "name": "AllAfrica Top Stories",
+      "url": "https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "africa"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:arabnews",
+      "type": "rss",
+      "name": "Arab News",
+      "url": "https://www.arabnews.com/rss.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "middle_east"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:buenosairesherald",
+      "type": "rss",
+      "name": "Buenos Aires Herald",
+      "url": "https://buenosairesherald.com/feed",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "latin_america"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:cna_asia",
+      "type": "rss",
+      "name": "CNA Asia",
+      "url": "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6936",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:coindesk",
+      "type": "rss",
+      "name": "CoinDesk",
+      "url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+      "verticals": [
+        "macro_policy",
+        "economics",
+        "finance"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:daily_maverick",
+      "type": "rss",
+      "name": "Daily Maverick",
+      "url": "https://www.dailymaverick.co.za/dmrss/",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "africa"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:dw_ar",
+      "type": "rss",
+      "name": "Deutsche Welle Arabic",
+      "url": "https://rss.dw.com/rdf/rss-ar-all",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:dw_de",
+      "type": "rss",
+      "name": "Deutsche Welle German",
+      "url": "https://rss.dw.com/rdf/rss-de-all",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "de"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:dw_en",
+      "type": "rss",
+      "name": "Deutsche Welle English",
+      "url": "https://rss.dw.com/rdf/rss-en-all",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:dw_ru",
+      "type": "rss",
+      "name": "Deutsche Welle Russian",
+      "url": "https://rss.dw.com/rdf/rss-ru-all",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:elmundo",
+      "type": "rss",
+      "name": "El Mundo",
+      "url": "https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "es"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:elpais",
+      "type": "rss",
+      "name": "El Pais",
+      "url": "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "es"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:euronews_de",
+      "type": "rss",
+      "name": "Euronews Deutsch",
+      "url": "https://de.euronews.com/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "de"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:euronews_es",
+      "type": "rss",
+      "name": "Euronews Espanol",
+      "url": "https://es.euronews.com/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "es"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:euronews_fr",
+      "type": "rss",
+      "name": "Euronews Francais",
+      "url": "https://fr.euronews.com/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:folha",
+      "type": "rss",
+      "name": "Folha de S.Paulo",
+      "url": "https://feeds.folha.uol.com.br/emcimadahora/rss091.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "regions": [
+        "latin_america"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:france24_ar",
+      "type": "rss",
+      "name": "France 24 Arabic",
+      "url": "https://www.france24.com/ar/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:france24_es",
+      "type": "rss",
+      "name": "France 24 Spanish",
+      "url": "https://www.france24.com/es/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "es"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:france24_fr",
+      "type": "rss",
+      "name": "France 24 French",
+      "url": "https://www.france24.com/fr/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:ft_markets",
+      "type": "rss",
+      "name": "Financial Times Markets",
+      "url": "https://www.ft.com/markets?format=rss",
+      "verticals": [
+        "macro_policy",
+        "economics",
+        "finance"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:guardian_world",
+      "type": "rss",
+      "name": "The Guardian World",
+      "url": "https://www.theguardian.com/world/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:health_affairs",
+      "type": "rss",
+      "name": "Health Affairs",
+      "url": "https://www.healthaffairs.org/action/showFeed?type=etoc&feed=rss&jc=hlthaff",
+      "verticals": [
+        "health",
+        "public_health",
+        "policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90,
+      "jurisdictions": [
+        "US"
+      ]
+    },
+    {
+      "id": "rss:indianexpress_world",
+      "type": "rss",
+      "name": "Indian Express World",
+      "url": "https://indianexpress.com/section/world/feed/",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "india"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:japantimes",
+      "type": "rss",
+      "name": "The Japan Times",
+      "url": "https://www.japantimes.co.jp/feed/",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:koreaherald",
+      "type": "rss",
+      "name": "The Korea Herald",
+      "url": "https://www.koreaherald.com/rss/news.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:kyivindependent",
+      "type": "rss",
+      "name": "Kyiv Independent",
+      "url": "https://kyivindependent.com/news-archive/rss/",
+      "verticals": [
+        "conflict",
+        "security",
+        "macro_policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:laprensalatina",
+      "type": "rss",
+      "name": "La Prensa Latina",
+      "url": "https://www.laprensalatina.com/feed/",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "es"
+      ],
+      "regions": [
+        "latin_america"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:marketwatch_top",
+      "type": "rss",
+      "name": "MarketWatch Top Stories",
+      "url": "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+      "verticals": [
+        "macro_policy",
+        "economics",
+        "finance"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:meduza_en",
+      "type": "rss",
+      "name": "Meduza English",
+      "url": "https://meduza.io/rss2/en/all",
+      "verticals": [
+        "conflict",
+        "security",
+        "macro_policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:nature_news",
+      "type": "rss",
+      "name": "Nature News",
+      "url": "https://www.nature.com/nature.rss",
+      "verticals": [
+        "science",
+        "health",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:nhk_world_en",
+      "type": "rss",
+      "name": "NHK World Japan English",
+      "url": "https://www3.nhk.or.jp/rss/news/cat0.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:npr_world",
+      "type": "rss",
+      "name": "NPR World",
+      "url": "https://feeds.npr.org/1004/rss.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:rfi_en",
+      "type": "rss",
+      "name": "RFI English",
+      "url": "https://www.rfi.fr/en/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:rfi_es",
+      "type": "rss",
+      "name": "RFI Spanish",
+      "url": "https://www.rfi.fr/es/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "es"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:rfi_fr",
+      "type": "rss",
+      "name": "RFI French",
+      "url": "https://www.rfi.fr/fr/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:rfi_ha",
+      "type": "rss",
+      "name": "RFI Hausa",
+      "url": "https://www.rfi.fr/ha/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "ha"
+      ],
+      "regions": [
+        "west_africa"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:rfi_pt",
+      "type": "rss",
+      "name": "RFI Portuguese",
+      "url": "https://www.rfi.fr/br/rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:science_daily",
+      "type": "rss",
+      "name": "ScienceDaily Top News",
+      "url": "https://www.sciencedaily.com/rss/top.xml",
+      "verticals": [
+        "science",
+        "health",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:scmp_asia",
+      "type": "rss",
+      "name": "South China Morning Post Asia",
+      "url": "https://www.scmp.com/rss/3/feed",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:sky_world",
+      "type": "rss",
+      "name": "Sky News World",
+      "url": "https://feeds.skynews.com/feeds/rss/world.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:stat_news",
+      "type": "rss",
+      "name": "STAT News",
+      "url": "https://www.statnews.com/feed/",
+      "verticals": [
+        "health",
+        "public_health",
+        "policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90,
+      "jurisdictions": [
+        "US"
+      ]
+    },
+    {
+      "id": "rss:straitstimes_asia",
+      "type": "rss",
+      "name": "The Straits Times Asia",
+      "url": "https://www.straitstimes.com/news/asia/rss.xml",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:technologyreview",
+      "type": "rss",
+      "name": "MIT Technology Review",
+      "url": "https://www.technologyreview.com/feed/",
+      "verticals": [
+        "technology",
+        "ai",
+        "science"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:thehindu_news",
+      "type": "rss",
+      "name": "The Hindu News",
+      "url": "https://www.thehindu.com/news/feeder/default.rss",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "india"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:timesofindia_world",
+      "type": "rss",
+      "name": "Times of India World",
+      "url": "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "india"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "telegram:africanews",
+      "type": "telegram",
+      "name": "Africanews Telegram",
+      "url": "https://t.me/s/africanews",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "africa"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:ajenglish",
+      "type": "telegram",
+      "name": "AJ English Telegram",
+      "url": "https://t.me/s/AJEnglish",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:bbc_persian",
+      "type": "telegram",
+      "name": "BBC Persian Telegram",
+      "url": "https://t.me/s/bbcpersian",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "fa"
+      ],
+      "regions": [
+        "middle_east"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:euronews",
+      "type": "telegram",
+      "name": "Euronews Telegram",
+      "url": "https://t.me/s/euronews",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:kyiv_independent",
+      "type": "telegram",
+      "name": "Kyiv Independent Telegram",
+      "url": "https://t.me/s/KyivIndependent_official",
+      "verticals": [
+        "conflict",
+        "security",
+        "macro_policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:nexta_live",
+      "type": "telegram",
+      "name": "NEXTA Live Telegram",
+      "url": "https://t.me/s/nexta_live",
+      "verticals": [
+        "conflict",
+        "security",
+        "macro_policy"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:rian_ru",
+      "type": "telegram",
+      "name": "RIA Novosti Telegram",
+      "url": "https://t.me/s/rian_ru",
+      "verticals": [
+        "conflict",
+        "security",
+        "macro_policy"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:scmp",
+      "type": "telegram",
+      "name": "SCMP Telegram",
+      "url": "https://t.me/s/scmp_news",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:tass_agency",
+      "type": "telegram",
+      "name": "TASS Telegram",
+      "url": "https://t.me/s/tass_agency",
+      "verticals": [
+        "conflict",
+        "security",
+        "macro_policy"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:timesofindia",
+      "type": "telegram",
+      "name": "Times of India Telegram",
+      "url": "https://t.me/s/timesofindia",
+      "verticals": [
+        "conflict",
+        "elections",
+        "macro_policy",
+        "health",
+        "climate",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "india"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:ukrpravda",
+      "type": "telegram",
+      "name": "Ukrainska Pravda Telegram",
+      "url": "https://t.me/s/ukrpravda_news",
+      "verticals": [
+        "conflict",
+        "security",
+        "macro_policy"
+      ],
+      "languages": [
+        "uk"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:36kr",
+      "type": "rss",
+      "name": "36Kr",
+      "url": "https://36kr.com/feed",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "zh"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:ars",
+      "type": "rss",
+      "name": "Ars Technica",
+      "url": "https://feeds.arstechnica.com/arstechnica/index",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:biorxiv",
+      "type": "rss",
+      "name": "bioRxiv",
+      "url": "https://connect.biorxiv.org/biorxiv_xml.php?subject=all",
+      "verticals": [
+        "science",
+        "health",
+        "research"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:bleepingcomputer",
+      "type": "rss",
+      "name": "BleepingComputer",
+      "url": "https://www.bleepingcomputer.com/feed/",
+      "verticals": [
+        "security",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:calculatedrisk",
+      "type": "rss",
+      "name": "Calculated Risk",
+      "url": "https://www.calculatedriskblog.com/feeds/posts/default",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:cnbc_markets",
+      "type": "rss",
+      "name": "CNBC Markets",
+      "url": "https://www.cnbc.com/id/15839135/device/rss/rss.html",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:cnbc_world",
+      "type": "rss",
+      "name": "CNBC World News",
+      "url": "https://www.cnbc.com/id/100727362/device/rss/rss.html",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:darkreading",
+      "type": "rss",
+      "name": "Dark Reading",
+      "url": "https://www.darkreading.com/rss.xml",
+      "verticals": [
+        "security",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:ee_times",
+      "type": "rss",
+      "name": "EE Times",
+      "url": "https://www.eetimes.com/feed/",
+      "verticals": [
+        "semiconductors",
+        "technology",
+        "supply_chain"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:forexlive",
+      "type": "rss",
+      "name": "ForexLive",
+      "url": "https://www.forexlive.com/feed/news",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:freightwaves",
+      "type": "rss",
+      "name": "FreightWaves",
+      "url": "https://www.freightwaves.com/news/feed",
+      "verticals": [
+        "supply_chain",
+        "logistics",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:golem",
+      "type": "rss",
+      "name": "Golem.de",
+      "url": "https://rss.golem.de/rss.php?feed=RSS2.0",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "de"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:habr",
+      "type": "rss",
+      "name": "Habr",
+      "url": "https://habr.com/ru/rss/articles/",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:heise_news",
+      "type": "rss",
+      "name": "Heise Online News",
+      "url": "https://www.heise.de/rss/heise-atom.xml",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "de"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:hn_frontpage",
+      "type": "rss",
+      "name": "Hacker News Front Page",
+      "url": "https://hnrss.org/frontpage",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:hn_newest",
+      "type": "rss",
+      "name": "Hacker News Newest",
+      "url": "https://hnrss.org/newest",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:hn_show",
+      "type": "rss",
+      "name": "Hacker News Show HN",
+      "url": "https://hnrss.org/show",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:investing_news",
+      "type": "rss",
+      "name": "Investing.com News",
+      "url": "https://www.investing.com/rss/news.rss",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:itmedia_news",
+      "type": "rss",
+      "name": "ITmedia News",
+      "url": "https://rss.itmedia.co.jp/rss/2.0/news_bursts.xml",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "ja"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:krebsonsecurity",
+      "type": "rss",
+      "name": "Krebs on Security",
+      "url": "https://krebsonsecurity.com/feed/",
+      "verticals": [
+        "security",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:lobsters",
+      "type": "rss",
+      "name": "Lobsters",
+      "url": "https://lobste.rs/rss",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:medicalxpress",
+      "type": "rss",
+      "name": "Medical Xpress",
+      "url": "https://medicalxpress.com/rss-feed/",
+      "verticals": [
+        "science",
+        "health",
+        "research"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:medrxiv",
+      "type": "rss",
+      "name": "medRxiv",
+      "url": "https://connect.medrxiv.org/medrxiv_xml.php?subject=medrxiv",
+      "verticals": [
+        "science",
+        "health",
+        "research"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:mining_com",
+      "type": "rss",
+      "name": "MINING.com",
+      "url": "https://www.mining.com/feed/",
+      "verticals": [
+        "energy",
+        "commodities",
+        "climate",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:nikkei_xtech",
+      "type": "rss",
+      "name": "Nikkei XTech",
+      "url": "https://xtech.nikkei.com/rss/xtech-it.rdf",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "ja"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:numerama",
+      "type": "rss",
+      "name": "Numerama",
+      "url": "https://www.numerama.com/feed/",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:oilprice",
+      "type": "rss",
+      "name": "OilPrice.com",
+      "url": "https://oilprice.com/rss/main",
+      "verticals": [
+        "energy",
+        "commodities",
+        "climate",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:physorg",
+      "type": "rss",
+      "name": "Phys.org",
+      "url": "https://phys.org/rss-feed/",
+      "verticals": [
+        "science",
+        "health",
+        "research"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:plos_blog",
+      "type": "rss",
+      "name": "PLOS Blogs",
+      "url": "https://theplosblog.plos.org/feed/",
+      "verticals": [
+        "science",
+        "health",
+        "research"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:pv_magazine",
+      "type": "rss",
+      "name": "PV Magazine",
+      "url": "https://www.pv-magazine.com/feed/",
+      "verticals": [
+        "energy",
+        "commodities",
+        "climate",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:railfreight",
+      "type": "rss",
+      "name": "RailFreight.com",
+      "url": "https://www.railfreight.com/feed/",
+      "verticals": [
+        "supply_chain",
+        "logistics",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:sciencemag",
+      "type": "rss",
+      "name": "Science Magazine News",
+      "url": "https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=science",
+      "verticals": [
+        "science",
+        "health",
+        "research"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:securityweek",
+      "type": "rss",
+      "name": "SecurityWeek",
+      "url": "https://www.securityweek.com/feed/",
+      "verticals": [
+        "security",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:semiengineering",
+      "type": "rss",
+      "name": "Semiconductor Engineering",
+      "url": "https://semiengineering.com/feed/",
+      "verticals": [
+        "semiconductors",
+        "technology",
+        "supply_chain"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:slashdot",
+      "type": "rss",
+      "name": "Slashdot",
+      "url": "http://rss.slashdot.org/Slashdot/slashdotMain",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:splash247",
+      "type": "rss",
+      "name": "Splash 247",
+      "url": "https://splash247.com/feed/",
+      "verticals": [
+        "supply_chain",
+        "logistics",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:supplychaindive",
+      "type": "rss",
+      "name": "Supply Chain Dive",
+      "url": "https://www.supplychaindive.com/feeds/news/",
+      "verticals": [
+        "supply_chain",
+        "logistics",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:techcrunch",
+      "type": "rss",
+      "name": "TechCrunch",
+      "url": "https://techcrunch.com/feed/",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:theregister",
+      "type": "rss",
+      "name": "The Register",
+      "url": "https://www.theregister.com/headlines.atom",
+      "verticals": [
+        "security",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:theverge",
+      "type": "rss",
+      "name": "The Verge",
+      "url": "https://www.theverge.com/rss/index.xml",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:venturebeat",
+      "type": "rss",
+      "name": "VentureBeat",
+      "url": "https://venturebeat.com/feed/",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:wired",
+      "type": "rss",
+      "name": "Wired",
+      "url": "https://www.wired.com/feed/rss",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:xataka",
+      "type": "rss",
+      "name": "Xataka",
+      "url": "https://www.xataka.com/feedburner.xml",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "es"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:zerohedge",
+      "type": "rss",
+      "name": "ZeroHedge",
+      "url": "https://feeds.feedburner.com/zerohedge/feed",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "telegram:africa_intel",
+      "type": "telegram",
+      "name": "Africa Intelligence Telegram",
+      "url": "https://t.me/s/africaintelligence",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "africa"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:babel_ua",
+      "type": "telegram",
+      "name": "Babel UA Telegram",
+      "url": "https://t.me/s/babel",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "uk"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:baza",
+      "type": "telegram",
+      "name": "Baza Telegram",
+      "url": "https://t.me/s/bazabazon",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:belsat",
+      "type": "telegram",
+      "name": "Belsat Telegram",
+      "url": "https://t.me/s/belsat",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "be"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:bleepingcomputer_tg",
+      "type": "telegram",
+      "name": "BleepingComputer Telegram",
+      "url": "https://t.me/s/bleepingcomputer",
+      "verticals": [
+        "security",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:bno_news",
+      "type": "telegram",
+      "name": "BNO News Telegram",
+      "url": "https://t.me/s/BNOFeed",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:clashreport",
+      "type": "telegram",
+      "name": "Clash Report Telegram",
+      "url": "https://t.me/s/clashreport",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:cointelegraph",
+      "type": "telegram",
+      "name": "Cointelegraph Telegram",
+      "url": "https://t.me/s/cointelegraph",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:cybersecuritynews",
+      "type": "telegram",
+      "name": "Cyber Security News Telegram",
+      "url": "https://t.me/s/cybersecuritynews",
+      "verticals": [
+        "security",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:deepstate_ua",
+      "type": "telegram",
+      "name": "DeepState UA Telegram",
+      "url": "https://t.me/s/DeepStateUA",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "uk"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:disclose_tv",
+      "type": "telegram",
+      "name": "Disclose.tv Telegram",
+      "url": "https://t.me/s/disclosetv",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:elpitazo",
+      "type": "telegram",
+      "name": "El Pitazo Telegram",
+      "url": "https://t.me/s/elpitazo",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "es"
+      ],
+      "regions": [
+        "latin_america"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:gaza_now",
+      "type": "telegram",
+      "name": "Gaza Now Telegram",
+      "url": "https://t.me/s/gazaalanpa",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "middle_east"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:hackernews100",
+      "type": "telegram",
+      "name": "Hacker News 100 Telegram",
+      "url": "https://t.me/s/hacker_news_feed",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:hindustan_times",
+      "type": "telegram",
+      "name": "Hindustan Times Telegram",
+      "url": "https://t.me/s/hindustantimes",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "india"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:hk01",
+      "type": "telegram",
+      "name": "HK01 Telegram",
+      "url": "https://t.me/s/hk01official",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "zh"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:hkfp",
+      "type": "telegram",
+      "name": "Hong Kong Free Press Telegram",
+      "url": "https://t.me/s/hongkongfp",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:hromadske",
+      "type": "telegram",
+      "name": "Hromadske Telegram",
+      "url": "https://t.me/s/hromadske_ua",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "uk"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:insiderpaper",
+      "type": "telegram",
+      "name": "Insider Paper Telegram",
+      "url": "https://t.me/s/insiderpaper",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:intelslava",
+      "type": "telegram",
+      "name": "Intel Slava Z Telegram",
+      "url": "https://t.me/s/intelslava",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:iranintl_en",
+      "type": "telegram",
+      "name": "Iran International English Telegram",
+      "url": "https://t.me/s/IranIntl_En",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "middle_east"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:kompas",
+      "type": "telegram",
+      "name": "Kompas Telegram",
+      "url": "https://t.me/s/kompascom",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "id"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:metropoles",
+      "type": "telegram",
+      "name": "Metropoles Telegram",
+      "url": "https://t.me/s/metropoles",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "regions": [
+        "latin_america"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:middleeastobserver",
+      "type": "telegram",
+      "name": "Middle East Observer Telegram",
+      "url": "https://t.me/s/Middle_East_Spectator",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "middle_east"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:mothershipsg",
+      "type": "telegram",
+      "name": "Mothership SG Telegram",
+      "url": "https://t.me/s/mothershipsg",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:motolkohelp",
+      "type": "telegram",
+      "name": "Motolko Help Telegram",
+      "url": "https://t.me/s/motolkohelp",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:ndtv",
+      "type": "telegram",
+      "name": "NDTV Telegram",
+      "url": "https://t.me/s/ndtv",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "india"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:nexta_tv",
+      "type": "telegram",
+      "name": "NEXTA Telegram",
+      "url": "https://t.me/s/nexta_tv",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:novaya_europe",
+      "type": "telegram",
+      "name": "Novaya Gazeta Europe Telegram",
+      "url": "https://t.me/s/novaya_europe",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:operativno_zsu",
+      "type": "telegram",
+      "name": "Operativno ZSU Telegram",
+      "url": "https://t.me/s/operativnoZSU",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "uk"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:ostorozhno_novosti",
+      "type": "telegram",
+      "name": "Ostorozhno Novosti Telegram",
+      "url": "https://t.me/s/ostorozhno_novosti",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:palestinechronicle",
+      "type": "telegram",
+      "name": "Palestine Chronicle Telegram",
+      "url": "https://t.me/s/palestinechronicle",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "middle_east"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:poder360",
+      "type": "telegram",
+      "name": "Poder360 Telegram",
+      "url": "https://t.me/s/poder360",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "regions": [
+        "latin_america"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:pulse_ng",
+      "type": "telegram",
+      "name": "Pulse Nigeria Telegram",
+      "url": "https://t.me/s/pulsenigeria247",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "africa"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:readovka",
+      "type": "telegram",
+      "name": "Readovka Telegram",
+      "url": "https://t.me/s/readovkanews",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:taiwan_news",
+      "type": "telegram",
+      "name": "Taiwan News Telegram",
+      "url": "https://t.me/s/taiwannews",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:thaiger",
+      "type": "telegram",
+      "name": "Thaiger Telegram",
+      "url": "https://t.me/s/thethaiger",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "culture",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:theverge_tg",
+      "type": "telegram",
+      "name": "The Verge Telegram",
+      "url": "https://t.me/s/verge",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:ukraine_now",
+      "type": "telegram",
+      "name": "Ukraine NOW Telegram",
+      "url": "https://t.me/s/UkraineNow",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:ukraine_now_ua",
+      "type": "telegram",
+      "name": "Ukraine NOW Ukrainian Telegram",
+      "url": "https://t.me/s/UkraineNow_UA",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "uk"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:uniannet",
+      "type": "telegram",
+      "name": "UNIAN Telegram",
+      "url": "https://t.me/s/uniannet",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "uk"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:varlamov",
+      "type": "telegram",
+      "name": "Varlamov Telegram",
+      "url": "https://t.me/s/varlamov_news",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:warmonitors",
+      "type": "telegram",
+      "name": "War Monitor Telegram",
+      "url": "https://t.me/s/warmonitors",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:whale_alert",
+      "type": "telegram",
+      "name": "Whale Alert Telegram",
+      "url": "https://t.me/s/whale_alert_io",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:zona_media",
+      "type": "telegram",
+      "name": "Mediazona Telegram",
+      "url": "https://t.me/s/mediazzzona",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "ru"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
     }
   ]
 }
