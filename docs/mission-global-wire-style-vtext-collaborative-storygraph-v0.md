@@ -5261,3 +5261,82 @@ Next executable probe:
   the public reader payload/UI, and prove on staging that the unauthenticated
   feed contains the publication title/body plus citation and rollback
   provenance.
+
+## Checkpoint - Public Link RSS Feed Projection - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Delivered slice:
+
+- Problem commit:
+  `e619fb44` (`docs: record global wire feed projection gap`).
+- Behavior commit:
+  `c4570ceb4c18cf850029845b1d928abab877b8a8`
+  (`feat: expose global wire public rss feed`).
+- `GlobalWirePublicationPublicLink` now exposes a derived `feed_path`.
+- The existing unauthenticated public-link route now supports
+  `/api/global-wire/publication-public-links/{token}/rss` and `{token}.rss`,
+  returning token-scoped `application/rss+xml`.
+- The RSS item derives from the same public-link artifact and includes title,
+  public reader link, export body, citation count/refs, rollback count/refs,
+  and stable guid.
+- The public reader now advertises the feed path with a visible RSS link.
+
+Proof:
+
+- Focused runtime proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`.
+- Frontend build passed:
+  `npm run build` in `frontend/`.
+- Diff hygiene passed:
+  `git diff --check`.
+- CI run `27088217905`: success. Runtime shards, integration smoke,
+  non-runtime tests, Go vet/build, frontend build, aggregate gate, and Deploy
+  to Staging all passed.
+- FlakeHub run `27088217927`: success.
+- Staging health reported proxy and upstream deployed commit
+  `c4570ceb4c18cf850029845b1d928abab877b8a8`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in" --timeout 180000`
+  with 1 passed. The proof creates the publication/export/public-link path,
+  fetches the unauthenticated RSS feed, verifies publication/provenance markers,
+  opens the public reader, verifies the RSS link, then continues through
+  Autoradio and RunAcceptance synthesis.
+
+Invariants preserved:
+
+- RSS is a read-only projection of a single owner-created public link; it does
+  not create a public index or expose owner queues.
+- The feed body remains provenance-rich and non-oracle: citation and rollback
+  counts/refs are embedded in the item description.
+- User-owned edits/forks and platform Story VTexts are not mutated by feed
+  creation or feed reads.
+- Style.vtext remains a citeable source artifact feeding the publication
+  export; RSS is downstream output, not a replacement style/source.
+- Future Noir, Carbon Kintsugi, and London Salmon still pass the deployed app
+  view proof.
+
+Belief-state update:
+
+- The proven trajectory now reaches feed-consumable output:
+  public export link -> public reader page -> token-scoped RSS projection,
+  while retaining RunAcceptance evidence through the Autoradio prompt
+  trajectory.
+
+Remaining error field:
+
+- RSS is one-token/one-item, not a multi-issue publication feed, subscription
+  system, email delivery, or newsletter campaign object.
+- No audio synthesis/playback exists beyond durable Autoradio script artifacts
+  and prompt handoffs.
+- Source/extraction normalization remains below the full research-ready target.
+
+Next executable probe:
+
+- Choose between a multi-item newsletter/issue feed over owner-approved public
+  links, an email-style delivery/subscription artifact, or deeper
+  source/extraction normalization. The strongest product gap after RSS is no
+  durable newsletter issue/subscriber delivery object.
