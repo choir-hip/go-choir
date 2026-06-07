@@ -2308,3 +2308,93 @@ Next executable probe:
   and reviewer-controlled, update the StoryGraph semantics, create a normal
   PlatformStory VText revision with provenance/citations, and preserve
   projection-review obligations for downstream Style.vtext projections.
+
+## Classified Promotion PlatformStory Slice Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What changed:
+
+- Graph-candidate promotion now applies bounded StoryGraph semantics based on
+  the promoted candidate classification.
+- Promoted `claim-changed`, `contradiction-added`,
+  `front-page-prominence-changed`, `related-story-edge-added`, and
+  `source-manifest-update` candidates update the corresponding StoryGraph
+  claim/change/tension/prominence/related/source-neighborhood fields.
+- Promotion now creates a normal appagent-authored PlatformStory VText
+  revision with parent revision lineage, source/candidate/style citations,
+  mutation-boundary metadata, and an explicit owner-fork non-mutation note.
+- Projection-review obligations still follow promotion, so Style.vtext
+  projections are reviewed separately before durable projection relations
+  advance.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `4f36b6e8c18cb0e46111a43f7ce93d9c27036f91`.
+- Behavior commit:
+  `ab3c60c106269987efd3b1b4b122eeaf3adfd1a3`.
+- CI run `27084187943`: success, including runtime shards, Go vet/build,
+  non-runtime tests, integration smoke, and staging deploy.
+- FlakeHub run `27084187931`: success.
+- Staging health at `2026-06-07T05:50:56Z` reported proxy and sandbox
+  `deployed_commit` =
+  `ab3c60c106269987efd3b1b4b122eeaf3adfd1a3`.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  and `npm run build` in `frontend/`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  with 1 passed.
+
+Invariants preserved:
+
+- Classified StoryGraph mutation happens only after explicit platform
+  graph-candidate promotion.
+- Platform story revision is a normal VText revision, not a bespoke news-card
+  mutation.
+- User-owned forks, edits, and contributions remain separate and are not
+  rewritten by platform promotion.
+- Style.vtext projection changes still require separate projection review,
+  draft, and approval before the durable projection relation advances.
+- News remains non-oracle and provenance-rich: the PlatformStory revision cites
+  the StoryGraph node, graph candidate, promoted source ContentItem, and
+  attached Style.vtext artifacts.
+- Graph nodes remain Story VText headlines; source, claim, related-edge, and
+  prominence changes are overlays/metadata on that headline-node object.
+
+Belief-state update:
+
+- The proven ingestion/publication loop now includes:
+  Source Service SourceItem -> refresh classification -> review artifacts ->
+  graph candidate -> explicit platform promotion -> classified StoryGraph
+  semantic update -> normal PlatformStory VText revision -> projection-review
+  obligations -> ProjectionStory VText revision path.
+- This closes the prior gap where classification existed but promotion flattened
+  all outcomes into a generic source append.
+- The implementation is still low-resolution: claim/event/entity extraction is
+  heuristic, and related-edge detection is text-match based.
+
+Remaining error field:
+
+- There is still no scheduled 24/7 source registry/fetch-cycle worker.
+- Claim/event/entity extraction is not yet a durable structured claim model
+  with uncertainty/dispute state.
+- Story clustering and related-edge detection are still low-resolution.
+- Style.vtext can be selected and cited, but not yet composed, replaced,
+  forked, or proposed through a full style-revision workflow.
+- There is no dedicated publication/update-feed/newsletter/researcher queue
+  beyond the current reconciliation/projection-review queues.
+- Autoradio remains a prompt-bar/VText handoff rather than a dedicated audio
+  playback or scheduling subsystem.
+
+Next executable probe:
+
+- Apply a cognitive-transform route choice before continuing. Highest-value
+  remaining routes are:
+  Style.vtext composition/replacement as citeable VText artifacts, structured
+  claim/research-task records tied to refresh classifications, or scheduled
+  Source Service ingestion runs over the story registry.
