@@ -1509,3 +1509,132 @@ Next executable probe:
   accepted classification/reconciliation decision whose note names the refresh
   route, create a graph-update candidate, and return all lineage without
   mutating the StoryGraph manifest.
+
+## Overnight Checkpoint - Source Refresh Candidate Loop - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What shipped:
+
+- Added `GlobalWireSourceRefreshRun`, a durable owner-scoped record for a
+  bounded source-ingestion/classification pass over one StoryGraph node.
+- Added `/api/global-wire/source-refresh`.
+- The route loads the selected StoryGraph node, searches Source Service using
+  the story headline or supplied query, imports the top result as a
+  `source_service_item` ContentItem, creates an accepted contribution and
+  reconciliation decision, creates a non-mutating graph-update candidate, and
+  records all lineage in the refresh run.
+- Reconciliation state now returns `refreshes` alongside contributions,
+  decisions, graph-update candidates, and promotion decisions.
+- The Global Wire app now exposes a visible `Refresh story evidence` control
+  and shows recent source-refresh runs near the contribution/reconciliation
+  surface.
+- Source refresh does not mutate the platform StoryGraph manifest. Promotion
+  remains a separate explicit platform-review action.
+
+What was proven locally:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed.
+- `npm run build` passed in `frontend/`.
+
+What was proven on staging:
+
+- Pushed `c11e36e781208766316a9c18c736748f7e147104` to `origin/main`.
+- GitHub Actions CI run `27083023728` completed successfully, including
+  runtime shards, non-runtime tests, frontend build, Go vet/build, and staging
+  deploy.
+- FlakeHub publish run `27083023740` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `c11e36e781208766316a9c18c736748f7e147104`, deployed at
+  `2026-06-07T04:49:21Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded auth proof skipped.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed against staging and verified the source-refresh endpoint returns a
+  durable refresh run. When Source Service returns evidence, the proof verifies
+  SourceItem import, accepted contribution, accepted decision, graph-update
+  candidate, and refresh-run candidate lineage.
+
+Belief-state changes:
+
+- The deployed product trajectory now covers:
+  live/source-service evidence import -> durable SourceItem -> source-refresh
+  run -> accepted contribution/decision -> graph-update candidate -> explicit
+  platform promotion -> StoryGraph source manifest update.
+- The refresh path is a low-resolution version of the 24/7 ingestion loop, but
+  it is still product-path and provenance-rich rather than a mock feed.
+- The candidate/promotion split continues to preserve the invariant that source
+  arrival and arbitrary user contribution do not silently mutate platform
+  stories.
+
+Remaining error field:
+
+- Source refresh is still request-triggered, not a scheduled 24/7 worker.
+- The source-refresh classifier is deliberately low resolution: top Source
+  Service result becomes a supporting-source candidate; no claim extraction,
+  contradiction classification, source-standing scoring, or story clustering
+  exists yet.
+- Promotion updates the source manifest only. It does not create projection
+  review jobs, update projection Story VTexts, revise front-page prominence, or
+  publish an update feed entry.
+- Autoradio remains a prompt-bar/VText handoff, not a dedicated audio playback
+  or scheduling subsystem.
+
+Highest-impact remaining uncertainty:
+
+- Whether the next realism step should create projection review/revision
+  records after StoryGraph evidence changes, or invest in a broader scheduled
+  source-refresh worker.
+
+Next executable probe:
+
+- Add a projection-review artifact emitted by graph candidate promotion when
+  the candidate's projection action requires review. The artifact should link
+  story, candidate, promotion, source content, affected Style.vtext source, and
+  status without pretending to regenerate prose automatically.
+
+## Problem Checkpoint - Missing Projection Review After Graph Update - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- The platform can now promote a reviewed graph-update candidate into the
+  StoryGraph source manifest, but that update does not create any durable
+  projection-review or projection-revision state.
+- The spec's publication loop requires StoryGraph updates to feed projection
+  jobs and Story VText revisions. Current behavior stops after manifest update
+  plus a human-readable promotion record.
+
+Evidence:
+
+- `GlobalWireGraphUpdateCandidate` carries `projection_action`, usually
+  `projection-review-required`.
+- `/api/global-wire/graph-candidates` records promotion decisions and can append
+  the cited SourceItem to the manifest tier.
+- No table/model/API response records that any Style.vtext projection or Story
+  VText now needs review because of the promoted source.
+
+Belief-state update:
+
+- The right next slice is not automatic story rewriting.
+- The smallest invariant-preserving artifact is a projection-review record:
+  citeable, owner-scoped, linked to the promoted graph candidate and Style.vtext
+  source, and visible in reconciliation state.
+- Actual VText regeneration can remain future work; the product should first
+  expose that evidence changes imply projection obligations.
+
+Remaining error field:
+
+- No durable projection-review table/model exists.
+- No promotion response includes projection review obligations.
+- The app cannot show that a promoted source changed the downstream projection
+  queue.
+
+Next executable probe:
+
+- Add `GlobalWireProjectionReview` records created during graph-candidate
+  promotion for candidates whose `projection_action` is
+  `projection-review-required`. Return and display them in reconciliation state
+  and prove through runtime and staging product-path tests.
