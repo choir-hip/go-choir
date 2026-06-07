@@ -2398,3 +2398,50 @@ Next executable probe:
   Style.vtext composition/replacement as citeable VText artifacts, structured
   claim/research-task records tied to refresh classifications, or scheduled
   Source Service ingestion runs over the story registry.
+
+## Problem Checkpoint - Style.vtext Is Selectable But Not Composable Or Replaceable - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- Global Wire style sources are ordinary citeable VTexts and can be selected in
+  the News app, but they are still effectively seeded choices.
+- The spec requires `Style.vtext` to be an authored source artifact that can be
+  selected, replaced, composed, merged, hybridized, forked, published, or
+  permissioned.
+- Without a product path for composition/replacement, Style.vtext remains closer
+  to app configuration than to a user/reviewer-owned source artifact that can
+  change the projection relation.
+
+Evidence:
+
+- `GlobalWireStyleSource` records id/title/label/summary/source path/doc id and
+  is embedded in each StoryGraph row's `style_sources_json`.
+- The app can open a selected style source VText and switch among seeded
+  styles.
+- There is no `/api/global-wire/style-sources` product path, no composed style
+  VText creation, and no relation update that proves a new composed/replaced
+  Style.vtext can shape a projection.
+
+Belief-state update:
+
+- The next topology-preserving improvement is a bounded style-source transition:
+  compose or replace a Style.vtext through a normal VText artifact, attach it to
+  a StoryGraph row, and create a projection relation that cites the composed
+  style source and the same StoryGraph evidence.
+
+Remaining error field:
+
+- No durable style composition endpoint exists.
+- No durable style replacement endpoint exists.
+- No staging proof shows a newly authored Style.vtext source becoming selectable
+  and shaping a StoryGraph projection.
+
+Next executable probe:
+
+- Add an owner-scoped Global Wire Style.vtext compose/replace endpoint and app
+  controls. Composition/replacement should create a normal Style.vtext document
+  with citations to parent style docs, update the story's selectable style
+  sources, create a projection VText/relation for the story, and preserve
+  evidence/provenance invariants.
