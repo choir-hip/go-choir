@@ -2252,7 +2252,7 @@ staging proof:
 
 ## Loop 8 Frontend Source Diagnosis Helper Extraction Target
 
-Status: `implemented_local`.
+Status: `implemented_staging_proven`.
 
 Next frontend simplification target: move pure source diagnosis and edit
 evidence projection helpers out of `frontend/src/lib/VTextEditor.svelte` into
@@ -2299,4 +2299,32 @@ local proof:
 
   npm --prefix frontend run build
   result: passed
+```
+
+deployment/evidence:
+
+```text
+source commit:
+  74c304d8efb923a996c548fffc0f2cd6f8934288
+  frontend: extract vtext source diagnosis helpers
+
+CI/deploy:
+  GitHub Actions CI 27078359741 passed.
+  FlakeHub publish 27078359731 passed.
+  Node B deploy job 79919670334 passed.
+  /health reported deployed_commit
+  74c304d8efb923a996c548fffc0f2cd6f8934288, deployed_at
+  2026-06-07T00:47:22Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000
+  npm --prefix frontend run e2e --
+  tests/vtext-markdown-lineage.spec.js -g
+  "structured edit evidence|bounded revision structure"
+
+  result: 2 passed. The deployed VText Sources panel showed structured edit
+  evidence without leaking raw prompts and showed bounded revision structure
+  summaries, table signatures, and no body text. This exercises the data now
+  projected by frontend/src/lib/vtext-source-diagnosis.ts through the deployed
+  VTextEditor.svelte source panel path.
 ```
