@@ -2312,6 +2312,36 @@ func TestInternalRuntimeRunRoutesRequireInternalCallerAndConstrainProfiles(t *te
 	if metadataStringValue(rec.Metadata, "request_source") != "internal_worker_vm" {
 		t.Fatalf("request_source = %q, want internal_worker_vm", metadataStringValue(rec.Metadata, "request_source"))
 	}
+
+	processorReq := httptest.NewRequest(http.MethodPost, "/internal/runtime/runs", strings.NewReader(`{"owner_id":"user-alice","prompt":"ingest source handoff","metadata":{"agent_profile":"processor","processor_key":"processor:global_firehose:global:gdelt"}}`))
+	processorReq.Header.Set("X-Internal-Caller", "true")
+	processorW := httptest.NewRecorder()
+	handler.HandleInternalRunSubmission(processorW, processorReq)
+	if processorW.Code != http.StatusAccepted {
+		t.Fatalf("processor internal runtime status = %d, want 202; body=%s", processorW.Code, processorW.Body.String())
+	}
+	var processorResp runStatusResponse
+	if err := json.NewDecoder(processorW.Body).Decode(&processorResp); err != nil {
+		t.Fatalf("decode processor internal run response: %v", err)
+	}
+	if processorResp.AgentProfile != AgentProfileProcessor || processorResp.AgentID != "processor:processor-global_firehose-global-gdelt" {
+		t.Fatalf("unexpected processor internal run response: %+v", processorResp)
+	}
+
+	reconcilerReq := httptest.NewRequest(http.MethodPost, "/internal/runtime/runs", strings.NewReader(`{"owner_id":"user-alice","prompt":"reconcile corpus","metadata":{"agent_profile":"reconciler","reconciler_scope":"story-corpus"}}`))
+	reconcilerReq.Header.Set("X-Internal-Caller", "true")
+	reconcilerW := httptest.NewRecorder()
+	handler.HandleInternalRunSubmission(reconcilerW, reconcilerReq)
+	if reconcilerW.Code != http.StatusAccepted {
+		t.Fatalf("reconciler internal runtime status = %d, want 202; body=%s", reconcilerW.Code, reconcilerW.Body.String())
+	}
+	var reconcilerResp runStatusResponse
+	if err := json.NewDecoder(reconcilerW.Body).Decode(&reconcilerResp); err != nil {
+		t.Fatalf("decode reconciler internal run response: %v", err)
+	}
+	if reconcilerResp.AgentProfile != AgentProfileReconciler || reconcilerResp.AgentID != "reconciler:story-corpus" {
+		t.Fatalf("unexpected reconciler internal run response: %+v", reconcilerResp)
+	}
 }
 
 func TestHandleRunSubmissionReturnsStableHandle(t *testing.T) {

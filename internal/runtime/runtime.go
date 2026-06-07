@@ -158,6 +158,14 @@ func defaultAgentID(profile, ownerID string, metadata map[string]any) string {
 		if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
 			return "vtext:" + docID
 		}
+	case AgentProfileProcessor:
+		if key := metadataStringValue(metadata, runMetadataProcessorKey); key != "" {
+			return "processor:" + safeRefPart(key)
+		}
+	case AgentProfileReconciler:
+		if scope := metadataStringValue(metadata, runMetadataReconcilerScope); scope != "" {
+			return "reconciler:" + safeRefPart(scope)
+		}
 	}
 	return uuid.New().String()
 }
@@ -185,7 +193,7 @@ func defaultChannelID(profile string, metadata map[string]any, parent *types.Run
 			return docID
 		}
 	}
-	if profile == AgentProfileSuper {
+	if profile == AgentProfileSuper || profile == AgentProfileProcessor || profile == AgentProfileReconciler {
 		return agentID
 	}
 	return ""
@@ -227,9 +235,12 @@ func resolveRunIdentity(ownerID, sandboxID string, metadata map[string]any, pare
 			profile = agentProfileForRun(&types.RunRecord{Metadata: metadata})
 		}
 	}
+	profile = canonicalAgentProfile(profile)
 	role := metadataStringValue(metadata, runMetadataAgentRole)
 	if role == "" {
 		role = profile
+	} else {
+		role = canonicalAgentProfile(role)
 	}
 	agentID := defaultAgentID(profile, ownerID, metadata)
 	channelID := defaultChannelID(profile, metadata, parent, agentID)

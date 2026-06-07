@@ -796,9 +796,9 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 		return
 	}
 	switch profile {
-	case AgentProfileCoSuper, AgentProfileResearcher, AgentProfileVSuper:
+	case AgentProfileCoSuper, AgentProfileResearcher, AgentProfileVSuper, AgentProfileProcessor, AgentProfileReconciler:
 	default:
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "internal worker runs may only start co-super, researcher, or vsuper profiles"})
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "internal worker runs may only start co-super, researcher, vsuper, processor, or reconciler profiles"})
 		return
 	}
 	req.Metadata[runMetadataAgentProfile] = profile

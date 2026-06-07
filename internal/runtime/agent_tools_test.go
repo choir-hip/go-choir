@@ -68,6 +68,8 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	conductor := rt.ToolRegistryForProfile(AgentProfileConductor)
 	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	vtext := rt.ToolRegistryForProfile(AgentProfileVText)
+	processor := rt.ToolRegistryForProfile(AgentProfileProcessor)
+	reconciler := rt.ToolRegistryForProfile(AgentProfileReconciler)
 
 	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "start_worker_delegation", "observe_worker_delegation", "redirect_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
@@ -148,6 +150,28 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	}
 	if _, ok := researcher.Lookup("spawn_agent"); ok {
 		t.Fatalf("researcher should not have spawn_agent")
+	}
+	for profile, registry := range map[string]*ToolRegistry{
+		AgentProfileProcessor:  processor,
+		AgentProfileReconciler: reconciler,
+	} {
+		for _, name := range []string{"read_file", "web_search", "source_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
+			if _, ok := registry.Lookup(name); !ok {
+				t.Fatalf("%s missing tool %q", profile, name)
+			}
+		}
+		for _, forbidden := range []string{"bash", "write_file", "edit_file", "edit_vtext", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
+			if _, ok := registry.Lookup(forbidden); ok {
+				t.Fatalf("%s should not have %s", profile, forbidden)
+			}
+		}
+		spawnTool, ok := registry.Lookup("spawn_agent")
+		if !ok {
+			t.Fatalf("%s missing spawn_agent", profile)
+		}
+		if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 2 || got[0] != AgentProfileResearcher || got[1] != AgentProfileVText {
+			t.Fatalf("%s spawn_agent role enum = %#v, want researcher/vtext", profile, got)
+		}
 	}
 	for _, name := range []string{"spawn_agent", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "read_evidence", "edit_vtext", "request_super_execution"} {
 		if _, ok := vtext.Lookup(name); !ok {
@@ -2012,6 +2036,93 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	}
 	if noisyResearchSpawn.Role != AgentProfileResearcher || noisyResearchSpawn.Profile != AgentProfileResearcher {
 		t.Fatalf("noisy research spawn = role %q profile %q, want researcher/researcher", noisyResearchSpawn.Role, noisyResearchSpawn.Profile)
+	}
+}
+
+func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText(t *testing.T) {
+	rt, _, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	processorRun, err := rt.StartRunWithMetadata(context.Background(), "ingest source batch", "user-alice", map[string]any{
+		runMetadataAgentProfile: "source-processor",
+		runMetadataAgentRole:    "source-processor",
+		runMetadataProcessorKey: "processor:global_firehose:global:gdelt",
+	})
+	if err != nil {
+		t.Fatalf("start processor run: %v", err)
+	}
+	if processorRun.AgentProfile != AgentProfileProcessor || processorRun.AgentRole != AgentProfileProcessor {
+		t.Fatalf("processor run profile/role = %q/%q, want processor/processor", processorRun.AgentProfile, processorRun.AgentRole)
+	}
+	if processorRun.AgentID != "processor:processor-global_firehose-global-gdelt" {
+		t.Fatalf("processor agent id = %q", processorRun.AgentID)
+	}
+	if processorRun.ChannelID != processorRun.AgentID {
+		t.Fatalf("processor channel id = %q, want agent id", processorRun.ChannelID)
+	}
+
+	processorRegistry := rt.ToolRegistryForProfile(AgentProfileProcessor)
+	spawnResearchRaw, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
+		"objective":"verify the strongest claims in this source batch",
+		"role":"researcher"
+	}`))
+	if err != nil {
+		t.Fatalf("processor spawn researcher: %v", err)
+	}
+	var researchSpawn struct {
+		Profile string `json:"profile"`
+		Role    string `json:"role"`
+	}
+	if err := json.Unmarshal([]byte(spawnResearchRaw), &researchSpawn); err != nil {
+		t.Fatalf("decode processor research spawn: %v", err)
+	}
+	if researchSpawn.Profile != AgentProfileResearcher || researchSpawn.Role != AgentProfileResearcher {
+		t.Fatalf("processor research spawn = %+v, want researcher/researcher", researchSpawn)
+	}
+
+	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
+		"objective":"write a source-grounded article from this processor brief",
+		"role":"vtext",
+		"channel_id":"global-wire-story-candidate"
+	}`)); err != nil {
+		t.Fatalf("processor spawn vtext: %v", err)
+	}
+	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
+		"objective":"mutate code",
+		"role":"co-super"
+	}`)); err == nil {
+		t.Fatal("processor should not be allowed to spawn co-super")
+	}
+
+	reconcilerRun, err := rt.StartRunWithMetadata(context.Background(), "reconcile story corpus", "user-alice", map[string]any{
+		runMetadataAgentProfile:    "corpus-reconciler",
+		runMetadataAgentRole:       "corpus-reconciler",
+		runMetadataReconcilerScope: "story-corpus",
+	})
+	if err != nil {
+		t.Fatalf("start reconciler run: %v", err)
+	}
+	if reconcilerRun.AgentProfile != AgentProfileReconciler || reconcilerRun.AgentRole != AgentProfileReconciler {
+		t.Fatalf("reconciler run profile/role = %q/%q, want reconciler/reconciler", reconcilerRun.AgentProfile, reconcilerRun.AgentRole)
+	}
+	if reconcilerRun.AgentID != "reconciler:story-corpus" {
+		t.Fatalf("reconciler agent id = %q", reconcilerRun.AgentID)
+	}
+	reconcilerRegistry := rt.ToolRegistryForProfile(AgentProfileReconciler)
+	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
+		"objective":"draft a correction/update VText from this corpus reconciliation",
+		"role":"vtext",
+		"channel_id":"global-wire-correction"
+	}`)); err != nil {
+		t.Fatalf("reconciler spawn vtext: %v", err)
+	}
+	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
+		"objective":"privileged mutation",
+		"role":"super"
+	}`)); err == nil {
+		t.Fatal("reconciler should not be allowed to spawn super")
 	}
 }
 
