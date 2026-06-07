@@ -903,7 +903,16 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		!slices.Contains(issueResp.Issue.RollbackRefs, "public_link:"+linkResp.PublicLink.ID) ||
 		len(issueResp.Deliveries) != 1 ||
 		issueResp.Deliveries[0].Status != "delivery-ready" ||
-		issueResp.Deliveries[0].SubscriberID != subscriberResp.Subscriber.ID {
+		issueResp.Deliveries[0].SubscriberID != subscriberResp.Subscriber.ID ||
+		len(issueResp.Receipts) != 1 ||
+		issueResp.Receipts[0].IssueID != issueResp.Issue.ID ||
+		issueResp.Receipts[0].DeliveryID != issueResp.Deliveries[0].ID ||
+		issueResp.Receipts[0].Provider != "choir-dry-run-mailer" ||
+		issueResp.Receipts[0].ProviderMode != "dry-run" ||
+		issueResp.Receipts[0].Status != "provider-dry-run-recorded" ||
+		!strings.HasPrefix(issueResp.Receipts[0].MessageID, "dryrun-") ||
+		!slices.Contains(issueResp.Receipts[0].EventRefs, "newsletter_issue:"+issueResp.Issue.ID) ||
+		!slices.Contains(issueResp.Receipts[0].RollbackRefs, "newsletter_delivery:"+issueResp.Deliveries[0].ID) {
 		t.Fatalf("newsletter issue/delivery missing provenance: %+v", issueResp)
 	}
 
@@ -915,7 +924,7 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	if err := json.NewDecoder(publicationListW.Body).Decode(&finalReconciliation); err != nil {
 		t.Fatalf("decode reconciliation after newsletter issue: %v", err)
 	}
-	if len(finalReconciliation.NewsletterIssues) == 0 || len(finalReconciliation.NewsletterDeliveries) == 0 {
+	if len(finalReconciliation.NewsletterIssues) == 0 || len(finalReconciliation.NewsletterDeliveries) == 0 || len(finalReconciliation.NewsletterReceipts) == 0 {
 		t.Fatalf("reconciliation missing newsletter ledger: %+v", finalReconciliation)
 	}
 	publicationListResp := finalReconciliation
@@ -941,6 +950,10 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	if len(finalReconciliation.SourceDossiers) == 0 ||
 		!slices.Contains(finalReconciliation.SourceDossiers[0].PublicationRefs.AutoradioEpisodeIDs, episodeResp.Episode.ID) {
 		t.Fatalf("source dossier missing autoradio episode ref: %+v", finalReconciliation.SourceDossiers)
+	}
+	if !slices.Contains(finalReconciliation.SourceDossiers[0].PublicationRefs.NewsletterReceiptIDs, issueResp.Receipts[0].ID) ||
+		!slices.Contains(finalReconciliation.SourceDossiers[0].PublicationRefs.RollbackRefs, "newsletter_delivery:"+issueResp.Deliveries[0].ID) {
+		t.Fatalf("source dossier missing newsletter provider receipt refs: %+v", finalReconciliation.SourceDossiers[0].PublicationRefs)
 	}
 	if len(finalReconciliation.SourceDossiers[0].SourceReviewSignals) != 1 ||
 		finalReconciliation.SourceDossiers[0].SourceReviewSignals[0].ID != resp.SourceReviewSignal.ID ||

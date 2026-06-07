@@ -190,6 +190,7 @@
   let newsletterSubscribers = [];
   let newsletterIssues = [];
   let newsletterDeliveries = [];
+  let newsletterProviderReceipts = [];
   let publicationFeedItems = [];
   let publicationFeedStatus = '';
   let publicationDeliveryDetail = null;
@@ -221,8 +222,7 @@
       .filter(Boolean);
     return Array.from(new Set([...(selectedDossier?.publication_refs?.newsletter_issue_ids || []), ...issueIds]));
   })();
-  $: selectedDossierMissingFields = (selectedDossier?.missing_fields || [])
-    .filter((field) => field !== 'newsletter_issues' || selectedDossierNewsletterIssueIds.length === 0);
+  $: selectedDossierMissingFields = sourceDossierMissingFields(selectedDossier);
   $: allSources = [
     ...selectedStory.manifest.lead,
     ...selectedStory.manifest.supporting,
@@ -270,6 +270,7 @@
       newsletterSubscribers = [];
       newsletterIssues = [];
       newsletterDeliveries = [];
+      newsletterProviderReceipts = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
@@ -336,6 +337,7 @@
       newsletterSubscribers = Array.isArray(payload.newsletter_subscribers) ? payload.newsletter_subscribers : [];
       newsletterIssues = Array.isArray(payload.newsletter_issues) ? payload.newsletter_issues : [];
       newsletterDeliveries = Array.isArray(payload.newsletter_deliveries) ? payload.newsletter_deliveries : [];
+      newsletterProviderReceipts = Array.isArray(payload.newsletter_provider_receipts) ? payload.newsletter_provider_receipts : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
       await loadPublicationFeed(storyId);
       await loadFetchCycles(storyId);
@@ -366,6 +368,7 @@
       newsletterSubscribers = [];
       newsletterIssues = [];
       newsletterDeliveries = [];
+      newsletterProviderReceipts = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
@@ -953,12 +956,26 @@
     return Array.from(new Set([...(dossier?.publication_refs?.newsletter_issue_ids || []), ...issueIds]));
   }
 
-  function sourceDossierMissingFields(dossier) {
-    const hasNewsletterIssue = sourceDossierNewsletterIssueIds(dossier).length > 0;
-    return (dossier?.missing_fields || []).filter((field) => field !== 'newsletter_issues' || !hasNewsletterIssue);
+  function sourceDossierNewsletterProviderReceiptIds(dossier) {
+    const storyId = dossier?.story_id || selectedStoryId;
+    const receiptIds = newsletterProviderReceipts
+      .filter((receipt) => receipt?.story_id === storyId)
+      .map((receipt) => receipt.id)
+      .filter(Boolean);
+    return Array.from(new Set([...(dossier?.publication_refs?.newsletter_provider_receipt_ids || []), ...receiptIds]));
   }
 
-  function noteNewsletterIssueInDossiers(issue, deliveries = [], storyIdHint = '') {
+  function sourceDossierMissingFields(dossier) {
+    const hasNewsletterIssue = sourceDossierNewsletterIssueIds(dossier).length > 0;
+    const hasNewsletterReceipt = sourceDossierNewsletterProviderReceiptIds(dossier).length > 0;
+    return (dossier?.missing_fields || []).filter((field) => {
+      if (field === 'newsletter_issues') return !hasNewsletterIssue;
+      if (field === 'newsletter_provider_receipts') return !hasNewsletterReceipt;
+      return true;
+    });
+  }
+
+  function noteNewsletterIssueInDossiers(issue, deliveries = [], receipts = [], storyIdHint = '') {
     const issueId = issue?.id || '';
     if (!issueId) return;
     const storyId = issue.story_id || storyIdHint || selectedStoryId;
@@ -970,16 +987,21 @@
         .filter((delivery) => delivery?.issue_id === issueId || delivery?.story_id === storyId)
         .map((delivery) => delivery.id)
         .filter(Boolean);
+      const receiptIds = receipts
+        .filter((receipt) => receipt?.issue_id === issueId || receipt?.story_id === storyId)
+        .map((receipt) => receipt.id)
+        .filter(Boolean);
       return {
         ...dossier,
         publication_refs: {
           ...publicationRefs,
           newsletter_issue_ids: Array.from(new Set([...(publicationRefs.newsletter_issue_ids || []), issueId])),
           newsletter_delivery_ids: Array.from(new Set([...(publicationRefs.newsletter_delivery_ids || []), ...deliveryIds])),
-          citation_refs: Array.from(new Set([...(publicationRefs.citation_refs || []), ...(issue.citation_refs || [])])),
-          rollback_refs: Array.from(new Set([...(publicationRefs.rollback_refs || []), ...(issue.rollback_refs || [])])),
+          newsletter_provider_receipt_ids: Array.from(new Set([...(publicationRefs.newsletter_provider_receipt_ids || []), ...receiptIds])),
+          citation_refs: Array.from(new Set([...(publicationRefs.citation_refs || []), ...(issue.citation_refs || []), ...receipts.flatMap((receipt) => receipt.citation_refs || [])])),
+          rollback_refs: Array.from(new Set([...(publicationRefs.rollback_refs || []), ...(issue.rollback_refs || []), ...receipts.flatMap((receipt) => [...(receipt.rollback_refs || []), ...(receipt.event_refs || [])])])),
         },
-        missing_fields: (dossier.missing_fields || []).filter((field) => field !== 'newsletter_issues'),
+        missing_fields: (dossier.missing_fields || []).filter((field) => field !== 'newsletter_issues' && field !== 'newsletter_provider_receipts'),
       };
     });
   }
@@ -1072,6 +1094,11 @@
   function newsletterDeliveriesForIssue(issue) {
     const id = issue?.id || '';
     return newsletterDeliveries.filter((delivery) => delivery.issue_id === id);
+  }
+
+  function newsletterProviderReceiptsForIssue(issue) {
+    const id = issue?.id || '';
+    return newsletterProviderReceipts.filter((receipt) => receipt.issue_id === id);
   }
 
   function selectedPublicationFeedItem() {
@@ -1467,7 +1494,10 @@
       newsletterDeliveries = [...(payload.deliveries || []), ...newsletterDeliveries]
         .filter(Boolean)
         .slice(0, 50);
-      noteNewsletterIssueInDossiers(payload.issue, payload.deliveries || [], publicLink.story_id || selectedStory.id);
+      newsletterProviderReceipts = [...(payload.newsletter_provider_receipts || []), ...newsletterProviderReceipts]
+        .filter(Boolean)
+        .slice(0, 50);
+      noteNewsletterIssueInDossiers(payload.issue, payload.deliveries || [], payload.newsletter_provider_receipts || [], publicLink.story_id || selectedStory.id);
       newsletterSubscribers = [...(payload.subscribers || subscribers), ...newsletterSubscribers]
         .filter(Boolean)
         .filter((item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index)
@@ -1992,6 +2022,7 @@
               {@const publicLink = publicLinkForExport(deliveryExport)}
               {@const newsletterIssue = newsletterIssueForPublicLink(publicLink)}
               {@const issueDeliveries = newsletterDeliveriesForIssue(newsletterIssue)}
+              {@const issueReceipts = newsletterProviderReceiptsForIssue(newsletterIssue)}
               <article
                 data-global-wire-publication-feed-item
                 data-global-wire-publication-feed-artifact-id={item.artifact.id}
@@ -2092,6 +2123,14 @@
                               data-global-wire-newsletter-delivery-id={issueDelivery.id}
                             >
                               {issueDelivery.status}: {issueDelivery.delivery_ref}
+                            </small>
+                          {/each}
+                          {#each issueReceipts.slice(0, 3) as receipt}
+                            <small
+                              data-global-wire-newsletter-provider-receipt
+                              data-global-wire-newsletter-provider-receipt-id={receipt.id}
+                            >
+                              {receipt.status}: {receipt.provider} · {receipt.provider_mode} · {receipt.message_id}
                             </small>
                           {/each}
                         </div>
@@ -2578,7 +2617,7 @@
                 </div>
               {/if}
               <small data-global-wire-source-dossier-publication>
-                publications: {(selectedDossier.publication_refs?.artifact_ids || []).length} · deliveries: {(selectedDossier.publication_refs?.delivery_ids || []).length} · newsletter issues: {selectedDossierNewsletterIssueIds.length}
+                publications: {(selectedDossier.publication_refs?.artifact_ids || []).length} · deliveries: {(selectedDossier.publication_refs?.delivery_ids || []).length} · newsletter issues: {selectedDossierNewsletterIssueIds.length} · provider receipts: {sourceDossierNewsletterProviderReceiptIds(selectedDossier).length}
               </small>
               <small data-global-wire-source-dossier-provenance>
                 citations: {(selectedDossier.publication_refs?.citation_refs || []).length} · rollback refs: {(selectedDossier.publication_refs?.rollback_refs || []).length} · missing: {selectedDossierMissingFields.join(', ') || 'none'}

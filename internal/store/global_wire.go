@@ -3131,6 +3131,102 @@ func (s *Store) ListGlobalWireNewsletterDeliveries(ctx context.Context, ownerID,
 	return out, nil
 }
 
+// CreateGlobalWireNewsletterProviderReceipt stores one provider-facing send
+// attempt or dry-run receipt over a newsletter delivery.
+func (s *Store) CreateGlobalWireNewsletterProviderReceipt(ctx context.Context, rec types.GlobalWireNewsletterProviderReceipt) (types.GlobalWireNewsletterProviderReceipt, error) {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
+	rec.CreatedAt = now
+	if strings.TrimSpace(rec.Status) == "" {
+		rec.Status = "provider-dry-run-recorded"
+	}
+	eventRefsJSON, err := json.Marshal(rec.EventRefs)
+	if err != nil {
+		return types.GlobalWireNewsletterProviderReceipt{}, fmt.Errorf("marshal global wire newsletter provider receipt event refs: %w", err)
+	}
+	citationRefsJSON, err := json.Marshal(rec.CitationRefs)
+	if err != nil {
+		return types.GlobalWireNewsletterProviderReceipt{}, fmt.Errorf("marshal global wire newsletter provider receipt citation refs: %w", err)
+	}
+	rollbackRefsJSON, err := json.Marshal(rec.RollbackRefs)
+	if err != nil {
+		return types.GlobalWireNewsletterProviderReceipt{}, fmt.Errorf("marshal global wire newsletter provider receipt rollback refs: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_newsletter_provider_receipts (
+			owner_id, receipt_id, issue_id, delivery_id, subscriber_id, story_id,
+			provider, provider_mode, status, message_id, recipient, delivery_ref,
+			attempt_summary, event_refs_json, citation_refs_json,
+			rollback_refs_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.IssueID,
+		rec.DeliveryID,
+		rec.SubscriberID,
+		rec.StoryID,
+		rec.Provider,
+		rec.ProviderMode,
+		rec.Status,
+		sanitizeStoreText(rec.MessageID),
+		strings.ToLower(strings.TrimSpace(rec.Recipient)),
+		sanitizeStoreText(rec.DeliveryRef),
+		sanitizeStoreText(rec.AttemptSummary),
+		string(eventRefsJSON),
+		string(citationRefsJSON),
+		string(rollbackRefsJSON),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireNewsletterProviderReceipt{}, fmt.Errorf("create global wire newsletter provider receipt: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireNewsletterProviderReceipts lists provider-facing newsletter
+// receipts, optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWireNewsletterProviderReceipts(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireNewsletterProviderReceipt, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, receipt_id, issue_id, delivery_id, subscriber_id,
+	                 story_id, provider, provider_mode, status, message_id,
+	                 recipient, delivery_ref, attempt_summary, event_refs_json,
+	                 citation_refs_json, rollback_refs_json, created_at, updated_at
+	            FROM global_wire_newsletter_provider_receipts
+	           WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire newsletter provider receipts: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireNewsletterProviderReceipt
+	for rows.Next() {
+		rec, err := scanGlobalWireNewsletterProviderReceipt(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire newsletter provider receipts: %w", err)
+	}
+	return out, nil
+}
+
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
 func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.GlobalWireStoryProjection) error {
 	now := rec.UpdatedAt
@@ -4346,6 +4442,58 @@ func scanGlobalWireNewsletterDelivery(row interface{ Scan(...any) error }) (type
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWireNewsletterDelivery{}, fmt.Errorf("parse global wire newsletter delivery updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireNewsletterProviderReceipt(row interface{ Scan(...any) error }) (types.GlobalWireNewsletterProviderReceipt, error) {
+	var rec types.GlobalWireNewsletterProviderReceipt
+	var eventRefsJSON, citationRefsJSON, rollbackRefsJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.IssueID,
+		&rec.DeliveryID,
+		&rec.SubscriberID,
+		&rec.StoryID,
+		&rec.Provider,
+		&rec.ProviderMode,
+		&rec.Status,
+		&rec.MessageID,
+		&rec.Recipient,
+		&rec.DeliveryRef,
+		&rec.AttemptSummary,
+		&eventRefsJSON,
+		&citationRefsJSON,
+		&rollbackRefsJSON,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireNewsletterProviderReceipt{}, ErrNotFound
+		}
+		return types.GlobalWireNewsletterProviderReceipt{}, fmt.Errorf("scan global wire newsletter provider receipt: %w", err)
+	}
+	if err := json.Unmarshal([]byte(eventRefsJSON), &rec.EventRefs); err != nil {
+		return types.GlobalWireNewsletterProviderReceipt{}, fmt.Errorf("unmarshal global wire newsletter provider receipt event refs: %w", err)
+	}
+	if err := json.Unmarshal([]byte(citationRefsJSON), &rec.CitationRefs); err != nil {
+		return types.GlobalWireNewsletterProviderReceipt{}, fmt.Errorf("unmarshal global wire newsletter provider receipt citation refs: %w", err)
+	}
+	if err := json.Unmarshal([]byte(rollbackRefsJSON), &rec.RollbackRefs); err != nil {
+		return types.GlobalWireNewsletterProviderReceipt{}, fmt.Errorf("unmarshal global wire newsletter provider receipt rollback refs: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireNewsletterProviderReceipt{}, fmt.Errorf("parse global wire newsletter provider receipt created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireNewsletterProviderReceipt{}, fmt.Errorf("parse global wire newsletter provider receipt updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()

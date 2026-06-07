@@ -663,6 +663,32 @@ CREATE TABLE IF NOT EXISTS global_wire_newsletter_deliveries (
 	KEY idx_global_wire_newsletter_deliveries_story (owner_id, story_id, updated_at)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_newsletter_provider_receipts (
+	owner_id             VARCHAR(255) NOT NULL,
+	receipt_id           VARCHAR(255) NOT NULL,
+	issue_id             VARCHAR(255) NOT NULL,
+	delivery_id          VARCHAR(255) NOT NULL,
+	subscriber_id        VARCHAR(255) NOT NULL,
+	story_id             VARCHAR(255) NOT NULL DEFAULT '',
+	provider             VARCHAR(255) NOT NULL DEFAULT '',
+	provider_mode        VARCHAR(255) NOT NULL DEFAULT '',
+	status               VARCHAR(255) NOT NULL DEFAULT '',
+	message_id           LONGTEXT NOT NULL DEFAULT '',
+	recipient            VARCHAR(255) NOT NULL DEFAULT '',
+	delivery_ref         LONGTEXT NOT NULL DEFAULT '',
+	attempt_summary      LONGTEXT NOT NULL DEFAULT '',
+	event_refs_json      LONGTEXT NOT NULL DEFAULT '[]',
+	citation_refs_json   LONGTEXT NOT NULL DEFAULT '[]',
+	rollback_refs_json   LONGTEXT NOT NULL DEFAULT '[]',
+	created_at           DATETIME NOT NULL,
+	updated_at           DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, receipt_id),
+	KEY idx_global_wire_newsletter_provider_receipts_issue (owner_id, issue_id, updated_at),
+	KEY idx_global_wire_newsletter_provider_receipts_delivery (owner_id, delivery_id, updated_at),
+	KEY idx_global_wire_newsletter_provider_receipts_story (owner_id, story_id, updated_at),
+	KEY idx_global_wire_newsletter_provider_receipts_status (owner_id, status, updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivery_id          VARCHAR(255) PRIMARY KEY,
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',

@@ -701,9 +701,16 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(newsletterIssuePayload.issue.subscriber_count).toBeGreaterThanOrEqual(1);
     expect(newsletterIssuePayload.deliveries?.[0]?.status).toBe('delivery-ready');
     expect(newsletterIssuePayload.deliveries?.[0]?.subscriber_id).toBe(newsletterSubscriberPayload.subscriber.id);
+    expect(newsletterIssuePayload.newsletter_provider_receipts?.[0]?.status).toBe('provider-dry-run-recorded');
+    expect(newsletterIssuePayload.newsletter_provider_receipts?.[0]?.provider).toBe('choir-dry-run-mailer');
+    expect(newsletterIssuePayload.newsletter_provider_receipts?.[0]?.provider_mode).toBe('dry-run');
+    expect(newsletterIssuePayload.newsletter_provider_receipts?.[0]?.delivery_id).toBe(newsletterIssuePayload.deliveries?.[0]?.id);
+    expect(newsletterIssuePayload.newsletter_provider_receipts?.[0]?.message_id).toContain('dryrun-');
+    expect(newsletterIssuePayload.newsletter_provider_receipts?.[0]?.event_refs || []).toContain(`newsletter_issue:${newsletterIssuePayload.issue.id}`);
     await expect(app.locator('[data-global-wire-newsletter-issue]').first()).toContainText('issue-ready');
     await expect(app.locator('[data-global-wire-newsletter-issue-provenance]').first()).toContainText('subscribers:');
     await expect(app.locator('[data-global-wire-newsletter-delivery]').first()).toContainText('delivery-ready');
+    await expect(app.locator('[data-global-wire-newsletter-provider-receipt]').first()).toContainText('provider-dry-run-recorded');
     const newsletterQueue = await page.evaluate(async (issueId) => {
       const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
       if (!res.ok) throw new Error(`load newsletter queue failed: ${res.status}`);
@@ -711,17 +718,21 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
       return {
         issue: (list.newsletter_issues || []).find((item) => item.id === issueId),
         delivery: (list.newsletter_deliveries || []).find((item) => item.issue_id === issueId),
+        receipt: (list.newsletter_provider_receipts || []).find((item) => item.issue_id === issueId),
         dossier: (list.source_dossiers || []).find((item) => item.story_id === 'story-supply-resilience'),
       };
     }, newsletterIssuePayload.issue.id);
     expect(newsletterQueue.issue.public_link_ids).toContain(publicLinkPayload.public_link.id);
     expect(newsletterQueue.issue.rollback_refs).toContain(`public_link:${publicLinkPayload.public_link.id}`);
     expect(newsletterQueue.delivery.status).toBe('delivery-ready');
+    expect(newsletterQueue.receipt.status).toBe('provider-dry-run-recorded');
+    expect(newsletterQueue.receipt.rollback_refs).toContain(`newsletter_delivery:${newsletterQueue.delivery.id}`);
     expect(newsletterQueue.dossier.review_state).toBe('source-dossier-ready');
     expect(newsletterQueue.dossier.claim_dossiers.length).toBeGreaterThanOrEqual(1);
     expect(newsletterQueue.dossier.extraction_ids.length).toBeGreaterThanOrEqual(1);
     expect(newsletterQueue.dossier.research_task_ids.length).toBeGreaterThanOrEqual(1);
     expect(newsletterQueue.dossier.publication_refs.newsletter_issue_ids).toContain(newsletterIssuePayload.issue.id);
+    expect(newsletterQueue.dossier.publication_refs.newsletter_provider_receipt_ids).toContain(newsletterQueue.receipt.id);
     expect(newsletterQueue.dossier.publication_refs.public_link_ids).toContain(publicLinkPayload.public_link.id);
     expect(newsletterQueue.dossier.publication_refs.citation_refs.length).toBeGreaterThanOrEqual(5);
     expect(newsletterQueue.dossier.missing_fields).not.toContain('claim_dossiers');
@@ -739,6 +750,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     await expect(app.locator('[data-global-wire-source-dossier]').first()).toContainText('source-dossier-ready');
     await expect(app.locator('[data-global-wire-source-dossier-claims]').first()).toContainText('claims:');
     await expect(app.locator('[data-global-wire-source-dossier-publication]').first()).toContainText('newsletter issues:');
+    await expect(app.locator('[data-global-wire-source-dossier-publication]').first()).toContainText('provider receipts:');
     await expect(app.locator('[data-global-wire-source-dossier-provenance]').first()).toContainText('missing: none');
     const publicReaderURL = new URL(publicLinkPayload.public_link.route_path, page.url()).toString();
     await page.goto(publicReaderURL);

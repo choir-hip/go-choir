@@ -124,6 +124,7 @@ type globalWireReconciliationResponse struct {
 	NewsletterSubscribers []types.GlobalWireNewsletterSubscriber      `json:"newsletter_subscribers"`
 	NewsletterIssues      []types.GlobalWireNewsletterIssue           `json:"newsletter_issues"`
 	NewsletterDeliveries  []types.GlobalWireNewsletterDelivery        `json:"newsletter_deliveries"`
+	NewsletterReceipts    []types.GlobalWireNewsletterProviderReceipt `json:"newsletter_provider_receipts"`
 	ProjectionReviews     []types.GlobalWireProjectionReview          `json:"projection_reviews"`
 }
 
@@ -171,6 +172,7 @@ type globalWireDossierPublicationRefs struct {
 	PublicLinkIDs         []string `json:"public_link_ids"`
 	NewsletterIssueIDs    []string `json:"newsletter_issue_ids"`
 	NewsletterDeliveryIDs []string `json:"newsletter_delivery_ids"`
+	NewsletterReceiptIDs  []string `json:"newsletter_provider_receipt_ids"`
 	CitationRefs          []string `json:"citation_refs"`
 	RollbackRefs          []string `json:"rollback_refs"`
 }
@@ -360,10 +362,11 @@ type globalWireNewsletterIssueRequest struct {
 }
 
 type globalWireNewsletterIssueResponse struct {
-	Issue       types.GlobalWireNewsletterIssue         `json:"issue"`
-	Deliveries  []types.GlobalWireNewsletterDelivery    `json:"deliveries"`
-	PublicLinks []types.GlobalWirePublicationPublicLink `json:"public_links"`
-	Subscribers []types.GlobalWireNewsletterSubscriber  `json:"subscribers"`
+	Issue       types.GlobalWireNewsletterIssue             `json:"issue"`
+	Deliveries  []types.GlobalWireNewsletterDelivery        `json:"deliveries"`
+	Receipts    []types.GlobalWireNewsletterProviderReceipt `json:"newsletter_provider_receipts"`
+	PublicLinks []types.GlobalWirePublicationPublicLink     `json:"public_links"`
+	Subscribers []types.GlobalWireNewsletterSubscriber      `json:"subscribers"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -1032,12 +1035,17 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter deliveries"})
 			return
 		}
+		newsletterReceipts, err := h.rt.Store().ListGlobalWireNewsletterProviderReceipts(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter provider receipts"})
+			return
+		}
 		projectionReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
 			return
 		}
-		dossiers, err := h.globalWireSourceDossiers(r, ownerID, storyID, contributions, refreshes, claimRecords, sourceReviewSignals, researchTasks, extractionArtifacts, researchEvidence, researchDecisions, candidates, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, autoradioEpisodes, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
+		dossiers, err := h.globalWireSourceDossiers(r, ownerID, storyID, contributions, refreshes, claimRecords, sourceReviewSignals, researchTasks, extractionArtifacts, researchEvidence, researchDecisions, candidates, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, autoradioEpisodes, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries, newsletterReceipts)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to build source dossiers"})
 			return
@@ -1066,6 +1074,7 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			NewsletterSubscribers: newsletterSubscribers,
 			NewsletterIssues:      newsletterIssues,
 			NewsletterDeliveries:  newsletterDeliveries,
+			NewsletterReceipts:    newsletterReceipts,
 			ProjectionReviews:     projectionReviews,
 		})
 	case http.MethodPost:
@@ -1250,7 +1259,12 @@ func (h *APIHandler) HandleGlobalWireSourceDossiers(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter deliveries"})
 		return
 	}
-	dossiers, err := h.globalWireSourceDossiers(r, ownerID, storyID, contributions, refreshes, claimRecords, sourceReviewSignals, researchTasks, extractionArtifacts, researchEvidence, researchDecisions, candidates, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, autoradioEpisodes, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
+	newsletterReceipts, err := h.rt.Store().ListGlobalWireNewsletterProviderReceipts(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter provider receipts"})
+		return
+	}
+	dossiers, err := h.globalWireSourceDossiers(r, ownerID, storyID, contributions, refreshes, claimRecords, sourceReviewSignals, researchTasks, extractionArtifacts, researchEvidence, researchDecisions, candidates, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, autoradioEpisodes, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries, newsletterReceipts)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to build source dossiers"})
 		return
@@ -2106,9 +2120,15 @@ func (h *APIHandler) HandleGlobalWireNewsletterIssues(w http.ResponseWriter, r *
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter deliveries"})
 			return
 		}
+		receipts, err := h.rt.Store().ListGlobalWireNewsletterProviderReceipts(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter provider receipts"})
+			return
+		}
 		writeAPIJSON(w, http.StatusOK, map[string]any{
-			"newsletter_issues":     issues,
-			"newsletter_deliveries": deliveries,
+			"newsletter_issues":            issues,
+			"newsletter_deliveries":        deliveries,
+			"newsletter_provider_receipts": receipts,
 		})
 	case http.MethodPost:
 		var req globalWireNewsletterIssueRequest
@@ -2118,7 +2138,7 @@ func (h *APIHandler) HandleGlobalWireNewsletterIssues(w http.ResponseWriter, r *
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid newsletter issue request"})
 			return
 		}
-		issue, deliveries, links, subscribers, err := h.createGlobalWireNewsletterIssue(r, ownerID, req)
+		issue, deliveries, receipts, links, subscribers, err := h.createGlobalWireNewsletterIssue(r, ownerID, req)
 		if err != nil {
 			if err == store.ErrNotFound {
 				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "newsletter public link not found"})
@@ -2130,6 +2150,7 @@ func (h *APIHandler) HandleGlobalWireNewsletterIssues(w http.ResponseWriter, r *
 		writeAPIJSON(w, http.StatusCreated, globalWireNewsletterIssueResponse{
 			Issue:       issue,
 			Deliveries:  deliveries,
+			Receipts:    receipts,
 			PublicLinks: links,
 			Subscribers: subscribers,
 		})
@@ -4073,7 +4094,7 @@ func xmlText(value string) string {
 	return replacer.Replace(value)
 }
 
-func (h *APIHandler) createGlobalWireNewsletterIssue(r *http.Request, ownerID string, req globalWireNewsletterIssueRequest) (types.GlobalWireNewsletterIssue, []types.GlobalWireNewsletterDelivery, []types.GlobalWirePublicationPublicLink, []types.GlobalWireNewsletterSubscriber, error) {
+func (h *APIHandler) createGlobalWireNewsletterIssue(r *http.Request, ownerID string, req globalWireNewsletterIssueRequest) (types.GlobalWireNewsletterIssue, []types.GlobalWireNewsletterDelivery, []types.GlobalWireNewsletterProviderReceipt, []types.GlobalWirePublicationPublicLink, []types.GlobalWireNewsletterSubscriber, error) {
 	publicLinkIDSet := map[string]bool{}
 	for _, id := range req.PublicLinkIDs {
 		id = strings.TrimSpace(id)
@@ -4084,7 +4105,7 @@ func (h *APIHandler) createGlobalWireNewsletterIssue(r *http.Request, ownerID st
 	storyID := strings.TrimSpace(req.StoryID)
 	allLinks, err := h.rt.Store().ListGlobalWirePublicationPublicLinks(r.Context(), ownerID, storyID, 100)
 	if err != nil {
-		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, err
+		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, nil, err
 	}
 	var links []types.GlobalWirePublicationPublicLink
 	for _, link := range allLinks {
@@ -4095,7 +4116,7 @@ func (h *APIHandler) createGlobalWireNewsletterIssue(r *http.Request, ownerID st
 		links = append(links, link)
 	}
 	if len(links) == 0 {
-		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, store.ErrNotFound
+		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, nil, store.ErrNotFound
 	}
 	if storyID == "" {
 		storyID = links[0].StoryID
@@ -4111,7 +4132,7 @@ func (h *APIHandler) createGlobalWireNewsletterIssue(r *http.Request, ownerID st
 	}
 	subscribers, err := h.rt.Store().ListGlobalWireNewsletterSubscribers(r.Context(), ownerID, 100)
 	if err != nil {
-		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, err
+		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, nil, err
 	}
 	var activeSubscribers []types.GlobalWireNewsletterSubscriber
 	for _, subscriber := range subscribers {
@@ -4120,7 +4141,7 @@ func (h *APIHandler) createGlobalWireNewsletterIssue(r *http.Request, ownerID st
 		}
 	}
 	if len(activeSubscribers) == 0 {
-		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, fmt.Errorf("create global wire newsletter issue: active subscriber is required")
+		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, nil, fmt.Errorf("create global wire newsletter issue: active subscriber is required")
 	}
 
 	issueID := "global-wire-newsletter-issue-" + uuid.NewString()
@@ -4153,6 +4174,7 @@ func (h *APIHandler) createGlobalWireNewsletterIssue(r *http.Request, ownerID st
 	}, "\n")
 	var deliveryIDs []string
 	var deliveries []types.GlobalWireNewsletterDelivery
+	var receipts []types.GlobalWireNewsletterProviderReceipt
 	for _, subscriber := range activeSubscribers {
 		deliveryID := "global-wire-newsletter-delivery-" + uuid.NewString()
 		deliveryIDs = append(deliveryIDs, deliveryID)
@@ -4170,9 +4192,44 @@ func (h *APIHandler) createGlobalWireNewsletterIssue(r *http.Request, ownerID st
 			RollbackRefs:  rollbackRefs,
 		})
 		if err != nil {
-			return types.GlobalWireNewsletterIssue{}, nil, nil, nil, err
+			return types.GlobalWireNewsletterIssue{}, nil, nil, nil, nil, err
 		}
 		deliveries = append(deliveries, delivery)
+		receiptID := "global-wire-newsletter-provider-receipt-" + uuid.NewString()
+		eventRefs := []string{
+			"newsletter_issue:" + issueID,
+			"newsletter_delivery:" + delivery.ID,
+			"newsletter_subscriber:" + subscriber.ID,
+		}
+		for _, linkID := range publicLinkIDs {
+			eventRefs = appendStringIfMissing(eventRefs, "public_link:"+linkID)
+		}
+		receiptRollbackRefs := appendStringListIfMissing(delivery.RollbackRefs, []string{
+			"newsletter_issue:" + issueID,
+			"newsletter_delivery:" + delivery.ID,
+		})
+		receipt, err := h.rt.Store().CreateGlobalWireNewsletterProviderReceipt(r.Context(), types.GlobalWireNewsletterProviderReceipt{
+			ID:             receiptID,
+			OwnerID:        ownerID,
+			IssueID:        issueID,
+			DeliveryID:     delivery.ID,
+			SubscriberID:   subscriber.ID,
+			StoryID:        storyID,
+			Provider:       "choir-dry-run-mailer",
+			ProviderMode:   "dry-run",
+			Status:         "provider-dry-run-recorded",
+			MessageID:      "dryrun-" + receiptID,
+			Recipient:      subscriber.Email,
+			DeliveryRef:    delivery.DeliveryRef + "/provider-receipts/" + receiptID,
+			AttemptSummary: "Provider dry-run receipt recorded for staging/product-path proof; no external email provider send is claimed.",
+			EventRefs:      eventRefs,
+			CitationRefs:   delivery.CitationRefs,
+			RollbackRefs:   receiptRollbackRefs,
+		})
+		if err != nil {
+			return types.GlobalWireNewsletterIssue{}, nil, nil, nil, nil, err
+		}
+		receipts = append(receipts, receipt)
 	}
 	issue, err := h.rt.Store().CreateGlobalWireNewsletterIssue(r.Context(), types.GlobalWireNewsletterIssue{
 		ID:              issueID,
@@ -4190,9 +4247,9 @@ func (h *APIHandler) createGlobalWireNewsletterIssue(r *http.Request, ownerID st
 		RollbackRefs:    rollbackRefs,
 	})
 	if err != nil {
-		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, err
+		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, nil, err
 	}
-	return issue, deliveries, selected, activeSubscribers, nil
+	return issue, deliveries, receipts, selected, activeSubscribers, nil
 }
 
 func (h *APIHandler) globalWirePublicationArtifactProjectionReviews(r *http.Request, ownerID string, update types.GlobalWirePublicationUpdate) ([]types.GlobalWireProjectionReview, error) {
@@ -5043,6 +5100,7 @@ func (h *APIHandler) globalWireSourceDossiers(
 	publicLinks []types.GlobalWirePublicationPublicLink,
 	newsletterIssues []types.GlobalWireNewsletterIssue,
 	newsletterDeliveries []types.GlobalWireNewsletterDelivery,
+	newsletterReceipts []types.GlobalWireNewsletterProviderReceipt,
 ) ([]globalWireSourceDossier, error) {
 	var stories []types.GlobalWireStory
 	if storyID != "" {
@@ -5080,6 +5138,7 @@ func (h *APIHandler) globalWireSourceDossiers(
 			publicLinks,
 			newsletterIssues,
 			newsletterDeliveries,
+			newsletterReceipts,
 		))
 	}
 	return dossiers, nil
@@ -5105,6 +5164,7 @@ func globalWireBuildSourceDossier(
 	publicLinks []types.GlobalWirePublicationPublicLink,
 	newsletterIssues []types.GlobalWireNewsletterIssue,
 	newsletterDeliveries []types.GlobalWireNewsletterDelivery,
+	newsletterReceipts []types.GlobalWireNewsletterProviderReceipt,
 ) globalWireSourceDossier {
 	dossier := globalWireSourceDossier{
 		ID:            "global-wire-source-dossier:" + story.ID,
@@ -5186,7 +5246,7 @@ func globalWireBuildSourceDossier(
 		dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, []string{"source_review_signal:" + signal.ID})
 		dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, signal.EvidenceRefs)
 	}
-	dossier.PublicationRefs = globalWireBuildDossierPublicationRefs(story.ID, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, autoradioEpisodes, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
+	dossier.PublicationRefs = globalWireBuildDossierPublicationRefs(story.ID, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, autoradioEpisodes, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries, newsletterReceipts)
 	dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, dossier.PublicationRefs.CitationRefs)
 	dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, dossier.PublicationRefs.RollbackRefs)
 	dossier.MissingFields = globalWireDossierMissingFields(dossier)
@@ -5301,6 +5361,7 @@ func globalWireBuildDossierPublicationRefs(
 	publicLinks []types.GlobalWirePublicationPublicLink,
 	newsletterIssues []types.GlobalWireNewsletterIssue,
 	newsletterDeliveries []types.GlobalWireNewsletterDelivery,
+	newsletterReceipts []types.GlobalWireNewsletterProviderReceipt,
 ) globalWireDossierPublicationRefs {
 	var out globalWireDossierPublicationRefs
 	for _, update := range publicationUpdates {
@@ -5374,6 +5435,15 @@ func globalWireBuildDossierPublicationRefs(
 		out.CitationRefs = appendStringListIfMissing(out.CitationRefs, delivery.CitationRefs)
 		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, delivery.RollbackRefs)
 	}
+	for _, receipt := range newsletterReceipts {
+		if receipt.StoryID != storyID {
+			continue
+		}
+		out.NewsletterReceiptIDs = appendStringListIfMissing(out.NewsletterReceiptIDs, []string{receipt.ID})
+		out.CitationRefs = appendStringListIfMissing(out.CitationRefs, receipt.CitationRefs)
+		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, receipt.RollbackRefs)
+		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, receipt.EventRefs)
+	}
 	return out
 }
 
@@ -5396,6 +5466,9 @@ func globalWireDossierMissingFields(dossier globalWireSourceDossier) []string {
 	}
 	if len(dossier.PublicationRefs.NewsletterIssueIDs) == 0 {
 		missing = append(missing, "newsletter_issues")
+	}
+	if len(dossier.PublicationRefs.NewsletterReceiptIDs) == 0 {
+		missing = append(missing, "newsletter_provider_receipts")
 	}
 	if len(dossier.PublicationRefs.CitationRefs) == 0 {
 		missing = append(missing, "citation_refs")

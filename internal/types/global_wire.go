@@ -489,6 +489,30 @@ type GlobalWireNewsletterDelivery struct {
 	UpdatedAt     time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWireNewsletterProviderReceipt records a provider-facing send attempt
+// over one newsletter delivery. The dry-run provider is honest staging evidence
+// and keeps the same contract a real email provider receipt can later satisfy.
+type GlobalWireNewsletterProviderReceipt struct {
+	ID             string    `json:"id"`
+	OwnerID        string    `json:"owner_id,omitempty"`
+	IssueID        string    `json:"issue_id"`
+	DeliveryID     string    `json:"delivery_id"`
+	SubscriberID   string    `json:"subscriber_id"`
+	StoryID        string    `json:"story_id"`
+	Provider       string    `json:"provider"`
+	ProviderMode   string    `json:"provider_mode"`
+	Status         string    `json:"status"`
+	MessageID      string    `json:"message_id"`
+	Recipient      string    `json:"recipient,omitempty"`
+	DeliveryRef    string    `json:"delivery_ref"`
+	AttemptSummary string    `json:"attempt_summary"`
+	EventRefs      []string  `json:"event_refs"`
+	CitationRefs   []string  `json:"citation_refs"`
+	RollbackRefs   []string  `json:"rollback_refs"`
+	CreatedAt      time.Time `json:"created_at,omitempty"`
+	UpdatedAt      time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
 // fetch cycle should use for one StoryGraph neighborhood.
 type GlobalWireSourceRegistryEntry struct {
