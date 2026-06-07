@@ -2077,4 +2077,20 @@ local proof:
 
   nix develop -c go test ./internal/platform ./internal/sourcecontract
   result: passed
+
+commit/deploy proof:
+  commit 153a21d5a34834c5679309a874cd84bdcbdc539b
+  GitHub Actions CI 27077825314 passed.
+  FlakeHub publish 27077825284 passed.
+  Node B deploy job 79918157839 passed.
+  /health reported proxy and sandbox deployed_commit
+  153a21d5a34834c5679309a874cd84bdcbdc539b, deployed_at
+  2026-06-07T00:19:19Z.
+
+staging proof:
+  No new temporary browser proof was required for this deletion because the
+  removed branch was unreachable from deployed export dispatch. The preceding
+  deployed export-spine smoke already exercised the live HTML, Markdown, DOCX,
+  and PDF export endpoints after the formatter move; this checkpoint adds CI,
+  deploy, and health identity for the dead-branch prune.
 ```
