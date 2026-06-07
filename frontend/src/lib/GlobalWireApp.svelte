@@ -156,6 +156,8 @@
   let sourceSearchResults = [];
   let sourceSearchBusy = false;
   let queueTopSourceResult = true;
+  let storyActionStatus = '';
+  let storyActionBusy = '';
   let contributions = [];
   let reconciliationSourceItems = {};
   let reconciliationDecisions = [];
@@ -289,6 +291,44 @@
     ].join('\n');
   }
 
+  function storyPromptContext(mode) {
+    const sourceManifest = [
+      sourceLines('lead', selectedStory.manifest.lead),
+      sourceLines('supporting', selectedStory.manifest.supporting),
+      sourceLines('contrary or qualifying', selectedStory.manifest.contrary),
+      sourceLines('ambient context', selectedStory.manifest.context),
+    ].filter(Boolean).join('\n');
+    const related = selectedStory.related.map((id) => {
+      const story = stories.find((item) => item.id === id);
+      return `- ${story?.headline || id} (${id})`;
+    }).join('\n');
+    const task = mode === 'autoradio'
+      ? 'Create an Autoradio-ready spoken brief for this story projection. Use only the evidence below, keep uncertainty audible, cite source tiers, and name evidence gaps instead of filling them.'
+      : 'Answer as Choir about this Global Wire story. Use only the evidence below, explain what changed, what remains uncertain, and what evidence should be checked next.';
+    return [
+      task,
+      '',
+      `StoryGraph id: ${selectedStory.id}`,
+      `Headline: ${selectedStory.headline}`,
+      `State: ${selectedStory.changeState}; ${selectedStory.tension}`,
+      `Style.vtext source: ${selectedStyle.title}`,
+      '',
+      'Projection:',
+      projectionText,
+      '',
+      'Claims:',
+      ...selectedStory.claims.map((claim) => `- ${claim}`),
+      '',
+      'Source Manifest:',
+      sourceManifest,
+      '',
+      'Related Story VTexts:',
+      related,
+      '',
+      'Guardrail: do not mutate the platform StoryGraph, do not invent facts, and make provenance visible.',
+    ].join('\n');
+  }
+
   function styleVTextContent(style = selectedStyle) {
     return [
       `# ${style.title}`,
@@ -379,6 +419,32 @@
       docId: selectedStyle.doc_id || '',
       createInitialVersion: !selectedStyle.doc_id,
     });
+  }
+
+  async function submitStoryAction(mode) {
+    if (!authenticated) {
+      storyActionStatus = 'Sign in to ask Choir from this StoryGraph.';
+      return;
+    }
+    storyActionBusy = mode;
+    storyActionStatus = '';
+    try {
+      const response = await fetch('/api/prompt-bar', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: storyPromptContext(mode) }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.submission_id) {
+        throw new Error(`Prompt submission failed: ${response.status}`);
+      }
+      storyActionStatus = `${mode === 'autoradio' ? 'Autoradio brief' : 'Ask Choir'} submitted: ${payload.submission_id.slice(0, 8)}`;
+    } catch (error) {
+      storyActionStatus = error?.message || 'Prompt submission failed';
+    } finally {
+      storyActionBusy = '';
+    }
   }
 
   async function submitContribution() {
@@ -597,10 +663,29 @@
           <h1>{selectedStory.headline}</h1>
         </div>
         <div class="reader-actions">
+          <button
+            type="button"
+            on:click={() => submitStoryAction('ask')}
+            disabled={storyActionBusy !== ''}
+            data-global-wire-ask-choir
+          >
+            Ask Choir
+          </button>
+          <button
+            type="button"
+            on:click={() => submitStoryAction('autoradio')}
+            disabled={storyActionBusy !== ''}
+            data-global-wire-autoradio
+          >
+            Autoradio
+          </button>
           <button type="button" on:click={openStoryVText} data-global-wire-open-vtext>Open VText</button>
           <button type="button" on:click={forkStory} data-global-wire-fork-story>Fork/Edit</button>
         </div>
       </div>
+      {#if storyActionStatus}
+        <p class="story-action-status" data-global-wire-story-action-status>{storyActionStatus}</p>
+      {/if}
 
       <p class="dek">{selectedStory.dek}</p>
 
@@ -1035,6 +1120,11 @@
   .dek {
     color: var(--choir-text-muted);
     line-height: 1.45;
+  }
+
+  .story-action-status {
+    color: var(--choir-text-accent);
+    font-size: 0.86rem;
   }
 
   .style-switcher,

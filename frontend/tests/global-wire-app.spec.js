@@ -44,6 +44,8 @@ test('Global Wire preserves StoryGraph, Style.vtext, VText fork, and contributio
   await expect(app.locator('[data-global-wire-evidence] [data-source-tier="lead"]')).toContainText('Port authority throughput bulletin');
   await expect(app.locator('[data-global-wire-story-graph]')).toContainText('Grid operators add reserve alerts');
   await expect(app.locator('[data-global-wire-source-search]')).toBeVisible();
+  await expect(app.locator('[data-global-wire-ask-choir]')).toBeVisible();
+  await expect(app.locator('[data-global-wire-autoradio]')).toBeVisible();
 
   await app.locator('[data-global-wire-style-switcher] button').filter({ hasText: 'Audit' }).click();
   await expect(app.locator('[data-global-wire-style-switcher]')).toContainText('Cites Style.vtext: Claim Audit');
@@ -222,6 +224,18 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   expect(reconciliation.candidate.source_content_id).toBe(queuedContribution.source_content_id);
   expect(reconciliation.sourceItem?.content_id).toBe(queuedContribution.source_content_id);
   expect(reconciliation.sourceItem?.metadata?.schema).toBe('choir.global_wire_user_source_contribution.v1');
+
+  const askResponsePromise = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST'
+  );
+  await app.locator('[data-global-wire-ask-choir]').click();
+  const askResponse = await askResponsePromise;
+  expect(askResponse.status()).toBe(202);
+  const askPayload = askResponse.request().postDataJSON();
+  expect(askPayload.text).toContain('StoryGraph id: story-supply-resilience');
+  expect(askPayload.text).toContain('Source Manifest:');
+  expect(askPayload.text).toContain('Style.vtext source:');
+  await expect(app.locator('[data-global-wire-story-action-status]')).toContainText('Ask Choir submitted');
 });
 
 for (const themeId of ['futuristic-noir', 'carbon-fiber-kintsugi', 'london-salmon']) {
