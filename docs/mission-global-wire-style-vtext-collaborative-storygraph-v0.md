@@ -1409,3 +1409,48 @@ Next executable probe:
 - Design and implement the smallest platform-process-shaped candidate promotion
   or autonomous classification step that preserves the invariant that arbitrary
   user edits never silently mutate platform stories.
+
+## Problem Checkpoint - Missing Platform Candidate Promotion - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- Global Wire now produces graph-update candidates from accepted reconciliation
+  decisions, but candidates remain review artifacts only.
+- There is no explicit platform-process-shaped promotion record or endpoint
+  that can take a reviewed candidate, record the platform review decision, and
+  apply a bounded StoryGraph update.
+
+Evidence:
+
+- `global_wire_graph_update_candidates` records carry source tier, edge kind,
+  projection action, status, and lineage.
+- The app can show a candidate as `candidate-review`, but no route exists to
+  promote, reject, or apply the candidate through a platform review step.
+- This keeps the invariant safe, but leaves the trajectory short of
+  "possible platform reconciliation later" from the spec.
+
+Belief-state update:
+
+- The next topology-preserving step is not arbitrary user merge.
+- The next real artifact is a platform review/promotion decision that is
+  owner-scoped, lineage-rich, and explicit.
+- The smallest honest promotion can apply only a bounded source-manifest update
+  from the candidate's cited SourceItem, leaving full claim/edge/projection
+  regeneration as later work.
+
+Remaining error field:
+
+- No promotion decision table/model exists.
+- No API or app control can mark a candidate promoted or rejected.
+- No proof shows a platform-process endpoint applying a candidate source to the
+  StoryGraph manifest while preserving candidate and decision provenance.
+
+Next executable probe:
+
+- Add a candidate promotion decision artifact and endpoint. Promoting a
+  candidate may append its cited SourceItem to the candidate's source tier in
+  the durable StoryGraph manifest if absent, update candidate status, and
+  record the platform review note. Rejecting a candidate should update only
+  candidate status and record the decision.
