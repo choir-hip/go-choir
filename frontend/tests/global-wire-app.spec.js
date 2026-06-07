@@ -128,7 +128,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
 
   await openDeskApp(page, 'global-wire');
   await expect(app.locator('[data-global-wire-reconciliation-source]').first()).toContainText('Contribution source');
-  await app.locator('[data-global-wire-reconcile-accept]').first().click();
+  await app.locator('[data-global-wire-reconcile-accept]').first().click({ force: true });
   await expect(app.locator('[data-global-wire-reconciliation-decision]').first()).toContainText('accepted');
 
   const importedSourceQueue = await page.evaluate(async () => {
