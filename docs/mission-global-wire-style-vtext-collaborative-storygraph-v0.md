@@ -704,3 +704,74 @@ Next executable probe:
   `StoryGraph + Style.vtext + context -> Story VText` records so style
   selection/composition/replacement can be cited and reconciled instead of
   remaining embedded projection text in story JSON.
+
+## Overnight Checkpoint - Style Projection Relation - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+commit delivered: `b5aec623c202f58900f8d06b856f945815abcd8f`
+(`feat: persist global wire style projections`)
+
+What changed:
+
+- Added `GlobalWireStoryProjection`, the durable relation for
+  `StoryGraph + Style.vtext + context -> Story VText`.
+- Added `global_wire_story_projections` with style ID, style VText doc ID,
+  projection Story VText doc ID, context JSON, projection text, and timestamps.
+- StoryGraph seed now persists projection rows for each style source.
+- The default wire projection points at the platform Story VText; alternate
+  styles create separate projection VText documents.
+- `GET /api/global-wire/stories` now returns `projection_vtext_docs`, mapping
+  style IDs to their projection Story VText document IDs.
+- The Global Wire app now opens the selected style's projection VText when a
+  projection document exists.
+- Runtime and deployed Playwright tests now prove the `claim-audit-style`
+  projection document exists and is loadable through ordinary VText APIs.
+
+What was proven locally:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed.
+- `npm run build` passed in `frontend/`.
+
+What was proven on staging:
+
+- Pushed `b5aec623c202f58900f8d06b856f945815abcd8f` to `origin/main`.
+- GitHub Actions CI run `27081750911` completed successfully, including
+  runtime shards, non-runtime tests, frontend build, Go vet/build, and staging
+  deploy.
+- FlakeHub publish run `27081750915` completed successfully.
+- `https://choir.news/health` reported both proxy and sandbox deployed at
+  `b5aec623c202f58900f8d06b856f945815abcd8f`, deployed at
+  `2026-06-07T03:41:45Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded auth proof skipped.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed, including projection VText lookup for the audit style.
+
+Belief-state changes:
+
+- The core dual-object topology is now present at low honest resolution:
+  SourceItem-backed evidence -> durable StoryGraph -> normal Story VTexts ->
+  citeable Style.vtext -> durable projection relation -> News app views ->
+  user-owned VText/source contribution artifacts -> reconciliation queue.
+- The largest remaining realism gap is not shape, but feed and workflow:
+  sourcecycled/live imported SourceItems are not yet the source of graph
+  creation/update, and no researcher/reconciler consumes queued contributions.
+
+Remaining error field:
+
+- Sourcecycled/live ingestion still does not update StoryGraph records.
+- Story clustering, edge classification, and update classification are not
+  implemented.
+- Existing imported `ContentItem`s are not selectable from the app as source
+  contributions.
+- Reconciliation remains a queue state, not an active researcher workflow.
+- Autoradio/Ask hooks remain outside this slice.
+
+Next executable probe:
+
+- Let a user queue an existing imported `ContentItem` as a Global Wire source
+  contribution by ID, preserving ownership and avoiding direct platform story
+  mutation. This closes the product API side of "uploaded/user-provided
+  sources -> contribution queue" before tackling sourcecycled clustering.
