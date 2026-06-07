@@ -5089,3 +5089,54 @@ Next executable probe:
   can be bound to real trajectory/run evidence; otherwise document the blocker
   precisely and choose the next realism axis between source standing/extraction
   normalization and newsletter/syndication publication output.
+
+## Problem Checkpoint - Run Acceptance Needs Product Trajectory Binding - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transform:
+
+- A RunAcceptanceRecord is not a notarized test report. It is a derived
+  product/control artifact over durable run, Trace, package, adoption, and
+  rollback evidence.
+- The Global Wire app proof creates publication artifacts directly through
+  owner product APIs. That is valid product proof, but most of that chain is not
+  itself a prompt-bar trajectory.
+- The honest bridge is to bind acceptance to a real Global Wire prompt-bar
+  action that is part of the product trajectory, such as the Autoradio handoff
+  from the selected publication artifact.
+
+Observed gap:
+
+- `/api/run-acceptances/synthesize` requires `target_mission_id` plus
+  `trajectory_id` or `loop_id`, and derives checkpoints from stored runs and
+  Trace events.
+- The public reader proof has strong staging/browser evidence, but not a single
+  mission-wide Choir run id that owns every Playwright-created Global Wire
+  artifact.
+- The signed-in proof already exercises `/api/prompt-bar` for Autoradio and Ask
+  Choir, but it does not yet use the returned submission id to synthesize a
+  durable RunAcceptanceRecord.
+
+Why this matters:
+
+- Synthesizing acceptance from caller-supplied Playwright facts would overclaim
+  and violate the product-path evidence invariant.
+- Synthesizing from a Global Wire Autoradio prompt trajectory is lower
+  resolution than full mission acceptance, but honest: it binds the publication
+  artifact output to a real prompt-bar/Trace trajectory and records residual
+  risk instead of pretending to have promotion or continuation evidence.
+
+Remaining error field:
+
+- No RunAcceptanceRecord is yet created during the Global Wire staging proof.
+- Even if synthesized from Autoradio, the record will not cover full
+  promotion-level or continuation-level self-development acceptance.
+
+Next executable probe:
+
+- Extend the signed-in Global Wire proof to capture the Autoradio
+  `/api/prompt-bar` response, synthesize
+  `/api/run-acceptances/synthesize` with that submission id as the trajectory,
+  assert the stored record has evidence/checkpoints and honest residual risk,
+  then rerun staging proof.
