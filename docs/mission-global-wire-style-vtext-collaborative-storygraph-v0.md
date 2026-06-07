@@ -5858,3 +5858,114 @@ Remaining error field:
 - Newsletter remains a ledger, not real provider send telemetry.
 - Source normalization remains low-resolution and deterministic.
 - The mission is still not `promotion-level` or `continuation-level`.
+
+## Overnight Checkpoint - Autoradio Playback Episode Slice - 2026-06-07
+
+Objective state:
+
+- The Autoradio axis has moved from prompt/script-only to a durable,
+  owner-scoped playback package over an approved publication artifact.
+- `global_wire_autoradio_episodes` records script id, artifact id, StoryGraph
+  story id, source content id, status, playback mode, transcript, voice notes,
+  duration estimate, citation refs, and rollback refs.
+- `/api/global-wire/autoradio-episodes` creates and lists those packages through
+  the authenticated product path.
+- Reconciliation and source-dossier responses now include
+  `autoradio_episodes` and `publication_refs.autoradio_episode_ids`, so
+  playback readiness appears in the same research/reconciliation artifact as
+  source evidence, claims, publication artifacts, public links, newsletter
+  ledgers, and scripts.
+- Global Wire renders an Episode action and a Play action. Play uses browser
+  speech synthesis and exposes product-visible playback state; no external
+  TTS/audio-file provider receipt is claimed.
+
+Problem found and fixed:
+
+- Staging proof for commit
+  `7f59a45ad035d4e9f040c13899b6a49a8496192c`
+  failed because the Playwright proof monkeypatched `speechSynthesis` by direct
+  assignment and did not observe the Play call. The problem was documented in
+  checkpoint commit `7119b19b` before the fix.
+- Final fix commit
+  `4df101eb7deec4b4c57290fa9fc8bd32c2c68de3`
+  exposes a product-visible playback state and installs the test speech stub
+  with `Object.defineProperty`, making the deployed proof observe the playback
+  path reliably.
+
+Local proof:
+
+- `nix develop -c go test ./internal/runtime -run TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph -count=1`
+  passed for the initial episode backend path.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire' -count=1`
+  passed.
+- `npm run build` passed for both the episode implementation and the playback
+  observability fix.
+- `git diff --check` passed before commits.
+
+Staging proof:
+
+- Final pushed behavior commit:
+  `4df101eb7deec4b4c57290fa9fc8bd32c2c68de3`.
+- CI run `27089848456`: success, including staging deploy.
+- FlakeHub run `27089848450`: success.
+- Staging `/health` reported proxy and upstream deployed commit
+  `4df101eb7deec4b4c57290fa9fc8bd32c2c68de3`, deployed at
+  `2026-06-07T10:27:01Z`.
+- Public deployed proof:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  returned 4 passed and 1 auth-gated skip.
+- Authenticated deployed proof:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in" --timeout 180000`
+  returned 1 passed. This proof covers source-backed refresh, user-owned
+  contribution/fork, reconciliation, promotion, projection review, publication
+  artifact, publication delivery, Autoradio script, Autoradio episode,
+  browser-speech playback state, delivery export, public link, newsletter issue
+  ledger, source dossier refs, Ask Choir, Autoradio prompt, and run acceptance
+  synthesis.
+
+Invariant audit:
+
+- Every story remains a normal editable VText.
+- User edits and contributions remain owner-owned and do not mutate platform
+  stories.
+- Style.vtext remains a citeable selectable/composable/replacement source
+  artifact.
+- News remains non-oracle and provenance-rich; the new episode cites the same
+  publication/script evidence chain and records rollback refs.
+- Graph nodes remain Story VText headlines with source-neighborhood semantics;
+  Autoradio episodes are downstream publication/playback artifacts, not graph
+  nodes.
+- Global Wire core views continue to render in Future Noir, Carbon Kintsugi,
+  and London Salmon in the deployed public proof.
+
+Belief state:
+
+- The product now has a staging-proven path from source-backed evidence through
+  StoryGraph, normal Story VTexts, Style.vtext projections, News app views,
+  owner-owned edits/contributions, research/reconciliation records, publication
+  artifacts, public links/newsletter ledger, and browser-speech Autoradio
+  playback packages.
+- This raises the Autoradio axis to `staging-smoke-level` and preserves the
+  whole topology at low resolution.
+
+Remaining error field:
+
+- Newsletter remains a ledger, not a real outbound provider send with
+  bounce/open telemetry.
+- Autoradio playback is browser-speech over a durable transcript, not generated
+  audio storage, scheduling, or provider-backed radio playout.
+- Source normalization remains deterministic and low-resolution; it is not yet
+  a full contradiction clustering/source credibility workbench.
+- No AppChangePackage adoption or owner promote/rollback proof was run for this
+  slice, so this is not `promotion-level`.
+- No continuation/run-memory acceptance record was explicitly collected outside
+  the deployed signed-in proof's acceptance synthesis path, so this is not a
+  whole-mission `continuation-level` stop.
+
+Next executable probe:
+
+- Increase realism along the source-normalization axis: create a deeper
+  contradiction/overlap/standing review artifact inside source dossiers, with
+  update classes (`contradiction added`, `claim changed`, `source manifest
+  update`, `related story edge`, `projection revision required`) visible as
+  reviewable, non-oracle records.
