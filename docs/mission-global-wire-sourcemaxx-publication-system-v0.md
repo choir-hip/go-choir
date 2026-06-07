@@ -1166,6 +1166,68 @@ updated remaining error field:
   panels, cards, nested scroll, visible theme selector, or noisy "Open in
   VText" labels.
 
+2026-06-07 article-head prompt delivery and SourceItem accessibility blocker:
+
+- Commit `d2a8ebe7a8245258544eb2395a9777236aaab20f` changed the SourceMaxx
+  VText revision contract so VText remains the document owner but SourceMaxx
+  handoffs are treated as grounded newsroom source context. SourceMaxx VText
+  revision runs now require the first `edit_vtext` call to write a publishable
+  article or correction/update draft, not a `SourceMaxx Brief`,
+  `Working Revision`, `Evidence Gathering` note, outline, or placeholder.
+  Ordinary prompt-bar VText runs still preserve the cautious
+  working-response-first behavior for ungrounded factual/current prompts.
+- Local proof passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText|TestSystemPromptForSourceMaxxVTextRunsRequiresArticleHead'`,
+  `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalRunSubmissionAllowsSourceMaxxProcessorAndReconcilerProfiles|TestPromptStore|TestVText'`,
+  and `git diff --check`. A broader comprehensive prompt-profile command
+  including `TestSystemPromptForSourceMaxxProfilesLoadsSharedHarnessPrompts`
+  still fails on a pre-existing `Available tools:` expectation mismatch and
+  was not used as proof for this change.
+- CI/deploy proof passed for `d2a8ebe7a8245258544eb2395a9777236aaab20f`: CI
+  run `27099098435`, FlakeHub run `27099098438`, and Node B staging deploy all
+  succeeded. `https://choir.news/health` reported proxy and sandbox deployed
+  commit `d2a8ebe7a8245258544eb2395a9777236aaab20f` at
+  `2026-06-07T17:05:49Z`.
+- A fresh post-deploy SourceMaxx cycle, `cycle_a59a364c43c0eed6d05a2a62`, was
+  forced by restarting `go-choir-sourcecycled.service`. The cycle fetched 686
+  deduped SourceItems from 14 fetches and queued 17 processor requests plus 1
+  reconciler request. Authenticated public product status resolved 7 processor
+  runs and 1 reconciler run; at proof time it reported processor states
+  `completed: 6`, `running: 1`, and reconciler state `completed: 1`.
+- The VText article-head proof did not execute because the reconciler spawned
+  no VText children. Direct reconciler runtime events for run
+  `ad28ea70-8707-4936-932a-1608e2ca5bc5` show the reconciler found a severe
+  upstream SourceMaxx/source-service problem instead of article candidates:
+  all 17 processor handles resolved to the same arXiv paper
+  `2606.04850` / source item `srcitem_5edf1e34e3ac253df3d38899`, while
+  queries for the 686 `srcitem_*` IDs listed in the reconciler request returned
+  zero source-service results. The reconciler saved evidence ids
+  `a393eff3-c0a5-4691-ba14-0270bc34f15c`,
+  `35b3c7e4-7e15-4b28-af76-000de3f73bc3`, and
+  `a80be16e-458a-4c8e-9694-2b62ff5a0c42`.
+- This is now the highest-value blocker: SourceMaxx can fetch hundreds of
+  items, but processor/reconciler handoff references are not reliably walkable
+  through the source-service tool path. The next behavior change must root
+  cause and repair source item lookup/routing so processors and reconcilers
+  receive diverse, accessible SourceItem handles before more UI work or
+  article-quality proof can be meaningful.
+
+updated remaining error field:
+
+- SourceMaxx source firehose volume is staging-proven, but source item
+  accessibility is not: reconciler source_search returned zero results for
+  the 686 request-listed `srcitem_*` handles in `cycle_a59a...`.
+- Processor/reconciler request diversity is not proven: the fresh staging
+  proof found 17 processor handoffs collapsing onto one arXiv source item.
+- The article-head VText prompt fix is committed, tested, and deployed, but
+  not yet staging-proven end-to-end because the latest reconciler correctly
+  declined to spawn articles from broken source context.
+- The next proof must show diverse, source-searchable SourceItems flowing into
+  processors/reconcilers, followed by VText child documents whose current
+  heads are publication article drafts with selected Style.vtext notes.
+
 suggested resume goal string: use the Goal String section above.
 
 evidence artifact refs: local browser screenshot emitted through Browser
