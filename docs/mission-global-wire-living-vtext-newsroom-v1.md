@@ -880,3 +880,32 @@ model-owned newsroom behavior. The mission must continue toward live
 processor/reconciler handoffs that cause VText agents to write and revise real
 articles from incoming sources. The fallback repair is acceptable only as a
 visible product floor, not as the end architecture.
+
+## Checkpoint 2026-06-07T23:40Z: fallback article prose repaired locally
+
+objective: raise the visible fallback article floor while preserving the
+architecture that live articles should be written and revised by VText agents.
+
+what changed: the seeded/repaired Global Wire article body now writes a fuller
+article instead of the prior thin stub. It includes multiple prose paragraphs,
+lead and secondary source framing, uncertainty/correction framing, bounded
+working claims, claim-audit and market-read paragraphs, background context,
+related-VText prose, and the living-VText revision note. Existing thin articles
+that contain the old `The current version keeps ... source neighborhood`
+sentence now repair forward into the fuller fallback body. The fallback uses
+native inline `source:` refs for available source entities and avoids source
+manifests, raw related-ID lists, and app-specific edit sections.
+
+proof: `nix develop -c go test ./internal/store -run
+'TestGlobalWireExistingArticleVTextBodyRepair|TestGlobalWireThinArticleVTextBodyRepairsForward'
+-count=1` passed. Full `nix develop -c go test ./internal/store -count=1`
+passed. Runtime handlers and prompt checks passed with
+`nix develop -c go test -tags comprehensive ./internal/runtime -run
+'TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts|TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads|TestHandleGlobalWirePromotesClassifiedRefreshIntoStoryGraphAndPlatformVText|TestSystemPromptForGlobalWireProfilesLoadsSharedHarnessPrompts|TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead'
+-count=1`.
+
+remaining error field: this is still a deterministic product floor, not the
+final newsroom behavior. The next proof must deploy this repair, verify in
+Comet that existing article VTexts advance to fuller prose with native source
+buttons, and continue toward live VText-agent article generation from the
+expanded source network.

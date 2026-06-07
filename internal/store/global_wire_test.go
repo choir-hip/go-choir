@@ -90,6 +90,20 @@ func TestGlobalWireExistingArticleVTextBodyRepair(t *testing.T) {
 	if !strings.Contains(repaired.Content, "source:gw-src-") {
 		t.Fatalf("repaired content has no native source refs:\n%s", repaired.Content)
 	}
+	if strings.Count(repaired.Content, "source:gw-src-") < 4 {
+		t.Fatalf("repaired content has too few native source refs:\n%s", repaired.Content)
+	}
+	for _, required := range []string{
+		"The lead signal is still the narrowest one",
+		"The source neighborhood keeps the story open",
+		"A claim-audit reading narrows the public takeaway",
+		"The market and second-order read",
+		"living Global Wire VText",
+	} {
+		if !strings.Contains(repaired.Content, required) {
+			t.Fatalf("repaired content missing article prose marker %q:\n%s", required, repaired.Content)
+		}
+	}
 	var meta map[string]any
 	if err := json.Unmarshal(repaired.Metadata, &meta); err != nil {
 		t.Fatalf("unmarshal repaired metadata: %v", err)
@@ -114,5 +128,71 @@ func TestGlobalWireExistingArticleVTextBodyRepair(t *testing.T) {
 	}
 	if after != before {
 		t.Fatalf("repair not idempotent: revisions before=%d after=%d", before, after)
+	}
+}
+
+func TestGlobalWireThinArticleVTextBodyRepairsForward(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	ownerID := "global-wire-thin-repair-user"
+
+	stories, err := s.ListGlobalWireStories(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("seed global wire stories: %v", err)
+	}
+	story := stories[0]
+	doc, err := s.GetDocument(ctx, story.StoryVTextDoc, ownerID)
+	if err != nil {
+		t.Fatalf("get seeded story document: %v", err)
+	}
+	thin := strings.Join([]string{
+		"# " + story.Headline,
+		"",
+		story.Dek,
+		"",
+		story.Projections["wire-style"],
+		"",
+		"The current version keeps lead evidence from [Port authority throughput bulletin](source:gw-src-source-port-authority) in the article's source neighborhood.",
+	}, "\n")
+	if !globalWireArticleVTextNeedsBodyRepair(thin) {
+		t.Fatalf("thin article body should be repairable")
+	}
+	if err := s.CreateRevision(ctx, types.Revision{
+		RevisionID:       "thin-global-wire-head",
+		DocID:            doc.DocID,
+		OwnerID:          ownerID,
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "Global Wire",
+		Content:          thin,
+		Citations:        json.RawMessage(`[]`),
+		Metadata:         json.RawMessage(`{"created_from":"thin_global_wire_seed"}`),
+		ParentRevisionID: doc.CurrentRevisionID,
+		CreatedAt:        time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("create thin head: %v", err)
+	}
+
+	if _, err := s.ListGlobalWireStories(ctx, ownerID); err != nil {
+		t.Fatalf("repair thin global wire story: %v", err)
+	}
+	repairedDoc, err := s.GetDocument(ctx, doc.DocID, ownerID)
+	if err != nil {
+		t.Fatalf("get repaired document: %v", err)
+	}
+	repaired, err := s.GetRevision(ctx, repairedDoc.CurrentRevisionID, ownerID)
+	if err != nil {
+		t.Fatalf("get repaired revision: %v", err)
+	}
+	if repaired.ParentRevisionID != "thin-global-wire-head" {
+		t.Fatalf("thin repair parent = %q, want thin head", repaired.ParentRevisionID)
+	}
+	if strings.Contains(repaired.Content, "The current version keeps") {
+		t.Fatalf("thin repair kept stub sentence:\n%s", repaired.Content)
+	}
+	if strings.Count(repaired.Content, "\n\n") < 7 || strings.Count(repaired.Content, "source:gw-src-") < 4 {
+		t.Fatalf("thin repair did not create a full source-linked article:\n%s", repaired.Content)
+	}
+	if !strings.Contains(repaired.Content, "related grid reserve-alert and retail margin exposure articles") {
+		t.Fatalf("thin repair missing related VText prose:\n%s", repaired.Content)
 	}
 }

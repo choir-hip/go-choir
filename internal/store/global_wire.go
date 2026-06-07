@@ -436,6 +436,7 @@ func globalWireArticleVTextNeedsBodyRepair(content string) bool {
 		"Draft state:",
 		"Projection review id:",
 		"Projection Review Approval",
+		"The current version keeps",
 	} {
 		if strings.Contains(content, token) {
 			return true
@@ -756,53 +757,123 @@ func (s *Store) createGlobalWireSeedVText(ctx context.Context, ownerID, title, c
 }
 
 func globalWireStoryVTextContent(story types.GlobalWireStory) string {
-	lead := ""
-	if len(story.Manifest.Lead) > 0 {
-		lead = globalWireSourceRefLabel(story.Manifest.Lead[0], 1)
-	}
-	support := ""
-	if len(story.Manifest.Supporting) > 0 {
-		support = globalWireSourceRefLabel(story.Manifest.Supporting[0], 2)
-	}
-	qualifier := ""
-	if len(story.Manifest.Contrary) > 0 {
-		qualifier = globalWireSourceRefLabel(story.Manifest.Contrary[0], 3)
-	}
-	context := ""
-	if len(story.Manifest.Context) > 0 {
-		context = globalWireSourceRefLabel(story.Manifest.Context[0], 4)
-	}
-	sourceSentence := func() string {
-		parts := []string{}
-		if lead != "" {
-			parts = append(parts, "lead evidence from "+lead)
-		}
-		if support != "" {
-			parts = append(parts, "supporting context from "+support)
-		}
-		if qualifier != "" {
-			parts = append(parts, "a qualifying account from "+qualifier)
-		}
-		if context != "" {
-			parts = append(parts, "background from "+context)
-		}
-		if len(parts) == 0 {
-			return ""
-		}
-		return "The current version keeps " + strings.Join(parts, ", ") + " in the article's source neighborhood."
-	}
+	lead := globalWireFirstSourceRef(story.Manifest.Lead, 1)
+	secondLead := globalWireNthSourceRef(story.Manifest.Lead, 1, 2)
+	support := globalWireFirstSourceRef(story.Manifest.Supporting, 3)
+	qualifier := globalWireFirstSourceRef(story.Manifest.Contrary, 5)
+	context := globalWireFirstSourceRef(story.Manifest.Context, 6)
+	styleProjection := strings.TrimSpace(story.Projections["wire-style"])
+	auditProjection := strings.TrimSpace(story.Projections["claim-audit-style"])
+	marketProjection := strings.TrimSpace(story.Projections["market-brief-style"])
+
 	lines := []string{
 		"# " + story.Headline,
 		"",
 		story.Dek,
 		"",
-		story.Projections["wire-style"],
+	}
+	if lead != "" {
+		leadSentence := "The lead signal is still the narrowest one: " + lead + " supports the update without turning it into an all-clear."
+		if secondLead != "" {
+			leadSentence += " " + secondLead + " keeps the operator view attached to the story, so the article is anchored in both public and operational evidence."
+		}
+		lines = append(lines, leadSentence, "")
+	}
+	if styleProjection != "" {
+		lines = append(lines, styleProjection, "")
+	}
+	if support != "" || qualifier != "" {
+		paragraph := "The source neighborhood keeps the story open rather than flattening it into a verdict."
+		if support != "" {
+			paragraph += " " + support + " adds the supporting context that explains why the headline improvement still has limits."
+		}
+		if qualifier != "" {
+			paragraph += " " + qualifier + " is retained as qualifying evidence, not because it outranks the lead source, but because it prevents the platform article from overstating certainty."
+		}
+		lines = append(lines, paragraph, "")
+	}
+	if len(story.Claims) > 0 {
+		lines = append(lines, "The article's working claims are deliberately bounded. "+globalWireClaimsSentence(story.Claims), "")
+	}
+	if auditProjection != "" {
+		lines = append(lines, "A claim-audit reading narrows the public takeaway: "+auditProjection, "")
+	}
+	if marketProjection != "" {
+		lines = append(lines, "The market and second-order read is different from the wire lead. "+marketProjection, "")
+	}
+	if context != "" {
+		lines = append(lines, "Background remains part of the article rather than a hidden appendix. "+context+" supplies the broader context that future revisions can walk when the story updates.", "")
+	}
+	if related := globalWireRelatedVTextSentence(story); related != "" {
+		lines = append(lines, related, "")
+	}
+	lines = append(lines,
+		"This is a living Global Wire VText. Later processor and reconciler updates should revise this article as ordinary VText versions, with corrections treated as progress rather than as a separate product surface.",
 		"",
-	}
-	if sentence := sourceSentence(); sentence != "" {
-		lines = append(lines, sentence, "")
-	}
+	)
 	return strings.Join(lines, "\n")
+}
+
+func globalWireFirstSourceRef(items []types.GlobalWireSourceItem, marker int) string {
+	return globalWireNthSourceRef(items, 0, marker)
+}
+
+func globalWireNthSourceRef(items []types.GlobalWireSourceItem, index, marker int) string {
+	if index < 0 || index >= len(items) {
+		return ""
+	}
+	return globalWireSourceRefLabel(items[index], marker)
+}
+
+func globalWireClaimsSentence(claims []string) string {
+	clean := make([]string, 0, len(claims))
+	for _, claim := range claims {
+		claim = strings.TrimSpace(claim)
+		if claim != "" {
+			clean = append(clean, claim)
+		}
+	}
+	switch len(clean) {
+	case 0:
+		return ""
+	case 1:
+		return clean[0]
+	case 2:
+		return clean[0] + " " + clean[1]
+	default:
+		return clean[0] + " " + clean[1] + " " + clean[2]
+	}
+}
+
+func globalWireRelatedVTextSentence(story types.GlobalWireStory) string {
+	labels := make([]string, 0, len(story.Related))
+	for _, id := range story.Related {
+		if label := globalWireRelatedStoryLabel(id); label != "" {
+			labels = append(labels, label)
+		}
+	}
+	if len(labels) == 0 {
+		return ""
+	}
+	if len(labels) == 1 {
+		return "This VText should be read alongside the related " + labels[0] + " article when reconcilers review cross-story updates."
+	}
+	return "This VText should be read alongside the related " + strings.Join(labels[:len(labels)-1], ", ") + " and " + labels[len(labels)-1] + " articles when reconcilers review cross-story updates."
+}
+
+func globalWireRelatedStoryLabel(id string) string {
+	switch strings.TrimSpace(id) {
+	case "story-supply-resilience":
+		return "port and inland recovery"
+	case "story-energy-grid":
+		return "grid reserve-alert"
+	case "story-city-air":
+		return "city air-quality"
+	case "story-retail-margins":
+		return "retail margin exposure"
+	default:
+		return ""
+	}
 }
 
 func globalWireStyleVTextContent(style types.GlobalWireStyleSource) string {
