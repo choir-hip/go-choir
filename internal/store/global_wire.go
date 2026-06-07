@@ -290,10 +290,10 @@ func (s *Store) ensureDefaultGlobalWireStories(ctx context.Context, ownerID stri
 			{ID: "style-source", Type: "vtext", Value: styleSources[0].SourcePath, Label: styleSources[0].Title},
 			{ID: "storygraph-node", Type: "storygraph", Value: sourceBackedStory.ID, Label: sourceBackedStory.Headline},
 		}, globalWireSourceCitations(sourceBackedStory)...), map[string]any{
-			"created_from":     "global_wire_storygraph_seed",
-			"storygraph_id":    sourceBackedStory.ID,
-			"source_state":     globalWireSeedState,
-			"immutable_notice": "User edits must fork and never mutate this platform story.",
+			"created_from":    "global_wire_storygraph_seed",
+			"storygraph_id":   sourceBackedStory.ID,
+			"source_state":    globalWireSeedState,
+			"source_entities": globalWireSourceEntities(sourceBackedStory),
 		}, now)
 		if err != nil {
 			return err
@@ -325,10 +325,11 @@ func (s *Store) ensureGlobalWireStoryProjections(ctx context.Context, ownerID st
 				{ID: "style-source", Type: "vtext", Value: style.SourcePath, Label: style.Title},
 				{ID: "storygraph-node", Type: "storygraph", Value: story.ID, Label: story.Headline},
 			}, globalWireSourceCitations(story)...), map[string]any{
-				"created_from":  "global_wire_style_projection_seed",
-				"storygraph_id": story.ID,
-				"style_id":      style.ID,
-				"style_doc_id":  style.DocID,
+				"created_from":    "global_wire_style_projection_seed",
+				"storygraph_id":   story.ID,
+				"style_id":        style.ID,
+				"style_doc_id":    style.DocID,
+				"source_entities": globalWireSourceEntities(story),
 			}, now)
 			if err != nil {
 				return nil, err
@@ -385,8 +386,7 @@ func (s *Store) ensureGlobalWireSourceTier(ctx context.Context, ownerID string, 
 			"",
 			"StoryGraph id: " + story.ID,
 			"Source id: " + item.ID,
-			"Evidence tier: " + tier,
-			"Standing: " + item.Standing,
+			"Evidence relation: " + tier,
 			"",
 			"This normalized SourceItem backs a Global Wire source-neighborhood manifest entry. It is seed evidence until replaced by live Source Service ingestion.",
 		}, "\n")
@@ -394,9 +394,8 @@ func (s *Store) ensureGlobalWireSourceTier(ctx context.Context, ownerID string, 
 			"schema":        "choir.global_wire_source_item.v1",
 			"story_id":      story.ID,
 			"source_id":     item.ID,
-			"tier":          tier,
-			"standing":      item.Standing,
-			"source_class":  item.Role,
+			"relation":      tier,
+			"source_medium": item.Role,
 			"source_state":  globalWireSeedState,
 			"source_system": "global_wire",
 		})
@@ -455,6 +454,89 @@ func globalWireSourceCitations(story types.GlobalWireStory) []types.Citation {
 		})
 	}
 	return citations
+}
+
+func globalWireSourceEntities(story types.GlobalWireStory) []map[string]any {
+	all := []types.GlobalWireSourceItem{}
+	all = append(all, story.Manifest.Lead...)
+	all = append(all, story.Manifest.Supporting...)
+	all = append(all, story.Manifest.Contrary...)
+	all = append(all, story.Manifest.Context...)
+	entities := make([]map[string]any, 0, len(all))
+	for _, item := range all {
+		if strings.TrimSpace(item.ContentID) == "" {
+			continue
+		}
+		entityID := globalWireSourceEntityID(item)
+		if entityID == "" {
+			continue
+		}
+		entities = append(entities, map[string]any{
+			"entity_id": entityID,
+			"kind":      "content_item",
+			"label":     item.Title,
+			"target": map[string]any{
+				"target_kind":   "content_item",
+				"content_id":    item.ContentID,
+				"canonical_url": item.CanonicalURL,
+			},
+			"selectors": []map[string]any{{"selector_kind": "whole_resource"}},
+			"display": map[string]any{
+				"inline_mode":       "collapsed_citation",
+				"expanded_mode":     "source_card",
+				"open_surface":      "source",
+				"default_collapsed": true,
+			},
+			"evidence": map[string]any{
+				"state":          "available",
+				"research_state": "represented",
+				"relation":       firstNonEmptyString(item.Role, "context"),
+			},
+			"provenance": map[string]any{
+				"created_by":            "global_wire",
+				"rights_scope":          "private_user_source",
+				"untrusted_source_text": true,
+			},
+		})
+	}
+	return entities
+}
+
+func globalWireSourceEntityID(item types.GlobalWireSourceItem) string {
+	base := firstNonEmptyString(item.ID, item.ContentID, item.Title)
+	if base == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range strings.ToLower(base) {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-' || r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	cleaned := strings.Trim(b.String(), "-_")
+	if cleaned == "" {
+		return ""
+	}
+	return "gw-src-" + cleaned
+}
+
+func globalWireSourceRefLabel(item types.GlobalWireSourceItem, fallback int) string {
+	label := strings.TrimSpace(item.Title)
+	if label == "" {
+		label = fmt.Sprintf("source %d", fallback)
+	}
+	entityID := globalWireSourceEntityID(item)
+	if entityID == "" {
+		return label
+	}
+	return fmt.Sprintf("[%s](source:%s)", label, entityID)
 }
 
 func firstNonEmptyString(values ...string) string {
@@ -529,47 +611,61 @@ func globalWireStoryVTextContent(story types.GlobalWireStory) string {
 	if len(story.StyleSources) > 0 {
 		styleTitle = story.StyleSources[0].Title
 	}
-	sourceLines := func(label string, items []types.GlobalWireSourceItem) []string {
-		lines := make([]string, 0, len(items))
-		for _, item := range items {
-			lines = append(lines, fmt.Sprintf("- %s: %s (%s; %s)", label, item.Title, item.Standing, item.ID))
+	lead := ""
+	if len(story.Manifest.Lead) > 0 {
+		lead = globalWireSourceRefLabel(story.Manifest.Lead[0], 1)
+	}
+	support := ""
+	if len(story.Manifest.Supporting) > 0 {
+		support = globalWireSourceRefLabel(story.Manifest.Supporting[0], 2)
+	}
+	qualifier := ""
+	if len(story.Manifest.Contrary) > 0 {
+		qualifier = globalWireSourceRefLabel(story.Manifest.Contrary[0], 3)
+	}
+	context := ""
+	if len(story.Manifest.Context) > 0 {
+		context = globalWireSourceRefLabel(story.Manifest.Context[0], 4)
+	}
+	sourceSentence := func() string {
+		parts := []string{}
+		if lead != "" {
+			parts = append(parts, "lead evidence from "+lead)
 		}
-		return lines
+		if support != "" {
+			parts = append(parts, "supporting context from "+support)
+		}
+		if qualifier != "" {
+			parts = append(parts, "a qualifying account from "+qualifier)
+		}
+		if context != "" {
+			parts = append(parts, "background from "+context)
+		}
+		if len(parts) == 0 {
+			return ""
+		}
+		return "The current version keeps " + strings.Join(parts, ", ") + " in the article's source neighborhood."
 	}
 	lines := []string{
 		"# " + story.Headline,
 		"",
 		story.Dek,
 		"",
-		"Style source: " + styleTitle,
-		"StoryGraph id: " + story.ID,
-		"State: " + story.ChangeState + "; " + story.Tension,
-		"",
-		"## Projection",
-		"",
 		story.Projections["wire-style"],
 		"",
-		"## Claims",
-		"",
+	}
+	if sentence := sourceSentence(); sentence != "" {
+		lines = append(lines, sentence, "")
 	}
 	for _, claim := range story.Claims {
-		lines = append(lines, "- "+claim)
+		claim = strings.TrimSpace(claim)
+		if claim != "" {
+			lines = append(lines, claim)
+		}
 	}
-	lines = append(lines, "", "## Source Manifest", "")
-	lines = append(lines, sourceLines("lead", story.Manifest.Lead)...)
-	lines = append(lines, sourceLines("supporting", story.Manifest.Supporting)...)
-	lines = append(lines, sourceLines("contrary or qualifying", story.Manifest.Contrary)...)
-	lines = append(lines, sourceLines("ambient context", story.Manifest.Context)...)
-	lines = append(lines, "", "## Related Story VTexts", "")
-	for _, related := range story.Related {
-		lines = append(lines, "- "+related)
+	if styleTitle != "" {
+		lines = append(lines, "", "Editorial style source: "+styleTitle+".")
 	}
-	lines = append(lines,
-		"",
-		"## Non-oracle note",
-		"",
-		"This story is a source-grounded VText projection. User edits create user-owned versions and do not mutate the platform story.",
-	)
 	return strings.Join(lines, "\n")
 }
 
@@ -600,26 +696,13 @@ func globalWireProjectionVTextContent(story types.GlobalWireStory, style types.G
 		"",
 		story.Dek,
 		"",
-		"Style source: " + style.Title,
-		"StoryGraph id: " + story.ID,
-		"Projection relation: StoryGraph + Style.vtext + audience/task context -> Story VText",
-		"",
-		"## Projection",
-		"",
 		projection,
 		"",
-		"## Claims Preserved",
-		"",
 	}
-	for _, claim := range story.Claims {
-		lines = append(lines, "- "+claim)
+	if len(story.Manifest.Lead) > 0 {
+		lines = append(lines, "The lead source for this version is "+globalWireSourceRefLabel(story.Manifest.Lead[0], 1)+".")
 	}
-	lines = append(lines,
-		"",
-		"## Evidence Invariant",
-		"",
-		"This projection may change framing and salience, but it must not invent evidence, hide contrary evidence, or mutate the platform StoryGraph.",
-	)
+	lines = append(lines, "", "Editorial style source: "+style.Title+".")
 	return strings.Join(lines, "\n")
 }
 

@@ -511,9 +511,9 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 	source := "durable-storygraph"
 	if sourceMaxxStories, err := h.sourceMaxxVTextStories(r.Context(), styleSources, 12); err == nil && len(sourceMaxxStories) > 0 {
 		stories = prependGlobalWireStories(sourceMaxxStories, stories)
-		source = "durable-storygraph+source-maxx-vtexts"
+		source = "durable-storygraph+source-network-vtexts"
 	} else if err != nil {
-		log.Printf("global wire: source maxx vtext index unavailable: %v", err)
+		log.Printf("global wire: source-network vtext index unavailable: %v", err)
 	}
 	writeAPIJSON(w, http.StatusOK, globalWireStoriesResponse{
 		Stories:      stories,
@@ -579,8 +579,8 @@ func sourceMaxxVTextStoryFromCurrentRevision(doc types.Document, rev types.Revis
 	manifest := sourceMaxxManifestFromHandles(sourceIDs, headline)
 	if len(manifest.Lead) == 0 {
 		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
-			ID:       "source-maxx-cycle:" + metadataString(meta, "source_maxx_cycle_id"),
-			Title:    "SourceMaxx cycle " + metadataString(meta, "source_maxx_cycle_id"),
+			ID:       "source-network-cycle:" + metadataString(meta, "source_maxx_cycle_id"),
+			Title:    "Source network cycle " + metadataString(meta, "source_maxx_cycle_id"),
 			Standing: "source firehose cycle",
 			Role:     "context",
 		})
@@ -590,13 +590,13 @@ func sourceMaxxVTextStoryFromCurrentRevision(doc types.Document, rev types.Revis
 		projections["wire-style"] = projection
 	}
 	return types.GlobalWireStory{
-		ID:                  "source-maxx-vtext-" + doc.DocID,
+		ID:                  "source-network-vtext-" + doc.DocID,
 		OwnerID:             doc.OwnerID,
 		Headline:            headline,
 		Dek:                 dek,
 		Freshness:           sourceMaxxFreshness(doc.UpdatedAt),
 		Prominence:          90,
-		Tension:             "source-maxx article",
+		Tension:             "source-network article",
 		ChangeState:         "vtext published",
 		NodeTone:            "live",
 		Related:             []string{},
@@ -607,14 +607,15 @@ func sourceMaxxVTextStoryFromCurrentRevision(doc types.Document, rev types.Revis
 		StyleSources:        styleSources,
 		StoryVTextDoc:       doc.DocID,
 		VTextContent:        content,
-		SourceState:         "source-maxx-vtext-index",
+		SourceState:         "source-network-vtext-index",
 		CreatedAt:           doc.CreatedAt,
 		UpdatedAt:           doc.UpdatedAt,
 	}, true
 }
 
 func sourceMaxxContentLooksLikeSeed(content string) bool {
-	return strings.Contains(content, "## SourceMaxx Brief") ||
+	return strings.Contains(content, "## Source Brief") ||
+		strings.Contains(content, "## SourceMaxx Brief") ||
 		strings.Contains(content, "## Evidence Gathering") ||
 		strings.Contains(content, "## Working Revision")
 }
@@ -660,7 +661,7 @@ func sourceMaxxManifestFromHandles(sourceIDs []string, headline string) types.Gl
 	for i, id := range sourceIDs {
 		item := types.GlobalWireSourceItem{
 			ID:       id,
-			Title:    "SourceMaxx source item " + id,
+			Title:    "Source network source item " + id,
 			Standing: "source-service handle",
 			Role:     "lead",
 		}
@@ -673,8 +674,8 @@ func sourceMaxxManifestFromHandles(sourceIDs []string, headline string) types.Gl
 	}
 	if len(manifest.Lead) == 0 && strings.TrimSpace(headline) != "" {
 		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
-			ID:       "source-maxx-vtext:" + headline,
-			Title:    "SourceMaxx VText article head",
+			ID:       "source-network-vtext:" + headline,
+			Title:    "Global Wire VText article head",
 			Standing: "platform VText current revision",
 			Role:     "context",
 		})
@@ -699,14 +700,14 @@ func sourceMaxxArticleHeadline(title, content string) string {
 			return truncateRunes(line, 120)
 		}
 	}
-	return "SourceMaxx article"
+	return "Global Wire article"
 }
 
 func sourceMaxxArticleDek(content string) string {
 	for _, paragraph := range sourceMaxxArticleParagraphs(content) {
 		return truncateRunes(paragraph, 220)
 	}
-	return "SourceMaxx VText article with source and style provenance on its current revision."
+	return "Global Wire VText article with source and style provenance on its current revision."
 }
 
 func sourceMaxxArticleProjection(content string) string {
@@ -751,11 +752,11 @@ func sourceMaxxArticleParagraphs(content string) []string {
 
 func sourceMaxxArticleClaims(content, styleTitle string, meta map[string]any) []string {
 	claims := []string{
-		"Current head is a normal VText article revision owned by the SourceMaxx platform agent.",
+		"Current head is a normal VText article revision owned by the Global Wire platform agent.",
 		"Style source: " + firstNonEmptyString(styleTitle, "Style.vtext"),
 	}
 	if cycleID := metadataString(meta, "source_maxx_cycle_id"); cycleID != "" {
-		claims = append(claims, "SourceMaxx cycle: "+cycleID)
+		claims = append(claims, "Source network cycle: "+cycleID)
 	}
 	if rationale := metadataString(meta, "selected_style_rationale"); rationale != "" {
 		claims = append(claims, "Style rationale: "+truncateRunes(rationale, 180))
@@ -769,7 +770,7 @@ func sourceMaxxArticleClaims(content, styleTitle string, meta map[string]any) []
 
 func sourceMaxxFreshness(updatedAt time.Time) string {
 	if updatedAt.IsZero() {
-		return "source-maxx current"
+		return "source-network current"
 	}
 	delta := time.Since(updatedAt)
 	if delta < 0 {
@@ -3394,39 +3395,22 @@ func globalWirePlatformStoryRevisionContent(story types.GlobalWireStory, candida
 		"",
 		story.Dek,
 		"",
-		"StoryGraph id: " + story.ID,
-		"Platform review state: " + story.ChangeState,
-		"Tension: " + story.Tension,
-		"Prominence: " + fmt.Sprintf("%d", story.Prominence),
-		"Candidate kind: " + firstNonEmptyString(candidate.CandidateKind, "source-manifest-update"),
-		"Graph candidate id: " + candidate.ID,
-		"Promoted source content id: " + item.ContentID,
-		"",
-		"## Platform Review Update",
+		"This version incorporates a platform review update from " + firstNonEmptyString(item.Title, "a reviewed source") + ".",
 		"",
 	}
 	for _, change := range appliedChanges {
-		lines = append(lines, "- "+change)
+		change = strings.TrimSpace(change)
+		if change != "" {
+			lines = append(lines, change)
+		}
 	}
-	lines = append(lines, "", "## Claims", "")
+	lines = append(lines, "")
 	for _, claim := range story.Claims {
-		lines = append(lines, "- "+claim)
+		claim = strings.TrimSpace(claim)
+		if claim != "" {
+			lines = append(lines, claim)
+		}
 	}
-	lines = append(lines, "", "## Source Manifest", "")
-	lines = append(lines, globalWireRuntimeSourceLines("lead", story.Manifest.Lead)...)
-	lines = append(lines, globalWireRuntimeSourceLines("supporting", story.Manifest.Supporting)...)
-	lines = append(lines, globalWireRuntimeSourceLines("contrary or qualifying", story.Manifest.Contrary)...)
-	lines = append(lines, globalWireRuntimeSourceLines("ambient context", story.Manifest.Context)...)
-	lines = append(lines, "", "## Related Story VTexts", "")
-	for _, related := range story.Related {
-		lines = append(lines, "- "+related)
-	}
-	lines = append(lines,
-		"",
-		"## Ownership Boundary",
-		"",
-		"This PlatformStory VText revision was created by explicit platform review. User-owned forks, edits, and contributions remain separate and are not mutated by this revision.",
-	)
 	return strings.Join(lines, "\n")
 }
 

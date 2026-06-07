@@ -66,7 +66,7 @@ func TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts(t *testing.T) {
 	}
 }
 
-func TestHandleGlobalWireStoriesIndexesSourceMaxxVTextHeads(t *testing.T) {
+func TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -118,27 +118,27 @@ func TestHandleGlobalWireStoriesIndexesSourceMaxxVTextHeads(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "durable-storygraph+source-maxx-vtexts" {
-		t.Fatalf("source = %q, want source maxx vtext index", resp.Source)
+	if resp.Source != "durable-storygraph+source-network-vtexts" {
+		t.Fatalf("source = %q, want source network vtext index", resp.Source)
 	}
 	if len(resp.Stories) < 4 {
 		t.Fatalf("stories length = %d, want source maxx story plus seeded stories", len(resp.Stories))
 	}
 	story := resp.Stories[0]
-	if story.ID != "source-maxx-vtext-"+doc.DocID ||
+	if story.ID != "source-network-vtext-"+doc.DocID ||
 		story.OwnerID != "global-wire-platform" ||
 		story.StoryVTextDoc != doc.DocID ||
 		story.VTextContent == "" {
-		t.Fatalf("first story is not the indexed SourceMaxx VText: %+v", story)
+		t.Fatalf("first story is not the indexed source-network VText: %+v", story)
 	}
 	if story.Headline != "Madrid dispatch" || !strings.Contains(story.Projections["wire-style"], "MADRID -- Pope Leo XIV") {
-		t.Fatalf("indexed SourceMaxx story did not expose article head: %+v", story)
+		t.Fatalf("indexed source-network story did not expose article head: %+v", story)
 	}
 	if len(story.Manifest.Lead) != 2 || story.Manifest.Lead[0].ID != "srcitem_live_1" {
-		t.Fatalf("indexed SourceMaxx story missing source handles: %+v", story.Manifest)
+		t.Fatalf("indexed source-network story missing source handles: %+v", story.Manifest)
 	}
 	if !strings.Contains(strings.Join(story.Claims, "\n"), "Style.vtext: Global Wire") {
-		t.Fatalf("indexed SourceMaxx story missing style provenance claims: %+v", story.Claims)
+		t.Fatalf("indexed source-network story missing style provenance claims: %+v", story.Claims)
 	}
 }
 

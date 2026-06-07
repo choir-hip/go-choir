@@ -116,7 +116,7 @@ export const APP_REGISTRY = [
     id: 'global-wire',
     name: 'Global Wire',
     icon: '🗞️',
-    description: 'SourceMaxx VText newspaper',
+    description: 'Living VText newspaper',
     component: () => import('../GlobalWireApp.svelte'),
     launcher: { desk: true, desktopIcon: false, mobileSwitcher: true, order: 65 },
     window: { singleton: true, heavy: true, desktop: { width: 1180, height: 760, minWidth: 820, minHeight: 560 }, compact: compactDefault },

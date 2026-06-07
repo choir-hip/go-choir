@@ -414,6 +414,9 @@
     if (appContext.sourceContentId) metadata.source_content_id = appContext.sourceContentId;
     if (appContext.appHint) metadata.app_hint = appContext.appHint;
     if (appContext.createdFrom) metadata.created_from = appContext.createdFrom;
+    if (Array.isArray(appContext.sourceEntities) && appContext.sourceEntities.length) {
+      metadata.source_entities = appContext.sourceEntities;
+    }
     if (publishedBundle?.publication?.id) {
       metadata.source_publication_id = publishedBundle.publication.id;
       metadata.source_publication_version_id = publishedBundle.version?.id || '';

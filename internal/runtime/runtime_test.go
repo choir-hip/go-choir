@@ -574,7 +574,7 @@ func TestSystemPromptForSourceMaxxProfilesLoadsSharedHarnessPrompts(t *testing.T
 	}
 }
 
-func TestSystemPromptForSourceMaxxVTextRunsRequiresArticleHead(t *testing.T) {
+func TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead(t *testing.T) {
 	rt := testPromptRuntime(t)
 
 	sourceMaxxRec := &types.RunRecord{
@@ -595,20 +595,21 @@ func TestSystemPromptForSourceMaxxVTextRunsRequiresArticleHead(t *testing.T) {
 	}
 	prompt, err := rt.systemPromptForRun(sourceMaxxRec)
 	if err != nil {
-		t.Fatalf("systemPromptForRun SourceMaxx VText: %v", err)
+		t.Fatalf("systemPromptForRun Global Wire VText: %v", err)
 	}
 	for _, want := range []string{
+		"For Global Wire article revision runs",
 		"processor or reconciler handoff is newsroom source context",
 		"first edit_vtext call must write a publishable article",
-		"not a SourceMaxx Brief, Working Revision, Evidence Gathering note, or placeholder",
+		"not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder",
 		"do not end the run with the document head still at a brief or status checkpoint",
 	} {
 		if !strings.Contains(prompt, want) {
-			t.Fatalf("SourceMaxx VText prompt missing %q in %q", want, prompt)
+			t.Fatalf("Global Wire VText prompt missing %q in %q", want, prompt)
 		}
 	}
 	if strings.Contains(prompt, "first call edit_vtext with a short owner-readable working response") {
-		t.Fatalf("SourceMaxx VText prompt should not use generic working-response rule: %q", prompt)
+		t.Fatalf("Global Wire VText prompt should not use generic working-response rule: %q", prompt)
 	}
 
 	ordinaryRec := &types.RunRecord{

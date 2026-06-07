@@ -537,19 +537,26 @@
 
   @media (max-width: 768px) {
     .doc-toolbar {
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 0.42rem;
-      padding: 0.46rem 0.55rem;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: stretch;
+      gap: 0.38rem;
+      max-height: none;
+      padding: 0.46rem 0.55rem 0.56rem;
     }
 
     .version-controls,
     .doc-actions {
       gap: 0.32rem;
+      flex-wrap: wrap;
+      justify-content: flex-start;
     }
 
     .doc-state {
-      text-align: center;
+      order: 3;
+      text-align: left;
       font-size: 0.68rem;
+      white-space: normal;
+      line-height: 1.2;
     }
 
     .nav-version {
@@ -560,7 +567,8 @@
     }
 
     .draft-line {
-      max-width: 6.8rem;
+      width: auto;
+      max-width: min(8.8rem, 46vw);
       height: 1.78rem;
       padding: 0 0.52rem;
       font-size: 0.68rem;
@@ -578,8 +586,13 @@
     }
 
     .secondary-action {
+      min-width: auto;
       padding: 0.5rem 0.64rem;
       font-size: 0.72rem;
+    }
+
+    .publish-action {
+      min-width: auto;
     }
 
     .publish-menu {

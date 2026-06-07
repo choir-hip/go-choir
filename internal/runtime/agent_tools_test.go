@@ -2127,7 +2127,7 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	if err != nil {
 		t.Fatalf("get processor-spawned seed revision: %v", err)
 	}
-	if seedRev.AuthorKind != types.AuthorAppAgent || !strings.Contains(seedRev.Content, "SourceMaxx Brief") {
+	if seedRev.AuthorKind != types.AuthorAppAgent || !strings.Contains(seedRev.Content, "Source Brief") {
 		t.Fatalf("processor seed revision = author %q content %q", seedRev.AuthorKind, seedRev.Content)
 	}
 	if !strings.Contains(seedRev.Content, "Style.vtext: Market Brief") {
@@ -2151,7 +2151,7 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 		t.Fatalf("processor vtext run missing Style.vtext context: metadata=%+v prompt=%q", vtextRun.Metadata, vtextRun.Prompt)
 	}
 	if !strings.Contains(vtextRun.Prompt, "must be a publishable article or correction/update draft") ||
-		!strings.Contains(vtextRun.Prompt, "not a SourceMaxx Brief, Working Revision, Evidence Gathering note") {
+		!strings.Contains(vtextRun.Prompt, "not a Source Brief, Working Revision, Evidence Gathering note") {
 		t.Fatalf("processor vtext run missing article-head completion contract: %q", vtextRun.Prompt)
 	}
 	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{

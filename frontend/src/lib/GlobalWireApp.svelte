@@ -146,7 +146,7 @@
   let styleSources = previewStyleSources;
   let selectedStoryId = stories[0].id;
   let selectedStyleId = styleSources[0].id;
-  let dataSource = 'preview-sourcemaxx';
+  let dataSource = 'preview-source-network';
   let loadError = '';
   let lastLoadKey = '';
   let sourceSearchQuery = '';
@@ -188,7 +188,7 @@
     if (!authenticated) {
       stories = previewStories;
       styleSources = previewStyleSources;
-      dataSource = 'preview-sourcemaxx';
+      dataSource = 'preview-source-network';
       fetchCycles = [];
       sourceRegistryEntries = [];
       sourceSchedulerRuns = [];
@@ -203,7 +203,7 @@
         styleSources = Array.isArray(payload.style_sources) && payload.style_sources.length
           ? payload.style_sources
           : payload.stories[0].style_sources || previewStyleSources;
-        dataSource = payload.source || 'durable-sourcemaxx';
+        dataSource = (payload.source || 'durable-source-network').replaceAll('source-maxx', 'source-network').replaceAll('sourcemaxx', 'source-network');
         if (!stories.some((story) => story.id === selectedStoryId)) selectedStoryId = stories[0].id;
         if (!styleSources.some((style) => style.id === selectedStyleId)) selectedStyleId = styleSources[0].id;
         await loadFetchCycles(selectedStoryId);
@@ -212,7 +212,7 @@
       loadError = error?.message || 'Global Wire load failed';
       stories = previewStories;
       styleSources = previewStyleSources;
-      dataSource = 'preview-sourcemaxx';
+      dataSource = 'preview-source-network';
     }
   }
 
@@ -274,45 +274,91 @@
     });
   }
 
-  function sourceLines(kind, items = []) {
-    return items.map((item) => `- ${kind}: ${item.title} (${item.standing}; ${item.id})`).join('\n');
+  function sourceEntityId(item = {}) {
+    const base = String(item.id || item.content_id || item.title || '').toLowerCase();
+    const cleaned = base.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+    return cleaned ? `gw-src-${cleaned}` : '';
+  }
+
+  function sourceRef(item = {}, fallback = 'source') {
+    const label = item.title || fallback;
+    if (!item.content_id) return label;
+    const entityId = sourceEntityId(item);
+    return entityId ? `[${label}](source:${entityId})` : label;
+  }
+
+  function evidenceLines(kind, items = []) {
+    return items.map((item) => `- ${kind}: ${item.title} (${item.id || item.content_id || 'source handle'})`).join('\n');
+  }
+
+  function manifestItems(story = selectedStory) {
+    return [
+      ...(story.manifest?.lead || []),
+      ...(story.manifest?.supporting || []),
+      ...(story.manifest?.contrary || []),
+      ...(story.manifest?.context || []),
+    ];
+  }
+
+  function storySourceEntities(story = selectedStory) {
+    return manifestItems(story)
+      .map((item) => {
+        const entityId = sourceEntityId(item);
+        if (!entityId || !item.content_id) return null;
+        return {
+          entity_id: entityId,
+          kind: 'content_item',
+          label: item.title,
+          target: {
+            target_kind: 'content_item',
+            content_id: item.content_id,
+            canonical_url: item.canonical_url || '',
+          },
+          selectors: [{ selector_kind: 'whole_resource' }],
+          display: {
+            inline_mode: 'collapsed_citation',
+            expanded_mode: 'source_card',
+            open_surface: 'source',
+            default_collapsed: true,
+          },
+          evidence: {
+            state: 'available',
+            research_state: 'represented',
+            relation: item.role || 'context',
+          },
+          provenance: {
+            created_by: 'global_wire',
+            rights_scope: 'private_user_source',
+            untrusted_source_text: true,
+          },
+        };
+      })
+      .filter(Boolean);
   }
 
   function storyVTextContent(story = selectedStory, style = selectedStyle) {
+    const lead = story.manifest?.lead?.[0];
+    const supporting = story.manifest?.supporting?.[0];
+    const qualifying = story.manifest?.contrary?.[0];
+    const context = story.manifest?.context?.[0];
+    const sourceSentence = [
+      lead ? `lead evidence from ${sourceRef(lead, 'lead source')}` : '',
+      supporting ? `supporting context from ${sourceRef(supporting, 'supporting source')}` : '',
+      qualifying ? `a qualifying account from ${sourceRef(qualifying, 'qualifying source')}` : '',
+      context ? `background from ${sourceRef(context, 'context source')}` : '',
+    ].filter(Boolean).join(', ');
     return [
       `# ${story.headline}`,
       '',
       story.dek,
       '',
-      `Style source: ${style.title}`,
-      `Story id: ${story.id}`,
-      `State: ${story.changeState}; ${story.tension}`,
-      '',
-      '## Projection',
-      '',
       story.projections[style.id] || story.projections['wire-style'],
       '',
-      '## Claims',
+      sourceSentence ? `The current version keeps ${sourceSentence} in view.` : '',
       '',
-      ...story.claims.map((claim) => `- ${claim}`),
+      ...story.claims.map((claim) => String(claim || '').trim()).filter(Boolean),
       '',
-      '## Source Manifest',
-      '',
-      sourceLines('lead', story.manifest.lead),
-      sourceLines('supporting', story.manifest.supporting),
-      sourceLines('contrary or qualifying', story.manifest.contrary),
-      sourceLines('ambient context', story.manifest.context),
-      '',
-      '## Related VTexts',
-      '',
-      ...story.related.map((id) => {
-        const related = stories.find((item) => item.id === id);
-        return `- ${related?.headline || id} (${id})`;
-      }),
-      '',
-      '## Non-oracle note',
-      '',
-      'This story is a source-grounded VText projection. User edits create user-owned versions and do not mutate the platform story.',
+      `Editorial style source: ${style.title}.`,
     ].join('\n');
   }
 
@@ -337,7 +383,7 @@
     ].join('\n');
   }
 
-  function launchVText({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = true }) {
+  function launchVText({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = true, sourceEntities = [] }) {
     dispatch('launchapp', {
       appId: 'vtext',
       appName: 'VText',
@@ -349,6 +395,7 @@
         createInitialVersion,
         createdFrom,
         sourcePath,
+        sourceEntities,
         appHint: 'global-wire',
         allowMultiple: true,
       },
@@ -367,17 +414,8 @@
       createdFrom: 'global_wire_story_projection',
       sourcePath: `global-wire/${story.id}.story.vtext`,
       docId: openDocId,
-      createInitialVersion: !openDocId,
-    });
-  }
-
-  function forkStory(story = selectedStory) {
-    selectedStoryId = story.id;
-    launchVText({
-      title: `My version of ${story.headline}`,
-      content: `${storyVTextContent(story, selectedStyle)}\n\n## My Edit\n\n`,
-      createdFrom: 'global_wire_user_story_fork',
-      sourcePath: `user-forks/${story.id}.story.vtext`,
+      createInitialVersion: !openDocId && !story.owner_id,
+      sourceEntities: storySourceEntities(story),
     });
   }
 
@@ -408,11 +446,11 @@
       'Claims:',
       ...selectedStory.claims.map((claim) => `- ${claim}`),
       '',
-      'Source Manifest:',
-      sourceLines('lead', selectedStory.manifest.lead),
-      sourceLines('supporting', selectedStory.manifest.supporting),
-      sourceLines('contrary or qualifying', selectedStory.manifest.contrary),
-      sourceLines('ambient context', selectedStory.manifest.context),
+      'Source evidence handles:',
+      evidenceLines('lead', selectedStory.manifest.lead),
+      evidenceLines('supporting', selectedStory.manifest.supporting),
+      evidenceLines('contrary or qualifying', selectedStory.manifest.contrary),
+      evidenceLines('ambient context', selectedStory.manifest.context),
       '',
       'Guardrail: do not mutate the platform VText, do not invent facts, and make provenance visible.',
     ].join('\n');
@@ -488,7 +526,7 @@
 
   async function runFetchCycle(schedulerMode = false) {
     if (!authenticated) {
-      fetchCycleStatus = 'Sign in to run a bounded SourceMaxx fetch cycle.';
+      fetchCycleStatus = 'Sign in to run a bounded source fetch cycle.';
       return;
     }
     fetchCycleBusy = true;
@@ -502,7 +540,7 @@
           story_ids: stories.slice(0, 3).map((story) => story.id),
           max_stories: 3,
           max_results: 8,
-          trigger: schedulerMode ? 'global-wire-sourcemaxx-scheduled-cycle' : 'global-wire-sourcemaxx-manual-cycle',
+          trigger: schedulerMode ? 'global-wire-source-network-scheduled-cycle' : 'global-wire-source-network-manual-cycle',
           scheduler_mode: schedulerMode,
           cadence_seconds: schedulerMode ? 900 : undefined,
         }),
@@ -568,13 +606,13 @@
 <section class="global-wire" data-global-wire-app data-global-wire-data-source={dataSource}>
   <header class="wire-masthead">
     <div>
-      <p class="kicker">SourceMaxx newsroom</p>
+      <p class="kicker">Living source network</p>
       <h2>Global Wire</h2>
     </div>
     <div class="wire-state" data-global-wire-state>
       <span>{ownerLabel}</span>
       <strong>{sourceItemCount} sources</strong>
-      <small>{sourceClassCount} source classes · {stories.length} article VTexts · {dataSource}</small>
+      <small>{sourceClassCount} source groups · {stories.length} article VTexts · {dataSource}</small>
     </div>
   </header>
 
@@ -602,7 +640,6 @@
           >
             <div class="article-tools">
               <button type="button" aria-label="Open article VText" title="Open article VText" on:click={() => openStoryVText(story, style)} data-global-wire-open-vtext>V</button>
-              <button type="button" aria-label="Fork article VText" title="Fork article VText" on:click={() => forkStory(story)} data-global-wire-fork-story>+</button>
             </div>
             <p class="article-meta">{story.changeState} · {story.freshness} · {story.tension}</p>
             <h1>{story.headline}</h1>
@@ -668,9 +705,6 @@
           {#each sourceRegistryEntries.slice(0, 3) as entry}
             <p data-global-wire-source-registry-entry>
               {entry.source_scope} · {entry.status} · {entry.query}
-              {#if entry.source_standing_rationale}
-                <span data-global-wire-source-standing-policy>{entry.source_standing_rationale}</span>
-              {/if}
               {#if entry.cadence_seconds}
                 <span data-global-wire-source-schedule-cadence>cadence {entry.cadence_seconds}s</span>
               {/if}
@@ -911,9 +945,9 @@
   }
 
   .wire-article h1 {
-    font-family: var(--choir-font-display);
-    font-size: 2.05rem;
-    line-height: 1.02;
+    font-family: Georgia, 'Times New Roman', ui-serif, serif;
+    font-size: clamp(1.55rem, 2.2vw, 2.05rem);
+    line-height: 1.08;
     margin-bottom: 12px;
   }
 
@@ -1097,6 +1131,18 @@
     color: var(--choir-accent);
   }
 
+  @media (max-width: 1100px) {
+    .wire-paper {
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+      gap: 28px;
+    }
+
+    .article-columns {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: 28px;
+    }
+  }
+
   @media (max-width: 820px) {
     .global-wire {
       padding: 18px;
@@ -1141,8 +1187,8 @@
     }
 
     .wire-article h1 {
-      font-size: 1.55rem;
-      line-height: 1.06;
+      font-size: 1.45rem;
+      line-height: 1.1;
     }
 
     .wire-disclosure {

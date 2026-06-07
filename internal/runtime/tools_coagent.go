@@ -379,7 +379,7 @@ func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRe
 	b.WriteString("# ")
 	b.WriteString(strings.TrimSuffix(coagentVTextTitle(req), ".vtext"))
 	b.WriteString("\n\n")
-	b.WriteString("## SourceMaxx Brief\n\n")
+	b.WriteString("## Source Brief\n\n")
 	if initial := strings.TrimSpace(req.InitialContent); initial != "" {
 		b.WriteString(initial)
 	} else {
@@ -407,11 +407,11 @@ func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRe
 	b.WriteString("\n- Parent loop: ")
 	b.WriteString(strings.TrimSpace(parentRec.RunID))
 	if cycleID := metadataString(parentRec.Metadata, "source_maxx_cycle_id"); cycleID != "" {
-		b.WriteString("\n- SourceMaxx cycle: ")
+		b.WriteString("\n- Source network cycle: ")
 		b.WriteString(cycleID)
 	}
 	if requestID := metadataString(parentRec.Metadata, "source_maxx_request_id"); requestID != "" {
-		b.WriteString("\n- SourceMaxx request: ")
+		b.WriteString("\n- Source network request: ")
 		b.WriteString(requestID)
 	}
 	b.WriteString("\n")
@@ -450,7 +450,7 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 	b.WriteString(styleRationale)
 	b.WriteString("\n\nHard requirements:")
 	b.WriteString("\n- Use edit_vtext to write the canonical VText revision; do not leave the article only in the run result.")
-	b.WriteString("\n- The current document head after this run must be a publishable article or correction/update draft, not a SourceMaxx Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
+	b.WriteString("\n- The current document head after this run must be a publishable article or correction/update draft, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
 	b.WriteString("\n- Preserve source handles and cite source entities or source refs when available.")
 	b.WriteString("\n- Include a compact Style.vtext source note in the VText naming the selected Style.vtext source(s) above and the editorial fit; do not claim every style was run.")
@@ -462,7 +462,7 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 	b.WriteString("\nParent loop: ")
 	b.WriteString(strings.TrimSpace(parentRec.RunID))
 	if cycleID := metadataString(parentRec.Metadata, "source_maxx_cycle_id"); cycleID != "" {
-		b.WriteString("\nSourceMaxx cycle: ")
+		b.WriteString("\nSource network cycle: ")
 		b.WriteString(cycleID)
 	}
 	return b.String()
