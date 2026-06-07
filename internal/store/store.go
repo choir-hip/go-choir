@@ -510,6 +510,30 @@ CREATE TABLE IF NOT EXISTS global_wire_autoradio_scripts (
 	KEY idx_global_wire_autoradio_scripts_artifact (owner_id, artifact_id, updated_at)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_publication_delivery_exports (
+	owner_id            VARCHAR(255) NOT NULL,
+	export_id           VARCHAR(255) NOT NULL,
+	delivery_id         VARCHAR(255) NOT NULL,
+	artifact_id         VARCHAR(255) NOT NULL,
+	script_id           VARCHAR(255) NOT NULL DEFAULT '',
+	story_id            VARCHAR(255) NOT NULL,
+	source_content_id   VARCHAR(255) NOT NULL DEFAULT '',
+	format              VARCHAR(255) NOT NULL DEFAULT '',
+	status              VARCHAR(255) NOT NULL DEFAULT '',
+	title               LONGTEXT NOT NULL DEFAULT '',
+	export_body         LONGTEXT NOT NULL DEFAULT '',
+	citation_count      INT NOT NULL DEFAULT 0,
+	rollback_count      INT NOT NULL DEFAULT 0,
+	citation_refs_json  LONGTEXT NOT NULL DEFAULT '[]',
+	rollback_refs_json  LONGTEXT NOT NULL DEFAULT '[]',
+	created_at          DATETIME NOT NULL,
+	updated_at          DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, export_id),
+	KEY idx_global_wire_publication_delivery_exports_story (owner_id, story_id, updated_at),
+	KEY idx_global_wire_publication_delivery_exports_delivery (owner_id, delivery_id, updated_at),
+	KEY idx_global_wire_publication_delivery_exports_artifact (owner_id, artifact_id, updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivery_id          VARCHAR(255) PRIMARY KEY,
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',

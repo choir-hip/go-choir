@@ -99,22 +99,23 @@ type globalWireFetchCycleResponse struct {
 }
 
 type globalWireReconciliationResponse struct {
-	Contributions         []types.GlobalWireContribution             `json:"contributions"`
-	SourceItems           map[string]types.ContentItem               `json:"source_items,omitempty"`
-	Decisions             []types.GlobalWireReconciliationDecision   `json:"decisions"`
-	Candidates            []types.GlobalWireGraphUpdateCandidate     `json:"candidates"`
-	Promotions            []types.GlobalWireGraphPromotionDecision   `json:"promotions"`
-	Refreshes             []types.GlobalWireSourceRefreshRun         `json:"refreshes"`
-	ClaimRecords          []types.GlobalWireClaimRecord              `json:"claim_records"`
-	ResearchTasks         []types.GlobalWireResearchTask             `json:"research_tasks"`
-	ExtractionArtifacts   []types.GlobalWireExtractionArtifact       `json:"extraction_artifacts"`
-	ResearchEvidence      []types.GlobalWireResearchTaskEvidence     `json:"research_evidence"`
-	ResearchDecisions     []types.GlobalWireResearchEvidenceDecision `json:"research_decisions"`
-	PublicationUpdates    []types.GlobalWirePublicationUpdate        `json:"publication_updates"`
-	PublicationArtifacts  []types.GlobalWirePublicationArtifact      `json:"publication_artifacts"`
-	PublicationDeliveries []types.GlobalWirePublicationDelivery      `json:"publication_deliveries"`
-	AutoradioScripts      []types.GlobalWireAutoradioScript          `json:"autoradio_scripts"`
-	ProjectionReviews     []types.GlobalWireProjectionReview         `json:"projection_reviews"`
+	Contributions         []types.GlobalWireContribution              `json:"contributions"`
+	SourceItems           map[string]types.ContentItem                `json:"source_items,omitempty"`
+	Decisions             []types.GlobalWireReconciliationDecision    `json:"decisions"`
+	Candidates            []types.GlobalWireGraphUpdateCandidate      `json:"candidates"`
+	Promotions            []types.GlobalWireGraphPromotionDecision    `json:"promotions"`
+	Refreshes             []types.GlobalWireSourceRefreshRun          `json:"refreshes"`
+	ClaimRecords          []types.GlobalWireClaimRecord               `json:"claim_records"`
+	ResearchTasks         []types.GlobalWireResearchTask              `json:"research_tasks"`
+	ExtractionArtifacts   []types.GlobalWireExtractionArtifact        `json:"extraction_artifacts"`
+	ResearchEvidence      []types.GlobalWireResearchTaskEvidence      `json:"research_evidence"`
+	ResearchDecisions     []types.GlobalWireResearchEvidenceDecision  `json:"research_decisions"`
+	PublicationUpdates    []types.GlobalWirePublicationUpdate         `json:"publication_updates"`
+	PublicationArtifacts  []types.GlobalWirePublicationArtifact       `json:"publication_artifacts"`
+	PublicationDeliveries []types.GlobalWirePublicationDelivery       `json:"publication_deliveries"`
+	AutoradioScripts      []types.GlobalWireAutoradioScript           `json:"autoradio_scripts"`
+	DeliveryExports       []types.GlobalWirePublicationDeliveryExport `json:"delivery_exports"`
+	ProjectionReviews     []types.GlobalWireProjectionReview          `json:"projection_reviews"`
 }
 
 type globalWireResearchTaskLifecycleRequest struct {
@@ -225,6 +226,20 @@ type globalWireAutoradioScriptResponse struct {
 	Artifact   types.GlobalWirePublicationArtifact `json:"artifact"`
 	Story      types.GlobalWireStory               `json:"story"`
 	SourceItem *types.ContentItem                  `json:"source_item,omitempty"`
+}
+
+type globalWirePublicationDeliveryExportRequest struct {
+	DeliveryID string `json:"delivery_id"`
+	Format     string `json:"format,omitempty"`
+}
+
+type globalWirePublicationDeliveryExportResponse struct {
+	Export     types.GlobalWirePublicationDeliveryExport `json:"export"`
+	Delivery   types.GlobalWirePublicationDelivery       `json:"delivery"`
+	Artifact   types.GlobalWirePublicationArtifact       `json:"artifact"`
+	Story      types.GlobalWireStory                     `json:"story"`
+	Script     *types.GlobalWireAutoradioScript          `json:"script,omitempty"`
+	SourceItem *types.ContentItem                        `json:"source_item,omitempty"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -854,6 +869,11 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list autoradio scripts"})
 			return
 		}
+		deliveryExports, err := h.rt.Store().ListGlobalWirePublicationDeliveryExports(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list delivery exports"})
+			return
+		}
 		projectionReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
@@ -875,6 +895,7 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			PublicationArtifacts:  publicationArtifacts,
 			PublicationDeliveries: publicationDeliveries,
 			AutoradioScripts:      autoradioScripts,
+			DeliveryExports:       deliveryExports,
 			ProjectionReviews:     projectionReviews,
 		})
 	case http.MethodPost:
@@ -1523,6 +1544,61 @@ func (h *APIHandler) HandleGlobalWireAutoradioScripts(w http.ResponseWriter, r *
 			Script:     script,
 			Artifact:   artifact,
 			Story:      story,
+			SourceItem: sourceItem,
+		})
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
+// HandleGlobalWirePublicationDeliveryExports materializes owner-scoped export
+// artifacts over delivered publication records.
+func (h *APIHandler) HandleGlobalWirePublicationDeliveryExports(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		storyID := strings.TrimSpace(r.URL.Query().Get("story_id"))
+		exports, err := h.rt.Store().ListGlobalWirePublicationDeliveryExports(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list delivery exports"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, map[string]any{
+			"delivery_exports": exports,
+		})
+	case http.MethodPost:
+		var req globalWirePublicationDeliveryExportRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid delivery export request"})
+			return
+		}
+		req.DeliveryID = strings.TrimSpace(req.DeliveryID)
+		req.Format = strings.TrimSpace(req.Format)
+		if req.DeliveryID == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "delivery_id is required"})
+			return
+		}
+		export, delivery, artifact, story, script, sourceItem, err := h.createGlobalWirePublicationDeliveryExport(r, ownerID, req)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "publication delivery not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create delivery export"})
+			return
+		}
+		writeAPIJSON(w, http.StatusCreated, globalWirePublicationDeliveryExportResponse{
+			Export:     export,
+			Delivery:   delivery,
+			Artifact:   artifact,
+			Story:      story,
+			Script:     script,
 			SourceItem: sourceItem,
 		})
 	default:
@@ -3153,6 +3229,71 @@ func (h *APIHandler) createGlobalWireAutoradioScript(r *http.Request, ownerID st
 	return script, artifact, story, sourceItem, nil
 }
 
+func (h *APIHandler) createGlobalWirePublicationDeliveryExport(r *http.Request, ownerID string, req globalWirePublicationDeliveryExportRequest) (types.GlobalWirePublicationDeliveryExport, types.GlobalWirePublicationDelivery, types.GlobalWirePublicationArtifact, types.GlobalWireStory, *types.GlobalWireAutoradioScript, *types.ContentItem, error) {
+	delivery, err := h.rt.Store().GetGlobalWirePublicationDelivery(r.Context(), ownerID, req.DeliveryID)
+	if err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, nil, err
+	}
+	artifact, err := h.rt.Store().GetGlobalWirePublicationArtifact(r.Context(), ownerID, delivery.ArtifactID)
+	if err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, nil, err
+	}
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, delivery.StoryID)
+	if err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, nil, err
+	}
+	var sourceItem *types.ContentItem
+	if strings.TrimSpace(artifact.SourceContentID) != "" {
+		rec, err := h.rt.Store().GetContentItem(r.Context(), ownerID, artifact.SourceContentID)
+		if err != nil {
+			return types.GlobalWirePublicationDeliveryExport{}, types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, nil, err
+		}
+		sourceItem = &rec
+	}
+	var script *types.GlobalWireAutoradioScript
+	scripts, err := h.rt.Store().ListGlobalWireAutoradioScripts(r.Context(), ownerID, delivery.StoryID, 100)
+	if err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, nil, err
+	}
+	for _, candidate := range scripts {
+		if candidate.ArtifactID == artifact.ID {
+			rec := candidate
+			script = &rec
+			break
+		}
+	}
+	format := strings.ToLower(firstNonEmptyString(req.Format, "md"))
+	if format != "md" && format != "markdown" {
+		format = "md"
+	}
+	rollbackRefs := appendStringIfMissing(delivery.RollbackRefs, "publication_delivery:"+delivery.ID)
+	if script != nil {
+		rollbackRefs = appendStringIfMissing(rollbackRefs, "autoradio_script:"+script.ID)
+	}
+	exportID := "global-wire-publication-delivery-export-" + uuid.NewString()
+	export, err := h.rt.Store().CreateGlobalWirePublicationDeliveryExport(r.Context(), types.GlobalWirePublicationDeliveryExport{
+		ID:              exportID,
+		OwnerID:         ownerID,
+		DeliveryID:      delivery.ID,
+		ArtifactID:      artifact.ID,
+		ScriptID:        scriptIDForGlobalWireExport(script),
+		StoryID:         delivery.StoryID,
+		SourceContentID: artifact.SourceContentID,
+		Format:          format,
+		Status:          "export-ready",
+		Title:           "Global Wire export: " + story.Headline,
+		ExportBody:      globalWirePublicationDeliveryExportBody(story, delivery, artifact, script, sourceItem),
+		CitationCount:   len(delivery.CitationRefs),
+		RollbackCount:   len(rollbackRefs),
+		CitationRefs:    delivery.CitationRefs,
+		RollbackRefs:    rollbackRefs,
+	})
+	if err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, nil, err
+	}
+	return export, delivery, artifact, story, script, sourceItem, nil
+}
+
 func (h *APIHandler) globalWirePublicationArtifactProjectionReviews(r *http.Request, ownerID string, update types.GlobalWirePublicationUpdate) ([]types.GlobalWireProjectionReview, error) {
 	if len(update.ProjectionReviewIDs) == 0 {
 		return []types.GlobalWireProjectionReview{}, nil
@@ -3539,6 +3680,59 @@ func globalWireAutoradioScriptBody(story types.GlobalWireStory, artifact types.G
 	if story.Dek != "" {
 		lines = append(lines[:1], append([]string{"Context: " + story.Dek}, lines[1:]...)...)
 	}
+	return strings.Join(lines, "\n")
+}
+
+func scriptIDForGlobalWireExport(script *types.GlobalWireAutoradioScript) string {
+	if script == nil {
+		return ""
+	}
+	return script.ID
+}
+
+func globalWirePublicationDeliveryExportBody(story types.GlobalWireStory, delivery types.GlobalWirePublicationDelivery, artifact types.GlobalWirePublicationArtifact, script *types.GlobalWireAutoradioScript, sourceItem *types.ContentItem) string {
+	sourceLabel := artifact.SourceContentID
+	if sourceItem != nil && strings.TrimSpace(sourceItem.Title) != "" {
+		sourceLabel = sourceItem.Title
+	}
+	if strings.TrimSpace(sourceLabel) == "" {
+		sourceLabel = "StoryGraph source neighborhood"
+	}
+	lines := []string{
+		"# " + story.Headline,
+		"",
+		"Delivery: " + delivery.DeliveryRef,
+		"Status: " + delivery.Status,
+		"Channel: " + delivery.Channel,
+		"Source: " + sourceLabel,
+		"",
+		"## Publication Artifact",
+		"",
+		artifact.Body,
+		"",
+		"## Provenance",
+		"",
+		fmt.Sprintf("- Artifact id: %s", artifact.ID),
+		fmt.Sprintf("- Delivery id: %s", delivery.ID),
+		fmt.Sprintf("- Citation count: %d", len(delivery.CitationRefs)),
+		fmt.Sprintf("- Rollback count: %d", len(delivery.RollbackRefs)),
+		"- Citation refs: " + strings.Join(delivery.CitationRefs, ", "),
+		"- Rollback refs: " + strings.Join(delivery.RollbackRefs, ", "),
+	}
+	if script != nil {
+		lines = append(lines,
+			"",
+			"## Autoradio Script",
+			"",
+			script.ScriptBody,
+			"",
+			fmt.Sprintf("- Autoradio script id: %s", script.ID),
+		)
+	}
+	lines = append(lines,
+		"",
+		"Guardrail: this export is owner-scoped publication evidence, not an unauthenticated public permalink.",
+	)
 	return strings.Join(lines, "\n")
 }
 

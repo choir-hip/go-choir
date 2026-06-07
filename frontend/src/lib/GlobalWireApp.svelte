@@ -182,6 +182,7 @@
   let publicationArtifacts = [];
   let publicationDeliveries = [];
   let autoradioScripts = [];
+  let deliveryExports = [];
   let publicationFeedItems = [];
   let publicationFeedStatus = '';
   let publicationDeliveryDetail = null;
@@ -233,6 +234,7 @@
       publicationArtifacts = [];
       publicationDeliveries = [];
       autoradioScripts = [];
+      deliveryExports = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
@@ -290,6 +292,7 @@
       publicationArtifacts = Array.isArray(payload.publication_artifacts) ? payload.publication_artifacts : [];
       publicationDeliveries = Array.isArray(payload.publication_deliveries) ? payload.publication_deliveries : [];
       autoradioScripts = Array.isArray(payload.autoradio_scripts) ? payload.autoradio_scripts : [];
+      deliveryExports = Array.isArray(payload.delivery_exports) ? payload.delivery_exports : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
       await loadPublicationFeed(storyId);
       await loadFetchCycles(storyId);
@@ -312,6 +315,7 @@
       publicationArtifacts = [];
       publicationDeliveries = [];
       autoradioScripts = [];
+      deliveryExports = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
@@ -925,6 +929,11 @@
     return autoradioScripts.find((script) => script.artifact_id === id);
   }
 
+  function deliveryExportForDelivery(delivery) {
+    const id = delivery?.id || '';
+    return deliveryExports.find((item) => item.delivery_id === id);
+  }
+
   function selectedPublicationFeedItem() {
     return publicationFeedItems.find((item) => item.story?.id === selectedStory.id || item.artifact?.story_id === selectedStory.id);
   }
@@ -1168,6 +1177,34 @@
       await loadContributions(selectedStory.id);
     } catch (error) {
       contributionStatus = error?.message || 'Autoradio script failed';
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
+  async function createDeliveryExport(delivery) {
+    if (!authenticated || !delivery?.id) return;
+    reconciliationBusyId = `${delivery.id}:delivery-export`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/publication-delivery-exports', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          delivery_id: delivery.id,
+          format: 'md',
+        }),
+      });
+      if (!response.ok) throw new Error(`Delivery export failed: ${response.status}`);
+      const payload = await response.json();
+      deliveryExports = [payload.export, ...deliveryExports.filter((item) => item.id !== payload.export?.id)]
+        .filter(Boolean)
+        .slice(0, 30);
+      contributionStatus = `Delivery export ${payload.export?.status || 'created'}`;
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || 'Delivery export failed';
     } finally {
       reconciliationBusyId = '';
     }
@@ -1678,6 +1715,7 @@
             {#each publicationFeedItems.slice(0, 3) as item}
               {@const delivery = publicationDeliveryForArtifact(item.artifact)}
               {@const autoradioScript = autoradioScriptForArtifact(item.artifact)}
+              {@const deliveryExport = deliveryExportForDelivery(delivery)}
               <article
                 data-global-wire-publication-feed-item
                 data-global-wire-publication-feed-artifact-id={item.artifact.id}
@@ -1711,6 +1749,19 @@
                       </small>
                     </div>
                   {/if}
+                  {#if deliveryExport}
+                    <div
+                      class="delivery-export"
+                      data-global-wire-delivery-export
+                      data-global-wire-delivery-export-id={deliveryExport.id}
+                    >
+                      <strong>{deliveryExport.status}: {deliveryExport.title}</strong>
+                      <span>{deliveryExport.export_body}</span>
+                      <small data-global-wire-delivery-export-provenance>
+                        export format: {deliveryExport.format} · citations: {deliveryExport.citation_count} · rollback refs: {deliveryExport.rollback_count}
+                      </small>
+                    </div>
+                  {/if}
                   <div class="publication-feed-actions">
                     <button
                       type="button"
@@ -1728,6 +1779,16 @@
                         data-global-wire-create-autoradio-script
                       >
                         Script
+                      </button>
+                    {/if}
+                    {#if !deliveryExport}
+                      <button
+                        type="button"
+                        on:click={() => createDeliveryExport(delivery)}
+                        disabled={reconciliationBusyId === `${delivery.id}:delivery-export`}
+                        data-global-wire-create-delivery-export
+                      >
+                        Export
                       </button>
                     {/if}
                   </div>
@@ -2599,6 +2660,19 @@
 
   .autoradio-script span {
     -webkit-line-clamp: 6;
+  }
+
+  .delivery-export {
+    display: grid;
+    gap: 0.22rem;
+    padding: 0.38rem;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-pane);
+  }
+
+  .delivery-export span {
+    -webkit-line-clamp: 7;
   }
 
   .publication-delivery-detail {

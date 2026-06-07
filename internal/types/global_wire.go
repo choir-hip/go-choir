@@ -344,6 +344,28 @@ type GlobalWireAutoradioScript struct {
 	UpdatedAt       time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWirePublicationDeliveryExport is a portable owner-scoped export over a
+// delivered publication and optional Autoradio script. It is not a public route.
+type GlobalWirePublicationDeliveryExport struct {
+	ID              string    `json:"id"`
+	OwnerID         string    `json:"owner_id,omitempty"`
+	DeliveryID      string    `json:"delivery_id"`
+	ArtifactID      string    `json:"artifact_id"`
+	ScriptID        string    `json:"script_id,omitempty"`
+	StoryID         string    `json:"story_id"`
+	SourceContentID string    `json:"source_content_id,omitempty"`
+	Format          string    `json:"format"`
+	Status          string    `json:"status"`
+	Title           string    `json:"title"`
+	ExportBody      string    `json:"export_body"`
+	CitationCount   int       `json:"citation_count"`
+	RollbackCount   int       `json:"rollback_count"`
+	CitationRefs    []string  `json:"citation_refs"`
+	RollbackRefs    []string  `json:"rollback_refs"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
 // fetch cycle should use for one StoryGraph neighborhood.
 type GlobalWireSourceRegistryEntry struct {

@@ -733,6 +733,45 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("autoradio script missing from list: %+v", scriptListResp)
 	}
 
+	exportBody := fmt.Sprintf(`{"delivery_id":%q,"format":"md"}`, deliveryResp.Delivery.ID)
+	exportW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-delivery-exports", exportBody, "user-alpha")
+	if exportW.Code != http.StatusCreated {
+		t.Fatalf("delivery export status = %d body=%s", exportW.Code, exportW.Body.String())
+	}
+	var exportResp globalWirePublicationDeliveryExportResponse
+	if err := json.NewDecoder(exportW.Body).Decode(&exportResp); err != nil {
+		t.Fatalf("decode delivery export response: %v", err)
+	}
+	if exportResp.Export.DeliveryID != deliveryResp.Delivery.ID ||
+		exportResp.Export.ArtifactID != artifactResp.Artifact.ID ||
+		exportResp.Export.ScriptID != scriptResp.Script.ID ||
+		exportResp.Export.Status != "export-ready" ||
+		exportResp.Export.Format != "md" ||
+		!strings.Contains(exportResp.Export.ExportBody, artifactResp.Artifact.Body) ||
+		!strings.Contains(exportResp.Export.ExportBody, scriptResp.Script.ScriptBody) ||
+		exportResp.Export.CitationCount < 5 ||
+		exportResp.Export.RollbackCount < 5 ||
+		!slices.Contains(exportResp.Export.RollbackRefs, "publication_delivery:"+deliveryResp.Delivery.ID) ||
+		!slices.Contains(exportResp.Export.RollbackRefs, "autoradio_script:"+scriptResp.Script.ID) ||
+		exportResp.Script == nil ||
+		exportResp.SourceItem == nil {
+		t.Fatalf("delivery export missing publication/script provenance: %+v", exportResp)
+	}
+	exportListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/publication-delivery-exports?story_id=story-supply-resilience", "", "user-alpha")
+	if exportListW.Code != http.StatusOK {
+		t.Fatalf("delivery export list status = %d body=%s", exportListW.Code, exportListW.Body.String())
+	}
+	var exportListResp struct {
+		DeliveryExports []types.GlobalWirePublicationDeliveryExport `json:"delivery_exports"`
+	}
+	if err := json.NewDecoder(exportListW.Body).Decode(&exportListResp); err != nil {
+		t.Fatalf("decode delivery export list response: %v", err)
+	}
+	if len(exportListResp.DeliveryExports) != 1 ||
+		exportListResp.DeliveryExports[0].DeliveryID != deliveryResp.Delivery.ID {
+		t.Fatalf("delivery export missing from list: %+v", exportListResp)
+	}
+
 	publicationListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
 	if publicationListW.Code != http.StatusOK {
 		t.Fatalf("list reconciliation after publication package status = %d body=%s", publicationListW.Code, publicationListW.Body.String())
@@ -751,8 +790,10 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		len(publicationListResp.PublicationDeliveries) != 1 ||
 		publicationListResp.PublicationDeliveries[0].ArtifactID != artifactResp.Artifact.ID ||
 		len(publicationListResp.AutoradioScripts) != 1 ||
-		publicationListResp.AutoradioScripts[0].ArtifactID != artifactResp.Artifact.ID {
-		t.Fatalf("publication artifacts missing from reconciliation list: updates=%+v artifacts=%+v deliveries=%+v scripts=%+v", publicationListResp.PublicationUpdates, publicationListResp.PublicationArtifacts, publicationListResp.PublicationDeliveries, publicationListResp.AutoradioScripts)
+		publicationListResp.AutoradioScripts[0].ArtifactID != artifactResp.Artifact.ID ||
+		len(publicationListResp.DeliveryExports) != 1 ||
+		publicationListResp.DeliveryExports[0].DeliveryID != deliveryResp.Delivery.ID {
+		t.Fatalf("publication artifacts missing from reconciliation list: updates=%+v artifacts=%+v deliveries=%+v scripts=%+v exports=%+v", publicationListResp.PublicationUpdates, publicationListResp.PublicationArtifacts, publicationListResp.PublicationDeliveries, publicationListResp.AutoradioScripts, publicationListResp.DeliveryExports)
 	}
 
 	storiesTaskAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")

@@ -498,6 +498,31 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     }, autoradioScriptPayload.script.id);
     expect(autoradioScriptQueue.artifact_id).toBe(publicationArtifact.body.artifact.id);
     expect(autoradioScriptQueue.rollback_refs).toContain(`publication_artifact:${publicationArtifact.body.artifact.id}`);
+    const deliveryExportResponsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/global-wire/publication-delivery-exports' && response.request().method() === 'POST'
+    );
+    await app.locator('[data-global-wire-create-delivery-export]').first().click();
+    const deliveryExportResponse = await deliveryExportResponsePromise;
+    expect(deliveryExportResponse.status()).toBe(201);
+    const deliveryExportPayload = await deliveryExportResponse.json();
+    expect(deliveryExportPayload.export.delivery_id).toBe(deliveryPayload.delivery.id);
+    expect(deliveryExportPayload.export.artifact_id).toBe(publicationArtifact.body.artifact.id);
+    expect(deliveryExportPayload.export.script_id).toBe(autoradioScriptPayload.script.id);
+    expect(deliveryExportPayload.export.status).toBe('export-ready');
+    expect(deliveryExportPayload.export.export_body).toContain(publicationArtifact.body.artifact.body);
+    expect(deliveryExportPayload.export.export_body).toContain(autoradioScriptPayload.script.script_body);
+    expect(deliveryExportPayload.script?.id).toBe(autoradioScriptPayload.script.id);
+    await expect(app.locator('[data-global-wire-delivery-export]').first()).toContainText('export-ready');
+    await expect(app.locator('[data-global-wire-delivery-export]').first()).toContainText('Publication Artifact');
+    await expect(app.locator('[data-global-wire-delivery-export-provenance]').first()).toContainText('export format: md');
+    const deliveryExportQueue = await page.evaluate(async (exportId) => {
+      const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
+      if (!res.ok) throw new Error(`load delivery export queue failed: ${res.status}`);
+      const list = await res.json();
+      return (list.delivery_exports || []).find((item) => item.id === exportId);
+    }, deliveryExportPayload.export.id);
+    expect(deliveryExportQueue.delivery_id).toBe(deliveryPayload.delivery.id);
+    expect(deliveryExportQueue.rollback_refs).toContain(`publication_delivery:${deliveryPayload.delivery.id}`);
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

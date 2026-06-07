@@ -2469,6 +2469,113 @@ func (s *Store) GetGlobalWireAutoradioScript(ctx context.Context, ownerID, scrip
 	return scanGlobalWireAutoradioScript(row)
 }
 
+// CreateGlobalWirePublicationDeliveryExport stores a portable owner-scoped
+// export over a delivered publication.
+func (s *Store) CreateGlobalWirePublicationDeliveryExport(ctx context.Context, rec types.GlobalWirePublicationDeliveryExport) (types.GlobalWirePublicationDeliveryExport, error) {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
+	rec.CreatedAt = now
+	if strings.TrimSpace(rec.Status) == "" {
+		rec.Status = "export-ready"
+	}
+	citationRefsJSON, err := json.Marshal(rec.CitationRefs)
+	if err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, fmt.Errorf("marshal global wire publication delivery export citation refs: %w", err)
+	}
+	rollbackRefsJSON, err := json.Marshal(rec.RollbackRefs)
+	if err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, fmt.Errorf("marshal global wire publication delivery export rollback refs: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_publication_delivery_exports (
+			owner_id, export_id, delivery_id, artifact_id, script_id, story_id,
+			source_content_id, format, status, title, export_body,
+			citation_count, rollback_count, citation_refs_json,
+			rollback_refs_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.DeliveryID,
+		rec.ArtifactID,
+		rec.ScriptID,
+		rec.StoryID,
+		rec.SourceContentID,
+		rec.Format,
+		rec.Status,
+		rec.Title,
+		rec.ExportBody,
+		rec.CitationCount,
+		rec.RollbackCount,
+		string(citationRefsJSON),
+		string(rollbackRefsJSON),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, fmt.Errorf("create global wire publication delivery export: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWirePublicationDeliveryExports lists owner-scoped delivery exports,
+// optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWirePublicationDeliveryExports(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWirePublicationDeliveryExport, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, export_id, delivery_id, artifact_id, script_id,
+	                story_id, source_content_id, format, status, title,
+	                export_body, citation_count, rollback_count,
+	                citation_refs_json, rollback_refs_json, created_at,
+	                updated_at
+	           FROM global_wire_publication_delivery_exports
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire publication delivery exports: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWirePublicationDeliveryExport
+	for rows.Next() {
+		rec, err := scanGlobalWirePublicationDeliveryExport(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire publication delivery exports: %w", err)
+	}
+	return out, nil
+}
+
+// GetGlobalWirePublicationDeliveryExport returns one owner-scoped delivery export.
+func (s *Store) GetGlobalWirePublicationDeliveryExport(ctx context.Context, ownerID, exportID string) (types.GlobalWirePublicationDeliveryExport, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, export_id, delivery_id, artifact_id, script_id,
+		        story_id, source_content_id, format, status, title,
+		        export_body, citation_count, rollback_count, citation_refs_json,
+		        rollback_refs_json, created_at, updated_at
+		   FROM global_wire_publication_delivery_exports
+		  WHERE owner_id = ? AND export_id = ?`,
+		ownerID,
+		exportID,
+	)
+	return scanGlobalWirePublicationDeliveryExport(row)
+}
+
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
 func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.GlobalWireStoryProjection) error {
 	now := rec.UpdatedAt
@@ -3365,6 +3472,54 @@ func scanGlobalWireAutoradioScript(row interface{ Scan(...any) error }) (types.G
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWireAutoradioScript{}, fmt.Errorf("parse global wire autoradio script updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWirePublicationDeliveryExport(row interface{ Scan(...any) error }) (types.GlobalWirePublicationDeliveryExport, error) {
+	var rec types.GlobalWirePublicationDeliveryExport
+	var citationRefsJSON, rollbackRefsJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.DeliveryID,
+		&rec.ArtifactID,
+		&rec.ScriptID,
+		&rec.StoryID,
+		&rec.SourceContentID,
+		&rec.Format,
+		&rec.Status,
+		&rec.Title,
+		&rec.ExportBody,
+		&rec.CitationCount,
+		&rec.RollbackCount,
+		&citationRefsJSON,
+		&rollbackRefsJSON,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWirePublicationDeliveryExport{}, ErrNotFound
+		}
+		return types.GlobalWirePublicationDeliveryExport{}, fmt.Errorf("scan global wire publication delivery export: %w", err)
+	}
+	if err := json.Unmarshal([]byte(citationRefsJSON), &rec.CitationRefs); err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, fmt.Errorf("unmarshal global wire publication delivery export citation refs: %w", err)
+	}
+	if err := json.Unmarshal([]byte(rollbackRefsJSON), &rec.RollbackRefs); err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, fmt.Errorf("unmarshal global wire publication delivery export rollback refs: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, fmt.Errorf("parse global wire publication delivery export created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWirePublicationDeliveryExport{}, fmt.Errorf("parse global wire publication delivery export updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()
