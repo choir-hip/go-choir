@@ -636,11 +636,35 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
       return {
         issue: (list.newsletter_issues || []).find((item) => item.id === issueId),
         delivery: (list.newsletter_deliveries || []).find((item) => item.issue_id === issueId),
+        dossier: (list.source_dossiers || []).find((item) => item.story_id === 'story-supply-resilience'),
       };
     }, newsletterIssuePayload.issue.id);
     expect(newsletterQueue.issue.public_link_ids).toContain(publicLinkPayload.public_link.id);
     expect(newsletterQueue.issue.rollback_refs).toContain(`public_link:${publicLinkPayload.public_link.id}`);
     expect(newsletterQueue.delivery.status).toBe('delivery-ready');
+    expect(newsletterQueue.dossier.review_state).toBe('source-dossier-ready');
+    expect(newsletterQueue.dossier.claim_dossiers.length).toBeGreaterThanOrEqual(1);
+    expect(newsletterQueue.dossier.extraction_ids.length).toBeGreaterThanOrEqual(1);
+    expect(newsletterQueue.dossier.research_task_ids.length).toBeGreaterThanOrEqual(1);
+    expect(newsletterQueue.dossier.publication_refs.newsletter_issue_ids).toContain(newsletterIssuePayload.issue.id);
+    expect(newsletterQueue.dossier.publication_refs.public_link_ids).toContain(publicLinkPayload.public_link.id);
+    expect(newsletterQueue.dossier.publication_refs.citation_refs.length).toBeGreaterThanOrEqual(5);
+    expect(newsletterQueue.dossier.missing_fields).not.toContain('claim_dossiers');
+    const sourceDossierResponse = await page.evaluate(async (issueId) => {
+      const res = await fetch('/api/global-wire/source-dossiers?story_id=story-supply-resilience', { credentials: 'include' });
+      if (!res.ok) throw new Error(`load source dossiers failed: ${res.status}`);
+      const list = await res.json();
+      const dossier = (list.dossiers || []).find((item) => item.story_id === 'story-supply-resilience');
+      return { status: list.status, source: list.source, dossier, issueId };
+    }, newsletterIssuePayload.issue.id);
+    expect(sourceDossierResponse.status).toBe('ready');
+    expect(sourceDossierResponse.source).toBe('derived-reconciliation-dossier');
+    expect(sourceDossierResponse.dossier.publication_refs.newsletter_issue_ids).toContain(sourceDossierResponse.issueId);
+    expect(sourceDossierResponse.dossier.manifest_tiers.find((tier) => tier.tier === 'lead').count).toBeGreaterThanOrEqual(1);
+    await expect(app.locator('[data-global-wire-source-dossier]').first()).toContainText('source-dossier-ready');
+    await expect(app.locator('[data-global-wire-source-dossier-claims]').first()).toContainText('claims:');
+    await expect(app.locator('[data-global-wire-source-dossier-publication]').first()).toContainText('newsletter issues:');
+    await expect(app.locator('[data-global-wire-source-dossier-provenance]').first()).toContainText('missing: none');
     const publicReaderURL = new URL(publicLinkPayload.public_link.route_path, page.url()).toString();
     await page.goto(publicReaderURL);
     await expect(page.locator('[data-global-wire-public-reader]')).toBeVisible();

@@ -169,6 +169,7 @@
   let storyActionBusy = '';
   let contributions = [];
   let reconciliationSourceItems = {};
+  let sourceDossiers = [];
   let reconciliationDecisions = [];
   let graphUpdateCandidates = [];
   let graphPromotionDecisions = [];
@@ -225,6 +226,7 @@
       dataSource = 'preview-storygraph';
       contributions = [];
       reconciliationSourceItems = {};
+      sourceDossiers = [];
       reconciliationDecisions = [];
       graphUpdateCandidates = [];
       graphPromotionDecisions = [];
@@ -287,6 +289,7 @@
       const payload = await response.json();
       contributions = Array.isArray(payload.contributions) ? payload.contributions.slice(0, 6) : [];
       reconciliationSourceItems = payload.source_items || {};
+      sourceDossiers = Array.isArray(payload.source_dossiers) ? payload.source_dossiers : [];
       reconciliationDecisions = Array.isArray(payload.decisions) ? payload.decisions : [];
       graphUpdateCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
       graphPromotionDecisions = Array.isArray(payload.promotions) ? payload.promotions : [];
@@ -311,6 +314,7 @@
     } catch {
       contributions = [];
       reconciliationSourceItems = {};
+      sourceDossiers = [];
       reconciliationDecisions = [];
       graphUpdateCandidates = [];
       graphPromotionDecisions = [];
@@ -878,6 +882,10 @@
   function contributionSource(item) {
     const contentId = item?.source_content_id || item?.sourceContentId || '';
     return contentId ? reconciliationSourceItems[contentId] : null;
+  }
+
+  function selectedSourceDossier() {
+    return sourceDossiers.find((dossier) => dossier.story_id === selectedStoryId) || sourceDossiers[0] || null;
   }
 
   function contributionDecision(item) {
@@ -2325,6 +2333,45 @@
               </article>
             {/each}
           </div>
+          {@const dossier = selectedSourceDossier()}
+          {#if dossier}
+            <article
+              class="source-dossier"
+              data-global-wire-source-dossier
+              data-global-wire-source-dossier-id={dossier.id}
+            >
+              <div>
+                <strong>{dossier.review_state}</strong>
+                <small>{dossier.headline}</small>
+              </div>
+              <div class="dossier-grid">
+                {#each dossier.manifest_tiers || [] as tier}
+                  <small data-global-wire-source-dossier-tier data-global-wire-source-tier={tier.tier}>
+                    {tier.tier}: {tier.count}
+                  </small>
+                {/each}
+              </div>
+              <small data-global-wire-source-dossier-claims>
+                claims: {(dossier.claim_dossiers || []).length} · extractions: {(dossier.extraction_ids || []).length} · tasks: {(dossier.research_task_ids || []).length}
+              </small>
+              <small data-global-wire-source-dossier-publication>
+                publications: {(dossier.publication_refs?.artifact_ids || []).length} · deliveries: {(dossier.publication_refs?.delivery_ids || []).length} · newsletter issues: {(dossier.publication_refs?.newsletter_issue_ids || []).length}
+              </small>
+              <small data-global-wire-source-dossier-provenance>
+                citations: {(dossier.publication_refs?.citation_refs || []).length} · rollback refs: {(dossier.publication_refs?.rollback_refs || []).length} · missing: {(dossier.missing_fields || []).join(', ') || 'none'}
+              </small>
+              {#if (dossier.entity_terms || []).length || (dossier.event_terms || []).length}
+                <small data-global-wire-source-dossier-overlay>
+                  entities: {(dossier.entity_terms || []).slice(0, 3).join(', ')} · events: {(dossier.event_terms || []).slice(0, 2).join(', ')}
+                </small>
+              {/if}
+              {#if (dossier.timeline || []).length}
+                <small data-global-wire-source-dossier-timeline>
+                  {(dossier.timeline || [])[0]}
+                </small>
+              {/if}
+            </article>
+          {/if}
         {/if}
       </section>
     </aside>
@@ -2885,7 +2932,8 @@
   }
 
   .reconciliation-source,
-  .graph-candidate {
+  .graph-candidate,
+  .source-dossier {
     display: grid;
     gap: 0.15rem;
     padding: 0.45rem;
@@ -2899,9 +2947,27 @@
     position: relative;
   }
 
+  .source-dossier {
+    gap: 0.35rem;
+    border-left: 3px solid var(--choir-border-strong);
+    font-size: 0.82rem;
+    line-height: 1.3;
+  }
+
+  .dossier-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem;
+  }
+
+  .source-dossier small {
+    overflow-wrap: anywhere;
+  }
+
   .reconciliation-source strong,
   .graph-candidate strong,
-  .graph-candidate span {
+  .graph-candidate span,
+  .source-dossier strong {
     overflow-wrap: anywhere;
   }
 

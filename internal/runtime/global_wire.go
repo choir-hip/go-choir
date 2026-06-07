@@ -101,6 +101,7 @@ type globalWireFetchCycleResponse struct {
 type globalWireReconciliationResponse struct {
 	Contributions         []types.GlobalWireContribution              `json:"contributions"`
 	SourceItems           map[string]types.ContentItem                `json:"source_items,omitempty"`
+	SourceDossiers        []globalWireSourceDossier                   `json:"source_dossiers"`
 	Decisions             []types.GlobalWireReconciliationDecision    `json:"decisions"`
 	Candidates            []types.GlobalWireGraphUpdateCandidate      `json:"candidates"`
 	Promotions            []types.GlobalWireGraphPromotionDecision    `json:"promotions"`
@@ -120,6 +121,75 @@ type globalWireReconciliationResponse struct {
 	NewsletterIssues      []types.GlobalWireNewsletterIssue           `json:"newsletter_issues"`
 	NewsletterDeliveries  []types.GlobalWireNewsletterDelivery        `json:"newsletter_deliveries"`
 	ProjectionReviews     []types.GlobalWireProjectionReview          `json:"projection_reviews"`
+}
+
+type globalWireSourceDossierResponse struct {
+	Dossiers []globalWireSourceDossier `json:"dossiers"`
+	Status   string                    `json:"status"`
+	Source   string                    `json:"source"`
+}
+
+type globalWireDossierManifestTier struct {
+	Tier       string   `json:"tier"`
+	Count      int      `json:"count"`
+	SourceIDs  []string `json:"source_ids"`
+	ContentIDs []string `json:"content_ids,omitempty"`
+	Titles     []string `json:"titles"`
+}
+
+type globalWireDossierClaim struct {
+	ClaimID              string   `json:"claim_id"`
+	ClaimText            string   `json:"claim_text"`
+	ClaimKind            string   `json:"claim_kind"`
+	Status               string   `json:"status"`
+	UncertaintyState     string   `json:"uncertainty_state"`
+	DisputeState         string   `json:"dispute_state"`
+	EvidenceGap          string   `json:"evidence_gap"`
+	SourceContentID      string   `json:"source_content_id,omitempty"`
+	CandidateID          string   `json:"candidate_id,omitempty"`
+	ContributionID       string   `json:"contribution_id,omitempty"`
+	RefreshID            string   `json:"refresh_id,omitempty"`
+	ExtractionIDs        []string `json:"extraction_ids"`
+	ResearchTaskIDs      []string `json:"research_task_ids"`
+	ResearchEvidenceIDs  []string `json:"research_evidence_ids"`
+	ResearchDecisionIDs  []string `json:"research_decision_ids"`
+	PublicationUpdateIDs []string `json:"publication_update_ids"`
+}
+
+type globalWireDossierPublicationRefs struct {
+	UpdateIDs             []string `json:"update_ids"`
+	ArtifactIDs           []string `json:"artifact_ids"`
+	DeliveryIDs           []string `json:"delivery_ids"`
+	AutoradioScriptIDs    []string `json:"autoradio_script_ids"`
+	DeliveryExportIDs     []string `json:"delivery_export_ids"`
+	PublicLinkIDs         []string `json:"public_link_ids"`
+	NewsletterIssueIDs    []string `json:"newsletter_issue_ids"`
+	NewsletterDeliveryIDs []string `json:"newsletter_delivery_ids"`
+	CitationRefs          []string `json:"citation_refs"`
+	RollbackRefs          []string `json:"rollback_refs"`
+}
+
+type globalWireSourceDossier struct {
+	ID                  string                           `json:"id"`
+	StoryID             string                           `json:"story_id"`
+	Headline            string                           `json:"headline"`
+	SourceState         string                           `json:"source_state"`
+	ManifestTiers       []globalWireDossierManifestTier  `json:"manifest_tiers"`
+	ClaimDossiers       []globalWireDossierClaim         `json:"claim_dossiers"`
+	ExtractionIDs       []string                         `json:"extraction_ids"`
+	ResearchTaskIDs     []string                         `json:"research_task_ids"`
+	ResearchEvidenceIDs []string                         `json:"research_evidence_ids"`
+	CandidateIDs        []string                         `json:"candidate_ids"`
+	ContributionIDs     []string                         `json:"contribution_ids"`
+	RefreshRunIDs       []string                         `json:"refresh_run_ids"`
+	PublicationRefs     globalWireDossierPublicationRefs `json:"publication_refs"`
+	SourceContentIDs    []string                         `json:"source_content_ids"`
+	EntityTerms         []string                         `json:"entity_terms"`
+	EventTerms          []string                         `json:"event_terms"`
+	Timeline            []string                         `json:"timeline"`
+	MissingFields       []string                         `json:"missing_fields"`
+	ReviewState         string                           `json:"review_state"`
+	ProvenanceRefs      []string                         `json:"provenance_refs"`
 }
 
 type globalWireResearchTaskLifecycleRequest struct {
@@ -937,9 +1007,15 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
 			return
 		}
+		dossiers, err := h.globalWireSourceDossiers(r, ownerID, storyID, contributions, refreshes, claimRecords, researchTasks, extractionArtifacts, researchEvidence, researchDecisions, candidates, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to build source dossiers"})
+			return
+		}
 		writeAPIJSON(w, http.StatusOK, globalWireReconciliationResponse{
 			Contributions:         contributions,
 			SourceItems:           h.globalWireContributionSourceItems(r, ownerID, contributions),
+			SourceDossiers:        dossiers,
 			Decisions:             decisions,
 			Candidates:            candidates,
 			Promotions:            promotions,
@@ -1037,6 +1113,111 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
+}
+
+// HandleGlobalWireSourceDossiers exposes a deterministic, non-mutating dossier
+// projection over existing reconciliation records.
+func (h *APIHandler) HandleGlobalWireSourceDossiers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	storyID := strings.TrimSpace(r.URL.Query().Get("story_id"))
+	contributions, err := h.rt.Store().ListGlobalWireContributions(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list contributions"})
+		return
+	}
+	refreshes, err := h.rt.Store().ListGlobalWireSourceRefreshRuns(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list source refresh runs"})
+		return
+	}
+	claimRecords, err := h.rt.Store().ListGlobalWireClaimRecords(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list claim records"})
+		return
+	}
+	researchTasks, err := h.rt.Store().ListGlobalWireResearchTasks(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list research tasks"})
+		return
+	}
+	extractionArtifacts, err := h.rt.Store().ListGlobalWireExtractionArtifacts(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list extraction artifacts"})
+		return
+	}
+	researchEvidence, err := h.rt.Store().ListGlobalWireResearchTaskEvidence(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list research evidence"})
+		return
+	}
+	researchDecisions, err := h.rt.Store().ListGlobalWireResearchEvidenceDecisions(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list research decisions"})
+		return
+	}
+	candidates, err := h.rt.Store().ListGlobalWireGraphUpdateCandidates(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list graph candidates"})
+		return
+	}
+	publicationUpdates, err := h.rt.Store().ListGlobalWirePublicationUpdates(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list publication updates"})
+		return
+	}
+	publicationArtifacts, err := h.rt.Store().ListGlobalWirePublicationArtifacts(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list publication artifacts"})
+		return
+	}
+	publicationDeliveries, err := h.rt.Store().ListGlobalWirePublicationDeliveries(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list publication deliveries"})
+		return
+	}
+	autoradioScripts, err := h.rt.Store().ListGlobalWireAutoradioScripts(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list autoradio scripts"})
+		return
+	}
+	deliveryExports, err := h.rt.Store().ListGlobalWirePublicationDeliveryExports(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list delivery exports"})
+		return
+	}
+	publicLinks, err := h.rt.Store().ListGlobalWirePublicationPublicLinks(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list public links"})
+		return
+	}
+	newsletterIssues, err := h.rt.Store().ListGlobalWireNewsletterIssues(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter issues"})
+		return
+	}
+	newsletterDeliveries, err := h.rt.Store().ListGlobalWireNewsletterDeliveries(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter deliveries"})
+		return
+	}
+	dossiers, err := h.globalWireSourceDossiers(r, ownerID, storyID, contributions, refreshes, claimRecords, researchTasks, extractionArtifacts, researchEvidence, researchDecisions, candidates, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to build source dossiers"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, globalWireSourceDossierResponse{
+		Dossiers: dossiers,
+		Status:   "ready",
+		Source:   "derived-reconciliation-dossier",
+	})
 }
 
 // HandleGlobalWireResearchTasks records researcher lifecycle transitions and
@@ -4603,6 +4784,355 @@ func (h *APIHandler) globalWireContributionSourceItems(r *http.Request, ownerID 
 		return nil
 	}
 	return items
+}
+
+func (h *APIHandler) globalWireSourceDossiers(
+	r *http.Request,
+	ownerID string,
+	storyID string,
+	contributions []types.GlobalWireContribution,
+	refreshes []types.GlobalWireSourceRefreshRun,
+	claimRecords []types.GlobalWireClaimRecord,
+	researchTasks []types.GlobalWireResearchTask,
+	extractionArtifacts []types.GlobalWireExtractionArtifact,
+	researchEvidence []types.GlobalWireResearchTaskEvidence,
+	researchDecisions []types.GlobalWireResearchEvidenceDecision,
+	candidates []types.GlobalWireGraphUpdateCandidate,
+	publicationUpdates []types.GlobalWirePublicationUpdate,
+	publicationArtifacts []types.GlobalWirePublicationArtifact,
+	publicationDeliveries []types.GlobalWirePublicationDelivery,
+	autoradioScripts []types.GlobalWireAutoradioScript,
+	deliveryExports []types.GlobalWirePublicationDeliveryExport,
+	publicLinks []types.GlobalWirePublicationPublicLink,
+	newsletterIssues []types.GlobalWireNewsletterIssue,
+	newsletterDeliveries []types.GlobalWireNewsletterDelivery,
+) ([]globalWireSourceDossier, error) {
+	var stories []types.GlobalWireStory
+	if storyID != "" {
+		story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, storyID)
+		if err != nil {
+			return nil, err
+		}
+		stories = []types.GlobalWireStory{story}
+	} else {
+		var err error
+		stories, err = h.rt.Store().ListGlobalWireStories(r.Context(), ownerID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	dossiers := make([]globalWireSourceDossier, 0, len(stories))
+	for _, story := range stories {
+		dossiers = append(dossiers, globalWireBuildSourceDossier(
+			story,
+			contributions,
+			refreshes,
+			claimRecords,
+			researchTasks,
+			extractionArtifacts,
+			researchEvidence,
+			researchDecisions,
+			candidates,
+			publicationUpdates,
+			publicationArtifacts,
+			publicationDeliveries,
+			autoradioScripts,
+			deliveryExports,
+			publicLinks,
+			newsletterIssues,
+			newsletterDeliveries,
+		))
+	}
+	return dossiers, nil
+}
+
+func globalWireBuildSourceDossier(
+	story types.GlobalWireStory,
+	contributions []types.GlobalWireContribution,
+	refreshes []types.GlobalWireSourceRefreshRun,
+	claimRecords []types.GlobalWireClaimRecord,
+	researchTasks []types.GlobalWireResearchTask,
+	extractionArtifacts []types.GlobalWireExtractionArtifact,
+	researchEvidence []types.GlobalWireResearchTaskEvidence,
+	researchDecisions []types.GlobalWireResearchEvidenceDecision,
+	candidates []types.GlobalWireGraphUpdateCandidate,
+	publicationUpdates []types.GlobalWirePublicationUpdate,
+	publicationArtifacts []types.GlobalWirePublicationArtifact,
+	publicationDeliveries []types.GlobalWirePublicationDelivery,
+	autoradioScripts []types.GlobalWireAutoradioScript,
+	deliveryExports []types.GlobalWirePublicationDeliveryExport,
+	publicLinks []types.GlobalWirePublicationPublicLink,
+	newsletterIssues []types.GlobalWireNewsletterIssue,
+	newsletterDeliveries []types.GlobalWireNewsletterDelivery,
+) globalWireSourceDossier {
+	dossier := globalWireSourceDossier{
+		ID:            "global-wire-source-dossier:" + story.ID,
+		StoryID:       story.ID,
+		Headline:      story.Headline,
+		SourceState:   story.SourceState,
+		ManifestTiers: globalWireDossierManifestTiers(story.Manifest),
+		ReviewState:   "source-dossier-ready",
+	}
+	dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, []string{"story:" + story.ID})
+	for _, tier := range dossier.ManifestTiers {
+		for _, sourceID := range tier.SourceIDs {
+			dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, []string{"manifest_source:" + sourceID})
+		}
+		dossier.SourceContentIDs = appendStringListIfMissing(dossier.SourceContentIDs, tier.ContentIDs)
+	}
+	for _, contribution := range contributions {
+		if contribution.StoryID != story.ID {
+			continue
+		}
+		dossier.ContributionIDs = appendStringListIfMissing(dossier.ContributionIDs, []string{contribution.ID})
+		dossier.SourceContentIDs = appendStringListIfMissing(dossier.SourceContentIDs, []string{contribution.SourceContentID})
+		dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, []string{"contribution:" + contribution.ID})
+	}
+	for _, refresh := range refreshes {
+		if refresh.StoryID != story.ID {
+			continue
+		}
+		dossier.RefreshRunIDs = appendStringListIfMissing(dossier.RefreshRunIDs, []string{refresh.ID})
+		dossier.SourceContentIDs = appendStringListIfMissing(dossier.SourceContentIDs, []string{refresh.SourceContentID})
+		dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, []string{"refresh:" + refresh.ID})
+	}
+	for _, candidate := range candidates {
+		if candidate.StoryID != story.ID {
+			continue
+		}
+		dossier.CandidateIDs = appendStringListIfMissing(dossier.CandidateIDs, []string{candidate.ID})
+		dossier.SourceContentIDs = appendStringListIfMissing(dossier.SourceContentIDs, []string{candidate.SourceContentID})
+		dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, []string{"candidate:" + candidate.ID})
+	}
+	for _, task := range researchTasks {
+		if task.StoryID != story.ID {
+			continue
+		}
+		dossier.ResearchTaskIDs = appendStringListIfMissing(dossier.ResearchTaskIDs, []string{task.ID})
+		dossier.SourceContentIDs = appendStringListIfMissing(dossier.SourceContentIDs, []string{task.SourceContentID})
+	}
+	for _, evidence := range researchEvidence {
+		if evidence.StoryID != story.ID {
+			continue
+		}
+		dossier.ResearchEvidenceIDs = appendStringListIfMissing(dossier.ResearchEvidenceIDs, []string{evidence.ID})
+		dossier.SourceContentIDs = appendStringListIfMissing(dossier.SourceContentIDs, []string{evidence.SourceContentID})
+	}
+	for _, extraction := range extractionArtifacts {
+		if extraction.StoryID != story.ID {
+			continue
+		}
+		dossier.ExtractionIDs = appendStringListIfMissing(dossier.ExtractionIDs, []string{extraction.ID})
+		dossier.SourceContentIDs = appendStringListIfMissing(dossier.SourceContentIDs, []string{extraction.SourceContentID})
+		dossier.EntityTerms = appendStringListIfMissing(dossier.EntityTerms, extraction.Entities)
+		dossier.EventTerms = appendStringListIfMissing(dossier.EventTerms, extraction.Events)
+		dossier.Timeline = appendStringListIfMissing(dossier.Timeline, extraction.Timeline)
+	}
+	for _, claim := range claimRecords {
+		if claim.StoryID != story.ID {
+			continue
+		}
+		dossier.ClaimDossiers = append(dossier.ClaimDossiers, globalWireDossierClaimForRecord(claim, researchTasks, extractionArtifacts, researchEvidence, researchDecisions, publicationUpdates))
+		dossier.SourceContentIDs = appendStringListIfMissing(dossier.SourceContentIDs, []string{claim.SourceContentID})
+		dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, []string{"claim:" + claim.ID})
+	}
+	dossier.PublicationRefs = globalWireBuildDossierPublicationRefs(story.ID, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
+	dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, dossier.PublicationRefs.CitationRefs)
+	dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, dossier.PublicationRefs.RollbackRefs)
+	dossier.MissingFields = globalWireDossierMissingFields(dossier)
+	return dossier
+}
+
+func globalWireDossierManifestTiers(manifest types.GlobalWireSourceManifest) []globalWireDossierManifestTier {
+	return []globalWireDossierManifestTier{
+		globalWireDossierManifestTierForSources("lead", manifest.Lead),
+		globalWireDossierManifestTierForSources("supporting", manifest.Supporting),
+		globalWireDossierManifestTierForSources("contrary", manifest.Contrary),
+		globalWireDossierManifestTierForSources("context", manifest.Context),
+	}
+}
+
+func globalWireDossierManifestTierForSources(tier string, sources []types.GlobalWireSourceItem) globalWireDossierManifestTier {
+	out := globalWireDossierManifestTier{Tier: tier, Count: len(sources)}
+	for _, source := range sources {
+		out.SourceIDs = appendStringListIfMissing(out.SourceIDs, []string{source.ID})
+		out.ContentIDs = appendStringListIfMissing(out.ContentIDs, []string{source.ContentID})
+		out.Titles = appendStringListIfMissing(out.Titles, []string{source.Title})
+	}
+	return out
+}
+
+func globalWireDossierClaimForRecord(
+	claim types.GlobalWireClaimRecord,
+	researchTasks []types.GlobalWireResearchTask,
+	extractionArtifacts []types.GlobalWireExtractionArtifact,
+	researchEvidence []types.GlobalWireResearchTaskEvidence,
+	researchDecisions []types.GlobalWireResearchEvidenceDecision,
+	publicationUpdates []types.GlobalWirePublicationUpdate,
+) globalWireDossierClaim {
+	out := globalWireDossierClaim{
+		ClaimID:          claim.ID,
+		ClaimText:        claim.ClaimText,
+		ClaimKind:        claim.ClaimKind,
+		Status:           claim.Status,
+		UncertaintyState: claim.UncertaintyState,
+		DisputeState:     claim.DisputeState,
+		EvidenceGap:      claim.EvidenceGap,
+		SourceContentID:  claim.SourceContentID,
+		CandidateID:      claim.CandidateID,
+		ContributionID:   claim.ContributionID,
+		RefreshID:        claim.RefreshID,
+	}
+	for _, extraction := range extractionArtifacts {
+		if extraction.ClaimID == claim.ID {
+			out.ExtractionIDs = appendStringListIfMissing(out.ExtractionIDs, []string{extraction.ID})
+		}
+	}
+	for _, task := range researchTasks {
+		if task.ClaimID == claim.ID {
+			out.ResearchTaskIDs = appendStringListIfMissing(out.ResearchTaskIDs, []string{task.ID})
+		}
+	}
+	for _, evidence := range researchEvidence {
+		if evidence.ClaimID == claim.ID {
+			out.ResearchEvidenceIDs = appendStringListIfMissing(out.ResearchEvidenceIDs, []string{evidence.ID})
+		}
+	}
+	for _, decision := range researchDecisions {
+		if decision.ClaimID == claim.ID {
+			out.ResearchDecisionIDs = appendStringListIfMissing(out.ResearchDecisionIDs, []string{decision.ID})
+		}
+	}
+	for _, update := range publicationUpdates {
+		if stringListContainsAny(update.ExtractionIDs, out.ExtractionIDs) ||
+			stringListContains(out.ResearchEvidenceIDs, update.EvidenceID) {
+			out.PublicationUpdateIDs = appendStringListIfMissing(out.PublicationUpdateIDs, []string{update.ID})
+		}
+	}
+	return out
+}
+
+func stringListContains(values []string, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), target) {
+			return true
+		}
+	}
+	return false
+}
+
+func stringListContainsAny(values []string, targets []string) bool {
+	for _, target := range targets {
+		if stringListContains(values, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func globalWireBuildDossierPublicationRefs(
+	storyID string,
+	publicationUpdates []types.GlobalWirePublicationUpdate,
+	publicationArtifacts []types.GlobalWirePublicationArtifact,
+	publicationDeliveries []types.GlobalWirePublicationDelivery,
+	autoradioScripts []types.GlobalWireAutoradioScript,
+	deliveryExports []types.GlobalWirePublicationDeliveryExport,
+	publicLinks []types.GlobalWirePublicationPublicLink,
+	newsletterIssues []types.GlobalWireNewsletterIssue,
+	newsletterDeliveries []types.GlobalWireNewsletterDelivery,
+) globalWireDossierPublicationRefs {
+	var out globalWireDossierPublicationRefs
+	for _, update := range publicationUpdates {
+		if update.StoryID != storyID {
+			continue
+		}
+		out.UpdateIDs = appendStringListIfMissing(out.UpdateIDs, []string{update.ID})
+		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, update.RollbackRefs)
+	}
+	for _, artifact := range publicationArtifacts {
+		if artifact.StoryID != storyID {
+			continue
+		}
+		out.ArtifactIDs = appendStringListIfMissing(out.ArtifactIDs, []string{artifact.ID})
+		out.CitationRefs = appendStringListIfMissing(out.CitationRefs, artifact.CitationRefs)
+		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, artifact.RollbackRefs)
+	}
+	for _, delivery := range publicationDeliveries {
+		if delivery.StoryID != storyID {
+			continue
+		}
+		out.DeliveryIDs = appendStringListIfMissing(out.DeliveryIDs, []string{delivery.ID})
+		out.CitationRefs = appendStringListIfMissing(out.CitationRefs, delivery.CitationRefs)
+		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, delivery.RollbackRefs)
+	}
+	for _, script := range autoradioScripts {
+		if script.StoryID != storyID {
+			continue
+		}
+		out.AutoradioScriptIDs = appendStringListIfMissing(out.AutoradioScriptIDs, []string{script.ID})
+		out.CitationRefs = appendStringListIfMissing(out.CitationRefs, script.CitationRefs)
+		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, script.RollbackRefs)
+	}
+	for _, export := range deliveryExports {
+		if export.StoryID != storyID {
+			continue
+		}
+		out.DeliveryExportIDs = appendStringListIfMissing(out.DeliveryExportIDs, []string{export.ID})
+		out.CitationRefs = appendStringListIfMissing(out.CitationRefs, export.CitationRefs)
+		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, export.RollbackRefs)
+	}
+	for _, link := range publicLinks {
+		if link.StoryID != storyID {
+			continue
+		}
+		out.PublicLinkIDs = appendStringListIfMissing(out.PublicLinkIDs, []string{link.ID})
+		out.CitationRefs = appendStringListIfMissing(out.CitationRefs, link.CitationRefs)
+		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, link.RollbackRefs)
+	}
+	for _, issue := range newsletterIssues {
+		if issue.StoryID != storyID {
+			continue
+		}
+		out.NewsletterIssueIDs = appendStringListIfMissing(out.NewsletterIssueIDs, []string{issue.ID})
+		out.CitationRefs = appendStringListIfMissing(out.CitationRefs, issue.CitationRefs)
+		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, issue.RollbackRefs)
+	}
+	for _, delivery := range newsletterDeliveries {
+		if delivery.StoryID != storyID {
+			continue
+		}
+		out.NewsletterDeliveryIDs = appendStringListIfMissing(out.NewsletterDeliveryIDs, []string{delivery.ID})
+		out.CitationRefs = appendStringListIfMissing(out.CitationRefs, delivery.CitationRefs)
+		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, delivery.RollbackRefs)
+	}
+	return out
+}
+
+func globalWireDossierMissingFields(dossier globalWireSourceDossier) []string {
+	var missing []string
+	if len(dossier.ClaimDossiers) == 0 {
+		missing = append(missing, "claim_dossiers")
+	}
+	if len(dossier.ExtractionIDs) == 0 {
+		missing = append(missing, "extraction_overlays")
+	}
+	if len(dossier.ResearchTaskIDs) == 0 {
+		missing = append(missing, "research_tasks")
+	}
+	if len(dossier.PublicationRefs.ArtifactIDs) == 0 {
+		missing = append(missing, "publication_artifacts")
+	}
+	if len(dossier.PublicationRefs.NewsletterIssueIDs) == 0 {
+		missing = append(missing, "newsletter_issues")
+	}
+	if len(dossier.PublicationRefs.CitationRefs) == 0 {
+		missing = append(missing, "citation_refs")
+	}
+	return missing
 }
 
 func (h *APIHandler) createGlobalWireContributionSourceItem(r *http.Request, ownerID string, req globalWireContributionCreateRequest) (string, error) {
