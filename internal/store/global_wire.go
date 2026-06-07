@@ -568,14 +568,15 @@ func (s *Store) CreateGlobalWireContribution(ctx context.Context, rec types.Glob
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO global_wire_contributions (
 			owner_id, contribution_id, story_id, kind, headline, content,
-			user_vtext_doc_id, research_state, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			source_content_id, user_vtext_doc_id, research_state, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.OwnerID,
 		rec.ID,
 		rec.StoryID,
 		rec.Kind,
 		sanitizeStoreText(rec.Headline),
 		sanitizeStoreText(rec.Text),
+		rec.SourceContentID,
 		rec.UserVTextDocID,
 		rec.ResearchState,
 		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -594,7 +595,7 @@ func (s *Store) ListGlobalWireContributions(ctx context.Context, ownerID, storyI
 		limit = 20
 	}
 	query := `SELECT owner_id, contribution_id, story_id, kind, headline, content,
-	                user_vtext_doc_id, research_state, created_at, updated_at
+	                source_content_id, user_vtext_doc_id, research_state, created_at, updated_at
 	           FROM global_wire_contributions
 	          WHERE owner_id = ?`
 	args := []any{ownerID}
@@ -695,6 +696,7 @@ func scanGlobalWireContribution(row interface{ Scan(...any) error }) (types.Glob
 		&rec.Kind,
 		&rec.Headline,
 		&rec.Text,
+		&rec.SourceContentID,
 		&rec.UserVTextDocID,
 		&rec.ResearchState,
 		&createdAt,

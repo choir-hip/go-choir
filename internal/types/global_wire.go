@@ -57,14 +57,15 @@ type GlobalWireStory struct {
 // GlobalWireContribution is a user-owned contribution queued for research and
 // reconciliation. It never mutates the platform story directly.
 type GlobalWireContribution struct {
-	ID             string    `json:"id"`
-	OwnerID        string    `json:"owner_id,omitempty"`
-	StoryID        string    `json:"storyId"`
-	Kind           string    `json:"kind"`
-	Headline       string    `json:"headline"`
-	Text           string    `json:"text"`
-	UserVTextDocID string    `json:"user_vtext_doc_id,omitempty"`
-	ResearchState  string    `json:"research_state"`
-	CreatedAt      time.Time `json:"created_at,omitempty"`
-	UpdatedAt      time.Time `json:"updated_at,omitempty"`
+	ID              string    `json:"id"`
+	OwnerID         string    `json:"owner_id,omitempty"`
+	StoryID         string    `json:"storyId"`
+	Kind            string    `json:"kind"`
+	Headline        string    `json:"headline"`
+	Text            string    `json:"text"`
+	SourceContentID string    `json:"source_content_id,omitempty"`
+	UserVTextDocID  string    `json:"user_vtext_doc_id,omitempty"`
+	ResearchState   string    `json:"research_state"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at,omitempty"`
 }

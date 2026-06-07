@@ -78,6 +78,9 @@ func TestHandleGlobalWireContributionsAreOwnerScoped(t *testing.T) {
 	if created["research_state"] != "pending-researcher-review" {
 		t.Fatalf("research_state = %v", created["research_state"])
 	}
+	if created["source_content_id"] == "" {
+		t.Fatalf("source_content_id is empty in created contribution: %+v", created)
+	}
 
 	alpha := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/contributions?story_id=story-supply-resilience", "", "user-alpha")
 	if alpha.Code != http.StatusOK {
@@ -89,6 +92,13 @@ func TestHandleGlobalWireContributionsAreOwnerScoped(t *testing.T) {
 	}
 	if len(alphaResp.Contributions) != 1 {
 		t.Fatalf("alpha contribution count = %d, want 1", len(alphaResp.Contributions))
+	}
+	if alphaResp.Contributions[0].SourceContentID == "" {
+		t.Fatalf("persisted source_content_id is empty: %+v", alphaResp.Contributions[0])
+	}
+	sourceW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/content/items/"+alphaResp.Contributions[0].SourceContentID, "", "user-alpha")
+	if sourceW.Code != http.StatusOK {
+		t.Fatalf("get contribution source item status = %d body=%s", sourceW.Code, sourceW.Body.String())
 	}
 
 	beta := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/contributions?story_id=story-supply-resilience", "", "user-beta")

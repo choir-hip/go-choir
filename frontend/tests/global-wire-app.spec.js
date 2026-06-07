@@ -108,7 +108,15 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     if (!res.ok) throw new Error(`list contributions failed: ${res.status}`);
     return res.json();
   });
-  expect((queue.contributions || []).some((item) => item.research_state === 'pending-researcher-review')).toBeTruthy();
+  const queuedContribution = (queue.contributions || []).find((item) => item.research_state === 'pending-researcher-review');
+  expect(queuedContribution).toBeTruthy();
+  expect(queuedContribution.source_content_id).toBeTruthy();
+  const contributionSource = await page.evaluate(async (contentId) => {
+    const res = await fetch(`/api/content/items/${contentId}`, { credentials: 'include' });
+    if (!res.ok) throw new Error(`load contribution SourceItem failed: ${res.status}`);
+    return res.json();
+  }, queuedContribution.source_content_id);
+  expect(contributionSource.metadata?.schema).toBe('choir.global_wire_user_source_contribution.v1');
 });
 
 for (const themeId of ['futuristic-noir', 'carbon-fiber-kintsugi', 'london-salmon']) {

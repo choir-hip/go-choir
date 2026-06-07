@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -87,14 +88,20 @@ func (h *APIHandler) HandleGlobalWireContributions(w http.ResponseWriter, r *htt
 		if req.Text == "" {
 			req.Text = "Draft contribution awaiting detail."
 		}
+		sourceContentID, err := h.createGlobalWireContributionSourceItem(r, ownerID, req)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create contribution source item"})
+			return
+		}
 		rec, err := h.rt.Store().CreateGlobalWireContribution(r.Context(), types.GlobalWireContribution{
-			ID:             "global-wire-contribution-" + uuid.NewString(),
-			OwnerID:        ownerID,
-			StoryID:        req.StoryID,
-			Kind:           req.Kind,
-			Headline:       strings.TrimSpace(req.Headline),
-			Text:           req.Text,
-			UserVTextDocID: strings.TrimSpace(req.UserVTextDocID),
+			ID:              "global-wire-contribution-" + uuid.NewString(),
+			OwnerID:         ownerID,
+			StoryID:         req.StoryID,
+			Kind:            req.Kind,
+			Headline:        strings.TrimSpace(req.Headline),
+			Text:            req.Text,
+			SourceContentID: sourceContentID,
+			UserVTextDocID:  strings.TrimSpace(req.UserVTextDocID),
 		})
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create global wire contribution"})
@@ -104,4 +111,53 @@ func (h *APIHandler) HandleGlobalWireContributions(w http.ResponseWriter, r *htt
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
+}
+
+func (h *APIHandler) createGlobalWireContributionSourceItem(r *http.Request, ownerID string, req globalWireContributionCreateRequest) (string, error) {
+	switch req.Kind {
+	case "source", "counter-source":
+	default:
+		return "", nil
+	}
+	now := time.Now().UTC()
+	contentID := uuid.NewString()
+	metadata, err := json.Marshal(map[string]any{
+		"schema":       "choir.global_wire_user_source_contribution.v1",
+		"story_id":     req.StoryID,
+		"kind":         req.Kind,
+		"research_use": "pending-reconciliation-review",
+	})
+	if err != nil {
+		return "", err
+	}
+	provenance, err := json.Marshal(map[string]any{
+		"created_from": "global_wire_user_contribution",
+		"story_id":     req.StoryID,
+		"created_at":   now.UTC().Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		return "", err
+	}
+	item := types.ContentItem{
+		ContentID:   contentID,
+		OwnerID:     ownerID,
+		SourceType:  "text",
+		MediaType:   "text/markdown",
+		AppHint:     "global-wire",
+		Title:       "Contribution source: " + strings.TrimSpace(req.Headline),
+		TextContent: req.Text,
+		ContentHash: uuid.NewSHA1(uuid.NameSpaceURL, []byte(ownerID+":"+req.StoryID+":"+req.Kind+":"+req.Text)).String(),
+		Metadata:    metadata,
+		Provenance:  provenance,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if strings.TrimSpace(item.Title) == "Contribution source:" {
+		item.Title = "Global Wire contribution source"
+	}
+	if err := h.rt.Store().CreateContentItem(r.Context(), item); err != nil {
+		return "", err
+	}
+	_, _ = h.rt.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventContentItemCreated, contentItemEventPayload(item))
+	return contentID, nil
 }
