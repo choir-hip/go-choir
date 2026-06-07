@@ -66,6 +66,82 @@ func TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts(t *testing.T) {
 	}
 }
 
+func TestHandleGlobalWireStoriesIndexesSourceMaxxVTextHeads(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := types.Document{
+		DocID:     "doc-source-maxx-live",
+		OwnerID:   "global-wire-platform",
+		Title:     "Madrid dispatch.vtext",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := handler.rt.Store().CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create platform source maxx doc: %v", err)
+	}
+	meta, _ := json.Marshal(map[string]any{
+		"source":                   "edit_vtext",
+		"source_maxx_cycle_id":     "cycle-live",
+		"source_maxx_request_id":   "reconciler-live",
+		"source_maxx_request_kind": "reconciler",
+		"selected_style_sources":   []map[string]any{{"title": "Style.vtext: Global Wire"}},
+		"selected_style_rationale": "Global Wire style fits a fast sourced dispatch.",
+		"source_item_ids":          []string{"srcitem_live_1", "srcitem_live_2"},
+	})
+	rev := types.Revision{
+		RevisionID:  "rev-source-maxx-live",
+		DocID:       doc.DocID,
+		OwnerID:     doc.OwnerID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "vtext:doc-source-maxx-live",
+		Content: strings.Join([]string{
+			"# Madrid dispatch",
+			"",
+			"MADRID -- Pope Leo XIV addressed a packed crowd while city officials adjusted transport and security plans around the visit.",
+			"",
+			"The article keeps the sourcing narrow: official crowd-control notices, local transit updates, and SourceMaxx conflict-free context remain separate from commentary.",
+		}, "\n"),
+		Citations: json.RawMessage("[]"),
+		Metadata:  meta,
+		CreatedAt: now,
+	}
+	if err := handler.rt.Store().CreateRevision(ctx, rev); err != nil {
+		t.Fatalf("create platform source maxx revision: %v", err)
+	}
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-global-wire")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/global-wire/stories status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp globalWireStoriesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode stories response: %v", err)
+	}
+	if resp.Source != "durable-storygraph+source-maxx-vtexts" {
+		t.Fatalf("source = %q, want source maxx vtext index", resp.Source)
+	}
+	if len(resp.Stories) < 4 {
+		t.Fatalf("stories length = %d, want source maxx story plus seeded stories", len(resp.Stories))
+	}
+	story := resp.Stories[0]
+	if story.ID != "source-maxx-vtext-"+doc.DocID ||
+		story.OwnerID != "global-wire-platform" ||
+		story.StoryVTextDoc != doc.DocID ||
+		story.VTextContent == "" {
+		t.Fatalf("first story is not the indexed SourceMaxx VText: %+v", story)
+	}
+	if story.Headline != "Madrid dispatch" || !strings.Contains(story.Projections["wire-style"], "MADRID -- Pope Leo XIV") {
+		t.Fatalf("indexed SourceMaxx story did not expose article head: %+v", story)
+	}
+	if len(story.Manifest.Lead) != 2 || story.Manifest.Lead[0].ID != "srcitem_live_1" {
+		t.Fatalf("indexed SourceMaxx story missing source handles: %+v", story.Manifest)
+	}
+	if !strings.Contains(strings.Join(story.Claims, "\n"), "Style.vtext: Global Wire") {
+		t.Fatalf("indexed SourceMaxx story missing style provenance claims: %+v", story.Claims)
+	}
+}
+
 func TestHandleGlobalWireStyleSourcesComposeAndReplace(t *testing.T) {
 	_, handler := testAPISetup(t)
 

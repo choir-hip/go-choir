@@ -50,6 +50,7 @@ type GlobalWireStory struct {
 	ProjectionVTextDocs map[string]string        `json:"projection_vtext_docs,omitempty"`
 	StyleSources        []GlobalWireStyleSource  `json:"style_sources,omitempty"`
 	StoryVTextDoc       string                   `json:"story_vtext_doc_id,omitempty"`
+	VTextContent        string                   `json:"vtext_content,omitempty"`
 	SourceState         string                   `json:"source_state"`
 	CreatedAt           time.Time                `json:"created_at,omitempty"`
 	UpdatedAt           time.Time                `json:"updated_at,omitempty"`

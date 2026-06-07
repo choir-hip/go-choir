@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -507,11 +508,297 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 	if len(stories) > 0 {
 		styleSources = stories[0].StyleSources
 	}
+	source := "durable-storygraph"
+	if sourceMaxxStories, err := h.sourceMaxxVTextStories(r.Context(), styleSources, 12); err == nil && len(sourceMaxxStories) > 0 {
+		stories = prependGlobalWireStories(sourceMaxxStories, stories)
+		source = "durable-storygraph+source-maxx-vtexts"
+	} else if err != nil {
+		log.Printf("global wire: source maxx vtext index unavailable: %v", err)
+	}
 	writeAPIJSON(w, http.StatusOK, globalWireStoriesResponse{
 		Stories:      stories,
 		StyleSources: styleSources,
-		Source:       "durable-storygraph",
+		Source:       source,
 	})
+}
+
+func (h *APIHandler) sourceMaxxVTextStories(ctx context.Context, styleSources []types.GlobalWireStyleSource, limit int) ([]types.GlobalWireStory, error) {
+	if h == nil || h.rt == nil || h.rt.Store() == nil {
+		return nil, nil
+	}
+	platformOwner := sourceMaxxPlatformOwnerID()
+	docs, err := h.rt.Store().ListDocumentsByOwner(ctx, platformOwner, 200)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]types.GlobalWireStory, 0, limit)
+	for _, doc := range docs {
+		if len(out) >= limit {
+			break
+		}
+		if strings.TrimSpace(doc.CurrentRevisionID) == "" {
+			continue
+		}
+		rev, err := h.rt.Store().GetRevision(ctx, doc.CurrentRevisionID, platformOwner)
+		if err != nil {
+			if err == store.ErrNotFound {
+				continue
+			}
+			return nil, err
+		}
+		story, ok := sourceMaxxVTextStoryFromCurrentRevision(doc, rev, styleSources)
+		if ok {
+			out = append(out, story)
+		}
+	}
+	return out, nil
+}
+
+func sourceMaxxPlatformOwnerID() string {
+	ownerID := strings.TrimSpace(getenvFirst("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID"))
+	if ownerID == "" {
+		ownerID = "global-wire-platform"
+	}
+	return ownerID
+}
+
+func sourceMaxxVTextStoryFromCurrentRevision(doc types.Document, rev types.Revision, styleSources []types.GlobalWireStyleSource) (types.GlobalWireStory, bool) {
+	meta := decodeRevisionMetadata(rev.Metadata)
+	if metadataString(meta, "source") != "edit_vtext" || metadataString(meta, "source_maxx_cycle_id") == "" {
+		return types.GlobalWireStory{}, false
+	}
+	content := strings.TrimSpace(rev.Content)
+	if content == "" || sourceMaxxContentLooksLikeSeed(content) {
+		return types.GlobalWireStory{}, false
+	}
+	styleID, styleTitle := sourceMaxxSelectedStyle(meta, styleSources)
+	headline := sourceMaxxArticleHeadline(doc.Title, content)
+	dek := sourceMaxxArticleDek(content)
+	projection := sourceMaxxArticleProjection(content)
+	sourceIDs := sourceMaxxMetadataStringSlice(meta["source_item_ids"])
+	manifest := sourceMaxxManifestFromHandles(sourceIDs, headline)
+	if len(manifest.Lead) == 0 {
+		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
+			ID:       "source-maxx-cycle:" + metadataString(meta, "source_maxx_cycle_id"),
+			Title:    "SourceMaxx cycle " + metadataString(meta, "source_maxx_cycle_id"),
+			Standing: "source firehose cycle",
+			Role:     "context",
+		})
+	}
+	projections := map[string]string{styleID: projection}
+	if styleID != "wire-style" {
+		projections["wire-style"] = projection
+	}
+	return types.GlobalWireStory{
+		ID:                  "source-maxx-vtext-" + doc.DocID,
+		OwnerID:             doc.OwnerID,
+		Headline:            headline,
+		Dek:                 dek,
+		Freshness:           sourceMaxxFreshness(doc.UpdatedAt),
+		Prominence:          90,
+		Tension:             "source-maxx article",
+		ChangeState:         "vtext published",
+		NodeTone:            "live",
+		Related:             []string{},
+		Manifest:            manifest,
+		Claims:              sourceMaxxArticleClaims(content, styleTitle, meta),
+		Projections:         projections,
+		ProjectionVTextDocs: map[string]string{styleID: doc.DocID},
+		StyleSources:        styleSources,
+		StoryVTextDoc:       doc.DocID,
+		VTextContent:        content,
+		SourceState:         "source-maxx-vtext-index",
+		CreatedAt:           doc.CreatedAt,
+		UpdatedAt:           doc.UpdatedAt,
+	}, true
+}
+
+func sourceMaxxContentLooksLikeSeed(content string) bool {
+	return strings.Contains(content, "## SourceMaxx Brief") ||
+		strings.Contains(content, "## Evidence Gathering") ||
+		strings.Contains(content, "## Working Revision")
+}
+
+func sourceMaxxSelectedStyle(meta map[string]any, styles []types.GlobalWireStyleSource) (string, string) {
+	title := "Style.vtext: Global Wire"
+	if selected, ok := meta["selected_style_sources"].([]any); ok && len(selected) > 0 {
+		if first, ok := selected[0].(map[string]any); ok {
+			if raw := strings.TrimSpace(stringValue(first["title"])); raw != "" {
+				title = raw
+			}
+		}
+	}
+	for _, style := range styles {
+		if strings.EqualFold(strings.TrimSpace(style.Title), title) {
+			return style.ID, style.Title
+		}
+	}
+	return "wire-style", title
+}
+
+func sourceMaxxMetadataStringSlice(value any) []string {
+	out := []string{}
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			if str := strings.TrimSpace(stringValue(item)); str != "" {
+				out = append(out, str)
+			}
+		}
+	case []string:
+		for _, item := range typed {
+			if str := strings.TrimSpace(item); str != "" {
+				out = append(out, str)
+			}
+		}
+	}
+	return out
+}
+
+func sourceMaxxManifestFromHandles(sourceIDs []string, headline string) types.GlobalWireSourceManifest {
+	manifest := types.GlobalWireSourceManifest{}
+	for i, id := range sourceIDs {
+		item := types.GlobalWireSourceItem{
+			ID:       id,
+			Title:    "SourceMaxx source item " + id,
+			Standing: "source-service handle",
+			Role:     "lead",
+		}
+		if i >= 3 {
+			item.Role = "context"
+			manifest.Context = append(manifest.Context, item)
+			continue
+		}
+		manifest.Lead = append(manifest.Lead, item)
+	}
+	if len(manifest.Lead) == 0 && strings.TrimSpace(headline) != "" {
+		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
+			ID:       "source-maxx-vtext:" + headline,
+			Title:    "SourceMaxx VText article head",
+			Standing: "platform VText current revision",
+			Role:     "context",
+		})
+	}
+	return manifest
+}
+
+func sourceMaxxArticleHeadline(title, content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "# ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "# "))
+		}
+	}
+	title = strings.TrimSpace(strings.TrimSuffix(title, ".vtext"))
+	if title != "" {
+		return title
+	}
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(strings.Trim(line, "# -*\t"))
+		if line != "" {
+			return truncateRunes(line, 120)
+		}
+	}
+	return "SourceMaxx article"
+}
+
+func sourceMaxxArticleDek(content string) string {
+	for _, paragraph := range sourceMaxxArticleParagraphs(content) {
+		return truncateRunes(paragraph, 220)
+	}
+	return "SourceMaxx VText article with source and style provenance on its current revision."
+}
+
+func sourceMaxxArticleProjection(content string) string {
+	paragraphs := sourceMaxxArticleParagraphs(content)
+	if len(paragraphs) == 0 {
+		return truncateRunes(content, 520)
+	}
+	return truncateRunes(strings.Join(paragraphs, "\n\n"), 900)
+}
+
+func sourceMaxxArticleParagraphs(content string) []string {
+	out := []string{}
+	var current []string
+	flush := func() {
+		if len(current) == 0 {
+			return
+		}
+		paragraph := strings.TrimSpace(strings.Join(current, " "))
+		current = nil
+		if paragraph != "" {
+			out = append(out, paragraph)
+		}
+	}
+	for _, raw := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			flush()
+			continue
+		}
+		if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "- ") || strings.HasPrefix(line, ">") {
+			flush()
+			continue
+		}
+		current = append(current, line)
+		if len(out) >= 4 {
+			break
+		}
+	}
+	flush()
+	return out
+}
+
+func sourceMaxxArticleClaims(content, styleTitle string, meta map[string]any) []string {
+	claims := []string{
+		"Current head is a normal VText article revision owned by the SourceMaxx platform agent.",
+		"Style source: " + firstNonEmptyString(styleTitle, "Style.vtext"),
+	}
+	if cycleID := metadataString(meta, "source_maxx_cycle_id"); cycleID != "" {
+		claims = append(claims, "SourceMaxx cycle: "+cycleID)
+	}
+	if rationale := metadataString(meta, "selected_style_rationale"); rationale != "" {
+		claims = append(claims, "Style rationale: "+truncateRunes(rationale, 180))
+	}
+	if len(claims) > 4 {
+		return claims[:4]
+	}
+	_ = content
+	return claims
+}
+
+func sourceMaxxFreshness(updatedAt time.Time) string {
+	if updatedAt.IsZero() {
+		return "source-maxx current"
+	}
+	delta := time.Since(updatedAt)
+	if delta < 0 {
+		delta = 0
+	}
+	switch {
+	case delta < time.Minute:
+		return "updated just now"
+	case delta < time.Hour:
+		return fmt.Sprintf("updated %d min ago", int(delta.Minutes()))
+	case delta < 24*time.Hour:
+		return fmt.Sprintf("updated %d hr ago", int(delta.Hours()))
+	default:
+		return updatedAt.UTC().Format("2006-01-02")
+	}
+}
+
+func prependGlobalWireStories(prefix, existing []types.GlobalWireStory) []types.GlobalWireStory {
+	out := make([]types.GlobalWireStory, 0, len(prefix)+len(existing))
+	seen := map[string]bool{}
+	for _, story := range append(prefix, existing...) {
+		key := strings.TrimSpace(firstNonEmptyString(story.StoryVTextDoc, story.ID, story.Headline))
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, story)
+	}
+	return out
 }
 
 // HandleGlobalWireSourceMaxxStatus reports non-sensitive SourceMaxx aggregate

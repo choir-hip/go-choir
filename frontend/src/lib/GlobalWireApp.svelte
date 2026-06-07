@@ -359,13 +359,15 @@
     selectedStoryId = story.id;
     selectedStyleId = style.id;
     const projectionDocId = story.projection_vtext_docs?.[style.id] || story.story_vtext_doc_id || '';
+    const platformOwned = story.owner_id && story.owner_id !== currentUser?.id;
+    const openDocId = platformOwned ? '' : projectionDocId;
     launchVText({
       title: story.headline,
-      content: storyVTextContent(story, style),
+      content: story.vtext_content || storyVTextContent(story, style),
       createdFrom: 'global_wire_story_projection',
       sourcePath: `global-wire/${story.id}.story.vtext`,
-      docId: projectionDocId,
-      createInitialVersion: !projectionDocId,
+      docId: openDocId,
+      createInitialVersion: !openDocId,
     });
   }
 

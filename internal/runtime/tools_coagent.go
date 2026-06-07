@@ -316,6 +316,7 @@ func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *ty
 		"source_maxx_cycle_id":     metadataString(parentRec.Metadata, "source_maxx_cycle_id"),
 		"source_maxx_request_id":   metadataString(parentRec.Metadata, "source_maxx_request_id"),
 		"source_maxx_request_kind": metadataString(parentRec.Metadata, "source_maxx_request_kind"),
+		"source_item_ids":          parentRec.Metadata["source_item_ids"],
 		"processor_key":            metadataString(parentRec.Metadata, runMetadataProcessorKey),
 		"reconciler_scope":         metadataString(parentRec.Metadata, runMetadataReconcilerScope),
 		"selected_style_sources":   selectedStyles,

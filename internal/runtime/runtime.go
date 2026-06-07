@@ -1952,6 +1952,7 @@ var durableMetadataKeys = []string{
 	"source_maxx_cycle_id",
 	"source_maxx_request_id",
 	"source_maxx_request_kind",
+	"source_item_ids",
 	"processor_key",
 	"reconciler_scope",
 	"selected_style_sources",
