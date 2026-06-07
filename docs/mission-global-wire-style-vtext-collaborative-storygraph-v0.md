@@ -5140,3 +5140,82 @@ Next executable probe:
   `/api/run-acceptances/synthesize` with that submission id as the trajectory,
   assert the stored record has evidence/checkpoints and honest residual risk,
   then rerun staging proof.
+
+## Checkpoint - Autoradio RunAcceptance Binding - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Delivered slice:
+
+- Problem commit:
+  `f65a6aa0` (`docs: record global wire acceptance binding gap`).
+- Proof commit:
+  `e7a410a9bd77773bbe00c05a20004c391d54abbb`
+  (`test: synthesize global wire autoradio acceptance`).
+- The signed-in Global Wire proof now captures the Autoradio
+  `/api/prompt-bar` 202 response, waits for the real prompt submission
+  decision, calls `/api/run-acceptances/synthesize` with the returned
+  `submission_id` as `trajectory_id`, and verifies the stored
+  RunAcceptanceRecord can be fetched by id.
+- The proof asserts the record is targeted to
+  `mission-global-wire-style-vtext-collaborative-storygraph-v0`, has derived
+  checkpoints/evidence/verifier contracts, and does not claim promotion-level
+  acceptance.
+
+Proof:
+
+- Local/deployed signed-in proof before commit passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in" --timeout 180000`
+  with 1 passed.
+- Public deployed proof before commit passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Diff hygiene passed:
+  `git diff --check`.
+- CI run `27088071639`: success. Runtime shards, integration smoke,
+  non-runtime tests, Go vet/build, and aggregate gate passed. Deploy was
+  skipped because the commit changed only tests.
+- FlakeHub run `27088071633`: success.
+- Staging health after the test commit still reported proxy/upstream deployed
+  behavior commit `fc7bf659a644c6b8a08149e242ceed1c0cb81b05`.
+- Final public deployed proof from the tracked test state passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Final authenticated deployed proof from the tracked test state passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in" --timeout 180000`
+  with 1 passed. This proof now creates a durable RunAcceptanceRecord from the
+  real Autoradio prompt trajectory.
+
+Invariants preserved:
+
+- RunAcceptance synthesis is derived from a product prompt-bar trajectory, not
+  from caller-supplied Playwright checkpoints.
+- The acceptance record is deliberately not promotion-level; no AppChangePackage
+  adoption or rollback evidence is being overclaimed for this Global Wire slice.
+- Autoradio remains a product-path prompt handoff over a citeable publication
+  artifact; it does not mutate StoryGraph, platform Story VTexts, Style.vtext,
+  or user-owned forks.
+
+Belief-state update:
+
+- The trajectory now has a durable acceptance evidence side channel at honest
+  resolution: publication artifact -> Autoradio prompt trajectory ->
+  RunAcceptanceRecord. This binds part of the Global Wire output path to Trace
+  and acceptance without pretending that the full Playwright-created artifact
+  chain is one Choir run.
+
+Remaining error field:
+
+- The RunAcceptanceRecord is tied to the Autoradio prompt trajectory, not to an
+  all-encompassing overnight mission run.
+- Acceptance remains below promotion-level and continuation-level because there
+  is no AppChangePackage adoption/promotion/rollback or continuation evidence
+  for this Global Wire delivery path.
+- Newsletter/email/syndication and audio playback remain unbuilt.
+
+Next executable probe:
+
+- Highest-value remaining delivery axes are now publication output broadening
+  (newsletter/RSS/email-style delivery) or source/extraction normalization. Use
+  cognitive transforms before choosing; avoid spending the next slice on UI
+  polish unless it materially improves public provenance or owner editability.
