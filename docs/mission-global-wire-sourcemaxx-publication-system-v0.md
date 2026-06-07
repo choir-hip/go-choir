@@ -859,6 +859,19 @@ belief-state changes:
   accepted the sourcecycled runs. Sandbox logs remain the evidence that those
   submitted runs entered active shared-harness tool loops after the prompt-role
   fix.
+- Lifecycle-output probe after that proof found a separate runtime availability
+  issue. The 15:20 SourceMaxx processor/reconciler runs entered active tool
+  loops and made repeated provider/tool calls, but the `a5a5e8d8` deploy
+  restarted `go-choir-gateway.service` at `2026-06-07T15:27:48Z` while those
+  runs were still in progress. Several runs then failed with
+  `gateway call failed: Post "http://127.0.0.1:8084/provider/v1/inference":
+  dial tcp 127.0.0.1:8084: connect: connection refused`. Gateway logs also
+  show Fireworks 429 pressure before the restart. The active gateway is healthy
+  again after the deploy (`/health` reports `status: ok`). This is a deployment
+  interruption/backpressure finding, not a SourceMaxx role or toolset failure.
+  The next proof should use a post-deploy scheduled cycle with gateway already
+  stable, then check for processor/reconciler `submit_coagent_update`,
+  researcher/VText delegation, and produced lifecycle output.
 
 remaining error field:
 
@@ -870,6 +883,9 @@ remaining error field:
   runtime-run lineage counts and unresolved detailed joins; resident
   output/result quality, compaction continuity, researcher delegation, and
   VText delegation/publication remain incomplete;
+- deploys can interrupt active SourceMaxx runs because gateway/sandbox restart
+  while processor/reconciler loops are mid-inference; provider 429 pressure was
+  also observed under the current dispatch volume;
 - processor load budget and routing scheme after live staging data;
 - current researcher/VText agent invocation contracts for this workflow;
 - deletion/reuse map for current Global Wire backend source paths;
@@ -887,10 +903,10 @@ publication-quality VText production.
 
 next executable delivery loop:
 
-1. Add product-visible lifecycle output for processor/reconciler runs: compact
-   processor/reconciler notes as VText-native early versions or source-linked
-   handoff artifacts, expose update counts through the safe status route, and
-   preserve handles to source items and full content.
+1. Wait for or trigger a clean post-deploy SourceMaxx cycle with gateway
+   already stable, then inspect processor/reconciler lifecycle output:
+   `submit_coagent_update`, child researcher/VText delegation, produced VText
+   revisions, and failure/backpressure rates.
 2. Keep processors and reconcilers on the shared runtime harness with
    profile-specific prompts/toolsets only. Do not create a separate processor
    service loop to mask lineage gaps.
