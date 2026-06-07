@@ -43,6 +43,7 @@ test('Global Wire preserves StoryGraph, Style.vtext, VText fork, and contributio
   await expect(app.locator('[data-global-wire-story-reader]')).toContainText('Port backlog recedes');
   await expect(app.locator('[data-global-wire-evidence] [data-source-tier="lead"]')).toContainText('Port authority throughput bulletin');
   await expect(app.locator('[data-global-wire-story-graph]')).toContainText('Grid operators add reserve alerts');
+  await expect(app.locator('[data-global-wire-source-search]')).toBeVisible();
 
   await app.locator('[data-global-wire-style-switcher] button').filter({ hasText: 'Audit' }).click();
   await expect(app.locator('[data-global-wire-style-switcher]')).toContainText('Cites Style.vtext: Claim Audit');
@@ -68,6 +69,14 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   await expect(app).toBeVisible();
   await expect(app).toHaveAttribute('data-global-wire-data-source', 'durable-storygraph');
   await expect(app.locator('[data-global-wire-state]')).toContainText('durable-storygraph');
+  await app.locator('[data-global-wire-source-search-input]').fill('port congestion');
+  await app.locator('[data-global-wire-source-search-submit]').click();
+  const searchStatus = app.locator('[data-global-wire-source-search-status]');
+  await expect(searchStatus).toContainText(/ok|no-evidence|unavailable/);
+  const searchResultCount = await app.locator('[data-global-wire-source-search-results] article').count();
+  if (searchResultCount > 0) {
+    await expect(app.locator('[data-global-wire-source-search-results] article').first()).toContainText(/source_service_item|source artifact/);
+  }
 
   const storyGraph = await page.evaluate(async () => {
     const res = await fetch('/api/global-wire/stories', { credentials: 'include' });

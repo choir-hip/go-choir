@@ -150,6 +150,12 @@
   let contributionKind = 'source';
   let contributionText = '';
   let contributionStatus = '';
+  let sourceSearchQuery = '';
+  let sourceSearchStatus = '';
+  let sourceSearchMessage = '';
+  let sourceSearchResults = [];
+  let sourceSearchBusy = false;
+  let queueTopSourceResult = true;
   let contributions = [];
   let reconciliationSourceItems = {};
   let reconciliationDecisions = [];
@@ -190,6 +196,9 @@
       reconciliationSourceItems = {};
       reconciliationDecisions = [];
       graphUpdateCandidates = [];
+      sourceSearchResults = [];
+      sourceSearchStatus = '';
+      sourceSearchMessage = '';
       return;
     }
     try {
@@ -427,6 +436,54 @@
     contributionText = '';
   }
 
+  async function searchSources() {
+    const query = sourceSearchQuery.trim();
+    if (!authenticated) {
+      sourceSearchStatus = 'sign-in-required';
+      sourceSearchMessage = 'Sign in to search and import source evidence.';
+      sourceSearchResults = [];
+      return;
+    }
+    if (!query) {
+      sourceSearchStatus = 'query-required';
+      sourceSearchMessage = 'Enter a source query.';
+      sourceSearchResults = [];
+      return;
+    }
+    sourceSearchBusy = true;
+    sourceSearchStatus = '';
+    sourceSearchMessage = '';
+    try {
+      const response = await fetch('/api/global-wire/source-search', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          max_results: 5,
+          story_id: selectedStory.id,
+          queue_top_result: queueTopSourceResult,
+        }),
+      });
+      const payload = await response.json();
+      sourceSearchStatus = payload.status || (response.ok ? 'ok' : 'unavailable');
+      sourceSearchMessage = payload.message || `${payload.source || 'source-service'}: ${sourceSearchStatus}`;
+      sourceSearchResults = Array.isArray(payload.content_items) ? payload.content_items : [];
+      if (payload.contribution?.id) {
+        contributionStatus = 'Source evidence imported and queued for reconciliation';
+        await loadContributions(selectedStory.id);
+      } else if (sourceSearchStatus === 'ok') {
+        contributionStatus = 'Source evidence imported';
+      }
+    } catch (error) {
+      sourceSearchStatus = 'unavailable';
+      sourceSearchMessage = error?.message || 'Source search failed';
+      sourceSearchResults = [];
+    } finally {
+      sourceSearchBusy = false;
+    }
+  }
+
   function contributionSource(item) {
     const contentId = item?.source_content_id || item?.sourceContentId || '';
     return contentId ? reconciliationSourceItems[contentId] : null;
@@ -624,6 +681,45 @@
         <div class="section-title">
           <h3>Contribute</h3>
           <span>research queue</span>
+        </div>
+        <div class="source-search" data-global-wire-source-search>
+          <label>
+            <span>Source search</span>
+            <input
+              bind:value={sourceSearchQuery}
+              type="search"
+              placeholder="Search live/source-service evidence"
+              data-global-wire-source-search-input
+            />
+          </label>
+          <label class="queue-toggle">
+            <input type="checkbox" bind:checked={queueTopSourceResult} />
+            <span>Queue top result</span>
+          </label>
+          <button
+            type="button"
+            class="source-search-button"
+            on:click={searchSources}
+            disabled={sourceSearchBusy}
+            data-global-wire-source-search-submit
+          >
+            {sourceSearchBusy ? 'Searching...' : 'Search sources'}
+          </button>
+          {#if sourceSearchStatus}
+            <p class="source-search-status" data-global-wire-source-search-status>
+              {sourceSearchStatus}: {sourceSearchMessage}
+            </p>
+          {/if}
+          {#if sourceSearchResults.length}
+            <div class="source-search-results" data-global-wire-source-search-results>
+              {#each sourceSearchResults.slice(0, 3) as result}
+                <article>
+                  <strong>{result.title}</strong>
+                  <small>{result.source_type} · {result.metadata?.schema || 'source artifact'}</small>
+                </article>
+              {/each}
+            </div>
+          {/if}
         </div>
         <label>
           <span>Kind</span>
@@ -844,6 +940,7 @@
   .style-tabs button,
   .section-title button,
   .submit-contribution,
+  .source-search-button,
   .reconciliation-actions button,
   .graph-node {
     min-height: 2.35rem;
@@ -929,6 +1026,7 @@
   .section-title button,
   .style-tabs button,
   .submit-contribution,
+  .source-search-button,
   .reconciliation-actions button {
     padding: 0.45rem 0.7rem;
     font-weight: 720;
@@ -1031,6 +1129,7 @@
     font-weight: 720;
   }
 
+  input,
   select,
   textarea {
     width: 100%;
@@ -1042,6 +1141,7 @@
     font: inherit;
   }
 
+  input,
   select {
     min-height: 2.35rem;
     padding: 0.35rem 0.5rem;
@@ -1054,14 +1154,55 @@
     line-height: 1.35;
   }
 
-  .submit-contribution {
+  .submit-contribution,
+  .source-search-button {
     background: var(--choir-accent);
     color: var(--choir-on-accent);
   }
 
+  .source-search {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.55rem;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-pane);
+  }
+
+  .queue-toggle {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .queue-toggle input {
+    width: auto;
+    min-height: 0;
+  }
+
+  .source-search-status,
   .contribution-status {
     color: var(--choir-text-accent);
     font-size: 0.85rem;
+  }
+
+  .source-search-results {
+    display: grid;
+    gap: 0.35rem;
+    max-height: 8rem;
+    overflow: auto;
+  }
+
+  .source-search-results article {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.4rem;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-card);
+  }
+
+  .source-search-results strong {
+    overflow-wrap: anywhere;
   }
 
   .contribution-list {
