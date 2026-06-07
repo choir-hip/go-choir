@@ -947,18 +947,38 @@ belief-state changes:
   lifecycle endpoint on 8085. The next code fix should add 8085 as a
   tap-reachable host service only for this internal runtime lifecycle evidence
   path, with tests documenting that this is not browser-public exposure.
+- Commit `68166bfe9be182504ed7c4b3e0d621d2ce0261fd` added host sandbox
+  runtime port 8085 to the per-VM tap-reachable host service allowlist. Focused
+  local proof passed:
+  `nix develop -c go test ./internal/vmmanager -run
+  'TestTapReachableHostServicePortsIncludeHostPrivateServices|TestTapHostServiceInputRuleSpec|TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams'`,
+  `nix develop -c go build ./cmd/vmctl`, and `git diff --check`.
+- Deployed proof for `68166bfe9be182504ed7c4b3e0d621d2ce0261fd` passed: CI
+  run `27097898836`, FlakeHub run `27097898843`, and Node B deploy all
+  succeeded. `https://choir.news/health` reported `status: ok`,
+  `vmctl_status: ok`, and proxy/sandbox deployed commit
+  `68166bfe9be182504ed7c4b3e0d621d2ce0261fd` at
+  `2026-06-07T16:15:37Z`.
+- Product-path authenticated public API proof with fresh owner
+  `sourcemaxx-proof-1780849103` returned HTTP 200 for
+  `/api/global-wire/sourcemaxx-status` and resolved SourceMaxx lifecycle
+  evidence for cycle `cycle_620122d38e3a67282f74b420`: 500 SourceItems, 14
+  fetches, 10 processor requests, 1 reconciler request, 7/7 processor runtime
+  runs resolved as completed, 1/1 reconciler runtime run resolved as completed,
+  processor update count 10, reconciler update count 2, and reconciler child
+  profile counts `researcher: 2` and `vtext: 5`. The source firehose ->
+  shared-harness processors/reconciler -> researcher/VText delegation evidence
+  surface is now staging-proven at aggregate product status level.
 
 remaining error field:
 
 - sustained staging source daemon/storage behavior across repeated cycles,
   including provider-level distribution, freshness, dedupe, and backoff;
 - first-class processor/reconciler shared-harness profiles are present,
-  sourcecycled submits capped staging handoffs to them, and staging logs show
-  post-fix shared-harness tool loops; clean-cycle internal evidence shows
-  processor `submit_coagent_update` and researcher/VText-capable delegation
-  calls, but browser-visible product status still cannot resolve detailed
-  lifecycle events from request-serving VM sandboxes because host tap networking
-  does not yet admit the runtime lifecycle port 8085; publication-quality VText
+  sourcecycled submits capped staging handoffs to them, staging logs show
+  shared-harness tool loops, and browser-visible product status now resolves
+  aggregate lifecycle evidence including processor/reconciler completion,
+  updates, and researcher/VText child delegation; publication-quality VText
   production remains incomplete;
 - deploys can interrupt active SourceMaxx runs because gateway/sandbox restart
   while processor/reconciler loops are mid-inference; provider 429 pressure was
@@ -970,19 +990,16 @@ remaining error field:
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether adding host sandbox runtime port
-8085 to the tap-reachable service allowlist lets request-serving VM sandboxes
-resolve SourceMaxx processor/reconciler lifecycle evidence, then whether the
-produced processor/reconciler updates and delegated researcher/VText children
-are good enough to create publication-quality VTexts with appropriate
-Style.vtext sources.
+highest-impact remaining uncertainty: whether the resolved processor/reconciler
+updates and delegated researcher/VText children produce publication-quality
+VTexts with appropriate Style.vtext sources, and how to surface that output in
+the clean newspaper UI without reviving the old busy panel/card design.
 
 next executable delivery loop:
 
-1. Fix product-safe lifecycle join for SourceMaxx status: use the configured
-   sourcecycled runtime base URL/owner when resolving submitted run IDs, expose
-   only aggregate lifecycle counts through `/api/global-wire/sourcemaxx-status`,
-   and keep raw event content/internal endpoints private.
+1. Inspect the VText child outputs from the proven SourceMaxx cycle and identify
+   the concrete gap between current generated VTexts and publication-quality
+   story VTexts with citeable Style.vtext source selection/composition.
 2. Keep processors and reconcilers on the shared runtime harness with
    profile-specific prompts/toolsets only. Do not create a separate processor
    service loop to mask lineage gaps.
@@ -990,8 +1007,7 @@ next executable delivery loop:
    and route article/update needs into existing VText agents. Do not create a
    parallel researcher/writer system.
 4. Replace remaining wrong-object paths while preserving product topology:
-   high-volume
-   source ingestion, durable SourceItems, routing, processor state,
+   high-volume source ingestion, durable SourceItems, routing, processor state,
    reconciler corpus review, researcher request/result reuse, VText
    write/revision reuse, Style.vtext routing, VText traversal/source indexes,
    and user-owned VText boundaries.
