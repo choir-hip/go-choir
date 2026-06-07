@@ -4725,3 +4725,51 @@ Next executable probe:
   owner-approved exports, honest `RunAcceptanceRecord` synthesis if a real
   product trajectory/run can be bound, or source standing/extraction
   normalization to reduce demo-shaped evidence.
+
+## Problem Checkpoint - Export Artifacts Lack Owner-Created Public Link - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transform:
+
+- Treat public visibility as its own owner-created artifact, not as an ambient
+  property of delivery or export rows.
+- Keep the first public surface unlisted and read-only, scoped to a single
+  already exported delivery artifact. This gives the publication path a real
+  public/read surface without making all owner exports public.
+
+Observed gap:
+
+- Delivery exports are durable and owner-scoped, but cannot be read outside the
+  authenticated owner product path.
+- There is no public/unlisted permalink object that binds a delivery export to
+  a stable route/token and preserves citation/rollback provenance.
+- The News app cannot create or display a public publication ref.
+
+Why this matters:
+
+- The spec trajectory includes newsletter/public publication surfaces. An
+  owner-scoped export is portable internally, but not yet publication in the
+  ordinary reader sense.
+- Public/unlisted links are the smallest honest public surface: they require an
+  owner action, expose a specific export only, and can carry non-oracle
+  provenance.
+- The public link must not mutate platform Story VTexts or user-owned forks,
+  and must not expose unrelated owner queues.
+
+Remaining error field:
+
+- No `GlobalWirePublicationPublicLink` or equivalent public/unlisted artifact
+  exists.
+- No owner product path creates a public link from a delivery export.
+- No unauthenticated read-only route returns a single exported publication with
+  provenance.
+- No News app view displays a public ref for an exported delivery.
+
+Next executable probe:
+
+- Add owner-created public/unlisted link records over delivery exports, expose
+  authenticated create/list and unauthenticated read-only detail by token, show
+  the public ref in the News app, and prove on staging that public reads expose
+  only the selected export body/provenance while preserving owner scope for all
+  other queues.
