@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -268,7 +269,7 @@ func (s *Store) ensureDefaultGlobalWireStories(ctx context.Context, ownerID stri
 		return fmt.Errorf("count global wire stories: %w", err)
 	}
 	if count > 0 {
-		return nil
+		return s.ensureExistingGlobalWireArticleVTextRevisions(ctx, ownerID)
 	}
 	now := time.Now().UTC()
 	styleSources, err := s.ensureDefaultGlobalWireStyleVTexts(ctx, ownerID, now)
@@ -286,10 +287,7 @@ func (s *Store) ensureDefaultGlobalWireStories(ctx context.Context, ownerID stri
 			return err
 		}
 		sourceBackedStory.StyleSources = styleSources
-		docID, err := s.createGlobalWireSeedVText(ctx, ownerID, sourceBackedStory.Headline, globalWireStoryVTextContent(sourceBackedStory), append([]types.Citation{
-			{ID: "style-source", Type: "vtext", Value: styleSources[0].SourcePath, Label: styleSources[0].Title},
-			{ID: "storygraph-node", Type: "storygraph", Value: sourceBackedStory.ID, Label: sourceBackedStory.Headline},
-		}, globalWireSourceCitations(sourceBackedStory)...), map[string]any{
+		docID, err := s.createGlobalWireSeedVText(ctx, ownerID, sourceBackedStory.Headline, globalWireStoryVTextContent(sourceBackedStory), globalWireStoryVTextCitations(sourceBackedStory), map[string]any{
 			"created_from":    "global_wire_storygraph_seed",
 			"storygraph_id":   sourceBackedStory.ID,
 			"source_state":    globalWireSeedState,
@@ -311,6 +309,141 @@ func (s *Store) ensureDefaultGlobalWireStories(ctx context.Context, ownerID stri
 	return nil
 }
 
+func (s *Store) ensureExistingGlobalWireArticleVTextRevisions(ctx context.Context, ownerID string) error {
+	rows, err := s.readDB.QueryContext(ctx,
+		`SELECT owner_id, story_id, headline, dek, freshness, prominence, tension,
+		        change_state, node_tone, related_json, manifest_json, claims_json,
+		        projections_json, style_sources_json, story_vtext_doc_id,
+		        source_state, created_at, updated_at
+		   FROM global_wire_story_graphs
+		  WHERE owner_id = ?`,
+		ownerID,
+	)
+	if err != nil {
+		return fmt.Errorf("list existing global wire stories for vtext repair: %w", err)
+	}
+	var stories []types.GlobalWireStory
+	for rows.Next() {
+		story, err := scanGlobalWireStory(rows)
+		if err != nil {
+			_ = rows.Close()
+			return err
+		}
+		stories = append(stories, story)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close existing global wire stories for vtext repair: %w", err)
+	}
+	if err := s.attachGlobalWireProjectionRefs(ctx, ownerID, stories); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for _, story := range stories {
+		if strings.TrimSpace(story.StoryVTextDoc) != "" {
+			if err := s.repairGlobalWireArticleVTextRevision(ctx, ownerID, story.StoryVTextDoc, story.Headline, globalWireStoryVTextContent(story), globalWireStoryVTextCitations(story), map[string]any{
+				"created_from":    "global_wire_article_body_repair",
+				"storygraph_id":   story.ID,
+				"source_state":    story.SourceState,
+				"source_entities": globalWireSourceEntities(story),
+			}, now); err != nil {
+				return err
+			}
+		}
+		for _, style := range story.StyleSources {
+			docID := strings.TrimSpace(story.ProjectionVTextDocs[style.ID])
+			if docID == "" || docID == story.StoryVTextDoc {
+				continue
+			}
+			projection := strings.TrimSpace(story.Projections[style.ID])
+			if projection == "" {
+				continue
+			}
+			if err := s.repairGlobalWireArticleVTextRevision(ctx, ownerID, docID, story.Headline+" - "+style.Label+" projection", globalWireProjectionVTextContent(story, style, projection), globalWireProjectionVTextCitations(story, style), map[string]any{
+				"created_from":    "global_wire_projection_body_repair",
+				"storygraph_id":   story.ID,
+				"style_id":        style.ID,
+				"style_doc_id":    style.DocID,
+				"source_entities": globalWireSourceEntities(story),
+			}, now); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Store) repairGlobalWireArticleVTextRevision(ctx context.Context, ownerID, docID, title, content string, citations []types.Citation, metadata map[string]any, now time.Time) error {
+	doc, err := s.GetDocument(ctx, docID, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	if strings.TrimSpace(doc.CurrentRevisionID) == "" {
+		return nil
+	}
+	current, err := s.GetRevision(ctx, doc.CurrentRevisionID, ownerID)
+	if err != nil {
+		return err
+	}
+	if !globalWireArticleVTextNeedsBodyRepair(current.Content) {
+		return nil
+	}
+	if strings.TrimSpace(title) != "" && doc.Title != title {
+		doc.Title = title
+		doc.UpdatedAt = now
+		if err := s.UpdateDocument(ctx, doc); err != nil {
+			return err
+		}
+	}
+	metadata["repaired_from_revision_id"] = current.RevisionID
+	citationsJSON, err := json.Marshal(citations)
+	if err != nil {
+		return fmt.Errorf("marshal global wire repaired citations: %w", err)
+	}
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("marshal global wire repaired metadata: %w", err)
+	}
+	return s.CreateRevision(ctx, types.Revision{
+		RevisionID:       uuid.NewString(),
+		DocID:            docID,
+		OwnerID:          ownerID,
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "Global Wire",
+		Content:          content,
+		Citations:        citationsJSON,
+		Metadata:         metadataJSON,
+		ParentRevisionID: current.RevisionID,
+		CreatedAt:        now,
+	})
+}
+
+func globalWireArticleVTextNeedsBodyRepair(content string) bool {
+	for _, token := range []string{
+		"Style source:",
+		"Story id:",
+		"## Projection",
+		"\nProjection\n",
+		"\nClaims\n",
+		"Source Manifest",
+		"Related VTexts",
+		"Non-oracle note",
+		"My Edit",
+		"Projection relation:",
+		"Evidence Invariant",
+		"Draft state:",
+		"Projection review id:",
+		"Projection Review Approval",
+	} {
+		if strings.Contains(content, token) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Store) ensureGlobalWireStoryProjections(ctx context.Context, ownerID string, story types.GlobalWireStory, styles []types.GlobalWireStyleSource, now time.Time) (map[string]string, error) {
 	out := map[string]string{}
 	for i, style := range styles {
@@ -321,10 +454,7 @@ func (s *Store) ensureGlobalWireStoryProjections(ctx context.Context, ownerID st
 		storyDocID := story.StoryVTextDoc
 		if i > 0 {
 			content := globalWireProjectionVTextContent(story, style, text)
-			docID, err := s.createGlobalWireSeedVText(ctx, ownerID, story.Headline+" - "+style.Label+" projection", content, append([]types.Citation{
-				{ID: "style-source", Type: "vtext", Value: style.SourcePath, Label: style.Title},
-				{ID: "storygraph-node", Type: "storygraph", Value: story.ID, Label: story.Headline},
-			}, globalWireSourceCitations(story)...), map[string]any{
+			docID, err := s.createGlobalWireSeedVText(ctx, ownerID, story.Headline+" - "+style.Label+" projection", content, globalWireProjectionVTextCitations(story, style), map[string]any{
 				"created_from":    "global_wire_style_projection_seed",
 				"storygraph_id":   story.ID,
 				"style_id":        style.ID,
@@ -452,6 +582,27 @@ func globalWireSourceCitations(story types.GlobalWireStory) []types.Citation {
 		})
 	}
 	return citations
+}
+
+func globalWireStoryVTextCitations(story types.GlobalWireStory) []types.Citation {
+	citations := []types.Citation{
+		{ID: "storygraph-node", Type: "storygraph", Value: story.ID, Label: story.Headline},
+	}
+	if len(story.StyleSources) > 0 {
+		style := story.StyleSources[0]
+		citations = append([]types.Citation{{ID: "style-source", Type: "vtext", Value: style.SourcePath, Label: style.Title}}, citations...)
+	}
+	return append(citations, globalWireSourceCitations(story)...)
+}
+
+func globalWireProjectionVTextCitations(story types.GlobalWireStory, style types.GlobalWireStyleSource) []types.Citation {
+	citations := []types.Citation{
+		{ID: "storygraph-node", Type: "storygraph", Value: story.ID, Label: story.Headline},
+	}
+	if strings.TrimSpace(style.SourcePath) != "" || strings.TrimSpace(style.Title) != "" {
+		citations = append([]types.Citation{{ID: "style-source", Type: "vtext", Value: style.SourcePath, Label: style.Title}}, citations...)
+	}
+	return append(citations, globalWireSourceCitations(story)...)
 }
 
 func globalWireSourceEntities(story types.GlobalWireStory) []map[string]any {
