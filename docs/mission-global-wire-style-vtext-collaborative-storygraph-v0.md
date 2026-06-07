@@ -4630,3 +4630,98 @@ Next executable probe:
   News app, include exports in reconciliation, and prove on staging that export
   creation preserves delivery/artifact/story/source/script/citation/rollback
   provenance without making the export public.
+
+## Checkpoint - Owner-Scoped Delivery Export Artifacts - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What changed:
+
+- Added `GlobalWirePublicationDeliveryExport` as a portable owner-scoped export
+  over a delivered publication and optional Autoradio script.
+- Added `global_wire_publication_delivery_exports` with delivery/artifact/
+  script/story/source/citation/rollback provenance fields.
+- Added authenticated
+  `GET/POST /api/global-wire/publication-delivery-exports`.
+- Export creation reads an existing `delivery-ready` publication delivery,
+  publication artifact, StoryGraph story, source item, and latest matching
+  Autoradio script when present.
+- Reconciliation now returns `delivery_exports`.
+- The News app now lets an owner create an export from a delivered publication
+  row and displays export body plus format/citation/rollback provenance.
+
+Evidence:
+
+- Problem-first checkpoint commit:
+  `2335ed2a` (`docs: record global wire delivery export gap`).
+- Behavior commit:
+  `46e50aa1a09015d8a6f7f21baf9763c02ddecdbf`
+  (`feat: export global wire delivery artifacts`).
+- Local runtime proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`.
+- Local frontend proof passed:
+  `npm run build` in `frontend/`.
+- Diff hygiene passed:
+  `git diff --check`.
+- CI run `27087453153`: success. Runtime shards, non-runtime tests,
+  integration smoke, Go vet/build, frontend build, aggregate gate, and Deploy
+  to Staging all passed.
+- FlakeHub publish run `27087453166`: success.
+- Staging health after deploy reported proxy and upstream deployed commit
+  `46e50aa1a09015d8a6f7f21baf9763c02ddecdbf`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in"`
+  with 1 passed. The proof creates the publication artifact trajectory,
+  approves it, creates delivery evidence, creates an Autoradio script, creates
+  a delivery export through the News app, verifies visible export body/
+  provenance, and verifies reconciliation returns the export with rollback refs.
+
+Invariants preserved:
+
+- Delivery exports are authenticated owner-scoped artifacts, not public
+  permalinks or syndication feeds.
+- Export creation composes existing delivery/artifact/story/source/script
+  evidence and does not mutate platform stories, StoryGraph records, or
+  user-owned forks.
+- Export body includes non-oracle provenance boundaries: delivery ref, source,
+  citation count/refs, rollback count/refs, artifact id, delivery id, and
+  optional Autoradio script id/body.
+- Publication artifact approval and delivery remain the owner gates before
+  export.
+- Future Noir, Carbon Kintsugi, and London Salmon view proofs still pass on
+  staging.
+
+Belief-state update:
+
+- The proven product trajectory now reaches:
+  SourceItem -> source refresh/fetch/scheduler evidence -> StoryGraph headline
+  candidate -> extraction/research artifacts -> research handoff ->
+  projection review -> publication update package -> publication artifact ->
+  owner-scoped publication feed item -> Autoradio artifact traversal prompt ->
+  owner artifact approval -> owner-scoped delivery-ready publication record ->
+  owner-scoped delivered-publication detail view -> durable Autoradio script
+  artifact -> owner-scoped delivery export artifact.
+- Publication output is now portable inside the authenticated product path. The
+  system still lacks public permalink/newsletter/syndication delivery, but the
+  exported object is a safe precursor with explicit provenance and rollback.
+
+Remaining error field:
+
+- Delivery exports are not public/unlisted routes, newsletter issues, email
+  deliveries, subscription events, or syndication feed items.
+- Autoradio scripts are text artifacts only; there is no audio synthesis,
+  playback, scheduling, or podcast/feed delivery.
+- No durable `RunAcceptanceRecord` exists for this mission.
+- Source standing policy, extraction normalization, full Style.vtext revision
+  workflows, and public delivery remain below the full spec target.
+
+Next executable probe:
+
+- Apply cognitive transforms before the next route choice. The highest-value
+  remaining realism axes are now: public/unlisted read-only permalink over
+  owner-approved exports, honest `RunAcceptanceRecord` synthesis if a real
+  product trajectory/run can be bound, or source standing/extraction
+  normalization to reduce demo-shaped evidence.
