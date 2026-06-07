@@ -3282,6 +3282,7 @@ func (h *APIHandler) createGlobalWirePlatformStoryRevision(r *http.Request, owne
 		"edge_kind":         candidate.EdgeKind,
 		"source_tier":       candidate.SourceTier,
 		"applied_changes":   appliedChanges,
+		"source_entities":   globalWireRuntimeSourceEntities(story),
 		"mutation_boundary": "platform-review-only",
 	})
 	if err != nil {
@@ -3390,28 +3391,115 @@ func globalWirePlatformStoryRevisionCitations(story types.GlobalWireStory, candi
 }
 
 func globalWirePlatformStoryRevisionContent(story types.GlobalWireStory, candidate types.GlobalWireGraphUpdateCandidate, item types.ContentItem, appliedChanges []string) string {
+	sourceRef := globalWireRuntimeSourceRef(globalWireSourceItemFromContentItem(candidate, item), 1)
+	updateSummary := strings.TrimSpace(candidate.Summary)
+	if updateSummary == "" {
+		updateSummary = strings.TrimSpace(item.TextContent)
+	}
+	if updateSummary == "" {
+		updateSummary = "A newly reviewed source changed the story's source neighborhood."
+	}
+	if len(updateSummary) > 320 {
+		updateSummary = strings.TrimSpace(updateSummary[:320]) + "..."
+	}
+	projection := strings.TrimSpace(story.Projections["wire-style"])
+	if projection == "" {
+		projection = strings.TrimSpace(story.Dek)
+	}
 	lines := []string{
 		"# " + story.Headline,
 		"",
 		story.Dek,
 		"",
-		"This version incorporates a platform review update from " + firstNonEmptyString(item.Title, "a reviewed source") + ".",
+		projection,
 		"",
-	}
-	for _, change := range appliedChanges {
-		change = strings.TrimSpace(change)
-		if change != "" {
-			lines = append(lines, change)
-		}
-	}
-	lines = append(lines, "")
-	for _, claim := range story.Claims {
-		claim = strings.TrimSpace(claim)
-		if claim != "" {
-			lines = append(lines, claim)
-		}
+		"The latest version incorporates " + sourceRef + " as reviewed source context. " + updateSummary,
 	}
 	return strings.Join(lines, "\n")
+}
+
+func globalWireRuntimeSourceEntities(story types.GlobalWireStory) []vtextSourceEntity {
+	all := []types.GlobalWireSourceItem{}
+	all = append(all, story.Manifest.Lead...)
+	all = append(all, story.Manifest.Supporting...)
+	all = append(all, story.Manifest.Contrary...)
+	all = append(all, story.Manifest.Context...)
+	entities := make([]vtextSourceEntity, 0, len(all))
+	for _, item := range all {
+		contentID := strings.TrimSpace(item.ContentID)
+		if contentID == "" {
+			continue
+		}
+		entityID := globalWireRuntimeSourceEntityID(item)
+		if entityID == "" {
+			continue
+		}
+		entities = append(entities, vtextSourceEntity{
+			EntityID: entityID,
+			Kind:     "content_item",
+			Label:    strings.TrimSpace(item.Title),
+			Target: vtextSourceEntityTarget{
+				TargetKind:   "content_item",
+				ContentID:    contentID,
+				CanonicalURL: strings.TrimSpace(item.CanonicalURL),
+			},
+			Selectors: []vtextSourceEntitySelector{{SelectorKind: "whole_resource"}},
+			Display: vtextSourceEntityDisplay{
+				InlineMode:       "collapsed_citation",
+				ExpandedMode:     "source_card",
+				OpenSurface:      "source",
+				DefaultCollapsed: true,
+			},
+			Evidence: vtextSourceEntityEvidence{
+				State:         "available",
+				ResearchState: "represented",
+				Relation:      firstNonEmptyString(item.Role, "context"),
+			},
+			Provenance: vtextSourceEntityProvenance{
+				CreatedBy:           "global_wire",
+				RightsScope:         "private_user_source",
+				UntrustedSourceText: true,
+			},
+		})
+	}
+	return entities
+}
+
+func globalWireRuntimeSourceRef(item types.GlobalWireSourceItem, fallback int) string {
+	label := strings.TrimSpace(item.Title)
+	if label == "" {
+		label = fmt.Sprintf("source %d", fallback)
+	}
+	entityID := globalWireRuntimeSourceEntityID(item)
+	if entityID == "" {
+		return label
+	}
+	return fmt.Sprintf("[%s](source:%s)", label, entityID)
+}
+
+func globalWireRuntimeSourceEntityID(item types.GlobalWireSourceItem) string {
+	base := firstNonEmptyString(item.ID, item.ContentID, item.Title)
+	if base == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range strings.ToLower(base) {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-' || r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	cleaned := strings.Trim(b.String(), "-_")
+	if cleaned == "" {
+		return ""
+	}
+	return "gw-src-" + cleaned
 }
 
 func globalWireRuntimeSourceLines(label string, items []types.GlobalWireSourceItem) []string {

@@ -1646,10 +1646,30 @@ func TestHandleGlobalWirePromotesClassifiedRefreshIntoStoryGraphAndPlatformVText
 	}
 	if afterRev.AuthorKind != types.AuthorAppAgent ||
 		afterRev.ParentRevisionID != beforeDoc.CurrentRevisionID ||
-		!strings.Contains(afterRev.Content, "front-page prominence changed") ||
-		!strings.Contains(afterRev.Content, refreshResp.ContentItem.ContentID) ||
-		!strings.Contains(afterRev.Content, "User-owned forks, edits, and contributions remain separate") {
-		t.Fatalf("platform story revision missing classified promotion provenance: %+v", afterRev)
+		!strings.Contains(afterRev.Content, "reviewed source context") ||
+		!strings.Contains(afterRev.Content, "source:gw-src-") ||
+		strings.Contains(afterRev.Content, "source_content_id") ||
+		strings.Contains(afterRev.Content, "User-owned forks, edits, and contributions remain separate") {
+		t.Fatalf("platform story revision did not preserve article-body/source-ref contract: %+v", afterRev)
+	}
+	afterMeta := decodeRevisionMetadata(afterRev.Metadata)
+	if afterMeta["created_from"] != "global_wire_graph_candidate_promotion" ||
+		afterMeta["storygraph_id"] != "story-supply-resilience" ||
+		afterMeta["candidate_id"] != refreshResp.Candidate.ID ||
+		afterMeta["source_content_id"] != refreshResp.ContentItem.ContentID ||
+		afterMeta["candidate_kind"] != "front-page-prominence-changed" {
+		t.Fatalf("platform story revision missing structured promotion provenance: %#v", afterMeta)
+	}
+	sourceEntities := decodeVTextSourceEntities(afterMeta["source_entities"])
+	foundPromotedSource := false
+	for _, entity := range sourceEntities {
+		if entity.Target.ContentID == refreshResp.ContentItem.ContentID {
+			foundPromotedSource = true
+			break
+		}
+	}
+	if !foundPromotedSource {
+		t.Fatalf("platform story revision source_entities missing promoted source %q: %#v", refreshResp.ContentItem.ContentID, sourceEntities)
 	}
 }
 
