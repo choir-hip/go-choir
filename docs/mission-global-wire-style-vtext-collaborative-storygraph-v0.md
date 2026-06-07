@@ -5219,3 +5219,45 @@ Next executable probe:
   (newsletter/RSS/email-style delivery) or source/extraction normalization. Use
   cognitive transforms before choosing; avoid spending the next slice on UI
   polish unless it materially improves public provenance or owner editability.
+
+## Problem Checkpoint - Public Reader Still Lacks Feed Projection - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transform:
+
+- Do not invent a second publishing object when the durable public-link artifact
+  already names the public publication. The next projection should derive from
+  that artifact.
+- Treat RSS/feed output as a machine-readable projection of the same
+  provenance-rich publication, not as an oracle feed or a broad public index.
+- Keep the lowest honest delivery slice: one public link -> one RSS item/feed,
+  token-scoped and read-only.
+
+Observed gap:
+
+- Global Wire now has owner-created public links and a public reader page.
+- Those links are human-readable, but not yet feed-consumable as RSS/Atom or
+  newsletter-style syndication output.
+- The spec trajectory still includes News/publication views and downstream
+  delivery surfaces; the current public page is not enough for feed readers or
+  syndication probes.
+
+Why this matters:
+
+- A public RSS projection is the smallest useful syndication surface after a
+  public reader. It can prove that exported publication body, title, citations,
+  rollback refs, and route path survive into a standard downstream format.
+- The projection must not expose owner queues or add public mutation controls.
+
+Remaining error field:
+
+- No public feed endpoint exists for `GlobalWirePublicationPublicLink`.
+- The public reader does not advertise a feed projection.
+
+Next executable probe:
+
+- Add a token-scoped RSS projection for a public link, expose its feed route in
+  the public reader payload/UI, and prove on staging that the unauthenticated
+  feed contains the publication title/body plus citation and rollback
+  provenance.
