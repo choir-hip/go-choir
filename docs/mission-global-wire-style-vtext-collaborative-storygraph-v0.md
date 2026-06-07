@@ -3110,3 +3110,57 @@ Next executable probe:
   state, Style.vtext projection review state, source lineage, and rollback refs
   into an owner-visible `GlobalWirePublicationUpdate` artifact without
   auto-mutating platform stories.
+
+## Problem - Publication Readiness Is Not Yet A Durable Update Package - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Observed gap:
+
+- Global Wire can ingest source evidence, create candidates, complete research,
+  accept research evidence into review, promote graph candidates, and review
+  Style.vtext projection drafts.
+- Those artifacts remain separate rows and UI fragments. There is no durable
+  publication/update package that names the story update, cited evidence,
+  candidate state, projection review state, source lineage, and rollback refs.
+- The News app cannot yet show an owner-visible "this update is packaged for
+  publication/release review" object.
+
+Why this matters:
+
+- The spec's ingestion loop includes `Story VText revisions ->
+  publication/update feed`. Candidate readiness and projection review are
+  prerequisites, but they are not themselves a publication feed.
+- A publication/update queue must remain non-oracle. It should bundle evidence
+  and review state for owner/platform review, not silently publish or rewrite
+  stories.
+- Rollback refs need to be visible before publication pressure, not invented
+  after a mutation. At low resolution, they can cite current story/projection
+  doc ids and candidate/review ids as rollback anchors.
+
+Belief-state update:
+
+- The next topology-preserving improvement is a low-resolution
+  `GlobalWirePublicationUpdate` artifact created from an accepted research
+  handoff decision and its linked StoryGraph candidate/projection review state.
+- The artifact should be owner-scoped, provenance-rich, and visible in
+  reconciliation/News. It should not mutate platform stories or publish a
+  newsletter by itself.
+
+Remaining error field:
+
+- No durable publication/update package table exists.
+- No product endpoint packages accepted research handoffs into publication
+  update artifacts.
+- Reconciliation does not return publication/update queue records.
+- News cannot display publication readiness, source lineage, or rollback refs
+  as a first-class object.
+
+Next executable probe:
+
+- Add `/api/global-wire/publication-updates` with GET/POST. POST should package
+  an accepted `GlobalWireResearchEvidenceDecision` into a
+  `GlobalWirePublicationUpdate` that cites story id, candidate id, evidence
+  decision id, SourceItem id, projection review ids/states, rollback refs, and
+  a non-publication status. Expose it in reconciliation and News, prove locally
+  and on staging that package creation does not mutate platform stories.
