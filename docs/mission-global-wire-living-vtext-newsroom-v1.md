@@ -909,3 +909,45 @@ final newsroom behavior. The next proof must deploy this repair, verify in
 Comet that existing article VTexts advance to fuller prose with native source
 buttons, and continue toward live VText-agent article generation from the
 expanded source network.
+
+## Checkpoint 2026-06-07T23:49Z: fallback article repair deployed; live article proof still partial
+
+objective: deploy the fallback article-depth repair and prove the staging
+identity and product surface.
+
+deployed proof: commit `9f7a6603eb432f4098e0cc2b95705910083af77c` passed CI
+run `27108134124`: integration smoke, Go vet/build, non-runtime tests, all
+four runtime shards, aggregate gate, and Node B deploy job `80000974315`.
+FlakeHub publish run `27108134106` also succeeded. `https://choir.news/health`
+and Node B `/opt/go-choir` both report deployed commit
+`9f7a6603eb432f4098e0cc2b95705910083af77c` with deployed_at
+`2026-06-07T23:38:36Z`. On the deployed checkout,
+`nix develop -c go test ./internal/store -run
+TestGlobalWireThinArticleVTextBodyRepairsForward -count=1` passed.
+
+Comet/product-surface proof: Comet on `https://choir.news/` shows the
+authenticated desktop with a `Global Wire` desktop icon. Before this deploy,
+opening Global Wire in Comet showed the live source surface with `211 live
+sources`, `4,982 source items`, `123 processors`, and `1 reconciler`, and the
+opened article VText showed native source buttons. After this deploy, Comet
+reloaded to the desktop and still shows the `Global Wire` icon, but the
+Computer Use click tool refused to interact after `get_app_state` with
+`Computer Use is not active`, so the live owner article could not be reopened
+through Comet in this turn. The deployed code and deployed-checkout test prove
+the repair path; the actual Comet reopened-article visual proof remains
+pending.
+
+additional observed issue: the Comet prompt stream displayed a stale or
+separate VText run message saying a run called `edit_vtext` and then hit a
+gateway provider HTTP failure. Node B gateway health is currently `ok`, and
+gateway logs after deploy show Fireworks inference succeeding. The same logs
+also show repeated `gateway: search outage` lines for researcher-style
+queries. That search-provider instability is relevant to the research axis and
+should be treated as a future documented problem before any search fix.
+
+remaining error field: source breadth, desktop entry, VText-owned article
+metadata, and fallback article depth have all moved forward. The mission is
+still not complete: live model-authored Global Wire articles need product-path
+proof, related VTexts need first-class transclusion rather than prose-only
+references, Comet/browser interaction needs a reliable proof path, and gateway
+search outages can block researcher-backed reconciliation.
