@@ -2225,4 +2225,27 @@ local proof:
 
   nix develop -c scripts/go-test-runtime-shards
   result: passed.
+
+commit/deploy proof:
+  commit b2a8d9490e92ea2171b12314bba9178686e87bc1
+  GitHub Actions CI 27078169938 passed.
+  FlakeHub publish 27078169931 passed.
+  Node B deploy job 79919151561 passed.
+  /health reported proxy and sandbox deployed_commit
+  b2a8d9490e92ea2171b12314bba9178686e87bc1, deployed_at
+  2026-06-07T00:37:40Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000
+  npm --prefix frontend run e2e --
+  tests/vtext-diagnosis-extraction-staging.tmp.spec.js
+  result: first attempt failed because the temporary spec incorrectly expected
+  `revisions` to be populated with `include_content=false`; this is contrary
+  to the intended diagnosis contract. The corrected proof asserted that full
+  revision content was omitted, that body text did not leak into the response,
+  and that `revision_structures` returned the expected deployed heading/table
+  counts, separator flag, and SHA-256 table signature.
+
+  corrected result: 1 passed. The temporary spec and Playwright .last-run.json
+  were deleted after the run.
 ```
