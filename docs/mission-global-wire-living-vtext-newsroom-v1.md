@@ -274,7 +274,7 @@ revisions so promotion/source evidence is carried in structured revision
 metadata and `source_entities`, while the visible VText body remains article
 prose with native source refs instead of `source_content_id` lines, manifest
 mutation text, fork disclaimers, or raw provenance dumps.
-Current working checkpoint on 2026-06-07 updates the shared coagent VText
+Current shipped checkpoint `e6a634c1` on 2026-06-07 updates the shared coagent VText
 handoff route: processor/reconciler `spawn_agent(role=vtext)` now starts a
 Global Wire VText revision run with source-network metadata, creates any
 initial handoff as `artifact_kind=source_brief` with `article_version=false`
@@ -287,7 +287,7 @@ what shipped: prior work shipped source service substrate, processor/reconciler
 handoff scaffolding, some VText agent usage, and a cleaner newspaper preview.
 Those are substrate only. Latest shipped code also removes the old failed
 promotion-body contract that made platform story revisions read like internal
-metadata. Current unshipped source changes further normalize the
+metadata. Shipped checkpoint `e6a634c1` further normalizes the
 processor/reconciler-to-VText handoff around VText ownership and native source
 entities, while preserving legacy `source_maxx_*` metadata only for
 continuation compatibility.
@@ -316,6 +316,11 @@ runtime-only; the earlier frontend-changing commit `e8728cb6` had passed local
 Current local proof for the coagent handoff checkpoint passed
 `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText|TestSystemPromptForGlobalWireProfilesLoadsSharedHarnessPrompts|TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead' -count=1`.
 Current local frontend proof passed `npm run build` in `frontend`.
+CI run `27104452596` passed for
+`e6a634c1c4866f151244a7ac6379e44f7e4bdde6`: Go vet/build,
+integration-tagged smoke, non-runtime tests, all four runtime shards,
+frontend build, aggregate gate, and staging deploy. FlakeHub run
+`27104452597` also passed for the same SHA.
 
 staging identity proof: deploy job `79989704732` completed successfully and
 reported proxy, sandbox upstream, and platformd build/deployed commit
@@ -323,6 +328,12 @@ reported proxy, sandbox upstream, and platformd build/deployed commit
 `2026-06-07T20:32:11Z`. Node B `/opt/go-choir` also reports that exact git
 HEAD with a clean worktree. The deploy job verified service health and public
 frontend asset graph.
+Follow-up deploy job `79991079599` completed successfully for `e6a634c1`.
+Deploy logs reported proxy, sandbox upstream, and platformd build/deployed
+commit `e6a634c1c4866f151244a7ac6379e44f7e4bdde6`, deployed at
+`2026-06-07T20:52:55Z`. Node B `/opt/go-choir` reports that exact git HEAD
+with a clean worktree, and direct health checks on ports 8082 and 8086 returned
+that commit for proxy/sandbox/platformd.
 
 staging product-path proof: unauthenticated `https://choir.news` browser proof
 loaded the deployed signed-out desktop preview with no console errors, no
@@ -334,6 +345,15 @@ API calls correctly returned 401 and the local Chrome profile does not have
 the Codex Chrome Extension installed (`check-extension-installed.js --json`
 reported installed=false for selected profile `Default`), so Codex could not
 take over an authenticated browser session without bypassing the product path.
+After the Chrome extension became available, authenticated staging browser
+proof loaded the Choir desktop at `https://choir.news/` on deployed
+`e6a634c1` with no browser console errors and no horizontal overflow in the
+observed narrow desktop shell. This proof also confirmed the residual product
+failure remains for existing article documents: the opened Global Wire VText
+still showed `v0`, visible style/story metadata in prose, a `Projection`
+section, and claim-list structure instead of a finished article with native
+source/related-VText transclusions. That is not a regression from this
+checkpoint; it is the next article-quality/VText-agent output target.
 
 unproven or partial claims: full source health, learned source track-record
 state, per-source proof surfaces, VText agent producing publication-quality
@@ -386,14 +406,12 @@ track-record state without hardcoded editorial tiers, while keeping long-tail
 Telegram/social inputs valuable as sentiment and lead discovery rather than
 standalone publication support.
 
-next executable probe: land/deploy the coagent handoff checkpoint, verify the
-deployed commit identity, then install/enable the Codex Chrome Extension or
-otherwise provide a usable authenticated staging browser session. Run the
-deployed Global Wire/VText proof: open Global Wire on `choir.news`, verify
-article columns, open every article through the compact VText affordance,
-trigger a processor/reconciler-to-VText handoff or equivalent product-path
-prompt, and inspect the resulting VText revision metadata/source entities and
-rendered source refs/transclusions.
+next executable probe: trigger a processor/reconciler-to-VText handoff through
+the product path or an approved internal newsroom control, then inspect the
+resulting VText revision metadata/source entities and rendered source
+refs/transclusions on authenticated staging. If that path produces another
+stub/outline, root-cause the VText agent edit prompt/tool result path before
+touching UI again.
 
 suggested resume goal string: use the Goal String section above.
 
@@ -402,5 +420,6 @@ the UI/article/VText failures; staging source service latest observed cycle
 had hundreds of items but only 14 configured sources.
 
 rollback refs: prior deployed behavior commit
-`4629811947f803a1104b33706186cb9e032ca83e` remains the rollback target until
-the current coagent handoff checkpoint lands and deploys.
+`4629811947f803a1104b33706186cb9e032ca83e` remains the rollback target for the
+coagent handoff checkpoint. Current deployed behavior commit is
+`e6a634c1c4866f151244a7ac6379e44f7e4bdde6`.
