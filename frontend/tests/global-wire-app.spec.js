@@ -19,6 +19,14 @@ async function focusDeskApp(page, appId, title) {
   await expect(page.locator(`[data-window][data-window-app-id="${appId}"]`)).toHaveAttribute('data-window-active', 'true');
 }
 
+async function ensureDeskApp(page, appId, title) {
+  if (await page.locator(`[data-window-tray-item][title="${title}"]`).count()) {
+    await focusDeskApp(page, appId, title);
+    return;
+  }
+  await openDeskApp(page, appId);
+}
+
 async function applyTheme(page, id) {
   const names = {
     'futuristic-noir': 'Futuristic Noir',
@@ -73,7 +81,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: DESKTOP_BOOT_TIMEOUT_MS });
 
   await openDeskApp(page, 'global-wire');
-  const app = page.locator('[data-global-wire-app]');
+  const app = page.locator('[data-window][data-window-app-id="global-wire"]').first().locator('[data-global-wire-app]');
   await expect(app).toBeVisible();
   await expect(app).toHaveAttribute('data-global-wire-data-source', 'durable-storygraph');
   await expect(app.locator('[data-global-wire-state]')).toContainText('durable-storygraph');
@@ -543,13 +551,18 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(publicRead.body.public_link.owner_id || '').toBe('');
     expect(publicRead.body.public_link.export_id).toBe(deliveryExportPayload.export.id);
     expect(publicRead.body.public_link.export_body).toContain(publicationArtifact.body.artifact.body);
-    await page.goto(publicLinkPayload.public_link.route_path);
+    const publicReaderURL = new URL(publicLinkPayload.public_link.route_path, page.url()).toString();
+    await page.goto(publicReaderURL);
     await expect(page.locator('[data-global-wire-public-reader]')).toBeVisible();
     await expect(page.locator('[data-global-wire-public-publication]')).toContainText(publicLinkPayload.public_link.title);
     await expect(page.locator('[data-global-wire-public-publication]')).toContainText(publicationArtifact.body.artifact.body);
     await expect(page.locator('[data-global-wire-public-provenance]')).toContainText('citations:');
     await expect(page.locator('[data-global-wire-public-citations]')).toContainText('story:story-supply-resilience');
     await expect(page.locator('[data-global-wire-public-rollback]')).toContainText('delivery_export:');
+    await page.goto(new URL('/', publicReaderURL).toString());
+    await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: DESKTOP_BOOT_TIMEOUT_MS });
+    await ensureDeskApp(page, 'global-wire', 'Global Wire');
+    await expect(app).toBeVisible();
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');
@@ -573,7 +586,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   expect(fetchCycle.refresh_runs?.length || 0).toBeGreaterThanOrEqual(1);
   await expect(app.locator('[data-global-wire-fetch-cycle-status]')).toBeVisible();
   await expect(app.locator('[data-global-wire-fetch-cycle-runs]')).toContainText('story-supply-resilience');
-  await expect(app.locator('[data-global-wire-source-standing-policy]')).toBeVisible();
+  await expect(app.locator('[data-global-wire-source-standing-policy]').first()).toBeVisible();
 
   const schedulerResponsePromise = page.waitForResponse((response) =>
     new URL(response.url()).pathname === '/api/global-wire/fetch-cycles' && response.request().method() === 'POST'
