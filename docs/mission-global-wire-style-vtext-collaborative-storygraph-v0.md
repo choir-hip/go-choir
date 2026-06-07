@@ -908,3 +908,95 @@ Remaining alternative:
 - If staging lacks a deployable Source Service, the next ship-worthy slice
   should be an explicit reconciliation workflow over the existing contribution
   queue rather than a fake live-ingestion loop.
+
+## Overnight Checkpoint - Source Service Bridge - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+commit delivered: `c651e48acb20db99850dcf7d24673454e814de48`
+(`feat: bridge source service into global wire`)
+
+What changed:
+
+- Added authenticated `POST /api/global-wire/source-search`.
+- The route searches the configured Source Service through the existing runtime
+  Source Service client.
+- Source Service results are imported into deterministic owner-scoped
+  `ContentItem`s with:
+  - `source_type=source_service_item`;
+  - `app_hint=global-wire`;
+  - metadata schema `choir.global_wire_source_service_item.v1`;
+  - preserved `source_service_item`, `source_id`, `fetch_id`, content hash,
+    evidence level, fetched/published times, verticals, language, and region.
+- When requested, the top imported result is queued as a normal Global Wire
+  source contribution in `pending-researcher-review`.
+- The route reports `unavailable` or `no-evidence` explicitly instead of
+  falling back to seeded data.
+- Platform StoryGraph stories remain unchanged; Source Service evidence enters
+  only as owner-owned source artifacts and contribution candidates.
+
+What was proven locally:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed.
+- `npm run build` passed in `frontend/`.
+
+What was proven on staging:
+
+- Pushed `c651e48acb20db99850dcf7d24673454e814de48` to `origin/main`.
+- GitHub Actions CI run `27081983909` completed successfully, including
+  runtime shards, non-runtime tests, Go vet/build, and staging deploy.
+- FlakeHub publish run `27081983912` completed successfully.
+- `https://choir.news/health` reported both proxy and sandbox deployed at
+  `c651e48acb20db99850dcf7d24673454e814de48`, deployed at
+  `2026-06-07T03:54:27Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded auth proof skipped when run from
+  `frontend/`.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed when run from `frontend/`.
+- A one-off authenticated product-path probe against staging returned
+  `status=ok` for `/api/global-wire/source-search` with query
+  `port congestion`. It imported two live Source Service/GDELT
+  `source_service_item` results as owner-scoped Global Wire `ContentItem`s and
+  queued the top result as a pending source contribution. Example evidence:
+  - `source=source_service_api`;
+  - `source_id=gdelt:15min`;
+  - first item `item_id=srcitem_35cc888d00facc96836e4bc1`;
+  - first imported content item
+    `global-wire-source-service-7920189f-b3f9-5f56-89aa-842e46944e9d`;
+  - queued contribution
+    `global-wire-contribution-8618b07a-efd9-4c44-bdc4-d118b66997d3`;
+  - contribution state `pending-researcher-review`.
+
+Belief-state changes:
+
+- The deployed product now has a real Source Service-backed evidence path into
+  Global Wire. This is no longer merely seeded or manually imported evidence.
+- The path still preserves the core invariants: live source evidence becomes
+  owner-owned artifacts and queued contributions, not platform story mutation.
+- The current deployed object covers the whole spec trajectory at low but real
+  resolution:
+  live Source Service evidence -> owner-scoped SourceItems -> durable
+  StoryGraph -> Story VTexts -> Style.vtext projections -> News app views ->
+  user-owned edits/contributions -> research/reconciliation-ready state.
+
+Remaining error field:
+
+- Source Service evidence is searched and queued by product request; there is
+  not yet an autonomous graph update/classification loop.
+- Story clustering, graph edge classification, and update classification remain
+  absent.
+- Reconciliation remains a queue state, not an active researcher workflow that
+  accepts/rejects/merges source-service contributions into graph neighborhoods.
+- The app does not yet expose a visible Source Service search/picker control;
+  the bridge is currently an API/proof path.
+- Autoradio/Ask hooks remain outside this slice.
+
+Next executable probe:
+
+- Implement the narrow reconciliation action surface: list queued Global Wire
+  contributions with source artifacts, mark one as accepted/rejected with a
+  reviewer note, and record a non-mutating reconciliation decision artifact.
+  That increases the research/reconciliation axis without pretending the graph
+  classifier is solved.
