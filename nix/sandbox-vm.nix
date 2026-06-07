@@ -265,6 +265,12 @@ EOF
           choir.source_service_url=*)
             echo "SOURCE_SERVICE_BASE_URL=''${param#choir.source_service_url=}" >> "$ENV_FILE"
             ;;
+          choir.source_service_runtime_url=*)
+            echo "SOURCE_SERVICE_RUNTIME_BASE_URL=''${param#choir.source_service_runtime_url=}" >> "$ENV_FILE"
+            ;;
+          choir.source_service_runtime_owner_id=*)
+            echo "SOURCE_SERVICE_RUNTIME_OWNER_ID=''${param#choir.source_service_runtime_owner_id=}" >> "$ENV_FILE"
+            ;;
           choir.computer_kind=*)
             echo "CHOIR_COMPUTER_KIND=''${param#choir.computer_kind=}" >> "$ENV_FILE"
             ;;

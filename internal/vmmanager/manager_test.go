@@ -1181,6 +1181,8 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		"choir.vmctl_url=http://10.200.0.1:8083",
 		"choir.maild_url=http://10.200.0.1:8087",
 		"choir.source_service_url=http://10.200.0.1:8787",
+		"choir.source_service_runtime_url=http://10.200.0.1:8085",
+		"choir.source_service_runtime_owner_id=global-wire-platform",
 		"choir.computer_kind=worker",
 		"choir.owner_id=owner@example.com",
 		"choir.desktop_id=primary",
@@ -1206,6 +1208,8 @@ func TestGuestInitScript_NoProviderCredentials(t *testing.T) {
 	//   - RUNTIME_VMCTL_URL (tap-subnet control plane for super VM tools)
 	//   - RUNTIME_MAILD_URL (tap-subnet draft persistence only)
 	//   - SOURCE_SERVICE_BASE_URL (tap-subnet source retrieval only)
+	//   - SOURCE_SERVICE_RUNTIME_BASE_URL / SOURCE_SERVICE_RUNTIME_OWNER_ID
+	//     (tap-subnet SourceMaxx lifecycle evidence only)
 	//   - RUNTIME_STORE_PATH (local persistent path)
 	//
 	// No provider credentials or host-side secret paths are set.
@@ -1217,6 +1221,8 @@ func TestGuestInitScript_NoProviderCredentials(t *testing.T) {
 		"RUNTIME_VMCTL_URL",
 		"RUNTIME_MAILD_URL",
 		"SOURCE_SERVICE_BASE_URL",
+		"SOURCE_SERVICE_RUNTIME_BASE_URL",
+		"SOURCE_SERVICE_RUNTIME_OWNER_ID",
 		"RUNTIME_STORE_PATH",
 	}
 
