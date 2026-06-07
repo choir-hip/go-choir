@@ -2197,6 +2197,45 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 		!strings.Contains(vtextRun.Prompt, "do not replace them with a plain source manifest") {
 		t.Fatalf("processor vtext run missing article-head completion contract: %q", vtextRun.Prompt)
 	}
+	articleContent := "# Fed rate cut expectations cool as inflation prints remain uneven\n\nMarkets repriced the near-term rate path after the latest inflation batch, but the stronger claim is not that a cut is off the table. The useful reading is narrower: officials have less room to declare victory while price pressure remains uneven across services and shelter measures [inflation batch](source:" + sourceEntities[0].EntityID + ").\n\nThe article uses Style.vtext: Market Brief because the story is primarily a market-moving macro update.\n"
+	editArgs, err := json.Marshal(map[string]any{
+		"doc_id":           vtextSpawn.DocID,
+		"base_revision_id": vtextSpawn.SeedRevisionID,
+		"operation":        "replace_all",
+		"content":          articleContent,
+		"rationale":        "Create the first Global Wire article revision from the processor brief.",
+	})
+	if err != nil {
+		t.Fatalf("marshal vtext edit args: %v", err)
+	}
+	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
+	if _, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "edit_vtext", editArgs); err != nil {
+		t.Fatalf("vtext article edit: %v", err)
+	}
+	articleDoc, err := rt.Store().GetDocument(context.Background(), vtextSpawn.DocID, "user-alice")
+	if err != nil {
+		t.Fatalf("get article doc after edit: %v", err)
+	}
+	if articleDoc.CurrentRevisionID == vtextSpawn.SeedRevisionID {
+		t.Fatalf("article edit did not advance document head")
+	}
+	articleRev, err := rt.Store().GetRevision(context.Background(), articleDoc.CurrentRevisionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get article revision: %v", err)
+	}
+	if articleRev.ParentRevisionID != vtextSpawn.SeedRevisionID || !strings.Contains(articleRev.Content, "(source:"+sourceEntities[0].EntityID+")") {
+		t.Fatalf("article revision content/lineage invalid: %+v", articleRev)
+	}
+	articleMeta := decodeRevisionMetadata(articleRev.Metadata)
+	if metadataString(articleMeta, "artifact_kind") != "article_revision" || articleMeta["article_version"] != true || metadataString(articleMeta, "vtext_version_stage") != "article_revision" {
+		t.Fatalf("vtext-owned article revision kept pre-article metadata: %#v", articleMeta)
+	}
+	if len(decodeVTextSourceEntities(articleMeta["source_entities"])) != 1 ||
+		metadataString(articleMeta, "source_network_cycle_id") != "cycle-test" ||
+		metadataString(articleMeta, "processor_key") != "processor:global_firehose:global:gdelt" ||
+		metadataString(articleMeta, "selected_style_rationale") == "" {
+		t.Fatalf("vtext-owned article revision lost durable source/style metadata: %#v", articleMeta)
+	}
 	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"mutate code",
 		"role":"co-super"

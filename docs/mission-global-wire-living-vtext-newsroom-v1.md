@@ -805,3 +805,41 @@ still needs article-body quality and native transclusion proof: article
 content should be prose with inline `source:` refs and editorially useful
 related-VText transclusions, not outlines, source manifests, raw related-ID
 lists, or app-specific edit sections.
+
+## Checkpoint 2026-06-07T23:26Z: VText-owned article metadata transition fixed locally
+
+objective: ensure processor/reconciler handoffs remain non-article source
+briefs until the VText agent writes the article, then classify the resulting
+`edit_vtext` revision as the article object.
+
+what changed: Global Wire VText revision runs whose request intent matches
+`global_wire_*_article_revision` now normalize the appagent-created revision
+metadata at `edit_vtext` commit time. The stored revision becomes
+`artifact_kind=article_revision`, `article_version=true`, and
+`vtext_version_stage=article_revision`. The correction is intentionally narrow:
+it does not change ordinary VText edits, email VTexts, or non-Global-Wire
+worker wakeups, and it still preserves source entities, source-network IDs,
+selected Style.vtext context, worker-update metadata, and normal edit
+provenance.
+
+proof: the comprehensive processor/reconciler harness test now executes the
+real VText tool path: a processor spawns a VText article document, the seed
+revision remains `source_brief` and `article_version=false`, the VText agent
+calls `edit_vtext` with prose containing a native `source:` reference, and the
+stored head revision is asserted to be an `article_revision` with
+`article_version=true` while keeping source entities, cycle ID, processor key,
+and selected Style.vtext rationale. Local proof commands passed:
+`nix develop -c go test -tags comprehensive ./internal/runtime -run
+TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText
+-count=1`,
+`nix develop -c go test -tags comprehensive ./internal/runtime -run
+'TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText|TestSystemPromptForGlobalWireProfilesLoadsSharedHarnessPrompts|TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead'
+-count=1`, and
+`nix develop -c go test ./internal/runtime -run
+'TestBuildAppagentRevisionMetadata|TestVText|TestGlobalWire' -count=1`.
+
+remaining error field: this fixes the VText ownership boundary for revision
+metadata, but does not yet prove that live model-authored Global Wire articles
+are long-form publication-quality prose or that related VTexts are transcluded
+in the rendered reader. The next realism axis is content quality plus rendered
+source/related transclusion proof in Comet on staging.

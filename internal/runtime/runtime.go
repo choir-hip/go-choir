@@ -1997,6 +1997,11 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 			}
 		}
 	}
+	if isGlobalWireArticleRevisionRun(rec) {
+		meta["artifact_kind"] = "article_revision"
+		meta["article_version"] = true
+		meta["vtext_version_stage"] = "article_revision"
+	}
 	workerUpdateMeta := rt.workerUpdateRevisionMetadata(ctx, ownerID, doc.DocID, mutation)
 	if vtextWorkerUpdateMetadataHasRole(workerUpdateMeta["worker_updates_consumed"], AgentProfileResearcher) {
 		markVTextMediaSourceRefsResearchState(meta, "represented")
@@ -2010,6 +2015,14 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 		return json.RawMessage(`{"source":"edit_vtext","loop_id":"` + rec.RunID + `"}`)
 	}
 	return data
+}
+
+func isGlobalWireArticleRevisionRun(rec *types.RunRecord) bool {
+	if rec == nil {
+		return false
+	}
+	intent := metadataStringValue(rec.Metadata, "request_intent")
+	return strings.HasPrefix(intent, "global_wire_") && strings.HasSuffix(intent, "_article_revision")
 }
 
 func vtextWorkerUpdateMetadataHasRole(value any, role string) bool {
