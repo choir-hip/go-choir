@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
+	"golang.org/x/net/html/charset"
 )
 
 type RSSPoller struct {
@@ -154,7 +156,10 @@ type parsedFeed struct {
 
 func parseRSSLikeFeed(data []byte) (parsedFeed, error) {
 	var env feedEnvelope
-	if err := xml.Unmarshal(data, &env); err != nil {
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = charset.NewReaderLabel
+	decoder.Strict = false
+	if err := decoder.Decode(&env); err != nil {
 		return parsedFeed{}, err
 	}
 	if env.Channel != nil {

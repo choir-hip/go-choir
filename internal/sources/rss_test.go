@@ -73,3 +73,35 @@ func TestRSSPollerReturnsFetchRecordAndStableItem(t *testing.T) {
 		t.Fatalf("item provenance incomplete: %+v", first.Items[0])
 	}
 }
+
+func TestParseRSSLikeFeedHandlesDeclaredLatin1Charset(t *testing.T) {
+	feed, err := parseRSSLikeFeed([]byte("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n" +
+		"<rss version=\"2.0\"><channel><item><title>Golem Pr\xfcfung</title>" +
+		"<link>https://example.test/latin1</link><description>ISO feed</description>" +
+		"</item></channel></rss>"))
+	if err != nil {
+		t.Fatalf("parse latin1 feed: %v", err)
+	}
+	if len(feed.Items) != 1 || feed.Items[0].Title != "Golem Prüfung" {
+		t.Fatalf("items = %+v, want decoded latin1 title", feed.Items)
+	}
+}
+
+func TestParseRSSLikeFeedToleratesMalformedEntity(t *testing.T) {
+	feed, err := parseRSSLikeFeed([]byte(`<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Markets &3 policy update</title>
+      <link>https://example.test/malformed-entity</link>
+      <description>Entity-like text from a feed</description>
+    </item>
+  </channel>
+</rss>`))
+	if err != nil {
+		t.Fatalf("parse malformed entity feed: %v", err)
+	}
+	if len(feed.Items) != 1 || feed.Items[0].Title != "Markets &3 policy update" {
+		t.Fatalf("items = %+v, want malformed entity preserved", feed.Items)
+	}
+}
