@@ -581,6 +581,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(publicLinkPayload.public_link.export_id).toBe(deliveryExportPayload.export.id);
     expect(publicLinkPayload.public_link.status).toBe('public-unlisted');
     expect(publicLinkPayload.public_link.route_path).toContain('/global-wire/publications/');
+    expect(publicLinkPayload.public_link.feed_path).toContain('/api/global-wire/publication-public-links/');
     await expect(app.locator('[data-global-wire-public-link]').first()).toContainText('public-unlisted');
     const publicRead = await page.evaluate(async (token) => {
       const res = await fetch(`/api/global-wire/publication-public-links/${encodeURIComponent(token)}`);
@@ -591,11 +592,27 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(publicRead.body.public_link.owner_id || '').toBe('');
     expect(publicRead.body.public_link.export_id).toBe(deliveryExportPayload.export.id);
     expect(publicRead.body.public_link.export_body).toContain(publicationArtifact.body.artifact.body);
+    expect(publicRead.body.public_link.feed_path).toBe(publicLinkPayload.public_link.feed_path);
+    const publicFeed = await page.evaluate(async (feedPath) => {
+      const res = await fetch(feedPath);
+      return {
+        statusCode: res.status,
+        contentType: res.headers.get('content-type') || '',
+        body: await res.text(),
+      };
+    }, publicLinkPayload.public_link.feed_path);
+    expect(publicFeed.statusCode).toBe(200);
+    expect(publicFeed.contentType).toContain('application/rss+xml');
+    expect(publicFeed.body).toContain('<rss');
+    expect(publicFeed.body).toContain(publicLinkPayload.public_link.title);
+    expect(publicFeed.body).toContain('Citation refs:');
+    expect(publicFeed.body).toContain('Rollback refs:');
     const publicReaderURL = new URL(publicLinkPayload.public_link.route_path, page.url()).toString();
     await page.goto(publicReaderURL);
     await expect(page.locator('[data-global-wire-public-reader]')).toBeVisible();
     await expect(page.locator('[data-global-wire-public-publication]')).toContainText(publicLinkPayload.public_link.title);
     await expect(page.locator('[data-global-wire-public-publication]')).toContainText(publicationArtifact.body.artifact.body);
+    await expect(page.locator('[data-global-wire-public-feed]')).toHaveAttribute('href', publicLinkPayload.public_link.feed_path);
     await expect(page.locator('[data-global-wire-public-provenance]')).toContainText('citations:');
     await expect(page.locator('[data-global-wire-public-citations]')).toContainText('story:story-supply-resilience');
     await expect(page.locator('[data-global-wire-public-rollback]')).toContainText('delivery_export:');

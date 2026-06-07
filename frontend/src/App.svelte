@@ -453,6 +453,9 @@
           <div class="reader-kicker">
             <span>{globalWirePublicLink.status}</span>
             <span>{globalWirePublicLink.route_path}</span>
+            {#if globalWirePublicLink.feed_path}
+              <a href={globalWirePublicLink.feed_path} data-global-wire-public-feed>RSS</a>
+            {/if}
           </div>
           <h1>{globalWirePublicLink.title}</h1>
           <pre>{globalWirePublicLink.export_body}</pre>

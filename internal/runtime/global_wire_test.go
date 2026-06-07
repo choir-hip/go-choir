@@ -784,6 +784,7 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	if linkResp.PublicLink.ExportID != exportResp.Export.ID ||
 		linkResp.PublicLink.Status != "public-unlisted" ||
 		linkResp.PublicLink.RoutePath == "" ||
+		linkResp.PublicLink.FeedPath == "" ||
 		linkResp.PublicLink.Token == "" ||
 		!strings.Contains(linkResp.PublicLink.ExportBody, artifactResp.Artifact.Body) ||
 		!slices.Contains(linkResp.PublicLink.RollbackRefs, "delivery_export:"+exportResp.Export.ID) {
@@ -802,6 +803,22 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		publicLinkResp.PublicLink.ExportID != exportResp.Export.ID ||
 		!strings.Contains(publicLinkResp.PublicLink.ExportBody, artifactResp.Artifact.Body) {
 		t.Fatalf("public link detail leaked or lost fields: %+v", publicLinkResp)
+	}
+	rssW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/publication-public-links/"+linkResp.PublicLink.Token+"/rss", "", "")
+	if rssW.Code != http.StatusOK {
+		t.Fatalf("public link rss status = %d body=%s", rssW.Code, rssW.Body.String())
+	}
+	if contentType := rssW.Header().Get("Content-Type"); !strings.Contains(contentType, "application/rss+xml") {
+		t.Fatalf("public link rss content-type = %q", contentType)
+	}
+	rssBody := rssW.Body.String()
+	if !strings.Contains(rssBody, "<rss") ||
+		!strings.Contains(rssBody, linkResp.PublicLink.Title) ||
+		!strings.Contains(rssBody, "Global Wire publication artifact for") ||
+		!strings.Contains(rssBody, artifactResp.Artifact.ID) ||
+		!strings.Contains(rssBody, "Citation refs:") ||
+		!strings.Contains(rssBody, "Rollback refs:") {
+		t.Fatalf("public link rss missing publication/provenance: %s", rssBody)
 	}
 
 	publicationListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")

@@ -378,6 +378,7 @@ type GlobalWirePublicationPublicLink struct {
 	StoryID       string    `json:"story_id"`
 	Status        string    `json:"status"`
 	RoutePath     string    `json:"route_path"`
+	FeedPath      string    `json:"feed_path,omitempty"`
 	Title         string    `json:"title"`
 	ExportBody    string    `json:"export_body"`
 	CitationCount int       `json:"citation_count"`

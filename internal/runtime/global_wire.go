@@ -1638,6 +1638,9 @@ func (h *APIHandler) HandleGlobalWirePublicationPublicLinks(w http.ResponseWrite
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list public links"})
 			return
 		}
+		for i := range links {
+			hydrateGlobalWirePublicLinkDerivedFields(&links[i])
+		}
 		writeAPIJSON(w, http.StatusOK, map[string]any{
 			"public_links": links,
 		})
@@ -1681,6 +1684,14 @@ func (h *APIHandler) HandleGlobalWirePublicationPublicLinkDetail(w http.Response
 	}
 	token := strings.TrimPrefix(r.URL.Path, "/api/global-wire/publication-public-links/")
 	token = strings.Trim(strings.TrimSpace(token), "/")
+	rssRequested := false
+	if strings.HasSuffix(token, "/rss") {
+		rssRequested = true
+		token = strings.TrimSuffix(token, "/rss")
+	} else if strings.HasSuffix(token, ".rss") {
+		rssRequested = true
+		token = strings.TrimSuffix(token, ".rss")
+	}
 	if token == "" {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "public link not found"})
 		return
@@ -1696,6 +1707,11 @@ func (h *APIHandler) HandleGlobalWirePublicationPublicLinkDetail(w http.Response
 	}
 	link.OwnerID = ""
 	link.Token = token
+	hydrateGlobalWirePublicLinkDerivedFields(&link)
+	if rssRequested {
+		writeGlobalWirePublicLinkRSS(w, r, link)
+		return
+	}
 	writeAPIJSON(w, http.StatusOK, globalWirePublicationPublicLinkResponse{
 		PublicLink: link,
 	})
@@ -3418,7 +3434,86 @@ func (h *APIHandler) createGlobalWirePublicationPublicLink(r *http.Request, owne
 	if err != nil {
 		return types.GlobalWirePublicationPublicLink{}, types.GlobalWirePublicationDeliveryExport{}, err
 	}
+	hydrateGlobalWirePublicLinkDerivedFields(&link)
 	return link, export, nil
+}
+
+func hydrateGlobalWirePublicLinkDerivedFields(link *types.GlobalWirePublicationPublicLink) {
+	if link == nil {
+		return
+	}
+	token := strings.TrimSpace(link.Token)
+	if token == "" {
+		return
+	}
+	link.FeedPath = "/api/global-wire/publication-public-links/" + token + "/rss"
+}
+
+func writeGlobalWirePublicLinkRSS(w http.ResponseWriter, r *http.Request, link types.GlobalWirePublicationPublicLink) {
+	w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	origin := globalWireRequestOrigin(r)
+	publicURL := origin + link.RoutePath
+	descriptionLines := []string{
+		link.ExportBody,
+		"",
+		"Provenance:",
+		fmt.Sprintf("Citation count: %d", link.CitationCount),
+		fmt.Sprintf("Rollback count: %d", link.RollbackCount),
+		"Citation refs: " + strings.Join(link.CitationRefs, ", "),
+		"Rollback refs: " + strings.Join(link.RollbackRefs, ", "),
+	}
+	body := strings.Join([]string{
+		`<?xml version="1.0" encoding="UTF-8"?>`,
+		`<rss version="2.0">`,
+		`  <channel>`,
+		`    <title>` + xmlText("Choir Global Wire") + `</title>`,
+		`    <link>` + xmlText(origin+"/global-wire/publications/"+strings.TrimSpace(link.Token)) + `</link>`,
+		`    <description>` + xmlText("Token-scoped Global Wire publication feed") + `</description>`,
+		`    <item>`,
+		`      <title>` + xmlText(link.Title) + `</title>`,
+		`      <link>` + xmlText(publicURL) + `</link>`,
+		`      <guid isPermaLink="false">` + xmlText(link.ID) + `</guid>`,
+		`      <description>` + xmlText(strings.Join(descriptionLines, "\n")) + `</description>`,
+		`    </item>`,
+		`  </channel>`,
+		`</rss>`,
+		``,
+	}, "\n")
+	_, _ = w.Write([]byte(body))
+}
+
+func globalWireRequestOrigin(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	if proto == "" {
+		if r.TLS != nil {
+			proto = "https"
+		} else {
+			proto = "http"
+		}
+	}
+	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
+	if host == "" {
+		host = r.Host
+	}
+	if host == "" {
+		return ""
+	}
+	return proto + "://" + host
+}
+
+func xmlText(value string) string {
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&#39;",
+	)
+	return replacer.Replace(value)
 }
 
 func (h *APIHandler) globalWirePublicationArtifactProjectionReviews(r *http.Request, ownerID string, update types.GlobalWirePublicationUpdate) ([]types.GlobalWireProjectionReview, error) {
