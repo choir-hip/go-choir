@@ -13,7 +13,7 @@ The transparency bug exposed the deeper design failure. A global rescue layer
 treated structural panes as soft decorative panels, which made foreground
 windows visually blend with windows behind them. The first repair then exposed
 another gap: opaque app surfaces must be theme-native and must not fall back to
-Future Noir colors.
+Futuristic Noir colors.
 
 ## System Review
 
@@ -122,9 +122,9 @@ compatibility, but new app CSS should not reach for them first.
 
 ## Acceptance
 
-- Carbon Fiber Kintsugi has no visible Future Noir blue/cyan residue in common
+- Carbon Fiber Kintsugi has no visible Futuristic Noir blue/cyan residue in common
   shell and app surfaces.
-- London Salmon and Future Noir still pass existing theme tests.
+- London Salmon and Futuristic Noir still pass existing theme tests.
 - Restored overlapping windows remain opaque before focus.
 - `rg`/test coverage shows app and shell CSS no longer contain hard-coded
   design colors outside the theme module and documented exceptions.

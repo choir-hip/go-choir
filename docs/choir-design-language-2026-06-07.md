@@ -4,7 +4,7 @@
 **Related:** [Theme System Contract v0](./theme-system-contract-v0.md),
 [Global Wire SourceMaxx spec](./choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md).  
 **Scope:** Choir desktop shell, VText, Global Wire, and app surfaces across
-Future Noir, Carbon Kintsugi, and London Salmon.
+Futuristic Noir, Carbon Fiber Kintsugi, and London Salmon.
 
 ## Purpose
 
@@ -34,21 +34,21 @@ state for long sessions.
 The legal text in these screenshots is incidental. The screenshots are included
 to capture theme behavior, typography, material, and control feel.
 
-### Future Noir - VText Reader
+### Futuristic Noir - VText Reader
 
-![Future Noir VText reader](./assets/design-language/future-noir-vtext-reader-2026-06-07.png)
+![Futuristic Noir VText reader](./assets/design-language/futuristic-noir-vtext-reader-2026-06-07.png)
 
-### Future Noir - Settings / Controls
+### Futuristic Noir - Settings / Controls
 
-![Future Noir settings](./assets/design-language/future-noir-settings-2026-06-07.png)
+![Futuristic Noir settings](./assets/design-language/futuristic-noir-settings-2026-06-07.png)
 
 ### London Salmon - VText Reader
 
 ![London Salmon VText reader](./assets/design-language/london-salmon-vtext-reader-2026-06-07.png)
 
-### Carbon Kintsugi - VText Reader
+### Carbon Fiber Kintsugi - VText Reader
 
-![Carbon Kintsugi VText reader](./assets/design-language/carbon-kintsugi-vtext-reader-2026-06-07.png)
+![Carbon Fiber Kintsugi VText reader](./assets/design-language/carbon-fiber-kintsugi-vtext-reader-2026-06-07.png)
 
 ## Shared Shape
 
@@ -71,9 +71,9 @@ Across all themes, preserve these traits:
 
 ## Theme Personalities
 
-### Future Noir
+### Futuristic Noir
 
-Future Noir is the default high-agency dark computer.
+Futuristic Noir is the default high-agency dark computer.
 
 Use:
 
@@ -90,7 +90,7 @@ Avoid:
 - letting panels stack into a busy blue dashboard;
 - relying on low-contrast gray text for primary reading.
 
-Future Noir works best when content has room and the accent is reserved for
+Futuristic Noir works best when content has room and the accent is reserved for
 headlines, active controls, citations, and source markers.
 
 ### London Salmon
@@ -109,7 +109,7 @@ Use:
 Avoid:
 
 - pure white/black default web styling;
-- blue Future Noir residue;
+- blue Futuristic Noir residue;
 - beige-on-beige low contrast;
 - overusing salmon as a fill color for controls;
 - making source/provenance callouts look like ads or warning boxes.
@@ -117,9 +117,9 @@ Avoid:
 London Salmon should feel like a private editorial/legal desktop: readable,
 warm, precise, and serious.
 
-### Carbon Kintsugi
+### Carbon Fiber Kintsugi
 
-Carbon Kintsugi is dark, tactile, and mineral.
+Carbon Fiber Kintsugi is dark, tactile, and mineral.
 
 Use:
 
@@ -138,7 +138,7 @@ Avoid:
 - gold as a decorative border around everything;
 - losing body readability by making all text tan.
 
-Carbon Kintsugi should feel grounded and durable. It is the least "digital
+Carbon Fiber Kintsugi should feel grounded and durable. It is the least "digital
 glow" theme and should favor print-like contrast over neon effects.
 
 ## Typography
@@ -180,6 +180,16 @@ subtle rules before boxes.
 Global Wire should adapt this design language as a newspaper-like VText
 collection surface.
 
+Reference direction mockups:
+
+![Global Wire desktop mockup across Futuristic Noir, London Salmon, and Carbon Fiber Kintsugi](./assets/design-language/global-wire-desktop-three-themes-2026-06-07.png)
+
+![Global Wire mobile mockup across Futuristic Noir, London Salmon, and Carbon Fiber Kintsugi](./assets/design-language/global-wire-mobile-three-themes-2026-06-07.png)
+
+These mockups are visual direction, not product proof. The implementation must
+still use the real theme tokens, real app shell, product-path data, and browser
+screenshots.
+
 Desktop:
 
 - no app-local theme selector;
@@ -202,11 +212,11 @@ Mobile:
 
 Theme behavior:
 
-- Future Noir Global Wire: dark wire desk with cyan used sparingly for live
+- Futuristic Noir Global Wire: dark wire desk with cyan used sparingly for live
   source freshness and citation markers.
 - London Salmon Global Wire: warm broadsheet with wine text and restrained teal
   evidence/source accents.
-- Carbon Kintsugi Global Wire: black/ivory newspaper with gold source/freshness
+- Carbon Fiber Kintsugi Global Wire: black/ivory newspaper with gold source/freshness
   signals and minimal chrome.
 
 ## Source And Provenance Display
@@ -255,7 +265,7 @@ Avoid:
 
 Before shipping theme-sensitive UI:
 
-- verify Future Noir, London Salmon, and Carbon Kintsugi;
+- verify Futuristic Noir, London Salmon, and Carbon Fiber Kintsugi;
 - check foreground windows remain visually opaque over background windows;
 - check article text has enough contrast and comfortable line length;
 - check metadata does not overpower content;

@@ -61,7 +61,7 @@ quality.
 - Relationship nodes are story/article headlines by default. Sources, claims,
   entities, processor notes, reconciler notes, and timelines are overlays over
   VTexts and source records.
-- All UI views must work in Future Noir, Carbon Kintsugi, and London Salmon.
+- All UI views must work in Futuristic Noir, Carbon Fiber Kintsugi, and London Salmon.
 - Low-resolution implementation must preserve topology: source ingestion,
   processors, reconcilers, researcher reuse, VText agent reuse, Style.vtext
   routing, story/article VTexts, user ownership, VText traversal/indexing,
@@ -423,7 +423,7 @@ UI requirements:
 - evidence visible without overwhelming the collection surface;
 - no contribution dashboard inside the News app; contribution and editing
   happen through VText/source/style flows;
-- all views render in Future Noir, Carbon Kintsugi, and London Salmon.
+- all views render in Futuristic Noir, Carbon Fiber Kintsugi, and London Salmon.
 
 Theme changes may change typography, density, contrast, and mood. They must not
 change product capability, hide evidence, or alter ownership semantics.
