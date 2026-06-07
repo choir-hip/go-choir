@@ -564,6 +564,16 @@ what was proven:
 - `npm --prefix frontend run build` passed.
 - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm --prefix frontend run e2e -- tests/global-wire-app.spec.js --project=chromium --workers=1 --reporter=line`
   passed: 4 tests.
+- Commit `83af469309ed1874780283b6115a16b87232893d` was pushed to
+  `origin/main`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27094084911` completed
+  successfully for commit `83af469309ed1874780283b6115a16b87232893d`.
+- `https://choir.news/health` reported deployed commit
+  `83af469309ed1874780283b6115a16b87232893d` with deployed_at
+  `2026-06-07T13:36:55Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/global-wire-app.spec.js --project=chromium --workers=1 --reporter=line`
+  passed on staging: 4 tests.
 - Browser plugin inspection of `http://127.0.0.1:5173/` confirmed
   `SourceMaxx desk`, 3 article VText open affordances, 16 sources in source
   chronology, first story `borderTopWidth: 0px`, first story
@@ -587,9 +597,8 @@ unproven or partial claims:
 - reuse of existing VText agents for article writing/revision;
 - intelligent Style.vtext routing and withholding/deprioritization;
 - publication-quality VText output;
-- readable newspaper UI across all themes;
-- no story boxes/rules or noisy repeated `Open in VText` labels;
-- responsive Choir web desktop behavior for mobile-width Global Wire.
+- source volume and source-processing behavior on staging beyond the static
+  visible SourceMaxx demo data.
 
 belief-state changes:
 
@@ -616,9 +625,7 @@ remaining error field:
 - deletion/reuse map for current Global Wire backend source paths;
 - backend still uses many `StoryGraph` names and deferred contribution,
   newsletter, and Autoradio endpoints that should be audited before further
-  product exposure;
-- staging proof for the redesigned UI and deployed source behavior remains to
-  be run after commit/push/deploy.
+  product exposure.
 
 highest-impact remaining uncertainty: whether the deployed source system and
 runtime can ingest high-volume GDELT/RSS/Telegram/search batches and feed
@@ -627,24 +634,22 @@ storage, or agent-runtime changes.
 
 next executable delivery loop:
 
-1. Commit and push the SourceMaxx UI/product-surface checkpoint; monitor CI,
-   deploy identity, and staging behavior before treating it as shipped.
-2. Inspect and mutate `cmd/sourcecycled`, `internal/sources`, source storage,
+1. Inspect and mutate `cmd/sourcecycled`, `internal/sources`, source storage,
    runtime agent role contracts, researcher invocation, VText invocation, and
    current Global Wire backend source paths. Produce a deletion/reuse map only
    as a working artifact for implementation, not as a stopping point.
-3. Replace wrong-object paths while preserving product topology: high-volume
+2. Replace wrong-object paths while preserving product topology: high-volume
    source ingestion, durable SourceItems, routing, processor state,
    reconciler corpus review, researcher request/result reuse, VText
    write/revision reuse, Style.vtext routing, VText traversal/source indexes,
    and user-owned VText boundaries.
-4. Discard or selectively mine the stashed source-refresh experiment only if it
+3. Discard or selectively mine the stashed source-refresh experiment only if it
    helps the delivered architecture; do not revive click-time source refresh as
    the product object.
-5. Build through to staging behavior: tests, commit, push, CI/deploy monitor,
+4. Build through to staging behavior: tests, commit, push, CI/deploy monitor,
    staging identity, product-path source volume, processor/reconciler evidence,
    researcher/VText reuse evidence, ownership evidence, and browser screenshots.
-6. Perform a quality pass before claiming delivery: simplify names and data
+5. Perform a quality pass before claiming delivery: simplify names and data
    flows, remove obsolete panels/routes/tests, make Style.vtexts publication
    quality, and make the Global Wire UI nice in Futuristic Noir, Carbon Fiber
    Kintsugi, London Salmon, and responsive Choir web desktop layouts.
@@ -652,7 +657,8 @@ next executable delivery loop:
 suggested resume goal string: use the Goal String section above.
 
 evidence artifact refs: local browser screenshot emitted through Browser
-plugin during this run; focused frontend and source test commands listed above.
+plugin during this run; focused frontend/source test commands and staging
+acceptance command listed above.
 
 rollback refs: prior branch/worktree state before this mission;
 `stash@{1}` named
@@ -660,4 +666,5 @@ rollback refs: prior branch/worktree state before this mission;
 the abandoned source-refresh batch edits; `stash@{0}` named
 `wrong-pipeline-processor-reconciler-request-slice-2026-06-07` preserves the
 abandoned pipeline-shaped processor/reconciler edits; behavior commits must
-record their own rollback SHAs.
+record their own rollback SHAs. The shipped SourceMaxx UI checkpoint rollback
+SHA is the parent of `83af469309ed1874780283b6115a16b87232893d`.
