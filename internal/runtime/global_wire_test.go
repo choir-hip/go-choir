@@ -1,9 +1,13 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts(t *testing.T) {
@@ -118,5 +122,44 @@ func TestHandleGlobalWireContributionsAreOwnerScoped(t *testing.T) {
 	}
 	if len(betaResp.Contributions) != 0 {
 		t.Fatalf("beta contribution count = %d, want 0", len(betaResp.Contributions))
+	}
+}
+
+func TestHandleGlobalWireContributionCanReferenceExistingContentItem(t *testing.T) {
+	_, handler := testAPISetup(t)
+	now := time.Now().UTC()
+	item := types.ContentItem{
+		ContentID:   "existing-global-wire-source",
+		OwnerID:     "user-alpha",
+		SourceType:  "text",
+		MediaType:   "text/markdown",
+		AppHint:     "global-wire",
+		Title:       "Existing source",
+		TextContent: "Existing imported source text.",
+		Metadata:    []byte(`{"schema":"test.source"}`),
+		Provenance:  []byte(`{"created_from":"test"}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := handler.rt.Store().CreateContentItem(context.Background(), item); err != nil {
+		t.Fatalf("CreateContentItem: %v", err)
+	}
+
+	body := `{"story_id":"story-supply-resilience","kind":"source","headline":"Port backlog recedes","text":"Use the imported source.","source_content_id":"existing-global-wire-source"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/contributions", body, "user-alpha")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create contribution with existing source status = %d body=%s", w.Code, w.Body.String())
+	}
+	var created types.GlobalWireContribution
+	if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
+		t.Fatalf("decode contribution: %v", err)
+	}
+	if created.SourceContentID != item.ContentID {
+		t.Fatalf("source_content_id = %q, want %q", created.SourceContentID, item.ContentID)
+	}
+
+	beta := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/contributions", body, "user-beta")
+	if beta.Code != http.StatusBadRequest {
+		t.Fatalf("cross-owner source contribution status = %d body=%s", beta.Code, beta.Body.String())
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -21,11 +22,12 @@ type globalWireContributionListResponse struct {
 }
 
 type globalWireContributionCreateRequest struct {
-	StoryID        string `json:"story_id"`
-	Kind           string `json:"kind"`
-	Headline       string `json:"headline"`
-	Text           string `json:"text"`
-	UserVTextDocID string `json:"user_vtext_doc_id,omitempty"`
+	StoryID         string `json:"story_id"`
+	Kind            string `json:"kind"`
+	Headline        string `json:"headline"`
+	Text            string `json:"text"`
+	SourceContentID string `json:"source_content_id,omitempty"`
+	UserVTextDocID  string `json:"user_vtext_doc_id,omitempty"`
 }
 
 // HandleGlobalWireStories returns the authenticated owner's durable StoryGraph.
@@ -81,6 +83,7 @@ func (h *APIHandler) HandleGlobalWireContributions(w http.ResponseWriter, r *htt
 		req.StoryID = strings.TrimSpace(req.StoryID)
 		req.Kind = strings.TrimSpace(req.Kind)
 		req.Text = strings.TrimSpace(req.Text)
+		req.SourceContentID = strings.TrimSpace(req.SourceContentID)
 		if req.StoryID == "" || req.Kind == "" {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "story_id and kind are required"})
 			return
@@ -90,6 +93,10 @@ func (h *APIHandler) HandleGlobalWireContributions(w http.ResponseWriter, r *htt
 		}
 		sourceContentID, err := h.createGlobalWireContributionSourceItem(r, ownerID, req)
 		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "source_content_id was not found for this owner"})
+				return
+			}
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create contribution source item"})
 			return
 		}
@@ -118,6 +125,12 @@ func (h *APIHandler) createGlobalWireContributionSourceItem(r *http.Request, own
 	case "source", "counter-source":
 	default:
 		return "", nil
+	}
+	if req.SourceContentID != "" {
+		if _, err := h.rt.Store().GetContentItem(r.Context(), ownerID, req.SourceContentID); err != nil {
+			return "", err
+		}
+		return req.SourceContentID, nil
 	}
 	now := time.Now().UTC()
 	contentID := uuid.NewString()

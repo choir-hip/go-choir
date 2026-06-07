@@ -125,6 +125,40 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     return res.json();
   }, queuedContribution.source_content_id);
   expect(contributionSource.metadata?.schema).toBe('choir.global_wire_user_source_contribution.v1');
+
+  const importedSourceQueue = await page.evaluate(async () => {
+    const itemRes = await fetch('/api/content/items', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source_type: 'text',
+        media_type: 'text/markdown',
+        app_hint: 'global-wire',
+        title: 'Imported source for Global Wire proof',
+        text_content: 'Imported source text queued as a Global Wire source contribution.',
+        metadata: { schema: 'test.global_wire_imported_source' },
+        provenance: { created_from: 'global_wire_playwright_proof' },
+      }),
+    });
+    if (!itemRes.ok) throw new Error(`create imported source failed: ${itemRes.status}`);
+    const item = await itemRes.json();
+    const contributionRes = await fetch('/api/global-wire/contributions', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        story_id: 'story-supply-resilience',
+        kind: 'source',
+        headline: 'Port backlog recedes',
+        text: 'Queue imported source content item for review.',
+        source_content_id: item.content_id,
+      }),
+    });
+    if (!contributionRes.ok) throw new Error(`queue imported source failed: ${contributionRes.status}`);
+    return contributionRes.json();
+  });
+  expect(importedSourceQueue.source_content_id).toBeTruthy();
 });
 
 for (const themeId of ['futuristic-noir', 'carbon-fiber-kintsugi', 'london-salmon']) {
