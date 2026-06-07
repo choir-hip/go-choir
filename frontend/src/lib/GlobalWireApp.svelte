@@ -151,6 +151,9 @@
   let contributionText = '';
   let contributionStatus = '';
   let contributions = [];
+  let reconciliationSourceItems = {};
+  let reconciliationDecisions = [];
+  let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
   let loadError = '';
   let lastLoadKey = '';
@@ -183,6 +186,8 @@
       styleSources = previewStyleSources;
       dataSource = 'preview-storygraph';
       contributions = [];
+      reconciliationSourceItems = {};
+      reconciliationDecisions = [];
       return;
     }
     try {
@@ -210,14 +215,18 @@
   async function loadContributions(storyId = selectedStoryId) {
     if (!authenticated || !storyId) return;
     try {
-      const response = await fetch(`/api/global-wire/contributions?story_id=${encodeURIComponent(storyId)}`, {
+      const response = await fetch(`/api/global-wire/reconciliation?story_id=${encodeURIComponent(storyId)}`, {
         credentials: 'include',
       });
-      if (!response.ok) throw new Error(`Contribution load failed: ${response.status}`);
+      if (!response.ok) throw new Error(`Reconciliation load failed: ${response.status}`);
       const payload = await response.json();
       contributions = Array.isArray(payload.contributions) ? payload.contributions.slice(0, 6) : [];
+      reconciliationSourceItems = payload.source_items || {};
+      reconciliationDecisions = Array.isArray(payload.decisions) ? payload.decisions : [];
     } catch {
       contributions = [];
+      reconciliationSourceItems = {};
+      reconciliationDecisions = [];
     }
   }
 
@@ -390,6 +399,7 @@
           id: saved.id || record.id,
           storyId: saved.storyId || selectedStory.id,
           text: saved.text || record.text,
+          source_content_id: saved.source_content_id || '',
           research_state: saved.research_state || record.research_state,
         };
       } catch (error) {
@@ -401,6 +411,9 @@
     contributionStatus = authenticated
       ? 'Contribution queued for research/reconciliation'
       : 'Local contribution preview - sign in to save';
+    if (authenticated) {
+      await loadContributions(selectedStory.id);
+    }
     launchVText({
       title: `Contribution: ${selectedStory.headline}`,
       content: contributionContent(),
@@ -408,6 +421,58 @@
       sourcePath: `contributions/${selectedStory.id}-${record.kind}.vtext`,
     });
     contributionText = '';
+  }
+
+  function contributionSource(item) {
+    const contentId = item?.source_content_id || item?.sourceContentId || '';
+    return contentId ? reconciliationSourceItems[contentId] : null;
+  }
+
+  function contributionDecision(item) {
+    const id = item?.id || '';
+    return reconciliationDecisions.find((decision) => decision.contribution_id === id);
+  }
+
+  async function reconcileContribution(item, decision) {
+    if (!authenticated || !item?.id) return;
+    reconciliationBusyId = `${item.id}:${decision}`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/reconciliation', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contribution_id: item.id,
+          decision,
+          note: decision === 'accepted'
+            ? 'Accepted for graph review from the Global Wire desk.'
+            : 'Rejected for this StoryGraph neighborhood from the Global Wire desk.',
+        }),
+      });
+      if (!response.ok) throw new Error(`Reconciliation decision failed: ${response.status}`);
+      const payload = await response.json();
+      contributions = contributions.map((contribution) => (
+        contribution.id === item.id ? payload.contribution : contribution
+      ));
+      if (payload.source_item?.content_id) {
+        reconciliationSourceItems = {
+          ...reconciliationSourceItems,
+          [payload.source_item.content_id]: payload.source_item,
+        };
+      }
+      reconciliationDecisions = [payload.decision, ...reconciliationDecisions]
+        .filter(Boolean)
+        .slice(0, 20);
+      contributionStatus = decision === 'accepted'
+        ? 'Contribution accepted for graph review'
+        : 'Contribution rejected for this story neighborhood';
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || 'Reconciliation decision failed';
+    } finally {
+      reconciliationBusyId = '';
+    }
   }
 </script>
 
@@ -569,7 +634,40 @@
         {#if contributions.length}
           <div class="contribution-list" data-global-wire-contribution-list>
             {#each contributions as item}
-              <p><strong>{item.kind.replaceAll('-', ' ')}</strong> · {item.text} · {item.research_state || 'pending-researcher-review'}</p>
+              {@const source = contributionSource(item)}
+              {@const decision = contributionDecision(item)}
+              <article class="contribution-card" data-global-wire-reconciliation-item>
+                <p><strong>{item.kind.replaceAll('-', ' ')}</strong> · {item.text}</p>
+                <small>{item.research_state || 'pending-researcher-review'}</small>
+                {#if source}
+                  <div class="reconciliation-source" data-global-wire-reconciliation-source>
+                    <strong>{source.title}</strong>
+                    <small>{source.source_type} · {source.metadata?.schema || 'source artifact'}</small>
+                  </div>
+                {/if}
+                {#if decision}
+                  <small data-global-wire-reconciliation-decision>{decision.decision}: {decision.note}</small>
+                {:else if authenticated}
+                  <div class="reconciliation-actions">
+                    <button
+                      type="button"
+                      on:click={() => reconcileContribution(item, 'accepted')}
+                      disabled={reconciliationBusyId !== ''}
+                      data-global-wire-reconcile-accept
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      on:click={() => reconcileContribution(item, 'rejected')}
+                      disabled={reconciliationBusyId !== ''}
+                      data-global-wire-reconcile-reject
+                    >
+                      Reject
+                    </button>
+                  </div>
+                {/if}
+              </article>
             {/each}
           </div>
         {/if}
@@ -724,6 +822,7 @@
   .style-tabs button,
   .section-title button,
   .submit-contribution,
+  .reconciliation-actions button,
   .graph-node {
     min-height: 2.35rem;
     border: 1px solid var(--choir-border);
@@ -807,7 +906,8 @@
   .reader-actions button,
   .section-title button,
   .style-tabs button,
-  .submit-contribution {
+  .submit-contribution,
+  .reconciliation-actions button {
     padding: 0.45rem 0.7rem;
     font-weight: 720;
   }
@@ -945,17 +1045,46 @@
   .contribution-list {
     display: grid;
     gap: 0.4rem;
-    max-height: 7rem;
+    max-height: 12rem;
     overflow: auto;
   }
 
-  .contribution-list p {
+  .contribution-card {
+    display: grid;
+    gap: 0.4rem;
     padding: 0.45rem;
     border: 1px solid var(--choir-border);
     border-radius: 8px;
     background: var(--choir-surface-card);
     font-size: 0.82rem;
     line-height: 1.3;
+  }
+
+  .contribution-card p {
+    line-height: 1.3;
+  }
+
+  .reconciliation-source {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.45rem;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-pane);
+  }
+
+  .reconciliation-source strong {
+    overflow-wrap: anywhere;
+  }
+
+  .reconciliation-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .reconciliation-actions button {
+    flex: 1 1 5.5rem;
   }
 
   @media (max-width: 1080px) {

@@ -126,6 +126,10 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   }, queuedContribution.source_content_id);
   expect(contributionSource.metadata?.schema).toBe('choir.global_wire_user_source_contribution.v1');
 
+  await expect(app.locator('[data-global-wire-reconciliation-source]').first()).toContainText('Contribution source');
+  await app.locator('[data-global-wire-reconcile-accept]').first().click();
+  await expect(app.locator('[data-global-wire-reconciliation-decision]').first()).toContainText('accepted');
+
   const importedSourceQueue = await page.evaluate(async () => {
     const itemRes = await fetch('/api/content/items', {
       method: 'POST',
@@ -186,31 +190,21 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(sourceServiceBridge.body.message).toBeTruthy();
   }
 
-  const reconciliation = await page.evaluate(async (contributionId) => {
-    const decisionRes = await fetch('/api/global-wire/reconciliation', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contribution_id: contributionId,
-        decision: 'accepted',
-        note: 'Accept for graph review without mutating the platform story.',
-      }),
-    });
-    if (!decisionRes.ok) throw new Error(`create reconciliation decision failed: ${decisionRes.status}`);
-    const decision = await decisionRes.json();
+  const reconciliation = await page.evaluate(async (contributionId, sourceContentId) => {
     const listRes = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', {
       credentials: 'include',
     });
     if (!listRes.ok) throw new Error(`list reconciliation failed: ${listRes.status}`);
     const list = await listRes.json();
-    return { decision, list };
-  }, queuedContribution.id);
-  expect(reconciliation.decision.decision.decision).toBe('accepted');
-  expect(reconciliation.decision.contribution.research_state).toBe('accepted-for-graph-review');
-  expect(reconciliation.decision.source_item?.content_id).toBe(queuedContribution.source_content_id);
-  expect(reconciliation.list.decisions.some((decision) => decision.contribution_id === queuedContribution.id)).toBeTruthy();
-  expect(reconciliation.list.source_items[queuedContribution.source_content_id]?.metadata?.schema).toBe('choir.global_wire_user_source_contribution.v1');
+    const contribution = (list.contributions || []).find((item) => item.id === contributionId);
+    const decision = (list.decisions || []).find((item) => item.contribution_id === contributionId);
+    const sourceItem = list.source_items?.[sourceContentId];
+    return { contribution, decision, sourceItem };
+  }, queuedContribution.id, queuedContribution.source_content_id);
+  expect(reconciliation.decision.decision).toBe('accepted');
+  expect(reconciliation.contribution.research_state).toBe('accepted-for-graph-review');
+  expect(reconciliation.sourceItem?.content_id).toBe(queuedContribution.source_content_id);
+  expect(reconciliation.sourceItem?.metadata?.schema).toBe('choir.global_wire_user_source_contribution.v1');
 });
 
 for (const themeId of ['futuristic-noir', 'carbon-fiber-kintsugi', 'london-salmon']) {
