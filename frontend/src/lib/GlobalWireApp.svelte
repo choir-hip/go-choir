@@ -1032,7 +1032,11 @@
                 {#if decision}
                   <small data-global-wire-reconciliation-decision>{decision.decision}: {decision.note}</small>
                   {#if candidate}
-                    <div class="graph-candidate" data-global-wire-graph-candidate>
+                    <div
+                      class="graph-candidate"
+                      data-global-wire-graph-candidate
+                      data-global-wire-candidate-id={candidate.id}
+                    >
                       <strong>{candidate.candidate_kind}</strong>
                       <small>{candidate.source_tier} · {candidate.edge_kind} · {candidate.status}</small>
                       <span>{candidate.projection_action}</span>
@@ -1058,6 +1062,7 @@
                                     createInitialVersion: false,
                                   })}
                                   data-global-wire-open-projection-draft
+                                  data-global-wire-projection-review-id={review.id}
                                 >
                                   Open draft
                                 </button>
@@ -1067,6 +1072,7 @@
                                   on:click={() => createProjectionDraft(review)}
                                   disabled={reconciliationBusyId !== ''}
                                   data-global-wire-create-projection-draft
+                                  data-global-wire-projection-review-id={review.id}
                                 >
                                   Draft VText
                                 </button>

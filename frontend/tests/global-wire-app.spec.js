@@ -14,6 +14,11 @@ async function openDeskApp(page, appId) {
   await page.locator(`[data-desk-sheet-app][data-desk-app-id="${appId}"]`).click();
 }
 
+async function focusDeskApp(page, appId, title) {
+  await page.locator(`[data-window-tray-item][title="${title}"]`).click();
+  await expect(page.locator(`[data-window][data-window-app-id="${appId}"]`)).toHaveAttribute('data-window-active', 'true');
+}
+
 async function applyTheme(page, id) {
   const names = {
     'futuristic-noir': 'Futuristic Noir',
@@ -253,12 +258,23 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   expect(reconciliation.sourceItem?.content_id).toBe(queuedContribution.source_content_id);
   expect(reconciliation.sourceItem?.metadata?.schema).toBe('choir.global_wire_user_source_contribution.v1');
 
-  await app.locator('[data-global-wire-promote-candidate]').first().evaluate((button) => button.click());
-  await expect(app.locator('[data-global-wire-graph-promotion]').first()).toContainText('promoted');
-  await expect(app.locator('[data-global-wire-graph-promotion]').first()).toContainText('appended source_content_id');
-  await expect(app.locator('[data-global-wire-projection-review]').first()).toContainText('projection-review-required');
-  await app.locator('[data-global-wire-create-projection-draft]').first().evaluate((button) => button.click());
-  await expect(page.locator('[data-vtext-editor]').last()).toContainText('Draft state: review draft, not platform publication');
+  const candidateCard = app.locator(
+    `[data-global-wire-graph-candidate][data-global-wire-candidate-id="${reconciliation.candidate.id}"]`
+  );
+  await candidateCard.locator('[data-global-wire-promote-candidate]').evaluate((button) => button.click());
+  await expect(candidateCard.locator('[data-global-wire-graph-promotion]')).toContainText('promoted');
+  await expect(candidateCard.locator('[data-global-wire-graph-promotion]')).toContainText('appended source_content_id');
+  await expect(candidateCard.locator('[data-global-wire-projection-review]')).toContainText('projection-review-required');
+  const draftResponsePromise = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/global-wire/projection-reviews' && response.request().method() === 'POST'
+  );
+  await candidateCard.locator('[data-global-wire-create-projection-draft]').evaluate((button) => button.click());
+  const draftResponse = await draftResponsePromise;
+  expect(draftResponse.status()).toBe(201);
+  const draftPayload = await draftResponse.json();
+  await expect(page.locator(`[data-vtext-doc-id="${draftPayload.document.doc_id}"]`)).toContainText(
+    'Draft state: review draft, not platform publication'
+  );
 
   const promoted = await page.evaluate(async ({ candidateId, sourceContentId }) => {
     const listRes = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', {
@@ -283,6 +299,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   expect(draftedReview?.draft_story_doc_id).toBeTruthy();
   expect(promoted.source.content_id).toBe(queuedContribution.source_content_id);
 
+  await focusDeskApp(page, 'global-wire', 'Global Wire');
   const askResponsePromise = page.waitForResponse((response) =>
     new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST'
   );
