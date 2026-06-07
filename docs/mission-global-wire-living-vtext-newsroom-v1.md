@@ -483,3 +483,41 @@ rollback refs: prior deployed behavior commit
 `4629811947f803a1104b33706186cb9e032ca83e` remains the rollback target for the
 coagent handoff checkpoint. Current deployed behavior commit is
 `e6a634c1c4866f151244a7ac6379e44f7e4bdde6`.
+
+## Checkpoint 2026-06-07T21:45Z: deployed article-body normalization failed on existing VTexts
+
+objective: finish the Global Wire article body normalization mission on
+staging, not merely in constructors or tests.
+
+what changed: commits through `e09895ea64557bb7564fe2b5dd77ff2c34cb1042`
+were pushed and deployed. CI run `27105344630` passed all Go/runtime/frontend
+gates and completed Node B staging deploy. Deploy log reports proxy, sandbox,
+and platformd build/deployed commit
+`e09895ea64557bb7564fe2b5dd77ff2c34cb1042`; public frontend serves asset
+`index-DyjtbGv3.js`.
+
+evidence: authenticated Chrome product-path proof claimed an existing
+`https://choir.news/` tab and inspected the open Choir desktop. Global Wire was
+open and each front-page article had an icon-only `Open article VText` button.
+The open Global Wire article VText for `Port backlog recedes as carriers warn
+of uneven inland recovery` still rendered `v0` and still contained reader-facing
+scaffolding: `Style source: Style.vtext: Global Wire`, `Projection`, `Claims`,
+`Source Manifest`, `Related VTexts`, `Non-oracle note`, and `My Edit`.
+
+root cause hypothesis: the code normalized new seed/projection/review body
+constructors, but `ensureDefaultGlobalWireStories` returns as soon as any
+owner-scoped `global_wire_story_graphs` rows exist. Existing durable seeded
+article documents therefore keep their old current revisions forever unless a
+new VText revision is explicitly created. This is a persistence/migration
+failure, not just a frontend rendering issue.
+
+remaining error field: shipped staging is not acceptable yet because the
+owner-visible article VText remains the wrong object. The next fix must create
+normal VText revisions for stale Global Wire seed/projection documents when
+their current body contains known scaffolding, preserving history through
+parent revision links and structured metadata/source entities rather than
+mutating old revisions or platform stories.
+
+next step: implement an idempotent stale-body repair path in the store seed
+ensure flow, test it against a preexisting stale revision fixture, push, deploy,
+and rerun authenticated staging proof.
