@@ -888,6 +888,31 @@
     return sourceDossiers.find((dossier) => dossier.story_id === selectedStoryId) || sourceDossiers[0] || null;
   }
 
+  function noteNewsletterIssueInDossiers(issue, deliveries = []) {
+    const issueId = issue?.id || '';
+    if (!issueId) return;
+    const storyId = issue.story_id || selectedStoryId;
+    sourceDossiers = sourceDossiers.map((dossier) => {
+      if (dossier.story_id !== storyId) return dossier;
+      const publicationRefs = dossier.publication_refs || {};
+      const deliveryIds = deliveries
+        .filter((delivery) => delivery?.issue_id === issueId || delivery?.story_id === storyId)
+        .map((delivery) => delivery.id)
+        .filter(Boolean);
+      return {
+        ...dossier,
+        publication_refs: {
+          ...publicationRefs,
+          newsletter_issue_ids: Array.from(new Set([...(publicationRefs.newsletter_issue_ids || []), issueId])),
+          newsletter_delivery_ids: Array.from(new Set([...(publicationRefs.newsletter_delivery_ids || []), ...deliveryIds])),
+          citation_refs: Array.from(new Set([...(publicationRefs.citation_refs || []), ...(issue.citation_refs || [])])),
+          rollback_refs: Array.from(new Set([...(publicationRefs.rollback_refs || []), ...(issue.rollback_refs || [])])),
+        },
+        missing_fields: (dossier.missing_fields || []).filter((field) => field !== 'newsletter_issues'),
+      };
+    });
+  }
+
   function contributionDecision(item) {
     const id = item?.id || '';
     return reconciliationDecisions.find((decision) => decision.contribution_id === id);
@@ -1316,6 +1341,7 @@
       newsletterDeliveries = [...(payload.deliveries || []), ...newsletterDeliveries]
         .filter(Boolean)
         .slice(0, 50);
+      noteNewsletterIssueInDossiers(payload.issue, payload.deliveries || []);
       newsletterSubscribers = [...(payload.subscribers || subscribers), ...newsletterSubscribers]
         .filter(Boolean)
         .filter((item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index)
