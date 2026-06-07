@@ -439,6 +439,16 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     await openDeskApp(page, 'global-wire');
     await expect(app.locator('[data-global-wire-publication-feed-item]').first()).toBeVisible();
     await expect(app.locator('[data-global-wire-publication-feed-provenance]').first()).toContainText('citations:');
+    const approveResponsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/global-wire/publication-artifact-reviews' && response.request().method() === 'POST'
+    );
+    await app.locator('[data-global-wire-approve-publication-artifact]').first().click();
+    const approveResponse = await approveResponsePromise;
+    expect(approveResponse.status()).toBe(201);
+    const approvePayload = await approveResponse.json();
+    expect(approvePayload.artifact.id).toBe(publicationArtifact.body.artifact.id);
+    expect(approvePayload.artifact.status).toBe('publication-approved');
+    await expect(app.locator('[data-global-wire-publication-feed-item]').first()).toContainText('publication-approved');
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

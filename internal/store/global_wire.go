@@ -2224,6 +2224,46 @@ func (s *Store) ListGlobalWirePublicationArtifacts(ctx context.Context, ownerID,
 	return out, nil
 }
 
+// GetGlobalWirePublicationArtifact returns one owner-scoped publication
+// artifact.
+func (s *Store) GetGlobalWirePublicationArtifact(ctx context.Context, ownerID, artifactID string) (types.GlobalWirePublicationArtifact, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, artifact_id, update_id, story_id, candidate_id,
+		        story_vtext_doc_id, source_content_id, channel, status,
+		        title, body, style_doc_ids_json, projection_review_ids_json,
+		        extraction_ids_json, scheduler_run_ids_json,
+		        citation_refs_json, rollback_refs_json, created_at,
+		        updated_at
+		   FROM global_wire_publication_artifacts
+		  WHERE owner_id = ? AND artifact_id = ?`,
+		ownerID,
+		artifactID,
+	)
+	return scanGlobalWirePublicationArtifact(row)
+}
+
+// UpdateGlobalWirePublicationArtifactStatus records owner review state without
+// publishing publicly or mutating StoryGraph records.
+func (s *Store) UpdateGlobalWirePublicationArtifactStatus(ctx context.Context, ownerID, artifactID, status string) (types.GlobalWirePublicationArtifact, error) {
+	now := time.Now().UTC()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE global_wire_publication_artifacts
+		    SET status = ?, updated_at = ?
+		  WHERE owner_id = ? AND artifact_id = ?`,
+		strings.TrimSpace(status),
+		now.UTC().Format(time.RFC3339Nano),
+		ownerID,
+		artifactID,
+	)
+	if err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("update global wire publication artifact status: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return types.GlobalWirePublicationArtifact{}, ErrNotFound
+	}
+	return s.GetGlobalWirePublicationArtifact(ctx, ownerID, artifactID)
+}
+
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
 func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.GlobalWireStoryProjection) error {
 	now := rec.UpdatedAt

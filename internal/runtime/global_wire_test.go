@@ -617,6 +617,32 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("publication artifact missing from feed: %+v", feedResp)
 	}
 
+	reviewBody := fmt.Sprintf(`{"artifact_id":%q,"decision":"approve","note":"owner approved for publication review proof"}`, artifactResp.Artifact.ID)
+	reviewW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-artifact-reviews", reviewBody, "user-alpha")
+	if reviewW.Code != http.StatusCreated {
+		t.Fatalf("publication artifact review status = %d body=%s", reviewW.Code, reviewW.Body.String())
+	}
+	var reviewResp globalWirePublicationArtifactReviewResponse
+	if err := json.NewDecoder(reviewW.Body).Decode(&reviewResp); err != nil {
+		t.Fatalf("decode publication artifact review response: %v", err)
+	}
+	if reviewResp.Artifact.ID != artifactResp.Artifact.ID ||
+		reviewResp.Artifact.Status != "publication-approved" ||
+		reviewResp.Status != "publication-approved" {
+		t.Fatalf("publication artifact review did not approve artifact: %+v", reviewResp)
+	}
+	approvedFeedW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/publication-feed?story_id=story-supply-resilience&channel=newsletter", "", "user-alpha")
+	if approvedFeedW.Code != http.StatusOK {
+		t.Fatalf("approved publication feed status = %d body=%s", approvedFeedW.Code, approvedFeedW.Body.String())
+	}
+	var approvedFeedResp globalWirePublicationFeedResponse
+	if err := json.NewDecoder(approvedFeedW.Body).Decode(&approvedFeedResp); err != nil {
+		t.Fatalf("decode approved publication feed response: %v", err)
+	}
+	if len(approvedFeedResp.FeedItems) != 1 || approvedFeedResp.FeedItems[0].Status != "publication-approved" {
+		t.Fatalf("approved publication artifact missing from feed: %+v", approvedFeedResp)
+	}
+
 	publicationListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
 	if publicationListW.Code != http.StatusOK {
 		t.Fatalf("list reconciliation after publication package status = %d body=%s", publicationListW.Code, publicationListW.Body.String())

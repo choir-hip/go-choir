@@ -1041,6 +1041,44 @@
     }
   }
 
+  async function reviewPublicationArtifact(item, decision) {
+    const artifact = item?.artifact || item;
+    if (!authenticated || !artifact?.id) return;
+    reconciliationBusyId = `${artifact.id}:publication-${decision}`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/publication-artifact-reviews', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artifact_id: artifact.id,
+          decision,
+          note: `global-wire-app:${decision}`,
+        }),
+      });
+      if (!response.ok) throw new Error(`Publication artifact ${decision} failed: ${response.status}`);
+      const payload = await response.json();
+      publicationArtifacts = [payload.artifact, ...publicationArtifacts.filter((entry) => entry.id !== payload.artifact?.id)]
+        .filter(Boolean)
+        .slice(0, 30);
+      publicationFeedItems = publicationFeedItems.map((feedItem) => {
+        if (feedItem.artifact?.id !== payload.artifact?.id) return feedItem;
+        return {
+          ...feedItem,
+          artifact: payload.artifact,
+          status: payload.artifact.status,
+        };
+      });
+      contributionStatus = `Publication artifact ${payload.artifact?.status || decision}`;
+      await loadPublicationFeed(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || `Publication artifact ${decision} failed`;
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
   async function createProjectionDraft(review) {
     if (!authenticated || !review?.id) return;
     reconciliationBusyId = `${review.id}:draft`;
@@ -1554,6 +1592,26 @@
                 <small data-global-wire-publication-feed-provenance>
                   citations: {item.citation_count} · rollback refs: {item.rollback_count} · source {item.source_item?.title || item.artifact.source_content_id || 'story manifest'}
                 </small>
+                {#if authenticated && item.status === 'publication-review-ready'}
+                  <div class="publication-feed-actions">
+                    <button
+                      type="button"
+                      on:click={() => reviewPublicationArtifact(item, 'approve')}
+                      disabled={reconciliationBusyId === `${item.artifact.id}:publication-approve`}
+                      data-global-wire-approve-publication-artifact
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      on:click={() => reviewPublicationArtifact(item, 'reject')}
+                      disabled={reconciliationBusyId === `${item.artifact.id}:publication-reject`}
+                      data-global-wire-reject-publication-artifact
+                    >
+                      Reject
+                    </button>
+                  </div>
+                {/if}
               </article>
             {/each}
           </div>
@@ -2322,6 +2380,26 @@
     -webkit-line-clamp: 5;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+
+  .publication-feed-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .publication-feed-actions button {
+    flex: 1 1 5.25rem;
+    min-height: 2rem;
+    padding: 0.32rem 0.5rem;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-control);
+    color: var(--choir-text-primary);
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 720;
+    cursor: pointer;
   }
 
   .contribution-list {

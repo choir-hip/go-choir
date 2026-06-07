@@ -184,6 +184,18 @@ type globalWirePublicationFeedResponse struct {
 	Status    string                          `json:"status"`
 }
 
+type globalWirePublicationArtifactReviewRequest struct {
+	ArtifactID string `json:"artifact_id"`
+	Decision   string `json:"decision"`
+	Note       string `json:"note,omitempty"`
+}
+
+type globalWirePublicationArtifactReviewResponse struct {
+	Artifact types.GlobalWirePublicationArtifact `json:"artifact"`
+	Status   string                              `json:"status"`
+	Decision string                              `json:"decision"`
+}
+
 type globalWireReconciliationCreateRequest struct {
 	ContributionID string `json:"contribution_id"`
 	Decision       string `json:"decision"`
@@ -1277,12 +1289,82 @@ func (h *APIHandler) HandleGlobalWirePublicationFeed(w http.ResponseWriter, r *h
 	})
 }
 
+// HandleGlobalWirePublicationArtifactReviews records owner review state for a
+// publication artifact. It is not public delivery and does not mutate the
+// platform StoryGraph.
+func (h *APIHandler) HandleGlobalWirePublicationArtifactReviews(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	var req globalWirePublicationArtifactReviewRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid publication artifact review request"})
+		return
+	}
+	req.ArtifactID = strings.TrimSpace(req.ArtifactID)
+	status := normalizeGlobalWirePublicationArtifactReviewDecision(req.Decision)
+	if req.ArtifactID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "artifact_id is required"})
+		return
+	}
+	if status == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "decision must be approve or reject"})
+		return
+	}
+	existing, err := h.rt.Store().GetGlobalWirePublicationArtifact(r.Context(), ownerID, req.ArtifactID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "publication artifact not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load publication artifact"})
+		return
+	}
+	if existing.Status != "publication-review-ready" && existing.Status != status {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "publication artifact review state is already final"})
+		return
+	}
+	artifact, err := h.rt.Store().UpdateGlobalWirePublicationArtifactStatus(r.Context(), ownerID, req.ArtifactID, status)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "publication artifact not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to review publication artifact"})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, globalWirePublicationArtifactReviewResponse{
+		Artifact: artifact,
+		Status:   artifact.Status,
+		Decision: req.Decision,
+	})
+}
+
 func normalizeGlobalWireReconciliationDecision(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "accept", "accepted":
 		return "accepted"
 	case "reject", "rejected":
 		return "rejected"
+	default:
+		return ""
+	}
+}
+
+func normalizeGlobalWirePublicationArtifactReviewDecision(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "approve", "approved", "publish", "published":
+		return "publication-approved"
+	case "reject", "rejected", "pull", "pulled":
+		return "publication-rejected"
 	default:
 		return ""
 	}
