@@ -3949,3 +3949,84 @@ Next executable probe:
   item for the selected story when one exists, include artifact provenance in
   the prompt, and extend deployed owner proof to observe the prompt-bar
   submission payload.
+
+## Checkpoint - Autoradio Traverses Publication Artifacts - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What changed:
+
+- Autoradio now prefers the latest selected-story publication feed item when
+  one exists.
+- The Autoradio prompt treats the `GlobalWirePublicationArtifact` body as the
+  primary traversal object and includes artifact id, status, channel, title,
+  citation count, rollback count, SourceItem context, citation refs, rollback
+  refs, related Story VTexts, Style.vtext source, and non-mutation guardrails.
+- Ask Choir remains story/projection based; only Autoradio switches to
+  artifact traversal when a feed artifact is present.
+
+Evidence:
+
+- Problem-first checkpoint commit:
+  `b795771d` (`docs: record global wire autoradio artifact gap`).
+- Behavior commit:
+  `55f211681bf1ab35752f07354e20165758167d32`
+  (`feat: route autoradio through publication artifacts`).
+- Local proof passed:
+  `npm run build` in `frontend/`.
+- Diff hygiene passed:
+  `git diff --check`.
+- CI run `27086609892`: success. Go vet/build, runtime shards,
+  non-runtime tests, integration smoke, frontend build, aggregate gate, and
+  Deploy to Staging all passed.
+- FlakeHub publish run `27086609891`: success.
+- Staging health at `2026-06-07T07:53:14Z` reported proxy and upstream
+  deployed commit `55f211681bf1ab35752f07354e20165758167d32`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in"`
+  with 1 passed. The proof creates the artifact/feed trajectory, clicks
+  Autoradio, captures the `/api/prompt-bar` request, and verifies the prompt
+  includes the publication artifact id, citation count, rollback count,
+  citation refs, and artifact guardrail.
+
+Invariants preserved:
+
+- Autoradio artifact traversal is a prompt-bar submission; it does not mutate
+  platform stories or user-owned forks.
+- Publication artifacts remain citeable review artifacts and are not
+  automatically public publication.
+- News app views continue to pass in Future Noir, Carbon Kintsugi, and London
+  Salmon.
+- Style.vtext remains an explicit citeable source in the prompt context.
+
+Belief-state update:
+
+- The proven product trajectory now reaches:
+  SourceItem -> source refresh/fetch/scheduler evidence -> StoryGraph headline
+  candidate -> extraction/research artifacts -> research handoff ->
+  projection review -> publication update package -> publication artifact ->
+  owner-scoped publication feed item -> Autoradio artifact traversal prompt.
+- The next highest-value axis is probably explicit publication/review
+  semantics: a durable transition from review-ready artifact to approved
+  published/deliverable artifact, with rollback refs and no StoryGraph
+  mutation. That should be documented before implementation.
+
+Remaining error field:
+
+- Autoradio traversal submits a prompt; it is not yet a dedicated audio
+  playback/rendering pipeline with persisted script/audio artifacts.
+- Publication feed remains owner-scoped. Public newsletter routes, delivery,
+  subscriptions, syndication, and explicit publish approvals are not built.
+- No durable `RunAcceptanceRecord` has been synthesized from this mission.
+- Source standing policy, extraction normalization, and full Style.vtext
+  revision workflows remain lower-resolution than the spec target.
+
+Next executable probe:
+
+- Use cognitive transforms to choose between a review/publish state machine
+  over `GlobalWirePublicationArtifact`, dedicated Autoradio script/audio
+  artifact persistence, or honest `RunAcceptanceRecord` synthesis from a real
+  product trajectory.
