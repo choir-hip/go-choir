@@ -833,6 +833,32 @@ belief-state changes:
   role problem: the route should expose product-safe submitted runtime-run
   lineage counts directly from SourceMaxx request DTOs, while keeping detailed
   run-state/update/child-profile counts limited to records it can resolve.
+- Commit `a5a5e8d86b67ef99ba1e630add84c29af4500481` fixes that
+  product-safe projection gap. `processor_runtime_run_count` and
+  `reconciler_runtime_run_count` now count submitted runtime IDs present in the
+  SourceMaxx request lineage, while separate resolved/unresolved fields show
+  whether detailed lifecycle records could be joined. Focused runtime and
+  sourcecycled tests passed locally, `./cmd/sandbox` and `./cmd/sourcecycled`
+  built locally, CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27096707813` succeeded,
+  and FlakeHub run
+  `https://github.com/choir-hip/go-choir/actions/runs/27096707817` succeeded.
+  Staging health reported proxy and sandbox commit
+  `a5a5e8d86b67ef99ba1e630add84c29af4500481`, deployed at
+  `2026-06-07T15:27:31Z`.
+- Deployed authenticated product proof against
+  `/api/global-wire/sourcemaxx-status` now returns cycle
+  `cycle_043b6ca2781a54d8b3b4f761` with 503 SourceItems, 14 fetches, 11
+  processor requests, 1 reconciler request, `processor_runtime_run_count: 7`,
+  `reconciler_runtime_run_count: 1`,
+  `processor_unresolved_runtime_run_count: 7`, and
+  `reconciler_unresolved_runtime_run_count: 1`. The unresolved counts are
+  intentional evidence rather than hidden failure: product status can now prove
+  submitted runtime lineage from source-service handoffs, while detailed
+  lifecycle state still needs a product-safe join to the runtime store that
+  accepted the sourcecycled runs. Sandbox logs remain the evidence that those
+  submitted runs entered active shared-harness tool loops after the prompt-role
+  fix.
 
 remaining error field:
 
@@ -840,10 +866,10 @@ remaining error field:
   including provider-level distribution, freshness, dedupe, and backoff;
 - first-class processor/reconciler shared-harness profiles are present,
   sourcecycled submits capped staging handoffs to them, and staging logs show
-  post-fix shared-harness tool loops; product-safe status still needs submitted
-  runtime-run lineage counts even when detailed lifecycle records are not
-  locally resolvable; resident output/result quality, compaction continuity,
-  researcher delegation, and VText delegation/publication remain incomplete;
+  post-fix shared-harness tool loops; product-safe status now exposes submitted
+  runtime-run lineage counts and unresolved detailed joins; resident
+  output/result quality, compaction continuity, researcher delegation, and
+  VText delegation/publication remain incomplete;
 - processor load budget and routing scheme after live staging data;
 - current researcher/VText agent invocation contracts for this workflow;
 - deletion/reuse map for current Global Wire backend source paths;
@@ -851,20 +877,20 @@ remaining error field:
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether the product-safe SourceMaxx
-status projection gives enough owner-visible lineage to distinguish submitted
-runtime runs, unresolved detailed run records, active tool loops, child
-researcher/VText delegation, and produced updates. Sourcecycled storage, DTO
-serialization, and prompt-role execution are now proven on staging; the next
-realism axis is product-visible lifecycle evidence and publication-quality
-VText production, not source-volume visibility or basic dispatch.
+highest-impact remaining uncertainty: whether processors and reconcilers
+produce useful resident outputs, request existing researcher/VText agents when
+needed, preserve continuity/compaction state, and create publication-quality
+VTexts with appropriate Style.vtext sources. Source volume, sourcecycled
+handoffs, submitted runtime lineage, and prompt-role execution are now proven
+on staging; the next realism axis is product-visible lifecycle output and
+publication-quality VText production.
 
 next executable delivery loop:
 
-1. Fix product-safe SourceMaxx status projection so it counts submitted
-   runtime-run lineage directly from non-empty `runtime_run_id` request fields,
-   then separately reports detailed run-state/update/child-profile counts only
-   for runtime records it can resolve.
+1. Add product-visible lifecycle output for processor/reconciler runs: compact
+   processor/reconciler notes as VText-native early versions or source-linked
+   handoff artifacts, expose update counts through the safe status route, and
+   preserve handles to source items and full content.
 2. Keep processors and reconcilers on the shared runtime harness with
    profile-specific prompts/toolsets only. Do not create a separate processor
    service loop to mask lineage gaps.
