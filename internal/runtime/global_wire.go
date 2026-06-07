@@ -48,6 +48,24 @@ type globalWireSourceSearchResponse struct {
 	Contribution *types.GlobalWireContribution `json:"contribution,omitempty"`
 }
 
+type globalWireReconciliationResponse struct {
+	Contributions []types.GlobalWireContribution           `json:"contributions"`
+	SourceItems   map[string]types.ContentItem             `json:"source_items,omitempty"`
+	Decisions     []types.GlobalWireReconciliationDecision `json:"decisions"`
+}
+
+type globalWireReconciliationCreateRequest struct {
+	ContributionID string `json:"contribution_id"`
+	Decision       string `json:"decision"`
+	Note           string `json:"note,omitempty"`
+}
+
+type globalWireReconciliationCreateResponse struct {
+	Decision     types.GlobalWireReconciliationDecision `json:"decision"`
+	Contribution types.GlobalWireContribution           `json:"contribution"`
+	SourceItem   *types.ContentItem                     `json:"source_item,omitempty"`
+}
+
 // HandleGlobalWireStories returns the authenticated owner's durable StoryGraph.
 func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -235,6 +253,128 @@ func (h *APIHandler) HandleGlobalWireContributions(w http.ResponseWriter, r *htt
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
+}
+
+// HandleGlobalWireReconciliation exposes the research/reconciliation queue and
+// records owner-scoped decisions without mutating platform StoryGraph stories.
+func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		storyID := strings.TrimSpace(r.URL.Query().Get("story_id"))
+		contributions, err := h.rt.Store().ListGlobalWireContributions(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list reconciliation contributions"})
+			return
+		}
+		decisions, err := h.rt.Store().ListGlobalWireReconciliationDecisions(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list reconciliation decisions"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, globalWireReconciliationResponse{
+			Contributions: contributions,
+			SourceItems:   h.globalWireContributionSourceItems(r, ownerID, contributions),
+			Decisions:     decisions,
+		})
+	case http.MethodPost:
+		var req globalWireReconciliationCreateRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid reconciliation request"})
+			return
+		}
+		req.ContributionID = strings.TrimSpace(req.ContributionID)
+		req.Decision = normalizeGlobalWireReconciliationDecision(req.Decision)
+		req.Note = strings.TrimSpace(req.Note)
+		if req.ContributionID == "" || req.Decision == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "contribution_id and decision are required"})
+			return
+		}
+		contribution, err := h.rt.Store().GetGlobalWireContribution(r.Context(), ownerID, req.ContributionID)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "contribution not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load contribution"})
+			return
+		}
+		state := "rejected-by-review"
+		if req.Decision == "accepted" {
+			state = "accepted-for-graph-review"
+		}
+		updatedContribution, err := h.rt.Store().UpdateGlobalWireContributionResearchState(r.Context(), ownerID, req.ContributionID, state)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to update contribution state"})
+			return
+		}
+		decision, err := h.rt.Store().CreateGlobalWireReconciliationDecision(r.Context(), types.GlobalWireReconciliationDecision{
+			ID:              "global-wire-reconciliation-" + uuid.NewString(),
+			OwnerID:         ownerID,
+			ContributionID:  contribution.ID,
+			StoryID:         contribution.StoryID,
+			Decision:        req.Decision,
+			Note:            req.Note,
+			SourceContentID: contribution.SourceContentID,
+		})
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create reconciliation decision"})
+			return
+		}
+		var sourceItem *types.ContentItem
+		if contribution.SourceContentID != "" {
+			item, err := h.rt.Store().GetContentItem(r.Context(), ownerID, contribution.SourceContentID)
+			if err == nil {
+				sourceItem = &item
+			}
+		}
+		writeAPIJSON(w, http.StatusCreated, globalWireReconciliationCreateResponse{
+			Decision:     decision,
+			Contribution: updatedContribution,
+			SourceItem:   sourceItem,
+		})
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
+func normalizeGlobalWireReconciliationDecision(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "accept", "accepted":
+		return "accepted"
+	case "reject", "rejected":
+		return "rejected"
+	default:
+		return ""
+	}
+}
+
+func (h *APIHandler) globalWireContributionSourceItems(r *http.Request, ownerID string, contributions []types.GlobalWireContribution) map[string]types.ContentItem {
+	items := map[string]types.ContentItem{}
+	for _, contribution := range contributions {
+		contentID := strings.TrimSpace(contribution.SourceContentID)
+		if contentID == "" {
+			continue
+		}
+		if _, ok := items[contentID]; ok {
+			continue
+		}
+		item, err := h.rt.Store().GetContentItem(r.Context(), ownerID, contentID)
+		if err != nil {
+			continue
+		}
+		items[contentID] = item
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	return items
 }
 
 func (h *APIHandler) createGlobalWireContributionSourceItem(r *http.Request, ownerID string, req globalWireContributionCreateRequest) (string, error) {

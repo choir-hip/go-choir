@@ -699,6 +699,105 @@ func (s *Store) CreateGlobalWireContribution(ctx context.Context, rec types.Glob
 	return rec, nil
 }
 
+// GetGlobalWireContribution returns one owner-scoped contribution.
+func (s *Store) GetGlobalWireContribution(ctx context.Context, ownerID, contributionID string) (types.GlobalWireContribution, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, contribution_id, story_id, kind, headline, content,
+		        source_content_id, user_vtext_doc_id, research_state, created_at, updated_at
+		   FROM global_wire_contributions
+		  WHERE owner_id = ? AND contribution_id = ?`,
+		ownerID,
+		contributionID,
+	)
+	return scanGlobalWireContribution(row)
+}
+
+// UpdateGlobalWireContributionResearchState updates queue state without
+// changing the platform StoryGraph.
+func (s *Store) UpdateGlobalWireContributionResearchState(ctx context.Context, ownerID, contributionID, researchState string) (types.GlobalWireContribution, error) {
+	now := time.Now().UTC()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE global_wire_contributions
+		    SET research_state = ?, updated_at = ?
+		  WHERE owner_id = ? AND contribution_id = ?`,
+		strings.TrimSpace(researchState),
+		now.UTC().Format(time.RFC3339Nano),
+		ownerID,
+		contributionID,
+	)
+	if err != nil {
+		return types.GlobalWireContribution{}, fmt.Errorf("update global wire contribution state: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return types.GlobalWireContribution{}, ErrNotFound
+	}
+	return s.GetGlobalWireContribution(ctx, ownerID, contributionID)
+}
+
+// CreateGlobalWireReconciliationDecision records a reviewer/researcher decision
+// artifact over a contribution.
+func (s *Store) CreateGlobalWireReconciliationDecision(ctx context.Context, rec types.GlobalWireReconciliationDecision) (types.GlobalWireReconciliationDecision, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_reconciliation_decisions (
+			owner_id, decision_id, contribution_id, story_id, decision, note,
+			source_content_id, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.ContributionID,
+		rec.StoryID,
+		rec.Decision,
+		sanitizeStoreText(rec.Note),
+		rec.SourceContentID,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireReconciliationDecision{}, fmt.Errorf("create global wire reconciliation decision: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireReconciliationDecisions lists recent owner-scoped decision
+// artifacts, optionally narrowed to one story.
+func (s *Store) ListGlobalWireReconciliationDecisions(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireReconciliationDecision, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, decision_id, contribution_id, story_id, decision, note,
+	                source_content_id, created_at
+	           FROM global_wire_reconciliation_decisions
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY created_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire reconciliation decisions: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireReconciliationDecision
+	for rows.Next() {
+		rec, err := scanGlobalWireReconciliationDecision(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire reconciliation decisions: %w", err)
+	}
+	return out, nil
+}
+
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
 func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.GlobalWireStoryProjection) error {
 	now := rec.UpdatedAt
@@ -870,5 +969,32 @@ func scanGlobalWireContribution(row interface{ Scan(...any) error }) (types.Glob
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireReconciliationDecision(row interface{ Scan(...any) error }) (types.GlobalWireReconciliationDecision, error) {
+	var rec types.GlobalWireReconciliationDecision
+	var createdAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.ContributionID,
+		&rec.StoryID,
+		&rec.Decision,
+		&rec.Note,
+		&rec.SourceContentID,
+		&createdAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireReconciliationDecision{}, ErrNotFound
+		}
+		return types.GlobalWireReconciliationDecision{}, fmt.Errorf("scan global wire reconciliation decision: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireReconciliationDecision{}, fmt.Errorf("parse global wire reconciliation created_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
 	return rec, nil
 }

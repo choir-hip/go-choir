@@ -258,3 +258,78 @@ func TestHandleGlobalWireSourceSearchReportsUnconfiguredSourceService(t *testing
 		t.Fatalf("unexpected unconfigured response: %+v", resp)
 	}
 }
+
+func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(t *testing.T) {
+	_, handler := testAPISetup(t)
+
+	storiesBeforeW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
+	if storiesBeforeW.Code != http.StatusOK {
+		t.Fatalf("stories before status = %d body=%s", storiesBeforeW.Code, storiesBeforeW.Body.String())
+	}
+	var storiesBefore globalWireStoriesResponse
+	if err := json.NewDecoder(storiesBeforeW.Body).Decode(&storiesBefore); err != nil {
+		t.Fatalf("decode stories before: %v", err)
+	}
+	beforeManifest := storiesBefore.Stories[0].Manifest
+
+	contributionBody := `{"story_id":"story-supply-resilience","kind":"source","headline":"Port backlog recedes","text":"Reviewer source text for reconciliation."}`
+	contributionW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/contributions", contributionBody, "user-alpha")
+	if contributionW.Code != http.StatusCreated {
+		t.Fatalf("create contribution status = %d body=%s", contributionW.Code, contributionW.Body.String())
+	}
+	var contribution types.GlobalWireContribution
+	if err := json.NewDecoder(contributionW.Body).Decode(&contribution); err != nil {
+		t.Fatalf("decode contribution: %v", err)
+	}
+	if contribution.SourceContentID == "" {
+		t.Fatalf("contribution source_content_id is empty: %+v", contribution)
+	}
+
+	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
+	if listW.Code != http.StatusOK {
+		t.Fatalf("list reconciliation status = %d body=%s", listW.Code, listW.Body.String())
+	}
+	var listResp globalWireReconciliationResponse
+	if err := json.NewDecoder(listW.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode reconciliation list: %v", err)
+	}
+	if len(listResp.Contributions) != 1 {
+		t.Fatalf("reconciliation contribution count = %d, want 1", len(listResp.Contributions))
+	}
+	if listResp.SourceItems[contribution.SourceContentID].ContentID != contribution.SourceContentID {
+		t.Fatalf("reconciliation source item missing: %+v", listResp.SourceItems)
+	}
+
+	decisionBody := `{"contribution_id":"` + contribution.ID + `","decision":"accepted","note":"Evidence is relevant; send to graph review."}`
+	decisionW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/reconciliation", decisionBody, "user-alpha")
+	if decisionW.Code != http.StatusCreated {
+		t.Fatalf("create reconciliation decision status = %d body=%s", decisionW.Code, decisionW.Body.String())
+	}
+	var decisionResp globalWireReconciliationCreateResponse
+	if err := json.NewDecoder(decisionW.Body).Decode(&decisionResp); err != nil {
+		t.Fatalf("decode reconciliation decision: %v", err)
+	}
+	if decisionResp.Decision.Decision != "accepted" || decisionResp.Decision.SourceContentID != contribution.SourceContentID {
+		t.Fatalf("unexpected reconciliation decision: %+v", decisionResp.Decision)
+	}
+	if decisionResp.Contribution.ResearchState != "accepted-for-graph-review" {
+		t.Fatalf("contribution research_state = %q", decisionResp.Contribution.ResearchState)
+	}
+	if decisionResp.SourceItem == nil || decisionResp.SourceItem.ContentID != contribution.SourceContentID {
+		t.Fatalf("decision source item missing: %+v", decisionResp.SourceItem)
+	}
+
+	storiesAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
+	if storiesAfterW.Code != http.StatusOK {
+		t.Fatalf("stories after status = %d body=%s", storiesAfterW.Code, storiesAfterW.Body.String())
+	}
+	var storiesAfter globalWireStoriesResponse
+	if err := json.NewDecoder(storiesAfterW.Body).Decode(&storiesAfter); err != nil {
+		t.Fatalf("decode stories after: %v", err)
+	}
+	afterManifest := storiesAfter.Stories[0].Manifest
+	if len(afterManifest.Lead) != len(beforeManifest.Lead) || len(afterManifest.Supporting) != len(beforeManifest.Supporting) ||
+		len(afterManifest.Contrary) != len(beforeManifest.Contrary) || len(afterManifest.Context) != len(beforeManifest.Context) {
+		t.Fatalf("StoryGraph manifest mutated: before=%+v after=%+v", beforeManifest, afterManifest)
+	}
+}

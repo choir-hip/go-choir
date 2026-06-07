@@ -175,6 +175,20 @@ CREATE TABLE IF NOT EXISTS global_wire_story_projections (
 	KEY idx_global_wire_story_projections_story (owner_id, story_id, style_id)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_reconciliation_decisions (
+	owner_id           VARCHAR(255) NOT NULL,
+	decision_id        VARCHAR(255) NOT NULL,
+	contribution_id    VARCHAR(255) NOT NULL,
+	story_id           VARCHAR(255) NOT NULL,
+	decision           VARCHAR(64) NOT NULL,
+	note               LONGTEXT NOT NULL DEFAULT '',
+	source_content_id  VARCHAR(255) NOT NULL DEFAULT '',
+	created_at         DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, decision_id),
+	KEY idx_global_wire_reconciliation_contribution (owner_id, contribution_id, created_at),
+	KEY idx_global_wire_reconciliation_story (owner_id, story_id, created_at)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivery_id          VARCHAR(255) PRIMARY KEY,
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',

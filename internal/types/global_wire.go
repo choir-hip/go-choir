@@ -85,3 +85,17 @@ type GlobalWireContribution struct {
 	CreatedAt       time.Time `json:"created_at,omitempty"`
 	UpdatedAt       time.Time `json:"updated_at,omitempty"`
 }
+
+// GlobalWireReconciliationDecision records a reviewer/researcher decision over
+// a user-owned contribution. It is a decision artifact, not a platform story
+// mutation.
+type GlobalWireReconciliationDecision struct {
+	ID              string    `json:"id"`
+	OwnerID         string    `json:"owner_id,omitempty"`
+	ContributionID  string    `json:"contribution_id"`
+	StoryID         string    `json:"story_id"`
+	Decision        string    `json:"decision"`
+	Note            string    `json:"note"`
+	SourceContentID string    `json:"source_content_id,omitempty"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+}

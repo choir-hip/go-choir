@@ -185,6 +185,32 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(sourceServiceBridge.body.source).toBeTruthy();
     expect(sourceServiceBridge.body.message).toBeTruthy();
   }
+
+  const reconciliation = await page.evaluate(async (contributionId) => {
+    const decisionRes = await fetch('/api/global-wire/reconciliation', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contribution_id: contributionId,
+        decision: 'accepted',
+        note: 'Accept for graph review without mutating the platform story.',
+      }),
+    });
+    if (!decisionRes.ok) throw new Error(`create reconciliation decision failed: ${decisionRes.status}`);
+    const decision = await decisionRes.json();
+    const listRes = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', {
+      credentials: 'include',
+    });
+    if (!listRes.ok) throw new Error(`list reconciliation failed: ${listRes.status}`);
+    const list = await listRes.json();
+    return { decision, list };
+  }, queuedContribution.id);
+  expect(reconciliation.decision.decision.decision).toBe('accepted');
+  expect(reconciliation.decision.contribution.research_state).toBe('accepted-for-graph-review');
+  expect(reconciliation.decision.source_item?.content_id).toBe(queuedContribution.source_content_id);
+  expect(reconciliation.list.decisions.some((decision) => decision.contribution_id === queuedContribution.id)).toBeTruthy();
+  expect(reconciliation.list.source_items[queuedContribution.source_content_id]?.metadata?.schema).toBe('choir.global_wire_user_source_contribution.v1');
 });
 
 for (const themeId of ['futuristic-noir', 'carbon-fiber-kintsugi', 'london-salmon']) {
