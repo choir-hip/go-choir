@@ -5388,3 +5388,154 @@ Next executable probe:
   issue delivery refs for active subscribers, surface it in the News app, and
   prove on staging that issue/delivery records preserve citation and rollback
   provenance without mutating StoryGraph or user forks.
+
+## Checkpoint - Newsletter Issue Delivery Ledger - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Delivered slice:
+
+- Problem commit:
+  `4c851a2d` (`docs: record global wire newsletter ledger gap`).
+- Behavior commit:
+  `4ba5b6ef87a7c440a5894e179a415bcc0f9429f2`
+  (`feat: add global wire newsletter ledger`).
+- Added owner-scoped `GlobalWireNewsletterSubscriber`,
+  `GlobalWireNewsletterIssue`, and `GlobalWireNewsletterDelivery` records.
+- Added public product API routes for owner newsletter subscribers and issues:
+  `/api/global-wire/newsletter-subscribers` and
+  `/api/global-wire/newsletter-issues`.
+- Newsletter issues derive from selected owner-created public-link artifacts,
+  aggregate citation and rollback refs, and create delivery-ready ledger rows
+  for active subscribers.
+- The Global Wire app can create a low-resolution staging subscriber, create a
+  newsletter issue from a public link, and display issue provenance plus
+  delivery status in the News/publication view.
+- Reconciliation now returns newsletter subscribers, issues, and deliveries so
+  the product state is research/reconciliation-ready instead of only a UI
+  event.
+
+Proof:
+
+- Focused runtime proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`.
+- Frontend build passed:
+  `npm run build` in `frontend/`.
+- Diff hygiene passed:
+  `git diff --check`.
+- CI run `27088472533`: success for SHA
+  `4ba5b6ef87a7c440a5894e179a415bcc0f9429f2`.
+- FlakeHub run `27088472528`: failed in `flakehub-publish` while fetching
+  `https://flakehub.com/f/DeterminateSystems/inspect/%2A`; the log shows
+  repeated 15-second connection timeouts during `nix eval`. This is recorded
+  as packaging/publish evidence not green, distinct from the main CI and
+  deployed product-path proof.
+- Staging health reported proxy and upstream deployed commit
+  `4ba5b6ef87a7c440a5894e179a415bcc0f9429f2`, deployed at
+  `2026-06-07T09:22:00Z`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip, covering the public app views and the
+  Future Noir, Carbon Kintsugi, and London Salmon theme render checks.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in" --timeout 180000`
+  with 1 passed. The proof creates the owner fork/contribution/public-link path,
+  creates a newsletter subscriber and issue through product APIs, observes a
+  delivery-ready ledger row, verifies provenance in the UI, and confirms the
+  reconciliation payload contains the issue and delivery refs.
+
+Invariants preserved:
+
+- Newsletter issues are derived from owner-created public links; they do not
+  mutate platform Story VTexts, StoryGraph nodes, user forks, or contributions.
+- Subscriber and delivery records are owner-scoped. There is no public
+  subscriber endpoint and no claim of external email-provider delivery.
+- The newsletter issue is a downstream projection of normal editable VText
+  publication artifacts. Style.vtext remains a citeable source artifact that can
+  be selected, composed, and replaced; the newsletter ledger is not a substitute
+  style/source object.
+- News remains non-oracle and provenance-rich: citation refs, rollback refs,
+  issue refs, and delivery refs are carried forward into app and reconciliation
+  state.
+- Graph/story semantics remain headline/source-neighborhood based; the ledger
+  adds delivery state without redefining graph nodes.
+- Future Noir, Carbon Kintsugi, and London Salmon still pass deployed app view
+  proof.
+
+Belief-state update:
+
+- The proven trajectory now reaches:
+  live/source evidence -> StoryGraph headline/source-neighborhood view ->
+  Story VTexts -> Style.vtext projection -> News/publication export -> public
+  reader/RSS -> owner-created newsletter issue -> subscriber delivery ledger ->
+  reconciliation payload.
+- The delivery surface is still low resolution but now has durable issue,
+  subscriber, provenance, and rollback state that can be reviewed and reconciled
+  later.
+
+Remaining error field:
+
+- No real external email send, provider receipt, unsubscribe/preference flow, or
+  multi-issue campaign feed exists yet.
+- Subscriber management is intentionally low resolution: the staged product path
+  creates a default owner-scoped subscriber for proof instead of a full address
+  book UI.
+- Audio playback/Autoradio output is still script/prompt/acceptance level, not
+  synthesized playable audio.
+- Source extraction and normalization remain below the full research-ready
+  target; reconciliation is richer but not yet a complete source research
+  workbench.
+- FlakeHub publish for this SHA is not green because of the external fetch
+  timeout noted above, even though main CI and staging product proof are green.
+- The mission is not complete; acceptance remains below full spec completion,
+  promotion-level, and continuation-level.
+
+Next executable probe:
+
+- Highest-value next axes are: real newsletter delivery/provider receipt with
+  owner-visible rollback refs; richer source extraction and reconciliation
+  normalization; or Autoradio playable audio output. Choose the next slice with
+  cognitive transforms, preserving the same artifact trajectory rather than
+  adding a parallel demo surface.
+
+Run Checkpoint & Resumption State:
+
+- status: `checkpoint_incomplete`
+- last checkpoint: newsletter issue delivery ledger deployed and proven on
+  staging for SHA `4ba5b6ef87a7c440a5894e179a415bcc0f9429f2`.
+- current artifact state: Global Wire now has a proven provenance-preserving
+  path from public publication artifacts into RSS and owner-scoped newsletter
+  issue/subscriber/delivery ledger state.
+- what shipped: durable newsletter subscriber, issue, and delivery records;
+  owner product API routes; reconciliation fields; Global Wire app controls and
+  proof selectors; runtime and Playwright coverage.
+- what was proven: main CI green, staging serving the behavior SHA, public theme
+  proof green, authenticated product-path proof green, newsletter issue and
+  delivery refs visible in UI and reconciliation.
+- unproven or partial claims: real email delivery, full subscriber management,
+  playable audio output, full research normalization, promotion-level
+  AppChangePackage adoption, and continuation-level run-memory proof.
+- belief-state changes: the mission has crossed from read-only publication
+  output into owner-owned delivery ledger state without violating the VText,
+  Style.vtext, StoryGraph, provenance, or theme invariants.
+- remaining error field: delivery is ledger-ready but not provider-sent; source
+  research depth and audio output remain below target; FlakeHub publish for the
+  behavior SHA failed on an external timeout.
+- highest-impact remaining uncertainty: whether the next largest product value
+  is actual provider-backed delivery, deeper research/source normalization, or
+  media/audio output.
+- next executable probe: select and implement one of those axes as the next
+  low-resolution honest projection, then prove it through staging product paths.
+- suggested resume goal string: Continue the Global Wire / Style.vtext
+  collaborative StoryGraph MissionGradient from the newsletter-ledger
+  checkpoint. Preserve the dual-object spec invariants, choose the next
+  highest-value axis with cognitive transforms, document any new problem before
+  behavior changes, ship through main/staging, prove via product-path browser/API
+  evidence, and update this mission checkpoint before stopping.
+- evidence artifact refs: commits `4c851a2d` and
+  `4ba5b6ef87a7c440a5894e179a415bcc0f9429f2`; CI run `27088472533`;
+  FlakeHub run `27088472528`; deployed Playwright commands above; staging
+  health response for deployed commit `4ba5b6ef87a7c440a5894e179a415bcc0f9429f2`.
+- rollback refs: git revert of `4ba5b6ef87a7c440a5894e179a415bcc0f9429f2` for
+  newsletter ledger behavior; previous proven RSS/public-link behavior commit
+  `c4570ceb4c18cf850029845b1d928abab877b8a8`.
