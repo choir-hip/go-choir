@@ -203,6 +203,27 @@ type GlobalWireResearchTask struct {
 	UpdatedAt            time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWireExtractionArtifact is a provisional source/claim overlay with
+// entities, events, and timeline points. It enriches review; it does not
+// replace Story VText headline graph nodes.
+type GlobalWireExtractionArtifact struct {
+	ID              string    `json:"id"`
+	OwnerID         string    `json:"owner_id,omitempty"`
+	StoryID         string    `json:"story_id"`
+	ClaimID         string    `json:"claim_id,omitempty"`
+	RefreshID       string    `json:"refresh_id,omitempty"`
+	SourceContentID string    `json:"source_content_id,omitempty"`
+	CandidateID     string    `json:"candidate_id,omitempty"`
+	Entities        []string  `json:"entities"`
+	Events          []string  `json:"events"`
+	Timeline        []string  `json:"timeline"`
+	Uncertainty     string    `json:"uncertainty"`
+	Rationale       string    `json:"rationale"`
+	Status          string    `json:"status"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireResearchTaskEvidence is the researcher-produced packet attached to
 // a task lifecycle transition. It is reconciliation evidence, not a StoryGraph
 // mutation.
@@ -248,6 +269,7 @@ type GlobalWirePublicationUpdate struct {
 	ResearchDecisionID  string    `json:"research_decision_id,omitempty"`
 	EvidenceID          string    `json:"evidence_id,omitempty"`
 	SourceContentID     string    `json:"source_content_id,omitempty"`
+	ExtractionIDs       []string  `json:"extraction_ids"`
 	ProjectionReviewIDs []string  `json:"projection_review_ids"`
 	ProjectionStates    []string  `json:"projection_states"`
 	RollbackRefs        []string  `json:"rollback_refs"`

@@ -56,17 +56,18 @@ type globalWireSourceRefreshRequest struct {
 }
 
 type globalWireSourceRefreshResponse struct {
-	Status       string                                  `json:"status"`
-	Source       string                                  `json:"source"`
-	Query        string                                  `json:"query,omitempty"`
-	Message      string                                  `json:"message,omitempty"`
-	RefreshRun   types.GlobalWireSourceRefreshRun        `json:"refresh_run"`
-	ContentItem  *types.ContentItem                      `json:"content_item,omitempty"`
-	Contribution *types.GlobalWireContribution           `json:"contribution,omitempty"`
-	Decision     *types.GlobalWireReconciliationDecision `json:"decision,omitempty"`
-	Candidate    *types.GlobalWireGraphUpdateCandidate   `json:"candidate,omitempty"`
-	ClaimRecord  *types.GlobalWireClaimRecord            `json:"claim_record,omitempty"`
-	ResearchTask *types.GlobalWireResearchTask           `json:"research_task,omitempty"`
+	Status             string                                  `json:"status"`
+	Source             string                                  `json:"source"`
+	Query              string                                  `json:"query,omitempty"`
+	Message            string                                  `json:"message,omitempty"`
+	RefreshRun         types.GlobalWireSourceRefreshRun        `json:"refresh_run"`
+	ContentItem        *types.ContentItem                      `json:"content_item,omitempty"`
+	Contribution       *types.GlobalWireContribution           `json:"contribution,omitempty"`
+	Decision           *types.GlobalWireReconciliationDecision `json:"decision,omitempty"`
+	Candidate          *types.GlobalWireGraphUpdateCandidate   `json:"candidate,omitempty"`
+	ClaimRecord        *types.GlobalWireClaimRecord            `json:"claim_record,omitempty"`
+	ResearchTask       *types.GlobalWireResearchTask           `json:"research_task,omitempty"`
+	ExtractionArtifact *types.GlobalWireExtractionArtifact     `json:"extraction_artifact,omitempty"`
 }
 
 type globalWireFetchCycleRequest struct {
@@ -77,32 +78,34 @@ type globalWireFetchCycleRequest struct {
 }
 
 type globalWireFetchCycleResponse struct {
-	Status          string                                 `json:"status"`
-	Message         string                                 `json:"message"`
-	FetchCycle      types.GlobalWireFetchCycleRun          `json:"fetch_cycle"`
-	RegistryEntries []types.GlobalWireSourceRegistryEntry  `json:"registry_entries"`
-	RefreshRuns     []types.GlobalWireSourceRefreshRun     `json:"refresh_runs"`
-	ContentItems    []types.ContentItem                    `json:"content_items,omitempty"`
-	Contributions   []types.GlobalWireContribution         `json:"contributions,omitempty"`
-	Candidates      []types.GlobalWireGraphUpdateCandidate `json:"candidates,omitempty"`
-	ClaimRecords    []types.GlobalWireClaimRecord          `json:"claim_records,omitempty"`
-	ResearchTasks   []types.GlobalWireResearchTask         `json:"research_tasks,omitempty"`
-	RecentCycles    []types.GlobalWireFetchCycleRun        `json:"recent_cycles,omitempty"`
+	Status              string                                 `json:"status"`
+	Message             string                                 `json:"message"`
+	FetchCycle          types.GlobalWireFetchCycleRun          `json:"fetch_cycle"`
+	RegistryEntries     []types.GlobalWireSourceRegistryEntry  `json:"registry_entries"`
+	RefreshRuns         []types.GlobalWireSourceRefreshRun     `json:"refresh_runs"`
+	ContentItems        []types.ContentItem                    `json:"content_items,omitempty"`
+	Contributions       []types.GlobalWireContribution         `json:"contributions,omitempty"`
+	Candidates          []types.GlobalWireGraphUpdateCandidate `json:"candidates,omitempty"`
+	ClaimRecords        []types.GlobalWireClaimRecord          `json:"claim_records,omitempty"`
+	ResearchTasks       []types.GlobalWireResearchTask         `json:"research_tasks,omitempty"`
+	ExtractionArtifacts []types.GlobalWireExtractionArtifact   `json:"extraction_artifacts,omitempty"`
+	RecentCycles        []types.GlobalWireFetchCycleRun        `json:"recent_cycles,omitempty"`
 }
 
 type globalWireReconciliationResponse struct {
-	Contributions      []types.GlobalWireContribution             `json:"contributions"`
-	SourceItems        map[string]types.ContentItem               `json:"source_items,omitempty"`
-	Decisions          []types.GlobalWireReconciliationDecision   `json:"decisions"`
-	Candidates         []types.GlobalWireGraphUpdateCandidate     `json:"candidates"`
-	Promotions         []types.GlobalWireGraphPromotionDecision   `json:"promotions"`
-	Refreshes          []types.GlobalWireSourceRefreshRun         `json:"refreshes"`
-	ClaimRecords       []types.GlobalWireClaimRecord              `json:"claim_records"`
-	ResearchTasks      []types.GlobalWireResearchTask             `json:"research_tasks"`
-	ResearchEvidence   []types.GlobalWireResearchTaskEvidence     `json:"research_evidence"`
-	ResearchDecisions  []types.GlobalWireResearchEvidenceDecision `json:"research_decisions"`
-	PublicationUpdates []types.GlobalWirePublicationUpdate        `json:"publication_updates"`
-	ProjectionReviews  []types.GlobalWireProjectionReview         `json:"projection_reviews"`
+	Contributions       []types.GlobalWireContribution             `json:"contributions"`
+	SourceItems         map[string]types.ContentItem               `json:"source_items,omitempty"`
+	Decisions           []types.GlobalWireReconciliationDecision   `json:"decisions"`
+	Candidates          []types.GlobalWireGraphUpdateCandidate     `json:"candidates"`
+	Promotions          []types.GlobalWireGraphPromotionDecision   `json:"promotions"`
+	Refreshes           []types.GlobalWireSourceRefreshRun         `json:"refreshes"`
+	ClaimRecords        []types.GlobalWireClaimRecord              `json:"claim_records"`
+	ResearchTasks       []types.GlobalWireResearchTask             `json:"research_tasks"`
+	ExtractionArtifacts []types.GlobalWireExtractionArtifact       `json:"extraction_artifacts"`
+	ResearchEvidence    []types.GlobalWireResearchTaskEvidence     `json:"research_evidence"`
+	ResearchDecisions   []types.GlobalWireResearchEvidenceDecision `json:"research_decisions"`
+	PublicationUpdates  []types.GlobalWirePublicationUpdate        `json:"publication_updates"`
+	ProjectionReviews   []types.GlobalWireProjectionReview         `json:"projection_reviews"`
 }
 
 type globalWireResearchTaskLifecycleRequest struct {
@@ -516,23 +519,24 @@ func (h *APIHandler) HandleGlobalWireSourceRefresh(w http.ResponseWriter, r *htt
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
 		return
 	}
-	claimRecord, researchTask, err := h.createGlobalWireClaimResearchArtifacts(r, ownerID, story, item, classification, run, contribution, decision, candidate)
+	claimRecord, researchTask, extractionArtifact, err := h.createGlobalWireClaimResearchArtifacts(r, ownerID, story, item, classification, run, contribution, decision, candidate)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create claim research artifacts"})
 		return
 	}
 	writeAPIJSON(w, http.StatusCreated, globalWireSourceRefreshResponse{
-		Status:       run.Status,
-		Source:       run.Provider,
-		Query:        run.Query,
-		Message:      run.Message,
-		RefreshRun:   run,
-		ContentItem:  &item,
-		Contribution: &contribution,
-		Decision:     &decision,
-		Candidate:    &candidate,
-		ClaimRecord:  &claimRecord,
-		ResearchTask: &researchTask,
+		Status:             run.Status,
+		Source:             run.Provider,
+		Query:              run.Query,
+		Message:            run.Message,
+		RefreshRun:         run,
+		ContentItem:        &item,
+		Contribution:       &contribution,
+		Decision:           &decision,
+		Candidate:          &candidate,
+		ClaimRecord:        &claimRecord,
+		ResearchTask:       &researchTask,
+		ExtractionArtifact: &extractionArtifact,
 	})
 }
 
@@ -716,6 +720,11 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list research tasks"})
 			return
 		}
+		extractionArtifacts, err := h.rt.Store().ListGlobalWireExtractionArtifacts(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list extraction artifacts"})
+			return
+		}
 		researchEvidence, err := h.rt.Store().ListGlobalWireResearchTaskEvidence(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list research task evidence"})
@@ -737,18 +746,19 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, globalWireReconciliationResponse{
-			Contributions:      contributions,
-			SourceItems:        h.globalWireContributionSourceItems(r, ownerID, contributions),
-			Decisions:          decisions,
-			Candidates:         candidates,
-			Promotions:         promotions,
-			Refreshes:          refreshes,
-			ClaimRecords:       claimRecords,
-			ResearchTasks:      researchTasks,
-			ResearchEvidence:   researchEvidence,
-			ResearchDecisions:  researchDecisions,
-			PublicationUpdates: publicationUpdates,
-			ProjectionReviews:  projectionReviews,
+			Contributions:       contributions,
+			SourceItems:         h.globalWireContributionSourceItems(r, ownerID, contributions),
+			Decisions:           decisions,
+			Candidates:          candidates,
+			Promotions:          promotions,
+			Refreshes:           refreshes,
+			ClaimRecords:        claimRecords,
+			ResearchTasks:       researchTasks,
+			ExtractionArtifacts: extractionArtifacts,
+			ResearchEvidence:    researchEvidence,
+			ResearchDecisions:   researchDecisions,
+			PublicationUpdates:  publicationUpdates,
+			ProjectionReviews:   projectionReviews,
 		})
 	case http.MethodPost:
 		var req globalWireReconciliationCreateRequest
@@ -1764,6 +1774,7 @@ func (h *APIHandler) runGlobalWireFetchCycle(r *http.Request, ownerID string, re
 	candidates := []types.GlobalWireGraphUpdateCandidate{}
 	claimRecords := []types.GlobalWireClaimRecord{}
 	researchTasks := []types.GlobalWireResearchTask{}
+	extractionArtifacts := []types.GlobalWireExtractionArtifact{}
 	storyIDs := []string{}
 	registryIDs := []string{}
 	refreshIDs := []string{}
@@ -1910,7 +1921,7 @@ func (h *APIHandler) runGlobalWireFetchCycle(r *http.Request, ownerID string, re
 		if err != nil {
 			return globalWireFetchCycleResponse{}, err
 		}
-		claim, task, err := h.createGlobalWireClaimResearchArtifacts(r, ownerID, story, item, classification, run, contribution, decision, candidate)
+		claim, task, extraction, err := h.createGlobalWireClaimResearchArtifacts(r, ownerID, story, item, classification, run, contribution, decision, candidate)
 		if err != nil {
 			return globalWireFetchCycleResponse{}, err
 		}
@@ -1920,6 +1931,7 @@ func (h *APIHandler) runGlobalWireFetchCycle(r *http.Request, ownerID string, re
 		candidates = append(candidates, candidate)
 		claimRecords = append(claimRecords, claim)
 		researchTasks = append(researchTasks, task)
+		extractionArtifacts = append(extractionArtifacts, extraction)
 		messages = append(messages, story.ID+": "+classification.UpdateClassification)
 	}
 
@@ -1939,16 +1951,17 @@ func (h *APIHandler) runGlobalWireFetchCycle(r *http.Request, ownerID string, re
 		return globalWireFetchCycleResponse{}, err
 	}
 	return globalWireFetchCycleResponse{
-		Status:          cycle.Status,
-		Message:         cycle.Message,
-		FetchCycle:      cycle,
-		RegistryEntries: registry,
-		RefreshRuns:     refreshes,
-		ContentItems:    contentItems,
-		Contributions:   contributions,
-		Candidates:      candidates,
-		ClaimRecords:    claimRecords,
-		ResearchTasks:   researchTasks,
+		Status:              cycle.Status,
+		Message:             cycle.Message,
+		FetchCycle:          cycle,
+		RegistryEntries:     registry,
+		RefreshRuns:         refreshes,
+		ContentItems:        contentItems,
+		Contributions:       contributions,
+		Candidates:          candidates,
+		ClaimRecords:        claimRecords,
+		ResearchTasks:       researchTasks,
+		ExtractionArtifacts: extractionArtifacts,
 	}, nil
 }
 
@@ -1977,18 +1990,23 @@ func globalWireSourceRegistryEntryID(ownerID, storyID string) string {
 	return "global-wire-source-registry-" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ownerID+":"+storyID)).String()
 }
 
-func (h *APIHandler) createGlobalWireClaimResearchArtifacts(r *http.Request, ownerID string, story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification, run types.GlobalWireSourceRefreshRun, contribution types.GlobalWireContribution, decision types.GlobalWireReconciliationDecision, candidate types.GlobalWireGraphUpdateCandidate) (types.GlobalWireClaimRecord, types.GlobalWireResearchTask, error) {
+func (h *APIHandler) createGlobalWireClaimResearchArtifacts(r *http.Request, ownerID string, story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification, run types.GlobalWireSourceRefreshRun, contribution types.GlobalWireContribution, decision types.GlobalWireReconciliationDecision, candidate types.GlobalWireGraphUpdateCandidate) (types.GlobalWireClaimRecord, types.GlobalWireResearchTask, types.GlobalWireExtractionArtifact, error) {
 	claim := globalWireClaimRecordFromRefresh(ownerID, story, item, classification, run, contribution, decision, candidate)
 	savedClaim, err := h.rt.Store().CreateGlobalWireClaimRecord(r.Context(), claim)
 	if err != nil {
-		return types.GlobalWireClaimRecord{}, types.GlobalWireResearchTask{}, err
+		return types.GlobalWireClaimRecord{}, types.GlobalWireResearchTask{}, types.GlobalWireExtractionArtifact{}, err
 	}
 	task := globalWireResearchTaskFromClaim(ownerID, story, item, classification, run, contribution, candidate, savedClaim)
 	savedTask, err := h.rt.Store().CreateGlobalWireResearchTask(r.Context(), task)
 	if err != nil {
-		return types.GlobalWireClaimRecord{}, types.GlobalWireResearchTask{}, err
+		return types.GlobalWireClaimRecord{}, types.GlobalWireResearchTask{}, types.GlobalWireExtractionArtifact{}, err
 	}
-	return savedClaim, savedTask, nil
+	extraction := globalWireExtractionArtifactFromClaim(ownerID, story, item, classification, run, candidate, savedClaim)
+	savedExtraction, err := h.rt.Store().CreateGlobalWireExtractionArtifact(r.Context(), extraction)
+	if err != nil {
+		return types.GlobalWireClaimRecord{}, types.GlobalWireResearchTask{}, types.GlobalWireExtractionArtifact{}, err
+	}
+	return savedClaim, savedTask, savedExtraction, nil
 }
 
 func globalWireClaimRecordFromRefresh(ownerID string, story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification, run types.GlobalWireSourceRefreshRun, contribution types.GlobalWireContribution, decision types.GlobalWireReconciliationDecision, candidate types.GlobalWireGraphUpdateCandidate) types.GlobalWireClaimRecord {
@@ -2075,6 +2093,44 @@ func globalWireResearchTaskFromClaim(ownerID string, story types.GlobalWireStory
 		Status:               "open",
 		Priority:             priority,
 		UpdateClassification: classification.UpdateClassification,
+	}
+}
+
+func globalWireExtractionArtifactFromClaim(ownerID string, story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification, run types.GlobalWireSourceRefreshRun, candidate types.GlobalWireGraphUpdateCandidate, claim types.GlobalWireClaimRecord) types.GlobalWireExtractionArtifact {
+	sourceLabel := firstNonEmptyString(item.Title, item.CanonicalURL, item.SourceURL, item.ContentID, "Imported SourceItem")
+	createdAt := run.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	entities := []string{}
+	entities = appendStringIfMissing(entities, story.Headline)
+	if sourceLabel != story.Headline {
+		entities = appendStringIfMissing(entities, sourceLabel)
+	}
+	if strings.TrimSpace(candidate.Title) != "" {
+		entities = appendStringIfMissing(entities, candidate.Title)
+	}
+	events := []string{
+		firstNonEmptyString(classification.UpdateClassification, "source-manifest-update") + " signal for " + story.Headline,
+		"SourceItem imported for claim review: " + sourceLabel,
+	}
+	timeline := []string{
+		createdAt.UTC().Format(time.RFC3339) + " source refresh " + run.ID,
+	}
+	return types.GlobalWireExtractionArtifact{
+		ID:              "global-wire-extraction-" + uuid.NewString(),
+		OwnerID:         ownerID,
+		StoryID:         story.ID,
+		ClaimID:         claim.ID,
+		RefreshID:       run.ID,
+		SourceContentID: item.ContentID,
+		CandidateID:     candidate.ID,
+		Entities:        entities,
+		Events:          events,
+		Timeline:        timeline,
+		Uncertainty:     claim.UncertaintyState,
+		Rationale:       "Low-resolution extraction overlay from SourceItem title/body, StoryGraph headline, and refresh classification; review before publication. This enriches claim review and does not create or replace StoryGraph nodes.",
+		Status:          "provisional-review",
 	}
 }
 
@@ -2307,6 +2363,11 @@ func (h *APIHandler) createGlobalWirePublicationUpdate(r *http.Request, ownerID 
 		reviewIDs = append(reviewIDs, review.ID)
 		reviewStates = append(reviewStates, review.Status)
 	}
+	extractions, err := h.rt.Store().ListGlobalWireExtractionArtifacts(r.Context(), ownerID, decision.StoryID, 100)
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, err
+	}
+	extractionIDs := globalWirePublicationExtractionIDs(decision, extractions)
 	summary := req.Summary
 	if summary == "" {
 		summary = globalWirePublicationUpdateSummary(story, decision, candidate, reviews)
@@ -2319,9 +2380,10 @@ func (h *APIHandler) createGlobalWirePublicationUpdate(r *http.Request, ownerID 
 		ResearchDecisionID:  decision.ID,
 		EvidenceID:          decision.EvidenceID,
 		SourceContentID:     decision.SourceContentID,
+		ExtractionIDs:       extractionIDs,
 		ProjectionReviewIDs: reviewIDs,
 		ProjectionStates:    reviewStates,
-		RollbackRefs:        globalWirePublicationRollbackRefs(story, decision, candidate, reviews),
+		RollbackRefs:        globalWirePublicationRollbackRefs(story, decision, candidate, reviews, extractionIDs),
 		Status:              "packaged-for-publication-review",
 		Summary:             summary,
 	})
@@ -2331,7 +2393,24 @@ func (h *APIHandler) createGlobalWirePublicationUpdate(r *http.Request, ownerID 
 	return update, decision, candidate, reviews, sourceItem, nil
 }
 
-func globalWirePublicationRollbackRefs(story types.GlobalWireStory, decision types.GlobalWireResearchEvidenceDecision, candidate *types.GlobalWireGraphUpdateCandidate, reviews []types.GlobalWireProjectionReview) []string {
+func globalWirePublicationExtractionIDs(decision types.GlobalWireResearchEvidenceDecision, extractions []types.GlobalWireExtractionArtifact) []string {
+	ids := []string{}
+	for _, extraction := range extractions {
+		if strings.TrimSpace(extraction.ID) == "" {
+			continue
+		}
+		if strings.TrimSpace(decision.CandidateID) != "" && extraction.CandidateID == decision.CandidateID {
+			ids = appendStringIfMissing(ids, extraction.ID)
+			continue
+		}
+		if strings.TrimSpace(decision.SourceContentID) != "" && extraction.SourceContentID == decision.SourceContentID {
+			ids = appendStringIfMissing(ids, extraction.ID)
+		}
+	}
+	return ids
+}
+
+func globalWirePublicationRollbackRefs(story types.GlobalWireStory, decision types.GlobalWireResearchEvidenceDecision, candidate *types.GlobalWireGraphUpdateCandidate, reviews []types.GlobalWireProjectionReview, extractionIDs []string) []string {
 	refs := []string{
 		"story:" + story.ID,
 		"story_vtext:" + story.StoryVTextDoc,
@@ -2352,6 +2431,9 @@ func globalWirePublicationRollbackRefs(story types.GlobalWireStory, decision typ
 		if strings.TrimSpace(review.DraftStoryDocID) != "" {
 			refs = append(refs, "draft_projection_doc:"+review.DraftStoryDocID)
 		}
+	}
+	for _, id := range extractionIDs {
+		refs = append(refs, "extraction:"+id)
 	}
 	out := []string{}
 	for _, ref := range refs {

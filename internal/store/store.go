@@ -292,6 +292,28 @@ CREATE TABLE IF NOT EXISTS global_wire_research_tasks (
 	KEY idx_global_wire_research_tasks_claim (owner_id, claim_id)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_extraction_artifacts (
+	owner_id          VARCHAR(255) NOT NULL,
+	extraction_id     VARCHAR(255) NOT NULL,
+	story_id          VARCHAR(255) NOT NULL,
+	claim_id          VARCHAR(255) NOT NULL DEFAULT '',
+	refresh_id        VARCHAR(255) NOT NULL DEFAULT '',
+	source_content_id VARCHAR(255) NOT NULL DEFAULT '',
+	candidate_id      VARCHAR(255) NOT NULL DEFAULT '',
+	entities_json     LONGTEXT NOT NULL DEFAULT '[]',
+	events_json       LONGTEXT NOT NULL DEFAULT '[]',
+	timeline_json     LONGTEXT NOT NULL DEFAULT '[]',
+	uncertainty       LONGTEXT NOT NULL DEFAULT '',
+	rationale         LONGTEXT NOT NULL DEFAULT '',
+	status            VARCHAR(255) NOT NULL DEFAULT '',
+	created_at        DATETIME NOT NULL,
+	updated_at        DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, extraction_id),
+	KEY idx_global_wire_extraction_story (owner_id, story_id, updated_at),
+	KEY idx_global_wire_extraction_claim (owner_id, claim_id),
+	KEY idx_global_wire_extraction_source (owner_id, source_content_id)
+);
+
 CREATE TABLE IF NOT EXISTS global_wire_research_task_evidence (
 	owner_id          VARCHAR(255) NOT NULL,
 	evidence_id       VARCHAR(255) NOT NULL,
@@ -389,6 +411,7 @@ CREATE TABLE IF NOT EXISTS global_wire_publication_updates (
 	research_decision_id  VARCHAR(255) NOT NULL DEFAULT '',
 	evidence_id           VARCHAR(255) NOT NULL DEFAULT '',
 	source_content_id     VARCHAR(255) NOT NULL DEFAULT '',
+	extraction_ids_json   LONGTEXT NOT NULL DEFAULT '[]',
 	projection_review_ids_json LONGTEXT NOT NULL DEFAULT '[]',
 	projection_states_json     LONGTEXT NOT NULL DEFAULT '[]',
 	rollback_refs_json        LONGTEXT NOT NULL DEFAULT '[]',
@@ -853,6 +876,7 @@ func (s *Store) bootstrap() error {
 		{"global_wire_projection_reviews", "draft_story_doc_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"global_wire_projection_reviews", "approved_story_doc_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"global_wire_projection_reviews", "approved_revision_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"global_wire_publication_updates", "extraction_ids_json", "LONGTEXT NOT NULL DEFAULT '[]'"},
 		{"browser_sessions", "html_snapshot", "LONGTEXT NOT NULL DEFAULT ''"},
 		{"browser_sessions", "links_json", "LONGTEXT NOT NULL DEFAULT '[]'"},
 		{"browser_sessions", "screenshot_png_base64", "LONGTEXT NOT NULL DEFAULT ''"},

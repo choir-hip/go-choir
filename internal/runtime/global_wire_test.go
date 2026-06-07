@@ -381,7 +381,7 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	if resp.Status != "candidate-review" || resp.ContentItem == nil || resp.Contribution == nil || resp.Decision == nil || resp.Candidate == nil {
 		t.Fatalf("unexpected source refresh response: %+v", resp)
 	}
-	if resp.ClaimRecord == nil || resp.ResearchTask == nil {
+	if resp.ClaimRecord == nil || resp.ResearchTask == nil || resp.ExtractionArtifact == nil {
 		t.Fatalf("source refresh did not create structured claim/research state: %+v", resp)
 	}
 	if resp.RefreshRun.SourceContentID != resp.ContentItem.ContentID ||
@@ -426,6 +426,17 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		!strings.Contains(resp.ResearchTask.Prompt, "Do not treat the source as an oracle") {
 		t.Fatalf("research task missing review contract: %+v", resp.ResearchTask)
 	}
+	if resp.ExtractionArtifact.ClaimID != resp.ClaimRecord.ID ||
+		resp.ExtractionArtifact.RefreshID != resp.RefreshRun.ID ||
+		resp.ExtractionArtifact.SourceContentID != resp.ContentItem.ContentID ||
+		resp.ExtractionArtifact.CandidateID != resp.Candidate.ID ||
+		resp.ExtractionArtifact.Status != "provisional-review" ||
+		len(resp.ExtractionArtifact.Entities) == 0 ||
+		len(resp.ExtractionArtifact.Events) == 0 ||
+		len(resp.ExtractionArtifact.Timeline) == 0 ||
+		!strings.Contains(resp.ExtractionArtifact.Rationale, "does not create or replace StoryGraph nodes") {
+		t.Fatalf("extraction artifact missing source-neighborhood overlay contract: %+v", resp.ExtractionArtifact)
+	}
 
 	storiesAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
 	if storiesAfterW.Code != http.StatusOK {
@@ -457,6 +468,11 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	}
 	if len(listResp.ResearchTasks) != 1 || listResp.ResearchTasks[0].ClaimID != resp.ClaimRecord.ID {
 		t.Fatalf("research task missing from reconciliation list: %+v", listResp.ResearchTasks)
+	}
+	if len(listResp.ExtractionArtifacts) != 1 ||
+		listResp.ExtractionArtifacts[0].ClaimID != resp.ClaimRecord.ID ||
+		listResp.ExtractionArtifacts[0].SourceContentID != resp.ContentItem.ContentID {
+		t.Fatalf("extraction artifact missing from reconciliation list: %+v", listResp.ExtractionArtifacts)
 	}
 	if len(listResp.ResearchEvidence) != 0 {
 		t.Fatalf("research evidence should not exist before task lifecycle transition: %+v", listResp.ResearchEvidence)
@@ -550,6 +566,8 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		publicationResp.Update.SourceContentID != resp.ContentItem.ContentID ||
 		publicationResp.Update.Status != "packaged-for-publication-review" ||
 		!strings.Contains(publicationResp.Update.Summary, "does not publish or mutate") ||
+		len(publicationResp.Update.ExtractionIDs) != 1 ||
+		publicationResp.Update.ExtractionIDs[0] != resp.ExtractionArtifact.ID ||
 		len(publicationResp.Update.RollbackRefs) < 4 ||
 		publicationResp.Candidate == nil ||
 		publicationResp.SourceItem == nil {
@@ -566,6 +584,7 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	}
 	if len(publicationListResp.PublicationUpdates) != 1 ||
 		publicationListResp.PublicationUpdates[0].ResearchDecisionID != handoffResp.Decision.ID ||
+		len(publicationListResp.PublicationUpdates[0].ExtractionIDs) != 1 ||
 		len(publicationListResp.PublicationUpdates[0].RollbackRefs) < 4 {
 		t.Fatalf("publication update missing from reconciliation list: %+v", publicationListResp.PublicationUpdates)
 	}
@@ -647,8 +666,10 @@ func TestHandleGlobalWireFetchCycleCreatesRegistryAndRefreshEvidence(t *testing.
 		len(resp.Candidates) != 1 ||
 		len(resp.ClaimRecords) != 1 ||
 		len(resp.ResearchTasks) != 1 ||
+		len(resp.ExtractionArtifacts) != 1 ||
 		resp.ClaimRecords[0].RefreshID != resp.RefreshRuns[0].ID ||
-		resp.ResearchTasks[0].ClaimID != resp.ClaimRecords[0].ID {
+		resp.ResearchTasks[0].ClaimID != resp.ClaimRecords[0].ID ||
+		resp.ExtractionArtifacts[0].ClaimID != resp.ClaimRecords[0].ID {
 		t.Fatalf("fetch cycle did not reuse source-refresh classification artifacts: %+v", resp)
 	}
 

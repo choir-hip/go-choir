@@ -1268,6 +1268,98 @@ func (s *Store) ListGlobalWireResearchTasks(ctx context.Context, ownerID, storyI
 	return out, nil
 }
 
+// CreateGlobalWireExtractionArtifact stores a provisional source/claim
+// extraction overlay. It is review data, not a StoryGraph node mutation.
+func (s *Store) CreateGlobalWireExtractionArtifact(ctx context.Context, rec types.GlobalWireExtractionArtifact) (types.GlobalWireExtractionArtifact, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = rec.CreatedAt
+	}
+	if rec.Status == "" {
+		rec.Status = "provisional-review"
+	}
+	entitiesJSON, err := json.Marshal(rec.Entities)
+	if err != nil {
+		return types.GlobalWireExtractionArtifact{}, fmt.Errorf("marshal global wire extraction entities: %w", err)
+	}
+	eventsJSON, err := json.Marshal(rec.Events)
+	if err != nil {
+		return types.GlobalWireExtractionArtifact{}, fmt.Errorf("marshal global wire extraction events: %w", err)
+	}
+	timelineJSON, err := json.Marshal(rec.Timeline)
+	if err != nil {
+		return types.GlobalWireExtractionArtifact{}, fmt.Errorf("marshal global wire extraction timeline: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_extraction_artifacts (
+			owner_id, extraction_id, story_id, claim_id, refresh_id,
+			source_content_id, candidate_id, entities_json, events_json,
+			timeline_json, uncertainty, rationale, status, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.StoryID,
+		rec.ClaimID,
+		rec.RefreshID,
+		rec.SourceContentID,
+		rec.CandidateID,
+		string(entitiesJSON),
+		string(eventsJSON),
+		string(timelineJSON),
+		sanitizeStoreText(rec.Uncertainty),
+		sanitizeStoreText(rec.Rationale),
+		rec.Status,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireExtractionArtifact{}, fmt.Errorf("create global wire extraction artifact: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireExtractionArtifacts lists provisional extraction overlays,
+// optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWireExtractionArtifacts(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireExtractionArtifact, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, extraction_id, story_id, claim_id, refresh_id,
+	                source_content_id, candidate_id, entities_json, events_json,
+	                timeline_json, uncertainty, rationale, status, created_at,
+	                updated_at
+	           FROM global_wire_extraction_artifacts
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire extraction artifacts: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireExtractionArtifact
+	for rows.Next() {
+		rec, err := scanGlobalWireExtractionArtifact(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire extraction artifacts: %w", err)
+	}
+	return out, nil
+}
+
 // GetGlobalWireResearchTask returns one owner-scoped research task.
 func (s *Store) GetGlobalWireResearchTask(ctx context.Context, ownerID, taskID string) (types.GlobalWireResearchTask, error) {
 	row := s.readDB.QueryRowContext(ctx,
@@ -1814,6 +1906,10 @@ func (s *Store) CreateGlobalWirePublicationUpdate(ctx context.Context, rec types
 	if rec.Status == "" {
 		rec.Status = "packaged-for-publication-review"
 	}
+	extractionIDsJSON, err := json.Marshal(rec.ExtractionIDs)
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("marshal global wire publication extraction ids: %w", err)
+	}
 	projectionReviewIDsJSON, err := json.Marshal(rec.ProjectionReviewIDs)
 	if err != nil {
 		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("marshal global wire publication projection review ids: %w", err)
@@ -1829,10 +1925,10 @@ func (s *Store) CreateGlobalWirePublicationUpdate(ctx context.Context, rec types
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO global_wire_publication_updates (
 			owner_id, update_id, story_id, candidate_id, research_decision_id,
-			evidence_id, source_content_id, projection_review_ids_json,
-			projection_states_json, rollback_refs_json, status, summary,
-			created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			evidence_id, source_content_id, extraction_ids_json,
+			projection_review_ids_json, projection_states_json, rollback_refs_json,
+			status, summary, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.OwnerID,
 		rec.ID,
 		rec.StoryID,
@@ -1840,6 +1936,7 @@ func (s *Store) CreateGlobalWirePublicationUpdate(ctx context.Context, rec types
 		rec.ResearchDecisionID,
 		rec.EvidenceID,
 		rec.SourceContentID,
+		string(extractionIDsJSON),
 		string(projectionReviewIDsJSON),
 		string(projectionStatesJSON),
 		string(rollbackRefsJSON),
@@ -1862,8 +1959,9 @@ func (s *Store) ListGlobalWirePublicationUpdates(ctx context.Context, ownerID, s
 	}
 	query := `SELECT owner_id, update_id, story_id, candidate_id,
 	                research_decision_id, evidence_id, source_content_id,
-	                projection_review_ids_json, projection_states_json,
-	                rollback_refs_json, status, summary, created_at, updated_at
+	                extraction_ids_json, projection_review_ids_json,
+	                projection_states_json, rollback_refs_json, status, summary,
+	                created_at, updated_at
 	           FROM global_wire_publication_updates
 	          WHERE owner_id = ?`
 	args := []any{ownerID}
@@ -2300,6 +2398,55 @@ func scanGlobalWireResearchTask(row interface{ Scan(...any) error }) (types.Glob
 	return rec, nil
 }
 
+func scanGlobalWireExtractionArtifact(row interface{ Scan(...any) error }) (types.GlobalWireExtractionArtifact, error) {
+	var rec types.GlobalWireExtractionArtifact
+	var entitiesJSON, eventsJSON, timelineJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.StoryID,
+		&rec.ClaimID,
+		&rec.RefreshID,
+		&rec.SourceContentID,
+		&rec.CandidateID,
+		&entitiesJSON,
+		&eventsJSON,
+		&timelineJSON,
+		&rec.Uncertainty,
+		&rec.Rationale,
+		&rec.Status,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireExtractionArtifact{}, ErrNotFound
+		}
+		return types.GlobalWireExtractionArtifact{}, fmt.Errorf("scan global wire extraction artifact: %w", err)
+	}
+	if err := json.Unmarshal([]byte(entitiesJSON), &rec.Entities); err != nil {
+		return types.GlobalWireExtractionArtifact{}, fmt.Errorf("unmarshal global wire extraction entities: %w", err)
+	}
+	if err := json.Unmarshal([]byte(eventsJSON), &rec.Events); err != nil {
+		return types.GlobalWireExtractionArtifact{}, fmt.Errorf("unmarshal global wire extraction events: %w", err)
+	}
+	if err := json.Unmarshal([]byte(timelineJSON), &rec.Timeline); err != nil {
+		return types.GlobalWireExtractionArtifact{}, fmt.Errorf("unmarshal global wire extraction timeline: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireExtractionArtifact{}, fmt.Errorf("parse global wire extraction artifact created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireExtractionArtifact{}, fmt.Errorf("parse global wire extraction artifact updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
 func scanGlobalWireResearchTaskEvidence(row interface{ Scan(...any) error }) (types.GlobalWireResearchTaskEvidence, error) {
 	var rec types.GlobalWireResearchTaskEvidence
 	var createdAt string
@@ -2485,7 +2632,7 @@ func scanGlobalWireProjectionReview(row interface{ Scan(...any) error }) (types.
 
 func scanGlobalWirePublicationUpdate(row interface{ Scan(...any) error }) (types.GlobalWirePublicationUpdate, error) {
 	var rec types.GlobalWirePublicationUpdate
-	var projectionReviewIDsJSON, projectionStatesJSON, rollbackRefsJSON string
+	var extractionIDsJSON, projectionReviewIDsJSON, projectionStatesJSON, rollbackRefsJSON string
 	var createdAt, updatedAt string
 	err := row.Scan(
 		&rec.OwnerID,
@@ -2495,6 +2642,7 @@ func scanGlobalWirePublicationUpdate(row interface{ Scan(...any) error }) (types
 		&rec.ResearchDecisionID,
 		&rec.EvidenceID,
 		&rec.SourceContentID,
+		&extractionIDsJSON,
 		&projectionReviewIDsJSON,
 		&projectionStatesJSON,
 		&rollbackRefsJSON,
@@ -2508,6 +2656,9 @@ func scanGlobalWirePublicationUpdate(row interface{ Scan(...any) error }) (types
 			return types.GlobalWirePublicationUpdate{}, ErrNotFound
 		}
 		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("scan global wire publication update: %w", err)
+	}
+	if err := json.Unmarshal([]byte(extractionIDsJSON), &rec.ExtractionIDs); err != nil {
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("unmarshal global wire publication extraction ids: %w", err)
 	}
 	if err := json.Unmarshal([]byte(projectionReviewIDsJSON), &rec.ProjectionReviewIDs); err != nil {
 		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("unmarshal global wire publication projection review ids: %w", err)

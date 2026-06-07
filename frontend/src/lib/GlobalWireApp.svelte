@@ -174,6 +174,7 @@
   let sourceRefreshes = [];
   let claimRecords = [];
   let researchTasks = [];
+  let extractionArtifacts = [];
   let researchEvidence = [];
   let researchDecisions = [];
   let publicationUpdates = [];
@@ -220,6 +221,7 @@
       sourceRegistryEntries = [];
       claimRecords = [];
       researchTasks = [];
+      extractionArtifacts = [];
       projectionReviews = [];
       sourceSearchResults = [];
       sourceSearchStatus = '';
@@ -267,6 +269,7 @@
       sourceRefreshes = Array.isArray(payload.refreshes) ? payload.refreshes : [];
       claimRecords = Array.isArray(payload.claim_records) ? payload.claim_records : [];
       researchTasks = Array.isArray(payload.research_tasks) ? payload.research_tasks : [];
+      extractionArtifacts = Array.isArray(payload.extraction_artifacts) ? payload.extraction_artifacts : [];
       researchEvidence = Array.isArray(payload.research_evidence) ? payload.research_evidence : [];
       researchDecisions = Array.isArray(payload.research_decisions) ? payload.research_decisions : [];
       publicationUpdates = Array.isArray(payload.publication_updates) ? payload.publication_updates : [];
@@ -283,6 +286,7 @@
       sourceRegistryEntries = [];
       claimRecords = [];
       researchTasks = [];
+      extractionArtifacts = [];
       researchEvidence = [];
       researchDecisions = [];
       publicationUpdates = [];
@@ -668,6 +672,11 @@
           .filter(Boolean)
           .slice(0, 30);
       }
+      if (payload.extraction_artifact?.id) {
+        extractionArtifacts = [payload.extraction_artifact, ...extractionArtifacts]
+          .filter(Boolean)
+          .slice(0, 30);
+      }
       if (response.status === 201) {
         contributionStatus = `Source refresh classified ${payload.refresh_run?.update_classification || 'candidate evidence'} for review`;
         await loadContributions(selectedStory.id);
@@ -745,6 +754,11 @@
           .filter(Boolean)
           .slice(0, 30);
       }
+      if (Array.isArray(payload.extraction_artifacts) && payload.extraction_artifacts.length) {
+        extractionArtifacts = [...payload.extraction_artifacts, ...extractionArtifacts]
+          .filter(Boolean)
+          .slice(0, 30);
+      }
       await loadContributions(selectedStory.id);
     } catch (error) {
       fetchCycleStatus = error?.message || 'Fetch cycle failed';
@@ -786,6 +800,11 @@
   function claimResearchTasks(claim) {
     const id = claim?.id || '';
     return researchTasks.filter((task) => task.claim_id === id);
+  }
+
+  function claimExtractionArtifacts(claim) {
+    const id = claim?.id || '';
+    return extractionArtifacts.filter((artifact) => artifact.claim_id === id);
   }
 
   function taskEvidence(task) {
@@ -1433,11 +1452,25 @@
                         <div class="claim-research-list" data-global-wire-claim-records>
                           {#each claims.slice(0, 2) as claim}
                             {@const tasks = claimResearchTasks(claim)}
+                            {@const extractions = claimExtractionArtifacts(claim)}
                             <article data-global-wire-claim-record data-global-wire-claim-id={claim.id}>
                               <strong>{claim.claim_kind}</strong>
                               <small>{claim.uncertainty_state} · {claim.dispute_state} · {claim.status}</small>
                               <span>{claim.claim_text}</span>
                               <em>{claim.evidence_gap}</em>
+                              {#each extractions.slice(0, 2) as extraction}
+                                <small
+                                  data-global-wire-extraction-artifact
+                                  data-global-wire-extraction-id={extraction.id}
+                                >
+                                  {extraction.status}: entities {(extraction.entities || []).length} · events {(extraction.events || []).length}
+                                </small>
+                                {#if (extraction.timeline || []).length}
+                                  <small data-global-wire-extraction-timeline>
+                                    {(extraction.timeline || [])[0]}
+                                  </small>
+                                {/if}
+                              {/each}
                               {#each tasks.slice(0, 2) as task}
                                 {@const evidencePackets = taskEvidence(task)}
                                 <div
@@ -1494,6 +1527,9 @@
                                         </small>
                                         <small data-global-wire-publication-rollback>
                                           rollback refs: {(publicationUpdate.rollback_refs || []).length}
+                                        </small>
+                                        <small data-global-wire-publication-extraction-refs>
+                                          extraction refs: {(publicationUpdate.extraction_ids || []).length}
                                         </small>
                                       {:else if handoff.result_state === 'ready-for-platform-review'}
                                         <div class="research-task-actions">

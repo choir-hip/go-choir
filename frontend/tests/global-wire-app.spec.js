@@ -277,6 +277,12 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(sourceRefresh.body.claim_record?.uncertainty_state).toBeTruthy();
     expect(sourceRefresh.body.research_task?.claim_id).toBe(sourceRefresh.body.claim_record?.id);
     expect(sourceRefresh.body.research_task?.status).toBe('open');
+    expect(sourceRefresh.body.extraction_artifact?.claim_id).toBe(sourceRefresh.body.claim_record?.id);
+    expect(sourceRefresh.body.extraction_artifact?.source_content_id).toBe(sourceRefresh.body.content_item?.content_id);
+    expect(sourceRefresh.body.extraction_artifact?.status).toBe('provisional-review');
+    expect(sourceRefresh.body.extraction_artifact?.entities?.length || 0).toBeGreaterThan(0);
+    expect(sourceRefresh.body.extraction_artifact?.events?.length || 0).toBeGreaterThan(0);
+    expect(sourceRefresh.body.extraction_artifact?.timeline?.length || 0).toBeGreaterThan(0);
     expect(sourceRefresh.body.refresh_run?.update_classification).toBeTruthy();
     expect(sourceRefresh.body.refresh_run?.storygraph_action).toBeTruthy();
     expect(sourceRefresh.body.refresh_run?.projection_action).toBeTruthy();
@@ -287,12 +293,15 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
       const list = await res.json();
       const claimRecords = (list.claim_records || []).filter((item) => item.candidate_id === candidateId);
       const researchTasks = (list.research_tasks || []).filter((item) => claimRecords.some((claim) => claim.id === item.claim_id));
-      return { claimRecords, researchTasks };
+      const extractionArtifacts = (list.extraction_artifacts || []).filter((item) => claimRecords.some((claim) => claim.id === item.claim_id));
+      return { claimRecords, researchTasks, extractionArtifacts };
     }, sourceRefresh.body.candidate.id);
     expect(refreshQueue.claimRecords.length).toBeGreaterThanOrEqual(1);
     expect(refreshQueue.claimRecords[0].status).toBe('research-review-required');
     expect(refreshQueue.researchTasks.length).toBeGreaterThanOrEqual(1);
     expect(refreshQueue.researchTasks[0].status).toBe('open');
+    expect(refreshQueue.extractionArtifacts.length).toBeGreaterThanOrEqual(1);
+    expect(refreshQueue.extractionArtifacts[0].status).toBe('provisional-review');
     const researchTaskLifecycle = await page.evaluate(async (taskId) => {
       const res = await fetch('/api/global-wire/research-tasks', {
         method: 'POST',
@@ -369,6 +378,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(publicationUpdate.statusCode).toBe(201);
     expect(publicationUpdate.body.update.status).toBe('packaged-for-publication-review');
     expect(publicationUpdate.body.update.research_decision_id).toBe(researchEvidenceHandoff.body.decision.id);
+    expect(publicationUpdate.body.update.extraction_ids?.length || 0).toBeGreaterThanOrEqual(1);
     expect(publicationUpdate.body.update.rollback_refs.length).toBeGreaterThanOrEqual(4);
     const publicationQueue = await page.evaluate(async (updateId) => {
       const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
@@ -378,6 +388,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     }, publicationUpdate.body.update.id);
     expect(publicationQueue.status).toBe('packaged-for-publication-review');
     expect(publicationQueue.summary).toContain('does not publish or mutate');
+    expect(publicationQueue.extraction_ids?.length || 0).toBeGreaterThanOrEqual(1);
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');
