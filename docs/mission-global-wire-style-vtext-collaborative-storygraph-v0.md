@@ -631,3 +631,76 @@ Next executable probe:
 - Prefer reusing `/api/content/items` and the current contribution queue over a
   new SourceItem table unless sourcecycled import requires additional standing
   or dedupe metadata.
+
+## Overnight Checkpoint - User Source Contribution Artifacts - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+commit delivered: `e860165ac0fbb7ddab7ab08a2e49a26bae93e85d`
+(`feat: link global wire source contributions`)
+
+What changed:
+
+- Added `source_content_id` to `GlobalWireContribution` and
+  `global_wire_contributions`, with a bootstrap migration for existing stores.
+- `POST /api/global-wire/contributions` now creates a user-owned `ContentItem`
+  for `source` and `counter-source` contributions before writing the
+  reconciliation queue row.
+- The contribution `ContentItem` uses schema
+  `choir.global_wire_user_source_contribution.v1`, app hint `global-wire`,
+  and provenance `created_from=global_wire_user_contribution`.
+- The runtime emits the normal `content_item_created` product event for that
+  user-owned source artifact.
+- Focused backend and deployed Playwright tests now prove that the
+  contribution queue links to the user-owned SourceItem artifact.
+
+What was proven locally:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed.
+- `npm run build` passed in `frontend/`.
+
+What was proven on staging:
+
+- Pushed `e860165ac0fbb7ddab7ab08a2e49a26bae93e85d` to `origin/main`.
+- GitHub Actions CI run `27081658832` completed successfully, including
+  runtime shards, non-runtime tests, Go vet/build, and staging deploy.
+- FlakeHub publish run `27081658833` completed successfully.
+- `https://choir.news/health` reported both proxy and sandbox deployed at
+  `e860165ac0fbb7ddab7ab08a2e49a26bae93e85d`, deployed at
+  `2026-06-07T03:36:35Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded auth proof skipped.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed, proving:
+  - durable StoryGraph provenance;
+  - platform story source manifest `ContentItem` lookup;
+  - user-owned fork VText creation;
+  - contribution VText creation;
+  - durable contribution queue state;
+  - contribution `source_content_id` lookup through `/api/content/items/*`.
+
+Belief-state changes:
+
+- The collaboration path now has both a user-owned VText artifact and a
+  user-owned SourceItem artifact. This better matches the spec's
+  `user contribution -> user-owned VText/source artifact -> research queue`
+  topology.
+- The system still does not promote arbitrary user source content into platform
+  story manifests; that invariant remains intact.
+
+Remaining error field:
+
+- No researcher/reconciler consumes queued source artifacts yet.
+- Existing imported `ContentItem`s cannot yet be selected from the app as
+  source contributions; the route creates a new text SourceItem from the
+  contribution body.
+- Sourcecycled/live ingestion is still not feeding the StoryGraph update path.
+- Projection relation and graph edge tables remain implicit.
+
+Next executable probe:
+
+- Make projection a first-class relation before adding more UI: persist
+  `StoryGraph + Style.vtext + context -> Story VText` records so style
+  selection/composition/replacement can be cited and reconciled instead of
+  remaining embedded projection text in story JSON.
