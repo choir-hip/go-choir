@@ -2249,3 +2249,54 @@ staging proof:
   corrected result: 1 passed. The temporary spec and Playwright .last-run.json
   were deleted after the run.
 ```
+
+## Loop 8 Frontend Source Diagnosis Helper Extraction Target
+
+Status: `implemented_local`.
+
+Next frontend simplification target: move pure source diagnosis and edit
+evidence projection helpers out of `frontend/src/lib/VTextEditor.svelte` into
+a focused TypeScript helper module. After the source panel component
+extraction, `VTextEditor.svelte` still owns deterministic shaping of diagnosis
+responses into source-panel props: diagnosis summary facts, bounded revision
+structure summaries, table signatures, and VText edit-evidence metadata.
+
+This is a behavior-preserving extraction. It must not change source diagnosis
+API calls, source repair/artifact actions, source panel rendering, Source
+Viewer/Web Lens launch behavior, source evidence states, or VText edit
+metadata semantics. The editor should keep source-panel orchestration and
+side-effect handlers; the helper module should own only pure projection from
+diagnosis/revision objects to UI-ready data.
+
+acceptance:
+
+- `frontend/src/lib/vtext-source-diagnosis.ts` owns pure diagnosis summary,
+  structure evidence, and edit-evidence projection helpers;
+- `VTextEditor.svelte` imports those helpers and no longer defines the local
+  metadata parsing/projection helpers;
+- frontend build passes;
+- focused source/VText browser proof or deployed diagnosis proof still
+  exercises diagnosis-derived source panel data;
+- no source/publication security, export, or backend behavior changes.
+
+local implementation/evidence:
+
+```text
+change:
+  Extracted sourceDiagnosisSummary, sourceStructureEvidence,
+  revisionEditEvidence, and sourceEditEvidence from VTextEditor.svelte into
+  frontend/src/lib/vtext-source-diagnosis.ts. The editor still owns source
+  panel orchestration, diagnosis fetch/cancel, source repair/artifact actions,
+  and source open dispatch.
+
+line-count effect:
+  frontend/src/lib/VTextEditor.svelte           2704 lines
+  frontend/src/lib/vtext-source-diagnosis.ts      97 lines
+
+local proof:
+  git diff --check
+  result: passed
+
+  npm --prefix frontend run build
+  result: passed
+```
