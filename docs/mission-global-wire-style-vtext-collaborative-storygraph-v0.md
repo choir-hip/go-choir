@@ -1203,3 +1203,70 @@ Next executable probe:
   reconciliation decisions, expose candidates in the reconciliation surface, and
   prove the StoryGraph manifest remains unchanged while the candidate captures
   source-neighborhood semantics.
+
+## Overnight Checkpoint - Graph Update Candidates - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+deployed product commit: `f883b2b61e54219225cbec0a178c41bb8635084e`
+(`feat: add global wire graph update candidates`)
+
+What changed:
+
+- Added durable `global_wire_graph_update_candidates` records.
+- Accepted reconciliation decisions now create a non-mutating graph-update
+  candidate tied to owner id, story id, contribution id, decision id, and source
+  content id.
+- Candidate records classify the proposed StoryGraph effect by candidate kind,
+  source tier, edge kind, projection action, review status, and rationale.
+- `/api/global-wire/reconciliation` now returns graph-update candidates on list
+  and includes a candidate in accepted decision responses.
+- The Global Wire contribution rail now shows the candidate below an accepted
+  decision, separating review state from platform StoryGraph mutation.
+
+What was proven locally:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed.
+- `npm run build` passed in `frontend/`.
+
+What was proven on staging:
+
+- Pushed `f883b2b61e54219225cbec0a178c41bb8635084e` to `origin/main`.
+- GitHub Actions CI run `27082510021` completed successfully, including
+  runtime shards, non-runtime tests, frontend build, Go vet/build, and staging
+  deploy.
+- FlakeHub publish run `27082510019` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `f883b2b61e54219225cbec0a178c41bb8635084e`, deployed at
+  `2026-06-07T04:22:24Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded auth proof skipped.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed against staging and verified visible graph candidate semantics plus API
+  candidate lineage.
+
+Belief-state changes:
+
+- The research/reconciliation path now has an explicit non-mutating bridge into
+  StoryGraph evolution:
+  source evidence -> user-owned contribution -> reconciliation decision ->
+  graph-update candidate.
+- This preserves the core invariant: user contributions and accepted decisions
+  still do not mutate platform stories or manifests.
+- The remaining missing realism has moved from "decision has nowhere to go" to
+  "source discovery is still mostly API/proof-backed and not an owner-visible
+  app workflow."
+
+Remaining error field:
+
+- Source Service search/import is still not visible as an app search/picker.
+- Candidate review does not yet promote to a platform StoryGraph process.
+- There is no autonomous feed-to-cluster-to-update loop.
+- Autoradio/Ask hooks remain outside this slice.
+
+Next executable probe:
+
+- Add a visible source search/import control backed by
+  `/api/global-wire/source-search`, with explicit unavailable/no-evidence states
+  and queue-top-result behavior that creates a source-backed contribution.
