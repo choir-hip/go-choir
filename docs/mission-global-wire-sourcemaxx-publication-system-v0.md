@@ -713,13 +713,25 @@ belief-state changes:
   request metadata, compaction policy, and product-visible state while sharing
   the same provider calls, run memory, continuation, channel, cancellation,
   retry, and event machinery as existing agents.
+- Commit `27a70717f78d86982fe25f8e1e52c1dd20c0217e` connects SourceMaxx
+  processor/reconciler handoffs to `/internal/runtime/runs` with
+  `processor`/`reconciler` profile metadata and enables that dispatcher on
+  Node B. CI, FlakeHub, staging health, and the Global Wire UI test are green
+  for that commit. However, the authenticated product status route currently
+  reports only handoff counts, keys, and scopes; it drops request status. That
+  means product-path proof can see the source cycle and handoff topology, but
+  cannot yet distinguish submitted shared-harness runs from queued or
+  dispatch-failed handoffs. The next fix should expose non-sensitive
+  processor/reconciler status counts through `/api/global-wire/sourcemaxx-status`
+  before using it as dispatch acceptance evidence.
 
 remaining error field:
 
 - sustained staging source daemon/storage behavior across repeated cycles,
   including provider-level distribution, freshness, dedupe, and backoff;
-- first-class processor/reconciler agent profiles, same-loop tool use,
-  request/result channels, and compaction policy;
+- first-class processor/reconciler shared-harness profiles are present and
+  sourcecycled dispatches to them, but product-safe observability of dispatch
+  status and resident output/result channels remains incomplete;
 - processor load budget and routing scheme after live staging data;
 - current researcher/VText agent invocation contracts for this workflow;
 - deletion/reuse map for current Global Wire backend source paths;
