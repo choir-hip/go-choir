@@ -4581,3 +4581,52 @@ Next executable probe:
   evidence if honest run/trajectory ids are available, or deeper source
   standing/extraction normalization so the live evidence foundation is less
   demo-shaped.
+
+## Problem Checkpoint - Delivered Publications Lack Export Artifact - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transform:
+
+- Treat delivery as the boundary where a story becomes portable publication
+  evidence, not merely an owner-visible row in the News app.
+- Preserve ownership and provenance before public exposure. The next honest
+  step is an owner-scoped export artifact over a delivered publication, with
+  citations, rollback refs, and optional Autoradio script context. Public or
+  unauthenticated permalinks can come later.
+
+Observed gap:
+
+- `GlobalWirePublicationDelivery` and delivery detail are durable and
+  inspectable, but the system cannot export a delivered publication artifact
+  for researchers, newsletters, or later syndication.
+- Autoradio scripts are reconciliation-visible, but they are not attached to a
+  portable publication export.
+- Reconciliation has delivery and script rows, but no export object that binds
+  delivery, artifact, story, source, citations, rollback refs, and script text
+  into a reviewable package.
+
+Why this matters:
+
+- Researchers and downstream publication surfaces need portable artifacts, not
+  only UI detail panes.
+- Export is the safe predecessor to public permalinks and syndication because
+  it can stay authenticated while proving exact content/provenance boundaries.
+- The export must remain non-oracle and rollback-aware.
+
+Remaining error field:
+
+- No `GlobalWirePublicationDeliveryExport` or equivalent durable export record
+  exists.
+- No owner product path creates or lists delivery exports.
+- No News app view shows exported publication content/provenance.
+- No reconciliation payload includes delivery exports.
+
+Next executable probe:
+
+- Add owner-scoped delivery export records over delivered publication records,
+  expose `GET/POST /api/global-wire/publication-delivery-exports`, attach the
+  latest Autoradio script when present, render export content/provenance in the
+  News app, include exports in reconciliation, and prove on staging that export
+  creation preserves delivery/artifact/story/source/script/citation/rollback
+  provenance without making the export public.
