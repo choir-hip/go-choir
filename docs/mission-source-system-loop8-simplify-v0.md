@@ -2425,7 +2425,7 @@ staging proof:
 
 ## Loop 8 Frontend Source State Helper Extraction Target
 
-Status: `implemented_local`.
+Status: `implemented_staging_proven`.
 
 Next frontend simplification target: move pure source-state projection helpers
 out of `frontend/src/lib/VTextEditor.svelte` into a focused TypeScript helper
@@ -2497,4 +2497,34 @@ local proof:
   helper. The corrected proof used an isolated auth state and exercised
   source-gap candidate selection, repair payload/open behavior, structured edit
   evidence, and bounded revision structure summaries.
+```
+
+deployment/evidence:
+
+```text
+source commit:
+  3fce2f8e028d219f3a654486830117e968e256b6
+  frontend: extract vtext source state helpers
+
+CI/deploy:
+  GitHub Actions CI 27078919612 passed.
+  FlakeHub publish 27078919615 passed.
+  Node B deploy job 79921250845 passed.
+  /health reported deployed_commit
+  3fce2f8e028d219f3a654486830117e968e256b6, deployed_at
+  2026-06-07T01:16:14Z.
+
+staging proof:
+  CHOIR_AUTH_STATE=/tmp/go-choir-source-state-staging-auth.json
+  CHOIR_AUTH_META=/tmp/go-choir-source-state-staging-auth.meta.json
+  PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000
+  npm --prefix frontend run e2e --
+  tests/vtext-markdown-lineage.spec.js -g
+  "VText Sources panel applies source-gap repair|structured edit evidence|bounded revision structure"
+  --timeout=60000
+
+  result: 3 passed. The deployed proof exercised source-gap candidate
+  selection, repair payload/open behavior, source entity selection,
+  structured edit evidence, and bounded revision structure summaries through
+  the helper-backed VTextEditor source panel path.
 ```
