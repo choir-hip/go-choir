@@ -462,6 +462,88 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	}
 }
 
+func TestHandleGlobalWireFetchCycleCreatesRegistryAndRefreshEvidence(t *testing.T) {
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/source-service/search" {
+			t.Fatalf("unexpected source service path %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("q"); !strings.Contains(got, "Port backlog recedes") {
+			t.Fatalf("query = %q, want story headline query", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(sourceapi.SearchResponse{
+			Query:    r.URL.Query().Get("q"),
+			Provider: sourceapi.ProviderName,
+			Metadata: sourceapi.Metadata{TargetKind: sourceapi.TargetKind},
+			Results: []sourceapi.ItemResult{{
+				Rank:          1,
+				TargetKind:    sourceapi.TargetKind,
+				ItemID:        "srcitem_fetch_cycle_port",
+				SourceID:      "rss:ports",
+				SourceType:    "rss",
+				FetchID:       "fetch-cycle-port-1",
+				Title:         "Port rail dwell reduced after added slots",
+				Body:          "A source registry fetch cycle found that additional rail slots reduced dwell and updated the claim basis.",
+				URL:           "https://example.test/fetch-cycle-port",
+				CanonicalURL:  "https://example.test/fetch-cycle-port",
+				ContentHash:   "hash-fetch-cycle-port",
+				EvidenceLevel: "source-service-ledger",
+			}},
+		})
+	}))
+	defer sourceServer.Close()
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+
+	_, handler := testAPISetup(t)
+	body := `{"story_ids":["story-supply-resilience"],"max_stories":1,"max_results":1,"trigger":"test-bounded-cycle"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/fetch-cycles", body, "user-cycle")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("fetch cycle status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp globalWireFetchCycleResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode fetch cycle: %v", err)
+	}
+	if resp.FetchCycle.ID == "" ||
+		resp.FetchCycle.Trigger != "test-bounded-cycle" ||
+		resp.FetchCycle.Status != "completed" ||
+		len(resp.RegistryEntries) != 1 ||
+		len(resp.RefreshRuns) != 1 ||
+		len(resp.ContentItems) != 1 {
+		t.Fatalf("fetch cycle missing registry/source evidence: %+v", resp)
+	}
+	if resp.RegistryEntries[0].LastCycleID != resp.FetchCycle.ID ||
+		resp.FetchCycle.RegistryEntryIDs[0] != resp.RegistryEntries[0].ID ||
+		resp.FetchCycle.RefreshRunIDs[0] != resp.RefreshRuns[0].ID ||
+		resp.FetchCycle.SourceContentIDs[0] != resp.ContentItems[0].ContentID {
+		t.Fatalf("fetch cycle lineage mismatch: cycle=%+v registry=%+v refresh=%+v item=%+v", resp.FetchCycle, resp.RegistryEntries[0], resp.RefreshRuns[0], resp.ContentItems[0])
+	}
+	if resp.RefreshRuns[0].UpdateClassification != "claim-changed" ||
+		len(resp.Candidates) != 1 ||
+		len(resp.ClaimRecords) != 1 ||
+		len(resp.ResearchTasks) != 1 ||
+		resp.ClaimRecords[0].RefreshID != resp.RefreshRuns[0].ID ||
+		resp.ResearchTasks[0].ClaimID != resp.ClaimRecords[0].ID {
+		t.Fatalf("fetch cycle did not reuse source-refresh classification artifacts: %+v", resp)
+	}
+
+	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/fetch-cycles?story_id=story-supply-resilience", "", "user-cycle")
+	if listW.Code != http.StatusOK {
+		t.Fatalf("list fetch cycles status = %d body=%s", listW.Code, listW.Body.String())
+	}
+	var listResp globalWireFetchCycleResponse
+	if err := json.NewDecoder(listW.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode fetch cycle list: %v", err)
+	}
+	if len(listResp.RegistryEntries) != 1 ||
+		len(listResp.RecentCycles) != 1 ||
+		listResp.RecentCycles[0].ID != resp.FetchCycle.ID {
+		t.Fatalf("fetch cycle not listed durably: %+v", listResp)
+	}
+}
+
 func TestHandleGlobalWireSourceRefreshClassifiesNoVisibleChangeWithoutCandidate(t *testing.T) {
 	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/source-service/search" {

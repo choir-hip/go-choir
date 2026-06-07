@@ -302,6 +302,21 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(sourceRefresh.body.message).toBeTruthy();
   }
 
+  await focusDeskApp(page, 'global-wire', 'Global Wire');
+  const fetchCycleResponsePromise = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/global-wire/fetch-cycles' && response.request().method() === 'POST'
+  );
+  await app.locator('[data-global-wire-fetch-cycle]').click();
+  const fetchCycleResponse = await fetchCycleResponsePromise;
+  expect([201, 503]).toContain(fetchCycleResponse.status());
+  const fetchCycle = await fetchCycleResponse.json();
+  expect(fetchCycle.fetch_cycle?.id).toBeTruthy();
+  expect(fetchCycle.fetch_cycle?.story_ids).toContain('story-supply-resilience');
+  expect(fetchCycle.registry_entries?.[0]?.story_id).toBe('story-supply-resilience');
+  expect(fetchCycle.refresh_runs?.length || 0).toBeGreaterThanOrEqual(1);
+  await expect(app.locator('[data-global-wire-fetch-cycle-status]')).toBeVisible();
+  await expect(app.locator('[data-global-wire-fetch-cycle-runs]')).toContainText('story-supply-resilience');
+
   const reconciliation = await page.evaluate(async ({ contributionId, sourceContentId }) => {
     const listRes = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', {
       credentials: 'include',

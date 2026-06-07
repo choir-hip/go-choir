@@ -1549,6 +1549,7 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/global-wire/contributions", h.HandleGlobalWireContributions)
 	s.HandleFunc("/api/global-wire/reconciliation", h.HandleGlobalWireReconciliation)
 	s.HandleFunc("/api/global-wire/graph-candidates", h.HandleGlobalWireGraphCandidates)
+	s.HandleFunc("/api/global-wire/fetch-cycles", h.HandleGlobalWireFetchCycles)
 	s.HandleFunc("/api/global-wire/style-sources", h.HandleGlobalWireStyleSources)
 	s.HandleFunc("/api/global-wire/projection-reviews", h.HandleGlobalWireProjectionReviews)
 	s.HandleFunc("/api/ws", h.HandleLiveWS)

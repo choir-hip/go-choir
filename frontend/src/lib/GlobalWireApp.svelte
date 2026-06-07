@@ -157,6 +157,10 @@
   let sourceSearchBusy = false;
   let sourceRefreshStatus = '';
   let sourceRefreshBusy = false;
+  let fetchCycleStatus = '';
+  let fetchCycleBusy = false;
+  let fetchCycles = [];
+  let sourceRegistryEntries = [];
   let styleSourceStatus = '';
   let styleSourceBusy = false;
   let queueTopSourceResult = true;
@@ -209,6 +213,8 @@
       graphUpdateCandidates = [];
       graphPromotionDecisions = [];
       sourceRefreshes = [];
+      fetchCycles = [];
+      sourceRegistryEntries = [];
       claimRecords = [];
       researchTasks = [];
       projectionReviews = [];
@@ -216,6 +222,7 @@
       sourceSearchStatus = '';
       sourceSearchMessage = '';
       sourceRefreshStatus = '';
+      fetchCycleStatus = '';
       styleSourceStatus = '';
       return;
     }
@@ -258,6 +265,7 @@
       claimRecords = Array.isArray(payload.claim_records) ? payload.claim_records : [];
       researchTasks = Array.isArray(payload.research_tasks) ? payload.research_tasks : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
+      await loadFetchCycles(storyId);
     } catch {
       contributions = [];
       reconciliationSourceItems = {};
@@ -265,9 +273,27 @@
       graphUpdateCandidates = [];
       graphPromotionDecisions = [];
       sourceRefreshes = [];
+      fetchCycles = [];
+      sourceRegistryEntries = [];
       claimRecords = [];
       researchTasks = [];
       projectionReviews = [];
+    }
+  }
+
+  async function loadFetchCycles(storyId = selectedStoryId) {
+    if (!authenticated) return;
+    try {
+      const response = await fetch(`/api/global-wire/fetch-cycles?story_id=${encodeURIComponent(storyId || '')}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      fetchCycles = Array.isArray(payload.recent_cycles) ? payload.recent_cycles : [];
+      sourceRegistryEntries = Array.isArray(payload.registry_entries) ? payload.registry_entries : [];
+    } catch {
+      fetchCycles = [];
+      sourceRegistryEntries = [];
     }
   }
 
@@ -641,6 +667,80 @@
       sourceRefreshStatus = error?.message || 'Source refresh failed';
     } finally {
       sourceRefreshBusy = false;
+    }
+  }
+
+  async function runFetchCycle() {
+    if (!authenticated) {
+      fetchCycleStatus = 'Sign in to run a bounded source-registry fetch cycle.';
+      return;
+    }
+    fetchCycleBusy = true;
+    fetchCycleStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/fetch-cycles', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          story_ids: [selectedStory.id],
+          max_stories: 1,
+          max_results: 2,
+          trigger: 'global-wire-app-bounded-cycle',
+        }),
+      });
+      const payload = await response.json();
+      fetchCycleStatus = payload.message || payload.status || `Fetch cycle ${response.status}`;
+      if (payload.fetch_cycle?.id) {
+        fetchCycles = [payload.fetch_cycle, ...fetchCycles]
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+      if (Array.isArray(payload.registry_entries)) {
+        sourceRegistryEntries = [...payload.registry_entries, ...sourceRegistryEntries]
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+      if (Array.isArray(payload.refresh_runs)) {
+        sourceRefreshes = [...payload.refresh_runs, ...sourceRefreshes]
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+      if (Array.isArray(payload.content_items)) {
+        const nextItems = {};
+        for (const item of payload.content_items) {
+          if (item?.content_id) nextItems[item.content_id] = item;
+        }
+        reconciliationSourceItems = {
+          ...reconciliationSourceItems,
+          ...nextItems,
+        };
+      }
+      if (Array.isArray(payload.contributions) && payload.contributions.length) {
+        contributions = [...payload.contributions, ...contributions]
+          .filter(Boolean)
+          .slice(0, 6);
+      }
+      if (Array.isArray(payload.candidates) && payload.candidates.length) {
+        graphUpdateCandidates = [...payload.candidates, ...graphUpdateCandidates]
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+      if (Array.isArray(payload.claim_records) && payload.claim_records.length) {
+        claimRecords = [...payload.claim_records, ...claimRecords]
+          .filter(Boolean)
+          .slice(0, 30);
+      }
+      if (Array.isArray(payload.research_tasks) && payload.research_tasks.length) {
+        researchTasks = [...payload.research_tasks, ...researchTasks]
+          .filter(Boolean)
+          .slice(0, 30);
+      }
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      fetchCycleStatus = error?.message || 'Fetch cycle failed';
+    } finally {
+      fetchCycleBusy = false;
     }
   }
 
@@ -1087,6 +1187,15 @@
           >
             {sourceRefreshBusy ? 'Refreshing...' : 'Refresh story evidence'}
           </button>
+          <button
+            type="button"
+            class="source-search-button"
+            on:click={runFetchCycle}
+            disabled={fetchCycleBusy}
+            data-global-wire-fetch-cycle
+          >
+            {fetchCycleBusy ? 'Running...' : 'Run fetch cycle'}
+          </button>
           {#if sourceSearchStatus}
             <p class="source-search-status" data-global-wire-source-search-status>
               {sourceSearchStatus}: {sourceSearchMessage}
@@ -1096,6 +1205,29 @@
             <p class="source-search-status" data-global-wire-source-refresh-status>
               {sourceRefreshStatus}
             </p>
+          {/if}
+          {#if fetchCycleStatus}
+            <p class="source-search-status" data-global-wire-fetch-cycle-status>
+              {fetchCycleStatus}
+            </p>
+          {/if}
+          {#if fetchCycles.length || sourceRegistryEntries.length}
+            <div class="source-search-results" data-global-wire-fetch-cycle-runs>
+              {#each fetchCycles.slice(0, 2) as cycle}
+                <article>
+                  <strong>{cycle.status}</strong>
+                  <small>{cycle.trigger} · {cycle.refresh_run_ids?.length || 0} refreshes · {cycle.source_content_ids?.length || 0} sources</small>
+                  <span>{cycle.message}</span>
+                </article>
+              {/each}
+              {#each sourceRegistryEntries.slice(0, 2) as entry}
+                <article data-global-wire-source-registry-entry>
+                  <strong>{entry.source_scope}</strong>
+                  <small>{entry.status} · {entry.story_id}</small>
+                  <span>{entry.query}</span>
+                </article>
+              {/each}
+            </div>
           {/if}
           {#if sourceRefreshes.length}
             <div class="source-search-results" data-global-wire-source-refresh-runs>

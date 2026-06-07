@@ -203,6 +203,36 @@ type GlobalWireResearchTask struct {
 	UpdatedAt            time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
+// fetch cycle should use for one StoryGraph neighborhood.
+type GlobalWireSourceRegistryEntry struct {
+	ID          string    `json:"id"`
+	OwnerID     string    `json:"owner_id,omitempty"`
+	StoryID     string    `json:"story_id"`
+	Query       string    `json:"query"`
+	SourceScope string    `json:"source_scope"`
+	Status      string    `json:"status"`
+	LastCycleID string    `json:"last_cycle_id,omitempty"`
+	CreatedAt   time.Time `json:"created_at,omitempty"`
+	UpdatedAt   time.Time `json:"updated_at,omitempty"`
+}
+
+// GlobalWireFetchCycleRun records a bounded source-registry cycle. It is
+// scheduler/fetch evidence, not a claim that a 24/7 worker exists.
+type GlobalWireFetchCycleRun struct {
+	ID               string    `json:"id"`
+	OwnerID          string    `json:"owner_id,omitempty"`
+	Trigger          string    `json:"trigger"`
+	Status           string    `json:"status"`
+	StoryIDs         []string  `json:"story_ids"`
+	RegistryEntryIDs []string  `json:"registry_entry_ids"`
+	RefreshRunIDs    []string  `json:"refresh_run_ids"`
+	SourceContentIDs []string  `json:"source_content_ids"`
+	Message          string    `json:"message"`
+	CreatedAt        time.Time `json:"created_at,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireProjectionReview records that a StoryGraph change may require a
 // Style.vtext projection to be reviewed or revised.
 type GlobalWireProjectionReview struct {

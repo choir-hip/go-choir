@@ -1268,6 +1268,167 @@ func (s *Store) ListGlobalWireResearchTasks(ctx context.Context, ownerID, storyI
 	return out, nil
 }
 
+// UpsertGlobalWireSourceRegistryEntry stores the source/query basis for a
+// StoryGraph neighborhood fetch cycle.
+func (s *Store) UpsertGlobalWireSourceRegistryEntry(ctx context.Context, rec types.GlobalWireSourceRegistryEntry) (types.GlobalWireSourceRegistryEntry, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
+	if rec.Status == "" {
+		rec.Status = "active"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_source_registry (
+			owner_id, registry_id, story_id, query, source_scope, status,
+			last_cycle_id, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			query = VALUES(query),
+			source_scope = VALUES(source_scope),
+			status = VALUES(status),
+			last_cycle_id = VALUES(last_cycle_id),
+			updated_at = VALUES(updated_at)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.StoryID,
+		sanitizeStoreText(rec.Query),
+		rec.SourceScope,
+		rec.Status,
+		rec.LastCycleID,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireSourceRegistryEntry{}, fmt.Errorf("upsert global wire source registry entry: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireSourceRegistryEntries lists source registry entries,
+// optionally narrowed to one story.
+func (s *Store) ListGlobalWireSourceRegistryEntries(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireSourceRegistryEntry, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, registry_id, story_id, query, source_scope, status,
+	                last_cycle_id, created_at, updated_at
+	           FROM global_wire_source_registry
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire source registry entries: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireSourceRegistryEntry
+	for rows.Next() {
+		rec, err := scanGlobalWireSourceRegistryEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire source registry entries: %w", err)
+	}
+	return out, nil
+}
+
+// CreateGlobalWireFetchCycleRun records a bounded source-registry cycle.
+func (s *Store) CreateGlobalWireFetchCycleRun(ctx context.Context, rec types.GlobalWireFetchCycleRun) (types.GlobalWireFetchCycleRun, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = rec.CreatedAt
+	}
+	storyIDsJSON, err := json.Marshal(rec.StoryIDs)
+	if err != nil {
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("marshal global wire fetch cycle story ids: %w", err)
+	}
+	registryIDsJSON, err := json.Marshal(rec.RegistryEntryIDs)
+	if err != nil {
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("marshal global wire fetch cycle registry ids: %w", err)
+	}
+	refreshIDsJSON, err := json.Marshal(rec.RefreshRunIDs)
+	if err != nil {
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("marshal global wire fetch cycle refresh ids: %w", err)
+	}
+	sourceIDsJSON, err := json.Marshal(rec.SourceContentIDs)
+	if err != nil {
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("marshal global wire fetch cycle source ids: %w", err)
+	}
+	if rec.Status == "" {
+		rec.Status = "recorded"
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_fetch_cycle_runs (
+			owner_id, cycle_id, trigger_kind, status, story_ids_json,
+			registry_ids_json, refresh_ids_json, source_ids_json, message,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.Trigger,
+		rec.Status,
+		string(storyIDsJSON),
+		string(registryIDsJSON),
+		string(refreshIDsJSON),
+		string(sourceIDsJSON),
+		sanitizeStoreText(rec.Message),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("create global wire fetch cycle run: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireFetchCycleRuns lists recent bounded fetch cycles.
+func (s *Store) ListGlobalWireFetchCycleRuns(ctx context.Context, ownerID string, limit int) ([]types.GlobalWireFetchCycleRun, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	rows, err := s.readDB.QueryContext(ctx,
+		`SELECT owner_id, cycle_id, trigger_kind, status, story_ids_json,
+		        registry_ids_json, refresh_ids_json, source_ids_json, message,
+		        created_at, updated_at
+		   FROM global_wire_fetch_cycle_runs
+		  WHERE owner_id = ?
+		  ORDER BY updated_at DESC LIMIT ?`,
+		ownerID,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire fetch cycle runs: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireFetchCycleRun
+	for rows.Next() {
+		rec, err := scanGlobalWireFetchCycleRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire fetch cycle runs: %w", err)
+	}
+	return out, nil
+}
+
 // CreateGlobalWireProjectionReview records a projection obligation created by
 // a StoryGraph evidence change.
 func (s *Store) CreateGlobalWireProjectionReview(ctx context.Context, rec types.GlobalWireProjectionReview) (types.GlobalWireProjectionReview, error) {
@@ -1839,6 +2000,87 @@ func scanGlobalWireResearchTask(row interface{ Scan(...any) error }) (types.Glob
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWireResearchTask{}, fmt.Errorf("parse global wire research task updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireSourceRegistryEntry(row interface{ Scan(...any) error }) (types.GlobalWireSourceRegistryEntry, error) {
+	var rec types.GlobalWireSourceRegistryEntry
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.StoryID,
+		&rec.Query,
+		&rec.SourceScope,
+		&rec.Status,
+		&rec.LastCycleID,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireSourceRegistryEntry{}, ErrNotFound
+		}
+		return types.GlobalWireSourceRegistryEntry{}, fmt.Errorf("scan global wire source registry entry: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireSourceRegistryEntry{}, fmt.Errorf("parse global wire source registry created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireSourceRegistryEntry{}, fmt.Errorf("parse global wire source registry updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireFetchCycleRun(row interface{ Scan(...any) error }) (types.GlobalWireFetchCycleRun, error) {
+	var rec types.GlobalWireFetchCycleRun
+	var storyIDsJSON, registryIDsJSON, refreshIDsJSON, sourceIDsJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.Trigger,
+		&rec.Status,
+		&storyIDsJSON,
+		&registryIDsJSON,
+		&refreshIDsJSON,
+		&sourceIDsJSON,
+		&rec.Message,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireFetchCycleRun{}, ErrNotFound
+		}
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("scan global wire fetch cycle run: %w", err)
+	}
+	if err := json.Unmarshal([]byte(storyIDsJSON), &rec.StoryIDs); err != nil {
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("unmarshal global wire fetch cycle story ids: %w", err)
+	}
+	if err := json.Unmarshal([]byte(registryIDsJSON), &rec.RegistryEntryIDs); err != nil {
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("unmarshal global wire fetch cycle registry ids: %w", err)
+	}
+	if err := json.Unmarshal([]byte(refreshIDsJSON), &rec.RefreshRunIDs); err != nil {
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("unmarshal global wire fetch cycle refresh ids: %w", err)
+	}
+	if err := json.Unmarshal([]byte(sourceIDsJSON), &rec.SourceContentIDs); err != nil {
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("unmarshal global wire fetch cycle source ids: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("parse global wire fetch cycle created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireFetchCycleRun{}, fmt.Errorf("parse global wire fetch cycle updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()

@@ -69,6 +69,27 @@ type globalWireSourceRefreshResponse struct {
 	ResearchTask *types.GlobalWireResearchTask           `json:"research_task,omitempty"`
 }
 
+type globalWireFetchCycleRequest struct {
+	StoryIDs   []string `json:"story_ids,omitempty"`
+	MaxStories int      `json:"max_stories,omitempty"`
+	MaxResults int      `json:"max_results,omitempty"`
+	Trigger    string   `json:"trigger,omitempty"`
+}
+
+type globalWireFetchCycleResponse struct {
+	Status          string                                 `json:"status"`
+	Message         string                                 `json:"message"`
+	FetchCycle      types.GlobalWireFetchCycleRun          `json:"fetch_cycle"`
+	RegistryEntries []types.GlobalWireSourceRegistryEntry  `json:"registry_entries"`
+	RefreshRuns     []types.GlobalWireSourceRefreshRun     `json:"refresh_runs"`
+	ContentItems    []types.ContentItem                    `json:"content_items,omitempty"`
+	Contributions   []types.GlobalWireContribution         `json:"contributions,omitempty"`
+	Candidates      []types.GlobalWireGraphUpdateCandidate `json:"candidates,omitempty"`
+	ClaimRecords    []types.GlobalWireClaimRecord          `json:"claim_records,omitempty"`
+	ResearchTasks   []types.GlobalWireResearchTask         `json:"research_tasks,omitempty"`
+	RecentCycles    []types.GlobalWireFetchCycleRun        `json:"recent_cycles,omitempty"`
+}
+
 type globalWireReconciliationResponse struct {
 	Contributions     []types.GlobalWireContribution           `json:"contributions"`
 	SourceItems       map[string]types.ContentItem             `json:"source_items,omitempty"`
@@ -470,6 +491,77 @@ func (h *APIHandler) HandleGlobalWireSourceRefresh(w http.ResponseWriter, r *htt
 		ClaimRecord:  &claimRecord,
 		ResearchTask: &researchTask,
 	})
+}
+
+// HandleGlobalWireFetchCycles lists or runs a bounded source-registry fetch
+// cycle over StoryGraph headline neighborhoods. It records scheduler/fetch
+// evidence and reuses the non-mutating source-refresh artifact path.
+func (h *APIHandler) HandleGlobalWireFetchCycles(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		storyID := strings.TrimSpace(r.URL.Query().Get("story_id"))
+		registry, err := h.rt.Store().ListGlobalWireSourceRegistryEntries(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list source registry"})
+			return
+		}
+		cycles, err := h.rt.Store().ListGlobalWireFetchCycleRuns(r.Context(), ownerID, 20)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list fetch cycles"})
+			return
+		}
+		status := "empty"
+		if len(cycles) > 0 {
+			status = cycles[0].Status
+		}
+		writeAPIJSON(w, http.StatusOK, globalWireFetchCycleResponse{
+			Status:          status,
+			Message:         "Global Wire source registry and recent bounded fetch cycles.",
+			RegistryEntries: registry,
+			RecentCycles:    cycles,
+		})
+	case http.MethodPost:
+		var req globalWireFetchCycleRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid fetch cycle request"})
+			return
+		}
+		if req.MaxStories <= 0 {
+			req.MaxStories = 3
+		}
+		if req.MaxStories > 10 {
+			req.MaxStories = 10
+		}
+		if req.MaxResults <= 0 {
+			req.MaxResults = 2
+		}
+		if req.MaxResults > 10 {
+			req.MaxResults = 10
+		}
+		resp, err := h.runGlobalWireFetchCycle(r, ownerID, req)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "no StoryGraph stories found for fetch cycle"})
+				return
+			}
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to run fetch cycle"})
+			return
+		}
+		status := http.StatusCreated
+		if resp.FetchCycle.Status == "unavailable" {
+			status = http.StatusServiceUnavailable
+		}
+		writeAPIJSON(w, status, resp)
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
 }
 
 // HandleGlobalWireContributions lists and creates owner-owned contribution
@@ -1309,6 +1401,236 @@ func (h *APIHandler) createGlobalWireSourceRefreshArtifacts(r *http.Request, own
 		return types.GlobalWireContribution{}, types.GlobalWireReconciliationDecision{}, types.GlobalWireGraphUpdateCandidate{}, err
 	}
 	return contribution, decision, saved, nil
+}
+
+func (h *APIHandler) runGlobalWireFetchCycle(r *http.Request, ownerID string, req globalWireFetchCycleRequest) (globalWireFetchCycleResponse, error) {
+	stories, err := h.rt.Store().ListGlobalWireStories(r.Context(), ownerID)
+	if err != nil {
+		return globalWireFetchCycleResponse{}, err
+	}
+	stories = selectGlobalWireFetchCycleStories(stories, req.StoryIDs, req.MaxStories)
+	if len(stories) == 0 {
+		return globalWireFetchCycleResponse{}, store.ErrNotFound
+	}
+	cycleID := "global-wire-fetch-cycle-" + uuid.NewString()
+	registry := make([]types.GlobalWireSourceRegistryEntry, 0, len(stories))
+	refreshes := []types.GlobalWireSourceRefreshRun{}
+	contentItems := []types.ContentItem{}
+	contributions := []types.GlobalWireContribution{}
+	candidates := []types.GlobalWireGraphUpdateCandidate{}
+	claimRecords := []types.GlobalWireClaimRecord{}
+	researchTasks := []types.GlobalWireResearchTask{}
+	storyIDs := []string{}
+	registryIDs := []string{}
+	refreshIDs := []string{}
+	sourceIDs := []string{}
+	cycleStatus := "completed"
+	messages := []string{}
+	sourceClient := newSourceSearchClientFromEnv()
+
+	for _, story := range stories {
+		storyIDs = append(storyIDs, story.ID)
+		entry := types.GlobalWireSourceRegistryEntry{
+			ID:          globalWireSourceRegistryEntryID(ownerID, story.ID),
+			OwnerID:     ownerID,
+			StoryID:     story.ID,
+			Query:       story.Headline,
+			SourceScope: "story-neighborhood",
+			Status:      "active",
+			LastCycleID: cycleID,
+		}
+		entry, err = h.rt.Store().UpsertGlobalWireSourceRegistryEntry(r.Context(), entry)
+		if err != nil {
+			return globalWireFetchCycleResponse{}, err
+		}
+		registry = append(registry, entry)
+		registryIDs = append(registryIDs, entry.ID)
+
+		if sourceClient == nil {
+			run, runErr := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+				ID:       "global-wire-source-refresh-" + uuid.NewString(),
+				OwnerID:  ownerID,
+				StoryID:  story.ID,
+				Query:    entry.Query,
+				Status:   "unavailable",
+				Provider: "source-service",
+				Message:  "Source Service is not configured for this runtime; fetch cycle recorded scheduler evidence only.",
+			})
+			if runErr != nil {
+				return globalWireFetchCycleResponse{}, runErr
+			}
+			refreshes = append(refreshes, run)
+			refreshIDs = append(refreshIDs, run.ID)
+			cycleStatus = "unavailable"
+			messages = append(messages, story.ID+": unavailable")
+			continue
+		}
+
+		searchResp, searchErr := sourceClient.SearchSources(r.Context(), entry.Query, req.MaxResults)
+		provider := sourceapi.ProviderName
+		if searchResp.Provider != "" {
+			provider = searchResp.Provider
+		}
+		if searchErr != nil {
+			run, runErr := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+				ID:       "global-wire-source-refresh-" + uuid.NewString(),
+				OwnerID:  ownerID,
+				StoryID:  story.ID,
+				Query:    entry.Query,
+				Status:   "unavailable",
+				Provider: "source-service",
+				Message:  searchErr.Error(),
+			})
+			if runErr != nil {
+				return globalWireFetchCycleResponse{}, runErr
+			}
+			refreshes = append(refreshes, run)
+			refreshIDs = append(refreshIDs, run.ID)
+			if cycleStatus == "completed" {
+				cycleStatus = "completed-with-gaps"
+			}
+			messages = append(messages, story.ID+": unavailable")
+			continue
+		}
+		query := firstNonEmptyString(searchResp.Query, entry.Query)
+		if len(searchResp.Results) == 0 {
+			run, runErr := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+				ID:       "global-wire-source-refresh-" + uuid.NewString(),
+				OwnerID:  ownerID,
+				StoryID:  story.ID,
+				Query:    query,
+				Status:   "no-evidence",
+				Provider: provider,
+				Message:  "Fetch cycle searched the source registry query but Source Service returned no matching evidence.",
+			})
+			if runErr != nil {
+				return globalWireFetchCycleResponse{}, runErr
+			}
+			refreshes = append(refreshes, run)
+			refreshIDs = append(refreshIDs, run.ID)
+			if cycleStatus == "completed" {
+				cycleStatus = "completed-with-gaps"
+			}
+			messages = append(messages, story.ID+": no-evidence")
+			continue
+		}
+		item, err := h.ensureGlobalWireSourceServiceContentItem(r, ownerID, searchResp.Results[0])
+		if err != nil {
+			return globalWireFetchCycleResponse{}, err
+		}
+		contentItems = append(contentItems, item)
+		sourceIDs = appendStringIfMissing(sourceIDs, item.ContentID)
+		classification := classifyGlobalWireSourceRefresh(story, item)
+		if classification.UpdateClassification == "no-visible-change" {
+			run, runErr := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+				ID:                   "global-wire-source-refresh-" + uuid.NewString(),
+				OwnerID:              ownerID,
+				StoryID:              story.ID,
+				Query:                query,
+				Status:               classification.Status,
+				Provider:             provider,
+				Message:              classification.Message,
+				UpdateClassification: classification.UpdateClassification,
+				StoryGraphAction:     classification.StoryGraphAction,
+				ProjectionAction:     classification.ProjectionAction,
+				SourceContentID:      item.ContentID,
+			})
+			if runErr != nil {
+				return globalWireFetchCycleResponse{}, runErr
+			}
+			refreshes = append(refreshes, run)
+			refreshIDs = append(refreshIDs, run.ID)
+			messages = append(messages, story.ID+": no-visible-change")
+			continue
+		}
+		contribution, decision, candidate, err := h.createGlobalWireSourceRefreshArtifacts(r, ownerID, story, item, classification)
+		if err != nil {
+			return globalWireFetchCycleResponse{}, err
+		}
+		run, err := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+			ID:                   "global-wire-source-refresh-" + uuid.NewString(),
+			OwnerID:              ownerID,
+			StoryID:              story.ID,
+			Query:                query,
+			Status:               classification.Status,
+			Provider:             provider,
+			Message:              classification.Message,
+			UpdateClassification: classification.UpdateClassification,
+			StoryGraphAction:     classification.StoryGraphAction,
+			ProjectionAction:     classification.ProjectionAction,
+			SourceContentID:      item.ContentID,
+			ContributionID:       contribution.ID,
+			DecisionID:           decision.ID,
+			CandidateID:          candidate.ID,
+		})
+		if err != nil {
+			return globalWireFetchCycleResponse{}, err
+		}
+		claim, task, err := h.createGlobalWireClaimResearchArtifacts(r, ownerID, story, item, classification, run, contribution, decision, candidate)
+		if err != nil {
+			return globalWireFetchCycleResponse{}, err
+		}
+		refreshes = append(refreshes, run)
+		refreshIDs = append(refreshIDs, run.ID)
+		contributions = append(contributions, contribution)
+		candidates = append(candidates, candidate)
+		claimRecords = append(claimRecords, claim)
+		researchTasks = append(researchTasks, task)
+		messages = append(messages, story.ID+": "+classification.UpdateClassification)
+	}
+
+	cycle := types.GlobalWireFetchCycleRun{
+		ID:               cycleID,
+		OwnerID:          ownerID,
+		Trigger:          firstNonEmptyString(strings.TrimSpace(req.Trigger), "manual-bounded-cycle"),
+		Status:           cycleStatus,
+		StoryIDs:         storyIDs,
+		RegistryEntryIDs: registryIDs,
+		RefreshRunIDs:    refreshIDs,
+		SourceContentIDs: sourceIDs,
+		Message:          strings.Join(messages, "; "),
+	}
+	cycle, err = h.rt.Store().CreateGlobalWireFetchCycleRun(r.Context(), cycle)
+	if err != nil {
+		return globalWireFetchCycleResponse{}, err
+	}
+	return globalWireFetchCycleResponse{
+		Status:          cycle.Status,
+		Message:         cycle.Message,
+		FetchCycle:      cycle,
+		RegistryEntries: registry,
+		RefreshRuns:     refreshes,
+		ContentItems:    contentItems,
+		Contributions:   contributions,
+		Candidates:      candidates,
+		ClaimRecords:    claimRecords,
+		ResearchTasks:   researchTasks,
+	}, nil
+}
+
+func selectGlobalWireFetchCycleStories(stories []types.GlobalWireStory, ids []string, limit int) []types.GlobalWireStory {
+	selected := []types.GlobalWireStory{}
+	wanted := map[string]bool{}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			wanted[id] = true
+		}
+	}
+	for _, story := range stories {
+		if len(wanted) > 0 && !wanted[story.ID] {
+			continue
+		}
+		selected = append(selected, story)
+		if limit > 0 && len(selected) >= limit {
+			break
+		}
+	}
+	return selected
+}
+
+func globalWireSourceRegistryEntryID(ownerID, storyID string) string {
+	return "global-wire-source-registry-" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ownerID+":"+storyID)).String()
 }
 
 func (h *APIHandler) createGlobalWireClaimResearchArtifacts(r *http.Request, ownerID string, story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification, run types.GlobalWireSourceRefreshRun, contribution types.GlobalWireContribution, decision types.GlobalWireReconciliationDecision, candidate types.GlobalWireGraphUpdateCandidate) (types.GlobalWireClaimRecord, types.GlobalWireResearchTask, error) {

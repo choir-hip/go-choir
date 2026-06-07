@@ -292,6 +292,36 @@ CREATE TABLE IF NOT EXISTS global_wire_research_tasks (
 	KEY idx_global_wire_research_tasks_claim (owner_id, claim_id)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_source_registry (
+	owner_id          VARCHAR(255) NOT NULL,
+	registry_id       VARCHAR(255) NOT NULL,
+	story_id          VARCHAR(255) NOT NULL,
+	query             LONGTEXT NOT NULL DEFAULT '',
+	source_scope      VARCHAR(255) NOT NULL DEFAULT '',
+	status            VARCHAR(255) NOT NULL DEFAULT '',
+	last_cycle_id     VARCHAR(255) NOT NULL DEFAULT '',
+	created_at        DATETIME NOT NULL,
+	updated_at        DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, registry_id),
+	KEY idx_global_wire_source_registry_story (owner_id, story_id, updated_at)
+);
+
+CREATE TABLE IF NOT EXISTS global_wire_fetch_cycle_runs (
+	owner_id            VARCHAR(255) NOT NULL,
+	cycle_id            VARCHAR(255) NOT NULL,
+	trigger_kind        VARCHAR(255) NOT NULL DEFAULT '',
+	status              VARCHAR(255) NOT NULL DEFAULT '',
+	story_ids_json      LONGTEXT NOT NULL DEFAULT '[]',
+	registry_ids_json   LONGTEXT NOT NULL DEFAULT '[]',
+	refresh_ids_json    LONGTEXT NOT NULL DEFAULT '[]',
+	source_ids_json     LONGTEXT NOT NULL DEFAULT '[]',
+	message             LONGTEXT NOT NULL DEFAULT '',
+	created_at          DATETIME NOT NULL,
+	updated_at          DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, cycle_id),
+	KEY idx_global_wire_fetch_cycles_updated (owner_id, updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS global_wire_projection_reviews (
 	owner_id           VARCHAR(255) NOT NULL,
 	review_id          VARCHAR(255) NOT NULL,
