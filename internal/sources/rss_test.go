@@ -105,3 +105,16 @@ func TestParseRSSLikeFeedToleratesMalformedEntity(t *testing.T) {
 		t.Fatalf("items = %+v, want malformed entity preserved", feed.Items)
 	}
 }
+
+func TestParseRSSLikeFeedStripsInvalidXMLControlBytes(t *testing.T) {
+	feed, err := parseRSSLikeFeed([]byte("<?xml version=\"1.0\"?>\n" +
+		"<rss version=\"2.0\"><channel><item><title>Euronews\x1b France</title>" +
+		"<link>https://example.test/control-byte</link><description>Control byte feed</description>" +
+		"</item></channel></rss>"))
+	if err != nil {
+		t.Fatalf("parse control-byte feed: %v", err)
+	}
+	if len(feed.Items) != 1 || feed.Items[0].Title != "Euronews France" {
+		t.Fatalf("items = %+v, want invalid XML control byte stripped", feed.Items)
+	}
+}

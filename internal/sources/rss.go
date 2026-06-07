@@ -156,7 +156,7 @@ type parsedFeed struct {
 
 func parseRSSLikeFeed(data []byte) (parsedFeed, error) {
 	var env feedEnvelope
-	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder := xml.NewDecoder(bytes.NewReader(stripInvalidXMLControlBytes(data)))
 	decoder.CharsetReader = charset.NewReaderLabel
 	decoder.Strict = false
 	if err := decoder.Decode(&env); err != nil {
@@ -183,6 +183,22 @@ func parseRSSLikeFeed(data []byte) (parsedFeed, error) {
 		})
 	}
 	return parsedFeed{Items: items}, nil
+}
+
+func stripInvalidXMLControlBytes(data []byte) []byte {
+	for _, b := range data {
+		if b < 0x20 && b != '\t' && b != '\n' && b != '\r' {
+			out := make([]byte, 0, len(data))
+			for _, candidate := range data {
+				if candidate < 0x20 && candidate != '\t' && candidate != '\n' && candidate != '\r' {
+					continue
+				}
+				out = append(out, candidate)
+			}
+			return out
+		}
+	}
+	return data
 }
 
 func parseFeedTime(raw string) (time.Time, bool) {
