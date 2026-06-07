@@ -2533,3 +2533,56 @@ Next executable probe:
   to refresh classifications: turn source-refresh outcomes into durable claim,
   dispute, uncertainty, and research-task records that can feed reconciliation
   and projection review without pretending the News app is an oracle.
+
+## Problem Checkpoint - Claim And Research State Is Still String-Level - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- Global Wire currently preserves non-oracle language in story prose and seeded
+  claim strings, but claim/update/research state is not yet a durable product
+  object.
+- Source refresh classification can say `claim-changed`,
+  `contradiction-added`, `source-manifest-update`, or
+  `projection-revision-required`, but the downstream state is still mostly
+  contribution, candidate, projection-review, and story-string mutation.
+- The spec requires StoryGraph claim sets with uncertainty/dispute state and
+  contribution/research queue refs. Without first-class claim/research records,
+  reconciliation cannot clearly distinguish an asserted claim, disputed claim,
+  evidence gap, follow-up research task, or projection review obligation.
+
+Evidence:
+
+- `types.GlobalWireStory.Claims` is `[]string`.
+- `global_wire_story_graphs.claims_json` stores those strings.
+- `GlobalWireSourceRefreshRun` records update classification and graph/projection
+  actions, but not structured claim ids, uncertainty state, dispute state,
+  research task ids, or evidence-gap records.
+- `GlobalWireGraphUpdateCandidate` and `GlobalWireProjectionReview` exist, but
+  there is no `GlobalWireClaimRecord` or `GlobalWireResearchTask` product path
+  exposed through `/api/global-wire/reconciliation`.
+
+Belief-state update:
+
+- The next topology-preserving improvement is to add low-resolution but durable
+  claim/research records generated from source-refresh classification and user
+  contribution review. The records should remain explicitly provisional and
+  cite SourceItems, refresh runs, contributions, graph candidates, and the
+  StoryGraph headline node rather than presenting the News app as an oracle.
+
+Remaining error field:
+
+- No durable Global Wire claim record exists.
+- No durable Global Wire research task record exists.
+- No staging proof shows source refresh creating reviewable claim/dispute/gap
+  state tied to the same StoryGraph and reconciliation queue.
+
+Next executable probe:
+
+- Add owner-scoped claim/research-task storage and API inclusion. Source
+  refreshes should create structured records according to classification:
+  provisional claim review, dispute/contradiction review, evidence-gap/source
+  standing review, or projection-revision follow-up. The News app should show
+  these records in the research/reconciliation surface with citations and
+  non-oracle status labels.
