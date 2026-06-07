@@ -1779,3 +1779,50 @@ Next executable probe:
   StoryGraph, promoted source ContentItem, promotion decision, and Style.vtext
   source, update the review to `draft-created`, and return the draft doc id for
   opening through the existing VText editor path.
+
+## Problem Checkpoint - Projection Draft Foreground Occludes Continuation - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- Deployed authenticated product-path proof can create a projection-review
+  draft VText, but the newly opened foreground VText window occludes the Global
+  Wire window before the same proof continues into the Ask Choir handoff.
+- The failure is a product-path continuity gap in the acceptance trajectory:
+  the draft exists and opens, but the proof does not yet demonstrate returning
+  from that draft view to the Global Wire control surface for the next action.
+
+Evidence:
+
+- Staging is serving behavior commit
+  `9333ce595f465baa89f6fbfe497e1f9b8ac8f052`.
+- Public deployed proof passed
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`.
+- Authenticated deployed proof failed at
+  `tests/global-wire-app.spec.js:286-289`: Playwright resolved
+  `[data-global-wire-ask-choir]`, but the foreground VText window title
+  `Draft projection: Port backlog recedes as carrier...` intercepted pointer
+  events.
+
+Belief-state update:
+
+- The projection draft slice should remain: it creates an ordinary editable
+  VText and preserves the non-publication invariant.
+- The proof path needs an owner-realistic return/focus step, or the app should
+  expose a clearer continuation path after opening a projection draft.
+- This is not evidence that the projection-review draft endpoint failed.
+
+Remaining error field:
+
+- No deployed proof yet shows projection draft creation and subsequent Ask
+  Choir continuation in one authenticated owner path.
+- The app has no Global Wire-specific "return to review" affordance from the
+  opened projection draft.
+
+Next executable probe:
+
+- Repair the authenticated acceptance path by using an owner-realistic window
+  return/focus operation, or add a small product affordance that keeps the
+  Global Wire continuation reachable after opening a projection draft. Then
+  rerun deployed authenticated proof before claiming the slice.
