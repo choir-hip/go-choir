@@ -18,7 +18,9 @@ publication-quality living articles whose evidence and related context are
 native VText/source transclusions. It should pull from established outlets,
 wire/event feeds, public institutions, specialist publications, community
 surfaces, and long-tail social channels; source breadth is a reality sensor,
-not a hardcoded authority model.
+not a hardcoded authority model. Global Wire should learn source track records
+over time from outcomes, corroboration, corrections, freshness, and researcher
+or model judgment; the registry itself must not bake in permanent trust tiers.
 
 ## The Correct Object
 
@@ -167,6 +169,11 @@ Required direction:
 - use prompting to softly remind models of generally known source reputations
   when useful, but keep that reasoning visible, revisable, and subordinate to
   evidence, corroboration, and versioned corrections.
+- treat long-tail Telegram/public social channels as first-class source flow
+  for local perspective, sentiment, weak signals, rumor surfaces, community
+  observation, and viewpoints ignored by established outlets. These inputs
+  should influence processor/reconciler world models and research questions
+  even when they are not sufficient standalone support for an article claim.
 
 ## Agent Roles
 
@@ -246,6 +253,7 @@ Required direction:
 - no border-line grid;
 - source chronology as quiet provenance/breadth signal;
 - compact VText affordance on every article;
+- normal Choir desktop icon and app-switcher entry;
 - no repeated visible "Open in VText" label;
 - no app-local theme selector;
 - no special contribution/edit panel;
@@ -278,6 +286,8 @@ Do not claim delivery until staging proof shows:
 - ongoing-story update path: new information produces VText article revisions;
 - intelligent `Style.vtext` use without visible metadata sludge;
 - no Global Wire "my edits" subsystem;
+- Global Wire launchable from a normal desktop icon, not only from the app
+  switcher, tray, restored window state, or prompt bar;
 - clean Global Wire UI across Futuristic Noir, Carbon Fiber Kintsugi, and
   London Salmon;
 - desktop normal-width, wide desktop, and mobile-in-desktop-shell screenshots

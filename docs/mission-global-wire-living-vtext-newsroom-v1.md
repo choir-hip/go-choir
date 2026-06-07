@@ -168,6 +168,8 @@ Required product fixes:
 - source chronology should be quiet and useful, not a heavy dashboard;
 - every article has a compact VText affordance;
 - no repeated "Open in VText" labels;
+- Global Wire must be launchable as a normal desktop icon, not only through
+  the app switcher, tray, prompt, or restored window state;
 - VText mobile banner/menu must not overlap buttons or labels;
 - VText article rendering must hide metadata sludge and render source/related
   VText transclusions natively.
@@ -521,3 +523,58 @@ mutating old revisions or platform stories.
 next step: implement an idempotent stale-body repair path in the store seed
 ensure flow, test it against a preexisting stale revision fixture, push, deploy,
 and rerun authenticated staging proof.
+
+## Checkpoint 2026-06-07T22:08Z: stale article repair deployed and proven, deeper newsroom mission remains
+
+objective: verify the stale-body repair on staging through the authenticated
+product path and fold the latest architecture corrections into the next
+mission state.
+
+what changed: repair commit `8524ea3676b706b6fbe1195293b288498467c032`
+was pushed to `origin/main`. CI run `27105920988` passed Go vet/build,
+integration-tagged smoke, non-runtime tests, all four runtime shards, and the
+aggregate gate. Staging deploy job `79995032501` completed successfully.
+Node B `/opt/go-choir` reports git HEAD
+`8524ea3676b706b6fbe1195293b288498467c032`; direct health checks on
+platformd port 8086 and proxy/sandbox port 8082 returned that same deployed
+commit.
+
+product-path evidence: authenticated Comet browser proof opened
+`https://choir.news/`, switched to the existing Global Wire window, and clicked
+the first story's compact VText affordance. The opened article window for
+`Port backlog recedes as carriers warn of uneven inland recovery` rendered
+`v1`, with `v0` available as an older version. The visible body was prose:
+headline, lead paragraph, follow-up paragraph, and a source-neighborhood
+sentence with native source buttons for `Port authority throughput bulletin`,
+`Rail dwell dashboard`, `Regional exporters report delays`, and `Ambient
+corpus: shipping and retail filings`. The visible body no longer contained the
+old scaffold tokens `Style source`, `Story id`, `Projection`, `Claims`,
+`Source Manifest`, `Related VTexts`, `Non-oracle note`, or `My Edit`.
+
+what remains true: this repair makes the seeded article VText less wrong; it
+does not deliver the newsroom. The article is still too thin for publication
+quality. The Global Wire app surface still reports only `16 sources` and
+`4 source groups`, so it is not wired to the expanded source-service reality
+or the intended many-source live newsroom. Existing source labels such as
+`lead`, `supporting`, `contrary`, and `context` are editorial/source-neighborhood
+roles in the seed data, not learned source reliability tiers; the next
+architecture must not hardcode source trust or source standing. Long-tail
+Telegram/social feeds remain a priority source class for sentiment, weak
+signals, local/community views, rumor surfaces, and perspectives ignored by
+established outlets, while article support must come from corroboration,
+research, explicit uncertainty, and living corrections.
+
+UI evidence: Comet also confirmed Global Wire is available in the app switcher
+and as an open tray/window, but not as a normal left-side desktop icon. The app
+registry has `global-wire.launcher.desktopIcon = false`; the next frontend
+slice should make Global Wire a desktop icon and verify it in the actual
+desktop shell.
+
+next executable mission: source breadth first, then VText-owned article
+lifecycle. Connect Global Wire display counts to real source-service health;
+add broad multilingual RSS/Atom, GDELT/event, Hacker News/comparable tech
+community, science, finance, industry, local/regional, and long-tail Telegram
+sources without static trust tiers; then drive processor/reconciler/researcher
+briefs into VText agents that produce full article revisions with native
+source and related-VText transclusions. Use Comet for authenticated
+Computer Use proof unless a stronger product-path browser session is available.
