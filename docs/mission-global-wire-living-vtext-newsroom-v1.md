@@ -243,7 +243,12 @@ broad RSS/Atom plus long-tail Telegram/social evidence. Staging deployed commit
 `1d4029c5` and sourcecycled loaded 170 configured sources. Parser fix commit
 `9613991f` handled non-UTF RSS charsets and common malformed entity text.
 Source-health commit `a4370fd4` added cycle-linked fetch records,
-`source_health`, and `/internal/source-service/global-wire/latest`.
+`source_health`, and `/internal/source-service/global-wire/latest`. Commit
+`e8728cb6` attempted the first article-surface normalization: remove old
+source-volume naming, drop hardcoded source standing fields, make Global Wire
+headlines serif/readable, remove the visible fork button/edit scaffold, carry
+source entity handles into VText context, and rewrite seeded Global Wire VTexts
+away from metadata/manifest bodies toward prose with inline source refs.
 
 current artifact state: staging source service now runs the expanded registry:
 1 GDELT, 110 RSS/Atom, and 59 Telegram public-preview sources across 15
@@ -259,7 +264,11 @@ SourceItems, reported 156 successful fetches, 14 failed fetches, 142
 item-producing sources, 99 processor requests, and 1 reconciler request.
 Global Wire has a clean-ish collection surface but still exposes old naming and
 weak typography; opened article VTexts are projection/stub documents rather
-than real living articles.
+than real living articles. Local browser proof for `e8728cb6` showed the
+preview no longer displayed the old source-volume label, `My Edit`, `Source
+Manifest`, or visible story metadata; three article rows had compact VText
+affordances; headline font was serif; desktop, medium, mobile, and opened
+VText mobile checks had no horizontal overflow. This is local evidence only.
 
 what shipped: prior work shipped source service substrate, processor/reconciler
 handoff scaffolding, some VText agent usage, and a cleaner newspaper preview.
@@ -284,6 +293,12 @@ responsive/typographic quality.
 
 belief-state changes: source breadth and VText ownership are the first
 architectural blockers. UI cleanup alone cannot solve the wrong object.
+`e8728cb6` exposed a test-contract mismatch: the old graph-candidate promotion
+test still expects classified promotion provenance and fork-separation copy to
+appear in the article body, but the new product invariant says article body
+prose should not carry metadata/provenance sludge. Promotion provenance should
+remain version-local structured metadata and/or source/transclusion context,
+not visible manifesto text.
 
 remaining error field: staging source health shows 14 failures, mostly provider
 403s from Node B (`rss:arabnews`, France 24 language feeds, `rss:mining_com`,
@@ -294,7 +309,17 @@ source-health `item_count` sums pre-dedupe fetch item counts, while cycle
 the API before treating counts as owner-facing metrics. Next article lifecycle
 work remains: normalize article lifecycle through VText agents; replace
 source/related lists with transclusions; remove metadata/edit sludge from
-article documents; fix typography and mobile banner overlap.
+article documents; fix typography and mobile banner overlap. CI run
+`27103718864` for behavior commit `e8728cb6` failed before staging deploy:
+`Go Test (internal/runtime shard 0)` failed
+`TestHandleGlobalWirePromotesClassifiedRefreshIntoStoryGraphAndPlatformVText`
+because the generated platform-story revision no longer contains the old body
+strings `"front-page prominence changed"`, the promoted content id as plain
+text, and `"User-owned forks, edits, and contributions remain separate"`.
+Root-cause hypothesis: the test is asserting the old visible-provenance body
+contract instead of the new article-body/provenance separation contract, and
+the implementation may also need to ensure the same promotion evidence is
+present in revision metadata/source entity context.
 
 highest-impact remaining uncertainty: how to turn source-health, corrections,
 corroboration, freshness, and researcher/model judgment into learned source
@@ -302,10 +327,10 @@ track-record state without hardcoded editorial tiers, while keeping long-tail
 Telegram/social inputs valuable as sentiment and lead discovery rather than
 standalone publication support.
 
-next executable probe: add learned source track-record aggregation and/or clean
-owner-facing source-health copy, then return to VText-owned article generation:
-VText agents must own real article creation/revision with native source and
-related-VText transclusion.
+next executable probe: update the graph-candidate promotion contract so article
+body assertions check prose/source refs rather than metadata sludge, while
+structured revision metadata/source entity context preserves the promotion and
+source evidence; rerun shard 0 locally, then push and re-run the staging loop.
 
 suggested resume goal string: use the Goal String section above.
 
