@@ -2170,7 +2170,7 @@ staging proof:
 
 ## Loop 8 VText Diagnosis Boundary Extraction Target
 
-Status: `implemented_local`.
+Status: `implemented_staging_proven`.
 
 Next runtime simplification target: move VText diagnosis DTOs and pure
 diagnosis/structure summary helpers out of `internal/runtime/vtext.go` into a
