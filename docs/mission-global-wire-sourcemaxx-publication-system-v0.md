@@ -1408,3 +1408,29 @@ updated remaining error field:
   preserves the right architecture for it by treating article reading/editing
   as normal VText work, but the public user-published VText feed is not yet
   implemented.
+
+2026-06-07 SourceMaxx VText indexing problem:
+
+- Current deployed proof has two truths that are not yet joined:
+  SourceMaxx processors/reconcilers have produced normal VText article
+  documents with `source_maxx_cycle_id` and selected `Style.vtext` metadata,
+  and the Global Wire UI is now a clean VText newspaper surface. However,
+  `/api/global-wire/stories` still returns owner-scoped seeded Global Wire
+  records via `ListGlobalWireStories`, while unauthenticated users see seeded
+  frontend preview records. The fresh SourceMaxx VText article heads are not
+  yet indexed into the Global Wire story collection surface.
+- This is an architecture mismatch against the clarified product object:
+  VText agents own articles, and Global Wire should index/transclude article
+  VTexts. The old durable `GlobalWireStory`/StoryGraph-shaped seed path is now
+  useful only as compatibility scaffolding and should not remain the sole
+  source for the newspaper.
+- The next behavior change should add a VText-native SourceMaxx article index
+  path: find recent platform-owned VText revisions whose metadata marks them
+  as SourceMaxx article revisions, project their current heads into
+  `GlobalWireStory` response rows with VText doc ids, source/style provenance,
+  and article text, and let the existing clean UI render them. This is an
+  index over VTexts, not a new canonical article data structure.
+- The index must preserve invariants: platform stories are not mutated by user
+  edits; opening/forking happens through normal VText; source/style provenance
+  remains per VText version; and SourceMaxx status remains non-oracle evidence
+  rather than a global truth feed.
