@@ -1,6 +1,5 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
-  import { onMount } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
 
   export let currentUser = null;
   export let authenticated = false;
@@ -101,7 +100,7 @@
       ],
       projections: {
         'wire-style': 'Grid operators issued reserve alerts after the heat forecast moved north. The story is not a shortage call; it is an operational watch with utility statements and prior alert history kept in the evidence neighborhood.',
-        'claim-audit-style': 'The alert supports a risk claim, not a failure claim. The contrary utility statement does not negate the regional notice, but it narrows the geography and should stay attached to the StoryGraph.',
+        'claim-audit-style': 'The alert supports a risk claim, not a failure claim. The contrary utility statement does not negate the regional notice, but it narrows the geography and should stay attached to the story.',
         'market-brief-style': 'The exposure is timing-sensitive: reserve alerts can move power prices before any outage occurs. The practical signal is regional load stress and hedging pressure rather than confirmed infrastructure failure.',
       },
     },
@@ -147,16 +146,14 @@
   let styleSources = previewStyleSources;
   let selectedStoryId = stories[0].id;
   let selectedStyleId = styleSources[0].id;
-  let contributionKind = 'source';
-  let contributionText = '';
-  let contributionStatus = '';
+  let dataSource = 'preview-sourcemaxx';
+  let loadError = '';
+  let lastLoadKey = '';
   let sourceSearchQuery = '';
   let sourceSearchStatus = '';
   let sourceSearchMessage = '';
   let sourceSearchResults = [];
   let sourceSearchBusy = false;
-  let sourceRefreshStatus = '';
-  let sourceRefreshBusy = false;
   let fetchCycleStatus = '';
   let fetchCycleBusy = false;
   let fetchCycles = [];
@@ -164,71 +161,16 @@
   let sourceSchedulerRuns = [];
   let styleSourceStatus = '';
   let styleSourceBusy = false;
-  let queueTopSourceResult = true;
   let storyActionStatus = '';
   let storyActionBusy = '';
-  let contributions = [];
-  let reconciliationSourceItems = {};
-  let sourceDossiers = [];
-  let reconciliationDecisions = [];
-  let graphUpdateCandidates = [];
-  let graphPromotionDecisions = [];
-  let sourceRefreshes = [];
-  let claimRecords = [];
-  let sourceReviewSignals = [];
-  let researchTasks = [];
-  let extractionArtifacts = [];
-  let researchEvidence = [];
-  let researchDecisions = [];
-  let publicationUpdates = [];
-  let publicationArtifacts = [];
-  let publicationDeliveries = [];
-  let autoradioScripts = [];
-  let autoradioEpisodes = [];
-  let deliveryExports = [];
-  let publicLinks = [];
-  let newsletterSubscribers = [];
-  let newsletterIssues = [];
-  let newsletterDeliveries = [];
-  let newsletterProviderReceipts = [];
-  let publicationFeedItems = [];
-  let publicationFeedStatus = '';
-  let publicationDeliveryDetail = null;
-  let projectionReviews = [];
-  let autoradioPlaybackStatus = '';
-  let selectedDossier = null;
-  let selectedDossierNewsletterIssueIds = [];
-  let selectedDossierMissingFields = [];
-  let reconciliationBusyId = '';
-  let dataSource = 'preview-storygraph';
-  let loadError = '';
-  let lastLoadKey = '';
 
   $: selectedStory = stories.find((story) => story.id === selectedStoryId) || stories[0];
   $: selectedStyle = styleSources.find((style) => style.id === selectedStyleId) || styleSources[0];
-  $: projectionText = selectedStory.projections[selectedStyle.id] || selectedStory.projections['wire-style'];
-  $: selectedDossier = sourceDossiers.find((dossier) => dossier.story_id === selectedStoryId) || sourceDossiers[0] || null;
-  $: selectedDossierNewsletterIssueIds = (() => {
-    const storyId = selectedDossier?.story_id || selectedStoryId;
-    const storyPublicLinkIds = new Set(
-      publicLinks
-        .filter((link) => link?.story_id === storyId)
-        .map((link) => link.id)
-        .filter(Boolean)
-    );
-    const issueIds = newsletterIssues
-      .filter((issue) => issue?.story_id === storyId || (issue?.public_link_ids || []).some((id) => storyPublicLinkIds.has(id)))
-      .map((issue) => issue.id)
-      .filter(Boolean);
-    return Array.from(new Set([...(selectedDossier?.publication_refs?.newsletter_issue_ids || []), ...issueIds]));
-  })();
-  $: selectedDossierMissingFields = sourceDossierMissingFields(selectedDossier);
-  $: allSources = [
-    ...selectedStory.manifest.lead,
-    ...selectedStory.manifest.supporting,
-    ...selectedStory.manifest.contrary,
-    ...selectedStory.manifest.context,
-  ];
+  $: projectionText = selectedStory?.projections?.[selectedStyle?.id] || selectedStory?.projections?.['wire-style'] || '';
+  $: sourceChronology = buildSourceChronology(stories, sourceSearchResults);
+  $: sourceClassCount = new Set(sourceChronology.map((source) => source.role || source.source_type || 'source')).size;
+  $: sourceItemCount = sourceChronology.length;
+  $: ownerLabel = authenticated ? (currentUser?.email || 'owner computer') : 'public preview';
 
   onMount(() => {
     loadDurableStoryGraph();
@@ -246,164 +188,31 @@
     if (!authenticated) {
       stories = previewStories;
       styleSources = previewStyleSources;
-      dataSource = 'preview-storygraph';
-      contributions = [];
-      reconciliationSourceItems = {};
-      sourceDossiers = [];
-      reconciliationDecisions = [];
-      graphUpdateCandidates = [];
-      graphPromotionDecisions = [];
-      sourceRefreshes = [];
+      dataSource = 'preview-sourcemaxx';
       fetchCycles = [];
       sourceRegistryEntries = [];
       sourceSchedulerRuns = [];
-      claimRecords = [];
-      sourceReviewSignals = [];
-      researchTasks = [];
-      extractionArtifacts = [];
-      publicationArtifacts = [];
-      publicationDeliveries = [];
-      autoradioScripts = [];
-      autoradioEpisodes = [];
-      deliveryExports = [];
-      publicLinks = [];
-      newsletterSubscribers = [];
-      newsletterIssues = [];
-      newsletterDeliveries = [];
-      newsletterProviderReceipts = [];
-      publicationFeedItems = [];
-      publicationFeedStatus = '';
-      publicationDeliveryDetail = null;
-      projectionReviews = [];
-      autoradioPlaybackStatus = '';
-      sourceSearchResults = [];
-      sourceSearchStatus = '';
-      sourceSearchMessage = '';
-      sourceRefreshStatus = '';
-      fetchCycleStatus = '';
-      styleSourceStatus = '';
       return;
     }
     try {
       const response = await fetch('/api/global-wire/stories', { credentials: 'include' });
-      if (!response.ok) throw new Error(`StoryGraph load failed: ${response.status}`);
+      if (!response.ok) throw new Error(`Global Wire load failed: ${response.status}`);
       const payload = await response.json();
       if (Array.isArray(payload.stories) && payload.stories.length) {
         stories = payload.stories;
         styleSources = Array.isArray(payload.style_sources) && payload.style_sources.length
           ? payload.style_sources
           : payload.stories[0].style_sources || previewStyleSources;
-        dataSource = payload.source || 'durable-storygraph';
+        dataSource = payload.source || 'durable-sourcemaxx';
         if (!stories.some((story) => story.id === selectedStoryId)) selectedStoryId = stories[0].id;
         if (!styleSources.some((style) => style.id === selectedStyleId)) selectedStyleId = styleSources[0].id;
-        await loadContributions();
+        await loadFetchCycles(selectedStoryId);
       }
     } catch (error) {
-      loadError = error?.message || 'StoryGraph load failed';
+      loadError = error?.message || 'Global Wire load failed';
       stories = previewStories;
       styleSources = previewStyleSources;
-      dataSource = 'preview-storygraph';
-    }
-  }
-
-  async function loadContributions(storyId = selectedStoryId) {
-    if (!authenticated || !storyId) return;
-    try {
-      const response = await fetch(`/api/global-wire/reconciliation?story_id=${encodeURIComponent(storyId)}`, {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error(`Reconciliation load failed: ${response.status}`);
-      const payload = await response.json();
-      contributions = Array.isArray(payload.contributions) ? payload.contributions.slice(0, 6) : [];
-      reconciliationSourceItems = payload.source_items || {};
-      sourceDossiers = Array.isArray(payload.source_dossiers) ? payload.source_dossiers : [];
-      reconciliationDecisions = Array.isArray(payload.decisions) ? payload.decisions : [];
-      graphUpdateCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
-      graphPromotionDecisions = Array.isArray(payload.promotions) ? payload.promotions : [];
-      sourceRefreshes = Array.isArray(payload.refreshes) ? payload.refreshes : [];
-      claimRecords = Array.isArray(payload.claim_records) ? payload.claim_records : [];
-      sourceReviewSignals = Array.isArray(payload.source_review_signals) ? payload.source_review_signals : [];
-      researchTasks = Array.isArray(payload.research_tasks) ? payload.research_tasks : [];
-      extractionArtifacts = Array.isArray(payload.extraction_artifacts) ? payload.extraction_artifacts : [];
-      researchEvidence = Array.isArray(payload.research_evidence) ? payload.research_evidence : [];
-      researchDecisions = Array.isArray(payload.research_decisions) ? payload.research_decisions : [];
-      publicationUpdates = Array.isArray(payload.publication_updates) ? payload.publication_updates : [];
-      publicationArtifacts = Array.isArray(payload.publication_artifacts) ? payload.publication_artifacts : [];
-      publicationDeliveries = Array.isArray(payload.publication_deliveries) ? payload.publication_deliveries : [];
-      autoradioScripts = Array.isArray(payload.autoradio_scripts) ? payload.autoradio_scripts : [];
-      autoradioEpisodes = Array.isArray(payload.autoradio_episodes) ? payload.autoradio_episodes : [];
-      deliveryExports = Array.isArray(payload.delivery_exports) ? payload.delivery_exports : [];
-      publicLinks = Array.isArray(payload.public_links) ? payload.public_links : [];
-      newsletterSubscribers = Array.isArray(payload.newsletter_subscribers) ? payload.newsletter_subscribers : [];
-      newsletterIssues = Array.isArray(payload.newsletter_issues) ? payload.newsletter_issues : [];
-      newsletterDeliveries = Array.isArray(payload.newsletter_deliveries) ? payload.newsletter_deliveries : [];
-      newsletterProviderReceipts = Array.isArray(payload.newsletter_provider_receipts) ? payload.newsletter_provider_receipts : [];
-      projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
-      await loadPublicationFeed(storyId);
-      await loadFetchCycles(storyId);
-    } catch {
-      contributions = [];
-      reconciliationSourceItems = {};
-      sourceDossiers = [];
-      reconciliationDecisions = [];
-      graphUpdateCandidates = [];
-      graphPromotionDecisions = [];
-      sourceRefreshes = [];
-      fetchCycles = [];
-      sourceRegistryEntries = [];
-      sourceSchedulerRuns = [];
-      claimRecords = [];
-      sourceReviewSignals = [];
-      researchTasks = [];
-      extractionArtifacts = [];
-      researchEvidence = [];
-      researchDecisions = [];
-      publicationUpdates = [];
-      publicationArtifacts = [];
-      publicationDeliveries = [];
-      autoradioScripts = [];
-      autoradioEpisodes = [];
-      deliveryExports = [];
-      publicLinks = [];
-      newsletterSubscribers = [];
-      newsletterIssues = [];
-      newsletterDeliveries = [];
-      newsletterProviderReceipts = [];
-      publicationFeedItems = [];
-      publicationFeedStatus = '';
-      publicationDeliveryDetail = null;
-      projectionReviews = [];
-      autoradioPlaybackStatus = '';
-    }
-  }
-
-  async function loadPublicationFeed(storyId = selectedStoryId) {
-    if (!authenticated || !storyId) return;
-    try {
-      const response = await fetch(`/api/global-wire/publication-feed?story_id=${encodeURIComponent(storyId)}&channel=newsletter`, {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error(`Publication feed load failed: ${response.status}`);
-      const payload = await response.json();
-      publicationFeedItems = Array.isArray(payload.feed_items) ? payload.feed_items : [];
-      publicationFeedStatus = payload.status || '';
-    } catch {
-      publicationFeedItems = [];
-      publicationFeedStatus = '';
-    }
-  }
-
-  async function loadSourceDossiers(storyId = selectedStoryId) {
-    if (!authenticated || !storyId) return;
-    try {
-      const response = await fetch(`/api/global-wire/source-dossiers?story_id=${encodeURIComponent(storyId)}`, {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error(`Source dossier load failed: ${response.status}`);
-      const payload = await response.json();
-      sourceDossiers = Array.isArray(payload.dossiers) ? payload.dossiers : [];
-    } catch {
-      sourceDossiers = [];
+      dataSource = 'preview-sourcemaxx';
     }
   }
 
@@ -425,11 +234,47 @@
     }
   }
 
-  $: if (authenticated && dataSource === 'durable-storygraph' && selectedStoryId) {
-    loadContributions(selectedStoryId);
+  function buildSourceChronology(sourceStories, importedItems) {
+    const rows = [];
+    for (const story of sourceStories || []) {
+      const manifest = story.manifest || {};
+      for (const tier of ['lead', 'supporting', 'contrary', 'context']) {
+        for (const source of manifest[tier] || []) {
+          rows.push({
+            id: source.content_id || source.id,
+            title: source.title,
+            standing: source.standing,
+            role: source.role || tier,
+            tier,
+            storyId: story.id,
+            storyHeadline: story.headline,
+            freshness: story.freshness,
+          });
+        }
+      }
+    }
+    for (const item of importedItems || []) {
+      rows.unshift({
+        id: item.content_id || item.id,
+        title: item.title,
+        standing: item.metadata?.schema || item.source_type || 'source artifact',
+        role: item.source_type || 'source-service',
+        tier: 'live',
+        storyId: selectedStoryId,
+        storyHeadline: selectedStory?.headline || '',
+        freshness: 'live import',
+      });
+    }
+    const seen = new Set();
+    return rows.filter((row) => {
+      const key = row.id || `${row.storyId}:${row.title}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
-  function sourceLines(kind, items) {
+  function sourceLines(kind, items = []) {
     return items.map((item) => `- ${kind}: ${item.title} (${item.standing}; ${item.id})`).join('\n');
   }
 
@@ -440,7 +285,7 @@
       story.dek,
       '',
       `Style source: ${style.title}`,
-      `StoryGraph id: ${story.id}`,
+      `Story id: ${story.id}`,
       `State: ${story.changeState}; ${story.tension}`,
       '',
       '## Projection',
@@ -458,7 +303,7 @@
       sourceLines('contrary or qualifying', story.manifest.contrary),
       sourceLines('ambient context', story.manifest.context),
       '',
-      '## Related Story VTexts',
+      '## Related VTexts',
       '',
       ...story.related.map((id) => {
         const related = stories.find((item) => item.id === id);
@@ -471,82 +316,6 @@
     ].join('\n');
   }
 
-  function storyPromptContext(mode) {
-    const feedItem = mode === 'autoradio' ? selectedPublicationFeedItem() : null;
-    const sourceManifest = [
-      sourceLines('lead', selectedStory.manifest.lead),
-      sourceLines('supporting', selectedStory.manifest.supporting),
-      sourceLines('contrary or qualifying', selectedStory.manifest.contrary),
-      sourceLines('ambient context', selectedStory.manifest.context),
-    ].filter(Boolean).join('\n');
-    const related = selectedStory.related.map((id) => {
-      const story = stories.find((item) => item.id === id);
-      return `- ${story?.headline || id} (${id})`;
-    }).join('\n');
-    const task = mode === 'autoradio'
-      ? 'Create an Autoradio-ready spoken brief for this story projection. Use only the evidence below, keep uncertainty audible, cite source tiers, and name evidence gaps instead of filling them.'
-      : 'Answer as Choir about this Global Wire story. Use only the evidence below, explain what changed, what remains uncertain, and what evidence should be checked next.';
-    if (feedItem?.artifact?.id) {
-      return [
-        'Create an Autoradio-ready spoken brief from the selected Global Wire publication artifact. Use the artifact body as the primary traversal object, keep uncertainty audible, cite the artifact and source neighborhood, and do not add facts beyond the artifact and source context.',
-        '',
-        `StoryGraph id: ${selectedStory.id}`,
-        `Headline: ${selectedStory.headline}`,
-        `State: ${selectedStory.changeState}; ${selectedStory.tension}`,
-        `Style.vtext source: ${selectedStyle.title}`,
-        '',
-        'Publication Artifact:',
-        `Artifact id: ${feedItem.artifact.id}`,
-        `Status: ${feedItem.status || feedItem.artifact.status}`,
-        `Channel: ${feedItem.artifact.channel}`,
-        `Title: ${feedItem.artifact.title}`,
-        `Citation count: ${feedItem.citation_count}`,
-        `Rollback count: ${feedItem.rollback_count}`,
-        '',
-        'Artifact Body:',
-        feedItem.artifact.body,
-        '',
-        'Source Context:',
-        feedItem.source_item
-          ? `${feedItem.source_item.title} (${feedItem.source_item.source_type}; ${feedItem.source_item.content_id})`
-          : feedItem.artifact.source_content_id || 'Source manifest context only',
-        '',
-        'Citation Refs:',
-        ...(feedItem.artifact.citation_refs || []).map((ref) => `- ${ref}`),
-        '',
-        'Rollback Refs:',
-        ...(feedItem.artifact.rollback_refs || []).map((ref) => `- ${ref}`),
-        '',
-        'Related Story VTexts:',
-        related,
-        '',
-        'Guardrail: speak from this citeable publication artifact, keep provenance audible, do not mutate the platform StoryGraph, and do not invent facts.',
-      ].join('\n');
-    }
-    return [
-      task,
-      '',
-      `StoryGraph id: ${selectedStory.id}`,
-      `Headline: ${selectedStory.headline}`,
-      `State: ${selectedStory.changeState}; ${selectedStory.tension}`,
-      `Style.vtext source: ${selectedStyle.title}`,
-      '',
-      'Projection:',
-      projectionText,
-      '',
-      'Claims:',
-      ...selectedStory.claims.map((claim) => `- ${claim}`),
-      '',
-      'Source Manifest:',
-      sourceManifest,
-      '',
-      'Related Story VTexts:',
-      related,
-      '',
-      'Guardrail: do not mutate the platform StoryGraph, do not invent facts, and make provenance visible.',
-    ].join('\n');
-  }
-
   function styleVTextContent(style = selectedStyle) {
     return [
       `# ${style.title}`,
@@ -555,37 +324,16 @@
       '',
       '## Applies To',
       '',
-      '- StoryGraph projections',
-      '- Story VText revision prompts',
-      '- News reader and Autoradio traversal',
+      '- Global Wire article VTexts',
+      '- Source-grounded revisions',
+      '- Publication projection reviews',
       '',
       '## Guardrails',
       '',
-      '- Preserve lead, supporting, contrary, and ambient source tiers.',
+      '- Preserve source tiers and contrary evidence.',
       '- Change framing and salience without inventing evidence.',
       '- Keep uncertainty and corrections visible.',
       '- Cite this Style.vtext when it materially shapes a projection.',
-    ].join('\n');
-  }
-
-  function contributionContent() {
-    const kind = contributionKind.replaceAll('-', ' ');
-    return [
-      `# Contribution: ${selectedStory.headline}`,
-      '',
-      `StoryGraph id: ${selectedStory.id}`,
-      `Contribution kind: ${kind}`,
-      `Owner: ${currentUser?.email || 'public preview user'}`,
-      '',
-      '## User Contribution',
-      '',
-      contributionText.trim() || 'Draft contribution awaiting detail.',
-      '',
-      '## Research/Reconciliation State',
-      '',
-      '- user-owned artifact created from the News app contribution surface',
-      '- pending researcher review before any platform story reconciliation',
-      '- does not mutate the platform Story VText',
     ].join('\n');
   }
 
@@ -607,57 +355,86 @@
     });
   }
 
-  function openStoryVText() {
-    const projectionDocId = selectedStory.projection_vtext_docs?.[selectedStyle.id] || selectedStory.story_vtext_doc_id || '';
+  function openStoryVText(story = selectedStory, style = selectedStyle) {
+    selectedStoryId = story.id;
+    selectedStyleId = style.id;
+    const projectionDocId = story.projection_vtext_docs?.[style.id] || story.story_vtext_doc_id || '';
     launchVText({
-      title: selectedStory.headline,
-      content: storyVTextContent(),
+      title: story.headline,
+      content: storyVTextContent(story, style),
       createdFrom: 'global_wire_story_projection',
-      sourcePath: `global-wire/${selectedStory.id}.story.vtext`,
+      sourcePath: `global-wire/${story.id}.story.vtext`,
       docId: projectionDocId,
       createInitialVersion: !projectionDocId,
     });
   }
 
-  function forkStory() {
+  function forkStory(story = selectedStory) {
+    selectedStoryId = story.id;
     launchVText({
-      title: `My version of ${selectedStory.headline}`,
-      content: `${storyVTextContent()}\n\n## My Edit\n\n`,
+      title: `My version of ${story.headline}`,
+      content: `${storyVTextContent(story, selectedStyle)}\n\n## My Edit\n\n`,
       createdFrom: 'global_wire_user_story_fork',
-      sourcePath: `user-forks/${selectedStory.id}.story.vtext`,
+      sourcePath: `user-forks/${story.id}.story.vtext`,
     });
   }
 
-  function openStyleVText() {
+  function openStyleVText(style = selectedStyle) {
+    selectedStyleId = style.id;
     launchVText({
-      title: selectedStyle.title,
-      content: styleVTextContent(),
+      title: style.title,
+      content: styleVTextContent(style),
       createdFrom: 'global_wire_style_source',
-      sourcePath: selectedStyle.sourcePath,
-      docId: selectedStyle.doc_id || '',
-      createInitialVersion: !selectedStyle.doc_id,
+      sourcePath: style.sourcePath,
+      docId: style.doc_id || '',
+      createInitialVersion: !style.doc_id,
     });
   }
 
-  async function submitStoryAction(mode) {
+  function storyPromptContext() {
+    return [
+      'Answer as Choir about this Global Wire article. Use only the evidence below, explain what changed, what remains uncertain, and what evidence should be checked next.',
+      '',
+      `Story id: ${selectedStory.id}`,
+      `Headline: ${selectedStory.headline}`,
+      `State: ${selectedStory.changeState}; ${selectedStory.tension}`,
+      `Style.vtext source: ${selectedStyle.title}`,
+      '',
+      'Projection:',
+      projectionText,
+      '',
+      'Claims:',
+      ...selectedStory.claims.map((claim) => `- ${claim}`),
+      '',
+      'Source Manifest:',
+      sourceLines('lead', selectedStory.manifest.lead),
+      sourceLines('supporting', selectedStory.manifest.supporting),
+      sourceLines('contrary or qualifying', selectedStory.manifest.contrary),
+      sourceLines('ambient context', selectedStory.manifest.context),
+      '',
+      'Guardrail: do not mutate the platform VText, do not invent facts, and make provenance visible.',
+    ].join('\n');
+  }
+
+  async function submitStoryAction() {
     if (!authenticated) {
-      storyActionStatus = 'Sign in to ask Choir from this StoryGraph.';
+      storyActionStatus = 'Sign in to ask Choir from this article.';
       return;
     }
-    storyActionBusy = mode;
+    storyActionBusy = 'ask';
     storyActionStatus = '';
     try {
       const response = await fetch('/api/prompt-bar', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: storyPromptContext(mode) }),
+        body: JSON.stringify({ text: storyPromptContext() }),
       });
       const payload = await response.json();
       if (!response.ok || !payload.submission_id) {
         throw new Error(`Prompt submission failed: ${response.status}`);
       }
-      storyActionStatus = `${mode === 'autoradio' ? 'Autoradio brief' : 'Ask Choir'} submitted: ${payload.submission_id.slice(0, 8)}`;
+      storyActionStatus = `Ask submitted: ${payload.submission_id.slice(0, 8)}`;
     } catch (error) {
       storyActionStatus = error?.message || 'Prompt submission failed';
     } finally {
@@ -665,66 +442,11 @@
     }
   }
 
-  async function submitContribution() {
-    const text = contributionText.trim();
-    let record = {
-      id: `contribution-${Date.now()}`,
-      kind: contributionKind,
-      storyId: selectedStory.id,
-      headline: selectedStory.headline,
-      text: text || 'Draft contribution awaiting detail.',
-      owner: currentUser?.email || 'public-preview',
-      research_state: authenticated ? 'pending-researcher-review' : 'preview-only',
-    };
-    if (authenticated) {
-      try {
-        const response = await fetch('/api/global-wire/contributions', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            story_id: selectedStory.id,
-            kind: contributionKind,
-            headline: selectedStory.headline,
-            text: record.text,
-          }),
-        });
-        if (!response.ok) throw new Error(`Contribution queue failed: ${response.status}`);
-        const saved = await response.json();
-        record = {
-          ...record,
-          id: saved.id || record.id,
-          storyId: saved.storyId || selectedStory.id,
-          text: saved.text || record.text,
-          source_content_id: saved.source_content_id || '',
-          research_state: saved.research_state || record.research_state,
-        };
-      } catch (error) {
-        contributionStatus = error?.message || 'Contribution queue failed';
-        return;
-      }
-    }
-    contributions = [record, ...contributions].slice(0, 6);
-    contributionStatus = authenticated
-      ? 'Contribution queued for research/reconciliation'
-      : 'Local contribution preview - sign in to save';
-    if (authenticated) {
-      await loadContributions(selectedStory.id);
-    }
-    launchVText({
-      title: `Contribution: ${selectedStory.headline}`,
-      content: contributionContent(),
-      createdFrom: 'global_wire_user_contribution',
-      sourcePath: `contributions/${selectedStory.id}-${record.kind}.vtext`,
-    });
-    contributionText = '';
-  }
-
   async function searchSources() {
     const query = sourceSearchQuery.trim();
     if (!authenticated) {
       sourceSearchStatus = 'sign-in-required';
-      sourceSearchMessage = 'Sign in to search and import source evidence.';
+      sourceSearchMessage = 'Sign in to search source evidence.';
       sourceSearchResults = [];
       return;
     }
@@ -744,21 +466,15 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query,
-          max_results: 5,
+          max_results: 12,
           story_id: selectedStory.id,
-          queue_top_result: queueTopSourceResult,
+          queue_top_result: false,
         }),
       });
       const payload = await response.json();
       sourceSearchStatus = payload.status || (response.ok ? 'ok' : 'unavailable');
       sourceSearchMessage = payload.message || `${payload.source || 'source-service'}: ${sourceSearchStatus}`;
       sourceSearchResults = Array.isArray(payload.content_items) ? payload.content_items : [];
-      if (payload.contribution?.id) {
-        contributionStatus = 'Source evidence imported and queued for reconciliation';
-        await loadContributions(selectedStory.id);
-      } else if (sourceSearchStatus === 'ok') {
-        contributionStatus = 'Source evidence imported';
-      }
     } catch (error) {
       sourceSearchStatus = 'unavailable';
       sourceSearchMessage = error?.message || 'Source search failed';
@@ -768,87 +484,9 @@
     }
   }
 
-  async function refreshStorySources() {
-    if (!authenticated) {
-      sourceRefreshStatus = 'Sign in to refresh source evidence.';
-      return;
-    }
-    if (!selectedStory?.id) return;
-    sourceRefreshBusy = true;
-    sourceRefreshStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/source-refresh', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          story_id: selectedStory.id,
-          query: sourceSearchQuery.trim() || selectedStory.headline,
-          max_results: 3,
-        }),
-      });
-      const payload = await response.json();
-      sourceRefreshStatus = payload.message || payload.status || `Source refresh ${response.status}`;
-      if (payload.content_item?.content_id) {
-        reconciliationSourceItems = {
-          ...reconciliationSourceItems,
-          [payload.content_item.content_id]: payload.content_item,
-        };
-      }
-      if (payload.contribution?.id) {
-        contributions = [payload.contribution, ...contributions]
-          .filter(Boolean)
-          .slice(0, 6);
-      }
-      if (payload.decision?.id) {
-        reconciliationDecisions = [payload.decision, ...reconciliationDecisions]
-          .filter(Boolean)
-          .slice(0, 20);
-      }
-      if (payload.candidate?.id) {
-        graphUpdateCandidates = [payload.candidate, ...graphUpdateCandidates]
-          .filter(Boolean)
-          .slice(0, 20);
-      }
-      if (payload.refresh_run?.id) {
-        sourceRefreshes = [payload.refresh_run, ...sourceRefreshes]
-          .filter(Boolean)
-          .slice(0, 20);
-      }
-      if (payload.claim_record?.id) {
-        claimRecords = [payload.claim_record, ...claimRecords]
-          .filter(Boolean)
-          .slice(0, 30);
-      }
-      if (payload.source_review_signal?.id) {
-        sourceReviewSignals = [payload.source_review_signal, ...sourceReviewSignals]
-          .filter(Boolean)
-          .slice(0, 30);
-      }
-      if (payload.research_task?.id) {
-        researchTasks = [payload.research_task, ...researchTasks]
-          .filter(Boolean)
-          .slice(0, 30);
-      }
-      if (payload.extraction_artifact?.id) {
-        extractionArtifacts = [payload.extraction_artifact, ...extractionArtifacts]
-          .filter(Boolean)
-          .slice(0, 30);
-      }
-      if (response.status === 201) {
-        contributionStatus = `Source refresh classified ${payload.refresh_run?.update_classification || 'candidate evidence'} for review`;
-        await loadContributions(selectedStory.id);
-      }
-    } catch (error) {
-      sourceRefreshStatus = error?.message || 'Source refresh failed';
-    } finally {
-      sourceRefreshBusy = false;
-    }
-  }
-
   async function runFetchCycle(schedulerMode = false) {
     if (!authenticated) {
-      fetchCycleStatus = 'Sign in to run a bounded source-registry fetch cycle.';
+      fetchCycleStatus = 'Sign in to run a bounded SourceMaxx fetch cycle.';
       return;
     }
     fetchCycleBusy = true;
@@ -859,730 +497,25 @@
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          story_ids: [selectedStory.id],
-          max_stories: 1,
-          max_results: 2,
-          trigger: schedulerMode ? 'global-wire-app-scheduled-standing-cycle' : 'global-wire-app-bounded-cycle',
+          story_ids: stories.slice(0, 3).map((story) => story.id),
+          max_stories: 3,
+          max_results: 8,
+          trigger: schedulerMode ? 'global-wire-sourcemaxx-scheduled-cycle' : 'global-wire-sourcemaxx-manual-cycle',
           scheduler_mode: schedulerMode,
-          cadence_seconds: schedulerMode ? 3600 : undefined,
+          cadence_seconds: schedulerMode ? 900 : undefined,
         }),
       });
       const payload = await response.json();
       fetchCycleStatus = payload.message || payload.status || `Fetch cycle ${response.status}`;
-      if (payload.fetch_cycle?.id) {
-        fetchCycles = [payload.fetch_cycle, ...fetchCycles]
-          .filter(Boolean)
-          .slice(0, 20);
-      }
-      if (payload.scheduler_run?.id) {
-        sourceSchedulerRuns = [payload.scheduler_run, ...sourceSchedulerRuns]
-          .filter(Boolean)
-          .slice(0, 20);
-      }
-      if (Array.isArray(payload.registry_entries)) {
-        sourceRegistryEntries = [...payload.registry_entries, ...sourceRegistryEntries]
-          .filter(Boolean)
-          .slice(0, 20);
-      }
-      if (Array.isArray(payload.refresh_runs)) {
-        sourceRefreshes = [...payload.refresh_runs, ...sourceRefreshes]
-          .filter(Boolean)
-          .slice(0, 20);
-      }
-      if (Array.isArray(payload.content_items)) {
-        const nextItems = {};
-        for (const item of payload.content_items) {
-          if (item?.content_id) nextItems[item.content_id] = item;
-        }
-        reconciliationSourceItems = {
-          ...reconciliationSourceItems,
-          ...nextItems,
-        };
-      }
-      if (Array.isArray(payload.contributions) && payload.contributions.length) {
-        contributions = [...payload.contributions, ...contributions]
-          .filter(Boolean)
-          .slice(0, 6);
-      }
-      if (Array.isArray(payload.candidates) && payload.candidates.length) {
-        graphUpdateCandidates = [...payload.candidates, ...graphUpdateCandidates]
-          .filter(Boolean)
-          .slice(0, 20);
-      }
-      if (Array.isArray(payload.claim_records) && payload.claim_records.length) {
-        claimRecords = [...payload.claim_records, ...claimRecords]
-          .filter(Boolean)
-          .slice(0, 30);
-      }
-      if (Array.isArray(payload.research_tasks) && payload.research_tasks.length) {
-        researchTasks = [...payload.research_tasks, ...researchTasks]
-          .filter(Boolean)
-          .slice(0, 30);
-      }
-      if (Array.isArray(payload.extraction_artifacts) && payload.extraction_artifacts.length) {
-        extractionArtifacts = [...payload.extraction_artifacts, ...extractionArtifacts]
-          .filter(Boolean)
-          .slice(0, 30);
-      }
-      await loadContributions(selectedStory.id);
+      if (payload.fetch_cycle?.id) fetchCycles = [payload.fetch_cycle, ...fetchCycles].slice(0, 20);
+      if (payload.scheduler_run?.id) sourceSchedulerRuns = [payload.scheduler_run, ...sourceSchedulerRuns].slice(0, 20);
+      if (Array.isArray(payload.registry_entries)) sourceRegistryEntries = [...payload.registry_entries, ...sourceRegistryEntries].slice(0, 30);
+      if (Array.isArray(payload.content_items)) sourceSearchResults = [...payload.content_items, ...sourceSearchResults].slice(0, 30);
+      await loadFetchCycles(selectedStory.id);
     } catch (error) {
       fetchCycleStatus = error?.message || 'Fetch cycle failed';
     } finally {
       fetchCycleBusy = false;
-    }
-  }
-
-  function contributionSource(item) {
-    const contentId = item?.source_content_id || item?.sourceContentId || '';
-    return contentId ? reconciliationSourceItems[contentId] : null;
-  }
-
-  function selectedSourceDossier() {
-    return sourceDossiers.find((dossier) => dossier.story_id === selectedStoryId) || sourceDossiers[0] || null;
-  }
-
-  function sourceDossierNewsletterIssueIds(dossier) {
-    const storyId = dossier?.story_id || selectedStoryId;
-    const storyPublicLinkIds = new Set(
-      publicLinks
-        .filter((link) => link?.story_id === storyId)
-        .map((link) => link.id)
-        .filter(Boolean)
-    );
-    const issueIds = newsletterIssues
-      .filter((issue) => issue?.story_id === storyId || (issue?.public_link_ids || []).some((id) => storyPublicLinkIds.has(id)))
-      .map((issue) => issue.id)
-      .filter(Boolean);
-    return Array.from(new Set([...(dossier?.publication_refs?.newsletter_issue_ids || []), ...issueIds]));
-  }
-
-  function sourceDossierNewsletterProviderReceiptIds(dossier) {
-    const storyId = dossier?.story_id || selectedStoryId;
-    const receiptIds = newsletterProviderReceipts
-      .filter((receipt) => receipt?.story_id === storyId)
-      .map((receipt) => receipt.id)
-      .filter(Boolean);
-    return Array.from(new Set([...(dossier?.publication_refs?.newsletter_provider_receipt_ids || []), ...receiptIds]));
-  }
-
-  function sourceDossierMissingFields(dossier) {
-    const hasNewsletterIssue = sourceDossierNewsletterIssueIds(dossier).length > 0;
-    const hasNewsletterReceipt = sourceDossierNewsletterProviderReceiptIds(dossier).length > 0;
-    return (dossier?.missing_fields || []).filter((field) => {
-      if (field === 'newsletter_issues') return !hasNewsletterIssue;
-      if (field === 'newsletter_provider_receipts') return !hasNewsletterReceipt;
-      return true;
-    });
-  }
-
-  function noteNewsletterIssueInDossiers(issue, deliveries = [], receipts = [], storyIdHint = '') {
-    const issueId = issue?.id || '';
-    if (!issueId) return;
-    const storyId = issue.story_id || storyIdHint || selectedStoryId;
-    sourceDossiers = sourceDossiers.map((dossier) => {
-      const isSelectedDossier = dossier.story_id === selectedStoryId || sourceDossiers.length === 1;
-      if (dossier.story_id !== storyId && !isSelectedDossier) return dossier;
-      const publicationRefs = dossier.publication_refs || {};
-      const deliveryIds = deliveries
-        .filter((delivery) => delivery?.issue_id === issueId || delivery?.story_id === storyId)
-        .map((delivery) => delivery.id)
-        .filter(Boolean);
-      const receiptIds = receipts
-        .filter((receipt) => receipt?.issue_id === issueId || receipt?.story_id === storyId)
-        .map((receipt) => receipt.id)
-        .filter(Boolean);
-      return {
-        ...dossier,
-        publication_refs: {
-          ...publicationRefs,
-          newsletter_issue_ids: Array.from(new Set([...(publicationRefs.newsletter_issue_ids || []), issueId])),
-          newsletter_delivery_ids: Array.from(new Set([...(publicationRefs.newsletter_delivery_ids || []), ...deliveryIds])),
-          newsletter_provider_receipt_ids: Array.from(new Set([...(publicationRefs.newsletter_provider_receipt_ids || []), ...receiptIds])),
-          citation_refs: Array.from(new Set([...(publicationRefs.citation_refs || []), ...(issue.citation_refs || []), ...receipts.flatMap((receipt) => receipt.citation_refs || [])])),
-          rollback_refs: Array.from(new Set([...(publicationRefs.rollback_refs || []), ...(issue.rollback_refs || []), ...receipts.flatMap((receipt) => [...(receipt.rollback_refs || []), ...(receipt.event_refs || [])])])),
-        },
-        missing_fields: (dossier.missing_fields || []).filter((field) => field !== 'newsletter_issues' && field !== 'newsletter_provider_receipts'),
-      };
-    });
-  }
-
-  function contributionDecision(item) {
-    const id = item?.id || '';
-    return reconciliationDecisions.find((decision) => decision.contribution_id === id);
-  }
-
-  function contributionCandidate(item) {
-    const id = item?.id || '';
-    return graphUpdateCandidates.find((candidate) => candidate.contribution_id === id);
-  }
-
-  function candidatePromotion(candidate) {
-    const id = candidate?.id || '';
-    return graphPromotionDecisions.find((promotion) => promotion.candidate_id === id);
-  }
-
-  function candidateProjectionReviews(candidate) {
-    const id = candidate?.id || '';
-    return projectionReviews.filter((review) => review.candidate_id === id);
-  }
-
-  function candidateClaimRecords(candidate) {
-    const id = candidate?.id || '';
-    return claimRecords.filter((claim) => claim.candidate_id === id);
-  }
-
-  function claimResearchTasks(claim) {
-    const id = claim?.id || '';
-    return researchTasks.filter((task) => task.claim_id === id);
-  }
-
-  function claimExtractionArtifacts(claim) {
-    const id = claim?.id || '';
-    return extractionArtifacts.filter((artifact) => artifact.claim_id === id);
-  }
-
-  function taskEvidence(task) {
-    const id = task?.id || '';
-    return researchEvidence.filter((evidence) => evidence.task_id === id);
-  }
-
-  function evidenceDecision(evidence) {
-    const id = evidence?.id || '';
-    return researchDecisions.find((decision) => decision.evidence_id === id);
-  }
-
-  function publicationUpdateForDecision(decision) {
-    const id = decision?.id || '';
-    return publicationUpdates.find((update) => update.research_decision_id === id);
-  }
-
-  function publicationArtifactForUpdate(update) {
-    const id = update?.id || '';
-    return publicationArtifacts.find((artifact) => artifact.update_id === id);
-  }
-
-  function publicationDeliveryForArtifact(artifact) {
-    const id = artifact?.id || '';
-    return publicationDeliveries.find((delivery) => delivery.artifact_id === id);
-  }
-
-  function autoradioScriptForArtifact(artifact) {
-    const id = artifact?.id || '';
-    return autoradioScripts.find((script) => script.artifact_id === id);
-  }
-
-  function autoradioEpisodeForScript(script) {
-    const id = script?.id || '';
-    return autoradioEpisodes.find((episode) => episode.script_id === id);
-  }
-
-  function deliveryExportForDelivery(delivery) {
-    const id = delivery?.id || '';
-    return deliveryExports.find((item) => item.delivery_id === id);
-  }
-
-  function publicLinkForExport(deliveryExport) {
-    const id = deliveryExport?.id || '';
-    return publicLinks.find((item) => item.export_id === id);
-  }
-
-  function newsletterIssueForPublicLink(publicLink) {
-    const id = publicLink?.id || '';
-    return newsletterIssues.find((issue) => (issue.public_link_ids || []).includes(id));
-  }
-
-  function newsletterDeliveriesForIssue(issue) {
-    const id = issue?.id || '';
-    return newsletterDeliveries.filter((delivery) => delivery.issue_id === id);
-  }
-
-  function newsletterProviderReceiptsForIssue(issue) {
-    const id = issue?.id || '';
-    return newsletterProviderReceipts.filter((receipt) => receipt.issue_id === id);
-  }
-
-  function selectedPublicationFeedItem() {
-    return publicationFeedItems.find((item) => item.story?.id === selectedStory.id || item.artifact?.story_id === selectedStory.id);
-  }
-
-  function researchTaskEvidenceSummary(task, action) {
-    if (action === 'assign') {
-      return `Research task assigned for ${task.task_kind || 'claim review'}; no platform story mutation applied.`;
-    }
-    if (action === 'block') {
-      return `Research task blocked pending additional source evidence for ${task.claim_id || task.story_id}.`;
-    }
-    return `Research task completed for ${task.claim_id || task.story_id}; evidence is ready for reconciliation without mutating the platform StoryGraph.`;
-  }
-
-  async function updateResearchTask(task, action) {
-    if (!authenticated || !task?.id) return;
-    reconciliationBusyId = `${task.id}:${action}`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/research-tasks', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          task_id: task.id,
-          action,
-          evidence_level: 'reconciliation-level',
-          evidence_summary: researchTaskEvidenceSummary(task, action),
-          reviewer_note: `global-wire-app:${action}`,
-        }),
-      });
-      if (!response.ok) throw new Error(`Research task ${action} failed: ${response.status}`);
-      const payload = await response.json();
-      researchTasks = [payload.task, ...researchTasks.filter((item) => item.id !== task.id)]
-        .filter(Boolean)
-        .slice(0, 30);
-      researchEvidence = [payload.evidence, ...researchEvidence]
-        .filter(Boolean)
-        .slice(0, 50);
-      contributionStatus = `Research task ${payload.task?.status || action}`;
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || `Research task ${action} failed`;
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function reviewResearchEvidence(evidence, decision) {
-    if (!authenticated || !evidence?.id) return;
-    reconciliationBusyId = `${evidence.id}:${decision}`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/research-evidence', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          evidence_id: evidence.id,
-          decision,
-          note: `global-wire-app:${decision}`,
-        }),
-      });
-      if (!response.ok) throw new Error(`Research evidence ${decision} failed: ${response.status}`);
-      const payload = await response.json();
-      researchDecisions = [payload.decision, ...researchDecisions]
-        .filter(Boolean)
-        .slice(0, 50);
-      if (payload.candidate?.id) {
-        graphUpdateCandidates = [payload.candidate, ...graphUpdateCandidates.filter((item) => item.id !== payload.candidate.id)]
-          .filter(Boolean)
-          .slice(0, 20);
-      }
-      contributionStatus = `Research evidence ${payload.decision?.decision || decision}`;
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || `Research evidence ${decision} failed`;
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function packagePublicationUpdate(decision) {
-    if (!authenticated || !decision?.id) return;
-    reconciliationBusyId = `${decision.id}:publication-update`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/publication-updates', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          research_decision_id: decision.id,
-        }),
-      });
-      if (!response.ok) throw new Error(`Publication update package failed: ${response.status}`);
-      const payload = await response.json();
-      publicationUpdates = [payload.update, ...publicationUpdates]
-        .filter(Boolean)
-        .slice(0, 30);
-      contributionStatus = `Publication update ${payload.update?.status || 'packaged'}`;
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || 'Publication update package failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function createPublicationArtifact(update) {
-    if (!authenticated || !update?.id) return;
-    reconciliationBusyId = `${update.id}:publication-artifact`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/publication-artifacts', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          update_id: update.id,
-          channel: 'newsletter',
-        }),
-      });
-      if (!response.ok) throw new Error(`Publication artifact failed: ${response.status}`);
-      const payload = await response.json();
-      publicationArtifacts = [payload.artifact, ...publicationArtifacts]
-        .filter(Boolean)
-        .slice(0, 30);
-      contributionStatus = `Publication artifact ${payload.artifact?.status || 'created'}`;
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || 'Publication artifact failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function reviewPublicationArtifact(item, decision) {
-    const artifact = item?.artifact || item;
-    if (!authenticated || !artifact?.id) return;
-    reconciliationBusyId = `${artifact.id}:publication-${decision}`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/publication-artifact-reviews', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          artifact_id: artifact.id,
-          decision,
-          note: `global-wire-app:${decision}`,
-        }),
-      });
-      if (!response.ok) throw new Error(`Publication artifact ${decision} failed: ${response.status}`);
-      const payload = await response.json();
-      publicationArtifacts = [payload.artifact, ...publicationArtifacts.filter((entry) => entry.id !== payload.artifact?.id)]
-        .filter(Boolean)
-        .slice(0, 30);
-      publicationFeedItems = publicationFeedItems.map((feedItem) => {
-        if (feedItem.artifact?.id !== payload.artifact?.id) return feedItem;
-        return {
-          ...feedItem,
-          artifact: payload.artifact,
-          status: payload.artifact.status,
-        };
-      });
-      contributionStatus = `Publication artifact ${payload.artifact?.status || decision}`;
-      await loadPublicationFeed(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || `Publication artifact ${decision} failed`;
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function createPublicationDelivery(item) {
-    const artifact = item?.artifact || item;
-    if (!authenticated || !artifact?.id) return;
-    reconciliationBusyId = `${artifact.id}:publication-delivery`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/publication-deliveries', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          artifact_id: artifact.id,
-          channel: artifact.channel || 'newsletter',
-        }),
-      });
-      if (!response.ok) throw new Error(`Publication delivery failed: ${response.status}`);
-      const payload = await response.json();
-      publicationDeliveries = [payload.delivery, ...publicationDeliveries.filter((delivery) => delivery.id !== payload.delivery?.id)]
-        .filter(Boolean)
-        .slice(0, 30);
-      contributionStatus = `Publication delivery ${payload.delivery?.status || 'created'}`;
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || 'Publication delivery failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function openPublicationDeliveryDetail(delivery) {
-    if (!authenticated || !delivery?.id) return;
-    reconciliationBusyId = `${delivery.id}:publication-delivery-detail`;
-    try {
-      const response = await fetch(`/api/global-wire/publication-deliveries/${encodeURIComponent(delivery.id)}`, {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error(`Publication delivery detail failed: ${response.status}`);
-      publicationDeliveryDetail = await response.json();
-    } catch (error) {
-      contributionStatus = error?.message || 'Publication delivery detail failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function createAutoradioScript(item) {
-    const artifact = item?.artifact || item;
-    if (!authenticated || !artifact?.id) return;
-    reconciliationBusyId = `${artifact.id}:autoradio-script`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/autoradio-scripts', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          artifact_id: artifact.id,
-        }),
-      });
-      if (!response.ok) throw new Error(`Autoradio script failed: ${response.status}`);
-      const payload = await response.json();
-      autoradioScripts = [payload.script, ...autoradioScripts.filter((script) => script.id !== payload.script?.id)]
-        .filter(Boolean)
-        .slice(0, 30);
-      contributionStatus = `Autoradio script ${payload.script?.status || 'created'}`;
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || 'Autoradio script failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function createAutoradioEpisode(script) {
-    if (!authenticated || !script?.id) return;
-    reconciliationBusyId = `${script.id}:autoradio-episode`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/autoradio-episodes', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          script_id: script.id,
-        }),
-      });
-      if (!response.ok) throw new Error(`Autoradio episode failed: ${response.status}`);
-      const payload = await response.json();
-      autoradioEpisodes = [payload.episode, ...autoradioEpisodes.filter((episode) => episode.id !== payload.episode?.id)]
-        .filter(Boolean)
-        .slice(0, 30);
-      contributionStatus = `Autoradio episode ${payload.episode?.status || 'created'}`;
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || 'Autoradio episode failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  function playAutoradioEpisode(episode) {
-    if (!episode?.transcript) return;
-    autoradioPlaybackStatus = `Playback requested: ${episode.title}`;
-    if (typeof window === 'undefined' || !window.speechSynthesis || !window.SpeechSynthesisUtterance) {
-      autoradioPlaybackStatus = 'Browser speech playback unavailable';
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utterance = new window.SpeechSynthesisUtterance(episode.transcript);
-    utterance.rate = 0.96;
-    utterance.pitch = 0.92;
-    utterance.onstart = () => {
-      autoradioPlaybackStatus = `Playing ${episode.title}`;
-    };
-    utterance.onend = () => {
-      autoradioPlaybackStatus = `Played ${episode.title}`;
-    };
-    utterance.onerror = () => {
-      autoradioPlaybackStatus = 'Autoradio playback failed';
-    };
-    window.speechSynthesis.speak(utterance);
-  }
-
-  async function createDeliveryExport(delivery) {
-    if (!authenticated || !delivery?.id) return;
-    reconciliationBusyId = `${delivery.id}:delivery-export`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/publication-delivery-exports', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          delivery_id: delivery.id,
-          format: 'md',
-        }),
-      });
-      if (!response.ok) throw new Error(`Delivery export failed: ${response.status}`);
-      const payload = await response.json();
-      deliveryExports = [payload.export, ...deliveryExports.filter((item) => item.id !== payload.export?.id)]
-        .filter(Boolean)
-        .slice(0, 30);
-      contributionStatus = `Delivery export ${payload.export?.status || 'created'}`;
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || 'Delivery export failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function createPublicLink(deliveryExport) {
-    if (!authenticated || !deliveryExport?.id) return;
-    reconciliationBusyId = `${deliveryExport.id}:public-link`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/publication-public-links', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          export_id: deliveryExport.id,
-        }),
-      });
-      if (!response.ok) throw new Error(`Public link failed: ${response.status}`);
-      const payload = await response.json();
-      publicLinks = [payload.public_link, ...publicLinks.filter((item) => item.id !== payload.public_link?.id)]
-        .filter(Boolean)
-        .slice(0, 30);
-      contributionStatus = `Public link ${payload.public_link?.status || 'created'}`;
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || 'Public link failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function createNewsletterIssue(publicLink) {
-    if (!authenticated || !publicLink?.id) return;
-    reconciliationBusyId = `${publicLink.id}:newsletter-issue`;
-    contributionStatus = '';
-    try {
-      let subscribers = newsletterSubscribers.filter((subscriber) => subscriber.status === 'active');
-      if (!subscribers.length) {
-        const subscriberResponse = await fetch('/api/global-wire/newsletter-subscribers', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: 'global-wire-subscriber@example.com',
-            label: 'Global Wire staging subscriber',
-          }),
-        });
-        if (!subscriberResponse.ok) throw new Error(`Newsletter subscriber failed: ${subscriberResponse.status}`);
-        const subscriberPayload = await subscriberResponse.json();
-        subscribers = [subscriberPayload.subscriber].filter(Boolean);
-        newsletterSubscribers = [subscriberPayload.subscriber, ...newsletterSubscribers.filter((item) => item.id !== subscriberPayload.subscriber?.id)]
-          .filter(Boolean)
-          .slice(0, 30);
-      }
-      const response = await fetch('/api/global-wire/newsletter-issues', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          public_link_ids: [publicLink.id],
-          story_id: publicLink.story_id,
-        }),
-      });
-      if (!response.ok) throw new Error(`Newsletter issue failed: ${response.status}`);
-      const payload = await response.json();
-      newsletterIssues = [payload.issue, ...newsletterIssues.filter((item) => item.id !== payload.issue?.id)]
-        .filter(Boolean)
-        .slice(0, 30);
-      newsletterDeliveries = [...(payload.deliveries || []), ...newsletterDeliveries]
-        .filter(Boolean)
-        .slice(0, 50);
-      newsletterProviderReceipts = [...(payload.newsletter_provider_receipts || []), ...newsletterProviderReceipts]
-        .filter(Boolean)
-        .slice(0, 50);
-      noteNewsletterIssueInDossiers(payload.issue, payload.deliveries || [], payload.newsletter_provider_receipts || [], publicLink.story_id || selectedStory.id);
-      newsletterSubscribers = [...(payload.subscribers || subscribers), ...newsletterSubscribers]
-        .filter(Boolean)
-        .filter((item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index)
-        .slice(0, 30);
-      contributionStatus = `Newsletter issue ${payload.issue?.status || 'created'}`;
-      await loadContributions(selectedStory.id);
-      await loadSourceDossiers(publicLink.story_id || selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || 'Newsletter issue failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function createProjectionDraft(review) {
-    if (!authenticated || !review?.id) return;
-    reconciliationBusyId = `${review.id}:draft`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/projection-reviews', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ review_id: review.id }),
-      });
-      if (!response.ok) throw new Error(`Projection draft failed: ${response.status}`);
-      const payload = await response.json();
-      projectionReviews = projectionReviews.map((item) => (
-        item.id === review.id ? payload.review : item
-      ));
-      contributionStatus = 'Projection draft VText created';
-      if (payload.document?.doc_id) {
-        launchVText({
-          title: payload.document.title || `Draft projection: ${selectedStory.headline}`,
-          content: payload.revision?.content || '',
-          createdFrom: 'global_wire_projection_review_draft',
-          sourcePath: `global-wire/projection-drafts/${review.id}.vtext`,
-          docId: payload.document.doc_id,
-          createInitialVersion: false,
-        });
-      }
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || 'Projection draft failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function reviewProjectionDraft(review, action) {
-    if (!authenticated || !review?.id) return;
-    reconciliationBusyId = `${review.id}:${action}`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/projection-reviews', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ review_id: review.id, action }),
-      });
-      if (!response.ok) throw new Error(`Projection review ${action} failed: ${response.status}`);
-      const payload = await response.json();
-      projectionReviews = projectionReviews.map((item) => (
-        item.id === review.id ? payload.review : item
-      ));
-      contributionStatus = action === 'approve'
-        ? 'Projection draft approved into Story VText revision'
-        : 'Projection draft rejected';
-      if (action === 'approve' && payload.document?.doc_id) {
-        launchVText({
-          title: payload.document.title || `Projection: ${selectedStory.headline}`,
-          content: payload.revision?.content || '',
-          createdFrom: 'global_wire_projection_review_approval',
-          sourcePath: `global-wire/${selectedStory.id}.${review.style_id}.story.vtext`,
-          docId: payload.document.doc_id,
-          createInitialVersion: false,
-        });
-        lastLoadKey = '';
-        await loadDurableStoryGraph();
-      }
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || `Projection review ${action} failed`;
-    } finally {
-      reconciliationBusyId = '';
     }
   }
 
@@ -1614,16 +547,12 @@
       });
       if (!response.ok) throw new Error(`Style ${action} failed: ${response.status}`);
       const payload = await response.json();
-      if (payload.story?.id) {
-        stories = stories.map((story) => (story.id === payload.story.id ? payload.story : story));
-      }
+      if (payload.story?.id) stories = stories.map((story) => (story.id === payload.story.id ? payload.story : story));
       if (payload.style?.id) {
         styleSources = payload.story?.style_sources || [...styleSources, payload.style];
         selectedStyleId = payload.style.id;
       }
-      styleSourceStatus = action === 'compose'
-        ? 'Composed Style.vtext source created'
-        : 'Replacement Style.vtext source created';
+      styleSourceStatus = action === 'compose' ? 'Composed Style.vtext source created' : 'Replacement Style.vtext source created';
       lastLoadKey = '';
       await loadDurableStoryGraph();
     } catch (error) {
@@ -1632,1732 +561,561 @@
       styleSourceBusy = false;
     }
   }
-
-  async function reconcileContribution(item, decision) {
-    if (!authenticated || !item?.id) return;
-    reconciliationBusyId = `${item.id}:${decision}`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/reconciliation', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contribution_id: item.id,
-          decision,
-          note: decision === 'accepted'
-            ? 'Accepted for graph review from the Global Wire desk.'
-            : 'Rejected for this StoryGraph neighborhood from the Global Wire desk.',
-        }),
-      });
-      if (!response.ok) throw new Error(`Reconciliation decision failed: ${response.status}`);
-      const payload = await response.json();
-      contributions = contributions.map((contribution) => (
-        contribution.id === item.id ? payload.contribution : contribution
-      ));
-      if (payload.source_item?.content_id) {
-        reconciliationSourceItems = {
-          ...reconciliationSourceItems,
-          [payload.source_item.content_id]: payload.source_item,
-        };
-      }
-      reconciliationDecisions = [payload.decision, ...reconciliationDecisions]
-        .filter(Boolean)
-        .slice(0, 20);
-      if (payload.candidate?.id) {
-        graphUpdateCandidates = [payload.candidate, ...graphUpdateCandidates]
-          .filter(Boolean)
-          .slice(0, 20);
-      }
-      contributionStatus = decision === 'accepted'
-        ? 'Contribution accepted for graph review'
-        : 'Contribution rejected for this story neighborhood';
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || 'Reconciliation decision failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
-
-  async function reviewGraphCandidate(candidate, decision) {
-    if (!authenticated || !candidate?.id) return;
-    reconciliationBusyId = `${candidate.id}:${decision}`;
-    contributionStatus = '';
-    try {
-      const response = await fetch('/api/global-wire/graph-candidates', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          candidate_id: candidate.id,
-          decision,
-          note: decision === 'promoted'
-            ? 'Platform review promoted this candidate as a bounded StoryGraph source-manifest update.'
-            : 'Platform review rejected this candidate for the current StoryGraph.',
-        }),
-      });
-      if (!response.ok) throw new Error(`Graph candidate review failed: ${response.status}`);
-      const payload = await response.json();
-      graphUpdateCandidates = graphUpdateCandidates.map((item) => (
-        item.id === candidate.id ? payload.candidate : item
-      ));
-      graphPromotionDecisions = [payload.promotion, ...graphPromotionDecisions]
-        .filter(Boolean)
-        .slice(0, 20);
-      if (Array.isArray(payload.projection_reviews) && payload.projection_reviews.length) {
-        projectionReviews = [...payload.projection_reviews, ...projectionReviews]
-          .filter(Boolean)
-          .slice(0, 30);
-      }
-      if (payload.story?.id) {
-        stories = stories.map((story) => (story.id === payload.story.id ? payload.story : story));
-      }
-      contributionStatus = decision === 'promoted'
-        ? 'Graph candidate promoted through platform review'
-        : 'Graph candidate rejected by platform review';
-      await loadContributions(selectedStory.id);
-    } catch (error) {
-      contributionStatus = error?.message || 'Graph candidate review failed';
-    } finally {
-      reconciliationBusyId = '';
-    }
-  }
 </script>
 
 <section class="global-wire" data-global-wire-app data-global-wire-data-source={dataSource}>
-  <header class="wire-header">
+  <header class="wire-masthead">
     <div>
-      <p class="eyebrow">Global Wire</p>
-      <h2>StoryGraph desk</h2>
+      <p class="kicker">Global Wire</p>
+      <h2>SourceMaxx desk</h2>
     </div>
     <div class="wire-state" data-global-wire-state>
-      <span>{authenticated ? 'owner computer' : 'public preview'}</span>
-      <strong>{stories.length} story nodes</strong>
-      <small>{dataSource}</small>
+      <span>{ownerLabel}</span>
+      <strong>{sourceItemCount} sources</strong>
+      <small>{sourceClassCount} source classes · {stories.length} VTexts · {dataSource}</small>
     </div>
   </header>
+
   {#if loadError}
     <p class="wire-load-error">{loadError}</p>
   {/if}
 
-  <main class="wire-layout">
-    <section class="front-page" data-global-wire-front-page aria-label="Front page stories">
-      <div class="section-title">
-        <h3>Front Page</h3>
-        <span>headline nodes</span>
+  <main class="wire-paper">
+    <section class="wire-edition" data-global-wire-front-page aria-label="Front page">
+      <div class="edition-head">
+        <span>Front Page</span>
+        <span>{fetchCycles[0]?.status || 'source ledger standing by'}</span>
       </div>
-      <div class="story-list">
+
+      <div class="article-columns">
         {#each stories as story}
-          <button
-            type="button"
-            class:selected={story.id === selectedStory.id}
-            class="story-row"
+          {@const style = styleSources.find((item) => item.id === selectedStyleId) || story.style_sources?.[0] || selectedStyle}
+          <article
+            class="wire-article"
             data-global-wire-story
+            data-selected={story.id === selectedStory.id ? 'true' : 'false'}
             data-story-id={story.id}
-            on:click={() => (selectedStoryId = story.id)}
+            on:mouseenter={() => (selectedStoryId = story.id)}
+            on:focusin={() => (selectedStoryId = story.id)}
           >
-            <span class={`story-dot ${story.nodeTone}`}></span>
-            <span class="story-copy">
-              <strong>{story.headline}</strong>
-              <small>{story.freshness} · {story.tension}</small>
-            </span>
-            <span class="prominence">{story.prominence}</span>
-          </button>
+            <div class="article-tools">
+              <button type="button" aria-label="Open article VText" title="Open article VText" on:click={() => openStoryVText(story, style)} data-global-wire-open-vtext>V</button>
+              <button type="button" aria-label="Fork article VText" title="Fork article VText" on:click={() => forkStory(story)} data-global-wire-fork-story>F</button>
+            </div>
+            <p class="article-meta">{story.changeState} · {story.freshness} · {story.tension}</p>
+            <h1>{story.headline}</h1>
+            <p class="dek">{story.dek}</p>
+            <p class="projection" data-global-wire-story-reader>{story.projections?.[style.id] || story.projections?.['wire-style']}</p>
+            <p class="source-line">
+              {(story.manifest?.lead || []).length} lead · {(story.manifest?.supporting || []).length} supporting · {(story.manifest?.contrary || []).length} qualifying
+            </p>
+            <div class="claims" data-global-wire-claims>
+              {#each (story.claims || []).slice(0, 2) as claim}
+                <p>{claim}</p>
+              {/each}
+            </div>
+          </article>
         {/each}
       </div>
     </section>
 
-    <section class="story-reader" data-global-wire-story-reader aria-label="Story reader">
-      <div class="story-reader-header">
+    <aside class="source-column" data-global-wire-evidence aria-label="Source chronology">
+      <div class="source-head">
         <div>
-          <p class="eyebrow">{selectedStory.changeState}</p>
-          <h1>{selectedStory.headline}</h1>
+          <p class="kicker">Sources</p>
+          <h3>Chronology</h3>
         </div>
-        <div class="reader-actions">
-          <button
-            type="button"
-            on:click={() => submitStoryAction('ask')}
-            disabled={storyActionBusy !== ''}
-            data-global-wire-ask-choir
-          >
-            Ask Choir
-          </button>
-          <button
-            type="button"
-            on:click={() => submitStoryAction('autoradio')}
-            disabled={storyActionBusy !== ''}
-            data-global-wire-autoradio
-          >
-            Autoradio
-          </button>
-          <button type="button" on:click={openStoryVText} data-global-wire-open-vtext>Open VText</button>
-          <button type="button" on:click={forkStory} data-global-wire-fork-story>Fork/Edit</button>
-        </div>
+        <span>{sourceItemCount}</span>
       </div>
-      {#if storyActionStatus}
-        <p class="story-action-status" data-global-wire-story-action-status>{storyActionStatus}</p>
+
+      <form class="source-search" data-global-wire-source-search on:submit|preventDefault={searchSources}>
+        <input
+          bind:value={sourceSearchQuery}
+          type="search"
+          placeholder="Search source ledger"
+          data-global-wire-source-search-input
+        />
+        <button type="submit" disabled={sourceSearchBusy} data-global-wire-source-search-submit>
+          {sourceSearchBusy ? '...' : 'Search'}
+        </button>
+      </form>
+      {#if sourceSearchStatus}
+        <p class="source-status" data-global-wire-source-search-status>{sourceSearchStatus}: {sourceSearchMessage}</p>
       {/if}
 
-      <p class="dek">{selectedStory.dek}</p>
-
-      <div class="style-switcher" data-global-wire-style-switcher>
-        <div class="section-title">
-          <h3>Style.vtext Projection</h3>
-          <div class="style-actions">
-            <button type="button" on:click={openStyleVText} data-global-wire-open-style>Open style source</button>
-            {#if authenticated}
-              <button type="button" on:click={() => updateStyleSource('compose')} disabled={styleSourceBusy} data-global-wire-compose-style>Compose</button>
-              <button type="button" on:click={() => updateStyleSource('replace')} disabled={styleSourceBusy} data-global-wire-replace-style>Replace</button>
-            {/if}
-          </div>
-        </div>
-        <div class="style-tabs" role="tablist" aria-label="Style source">
-          {#each styleSources as style}
-            <button
-              type="button"
-              role="tab"
-              class:active={style.id === selectedStyle.id}
-              aria-selected={style.id === selectedStyle.id}
-              on:click={() => (selectedStyleId = style.id)}
-            >
-              {style.label}
-            </button>
-          {/each}
-        </div>
-        <article class="projection">
-          <p>{projectionText}</p>
-          <small>Cites {selectedStyle.title}; evidence manifest unchanged.</small>
-        </article>
-        {#if styleSourceStatus}
-          <p class="style-source-status" data-global-wire-style-source-status>{styleSourceStatus}</p>
-        {/if}
-      </div>
-
-      <div class="claims" data-global-wire-claims>
-        <h3>Claims</h3>
-        <ul>
-          {#each selectedStory.claims as claim}
-            <li>{claim}</li>
-          {/each}
-        </ul>
-      </div>
-    </section>
-
-    <aside class="right-rail" aria-label="Evidence and graph">
-      <section class="evidence" data-global-wire-evidence>
-        <div class="section-title">
-          <h3>Evidence</h3>
-          <span>{allSources.length} sources</span>
-        </div>
-        {#each ['lead', 'supporting', 'contrary', 'context'] as tier}
-          <div class="source-tier" data-source-tier={tier}>
-            <h4>{tier}</h4>
-            {#each selectedStory.manifest[tier] as source}
-              <div class="source-item">
-                <strong>{source.title}</strong>
-                <small>{source.standing}</small>
-              </div>
-            {/each}
-          </div>
-        {/each}
-      </section>
-
-      <section class="graph" data-global-wire-story-graph>
-        <div class="section-title">
-          <h3>StoryGraph</h3>
-          <span>source neighborhood</span>
-        </div>
-        <div class="graph-canvas">
-          {#each stories as story}
-            <button
-              type="button"
-              class:selected={story.id === selectedStory.id}
-              class={`graph-node ${story.nodeTone}`}
-              style={`--node-size: ${Math.max(58, Math.min(112, story.prominence + 20))}px`}
-              on:click={() => (selectedStoryId = story.id)}
-            >
-              <span>{story.headline}</span>
-            </button>
-          {/each}
-        </div>
-      </section>
-
-      <section class="contribution" data-global-wire-contribution>
-        <div class="section-title">
-          <h3>Contribute</h3>
-          <span>research queue</span>
-        </div>
-        <div class="source-search" data-global-wire-source-search>
-          <label>
-            <span>Source search</span>
-            <input
-              bind:value={sourceSearchQuery}
-              type="search"
-              placeholder="Search live/source-service evidence"
-              data-global-wire-source-search-input
-            />
-          </label>
-          <label class="queue-toggle">
-            <input type="checkbox" bind:checked={queueTopSourceResult} />
-            <span>Queue top result</span>
-          </label>
-          <button
-            type="button"
-            class="source-search-button"
-            on:click={searchSources}
-            disabled={sourceSearchBusy}
-            data-global-wire-source-search-submit
-          >
-            {sourceSearchBusy ? 'Searching...' : 'Search sources'}
-          </button>
-          <button
-            type="button"
-            class="source-search-button"
-            on:click={refreshStorySources}
-            disabled={sourceRefreshBusy}
-            data-global-wire-source-refresh
-          >
-            {sourceRefreshBusy ? 'Refreshing...' : 'Refresh story evidence'}
-          </button>
-          <button
-            type="button"
-            class="source-search-button"
-            on:click={() => runFetchCycle(false)}
-            disabled={fetchCycleBusy}
-            data-global-wire-fetch-cycle
-          >
-            {fetchCycleBusy ? 'Running...' : 'Run fetch cycle'}
-          </button>
-          <button
-            type="button"
-            class="source-search-button"
-            on:click={() => runFetchCycle(true)}
-            disabled={fetchCycleBusy}
-            data-global-wire-scheduler-cycle
-          >
-            {fetchCycleBusy ? 'Running...' : 'Run source schedule'}
-          </button>
-          {#if sourceSearchStatus}
-            <p class="source-search-status" data-global-wire-source-search-status>
-              {sourceSearchStatus}: {sourceSearchMessage}
-            </p>
-          {/if}
-          {#if sourceRefreshStatus}
-            <p class="source-search-status" data-global-wire-source-refresh-status>
-              {sourceRefreshStatus}
-            </p>
-          {/if}
-          {#if fetchCycleStatus}
-            <p class="source-search-status" data-global-wire-fetch-cycle-status>
-              {fetchCycleStatus}
-            </p>
-          {/if}
-          {#if fetchCycles.length || sourceRegistryEntries.length || sourceSchedulerRuns.length}
-            <div class="source-search-results" data-global-wire-fetch-cycle-runs>
-              {#each sourceSchedulerRuns.slice(0, 2) as run}
-                <article data-global-wire-source-scheduler-run>
-                  <strong>{run.status}</strong>
-                  <small>{run.trigger} · {(run.standing_policies || []).join(', ')}</small>
-                  <span>{run.message}</span>
-                </article>
-              {/each}
-              {#each fetchCycles.slice(0, 2) as cycle}
-                <article>
-                  <strong>{cycle.status}</strong>
-                  <small>{cycle.trigger} · {cycle.refresh_run_ids?.length || 0} refreshes · {cycle.source_content_ids?.length || 0} sources</small>
-                  <span>{cycle.message}</span>
-                </article>
-              {/each}
-              {#each sourceRegistryEntries.slice(0, 2) as entry}
-                <article data-global-wire-source-registry-entry>
-                  <strong>{entry.source_scope}</strong>
-                  <small>{entry.status} · {entry.story_id} · {entry.source_standing_policy || 'standing review'}</small>
-                  <span>{entry.query}</span>
-                  {#if entry.source_standing_rationale}
-                    <small data-global-wire-source-standing-policy>{entry.source_standing_rationale}</small>
-                  {/if}
-                  {#if entry.cadence_seconds}
-                    <small data-global-wire-source-schedule-cadence>
-                      cadence {entry.cadence_seconds}s · next due {entry.next_due_at || 'pending'}
-                    </small>
-                  {/if}
-                </article>
-              {/each}
-            </div>
-          {/if}
-          {#if sourceRefreshes.length}
-            <div class="source-search-results" data-global-wire-source-refresh-runs>
-              {#each sourceRefreshes.slice(0, 2) as run}
-                <article>
-                  <strong>{run.update_classification || run.status}</strong>
-                  <small>{run.storygraph_action || run.status} · {run.projection_action || 'projection pending'} · {run.provider}</small>
-                  <span>{run.query}</span>
-                </article>
-              {/each}
-            </div>
-          {/if}
-          {#if sourceSearchResults.length}
-            <div class="source-search-results" data-global-wire-source-search-results>
-              {#each sourceSearchResults.slice(0, 3) as result}
-                <article>
-                  <strong>{result.title}</strong>
-                  <small>{result.source_type} · {result.metadata?.schema || 'source artifact'}</small>
-                </article>
-              {/each}
-            </div>
-          {/if}
-        </div>
-        {#if publicationFeedItems.length}
-          <div class="publication-feed" data-global-wire-publication-feed>
-            <div class="section-title">
-              <h4>Publication Feed</h4>
-              <span>{publicationFeedStatus || 'ready'} · newsletter</span>
-            </div>
-            {#each publicationFeedItems.slice(0, 3) as item}
-              {@const delivery = publicationDeliveryForArtifact(item.artifact)}
-              {@const autoradioScript = autoradioScriptForArtifact(item.artifact)}
-              {@const autoradioEpisode = autoradioEpisodeForScript(autoradioScript)}
-              {@const deliveryExport = deliveryExportForDelivery(delivery)}
-              {@const publicLink = publicLinkForExport(deliveryExport)}
-              {@const newsletterIssue = newsletterIssueForPublicLink(publicLink)}
-              {@const issueDeliveries = newsletterDeliveriesForIssue(newsletterIssue)}
-              {@const issueReceipts = newsletterProviderReceiptsForIssue(newsletterIssue)}
-              <article
-                data-global-wire-publication-feed-item
-                data-global-wire-publication-feed-artifact-id={item.artifact.id}
-              >
-                <strong>{item.artifact.title}</strong>
-                <small>{item.status} · {item.artifact.channel} · {item.story.headline}</small>
-                <span>{item.artifact.body}</span>
-                <small data-global-wire-publication-feed-provenance>
-                  citations: {item.citation_count} · rollback refs: {item.rollback_count} · source {item.source_item?.title || item.artifact.source_content_id || 'story manifest'}
-                </small>
-                {#if delivery}
-                  <small
-                    data-global-wire-publication-delivery
-                    data-global-wire-publication-delivery-id={delivery.id}
-                  >
-                    {delivery.status}: {delivery.channel} · {delivery.delivery_ref}
-                  </small>
-                  <small data-global-wire-publication-delivery-provenance>
-                    delivery citations: {delivery.citation_count} · rollback refs: {delivery.rollback_count}
-                  </small>
-                  {#if autoradioScript}
-                    <div
-                      class="autoradio-script"
-                      data-global-wire-autoradio-script
-                      data-global-wire-autoradio-script-id={autoradioScript.id}
-                    >
-                      <strong>{autoradioScript.status}: {autoradioScript.title}</strong>
-                      <span>{autoradioScript.script_body}</span>
-                      <small data-global-wire-autoradio-script-provenance>
-                        script citations: {autoradioScript.citation_count} · rollback refs: {autoradioScript.rollback_count}
-                      </small>
-                      {#if autoradioEpisode}
-                        <div
-                          class="autoradio-episode"
-                          data-global-wire-autoradio-episode
-                          data-global-wire-autoradio-episode-id={autoradioEpisode.id}
-                        >
-                          <strong>{autoradioEpisode.status}: {autoradioEpisode.title}</strong>
-                          <small data-global-wire-autoradio-episode-provenance>
-                            {autoradioEpisode.playback_mode} · {autoradioEpisode.duration_seconds}s · citations: {autoradioEpisode.citation_count} · rollback refs: {autoradioEpisode.rollback_count}
-                          </small>
-                          <button
-                            type="button"
-                            on:click={() => playAutoradioEpisode(autoradioEpisode)}
-                            data-global-wire-play-autoradio-episode
-                          >
-                            Play
-                          </button>
-                          {#if autoradioPlaybackStatus}
-                            <small data-global-wire-autoradio-playback-state>{autoradioPlaybackStatus}</small>
-                          {/if}
-                        </div>
-                      {:else}
-                        <button
-                          type="button"
-                          on:click={() => createAutoradioEpisode(autoradioScript)}
-                          disabled={reconciliationBusyId === `${autoradioScript.id}:autoradio-episode`}
-                          data-global-wire-create-autoradio-episode
-                        >
-                          Episode
-                        </button>
-                      {/if}
-                    </div>
-                  {/if}
-                  {#if deliveryExport}
-                    <div
-                      class="delivery-export"
-                      data-global-wire-delivery-export
-                      data-global-wire-delivery-export-id={deliveryExport.id}
-                    >
-                      <strong>{deliveryExport.status}: {deliveryExport.title}</strong>
-                      <span>{deliveryExport.export_body}</span>
-                      <small data-global-wire-delivery-export-provenance>
-                        export format: {deliveryExport.format} · citations: {deliveryExport.citation_count} · rollback refs: {deliveryExport.rollback_count}
-                      </small>
-                    </div>
-                    {#if publicLink}
-                      <small
-                        data-global-wire-public-link
-                        data-global-wire-public-link-id={publicLink.id}
-                      >
-                        {publicLink.status}: {publicLink.route_path}
-                      </small>
-                      {#if newsletterIssue}
-                        <div
-                          class="delivery-export"
-                          data-global-wire-newsletter-issue
-                          data-global-wire-newsletter-issue-id={newsletterIssue.id}
-                        >
-                          <strong>{newsletterIssue.status}: {newsletterIssue.subject}</strong>
-                          <span>{newsletterIssue.issue_body}</span>
-                          <small data-global-wire-newsletter-issue-provenance>
-                            subscribers: {newsletterIssue.subscriber_count} · citations: {newsletterIssue.citation_count} · rollback refs: {newsletterIssue.rollback_count}
-                          </small>
-                          {#each issueDeliveries.slice(0, 3) as issueDelivery}
-                            <small
-                              data-global-wire-newsletter-delivery
-                              data-global-wire-newsletter-delivery-id={issueDelivery.id}
-                            >
-                              {issueDelivery.status}: {issueDelivery.delivery_ref}
-                            </small>
-                          {/each}
-                          {#each issueReceipts.slice(0, 3) as receipt}
-                            <small
-                              data-global-wire-newsletter-provider-receipt
-                              data-global-wire-newsletter-provider-receipt-id={receipt.id}
-                            >
-                              {receipt.status}: {receipt.provider} · {receipt.provider_mode} · {receipt.message_id}
-                            </small>
-                          {/each}
-                        </div>
-                      {/if}
-                    {/if}
-                  {/if}
-                  <div class="publication-feed-actions">
-                    <button
-                      type="button"
-                      on:click={() => openPublicationDeliveryDetail(delivery)}
-                      disabled={reconciliationBusyId === `${delivery.id}:publication-delivery-detail`}
-                      data-global-wire-open-publication-delivery
-                    >
-                      Inspect
-                    </button>
-                    {#if !autoradioScript}
-                      <button
-                        type="button"
-                        on:click={() => createAutoradioScript(item)}
-                        disabled={reconciliationBusyId === `${item.artifact.id}:autoradio-script`}
-                        data-global-wire-create-autoradio-script
-                      >
-                        Script
-                      </button>
-                    {/if}
-                    {#if !deliveryExport}
-                      <button
-                        type="button"
-                        on:click={() => createDeliveryExport(delivery)}
-                        disabled={reconciliationBusyId === `${delivery.id}:delivery-export`}
-                        data-global-wire-create-delivery-export
-                      >
-                        Export
-                      </button>
-                    {/if}
-                    {#if deliveryExport && !publicLink}
-                      <button
-                        type="button"
-                        on:click={() => createPublicLink(deliveryExport)}
-                        disabled={reconciliationBusyId === `${deliveryExport.id}:public-link`}
-                        data-global-wire-create-public-link
-                      >
-                        Publish
-                      </button>
-                    {/if}
-                    {#if publicLink && !newsletterIssue}
-                      <button
-                        type="button"
-                        on:click={() => createNewsletterIssue(publicLink)}
-                        disabled={reconciliationBusyId === `${publicLink.id}:newsletter-issue`}
-                        data-global-wire-create-newsletter-issue
-                      >
-                        Issue
-                      </button>
-                    {/if}
-                  </div>
-                {:else if authenticated && item.status === 'publication-approved'}
-                  <div class="publication-feed-actions">
-                    <button
-                      type="button"
-                      on:click={() => createPublicationDelivery(item)}
-                      disabled={reconciliationBusyId === `${item.artifact.id}:publication-delivery`}
-                      data-global-wire-create-publication-delivery
-                    >
-                      Deliver
-                    </button>
-                    {#if autoradioScript}
-                      <div class="autoradio-script compact" data-global-wire-autoradio-script>
-                        <small>{autoradioScript.status}: {autoradioScript.title}</small>
-                        {#if autoradioEpisode}
-                          <small
-                            data-global-wire-autoradio-episode
-                            data-global-wire-autoradio-episode-id={autoradioEpisode.id}
-                          >
-                            {autoradioEpisode.status}: {autoradioEpisode.playback_mode}
-                          </small>
-                          <button
-                            type="button"
-                            on:click={() => playAutoradioEpisode(autoradioEpisode)}
-                            data-global-wire-play-autoradio-episode
-                          >
-                            Play
-                          </button>
-                          {#if autoradioPlaybackStatus}
-                            <small data-global-wire-autoradio-playback-state>{autoradioPlaybackStatus}</small>
-                          {/if}
-                        {:else}
-                          <button
-                            type="button"
-                            on:click={() => createAutoradioEpisode(autoradioScript)}
-                            disabled={reconciliationBusyId === `${autoradioScript.id}:autoradio-episode`}
-                            data-global-wire-create-autoradio-episode
-                          >
-                            Episode
-                          </button>
-                        {/if}
-                      </div>
-                    {:else}
-                      <button
-                        type="button"
-                        on:click={() => createAutoradioScript(item)}
-                        disabled={reconciliationBusyId === `${item.artifact.id}:autoradio-script`}
-                        data-global-wire-create-autoradio-script
-                      >
-                        Script
-                      </button>
-                    {/if}
-                  </div>
-                {:else if authenticated && item.status === 'publication-review-ready'}
-                  <div class="publication-feed-actions">
-                    <button
-                      type="button"
-                      on:click={() => reviewPublicationArtifact(item, 'approve')}
-                      disabled={reconciliationBusyId === `${item.artifact.id}:publication-approve`}
-                      data-global-wire-approve-publication-artifact
-                    >
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      on:click={() => reviewPublicationArtifact(item, 'reject')}
-                      disabled={reconciliationBusyId === `${item.artifact.id}:publication-reject`}
-                      data-global-wire-reject-publication-artifact
-                    >
-                      Reject
-                    </button>
-                  </div>
-                {/if}
-              </article>
-            {/each}
-          </div>
-        {/if}
-        {#if publicationDeliveryDetail}
-          <div class="publication-delivery-detail" data-global-wire-publication-delivery-detail>
-            <div class="section-title">
-              <h4>{publicationDeliveryDetail.artifact.title}</h4>
-              <span>{publicationDeliveryDetail.delivery.status} · {publicationDeliveryDetail.delivery.channel}</span>
-            </div>
-            <small data-global-wire-publication-delivery-detail-ref>
-              {publicationDeliveryDetail.delivery.delivery_ref}
-            </small>
-            <strong>{publicationDeliveryDetail.story.headline}</strong>
-            <p>{publicationDeliveryDetail.artifact.body}</p>
-            <small data-global-wire-publication-delivery-detail-source>
-              source {publicationDeliveryDetail.source_item?.title || publicationDeliveryDetail.artifact.source_content_id || 'story manifest'}
-            </small>
-            <small data-global-wire-publication-delivery-detail-citations>
-              citations: {(publicationDeliveryDetail.delivery.citation_refs || []).slice(0, 4).join(' · ')}
-            </small>
-            <small data-global-wire-publication-delivery-detail-rollback>
-              rollback refs: {(publicationDeliveryDetail.delivery.rollback_refs || []).slice(0, 4).join(' · ')}
-            </small>
-          </div>
-        {/if}
-        <label>
-          <span>Kind</span>
-          <select bind:value={contributionKind}>
-            <option value="source">Add source</option>
-            <option value="counter-source">Counter-source</option>
-            <option value="claim-dispute">Dispute claim</option>
-            <option value="argument">Make argument</option>
-            <option value="research-request">Request research</option>
-          </select>
-        </label>
-        <label>
-          <span>Contribution</span>
-          <textarea bind:value={contributionText} rows="4" placeholder="Add source URL, claim note, counter-evidence, or research request"></textarea>
-        </label>
-        <button type="button" class="submit-contribution" on:click={submitContribution} data-global-wire-submit-contribution>
-          Create user-owned contribution
+      <div class="source-actions">
+        <button type="button" on:click={() => runFetchCycle(false)} disabled={fetchCycleBusy} data-global-wire-fetch-cycle>
+          {fetchCycleBusy ? 'Running' : 'Fetch'}
         </button>
-        {#if contributionStatus}
-          <p class="contribution-status">{contributionStatus}</p>
-        {/if}
-        {#if contributions.length}
-          <div class="contribution-list" data-global-wire-contribution-list>
-            {#each contributions as item}
-              {@const source = contributionSource(item)}
-              {@const decision = contributionDecision(item)}
-              {@const candidate = contributionCandidate(item)}
-              {@const promotion = candidatePromotion(candidate)}
-              {@const reviews = candidateProjectionReviews(candidate)}
-              {@const claims = candidateClaimRecords(candidate)}
-              <article class="contribution-card" data-global-wire-reconciliation-item>
-                <p><strong>{item.kind.replaceAll('-', ' ')}</strong> · {item.text}</p>
-                <small>{item.research_state || 'pending-researcher-review'}</small>
-                {#if source}
-                  <div class="reconciliation-source" data-global-wire-reconciliation-source>
-                    <strong>{source.title}</strong>
-                    <small>{source.source_type} · {source.metadata?.schema || 'source artifact'}</small>
-                  </div>
-                {/if}
-                {#if decision}
-                  <small data-global-wire-reconciliation-decision>{decision.decision}: {decision.note}</small>
-                  {#if candidate}
-                    <div
-                      class="graph-candidate"
-                      data-global-wire-graph-candidate
-                      data-global-wire-candidate-id={candidate.id}
-                    >
-                      <strong>{candidate.candidate_kind}</strong>
-                      <small>{candidate.source_tier} · {candidate.edge_kind} · {candidate.status}</small>
-                      <span>{candidate.projection_action}</span>
-                      {#if claims.length}
-                        <div class="claim-research-list" data-global-wire-claim-records>
-                          {#each claims.slice(0, 2) as claim}
-                            {@const tasks = claimResearchTasks(claim)}
-                            {@const extractions = claimExtractionArtifacts(claim)}
-                            <article data-global-wire-claim-record data-global-wire-claim-id={claim.id}>
-                              <strong>{claim.claim_kind}</strong>
-                              <small>{claim.uncertainty_state} · {claim.dispute_state} · {claim.status}</small>
-                              <span>{claim.claim_text}</span>
-                              <em>{claim.evidence_gap}</em>
-                              {#each extractions.slice(0, 2) as extraction}
-                                <small
-                                  data-global-wire-extraction-artifact
-                                  data-global-wire-extraction-id={extraction.id}
-                                >
-                                  {extraction.status}: entities {(extraction.entities || []).length} · events {(extraction.events || []).length}
-                                </small>
-                                {#if (extraction.timeline || []).length}
-                                  <small data-global-wire-extraction-timeline>
-                                    {(extraction.timeline || [])[0]}
-                                  </small>
-                                {/if}
-                              {/each}
-                              {#each tasks.slice(0, 2) as task}
-                                {@const evidencePackets = taskEvidence(task)}
-                                <div
-                                  class="research-task"
-                                  data-global-wire-research-task
-                                  data-global-wire-research-task-id={task.id}
-                                >
-                                  <small>{task.task_kind}: {task.status} · {task.priority}</small>
-                                  <div class="research-task-actions">
-                                    <button
-                                      type="button"
-                                      on:click={() => updateResearchTask(task, 'assign')}
-                                      disabled={reconciliationBusyId === `${task.id}:assign`}
-                                      data-global-wire-assign-research-task
-                                    >
-                                      Assign
-                                    </button>
-                                    <button
-                                      type="button"
-                                      on:click={() => updateResearchTask(task, 'complete')}
-                                      disabled={reconciliationBusyId === `${task.id}:complete`}
-                                      data-global-wire-complete-research-task
-                                    >
-                                      Complete
-                                    </button>
-                                    <button
-                                      type="button"
-                                      on:click={() => updateResearchTask(task, 'block')}
-                                      disabled={reconciliationBusyId === `${task.id}:block`}
-                                      data-global-wire-block-research-task
-                                    >
-                                      Block
-                                    </button>
-                                  </div>
-                                  {#each evidencePackets.slice(0, 2) as evidence}
-                                    {@const handoff = evidenceDecision(evidence)}
-                                    {@const publicationUpdate = publicationUpdateForDecision(handoff)}
-                                    <small
-                                      data-global-wire-research-task-evidence
-                                      data-global-wire-research-evidence-id={evidence.id}
-                                    >
-                                      {evidence.status}: {evidence.summary}
-                                    </small>
-                                    {#if handoff}
-                                      <small data-global-wire-research-evidence-decision>
-                                        {handoff.decision}: {handoff.result_state}
-                                      </small>
-                                      {#if publicationUpdate}
-                                        {@const publicationArtifact = publicationArtifactForUpdate(publicationUpdate)}
-                                        <small
-                                          data-global-wire-publication-update
-                                          data-global-wire-publication-update-id={publicationUpdate.id}
-                                        >
-                                          {publicationUpdate.status}: {publicationUpdate.summary}
-                                        </small>
-                                        <small data-global-wire-publication-rollback>
-                                          rollback refs: {(publicationUpdate.rollback_refs || []).length}
-                                        </small>
-                                        <small data-global-wire-publication-extraction-refs>
-                                          extraction refs: {(publicationUpdate.extraction_ids || []).length}
-                                        </small>
-                                        {#if publicationArtifact}
-                                          <small
-                                            data-global-wire-publication-artifact
-                                            data-global-wire-publication-artifact-id={publicationArtifact.id}
-                                          >
-                                            {publicationArtifact.status}: {publicationArtifact.title}
-                                          </small>
-                                          <small data-global-wire-publication-artifact-citations>
-                                            citations: {(publicationArtifact.citation_refs || []).length} / scheduler refs: {(publicationArtifact.scheduler_run_ids || []).length}
-                                          </small>
-                                        {:else}
-                                          <div class="research-task-actions">
-                                            <button
-                                              type="button"
-                                              on:click={() => createPublicationArtifact(publicationUpdate)}
-                                              disabled={reconciliationBusyId === `${publicationUpdate.id}:publication-artifact`}
-                                              data-global-wire-create-publication-artifact
-                                            >
-                                              Build publication artifact
-                                            </button>
-                                          </div>
-                                        {/if}
-                                      {:else if handoff.result_state === 'ready-for-platform-review'}
-                                        <div class="research-task-actions">
-                                          <button
-                                            type="button"
-                                            on:click={() => packagePublicationUpdate(handoff)}
-                                            disabled={reconciliationBusyId === `${handoff.id}:publication-update`}
-                                            data-global-wire-package-publication-update
-                                          >
-                                            Package update
-                                          </button>
-                                        </div>
-                                      {/if}
-                                    {:else}
-                                      <div class="research-task-actions">
-                                        <button
-                                          type="button"
-                                          on:click={() => reviewResearchEvidence(evidence, 'accept')}
-                                          disabled={reconciliationBusyId === `${evidence.id}:accept`}
-                                          data-global-wire-accept-research-evidence
-                                        >
-                                          Accept
-                                        </button>
-                                        <button
-                                          type="button"
-                                          on:click={() => reviewResearchEvidence(evidence, 'block')}
-                                          disabled={reconciliationBusyId === `${evidence.id}:block`}
-                                          data-global-wire-block-research-evidence
-                                        >
-                                          Block
-                                        </button>
-                                      </div>
-                                    {/if}
-                                  {/each}
-                                </div>
-                              {/each}
-                            </article>
-                          {/each}
-                        </div>
-                      {/if}
-                      {#if promotion}
-                        <small data-global-wire-graph-promotion>
-                          {promotion.decision}: {promotion.applied_change}
-                        </small>
-                        {#if reviews.length}
-                          <div class="projection-review-list" data-global-wire-projection-reviews>
-                            {#each reviews.slice(0, 3) as review}
-                              <small data-global-wire-projection-review>
-                                {review.status}: {review.style_title || review.style_id}
-                              </small>
-                              {#if review.draft_story_doc_id}
-                                <button
-                                  type="button"
-                                  on:click={() => launchVText({
-                                    title: `Draft projection: ${selectedStory.headline}`,
-                                    content: '',
-                                    createdFrom: 'global_wire_projection_review_draft',
-                                    sourcePath: `global-wire/projection-drafts/${review.id}.vtext`,
-                                    docId: review.draft_story_doc_id,
-                                    createInitialVersion: false,
-                                  })}
-                                  data-global-wire-open-projection-draft
-                                  data-global-wire-projection-review-id={review.id}
-                                >
-                                  Open draft
-                                </button>
-                                {#if authenticated && review.status === 'draft-created'}
-                                  <button
-                                    type="button"
-                                    on:click={() => reviewProjectionDraft(review, 'approve')}
-                                    disabled={reconciliationBusyId !== ''}
-                                    data-global-wire-approve-projection-draft
-                                    data-global-wire-projection-review-id={review.id}
-                                  >
-                                    Approve draft
-                                  </button>
-                                  <button
-                                    type="button"
-                                    on:click={() => reviewProjectionDraft(review, 'reject')}
-                                    disabled={reconciliationBusyId !== ''}
-                                    data-global-wire-reject-projection-draft
-                                    data-global-wire-projection-review-id={review.id}
-                                  >
-                                    Reject draft
-                                  </button>
-                                {/if}
-                              {:else if authenticated}
-                                <button
-                                  type="button"
-                                  on:click={() => createProjectionDraft(review)}
-                                  disabled={reconciliationBusyId !== ''}
-                                  data-global-wire-create-projection-draft
-                                  data-global-wire-projection-review-id={review.id}
-                                >
-                                  Draft VText
-                                </button>
-                              {/if}
-                            {/each}
-                          </div>
-                        {/if}
-                      {:else if authenticated && candidate.status === 'candidate-review'}
-                        <div class="reconciliation-actions">
-                          <button
-                            type="button"
-                            on:click={() => reviewGraphCandidate(candidate, 'promoted')}
-                            disabled={reconciliationBusyId !== ''}
-                            data-global-wire-promote-candidate
-                          >
-                            Promote
-                          </button>
-                          <button
-                            type="button"
-                            on:click={() => reviewGraphCandidate(candidate, 'rejected')}
-                            disabled={reconciliationBusyId !== ''}
-                            data-global-wire-reject-candidate
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      {/if}
-                    </div>
-                  {/if}
-                {:else if authenticated}
-                  <div class="reconciliation-actions">
-                    <button
-                      type="button"
-                      on:click={() => reconcileContribution(item, 'accepted')}
-                      disabled={reconciliationBusyId !== ''}
-                      data-global-wire-reconcile-accept
-                    >
-                      Accept
-                    </button>
-                    <button
-                      type="button"
-                      on:click={() => reconcileContribution(item, 'rejected')}
-                      disabled={reconciliationBusyId !== ''}
-                      data-global-wire-reconcile-reject
-                    >
-                      Reject
-                    </button>
-                  </div>
-                {/if}
-              </article>
-            {/each}
-          </div>
-          {#if selectedDossier}
-            <article
-              class="source-dossier"
-              data-global-wire-source-dossier
-              data-global-wire-source-dossier-id={selectedDossier.id}
-            >
-              <div>
-                <strong>{selectedDossier.review_state}</strong>
-                <small>{selectedDossier.headline}</small>
-              </div>
-              <div class="dossier-grid">
-                {#each selectedDossier.manifest_tiers || [] as tier}
-                  <small data-global-wire-source-dossier-tier data-global-wire-source-tier={tier.tier}>
-                    {tier.tier}: {tier.count}
-                  </small>
-                {/each}
-              </div>
-              <small data-global-wire-source-dossier-claims>
-                claims: {(selectedDossier.claim_dossiers || []).length} · signals: {(selectedDossier.source_review_signals || []).length} · extractions: {(selectedDossier.extraction_ids || []).length} · tasks: {(selectedDossier.research_task_ids || []).length}
-              </small>
-              {#if (selectedDossier.source_review_signals || []).length}
-                <div class="dossier-signals" data-global-wire-source-review-signals>
-                  {#each (selectedDossier.source_review_signals || []).slice(0, 3) as signal}
-                    <small
-                      data-global-wire-source-review-signal
-                      data-global-wire-source-review-signal-id={signal.id}
-                    >
-                      {signal.signal_kind}: {signal.update_classification} · {signal.overlap_state} · {signal.contradiction_state} · {signal.source_standing}
-                    </small>
-                  {/each}
-                </div>
+        <button type="button" on:click={() => runFetchCycle(true)} disabled={fetchCycleBusy} data-global-wire-scheduler-cycle>
+          Schedule
+        </button>
+      </div>
+      {#if fetchCycleStatus}
+        <p class="source-status" data-global-wire-fetch-cycle-status>{fetchCycleStatus}</p>
+      {/if}
+
+      {#if fetchCycles.length || sourceRegistryEntries.length || sourceSchedulerRuns.length}
+        <div class="source-run-ledger" data-global-wire-fetch-cycle-runs>
+          {#each sourceSchedulerRuns.slice(0, 2) as run}
+            <p data-global-wire-source-scheduler-run>{run.status} · {run.trigger} · {run.message}</p>
+          {/each}
+          {#each fetchCycles.slice(0, 2) as cycle}
+            <p>{cycle.status} · {(cycle.source_content_ids || []).length} source refs · {cycle.message}</p>
+          {/each}
+          {#each sourceRegistryEntries.slice(0, 3) as entry}
+            <p data-global-wire-source-registry-entry>
+              {entry.source_scope} · {entry.status} · {entry.query}
+              {#if entry.source_standing_rationale}
+                <span data-global-wire-source-standing-policy>{entry.source_standing_rationale}</span>
               {/if}
-              <small data-global-wire-source-dossier-publication>
-                publications: {(selectedDossier.publication_refs?.artifact_ids || []).length} · deliveries: {(selectedDossier.publication_refs?.delivery_ids || []).length} · newsletter issues: {selectedDossierNewsletterIssueIds.length} · provider receipts: {sourceDossierNewsletterProviderReceiptIds(selectedDossier).length}
-              </small>
-              <small data-global-wire-source-dossier-provenance>
-                citations: {(selectedDossier.publication_refs?.citation_refs || []).length} · rollback refs: {(selectedDossier.publication_refs?.rollback_refs || []).length} · missing: {selectedDossierMissingFields.join(', ') || 'none'}
-              </small>
-              {#if (selectedDossier.entity_terms || []).length || (selectedDossier.event_terms || []).length}
-                <small data-global-wire-source-dossier-overlay>
-                  entities: {(selectedDossier.entity_terms || []).slice(0, 3).join(', ')} · events: {(selectedDossier.event_terms || []).slice(0, 2).join(', ')}
-                </small>
+              {#if entry.cadence_seconds}
+                <span data-global-wire-source-schedule-cadence>cadence {entry.cadence_seconds}s</span>
               {/if}
-              {#if (selectedDossier.timeline || []).length}
-                <small data-global-wire-source-dossier-timeline>
-                  {(selectedDossier.timeline || [])[0]}
-                </small>
-              {/if}
+            </p>
+          {/each}
+        </div>
+      {/if}
+
+      <div class="source-list">
+        {#each sourceChronology.slice(0, 24) as source}
+          <button
+            type="button"
+            data-source-tier={source.tier}
+            on:click={() => (selectedStoryId = source.storyId)}
+          >
+            <span>{source.tier}</span>
+            <strong>{source.title}</strong>
+            <small>{source.standing} · {source.storyHeadline}</small>
+          </button>
+        {/each}
+      </div>
+
+      {#if sourceSearchResults.length}
+        <div class="source-search-results" data-global-wire-source-search-results>
+          {#each sourceSearchResults.slice(0, 6) as result}
+            <article>
+              <strong>{result.title}</strong>
+              <small>{result.source_type} · {result.metadata?.schema || 'source artifact'}</small>
             </article>
-          {/if}
-        {/if}
-      </section>
+          {/each}
+        </div>
+      {/if}
     </aside>
   </main>
+
+  <footer class="wire-disclosure">
+    <section data-global-wire-style-switcher>
+      <span>Style.vtext</span>
+      {#each styleSources as style}
+        <button
+          type="button"
+          class:active={style.id === selectedStyle.id}
+          aria-label={`Use ${style.title}`}
+          title={style.title}
+          on:click={() => (selectedStyleId = style.id)}
+        >
+          {style.label}
+        </button>
+      {/each}
+      <button type="button" aria-label="Open Style.vtext" title="Open Style.vtext" on:click={() => openStyleVText(selectedStyle)} data-global-wire-open-style>S</button>
+      {#if authenticated}
+        <button type="button" on:click={() => updateStyleSource('compose')} disabled={styleSourceBusy} data-global-wire-compose-style>Compose</button>
+        <button type="button" on:click={() => updateStyleSource('replace')} disabled={styleSourceBusy} data-global-wire-replace-style>Replace</button>
+      {/if}
+      <small>Cites {selectedStyle.title}; source provenance stays with the VText version.</small>
+      {#if styleSourceStatus}
+        <small data-global-wire-style-source-status>{styleSourceStatus}</small>
+      {/if}
+    </section>
+    <section>
+      <button type="button" on:click={submitStoryAction} disabled={storyActionBusy !== ''} data-global-wire-ask-choir>Ask</button>
+      {#if storyActionStatus}
+        <small data-global-wire-story-action-status>{storyActionStatus}</small>
+      {/if}
+    </section>
+  </footer>
 </section>
 
 <style>
+  :global(.global-wire-content) {
+    overflow: auto;
+  }
+
   .global-wire {
-    display: flex;
-    flex-direction: column;
     min-height: 100%;
-    gap: 0.75rem;
     color: var(--choir-text-primary);
+    background: var(--choir-surface-app);
+    font-family: var(--choir-font-ui);
+    padding: clamp(18px, 3vw, 34px);
   }
 
-  .wire-header,
-  .wire-layout,
-  .front-page,
-  .story-reader,
-  .right-rail,
-  .evidence,
-  .graph,
-  .contribution,
-  .style-switcher,
-  .claims {
-    min-width: 0;
+  .wire-masthead,
+  .wire-paper,
+  .wire-disclosure {
+    width: min(1320px, 100%);
+    margin: 0 auto;
   }
 
-  .wire-header {
+  .wire-masthead {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
-    gap: 1rem;
-    padding: 0.9rem 1rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-pane);
+    gap: 24px;
+    margin-bottom: clamp(22px, 4vw, 44px);
   }
 
-  .eyebrow,
-  .section-title span,
+  .kicker,
+  .article-meta,
+  .source-line,
+  .source-list span,
   .wire-state span,
-  small {
+  .wire-state small,
+  .edition-head,
+  .wire-disclosure span,
+  .wire-disclosure small,
+  .source-status,
+  .source-run-ledger,
+  .source-search-results small {
     color: var(--choir-text-muted);
-  }
-
-  .eyebrow {
-    margin: 0 0 0.25rem;
-    font-size: 0.72rem;
-    font-weight: 760;
-    text-transform: uppercase;
+    font-family: var(--choir-font-ui);
+    font-size: 0.78rem;
+    font-weight: 700;
     letter-spacing: 0;
   }
 
-  h1,
+  .kicker {
+    margin: 0 0 4px;
+    color: var(--choir-text-accent);
+    text-transform: uppercase;
+  }
+
   h2,
   h3,
-  h4,
+  h1,
   p {
     margin: 0;
   }
 
-  h1 {
-    font-family: var(--choir-font-display);
-    font-size: clamp(1.45rem, 3vw, 2.45rem);
-    line-height: 1.05;
-    letter-spacing: 0;
-  }
-
   h2 {
-    font-size: 1.25rem;
-    letter-spacing: 0;
-  }
-
-  h3 {
-    font-size: 0.95rem;
-    letter-spacing: 0;
-  }
-
-  h4 {
-    color: var(--choir-text-muted);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0;
+    font-family: var(--choir-font-display);
+    font-size: clamp(2rem, 4vw, 4.4rem);
+    line-height: 0.95;
   }
 
   .wire-state {
+    text-align: right;
     display: grid;
-    gap: 0.15rem;
-    justify-items: end;
-    font-size: 0.82rem;
+    gap: 3px;
+  }
+
+  .wire-state strong {
+    font-size: 1.35rem;
   }
 
   .wire-load-error {
-    padding: 0 1rem;
-    color: var(--choir-text-muted);
-    font-size: 0.82rem;
+    width: min(1320px, 100%);
+    margin: 0 auto 18px;
+    color: var(--choir-status-danger);
   }
 
-  .wire-layout {
+  .wire-paper {
     display: grid;
-    grid-template-columns: minmax(220px, 0.72fr) minmax(360px, 1.42fr) minmax(280px, 0.9fr);
-    gap: 0.75rem;
-    flex: 1;
-    overflow: hidden;
-  }
-
-  .front-page,
-  .story-reader,
-  .right-rail > section {
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-app);
-    overflow: auto;
-  }
-
-  .front-page,
-  .story-reader {
-    overflow: auto;
-  }
-
-  .front-page,
-  .story-reader,
-  .right-rail > section {
-    padding: 0.85rem;
-  }
-
-  .right-rail {
-    display: grid;
-    grid-template-rows: minmax(220px, 1fr) minmax(220px, 0.9fr) minmax(240px, 0.9fr);
-    gap: 0.75rem;
-    overflow: auto;
-  }
-
-  .section-title {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-bottom: 0.65rem;
-  }
-
-  .story-list {
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  .story-row,
-  .reader-actions button,
-  .style-tabs button,
-  .section-title button,
-  .submit-contribution,
-  .source-search-button,
-  .reconciliation-actions button,
-  .graph-node {
-    min-height: 2.35rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-control);
-    color: var(--choir-text-primary);
-    font: inherit;
-    cursor: pointer;
-  }
-
-  .story-row {
-    display: grid;
-    grid-template-columns: 0.8rem minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.55rem;
-    width: 100%;
-    padding: 0.7rem;
-    text-align: left;
-  }
-
-  .story-row.selected,
-  .style-tabs button.active,
-  .graph-node.selected {
-    border-color: var(--choir-border-strong);
-    background: var(--choir-state-selected);
-  }
-
-  .story-copy {
-    display: grid;
-    gap: 0.25rem;
-    min-width: 0;
-  }
-
-  .story-copy strong {
-    overflow-wrap: anywhere;
-    line-height: 1.2;
-  }
-
-  .prominence {
-    color: var(--choir-text-accent);
-    font-weight: 760;
-  }
-
-  .story-dot {
-    width: 0.7rem;
-    height: 0.7rem;
-    border-radius: 999px;
-    background: var(--choir-chart-1);
-  }
-
-  .story-dot.changed,
-  .graph-node.changed {
-    background: var(--choir-status-warning-soft);
-  }
-
-  .story-dot.cooling,
-  .graph-node.cooling {
-    background: var(--choir-status-success-soft);
-  }
-
-  .story-reader {
-    display: grid;
-    align-content: start;
-    gap: 0.9rem;
-  }
-
-  .story-reader-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.85rem;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+    gap: clamp(28px, 4vw, 56px);
     align-items: start;
   }
 
-  .reader-actions {
+  .edition-head {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-    justify-content: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
   }
 
-  .reader-actions button,
-  .section-title button,
-  .style-tabs button,
-  .submit-contribution,
-  .source-search-button,
-  .reconciliation-actions button {
-    padding: 0.45rem 0.7rem;
-    font-weight: 720;
+  .article-columns {
+    column-width: 320px;
+    column-gap: clamp(28px, 4vw, 54px);
+  }
+
+  .wire-article {
+    position: relative;
+    break-inside: avoid;
+    margin: 0 0 clamp(28px, 4vw, 48px);
+    padding: 0 0 2px;
+  }
+
+  .wire-article[data-selected='true'] h1 {
+    color: var(--choir-text-accent);
+  }
+
+  .article-tools {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    gap: 6px;
+    opacity: 0.72;
+  }
+
+  .wire-article:hover .article-tools,
+  .wire-article:focus-within .article-tools {
+    opacity: 1;
+  }
+
+  .article-tools button,
+  .wire-disclosure button,
+  .source-actions button,
+  .source-search button {
+    min-width: 36px;
+    min-height: 32px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--choir-surface-control);
+    color: var(--choir-text-primary);
+    box-shadow: var(--choir-control-shadow);
+    font: 700 0.82rem/1 var(--choir-font-ui);
+    cursor: pointer;
+  }
+
+  .article-tools button:hover,
+  .article-tools button:focus-visible,
+  .wire-disclosure button:hover,
+  .wire-disclosure button:focus-visible,
+  .source-actions button:hover,
+  .source-actions button:focus-visible,
+  .source-search button:hover,
+  .source-search button:focus-visible,
+  .wire-disclosure button.active {
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
+    outline: none;
+  }
+
+  .article-meta {
+    padding-right: 82px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+
+  .wire-article h1 {
+    font-family: var(--choir-font-display);
+    font-size: clamp(1.75rem, 3.4vw, 3.3rem);
+    line-height: 0.98;
+    margin-bottom: 12px;
+  }
+
+  .dek,
+  .projection,
+  .claims p {
+    font-family: Georgia, 'Times New Roman', ui-serif, serif;
+    font-size: clamp(1.02rem, 1.4vw, 1.28rem);
+    line-height: 1.48;
+    color: var(--choir-text-primary);
   }
 
   .dek {
     color: var(--choir-text-muted);
-    line-height: 1.45;
-  }
-
-  .story-action-status {
-    color: var(--choir-text-accent);
-    font-size: 0.86rem;
-  }
-
-  .style-switcher,
-  .claims {
-    display: grid;
-    gap: 0.7rem;
-    padding: 0.75rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-pane);
-  }
-
-  .style-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-  }
-
-  .style-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-    justify-content: flex-end;
+    margin-bottom: 13px;
   }
 
   .projection {
-    display: grid;
-    gap: 0.55rem;
-    padding: 0.75rem;
-    border-left: 3px solid var(--choir-border-strong);
-    background: var(--choir-surface-card);
+    margin-bottom: 12px;
   }
 
-  .projection p,
-  .claims li {
-    line-height: 1.45;
-  }
-
-  .style-source-status {
+  .source-line {
     color: var(--choir-text-accent);
-    font-size: 0.82rem;
+    margin-bottom: 12px;
   }
 
-  .claims ul {
+  .claims {
     display: grid;
-    gap: 0.45rem;
-    margin: 0;
-    padding-left: 1.1rem;
+    gap: 8px;
   }
 
-  .source-tier {
-    display: grid;
-    gap: 0.4rem;
-    margin-bottom: 0.7rem;
-  }
-
-  .source-item {
-    display: grid;
-    gap: 0.18rem;
-    padding: 0.55rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-card);
-  }
-
-  .graph-canvas {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.55rem;
-    align-items: stretch;
-  }
-
-  .graph-node {
-    display: grid;
-    place-items: center;
-    min-height: var(--node-size);
-    padding: 0.45rem;
-    background: var(--choir-state-hover);
-    overflow: hidden;
-  }
-
-  .graph-node span {
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    font-size: 0.78rem;
-    line-height: 1.18;
-  }
-
-  .contribution {
-    display: grid;
-    gap: 0.65rem;
-  }
-
-  label {
-    display: grid;
-    gap: 0.3rem;
-  }
-
-  label span {
+  .claims p {
     color: var(--choir-text-muted);
-    font-size: 0.78rem;
-    font-weight: 720;
+    font-size: 1rem;
   }
 
-  input,
-  select,
-  textarea {
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-input);
-    color: var(--choir-text-primary);
-    font: inherit;
+  .source-column {
+    position: sticky;
+    top: 0;
   }
 
-  input,
-  select {
-    min-height: 2.35rem;
-    padding: 0.35rem 0.5rem;
+  .source-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 12px;
+    margin-bottom: 18px;
   }
 
-  textarea {
-    resize: vertical;
-    min-height: 6rem;
-    padding: 0.55rem;
-    line-height: 1.35;
+  .source-head h3 {
+    font-size: 1.4rem;
   }
 
-  .submit-contribution,
-  .source-search-button {
-    background: var(--choir-accent);
-    color: var(--choir-on-accent);
+  .source-head > span {
+    color: var(--choir-text-accent);
+    font-weight: 800;
+    font-size: 1.3rem;
   }
 
   .source-search {
     display: grid;
-    gap: 0.5rem;
-    padding: 0.55rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-pane);
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-bottom: 10px;
   }
 
-  .queue-toggle {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
+  .source-search input {
+    min-width: 0;
+    border: 0;
+    border-radius: 999px;
+    background: var(--choir-surface-input);
+    color: var(--choir-text-primary);
+    padding: 10px 14px;
+    font: 700 0.9rem/1.2 var(--choir-font-ui);
   }
 
-  .queue-toggle input {
-    width: auto;
-    min-height: 0;
+  .source-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
   }
 
-  .source-search-status,
-  .contribution-status {
+  .source-status,
+  .source-run-ledger {
+    margin: 0 0 12px;
+  }
+
+  .source-run-ledger {
+    display: grid;
+    gap: 7px;
+    color: var(--choir-text-subtle);
+  }
+
+  .source-run-ledger span {
+    display: block;
     color: var(--choir-text-accent);
-    font-size: 0.85rem;
+  }
+
+  .source-list {
+    display: grid;
+    gap: 14px;
+  }
+
+  .source-list button {
+    display: grid;
+    gap: 3px;
+    padding: 0;
+    text-align: left;
+    border: 0;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .source-list button:hover strong,
+  .source-list button:focus-visible strong {
+    color: var(--choir-text-accent);
+  }
+
+  .source-list strong,
+  .source-search-results strong {
+    font-size: 0.98rem;
+    line-height: 1.2;
+  }
+
+  .source-list small,
+  .source-search-results small {
+    color: var(--choir-text-muted);
+    line-height: 1.25;
   }
 
   .source-search-results {
     display: grid;
-    gap: 0.35rem;
-    max-height: 8rem;
-    overflow: auto;
+    gap: 12px;
+    margin-top: 18px;
   }
 
   .source-search-results article {
     display: grid;
-    gap: 0.15rem;
-    padding: 0.4rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-card);
+    gap: 4px;
   }
 
-  .source-search-results strong {
-    overflow-wrap: anywhere;
-  }
-
-  .publication-feed {
-    display: grid;
-    gap: 0.4rem;
-    padding: 0.55rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-pane);
-  }
-
-  .publication-feed article {
-    display: grid;
-    gap: 0.2rem;
-    padding: 0.45rem;
-    border: 1px solid var(--choir-border);
-    border-left: 3px solid var(--choir-border-strong);
-    border-radius: 8px;
-    background: var(--choir-surface-card);
-    font-size: 0.82rem;
-    line-height: 1.3;
-  }
-
-  .publication-feed strong,
-  .publication-feed span {
-    overflow-wrap: anywhere;
-  }
-
-  .publication-feed span {
-    display: -webkit-box;
-    -webkit-line-clamp: 5;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .publication-feed-actions {
+  .wire-disclosure {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
+    justify-content: space-between;
+    gap: 18px;
+    margin-top: clamp(22px, 4vw, 44px);
+    padding-top: 16px;
   }
 
-  .publication-feed-actions button {
-    flex: 1 1 5.25rem;
-    min-height: 2rem;
-    padding: 0.32rem 0.5rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-control);
-    color: var(--choir-text-primary);
-    font: inherit;
-    font-size: 0.72rem;
-    font-weight: 720;
-    cursor: pointer;
-  }
-
-  .autoradio-script {
-    display: grid;
-    gap: 0.22rem;
-    padding: 0.38rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-pane);
-  }
-
-  .autoradio-script span {
-    -webkit-line-clamp: 6;
-  }
-
-  .autoradio-script.compact {
-    padding: 0.25rem;
-  }
-
-  .autoradio-episode {
-    display: grid;
-    gap: 0.22rem;
-    padding: 0.35rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-card);
-  }
-
-  .delivery-export {
-    display: grid;
-    gap: 0.22rem;
-    padding: 0.38rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-pane);
-  }
-
-  .delivery-export span {
-    -webkit-line-clamp: 7;
-  }
-
-  .publication-delivery-detail {
-    display: grid;
-    gap: 0.4rem;
-    padding: 0.55rem;
-    border: 1px solid var(--choir-border);
-    border-left: 3px solid var(--choir-border-strong);
-    border-radius: 8px;
-    background: var(--choir-surface-pane);
-    font-size: 0.82rem;
-    line-height: 1.32;
-  }
-
-  .publication-delivery-detail p {
-    display: -webkit-box;
-    -webkit-line-clamp: 7;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    line-height: 1.35;
-  }
-
-  .publication-delivery-detail strong,
-  .publication-delivery-detail p,
-  .publication-delivery-detail small {
-    overflow-wrap: anywhere;
-  }
-
-  .contribution-list {
-    display: grid;
-    gap: 0.4rem;
-  }
-
-  .contribution-card {
-    display: grid;
-    gap: 0.4rem;
-    padding: 0.45rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-card);
-    font-size: 0.82rem;
-    line-height: 1.3;
-  }
-
-  .contribution-card p {
-    line-height: 1.3;
-  }
-
-  .reconciliation-source,
-  .graph-candidate,
-  .source-dossier {
-    display: grid;
-    gap: 0.15rem;
-    padding: 0.45rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-pane);
-  }
-
-  .graph-candidate {
-    border-left: 3px solid var(--choir-border-strong);
-    position: relative;
-  }
-
-  .source-dossier {
-    gap: 0.35rem;
-    border-left: 3px solid var(--choir-border-strong);
-    font-size: 0.82rem;
-    line-height: 1.3;
-  }
-
-  .dossier-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.25rem;
-  }
-
-  .dossier-signals {
-    display: grid;
-    gap: 0.2rem;
-  }
-
-  .source-dossier small {
-    overflow-wrap: anywhere;
-  }
-
-  .reconciliation-source strong,
-  .graph-candidate strong,
-  .graph-candidate span,
-  .source-dossier strong {
-    overflow-wrap: anywhere;
-  }
-
-  .projection-review-list {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .projection-review-list small {
-    display: block;
-  }
-
-  .projection-review-list button {
-    justify-self: start;
-    position: relative;
-    z-index: 1;
-    min-height: 2.1rem;
-    padding: 0.35rem 0.65rem;
-  }
-
-  .claim-research-list {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .claim-research-list article {
-    display: grid;
-    gap: 0.18rem;
-    padding: 0.4rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-card);
-  }
-
-  .claim-research-list em {
-    color: var(--choir-text-muted);
-    font-style: normal;
-    overflow-wrap: anywhere;
-  }
-
-  .research-task {
-    display: grid;
-    gap: 0.3rem;
-    min-width: 0;
-  }
-
-  .research-task-actions {
+  .wire-disclosure section {
     display: flex;
+    align-items: center;
     flex-wrap: wrap;
-    gap: 0.35rem;
+    gap: 8px;
   }
 
-  .research-task-actions button {
-    flex: 1 1 4.75rem;
-    min-height: 2rem;
-    padding: 0.32rem 0.5rem;
-    font-size: 0.72rem;
+  .wire-disclosure small {
+    max-width: 520px;
   }
 
-  .reconciliation-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
+  :global(:root[data-theme-id='london-salmon']) .global-wire {
+    background: var(--choir-surface-document);
   }
 
-  .reconciliation-actions button {
-    flex: 1 1 5.5rem;
+  :global(:root[data-theme-id='london-salmon']) .wire-article h1,
+  :global(:root[data-theme-id='london-salmon']) h2,
+  :global(:root[data-theme-id='london-salmon']) h3,
+  :global(:root[data-theme-id='london-salmon']) .dek,
+  :global(:root[data-theme-id='london-salmon']) .projection,
+  :global(:root[data-theme-id='london-salmon']) .claims p {
+    font-family: Georgia, 'Times New Roman', ui-serif, serif;
   }
 
-  @media (max-width: 1080px) {
-    .wire-layout {
-      grid-template-columns: minmax(220px, 0.8fr) minmax(340px, 1.2fr);
-    }
-
-    .right-rail {
-      grid-column: 1 / -1;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      grid-template-rows: auto;
-    }
+  :global(:root[data-theme-id='carbon-fiber-kintsugi']) .wire-article h1 {
+    color: var(--choir-accent-2);
   }
 
-  @media (max-width: 760px) {
+  :global(:root[data-theme-id='carbon-fiber-kintsugi']) .wire-article[data-selected='true'] h1 {
+    color: var(--choir-accent);
+  }
+
+  @media (max-width: 820px) {
     .global-wire {
-      overflow: auto;
+      padding: 18px;
     }
 
-    .wire-header,
-    .story-reader-header,
-    .wire-layout,
-    .right-rail {
+    .wire-masthead {
       display: grid;
-      grid-template-columns: 1fr;
-    }
-
-    .wire-layout,
-    .right-rail {
-      overflow: visible;
+      gap: 12px;
+      margin-bottom: 26px;
     }
 
     .wire-state {
-      justify-items: start;
+      text-align: left;
     }
 
-    .reader-actions {
-      justify-content: stretch;
+    .wire-paper {
+      display: block;
     }
 
-    .reader-actions button,
-    .section-title button {
-      flex: 1 1 9rem;
+    .article-columns {
+      column-width: auto;
+      column-count: 1;
+    }
+
+    .source-column {
+      position: static;
+      margin-top: 28px;
+    }
+
+    .wire-disclosure {
+      display: grid;
     }
   }
 </style>

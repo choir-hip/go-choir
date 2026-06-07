@@ -527,19 +527,23 @@ safe executable probe or external authority requirement are recorded.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-07 mission revised for ambitious delivered status:
-SourceMaxx ingestion, processors, reconcilers, existing researcher reuse,
-existing VText reuse, deep Style.vtext routing, VText-native provenance,
-newspaper UI, and staging/product-path proof.
+last checkpoint: 2026-06-07 product-surface checkpoint after replacing the
+dense Global Wire dashboard with a SourceMaxx newspaper/source-chronology
+surface. This is useful shipped-direction progress, not delivered mission
+completion.
 
-current artifact state: prior Global Wire slices exist and staging has some
-Source Service-backed paths, StoryGraph/VText/projection/contribution records,
-publication artifacts, newsletter ledgers, and a dense Global Wire app surface.
-The current product direction is insufficient: source processing is too close
-to manual/source-refresh semantics, the UI is too busy, processors/reconcilers
-do not yet exist as product roles, and Style.vtexts are not yet deep
-publication artifacts. A partial source-refresh batch experiment from the
-superseded route is preserved in
+current artifact state: prior Global Wire slices still exist in backend
+storage/runtime APIs and staging has some Source Service-backed paths,
+StoryGraph/VText/projection/contribution records, publication artifacts, and
+newsletter ledgers. The visible News app surface has now been simplified into a
+SourceMaxx desk: front-page article columns, a source chronology column, quiet
+per-article VText affordances, compact Style.vtext controls, no app-local
+theme selector, no contribution dashboard, no Autoradio surface, no repeated
+`Open in VText` label text, no story border lines, and no nested app-panel
+scrolling. Source processing remains too close to manual/source-refresh
+semantics, processors/reconcilers do not yet exist as product roles, and
+Style.vtexts are not yet deep publication artifacts. A partial source-refresh
+batch experiment from the superseded route is preserved in
 `stash@{1}` named
 `superseded-global-wire-source-refresh-batch-experiment-2026-06-07`.
 The wrong pipeline-shaped processor/reconciler request code is preserved in
@@ -547,11 +551,29 @@ The wrong pipeline-shaped processor/reconciler request code is preserved in
 `wrong-pipeline-processor-reconciler-request-slice-2026-06-07` and must not be
 reapplied blindly.
 
-what shipped: docs-only mission/spec/design-language rewrite unless a later
-checkpoint says otherwise. The next run is expected to ship product behavior,
-not another docs-only plan.
+what shipped: behavior checkpoint in
+`frontend/src/lib/GlobalWireApp.svelte` and
+`frontend/tests/global-wire-app.spec.js`. The visible Global Wire app now
+projects the mission design language: clean newspaper columns plus source
+chronology instead of a dense StoryGraph/contribution/newsletter/Autoradio
+dashboard. Every article has a quiet VText button and fork button. Style.vtext
+routing remains compact and citeable.
 
-what was proven: not yet run under this rewritten mission.
+what was proven:
+
+- `npm --prefix frontend run build` passed.
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm --prefix frontend run e2e -- tests/global-wire-app.spec.js --project=chromium --workers=1 --reporter=line`
+  passed: 4 tests.
+- Browser plugin inspection of `http://127.0.0.1:5173/` confirmed
+  `SourceMaxx desk`, 3 article VText open affordances, 16 sources in source
+  chronology, first story `borderTopWidth: 0px`, first story
+  `backgroundColor: rgba(0, 0, 0, 0)`, first source row transparent with no
+  shadow, and source chronology text visible.
+- `nix develop -c go test ./internal/runtime -run 'TestGlobalWire'` passed
+  with no matching tests.
+- `nix develop -c go test ./internal/store -run 'TestGlobalWire'` passed with
+  no matching tests.
+- `nix develop -c go test ./internal/sources ./cmd/sourcecycled` passed.
 
 unproven or partial claims:
 
@@ -578,6 +600,10 @@ belief-state changes:
 - Existing researcher and VText agents are required infrastructure to reuse.
 - Style.vtext routing is editorial judgment, not exhaustive permutation.
 - UI correctness depends on source breadth and readability, not more panels.
+- The previous frontend was optimizing the wrong visible object: it exposed
+  artifact machinery as a dashboard before source breadth and article
+  readability were solved. The SourceMaxx surface should stay text-led while
+  deeper provenance remains available through VText/source disclosure.
 
 remaining error field:
 
@@ -587,7 +613,12 @@ remaining error field:
   channels, and compaction policy;
 - processor load budget and routing scheme;
 - current researcher/VText agent invocation contracts for this workflow;
-- deletion/reuse map for current Global Wire UI/source paths.
+- deletion/reuse map for current Global Wire backend source paths;
+- backend still uses many `StoryGraph` names and deferred contribution,
+  newsletter, and Autoradio endpoints that should be audited before further
+  product exposure;
+- staging proof for the redesigned UI and deployed source behavior remains to
+  be run after commit/push/deploy.
 
 highest-impact remaining uncertainty: whether the deployed source system and
 runtime can ingest high-volume GDELT/RSS/Telegram/search batches and feed
@@ -596,29 +627,32 @@ storage, or agent-runtime changes.
 
 next executable delivery loop:
 
-1. Inspect `cmd/sourcecycled`, `internal/sources`, source storage, runtime agent
-   role contracts, researcher invocation, VText invocation, current Global Wire
-   source paths, and theme/UI code. Produce a deletion/reuse map only as a
-   working artifact for the implementation, not as a stopping point.
-2. Replace wrong-object paths while preserving product topology: high-volume
+1. Commit and push the SourceMaxx UI/product-surface checkpoint; monitor CI,
+   deploy identity, and staging behavior before treating it as shipped.
+2. Inspect and mutate `cmd/sourcecycled`, `internal/sources`, source storage,
+   runtime agent role contracts, researcher invocation, VText invocation, and
+   current Global Wire backend source paths. Produce a deletion/reuse map only
+   as a working artifact for implementation, not as a stopping point.
+3. Replace wrong-object paths while preserving product topology: high-volume
    source ingestion, durable SourceItems, routing, processor state,
    reconciler corpus review, researcher request/result reuse, VText
    write/revision reuse, Style.vtext routing, VText traversal/source indexes,
    and user-owned VText boundaries.
-3. Discard or selectively mine the stashed source-refresh experiment only if it
+4. Discard or selectively mine the stashed source-refresh experiment only if it
    helps the delivered architecture; do not revive click-time source refresh as
    the product object.
-4. Build through to staging behavior: tests, commit, push, CI/deploy monitor,
+5. Build through to staging behavior: tests, commit, push, CI/deploy monitor,
    staging identity, product-path source volume, processor/reconciler evidence,
    researcher/VText reuse evidence, ownership evidence, and browser screenshots.
-5. Perform a quality pass before claiming delivery: simplify names and data
+6. Perform a quality pass before claiming delivery: simplify names and data
    flows, remove obsolete panels/routes/tests, make Style.vtexts publication
    quality, and make the Global Wire UI nice in Futuristic Noir, Carbon Fiber
    Kintsugi, London Salmon, and responsive Choir web desktop layouts.
 
 suggested resume goal string: use the Goal String section above.
 
-evidence artifact refs: none yet for this rewritten mission.
+evidence artifact refs: local browser screenshot emitted through Browser
+plugin during this run; focused frontend and source test commands listed above.
 
 rollback refs: prior branch/worktree state before this mission;
 `stash@{1}` named
