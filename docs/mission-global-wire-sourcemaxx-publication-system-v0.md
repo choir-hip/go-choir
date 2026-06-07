@@ -610,11 +610,33 @@ what was proven:
   items, and 38 Telegram items. Fetch status was `ok` for all 14 configured
   sources, with some feeds valid but empty for the cycle (`arxiv:cs_ai`,
   `rss:nikkei_asia`, `telegram:conflict_monitor`).
+- Commit `32046f713f08c28bfcb735f12427adec8ab85749` was pushed to
+  `origin/main`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27094523970` completed
+  successfully for commit `32046f713f08c28bfcb735f12427adec8ab85749`,
+  including staging deploy.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27094523958` completed
+  successfully for commit `32046f713f08c28bfcb735f12427adec8ab85749`.
+- `https://choir.news/health` reported deployed commit
+  `32046f713f08c28bfcb735f12427adec8ab85749` with deployed_at
+  `2026-06-07T13:55:50Z`.
+- Public-edge probes of
+  `https://choir.news/internal/source-service/health` and
+  `https://choir.news/internal/source-service/sourcemaxx/latest` returned
+  HTTP 403 with `internal routes are not available from the public edge`. This
+  confirms the internal boundary; it does not prove staging sourcecycled volume.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/global-wire-app.spec.js --project=chromium --workers=1 --reporter=line`
+  passed on deployed staging after the source-runtime change: 4 tests.
 
 unproven or partial claims:
 
-- hundreds of source items per 15 minutes on staging;
-- expanded GDELT/RSS/Telegram source configuration observed on staging;
+- hundreds of source items per 15 minutes on staging; local sourcecycled
+  proved 710 items in one cycle, but public staging cannot expose `/internal/*`
+  as proof;
+- expanded GDELT/RSS/Telegram source configuration observed on staging beyond
+  deployed commit identity;
 - processor contracts and long-running context continuity;
 - processor compaction with handles to full source content;
 - reconciler contracts and corpus-level contradiction/question behavior across
@@ -649,8 +671,9 @@ belief-state changes:
 
 remaining error field:
 
-- exact current sourcecycled staging configuration and source volume after
-  deploy;
+- exact current sourcecycled staging runtime state and source volume after
+  deploy; public-edge `/internal/*` correctly returns 403, so a verifier needs
+  an authorized internal or product-path source-service probe;
 - source daemon/storage ability to handle hundreds of items per 15 minutes on
   staging;
 - processor/reconciler runtime contracts, same-loop tool use, request/result
@@ -662,38 +685,44 @@ remaining error field:
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether staging sourcecycled runs the
+highest-impact remaining uncertainty: whether staging sourcecycled has run the
 expanded registry and whether queued processor/reconciler handoffs can be
 consumed by resident agents with preserved context and existing researcher/VText
-agent reuse without deeper runtime changes.
+agent reuse without deeper runtime changes. The source-service internal API is
+not public-edge accessible, so staging source volume proof needs an authorized
+internal verifier, source_search-mediated researcher proof, or a product-safe
+acceptance endpoint.
 
 next executable delivery loop:
 
 1. Commit and push the SourceMaxx source-runtime checkpoint; monitor CI,
    staging deploy identity, and sourcecycled/source-service behavior.
-2. Probe staging sourcecycled `/internal/source-service/health`,
-   `/internal/source-service/sourcemaxx/latest`, and researcher `source_search`
-   product paths where accessible; record exact source volume, fetch statuses,
-   processor handoffs, and reconciler handoff evidence.
-3. Connect queued processor/reconciler handoffs to resident agent runs using
+2. Add or use an authorized staging verifier for SourceMaxx internals without
+   exposing `/internal/*` publicly. Acceptable routes: deployment-side command,
+   product-safe run acceptance synthesis from internal evidence, authenticated
+   researcher `source_search` proof, or a narrow browser-public product API
+   that reports non-sensitive SourceMaxx aggregate metrics.
+3. Probe staging sourcecycled source volume, fetch statuses, processor
+   handoffs, and reconciler handoff evidence through that verifier.
+4. Connect queued processor/reconciler handoffs to resident agent runs using
    the existing runtime loop and request/result records. Preserve long-running
    context/compaction handles rather than reconstructing all context from text.
-4. Route processor/reconciler research needs into existing researcher agents
+5. Route processor/reconciler research needs into existing researcher agents
    and route article/update needs into existing VText agents. Do not create a
    parallel researcher/writer system.
-5. Replace remaining wrong-object paths while preserving product topology:
+6. Replace remaining wrong-object paths while preserving product topology:
    high-volume
    source ingestion, durable SourceItems, routing, processor state,
    reconciler corpus review, researcher request/result reuse, VText
    write/revision reuse, Style.vtext routing, VText traversal/source indexes,
    and user-owned VText boundaries.
-6. Discard or selectively mine the stashed source-refresh experiment only if it
+7. Discard or selectively mine the stashed source-refresh experiment only if it
    helps the delivered architecture; do not revive click-time source refresh as
    the product object.
-7. Build through to staging behavior: tests, commit, push, CI/deploy monitor,
+8. Build through to staging behavior: tests, commit, push, CI/deploy monitor,
    staging identity, product-path source volume, processor/reconciler evidence,
    researcher/VText reuse evidence, ownership evidence, and browser screenshots.
-8. Perform a quality pass before claiming delivery: simplify names and data
+9. Perform a quality pass before claiming delivery: simplify names and data
    flows, remove obsolete panels/routes/tests, make Style.vtexts publication
    quality, and make the Global Wire UI nice in Futuristic Noir, Carbon Fiber
    Kintsugi, London Salmon, and responsive Choir web desktop layouts.
