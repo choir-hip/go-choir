@@ -727,3 +727,40 @@ handoffs into VText-agent-owned, publication-quality article revisions with
 native source and related-VText transclusions, then prove the Global Wire
 collection surface opens those living articles cleanly across the product
 viewports and themes.
+
+## Checkpoint 2026-06-07T22:59Z: RSS control-byte parser hardening deployed
+
+objective: repair the source-quality issue documented in the previous
+checkpoint where `rss:euronews_fr` failed because the feed contained an XML
+illegal control byte.
+
+what shipped: commit `4bf7ad5ff1f4d0e03a8ad403b271548de26ef648` strips
+XML-forbidden low control bytes before RSS/Atom XML decoding while preserving
+tab, newline, carriage return, and the existing charset decoder path. A new
+`internal/sources` regression test covers a feed title containing byte
+`0x1B` and verifies the item still parses as ordinary text.
+
+proof: local `nix develop -c go test ./internal/sources ./internal/cycle
+./cmd/sourcecycled -count=1` passed. A bounded local sourcecycled cycle over
+the 211-source registry produced 5,347 deduped items and showed
+`rss:euronews_fr|ok|50`; only `rss:arabnews` remained an HTTP 403. CI run
+`27107297555` passed Go vet/build, non-runtime tests, integration-tagged
+smoke, all four runtime shards, aggregate gate, and Node B deploy job
+`79998733503`. Node B `/opt/go-choir` reports git HEAD
+`4bf7ad5ff1f4d0e03a8ad403b271548de26ef648`. Latest deployed source cycle
+`cycle_f2fd9198e6af3790b377d11d` started `2026-06-07T22:56:02Z`, completed
+`2026-06-07T22:56:09Z`, fetched 211 configured sources, produced 4,982
+deduped SourceItems, queued 123 processor requests, and queued 1 reconciler
+request. Node B sourcecycled logs after deploy show the remaining
+`rss:arabnews` 403 but no `rss:euronews_fr` parse error. Direct SQLite
+inspection on Node B was unavailable because `sqlite3` is not installed there;
+service API and journal evidence are the authoritative deployed proof for
+this checkpoint.
+
+remaining error field: one or more feeds can still be temporarily degraded by
+upstream 403 behavior, and only the first seven processor requests are
+submitted immediately because the staging dispatch limit is seven. The deeper
+mission remains unchanged: the source graph is now wider, but Global Wire
+still needs VText-agent-owned full article revisions, native source and
+related-VText transclusions, living reconciler updates, and product-path UI
+proof across the required themes and viewports.
