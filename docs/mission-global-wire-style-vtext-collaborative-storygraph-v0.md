@@ -4980,3 +4980,112 @@ Next executable probe:
   route on the current deployed origin, restore the authenticated Global Wire
   app route after reader assertions without duplicating windows, then rerun the
   authenticated staging proof.
+
+## Checkpoint - Public Global Wire Reader Page - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transforms applied:
+
+- Public visibility is an explicit owner-created artifact, not an ambient
+  platform state. The reader page is therefore token-scoped and read-only.
+- Treat the public link as a human publication surface, not just a JSON API.
+  The page foregrounds title/body/status plus provenance and rollback refs
+  rather than adding broad indexes or mutation controls.
+- Preserve the desktop/product distinction: public reading is outside the
+  authenticated desktop shell; private editing and contribution stay inside the
+  owner app path.
+
+Delivered slice:
+
+- Problem commit:
+  `dae47dd9` (`docs: record global wire public reader gap`).
+- Behavior commit:
+  `fc7bf659a644c6b8a08149e242ceed1c0cb81b05`
+  (`feat: render global wire public reader`).
+- Proof-gap documentation commits:
+  `3ea7f81f`, `b11dc978`, `712c83a5`, and `7a9cc133`.
+- Proof correction commit:
+  `1f641010b2469facdcac7ec18cbfa63139bbee89`
+  (`test: prove global wire public reader on staging origin`).
+- `frontend/src/App.svelte` now detects
+  `/global-wire/publications/{token}`, fetches
+  `/api/global-wire/publication-public-links/{token}` without auth, and renders
+  a focused public reader before the desktop shell.
+- The reader renders the selected publication title/body/status/route,
+  citation refs, rollback refs, provenance counts, and a sign-in affordance for
+  private editing/contribution.
+- `frontend/tests/global-wire-app.spec.js` now proves the signed-in owner path
+  creates a public link, navigates the public route on the deployed origin,
+  verifies the public reader page, returns to the signed-in desktop app, and
+  continues the reconciliation/source-standing flow.
+
+Proof:
+
+- Local runtime proof for behavior commit passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`.
+- Local frontend build for behavior commit passed:
+  `npm run build` in `frontend/`.
+- Diff hygiene passed:
+  `git diff --check`.
+- Behavior CI run `27087764411`: success.
+- Behavior FlakeHub run `27087764418`: success.
+- Staging health after behavior deploy reported proxy and upstream deployed
+  commit `fc7bf659a644c6b8a08149e242ceed1c0cb81b05`.
+- Test correction CI run `27087944655`: success. Deploy was skipped because the
+  commit only changed tests; staging remained deployed at
+  `fc7bf659a644c6b8a08149e242ceed1c0cb81b05`.
+- Test correction FlakeHub run `27087944658`: success.
+- Final public deployed proof from the tracked test state passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Final authenticated deployed owner proof from the tracked test state passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in" --timeout 120000`
+  with 1 passed.
+
+Invariants preserved:
+
+- The public reader is read-only and token-scoped; it does not expose owner
+  queues, private reconciliation state, or platform mutation controls.
+- User edits/contributions remain user-owned versions/forks and do not mutate
+  platform stories.
+- Style.vtext remains a citeable source artifact selected/composed/replaced in
+  the owner app path; the public reader only displays the resulting publication
+  export.
+- News remains non-oracle and provenance-rich: the public page shows citation
+  refs, rollback refs, status, and source-linked publication body.
+- Graph nodes remain story-headline objects with source-neighborhood semantics.
+- Future Noir, Carbon Kintsugi, and London Salmon still pass the deployed view
+  proof.
+
+Belief-state update:
+
+- The proven product trajectory now reaches:
+  SourceItem -> source refresh/fetch/scheduler evidence -> StoryGraph headline
+  candidate -> extraction/research artifacts -> research handoff ->
+  projection review -> publication update package -> publication artifact ->
+  owner-scoped publication feed item -> Autoradio artifact traversal prompt ->
+  owner artifact approval -> owner-scoped delivery-ready publication record ->
+  owner-scoped delivered-publication detail view -> durable Autoradio script
+  artifact -> owner-scoped delivery export artifact -> owner-created unlisted
+  public export link -> human-readable public Global Wire reader page.
+- This is now a ship-worthy public web slice for the publication trajectory,
+  but not the full newsletter/syndication/audio/acceptance-record target.
+
+Remaining error field:
+
+- No durable `RunAcceptanceRecord` has been synthesized for this mission.
+- Public reader presentation is intentionally minimal; newsletter issues,
+  email delivery, RSS/Atom feeds, syndication, comments, and subscription
+  events remain unbuilt.
+- Autoradio scripts are text artifacts only; no audio synthesis, playback,
+  scheduling, or podcast/feed delivery exists.
+- Source standing policy and extraction normalization are useful but still
+  below the full spec's research/reconciliation-ready depth.
+
+Next executable probe:
+
+- Try to synthesize an honest `RunAcceptanceRecord` only if the current mission
+  can be bound to real trajectory/run evidence; otherwise document the blocker
+  precisely and choose the next realism axis between source standing/extraction
+  normalization and newsletter/syndication publication output.
