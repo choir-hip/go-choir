@@ -3809,3 +3809,98 @@ Next executable probe:
   returns artifact, story, source-neighborhood, status, citation-count, and
   rollback-count fields; expose it in the News app; prove locally and on
   staging.
+
+## Checkpoint - Publication Feed From Review Artifacts - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What changed:
+
+- Added authenticated, owner-scoped
+  `GET /api/global-wire/publication-feed`.
+- The feed composes existing `GlobalWirePublicationArtifact` rows into
+  read-only feed items with artifact, StoryGraph story, optional SourceItem,
+  status, citation count, and rollback count.
+- The News app now loads the newsletter publication feed beside
+  reconciliation and renders review-ready feed items with artifact title,
+  story headline, body excerpt, citation count, rollback count, and source
+  context.
+- The feed remains non-oracle and does not publish publicly, send email,
+  mutate StoryGraph, or mutate platform Story VTexts.
+
+Evidence:
+
+- Problem-first checkpoint commit:
+  `7d5f7a4b` (`docs: record global wire publication feed gap`).
+- Behavior commit:
+  `db0218635f5ae39323d473b1b15175390e6757c7`
+  (`feat: expose global wire publication feed`).
+- Local proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`.
+- Local frontend proof passed:
+  `npm run build` in `frontend/`.
+- Diff hygiene passed:
+  `git diff --check`.
+- CI run `27086501002`: success. Go vet/build, runtime shards,
+  non-runtime tests, integration smoke, frontend build, aggregate gate, and
+  Deploy to Staging all passed.
+- FlakeHub publish run `27086500992`: success.
+- Staging health at `2026-06-07T07:47:56Z` reported proxy and upstream
+  deployed commit `db0218635f5ae39323d473b1b15175390e6757c7`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip, covering Future Noir, Carbon Kintsugi,
+  and London Salmon.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in"`
+  with 1 passed. The proof creates the source refresh/research/publication
+  artifact trajectory, reads `/api/global-wire/publication-feed`, verifies
+  feed item story/source/citation/rollback context, reloads the News app, and
+  observes the publication feed panel.
+
+Invariants preserved:
+
+- Feed reads are owner-scoped and do not mutate platform stories.
+- User-owned forks/contributions still remain separate from platform Story
+  VTexts.
+- Publication feed items are citeable artifacts, not oracle news output.
+- Style.vtext and projection review refs remain artifact citations rather than
+  hidden prompt context.
+- News app views still work in Future Noir, Carbon Kintsugi, and London
+  Salmon.
+
+Belief-state update:
+
+- The proven product trajectory is now:
+  SourceItem -> source refresh/fetch/scheduler evidence -> StoryGraph headline
+  candidate -> claim/extraction/research artifacts -> research handoff ->
+  projection review -> publication update package -> publication artifact ->
+  owner-scoped publication feed item.
+- The honest next axis is not another artifact wrapper. It is either
+  Autoradio traversal over publication artifacts, a public/newsletter delivery
+  contract with explicit review/publish semantics, or a durable
+  `RunAcceptanceRecord` synthesized from a real Choir product trajectory.
+
+Remaining error field:
+
+- Publication feed is owner-scoped review/feed consumption, not public
+  newsletter routing, email delivery, or syndication.
+- Autoradio prompt handoff still does not select publication artifacts as its
+  primary traversal object.
+- Source standing policy is durable and visible, but not backed by curated
+  source catalogs or source reputation history.
+- Extraction artifacts remain conservative structured overlays, not normalized
+  entity/event/timeline extraction.
+- Style.vtext composition/replacement is proven, but not yet a full style
+  revision workflow with forks, merge conflict handling, permissions, or
+  publication review.
+- No `RunAcceptanceRecord` has been synthesized for this Codex mission because
+  this run does not yet have an honest product trajectory/run id to feed the
+  synthesize endpoint.
+
+Next executable probe:
+
+- Apply a fresh cognitive transform to choose between:
+  `publication-artifact -> Autoradio traversal`, `publication-artifact ->
+  explicit review/publish contract`, or `existing product evidence ->
+  RunAcceptanceRecord` as the next highest-value realism axis.
