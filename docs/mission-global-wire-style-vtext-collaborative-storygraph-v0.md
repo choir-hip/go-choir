@@ -2963,3 +2963,54 @@ Next executable probe:
   reviewed into explicit reconciliation/publication decisions that can propose
   StoryGraph candidate updates or block them, while preserving the invariant
   that no platform story mutates without explicit platform review.
+
+## Problem - Completed Research Evidence Has No Handoff Decision - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Observed gap:
+
+- `GlobalWireResearchTaskEvidence` packets can now show that a researcher
+  assigned, completed, or blocked a task.
+- Reconciliation can see the evidence packet, but there is no separate reviewer
+  decision over that packet.
+- A completed evidence packet cannot yet be accepted into a reconciliation lane,
+  blocked as insufficient, or linked to the candidate review state as the
+  reason a candidate is ready or not ready for platform review.
+
+Why this matters:
+
+- Researcher evidence and reconciliation authority are different product
+  transitions. Collapsing them would make "completed research" behave like an
+  oracle verdict.
+- The spec requires non-oracle, provenance-rich news and explicit user-owned
+  edits/contributions moving toward reconciliation-ready state. That requires a
+  visible handoff decision, not just task completion.
+- The invariant remains: research handoff may update review/candidate state,
+  but must not mutate platform stories or Story VTexts without explicit
+  platform promotion.
+
+Belief-state update:
+
+- The next topology-preserving improvement is a low-resolution handoff lane:
+  completed task evidence -> handoff decision (`accepted-for-review` or
+  `blocked`) -> candidate/reconciliation state visible in News.
+- The handoff should cite the evidence packet, task, story, claim, SourceItem,
+  and candidate lineage.
+
+Remaining error field:
+
+- No durable handoff-decision table exists for task evidence.
+- No product endpoint accepts or blocks completed task evidence.
+- Candidate readiness can be inferred from source-refresh artifacts, but not
+  explicitly justified by a research-evidence handoff.
+- News cannot show whether completed research evidence has been accepted into
+  reconciliation or blocked as insufficient.
+
+Next executable probe:
+
+- Add a bounded `/api/global-wire/research-evidence` product path that accepts
+  or blocks completed task evidence, persists a handoff decision, updates only
+  review/candidate status where appropriate, exposes decisions in
+  reconciliation and News, and proves on staging that platform stories remain
+  unchanged.
