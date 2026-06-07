@@ -1102,6 +1102,70 @@ next executable delivery loop:
    quality, and make the Global Wire UI nice in Futuristic Noir, Carbon Fiber
    Kintsugi, London Salmon, and responsive Choir web desktop layouts.
 
+2026-06-07 Style.vtext selection delivery and publication-quality gap:
+
+- Commit `07bd7c687ac3ecaf9b052ede1cdd23513ddf77f3` added selective
+  Style.vtext source context to the normalized processor/reconciler -> VText
+  route. The runtime now records `selected_style_sources` and
+  `selected_style_rationale` on the VText seed revision and VText agent
+  revision run, and the VText prompt includes the selected Style.vtext source
+  context instead of asking every story to run every style.
+- Local proof passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText`,
+  `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalRunSubmissionAllowsSourceMaxxProcessorAndReconcilerProfiles|TestPromptStore|TestVText'`,
+  and `git diff --check`.
+- CI/deploy proof passed for `07bd7c687ac3ecaf9b052ede1cdd23513ddf77f3`:
+  CI run `27098733233`, FlakeHub run `27098733232`, and Node B staging deploy
+  all succeeded. `https://choir.news/health` reported proxy and sandbox
+  deployed commit `07bd7c687ac3ecaf9b052ede1cdd23513ddf77f3` at
+  `2026-06-07T16:50:58Z`.
+- A fresh post-deploy SourceMaxx cycle, `cycle_419cbad08d2defc39978e709`, was
+  forced by restarting `go-choir-sourcecycled.service`. The cycle fetched 686
+  deduped SourceItems from 14 fetches, queued 17 processor requests and 1
+  reconciler request, and public authenticated product status resolved 7
+  processor runs and 1 reconciler run. During the proof window it reported
+  processor states `completed: 5`, `failed: 1`, `running: 1`, and reconciler
+  child profile counts `vtext: 4`; direct runtime events showed the reconciler
+  actually spawned 7 VText article documents and 3 researcher agents.
+- Direct runtime proof for the seven VText child runs showed all completed as
+  normal `vtext:<doc_id>` appagent revision runs, carried the fresh
+  `source_maxx_cycle_id`, and had selected Style.vtext metadata. Six general
+  news stories selected `Style.vtext: Global Wire`; the SpaceX IPO story
+  selected `Style.vtext: Market Brief`, proving story-aware style matching
+  instead of all-styles-per-story.
+- Durable VText store proof showed the seven current document heads had
+  `author_kind=appagent`, `source=edit_vtext`, `selected_style_sources`
+  metadata, and content that mentions `style.vtext`.
+- New residual gap from the same proof: the VText current heads were not
+  consistently publication-quality articles. Several heads remained
+  `SourceMaxx Brief`, `Working Revision`, or `Evidence Gathering` versions
+  despite completed VText runs. This means the route now proves normalized
+  ownership and style selection, but it does not yet prove publication-quality
+  delivered articles. The next code change should make SourceMaxx VText
+  revision runs converge to article heads before completion, or surface a
+  precise incomplete/publication-needed state rather than treating a seed or
+  evidence-gathering revision as a completed article.
+
+updated remaining error field:
+
+- Style.vtext source selection is now staging-proven as metadata and prompt
+  context, but publication-quality article completion is not yet proven. A
+  completed VText child run may leave the current VText head as a brief or
+  evidence-gathering revision.
+- One processor failed during `cycle_419cbad08d2defc39978e709`; the failure
+  has not yet been root-caused. It did not block reconciler VText spawning, but
+  it remains a runtime reliability gap.
+- Public status aggregation reported `reconciler_child_profile_counts:
+  vtext: 4` while direct runtime events showed 7 VText spawn results. The
+  status endpoint is useful for aggregate proof but may undercount child
+  profiles while runs are still progressing.
+- The clean newspaper UI remains the highest-value visible product gap after
+  the VText article-completion fix. It must use the design language without
+  panels, cards, nested scroll, visible theme selector, or noisy "Open in
+  VText" labels.
+
 suggested resume goal string: use the Goal String section above.
 
 evidence artifact refs: local browser screenshot emitted through Browser
