@@ -4076,3 +4076,93 @@ Next executable probe:
   `global_wire_publication_artifacts`, expose approve/reject controls in the
   News app feed, and prove the status transition through deployed owner
   Playwright without mutating platform stories.
+
+## Checkpoint - Owner Review State For Publication Artifacts - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What changed:
+
+- Added owner-scoped store operations to get and update
+  `GlobalWirePublicationArtifact` status.
+- Added authenticated
+  `POST /api/global-wire/publication-artifact-reviews`.
+- The review action accepts approve/reject decisions and transitions artifacts
+  from `publication-review-ready` to `publication-approved` or
+  `publication-rejected`.
+- The News app publication feed now shows approve/reject controls for
+  review-ready artifacts and reloads the feed after review.
+- The review transition does not publish publicly, send delivery, mutate
+  StoryGraph, or mutate platform Story VTexts.
+
+Evidence:
+
+- Problem-first checkpoint commit:
+  `ce700d61` (`docs: record global wire publication review gap`).
+- Behavior commit:
+  `5a04c329abbb9806223b26a4209013e16470958c`
+  (`feat: review global wire publication artifacts`).
+- Local proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`.
+- Local frontend proof passed:
+  `npm run build` in `frontend/`.
+- Diff hygiene passed:
+  `git diff --check`.
+- CI run `27086745216`: success. Go vet/build, runtime shards,
+  non-runtime tests, integration smoke, frontend build, aggregate gate, and
+  Deploy to Staging all passed.
+- FlakeHub publish run `27086745228`: success.
+- Staging health at `2026-06-07T07:59:54Z` reported proxy and upstream
+  deployed commit `5a04c329abbb9806223b26a4209013e16470958c`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in"`
+  with 1 passed. The proof creates a publication artifact, observes the feed
+  item, approves it through the visible News app control, verifies
+  `/api/global-wire/publication-artifact-reviews` returns
+  `publication-approved`, observes the feed status update, and still verifies
+  Autoradio artifact traversal and Ask Choir story context.
+
+Invariants preserved:
+
+- Artifact review is owner-scoped and does not mutate platform StoryGraph or
+  platform Story VTexts.
+- Feed and Autoradio continue to operate over citeable publication artifacts.
+- Publication approval is not public delivery; it is a durable review state
+  suitable for later delivery contracts.
+- User-owned forks/contributions remain separate.
+- News app views continue to pass in Future Noir, Carbon Kintsugi, and London
+  Salmon.
+
+Belief-state update:
+
+- The proven product trajectory now reaches:
+  SourceItem -> source refresh/fetch/scheduler evidence -> StoryGraph headline
+  candidate -> extraction/research artifacts -> research handoff ->
+  projection review -> publication update package -> publication artifact ->
+  owner-scoped publication feed item -> Autoradio artifact traversal prompt ->
+  owner artifact approval.
+- The next real gap is delivery or acceptance packaging, not review state:
+  either build a lowest-resolution delivery/publication record over approved
+  artifacts, persist Autoradio script/audio artifacts, or synthesize an honest
+  run acceptance from a real Choir product trajectory.
+
+Remaining error field:
+
+- `publication-approved` does not yet create a public newsletter route,
+  subscription delivery, syndication item, email, or public permalink.
+- Autoradio traversal still submits a prompt and does not persist a dedicated
+  script/audio artifact.
+- No durable `RunAcceptanceRecord` exists for this mission.
+- Source standing policy and extraction normalization remain below the full
+  spec target.
+
+Next executable probe:
+
+- Before the next behavior change, apply cognitive transforms to choose
+  between approved-artifact delivery records, Autoradio script persistence, and
+  RunAcceptanceRecord synthesis from product evidence. The strongest current
+  route is likely a delivery record over approved artifacts because it raises
+  publication realism without pretending to solve email/syndication yet.
