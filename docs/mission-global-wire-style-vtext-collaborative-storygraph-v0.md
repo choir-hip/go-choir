@@ -4871,3 +4871,49 @@ Next executable probe:
   than JSON only, synthesize an honest `RunAcceptanceRecord` if a real
   trajectory/run can be bound, or strengthen source standing/extraction
   normalization now that publication surfaces are end-to-end.
+
+## Problem Checkpoint - Public Links Lack Reader Page - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transform:
+
+- Treat the public link as a reader-facing publication surface, not just an API
+  token. The public object should be inspectable by a human without knowing the
+  JSON endpoint shape.
+- Keep the first reader minimal and provenance-rich: render the selected export
+  title/body, citation/rollback counts and refs, status, and route path. Do not
+  add comments, mutation controls, or broad public indexes.
+
+Observed gap:
+
+- Owner-created public links exist and the unauthenticated token API returns a
+  single exported publication payload.
+- `/global-wire/publications/{token}` is recorded as the public route path, but
+  the frontend still renders the general desktop shell rather than a focused
+  Global Wire reader page.
+- Public readers must currently rely on a JSON API route to inspect the
+  publication.
+
+Why this matters:
+
+- The spec asks for News app views and eventual newsletters/publication
+  surfaces, not just machine-readable payloads.
+- A public reader page is the smallest honest publication surface after an
+  owner-created unlisted public link.
+- The reader page must preserve the non-oracle invariant by foregrounding
+  provenance and must not expose owner-only queues or mutation controls.
+
+Remaining error field:
+
+- No public reader page exists for `GlobalWirePublicationPublicLink`.
+- Public route paths are stored but not rendered as reader-facing views.
+- Public link proof covers JSON payload shape, not human reader presentation.
+
+Next executable probe:
+
+- Add a public Global Wire reader component for
+  `/global-wire/publications/{token}` that fetches the existing public-link API,
+  renders title/body/status/route/citation/rollback provenance, includes a
+  sign-in/edit-private-version affordance, and prove on staging that the public
+  route renders without auth while the owner app path still creates the link.
