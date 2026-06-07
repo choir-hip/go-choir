@@ -1,11 +1,13 @@
 # Design documents index
 
-**Updated:** 2026-05-26
+**Updated:** 2026-06-07
 
 Approved platform designs (implement in phase order):
 
 | Document | Scope |
 |----------|--------|
+| [choir-design-language-2026-06-07.md](./choir-design-language-2026-06-07.md) | Product-wide visual language across Future Noir, Carbon Kintsugi, and London Salmon |
+| [theme-system-contract-v0.md](./theme-system-contract-v0.md) | Semantic theme token contract and migration strategy |
 | [design-search-provider-plane-v1.md](./design-search-provider-plane-v1.md) | Gateway search: durable health, exponential backoff, parallel fan-out |
 
 **Related missions (execution tracking):**
