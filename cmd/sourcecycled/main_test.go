@@ -284,3 +284,55 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 		t.Fatalf("reconciler status = %+v", reconcilers)
 	}
 }
+
+func TestSourceMaxxRuntimeDispatcherRetriesTransientRuntimeUnavailable(t *testing.T) {
+	ctx := context.Background()
+	req := cycle.ProcessorRequest{
+		RequestID:     "processor_retry",
+		CycleID:       "cycle_retry",
+		ProcessorKey:  "processor:global_firehose:global:gdelt",
+		Status:        "queued",
+		SourceItemIDs: []string{"srcitem_retry_1"},
+		SourceCount:   1,
+		ContinuityRef: "sourcecycled://processor/processor:global_firehose:global:gdelt/latest",
+		Prompt:        "Processor retry",
+	}
+
+	var attempts int
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if r.Method != http.MethodPost || r.URL.Path != "/internal/runtime/runs" {
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
+		}
+		if attempts < 3 {
+			writeSourceServiceJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "runtime warming"})
+			return
+		}
+		writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{
+			RunID:        "run-processor-retry",
+			AgentID:      "processor:retry",
+			AgentProfile: "processor",
+			AgentRole:    "processor",
+			State:        "pending",
+		})
+	}))
+	defer runtimeServer.Close()
+
+	dispatcher := &sourceMaxxRuntimeDispatcher{
+		baseURL:       runtimeServer.URL,
+		ownerID:       "owner-global-wire",
+		client:        runtimeServer.Client(),
+		retryAttempts: 4,
+		retryDelay:    time.Millisecond,
+	}
+	run, err := dispatcher.submitProcessor(ctx, req)
+	if err != nil {
+		t.Fatalf("submit processor with transient retries: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("runtime attempts = %d, want 3", attempts)
+	}
+	if run.RunID != "run-processor-retry" || run.AgentProfile != "processor" {
+		t.Fatalf("unexpected run response: %+v", run)
+	}
+}

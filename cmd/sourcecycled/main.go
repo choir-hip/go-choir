@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,7 +21,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
 
-const defaultSourceMaxxProcessorDispatchLimit = 7
+const (
+	defaultSourceMaxxProcessorDispatchLimit = 7
+	defaultSourceMaxxRuntimeDispatchRetries = 8
+	defaultSourceMaxxRuntimeRetryDelay      = 2 * time.Second
+)
 
 type runtimeRunSubmitRequest struct {
 	OwnerID  string         `json:"owner_id"`
@@ -42,6 +47,8 @@ type sourceMaxxRuntimeDispatcher struct {
 	ownerID              string
 	maxProcessorRequests int
 	client               *http.Client
+	retryAttempts        int
+	retryDelay           time.Duration
 }
 
 type sourceMaxxDispatchResult struct {
@@ -161,11 +168,14 @@ func sourceMaxxRuntimeDispatcherFromEnv() *sourceMaxxRuntimeDispatcher {
 		ownerID = "global-wire-platform"
 	}
 	limit := parsePositiveInt(firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS", "SOURCECYCLED_AGENT_DISPATCH_MAX_PROCESSORS"), defaultSourceMaxxProcessorDispatchLimit)
+	retries := parsePositiveInt(firstEnv("SOURCE_SERVICE_RUNTIME_DISPATCH_RETRIES", "SOURCECYCLED_RUNTIME_DISPATCH_RETRIES"), defaultSourceMaxxRuntimeDispatchRetries)
 	return &sourceMaxxRuntimeDispatcher{
 		baseURL:              baseURL,
 		ownerID:              ownerID,
 		maxProcessorRequests: limit,
 		client:               &http.Client{Timeout: 20 * time.Second},
+		retryAttempts:        retries,
+		retryDelay:           defaultSourceMaxxRuntimeRetryDelay,
 	}
 }
 
@@ -483,6 +493,35 @@ func (d *sourceMaxxRuntimeDispatcher) submit(ctx context.Context, payload runtim
 	if d == nil || d.client == nil {
 		return runtimeRunStatusResponse{}, fmt.Errorf("runtime dispatcher is not configured")
 	}
+	attempts := d.retryAttempts
+	if attempts <= 0 {
+		attempts = defaultSourceMaxxRuntimeDispatchRetries
+	}
+	delay := d.retryDelay
+	if delay <= 0 {
+		delay = defaultSourceMaxxRuntimeRetryDelay
+	}
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		out, err := d.submitOnce(ctx, payload)
+		if err == nil {
+			return out, nil
+		}
+		lastErr = err
+		if !isTransientRuntimeSubmitError(err) || attempt == attempts {
+			break
+		}
+		log.Printf("SourceMaxx runtime dispatch attempt %d/%d failed transiently: %v", attempt, attempts, err)
+		select {
+		case <-ctx.Done():
+			return runtimeRunStatusResponse{}, ctx.Err()
+		case <-time.After(delay):
+		}
+	}
+	return runtimeRunStatusResponse{}, lastErr
+}
+
+func (d *sourceMaxxRuntimeDispatcher) submitOnce(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return runtimeRunStatusResponse{}, fmt.Errorf("marshal runtime run request: %w", err)
@@ -506,7 +545,7 @@ func (d *sourceMaxxRuntimeDispatcher) submit(ctx context.Context, payload runtim
 		if strings.TrimSpace(apiErr.Error) == "" {
 			apiErr.Error = resp.Status
 		}
-		return runtimeRunStatusResponse{}, fmt.Errorf("runtime returned %s: %s", resp.Status, apiErr.Error)
+		return runtimeRunStatusResponse{}, runtimeSubmitError{StatusCode: resp.StatusCode, Status: resp.Status, Message: apiErr.Error}
 	}
 	var out runtimeRunStatusResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -516,6 +555,27 @@ func (d *sourceMaxxRuntimeDispatcher) submit(ctx context.Context, payload runtim
 		return runtimeRunStatusResponse{}, fmt.Errorf("runtime accepted run without loop_id")
 	}
 	return out, nil
+}
+
+type runtimeSubmitError struct {
+	StatusCode int
+	Status     string
+	Message    string
+}
+
+func (e runtimeSubmitError) Error() string {
+	return fmt.Sprintf("runtime returned %s: %s", e.Status, e.Message)
+}
+
+func isTransientRuntimeSubmitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var statusErr runtimeSubmitError
+	if errors.As(err, &statusErr) {
+		return statusErr.StatusCode == http.StatusTooManyRequests || statusErr.StatusCode >= 500
+	}
+	return true
 }
 
 func parsePositiveInt(raw string, fallback int) int {
