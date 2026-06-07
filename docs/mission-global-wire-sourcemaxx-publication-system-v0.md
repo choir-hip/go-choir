@@ -1434,3 +1434,38 @@ updated remaining error field:
   edits; opening/forking happens through normal VText; source/style provenance
   remains per VText version; and SourceMaxx status remains non-oracle evidence
   rather than a global truth feed.
+
+2026-06-07 deployed SourceMaxx VText index proof failed:
+
+- Behavior commit `81cb3cbf49c6c189672dd5d496a7b030c793e68f`
+  (`runtime: index sourcemaxx vtexts in global wire`) is deployed on staging.
+  `https://choir.news/health` reports both proxy and sandbox at that commit,
+  deployed at `2026-06-07T17:57:38Z`.
+- Public deployed UI acceptance still passes:
+  `PLAYWRIGHT_BASE_URL=https://choir.news pnpm --dir frontend exec playwright
+  test tests/global-wire-app.spec.js` passed 4/4, proving the clean newspaper
+  preview surface remains intact.
+- Stronger authenticated product-path proof contradicted the intended data
+  realism: a real passkey browser session calling `/api/global-wire/stories`
+  received status `200`, response source `durable-storygraph`, `story_count:
+  3`, and `source_maxx_vtext_count: 0`. The same session calling
+  `/api/global-wire/sourcemaxx-status` received status `200` for latest cycle
+  `cycle_749fc5d6e5e8f7f859fb69c2`, with `fetch_count: 14`, `item_count:
+  500`, `processor_request_count: 10`, and `reconciler_request_count: 1`.
+- Current belief: the VText-owned architecture remains correct, but the new
+  Global Wire VText index is not discovering deployed SourceMaxx article heads.
+  Likely investigation axes are platform-owner mismatch, missing/unfinished
+  current SourceMaxx VText revisions for the latest cycle, revision metadata
+  shape mismatch, or overly strict seed-content filtering.
+
+updated remaining error field:
+
+- The latest deployed behavior commit is not enough to claim authenticated
+  Global Wire data realism. SourceMaxx status proves live source cycles, but
+  `/api/global-wire/stories` still exposes only seeded durable StoryGraph rows.
+- The next behavior change must root-cause why platform SourceMaxx VTexts are
+  absent from the story response, then prove with an authenticated product-path
+  browser session that `/api/global-wire/stories` returns
+  `durable-storygraph+source-maxx-vtexts` and at least one
+  `source-maxx-vtext-*` row with VText content, source/style provenance, and a
+  normal VText open path.
