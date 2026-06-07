@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 )
 
 func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath string) (*PublicationBundle, error) {
@@ -294,22 +292,6 @@ func publicationAccessPolicyAllowsPublicRoute(raw json.RawMessage) bool {
 	visibility := strings.TrimSpace(strings.ToLower(policy.Visibility))
 	route := strings.TrimSpace(strings.ToLower(policy.Route))
 	return visibility == "public" && (route == "" || route == "public")
-}
-
-func formatPublicationExportContent(bundle *PublicationBundle, format string) string {
-	if bundle == nil {
-		return ""
-	}
-	content := bundle.Artifact.Content
-	switch format {
-	case "md":
-		normalized, _ := markdownstructure.NormalizeTableShapedRows(content)
-		return normalized
-	case "html":
-		return renderPublicationHTML(buildPublicationDocument(bundle), defaultPublicationExportProfile())
-	default:
-		return content
-	}
 }
 
 func exportMediaType(format string) string {

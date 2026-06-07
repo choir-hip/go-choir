@@ -1925,3 +1925,73 @@ staging proof:
   and verified the resulting revision preserved both head/user content,
   appendix table rows, rebase metadata, and source entity metadata.
 ```
+
+## Loop 8 Publication Export Formatting Boundary Target
+
+Status: `documented_before_code`.
+
+Next backend simplification target: move remaining text/Markdown export body
+formatting out of `internal/platform/service_publication_read.go` and into the
+publication export spine. The read service should own authorization, bundle
+hydration, route resolution, policy gating, and response assembly. It should
+not directly import Markdown table-normalization code or decide how an
+authorized publication bundle becomes an export body.
+
+This is a behavior-preserving boundary cleanup. It must not change export
+formats, media types, filenames, export-policy enforcement, Markdown table
+normalization, HTML rich rendering, source manifest metadata, or public route
+visibility. The value is removing a remaining renderer shortcut from the
+public read service after DOCX/PDF/HTML renderers were split into the export
+spine.
+
+evidence:
+
+```text
+rg evidence:
+  internal/platform/service_publication_read.go imports
+  internal/markdownstructure only for formatPublicationExportContent.
+
+  internal/platform/export_formats.go already owns buildPublicationExportBytes
+  and dispatches DOCX, PDF, HTML, and default text/Markdown exports.
+
+classification:
+  refactor-boundary debt / duplicate ownership risk, not a behavior bug.
+```
+
+acceptance:
+
+- `service_publication_read.go` no longer imports `internal/markdownstructure`;
+- the Markdown/text body formatting helper lives beside
+  `buildPublicationExportBytes` in the export spine;
+- Markdown export still normalizes malformed table-shaped rows;
+- HTML export still uses `PublicationDocument` and the shared export profile;
+- platform publication/export tests pass.
+
+local implementation/evidence:
+
+```text
+change:
+  Moved formatPublicationExportContent from
+  internal/platform/service_publication_read.go to
+  internal/platform/export_formats.go. The public read service no longer
+  imports internal/markdownstructure; export_formats.go now owns the remaining
+  text/Markdown body formatting next to buildPublicationExportBytes.
+
+line-count effect:
+  internal/platform/export_formats.go             89 lines
+  internal/platform/service_publication_read.go  611 lines
+
+local proof:
+  gofmt -w internal/platform/export_formats.go \
+    internal/platform/service_publication_read.go
+  git diff --check
+  result: passed
+
+  nix develop -c go test ./internal/platform -run
+  'TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestPublishVTextCreatesImmutablePublicRecords|TestPublicationPublicSurfacesEnforceVisibilityPolicy'
+  -count=1 -v
+  result: passed
+
+  nix develop -c go test ./internal/platform ./internal/sourcecontract
+  result: passed
+```

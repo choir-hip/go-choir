@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 )
 
 type publicationExportBytes struct {
@@ -35,6 +37,22 @@ func buildPublicationExportBytes(bundle *PublicationBundle, format string) (publ
 		return publicationExportBytes{content: []byte(renderPublicationHTML(doc, profile)), metadata: metadata}, nil
 	default:
 		return publicationExportBytes{content: []byte(formatPublicationExportContent(bundle, format)), metadata: metadata}, nil
+	}
+}
+
+func formatPublicationExportContent(bundle *PublicationBundle, format string) string {
+	if bundle == nil {
+		return ""
+	}
+	content := bundle.Artifact.Content
+	switch format {
+	case "md":
+		normalized, _ := markdownstructure.NormalizeTableShapedRows(content)
+		return normalized
+	case "html":
+		return renderPublicationHTML(buildPublicationDocument(bundle), defaultPublicationExportProfile())
+	default:
+		return content
 	}
 }
 
