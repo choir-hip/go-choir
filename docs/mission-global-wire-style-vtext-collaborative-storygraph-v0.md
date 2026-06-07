@@ -5598,3 +5598,44 @@ Next executable probe:
   in reconciliation and/or a product API, surface it in the Global Wire app, and
   prove on staging that the dossier composes the existing evidence chain without
   mutating platform stories or user-owned forks.
+
+## Problem Checkpoint - Source Dossier Missing Fields Are Not Normalized - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Observed staging evidence:
+
+- Behavior commit `b1852595afb9173b25f7df3876cad83eae7f3ea3`
+  (`feat: add global wire source dossiers`) deployed to staging.
+- CI run `27088708252`: success.
+- FlakeHub run `27088708250`: success.
+- Staging health reported proxy and upstream deployed commit
+  `b1852595afb9173b25f7df3876cad83eae7f3ea3`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed proof failed in the source-dossier assertion after the
+  full source/research/publication/newsletter path was created. The dossier was
+  present and carried publication refs, but `missing_fields` was `null`, causing
+  the proof to fail when asserting a complete dossier does not contain
+  `claim_dossiers`.
+
+Why this matters:
+
+- `missing_fields` is part of the deterministic review-dossier contract. A
+  complete dossier should expose an empty list, not `null`, so verifiers,
+  future researchers, and app views can treat absence of missing fields as a
+  normalized state.
+- This is not a truth/oracle issue, but it weakens the reconciliation-ready
+  API shape and creates client-specific defensive handling.
+
+Root-cause hypothesis:
+
+- `globalWireDossierMissingFields` returns a nil slice when nothing is missing,
+  and Go JSON encodes that nil slice as `null`.
+
+Next executable probe:
+
+- Normalize dossier slice fields so complete dossiers emit empty arrays where
+  the API contract expects list semantics, rerun focused local proofs, push the
+  fix, and rerun deployed authenticated proof.
