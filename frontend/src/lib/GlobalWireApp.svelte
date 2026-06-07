@@ -1,12 +1,13 @@
 <script>
   import { createEventDispatcher } from 'svelte';
+  import { onMount } from 'svelte';
 
   export let currentUser = null;
   export let authenticated = false;
 
   const dispatch = createEventDispatcher();
 
-  const styleSources = [
+  const previewStyleSources = [
     {
       id: 'wire-style',
       title: 'Style.vtext: Global Wire',
@@ -30,7 +31,7 @@
     },
   ];
 
-  const stories = [
+  const previewStories = [
     {
       id: 'story-supply-resilience',
       headline: 'Port backlog recedes as carriers warn of uneven inland recovery',
@@ -142,12 +143,17 @@
     },
   ];
 
+  let stories = previewStories;
+  let styleSources = previewStyleSources;
   let selectedStoryId = stories[0].id;
   let selectedStyleId = styleSources[0].id;
   let contributionKind = 'source';
   let contributionText = '';
   let contributionStatus = '';
   let contributions = [];
+  let dataSource = 'preview-storygraph';
+  let loadError = '';
+  let lastLoadKey = '';
 
   $: selectedStory = stories.find((story) => story.id === selectedStoryId) || stories[0];
   $: selectedStyle = styleSources.find((style) => style.id === selectedStyleId) || styleSources[0];
@@ -158,6 +164,66 @@
     ...selectedStory.manifest.contrary,
     ...selectedStory.manifest.context,
   ];
+
+  onMount(() => {
+    loadDurableStoryGraph();
+  });
+
+  $: if (authenticated) {
+    loadDurableStoryGraph();
+  }
+
+  async function loadDurableStoryGraph() {
+    const loadKey = authenticated ? 'authenticated' : 'preview';
+    if (lastLoadKey === loadKey) return;
+    lastLoadKey = loadKey;
+    loadError = '';
+    if (!authenticated) {
+      stories = previewStories;
+      styleSources = previewStyleSources;
+      dataSource = 'preview-storygraph';
+      contributions = [];
+      return;
+    }
+    try {
+      const response = await fetch('/api/global-wire/stories', { credentials: 'include' });
+      if (!response.ok) throw new Error(`StoryGraph load failed: ${response.status}`);
+      const payload = await response.json();
+      if (Array.isArray(payload.stories) && payload.stories.length) {
+        stories = payload.stories;
+        styleSources = Array.isArray(payload.style_sources) && payload.style_sources.length
+          ? payload.style_sources
+          : payload.stories[0].style_sources || previewStyleSources;
+        dataSource = payload.source || 'durable-storygraph';
+        if (!stories.some((story) => story.id === selectedStoryId)) selectedStoryId = stories[0].id;
+        if (!styleSources.some((style) => style.id === selectedStyleId)) selectedStyleId = styleSources[0].id;
+        await loadContributions();
+      }
+    } catch (error) {
+      loadError = error?.message || 'StoryGraph load failed';
+      stories = previewStories;
+      styleSources = previewStyleSources;
+      dataSource = 'preview-storygraph';
+    }
+  }
+
+  async function loadContributions(storyId = selectedStoryId) {
+    if (!authenticated || !storyId) return;
+    try {
+      const response = await fetch(`/api/global-wire/contributions?story_id=${encodeURIComponent(storyId)}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error(`Contribution load failed: ${response.status}`);
+      const payload = await response.json();
+      contributions = Array.isArray(payload.contributions) ? payload.contributions.slice(0, 6) : [];
+    } catch {
+      contributions = [];
+    }
+  }
+
+  $: if (authenticated && dataSource === 'durable-storygraph' && selectedStoryId) {
+    loadContributions(selectedStoryId);
+  }
 
   function sourceLines(kind, items) {
     return items.map((item) => `- ${kind}: ${item.title} (${item.standing}; ${item.id})`).join('\n');
@@ -243,7 +309,7 @@
     ].join('\n');
   }
 
-  function launchVText({ title, content, createdFrom, sourcePath = '' }) {
+  function launchVText({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = true }) {
     dispatch('launchapp', {
       appId: 'vtext',
       appName: 'VText',
@@ -251,7 +317,8 @@
       appContext: {
         windowTitle: title,
         initialContent: content,
-        createInitialVersion: true,
+        docId,
+        createInitialVersion,
         createdFrom,
         sourcePath,
         appHint: 'global-wire',
@@ -266,6 +333,8 @@
       content: storyVTextContent(),
       createdFrom: 'global_wire_story_projection',
       sourcePath: `global-wire/${selectedStory.id}.story.vtext`,
+      docId: selectedStory.story_vtext_doc_id || '',
+      createInitialVersion: !selectedStory.story_vtext_doc_id,
     });
   }
 
@@ -284,22 +353,52 @@
       content: styleVTextContent(),
       createdFrom: 'global_wire_style_source',
       sourcePath: selectedStyle.sourcePath,
+      docId: selectedStyle.doc_id || '',
+      createInitialVersion: !selectedStyle.doc_id,
     });
   }
 
-  function submitContribution() {
+  async function submitContribution() {
     const text = contributionText.trim();
-    const record = {
+    let record = {
       id: `contribution-${Date.now()}`,
       kind: contributionKind,
       storyId: selectedStory.id,
       headline: selectedStory.headline,
       text: text || 'Draft contribution awaiting detail.',
       owner: currentUser?.email || 'public-preview',
+      research_state: authenticated ? 'pending-researcher-review' : 'preview-only',
     };
+    if (authenticated) {
+      try {
+        const response = await fetch('/api/global-wire/contributions', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            story_id: selectedStory.id,
+            kind: contributionKind,
+            headline: selectedStory.headline,
+            text: record.text,
+          }),
+        });
+        if (!response.ok) throw new Error(`Contribution queue failed: ${response.status}`);
+        const saved = await response.json();
+        record = {
+          ...record,
+          id: saved.id || record.id,
+          storyId: saved.storyId || selectedStory.id,
+          text: saved.text || record.text,
+          research_state: saved.research_state || record.research_state,
+        };
+      } catch (error) {
+        contributionStatus = error?.message || 'Contribution queue failed';
+        return;
+      }
+    }
     contributions = [record, ...contributions].slice(0, 6);
     contributionStatus = authenticated
-      ? 'Contribution queued as a user-owned VText draft'
+      ? 'Contribution queued for research/reconciliation'
       : 'Local contribution preview - sign in to save';
     launchVText({
       title: `Contribution: ${selectedStory.headline}`,
@@ -311,7 +410,7 @@
   }
 </script>
 
-<section class="global-wire" data-global-wire-app>
+<section class="global-wire" data-global-wire-app data-global-wire-data-source={dataSource}>
   <header class="wire-header">
     <div>
       <p class="eyebrow">Global Wire</p>
@@ -320,8 +419,12 @@
     <div class="wire-state" data-global-wire-state>
       <span>{authenticated ? 'owner computer' : 'public preview'}</span>
       <strong>{stories.length} story nodes</strong>
+      <small>{dataSource}</small>
     </div>
   </header>
+  {#if loadError}
+    <p class="wire-load-error">{loadError}</p>
+  {/if}
 
   <main class="wire-layout">
     <section class="front-page" data-global-wire-front-page aria-label="Front page stories">
@@ -465,7 +568,7 @@
         {#if contributions.length}
           <div class="contribution-list" data-global-wire-contribution-list>
             {#each contributions as item}
-              <p><strong>{item.kind.replaceAll('-', ' ')}</strong> · {item.text}</p>
+              <p><strong>{item.kind.replaceAll('-', ' ')}</strong> · {item.text} · {item.research_state || 'pending-researcher-review'}</p>
             {/each}
           </div>
         {/if}
@@ -558,6 +661,12 @@
     display: grid;
     gap: 0.15rem;
     justify-items: end;
+    font-size: 0.82rem;
+  }
+
+  .wire-load-error {
+    padding: 0 1rem;
+    color: var(--choir-text-muted);
     font-size: 0.82rem;
   }
 

@@ -1,0 +1,602 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/types"
+)
+
+const globalWireSeedState = "seeded-source-neighborhood"
+
+var defaultGlobalWireStyleSources = []types.GlobalWireStyleSource{
+	{
+		ID:         "wire-style",
+		Title:      "Style.vtext: Global Wire",
+		Label:      "Wire",
+		Summary:    "Fast public brief, direct sourcing, visible uncertainty, no oracle voice.",
+		SourcePath: "styles/global-wire.style.vtext",
+	},
+	{
+		ID:         "claim-audit-style",
+		Title:      "Style.vtext: Claim Audit",
+		Label:      "Audit",
+		Summary:    "Foregrounds dispute state, evidence gaps, counterclaims, and source standing.",
+		SourcePath: "styles/claim-audit.style.vtext",
+	},
+	{
+		ID:         "market-brief-style",
+		Title:      "Style.vtext: Market Brief",
+		Label:      "Market",
+		Summary:    "Emphasizes exposure, second-order effects, timing, and unresolved risks.",
+		SourcePath: "styles/market-brief.style.vtext",
+	},
+}
+
+var defaultGlobalWireStories = []types.GlobalWireStory{
+	{
+		ID:          "story-supply-resilience",
+		Headline:    "Port backlog recedes as carriers warn of uneven inland recovery",
+		Dek:         "Lead port indicators improved this week, while rail dwell and warehouse reports still show regional stress.",
+		Freshness:   "updated 18 min ago",
+		Prominence:  82,
+		Tension:     "qualifying evidence",
+		ChangeState: "claim narrowed",
+		NodeTone:    "live",
+		Related:     []string{"story-energy-grid", "story-retail-margins"},
+		Manifest: types.GlobalWireSourceManifest{
+			Lead: []types.GlobalWireSourceItem{
+				{ID: "source-port-authority", Title: "Port authority throughput bulletin", Standing: "official operations bulletin", Role: "lead"},
+				{ID: "source-carrier-note", Title: "Carrier service advisory", Standing: "operator disclosure", Role: "lead"},
+			},
+			Supporting: []types.GlobalWireSourceItem{
+				{ID: "source-rail-dwell", Title: "Rail dwell dashboard", Standing: "public logistics metric", Role: "supporting"},
+				{ID: "source-warehouse-index", Title: "Warehouse vacancy index", Standing: "industry data", Role: "supporting"},
+			},
+			Contrary: []types.GlobalWireSourceItem{
+				{ID: "source-regional-exporters", Title: "Regional exporters report delays", Standing: "trade association survey", Role: "contrary"},
+			},
+			Context: []types.GlobalWireSourceItem{
+				{ID: "source-ambient-brief", Title: "Ambient corpus: shipping and retail filings", Standing: "bounded context packet", Role: "context"},
+			},
+		},
+		Claims: []string{
+			"Container queue times have improved at the port complex.",
+			"Inland recovery remains uneven and should not be summarized as resolved.",
+			"Retail margin impact depends on regional warehouse exposure.",
+		},
+		Projections: map[string]string{
+			"wire-style":         "Port congestion indicators eased this week, but the recovery remains uneven once inland rail dwell and warehouse data are included. The current platform story treats the port bulletin as lead evidence and keeps the exporter delay survey visible as qualifying evidence.",
+			"claim-audit-style":  "The strongest supported claim is narrower than the headline risk suggests: vessel queues have improved. A broader claim that supply chains are normal again is not supported because rail dwell, warehouse vacancy, and exporter surveys still show regional delays.",
+			"market-brief-style": "The market read is mixed. Port improvement lowers near-term shipping pressure, but inland bottlenecks leave margin risk concentrated in retailers with regionally exposed inventories and limited warehouse flexibility.",
+		},
+	},
+	{
+		ID:          "story-energy-grid",
+		Headline:    "Grid operators add reserve alerts as heat forecast shifts north",
+		Dek:         "Forecast changes moved stress from the southern peak window toward northern reserve margins.",
+		Freshness:   "updated 41 min ago",
+		Prominence:  74,
+		Tension:     "forecast changed",
+		ChangeState: "timeline updated",
+		NodeTone:    "changed",
+		Related:     []string{"story-supply-resilience", "story-city-air"},
+		Manifest: types.GlobalWireSourceManifest{
+			Lead: []types.GlobalWireSourceItem{
+				{ID: "source-grid-notice", Title: "Regional grid operator reserve notice", Standing: "official grid notice", Role: "lead"},
+				{ID: "source-weather-update", Title: "National forecast update", Standing: "meteorological update", Role: "lead"},
+			},
+			Supporting: []types.GlobalWireSourceItem{
+				{ID: "source-demand-model", Title: "Demand forecast model", Standing: "operator model packet", Role: "supporting"},
+			},
+			Contrary: []types.GlobalWireSourceItem{
+				{ID: "source-utility-comment", Title: "Utility says local capacity is adequate", Standing: "utility statement", Role: "contrary"},
+			},
+			Context: []types.GlobalWireSourceItem{
+				{ID: "source-grid-history", Title: "Prior reserve-alert history", Standing: "timeline context", Role: "context"},
+			},
+		},
+		Claims: []string{
+			"Reserve concern shifted north with the updated heat forecast.",
+			"The alert is operational risk, not proof of shortage.",
+			"Local utility statements should be read against regional reserve margins.",
+		},
+		Projections: map[string]string{
+			"wire-style":         "Grid operators issued reserve alerts after the heat forecast moved north. The story is not a shortage call; it is an operational watch with utility statements and prior alert history kept in the evidence neighborhood.",
+			"claim-audit-style":  "The alert supports a risk claim, not a failure claim. The contrary utility statement does not negate the regional notice, but it narrows the geography and should stay attached to the StoryGraph.",
+			"market-brief-style": "The exposure is timing-sensitive: reserve alerts can move power prices before any outage occurs. The practical signal is regional load stress and hedging pressure rather than confirmed infrastructure failure.",
+		},
+	},
+	{
+		ID:          "story-city-air",
+		Headline:    "City air monitors show sharp overnight improvement after smoke plume disperses",
+		Dek:         "Monitors improved by morning, but health agencies kept cautions for sensitive groups while plume models update.",
+		Freshness:   "updated 1 hr ago",
+		Prominence:  63,
+		Tension:     "public guidance lag",
+		ChangeState: "status improved",
+		NodeTone:    "cooling",
+		Related:     []string{"story-energy-grid"},
+		Manifest: types.GlobalWireSourceManifest{
+			Lead: []types.GlobalWireSourceItem{
+				{ID: "source-air-monitors", Title: "City air-quality monitor readings", Standing: "public sensor network", Role: "lead"},
+				{ID: "source-health-agency", Title: "Health agency advisory", Standing: "public health guidance", Role: "lead"},
+			},
+			Supporting: []types.GlobalWireSourceItem{
+				{ID: "source-plume-model", Title: "Smoke plume model update", Standing: "forecast model", Role: "supporting"},
+			},
+			Contrary: []types.GlobalWireSourceItem{
+				{ID: "source-community-reports", Title: "Community reports of local haze", Standing: "local observations", Role: "contrary"},
+			},
+			Context: []types.GlobalWireSourceItem{
+				{ID: "source-prior-air-event", Title: "Prior air-quality event timeline", Standing: "historical context", Role: "context"},
+			},
+		},
+		Claims: []string{
+			"Sensor readings improved materially overnight.",
+			"Sensitive-group caution remains because public-health guidance lags and local haze reports persist.",
+			"The story should track monitor changes over time instead of freezing the morning state.",
+		},
+		Projections: map[string]string{
+			"wire-style":         "Air-quality readings improved sharply after the smoke plume dispersed overnight. Health guidance remains more cautious for sensitive groups, so the story keeps monitor data, plume models, and local reports in view.",
+			"claim-audit-style":  "The evidence supports improvement, not all-clear. The health advisory and community haze reports qualify the monitor trend and prevent the platform story from flattening a changing condition into a single verdict.",
+			"market-brief-style": "The operational effect is localized but real: school, transit, and outdoor-work decisions may lag sensor improvement because public guidance and local observations update on different cadences.",
+		},
+	},
+}
+
+// ListGlobalWireStories returns the owner's durable StoryGraph records, seeding
+// the initial source-neighborhood graph if the owner has not opened Global Wire
+// before.
+func (s *Store) ListGlobalWireStories(ctx context.Context, ownerID string) ([]types.GlobalWireStory, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return nil, fmt.Errorf("owner_id is required")
+	}
+	if err := s.ensureDefaultGlobalWireStories(ctx, ownerID); err != nil {
+		return nil, err
+	}
+	rows, err := s.readDB.QueryContext(ctx,
+		`SELECT owner_id, story_id, headline, dek, freshness, prominence, tension, change_state,
+		        node_tone, related_json, manifest_json, claims_json, projections_json,
+		        style_sources_json, story_vtext_doc_id, source_state, created_at, updated_at
+		   FROM global_wire_story_graphs
+		  WHERE owner_id = ?
+		  ORDER BY prominence DESC, updated_at DESC`,
+		ownerID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire stories: %w", err)
+	}
+	defer rows.Close()
+
+	var stories []types.GlobalWireStory
+	for rows.Next() {
+		story, err := scanGlobalWireStory(rows)
+		if err != nil {
+			return nil, err
+		}
+		stories = append(stories, story)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire stories: %w", err)
+	}
+	return stories, nil
+}
+
+func (s *Store) ensureDefaultGlobalWireStories(ctx context.Context, ownerID string) error {
+	var count int
+	if err := s.readDB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM global_wire_story_graphs WHERE owner_id = ?`,
+		ownerID,
+	).Scan(&count); err != nil {
+		return fmt.Errorf("count global wire stories: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	styleSources, err := s.ensureDefaultGlobalWireStyleVTexts(ctx, ownerID, now)
+	if err != nil {
+		return err
+	}
+	for _, seed := range defaultGlobalWireStories {
+		seed.OwnerID = ownerID
+		seed.StyleSources = styleSources
+		seed.SourceState = globalWireSeedState
+		seed.CreatedAt = now
+		seed.UpdatedAt = now
+		docID, err := s.createGlobalWireSeedVText(ctx, ownerID, seed.Headline, globalWireStoryVTextContent(seed), []types.Citation{
+			{ID: "style-source", Type: "vtext", Value: styleSources[0].SourcePath, Label: styleSources[0].Title},
+			{ID: "storygraph-node", Type: "storygraph", Value: seed.ID, Label: seed.Headline},
+		}, map[string]any{
+			"created_from":     "global_wire_storygraph_seed",
+			"storygraph_id":    seed.ID,
+			"source_state":     globalWireSeedState,
+			"immutable_notice": "User edits must fork and never mutate this platform story.",
+		}, now)
+		if err != nil {
+			return err
+		}
+		seed.StoryVTextDoc = docID
+		if err := s.UpsertGlobalWireStory(ctx, seed); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) ensureDefaultGlobalWireStyleVTexts(ctx context.Context, ownerID string, now time.Time) ([]types.GlobalWireStyleSource, error) {
+	out := make([]types.GlobalWireStyleSource, 0, len(defaultGlobalWireStyleSources))
+	for _, style := range defaultGlobalWireStyleSources {
+		docID, err := s.createGlobalWireSeedVText(ctx, ownerID, style.Title, globalWireStyleVTextContent(style), []types.Citation{
+			{ID: "style-vtext", Type: "vtext", Value: style.SourcePath, Label: style.Title},
+		}, map[string]any{
+			"created_from": "global_wire_style_seed",
+			"style_id":     style.ID,
+			"source_path":  style.SourcePath,
+		}, now)
+		if err != nil {
+			return nil, err
+		}
+		style.DocID = docID
+		out = append(out, style)
+	}
+	return out, nil
+}
+
+func (s *Store) createGlobalWireSeedVText(ctx context.Context, ownerID, title, content string, citations []types.Citation, metadata map[string]any, now time.Time) (string, error) {
+	docID := uuid.NewString()
+	revID := uuid.NewString()
+	doc := types.Document{
+		DocID:     docID,
+		OwnerID:   ownerID,
+		Title:     title,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		return "", err
+	}
+	citationsJSON, err := json.Marshal(citations)
+	if err != nil {
+		return "", fmt.Errorf("marshal global wire seed citations: %w", err)
+	}
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return "", fmt.Errorf("marshal global wire seed metadata: %w", err)
+	}
+	rev := types.Revision{
+		RevisionID:  revID,
+		DocID:       docID,
+		OwnerID:     ownerID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "Global Wire",
+		Content:     content,
+		Citations:   citationsJSON,
+		Metadata:    metadataJSON,
+		CreatedAt:   now,
+	}
+	if err := s.CreateRevision(ctx, rev); err != nil {
+		return "", err
+	}
+	return docID, nil
+}
+
+func globalWireStoryVTextContent(story types.GlobalWireStory) string {
+	styleTitle := "Style.vtext: Global Wire"
+	if len(story.StyleSources) > 0 {
+		styleTitle = story.StyleSources[0].Title
+	}
+	sourceLines := func(label string, items []types.GlobalWireSourceItem) []string {
+		lines := make([]string, 0, len(items))
+		for _, item := range items {
+			lines = append(lines, fmt.Sprintf("- %s: %s (%s; %s)", label, item.Title, item.Standing, item.ID))
+		}
+		return lines
+	}
+	lines := []string{
+		"# " + story.Headline,
+		"",
+		story.Dek,
+		"",
+		"Style source: " + styleTitle,
+		"StoryGraph id: " + story.ID,
+		"State: " + story.ChangeState + "; " + story.Tension,
+		"",
+		"## Projection",
+		"",
+		story.Projections["wire-style"],
+		"",
+		"## Claims",
+		"",
+	}
+	for _, claim := range story.Claims {
+		lines = append(lines, "- "+claim)
+	}
+	lines = append(lines, "", "## Source Manifest", "")
+	lines = append(lines, sourceLines("lead", story.Manifest.Lead)...)
+	lines = append(lines, sourceLines("supporting", story.Manifest.Supporting)...)
+	lines = append(lines, sourceLines("contrary or qualifying", story.Manifest.Contrary)...)
+	lines = append(lines, sourceLines("ambient context", story.Manifest.Context)...)
+	lines = append(lines, "", "## Related Story VTexts", "")
+	for _, related := range story.Related {
+		lines = append(lines, "- "+related)
+	}
+	lines = append(lines,
+		"",
+		"## Non-oracle note",
+		"",
+		"This story is a source-grounded VText projection. User edits create user-owned versions and do not mutate the platform story.",
+	)
+	return strings.Join(lines, "\n")
+}
+
+func globalWireStyleVTextContent(style types.GlobalWireStyleSource) string {
+	return strings.Join([]string{
+		"# " + style.Title,
+		"",
+		style.Summary,
+		"",
+		"## Applies To",
+		"",
+		"- StoryGraph projections",
+		"- Story VText revision prompts",
+		"- News reader and Autoradio traversal",
+		"",
+		"## Guardrails",
+		"",
+		"- Preserve lead, supporting, contrary, and ambient source tiers.",
+		"- Change framing and salience without inventing evidence.",
+		"- Keep uncertainty and corrections visible.",
+		"- Cite this Style.vtext when it materially shapes a projection.",
+	}, "\n")
+}
+
+// UpsertGlobalWireStory persists one StoryGraph node.
+func (s *Store) UpsertGlobalWireStory(ctx context.Context, rec types.GlobalWireStory) error {
+	now := rec.UpdatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	relatedJSON, err := json.Marshal(rec.Related)
+	if err != nil {
+		return fmt.Errorf("marshal global wire related stories: %w", err)
+	}
+	manifestJSON, err := json.Marshal(rec.Manifest)
+	if err != nil {
+		return fmt.Errorf("marshal global wire manifest: %w", err)
+	}
+	claimsJSON, err := json.Marshal(rec.Claims)
+	if err != nil {
+		return fmt.Errorf("marshal global wire claims: %w", err)
+	}
+	projectionsJSON, err := json.Marshal(rec.Projections)
+	if err != nil {
+		return fmt.Errorf("marshal global wire projections: %w", err)
+	}
+	styleSourcesJSON, err := json.Marshal(rec.StyleSources)
+	if err != nil {
+		return fmt.Errorf("marshal global wire style sources: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_story_graphs (
+			owner_id, story_id, headline, dek, freshness, prominence, tension, change_state,
+			node_tone, related_json, manifest_json, claims_json, projections_json,
+			style_sources_json, story_vtext_doc_id, source_state, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			headline = VALUES(headline),
+			dek = VALUES(dek),
+			freshness = VALUES(freshness),
+			prominence = VALUES(prominence),
+			tension = VALUES(tension),
+			change_state = VALUES(change_state),
+			node_tone = VALUES(node_tone),
+			related_json = VALUES(related_json),
+			manifest_json = VALUES(manifest_json),
+			claims_json = VALUES(claims_json),
+			projections_json = VALUES(projections_json),
+			style_sources_json = VALUES(style_sources_json),
+			story_vtext_doc_id = VALUES(story_vtext_doc_id),
+			source_state = VALUES(source_state),
+			updated_at = VALUES(updated_at)`,
+		rec.OwnerID,
+		rec.ID,
+		sanitizeStoreText(rec.Headline),
+		sanitizeStoreText(rec.Dek),
+		rec.Freshness,
+		rec.Prominence,
+		rec.Tension,
+		rec.ChangeState,
+		rec.NodeTone,
+		string(relatedJSON),
+		string(manifestJSON),
+		string(claimsJSON),
+		string(projectionsJSON),
+		string(styleSourcesJSON),
+		rec.StoryVTextDoc,
+		rec.SourceState,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		now.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return fmt.Errorf("upsert global wire story: %w", err)
+	}
+	return nil
+}
+
+// CreateGlobalWireContribution stores a user-owned contribution in the
+// research/reconciliation queue.
+func (s *Store) CreateGlobalWireContribution(ctx context.Context, rec types.GlobalWireContribution) (types.GlobalWireContribution, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = rec.CreatedAt
+	}
+	if rec.ResearchState == "" {
+		rec.ResearchState = "pending-researcher-review"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_contributions (
+			owner_id, contribution_id, story_id, kind, headline, content,
+			user_vtext_doc_id, research_state, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.StoryID,
+		rec.Kind,
+		sanitizeStoreText(rec.Headline),
+		sanitizeStoreText(rec.Text),
+		rec.UserVTextDocID,
+		rec.ResearchState,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireContribution{}, fmt.Errorf("create global wire contribution: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireContributions lists recent owner-owned contributions, optionally
+// narrowed to one story.
+func (s *Store) ListGlobalWireContributions(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireContribution, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	query := `SELECT owner_id, contribution_id, story_id, kind, headline, content,
+	                user_vtext_doc_id, research_state, created_at, updated_at
+	           FROM global_wire_contributions
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire contributions: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireContribution
+	for rows.Next() {
+		rec, err := scanGlobalWireContribution(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire contributions: %w", err)
+	}
+	return out, nil
+}
+
+func scanGlobalWireStory(row interface{ Scan(...any) error }) (types.GlobalWireStory, error) {
+	var rec types.GlobalWireStory
+	var relatedJSON, manifestJSON, claimsJSON, projectionsJSON, styleSourcesJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.Headline,
+		&rec.Dek,
+		&rec.Freshness,
+		&rec.Prominence,
+		&rec.Tension,
+		&rec.ChangeState,
+		&rec.NodeTone,
+		&relatedJSON,
+		&manifestJSON,
+		&claimsJSON,
+		&projectionsJSON,
+		&styleSourcesJSON,
+		&rec.StoryVTextDoc,
+		&rec.SourceState,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireStory{}, ErrNotFound
+		}
+		return types.GlobalWireStory{}, fmt.Errorf("scan global wire story: %w", err)
+	}
+	if err := json.Unmarshal([]byte(relatedJSON), &rec.Related); err != nil {
+		return types.GlobalWireStory{}, fmt.Errorf("unmarshal global wire related stories: %w", err)
+	}
+	if err := json.Unmarshal([]byte(manifestJSON), &rec.Manifest); err != nil {
+		return types.GlobalWireStory{}, fmt.Errorf("unmarshal global wire manifest: %w", err)
+	}
+	if err := json.Unmarshal([]byte(claimsJSON), &rec.Claims); err != nil {
+		return types.GlobalWireStory{}, fmt.Errorf("unmarshal global wire claims: %w", err)
+	}
+	if err := json.Unmarshal([]byte(projectionsJSON), &rec.Projections); err != nil {
+		return types.GlobalWireStory{}, fmt.Errorf("unmarshal global wire projections: %w", err)
+	}
+	if err := json.Unmarshal([]byte(styleSourcesJSON), &rec.StyleSources); err != nil {
+		return types.GlobalWireStory{}, fmt.Errorf("unmarshal global wire styles: %w", err)
+	}
+	if rec.StyleSources == nil {
+		rec.StyleSources = []types.GlobalWireStyleSource{}
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireStory{}, fmt.Errorf("parse global wire created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireStory{}, fmt.Errorf("parse global wire updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireContribution(row interface{ Scan(...any) error }) (types.GlobalWireContribution, error) {
+	var rec types.GlobalWireContribution
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.StoryID,
+		&rec.Kind,
+		&rec.Headline,
+		&rec.Text,
+		&rec.UserVTextDocID,
+		&rec.ResearchState,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireContribution{}, ErrNotFound
+		}
+		return types.GlobalWireContribution{}, fmt.Errorf("scan global wire contribution: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireContribution{}, fmt.Errorf("parse global wire contribution created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireContribution{}, fmt.Errorf("parse global wire contribution updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}

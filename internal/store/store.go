@@ -122,6 +122,43 @@ CREATE TABLE IF NOT EXISTS channel_messages (
 	PRIMARY KEY (channel_id, seq)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_story_graphs (
+	owner_id           VARCHAR(255) NOT NULL,
+	story_id           VARCHAR(255) NOT NULL,
+	headline           LONGTEXT NOT NULL,
+	dek                LONGTEXT NOT NULL DEFAULT '',
+	freshness          VARCHAR(255) NOT NULL DEFAULT '',
+	prominence         INT NOT NULL DEFAULT 0,
+	tension            VARCHAR(255) NOT NULL DEFAULT '',
+	change_state       VARCHAR(255) NOT NULL DEFAULT '',
+	node_tone          VARCHAR(255) NOT NULL DEFAULT '',
+	related_json       LONGTEXT NOT NULL DEFAULT '[]',
+	manifest_json      LONGTEXT NOT NULL DEFAULT '{}',
+	claims_json        LONGTEXT NOT NULL DEFAULT '[]',
+	projections_json   LONGTEXT NOT NULL DEFAULT '{}',
+	style_sources_json LONGTEXT NOT NULL DEFAULT '[]',
+	story_vtext_doc_id VARCHAR(255) NOT NULL DEFAULT '',
+	source_state       VARCHAR(255) NOT NULL DEFAULT '',
+	created_at         DATETIME NOT NULL,
+	updated_at         DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, story_id)
+);
+
+CREATE TABLE IF NOT EXISTS global_wire_contributions (
+	owner_id           VARCHAR(255) NOT NULL,
+	contribution_id    VARCHAR(255) NOT NULL,
+	story_id           VARCHAR(255) NOT NULL,
+	kind               VARCHAR(255) NOT NULL,
+	headline           LONGTEXT NOT NULL DEFAULT '',
+	content            LONGTEXT NOT NULL DEFAULT '',
+	user_vtext_doc_id  VARCHAR(255) NOT NULL DEFAULT '',
+	research_state     VARCHAR(255) NOT NULL DEFAULT '',
+	created_at         DATETIME NOT NULL,
+	updated_at         DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, contribution_id),
+	KEY idx_global_wire_contributions_story (owner_id, story_id, updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivery_id          VARCHAR(255) PRIMARY KEY,
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',

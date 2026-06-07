@@ -66,6 +66,8 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   await openDeskApp(page, 'global-wire');
   const app = page.locator('[data-global-wire-app]');
   await expect(app).toBeVisible();
+  await expect(app).toHaveAttribute('data-global-wire-data-source', 'durable-storygraph');
+  await expect(app.locator('[data-global-wire-state]')).toContainText('durable-storygraph');
 
   await app.locator('[data-global-wire-fork-story]').click();
   await expect(page.locator('[data-vtext-editor]').last()).toContainText('My Edit');
@@ -75,6 +77,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   await app.locator('[data-global-wire-contribution] textarea').fill('Add a local utility filing as a qualifying source before reconciliation.');
   await app.locator('[data-global-wire-submit-contribution]').click();
   await expect(page.locator('[data-vtext-editor]').last()).toContainText('Research/Reconciliation State');
+  await expect(app.locator('[data-global-wire-contribution-list]')).toContainText('pending-researcher-review');
 
   const docs = await page.evaluate(async () => {
     const res = await fetch('/api/vtext/documents', { credentials: 'include' });
@@ -84,6 +87,13 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   const titles = (docs.documents || []).map((doc) => doc.title || '');
   expect(titles.some((title) => title.startsWith('My version of Port backlog recedes'))).toBeTruthy();
   expect(titles.some((title) => title.startsWith('Contribution: Port backlog recedes'))).toBeTruthy();
+
+  const queue = await page.evaluate(async () => {
+    const res = await fetch('/api/global-wire/contributions?story_id=story-supply-resilience', { credentials: 'include' });
+    if (!res.ok) throw new Error(`list contributions failed: ${res.status}`);
+    return res.json();
+  });
+  expect((queue.contributions || []).some((item) => item.research_state === 'pending-researcher-review')).toBeTruthy();
 });
 
 for (const themeId of ['futuristic-noir', 'carbon-fiber-kintsugi', 'london-salmon']) {
