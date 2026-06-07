@@ -1315,3 +1315,47 @@ the abandoned source-refresh batch edits; `stash@{0}` named
 abandoned pipeline-shaped processor/reconciler edits; behavior commits must
 record their own rollback SHAs. The shipped SourceMaxx UI checkpoint rollback
 SHA is the parent of `83af469309ed1874780283b6115a16b87232893d`.
+
+2026-06-07 clean newspaper UI checkpoint:
+
+- User review of the prior Global Wire surface found the object visually wrong:
+  too busy, panel/card-heavy, nested-scrolling, repetitive, and unreadable. The
+  target UI is a clean newspaper-like VText collection surface: article text in
+  columns, no story boxes, no app-local theme selector, no visible repeated
+  `Open in VText` labels, no contribution panel, and no Autoradio surface in
+  this mission slice. The source chronology remains important because the
+  product must signal SourceMaxx breadth and provenance without becoming a
+  dashboard.
+- Architecture review also clarified the UI object: Global Wire is not the
+  owner/editor of articles. VText agents own article documents. Processors and
+  reconcilers request normal VText agent revisions through the shared harness,
+  and the Global Wire app indexes/transcludes article VTexts, opens them in the
+  VText app, and leaves edits/forks/style changes to normal VText flows.
+- Local implementation work after this checkpoint updates the app toward that
+  object: masthead `Global Wire` with quiet `SourceMaxx newsroom` signal,
+  registry description `SourceMaxx VText newspaper`, stable unboxed article
+  columns, every story openable/forkable through compact VText affordances, and
+  responsive one-column mobile behavior inside the Choir desktop shell.
+- Local proof before staging: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 pnpm
+  --dir frontend exec playwright test tests/global-wire-app.spec.js` passed
+  4/4, proving all three preview articles are openable as VText, Style.vtext
+  provenance stays compact, the old StoryGraph/Autoradio/Contribute/theme
+  surfaces are absent, and the surface remains responsive across Futuristic
+  Noir, Carbon Fiber Kintsugi, and London Salmon. `pnpm --dir frontend build`
+  passed with the existing large-chunk warning. Browser screenshots captured
+  `/tmp/global-wire-desktop-v2.png` and `/tmp/global-wire-mobile-v3.png` for
+  visual inspection.
+
+updated remaining error field:
+
+- Clean UI local proof is in progress but not yet staging-proven. The next
+  behavior commit must be pushed, CI/deploy monitored, staging commit identity
+  verified, and the deployed Global Wire product path re-tested.
+- The preview UI now reflects the VText-owned article architecture, but the
+  authenticated deployed data path still needs proof that fresh SourceMaxx
+  article heads appear in this cleaner newspaper surface instead of only seeded
+  preview records.
+- Firehose breadth is still not mature: the strongest staging proof remains
+  686 deduped items from 14 fetches. SourceMaxx still needs many more RSS,
+  Telegram, GDELT/provider feeds and health/backoff visibility before calling
+  ingestion complete.
