@@ -290,7 +290,7 @@
         sourcecycled = mkGoService {
           pname = "sourcecycled";
           subPackage = "cmd/sourcecycled";
-          vendorHash = "sha256-2uExDYKXWdF4NyIMX6NVVXcuXRoTm+/S/CxuwPExXiI=";
+          vendorHash = "sha256-5UKbNQEWnW0LeTQY4CkLxb7E0SXGuNnFXd+G29DztRc=";
           internalDirs = [
             "internal/buildinfo"
             "internal/cycle"
