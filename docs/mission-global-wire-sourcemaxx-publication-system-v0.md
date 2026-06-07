@@ -706,13 +706,20 @@ belief-state changes:
   edge. The remaining mission risk has moved from source-volume visibility to
   whether queued handoffs become resident processor/reconciler cognition and
   VText publication through existing agent loops.
+- Processor and reconciler handoffs should be consumed by new first-class
+  `processor` and `reconciler` agent profiles on the shared Choir harness, not
+  by relabeling them as `researcher`, `super`, `co-super`, or a sourcecycled
+  side loop. Their differences should live in role prompts, toolsets,
+  request metadata, compaction policy, and product-visible state while sharing
+  the same provider calls, run memory, continuation, channel, cancellation,
+  retry, and event machinery as existing agents.
 
 remaining error field:
 
 - sustained staging source daemon/storage behavior across repeated cycles,
   including provider-level distribution, freshness, dedupe, and backoff;
-- processor/reconciler runtime contracts, same-loop tool use, request/result
-  channels, and compaction policy;
+- first-class processor/reconciler agent profiles, same-loop tool use,
+  request/result channels, and compaction policy;
 - processor load budget and routing scheme after live staging data;
 - current researcher/VText agent invocation contracts for this workflow;
 - deletion/reuse map for current Global Wire backend source paths;
@@ -732,9 +739,11 @@ next executable delivery loop:
 1. Probe repeated staging SourceMaxx cycles through
    `/api/global-wire/sourcemaxx-status` and add provider-level product-safe
    observability only if needed for debugging source freshness/distribution.
-2. Connect queued processor/reconciler handoffs to resident agent runs using
-   the existing runtime loop and request/result records. Preserve long-running
-   context/compaction handles rather than reconstructing all context from text.
+2. Add first-class `processor` and `reconciler` agent profiles in the shared
+   runtime harness with profile-specific toolsets/prompts, then connect queued
+   handoffs to resident agent runs using existing request/result records.
+   Preserve long-running context/compaction handles rather than reconstructing
+   all context from text.
 3. Route processor/reconciler research needs into existing researcher agents
    and route article/update needs into existing VText agents. Do not create a
    parallel researcher/writer system.
