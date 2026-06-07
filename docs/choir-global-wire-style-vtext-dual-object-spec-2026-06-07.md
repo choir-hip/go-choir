@@ -399,8 +399,10 @@ Required views:
 - **Front Page:** readable newspaper/broadsheet columns of current VTexts.
 - **Source Chronology:** reverse-chronological source feed with filters by
   source class, geography, topic/vertical hints, and later search.
-- **Open In VText:** button/action on every full article that opens the normal
-  VText app for reading, editing, forking, style changes, or user publication.
+- **VText open affordance:** every article opens in the normal VText app for
+  reading, editing, forking, style changes, or user publication. Do not repeat
+  `Open in VText` as visible label text for every article; use a small VText
+  icon/glyph, click target, or contextual action.
 - **Style/Provenance Disclosure:** compact access to selected/composed
   `Style.vtext` sources, per-version sources, and change history.
 
@@ -419,6 +421,8 @@ UI requirements:
 - front page columns, not card walls;
 - no nested scrolling panels;
 - no repeated display of the same limited information;
+- no borders, rules, or boxes around each story; text, whitespace, and section
+  rhythm provide structure;
 - details by progressive disclosure;
 - evidence visible without overwhelming the collection surface;
 - no contribution dashboard inside the News app; contribution and editing

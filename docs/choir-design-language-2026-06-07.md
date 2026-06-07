@@ -190,17 +190,24 @@ These mockups are visual direction, not product proof. The implementation must
 still use the real theme tokens, real app shell, product-path data, and browser
 screenshots.
 
+If a mockup appears to show story boxes, vertical rules, or repeated text
+buttons, treat that as image-generator noise. The product rule is stronger:
+article text and whitespace provide the structure.
+
 Desktop:
 
 - no app-local theme selector;
 - masthead/status line only, not a marketing header;
 - columns of article text, not a grid of cards;
-- no borders around each story;
+- no borders, rules, or boxes around each story;
 - less metadata visible by default, more article;
 - source chronology column remains visible and useful;
 - provenance/style disclosure is compact and inline;
 - full article reading, editing, forking, style changes, and publication happen
-  through Open in VText.
+  through the normal VText app;
+- every article is openable as a VText;
+- do not repeat `Open in VText` as visible label text for each article; use a
+  small VText icon/glyph, click target, or contextual action instead.
 
 Mobile:
 
@@ -209,6 +216,9 @@ Mobile:
 - article text remains primary;
 - metadata stays inline and sparse;
 - no nested panel scrolling.
+- mobile remains a responsive app inside the Choir web desktop/shell; do not
+  design it as a native phone app with OS-native status bars, notches, or tab
+  bars.
 
 Theme behavior:
 
@@ -250,7 +260,8 @@ Use:
 - segmented controls for mode choices;
 - icon buttons where the command is familiar;
 - text buttons for clear editorial commands such as `Revise`, `Sources`,
-  `Publish`, and `Open in VText`;
+  and `Publish`;
+- compact icon/glyph actions for repeated per-article VText opening;
 - compact chips for filters such as source class or region;
 - visible selected states that match the active theme.
 
