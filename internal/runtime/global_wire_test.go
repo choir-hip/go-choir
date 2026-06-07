@@ -438,6 +438,105 @@ func TestHandleGlobalWireSourceRefreshClassifiesNoVisibleChangeWithoutCandidate(
 	}
 }
 
+func TestHandleGlobalWirePromotesClassifiedRefreshIntoStoryGraphAndPlatformVText(t *testing.T) {
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/source-service/search" {
+			t.Fatalf("unexpected source service path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(sourceapi.SearchResponse{
+			Query:    "urgent port prominence",
+			Provider: sourceapi.ProviderName,
+			Metadata: sourceapi.Metadata{TargetKind: sourceapi.TargetKind},
+			Results: []sourceapi.ItemResult{{
+				Rank:          1,
+				TargetKind:    sourceapi.TargetKind,
+				ItemID:        "srcitem_port_prominence",
+				SourceID:      "rss:ports",
+				SourceType:    "rss",
+				FetchID:       "fetch-port-prominence",
+				Title:         "Urgent major port disruption moves to front page",
+				Body:          "Breaking emergency port update may change front page prominence and lead evidence.",
+				URL:           "https://example.test/ports-prominence",
+				CanonicalURL:  "https://example.test/ports-prominence",
+				ContentHash:   "hash-port-prominence",
+				EvidenceLevel: "source-service-ledger",
+			}},
+		})
+	}))
+	defer sourceServer.Close()
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+
+	_, handler := testAPISetup(t)
+	storiesBeforeW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
+	if storiesBeforeW.Code != http.StatusOK {
+		t.Fatalf("stories before status = %d body=%s", storiesBeforeW.Code, storiesBeforeW.Body.String())
+	}
+	var storiesBefore globalWireStoriesResponse
+	if err := json.NewDecoder(storiesBeforeW.Body).Decode(&storiesBefore); err != nil {
+		t.Fatalf("decode stories before: %v", err)
+	}
+	beforeStory := storiesBefore.Stories[0]
+	beforeDoc, err := handler.rt.Store().GetDocument(context.Background(), beforeStory.StoryVTextDoc, "user-alpha")
+	if err != nil {
+		t.Fatalf("get platform story doc before: %v", err)
+	}
+
+	refreshBody := `{"story_id":"story-supply-resilience","query":"urgent port prominence","max_results":1}`
+	refreshW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/source-refresh", refreshBody, "user-alpha")
+	if refreshW.Code != http.StatusCreated {
+		t.Fatalf("source refresh status = %d body=%s", refreshW.Code, refreshW.Body.String())
+	}
+	var refreshResp globalWireSourceRefreshResponse
+	if err := json.NewDecoder(refreshW.Body).Decode(&refreshResp); err != nil {
+		t.Fatalf("decode source refresh: %v", err)
+	}
+	if refreshResp.RefreshRun.UpdateClassification != "front-page-prominence-changed" ||
+		refreshResp.Candidate == nil ||
+		refreshResp.Candidate.CandidateKind != "front-page-prominence-changed" ||
+		refreshResp.Candidate.SourceTier != "lead" {
+		t.Fatalf("refresh did not create prominence candidate: %+v", refreshResp)
+	}
+
+	promoteBody := `{"candidate_id":"` + refreshResp.Candidate.ID + `","decision":"promoted","note":"Platform review accepts prominence update."}`
+	promoteW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/graph-candidates", promoteBody, "user-alpha")
+	if promoteW.Code != http.StatusCreated {
+		t.Fatalf("promote graph candidate status = %d body=%s", promoteW.Code, promoteW.Body.String())
+	}
+	var promoteResp globalWireGraphCandidateReviewResponse
+	if err := json.NewDecoder(promoteW.Body).Decode(&promoteResp); err != nil {
+		t.Fatalf("decode graph promotion: %v", err)
+	}
+	if promoteResp.Story.ChangeState != "front-page prominence changed" ||
+		promoteResp.Story.Prominence <= beforeStory.Prominence ||
+		promoteResp.Story.Manifest.Lead[len(promoteResp.Story.Manifest.Lead)-1].ContentID != refreshResp.ContentItem.ContentID {
+		t.Fatalf("promoted story did not apply prominence semantics: before=%+v after=%+v", beforeStory, promoteResp.Story)
+	}
+	if !strings.Contains(promoteResp.Promotion.AppliedChange, "created PlatformStory VText revision") {
+		t.Fatalf("promotion did not record platform story revision: %+v", promoteResp.Promotion)
+	}
+	afterDoc, err := handler.rt.Store().GetDocument(context.Background(), beforeStory.StoryVTextDoc, "user-alpha")
+	if err != nil {
+		t.Fatalf("get platform story doc after: %v", err)
+	}
+	if afterDoc.CurrentRevisionID == beforeDoc.CurrentRevisionID {
+		t.Fatalf("platform story current revision did not change: before=%q after=%q", beforeDoc.CurrentRevisionID, afterDoc.CurrentRevisionID)
+	}
+	afterRev, err := handler.rt.Store().GetRevision(context.Background(), afterDoc.CurrentRevisionID, "user-alpha")
+	if err != nil {
+		t.Fatalf("get platform story revision after: %v", err)
+	}
+	if afterRev.AuthorKind != types.AuthorAppAgent ||
+		afterRev.ParentRevisionID != beforeDoc.CurrentRevisionID ||
+		!strings.Contains(afterRev.Content, "front-page prominence changed") ||
+		!strings.Contains(afterRev.Content, refreshResp.ContentItem.ContentID) ||
+		!strings.Contains(afterRev.Content, "User-owned forks, edits, and contributions remain separate") {
+		t.Fatalf("platform story revision missing classified promotion provenance: %+v", afterRev)
+	}
+}
+
 func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(t *testing.T) {
 	_, handler := testAPISetup(t)
 

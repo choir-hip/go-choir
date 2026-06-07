@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -841,6 +842,7 @@ func (h *APIHandler) applyGlobalWireGraphCandidate(r *http.Request, ownerID stri
 	source := globalWireSourceItemFromContentItem(candidate, item)
 	tier := strings.TrimSpace(candidate.SourceTier)
 	added := false
+	appliedChanges := []string{}
 	switch tier {
 	case "lead":
 		story.Manifest.Lead, added = appendGlobalWireSourceIfMissing(story.Manifest.Lead, source)
@@ -852,16 +854,148 @@ func (h *APIHandler) applyGlobalWireGraphCandidate(r *http.Request, ownerID stri
 		tier = "context"
 		story.Manifest.Context, added = appendGlobalWireSourceIfMissing(story.Manifest.Context, source)
 	}
+	if added {
+		appliedChanges = append(appliedChanges, "appended source_content_id "+item.ContentID+" to "+tier+" manifest tier")
+	} else {
+		appliedChanges = append(appliedChanges, "source already present in "+tier+" manifest tier; promotion recorded without duplicate source")
+	}
+	relatedStoryID, relatedStoryAdded := h.applyGlobalWireClassifiedStoryUpdate(r, ownerID, &story, candidate, item)
+	if relatedStoryAdded {
+		appliedChanges = append(appliedChanges, "added related Story VText edge to "+relatedStoryID)
+	}
 	story.SourceState = "platform-review-promoted-source"
-	story.ChangeState = firstNonEmptyString(story.ChangeState, "source manifest updated")
+	if strings.TrimSpace(story.Freshness) == "" || strings.Contains(strings.ToLower(story.Freshness), "updated") {
+		story.Freshness = "updated just now"
+	}
 	story.UpdatedAt = time.Now().UTC()
 	if err := h.rt.Store().UpsertGlobalWireStory(r.Context(), story); err != nil {
 		return types.GlobalWireStory{}, "", err
 	}
-	if !added {
-		return story, "source already present in " + tier + " manifest tier; promotion recorded without duplicate source", nil
+	revisionID, err := h.createGlobalWirePlatformStoryRevision(r, ownerID, story, candidate, item, appliedChanges)
+	if err != nil {
+		return types.GlobalWireStory{}, "", err
 	}
-	return story, "appended source_content_id " + item.ContentID + " to " + tier + " manifest tier", nil
+	if revisionID != "" {
+		appliedChanges = append(appliedChanges, "created PlatformStory VText revision "+revisionID)
+	}
+	return story, strings.Join(appliedChanges, "; "), nil
+}
+
+func (h *APIHandler) applyGlobalWireClassifiedStoryUpdate(r *http.Request, ownerID string, story *types.GlobalWireStory, candidate types.GlobalWireGraphUpdateCandidate, item types.ContentItem) (string, bool) {
+	kind := strings.TrimSpace(candidate.CandidateKind)
+	summary := firstNonEmptyString(candidate.Summary, item.TextContent, item.Title)
+	relatedStoryID := ""
+	relatedStoryAdded := false
+	switch kind {
+	case "claim-changed":
+		story.Claims = appendStringIfMissing(story.Claims, "Reviewed update: "+summary)
+		story.ChangeState = "claim changed"
+		story.Tension = "claim update"
+		story.NodeTone = "changed"
+		story.Prominence = clampGlobalWireProminence(story.Prominence + 4)
+	case "contradiction-added":
+		story.Claims = appendStringIfMissing(story.Claims, "Contrary evidence: "+summary)
+		story.ChangeState = "contradiction added"
+		story.Tension = "contradiction added"
+		story.NodeTone = "hot"
+		story.Prominence = clampGlobalWireProminence(story.Prominence + 6)
+	case "front-page-prominence-changed":
+		story.Claims = appendStringIfMissing(story.Claims, "Prominence review: "+summary)
+		story.ChangeState = "front-page prominence changed"
+		story.Tension = "prominence changed"
+		story.NodeTone = "live"
+		story.Prominence = clampGlobalWireProminence(story.Prominence + 12)
+	case "related-story-edge-added":
+		relatedStoryID = h.findGlobalWireRelatedStoryID(r, ownerID, story.ID, summary+" "+item.Title)
+		if relatedStoryID != "" {
+			story.Related, relatedStoryAdded = appendStringIfMissingWithStatus(story.Related, relatedStoryID)
+		}
+		story.ChangeState = "related story edge added"
+		story.Tension = "source neighborhood expanded"
+		story.NodeTone = "changed"
+		story.Prominence = clampGlobalWireProminence(story.Prominence + 2)
+	case "source-manifest-update":
+		story.ChangeState = "source manifest updated"
+		story.Tension = firstNonEmptyString(story.Tension, "new supporting evidence")
+		story.NodeTone = firstNonEmptyString(story.NodeTone, "changed")
+		story.Prominence = clampGlobalWireProminence(story.Prominence + 2)
+	default:
+		story.ChangeState = firstNonEmptyString(story.ChangeState, "source manifest updated")
+	}
+	return relatedStoryID, relatedStoryAdded
+}
+
+func (h *APIHandler) findGlobalWireRelatedStoryID(r *http.Request, ownerID, currentStoryID, evidenceText string) string {
+	stories, err := h.rt.Store().ListGlobalWireStories(r.Context(), ownerID)
+	if err != nil {
+		return ""
+	}
+	evidenceText = strings.ToLower(evidenceText)
+	for _, candidate := range stories {
+		if candidate.ID == currentStoryID {
+			continue
+		}
+		if strings.Contains(evidenceText, strings.ToLower(candidate.ID)) || strings.Contains(evidenceText, strings.ToLower(candidate.Headline)) {
+			return candidate.ID
+		}
+		for _, token := range strings.Fields(strings.ToLower(candidate.Headline)) {
+			token = strings.Trim(token, ".,:;!?()[]{}\"'")
+			if len(token) >= 6 && strings.Contains(evidenceText, token) {
+				return candidate.ID
+			}
+		}
+	}
+	return ""
+}
+
+func (h *APIHandler) createGlobalWirePlatformStoryRevision(r *http.Request, ownerID string, story types.GlobalWireStory, candidate types.GlobalWireGraphUpdateCandidate, item types.ContentItem, appliedChanges []string) (string, error) {
+	if strings.TrimSpace(story.StoryVTextDoc) == "" {
+		return "", nil
+	}
+	doc, err := h.rt.Store().GetDocument(r.Context(), story.StoryVTextDoc, ownerID)
+	if err != nil {
+		return "", err
+	}
+	now := time.Now().UTC()
+	citations, err := json.Marshal(globalWirePlatformStoryRevisionCitations(story, candidate, item))
+	if err != nil {
+		return "", err
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"created_from":      "global_wire_graph_candidate_promotion",
+		"storygraph_id":     story.ID,
+		"candidate_id":      candidate.ID,
+		"source_content_id": item.ContentID,
+		"candidate_kind":    candidate.CandidateKind,
+		"edge_kind":         candidate.EdgeKind,
+		"source_tier":       candidate.SourceTier,
+		"applied_changes":   appliedChanges,
+		"mutation_boundary": "platform-review-only",
+	})
+	if err != nil {
+		return "", err
+	}
+	rev := types.Revision{
+		RevisionID:       uuid.NewString(),
+		DocID:            doc.DocID,
+		OwnerID:          ownerID,
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "Global Wire",
+		Content:          globalWirePlatformStoryRevisionContent(story, candidate, item, appliedChanges),
+		Citations:        citations,
+		Metadata:         metadata,
+		CreatedAt:        now,
+		ParentRevisionID: doc.CurrentRevisionID,
+	}
+	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+		return "", err
+	}
+	storedRev, err := h.rt.Store().GetRevision(r.Context(), rev.RevisionID, ownerID)
+	if err != nil {
+		return "", err
+	}
+	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, storedRev)
+	return storedRev.RevisionID, nil
 }
 
 func globalWireSourceItemFromContentItem(candidate types.GlobalWireGraphUpdateCandidate, item types.ContentItem) types.GlobalWireSourceItem {
@@ -886,6 +1020,103 @@ func appendGlobalWireSourceIfMissing(items []types.GlobalWireSourceItem, source 
 		}
 	}
 	return append(items, source), true
+}
+
+func appendStringIfMissing(values []string, value string) []string {
+	out, _ := appendStringIfMissingWithStatus(values, value)
+	return out
+}
+
+func appendStringIfMissingWithStatus(values []string, value string) ([]string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return values, false
+	}
+	for _, existing := range values {
+		if strings.EqualFold(strings.TrimSpace(existing), value) {
+			return values, false
+		}
+	}
+	return append(values, value), true
+}
+
+func clampGlobalWireProminence(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
+}
+
+func globalWirePlatformStoryRevisionCitations(story types.GlobalWireStory, candidate types.GlobalWireGraphUpdateCandidate, item types.ContentItem) []types.Citation {
+	citations := []types.Citation{
+		{ID: "storygraph-node", Type: "storygraph", Value: story.ID, Label: story.Headline},
+		{ID: "graph-candidate", Type: "global_wire_graph_candidate", Value: candidate.ID, Label: firstNonEmptyString(candidate.CandidateKind, "graph candidate")},
+		{ID: "promoted-source", Type: "content_item", Value: item.ContentID, Label: firstNonEmptyString(item.Title, candidate.Title, "Promoted source")},
+	}
+	for _, style := range story.StyleSources {
+		if strings.TrimSpace(style.DocID) != "" {
+			citations = append(citations, types.Citation{
+				ID:    "style-" + style.ID,
+				Type:  "vtext",
+				Value: style.DocID,
+				Label: firstNonEmptyString(style.Title, style.Label),
+			})
+		}
+	}
+	return citations
+}
+
+func globalWirePlatformStoryRevisionContent(story types.GlobalWireStory, candidate types.GlobalWireGraphUpdateCandidate, item types.ContentItem, appliedChanges []string) string {
+	lines := []string{
+		"# " + story.Headline,
+		"",
+		story.Dek,
+		"",
+		"StoryGraph id: " + story.ID,
+		"Platform review state: " + story.ChangeState,
+		"Tension: " + story.Tension,
+		"Prominence: " + fmt.Sprintf("%d", story.Prominence),
+		"Candidate kind: " + firstNonEmptyString(candidate.CandidateKind, "source-manifest-update"),
+		"Graph candidate id: " + candidate.ID,
+		"Promoted source content id: " + item.ContentID,
+		"",
+		"## Platform Review Update",
+		"",
+	}
+	for _, change := range appliedChanges {
+		lines = append(lines, "- "+change)
+	}
+	lines = append(lines, "", "## Claims", "")
+	for _, claim := range story.Claims {
+		lines = append(lines, "- "+claim)
+	}
+	lines = append(lines, "", "## Source Manifest", "")
+	lines = append(lines, globalWireRuntimeSourceLines("lead", story.Manifest.Lead)...)
+	lines = append(lines, globalWireRuntimeSourceLines("supporting", story.Manifest.Supporting)...)
+	lines = append(lines, globalWireRuntimeSourceLines("contrary or qualifying", story.Manifest.Contrary)...)
+	lines = append(lines, globalWireRuntimeSourceLines("ambient context", story.Manifest.Context)...)
+	lines = append(lines, "", "## Related Story VTexts", "")
+	for _, related := range story.Related {
+		lines = append(lines, "- "+related)
+	}
+	lines = append(lines,
+		"",
+		"## Ownership Boundary",
+		"",
+		"This PlatformStory VText revision was created by explicit platform review. User-owned forks, edits, and contributions remain separate and are not mutated by this revision.",
+	)
+	return strings.Join(lines, "\n")
+}
+
+func globalWireRuntimeSourceLines(label string, items []types.GlobalWireSourceItem) []string {
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		lines = append(lines, fmt.Sprintf("- %s: %s (%s; %s)", label, item.Title, item.Standing, firstNonEmptyString(item.ContentID, item.ID)))
+	}
+	return lines
 }
 
 func (h *APIHandler) globalWireGraphUpdateCandidate(ownerID string, story types.GlobalWireStory, contribution types.GlobalWireContribution, decision types.GlobalWireReconciliationDecision) types.GlobalWireGraphUpdateCandidate {
