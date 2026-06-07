@@ -2365,6 +2365,110 @@ func (s *Store) GetGlobalWirePublicationDelivery(ctx context.Context, ownerID, d
 	return scanGlobalWirePublicationDelivery(row)
 }
 
+// CreateGlobalWireAutoradioScript stores a durable owner-scoped script over an
+// approved publication artifact.
+func (s *Store) CreateGlobalWireAutoradioScript(ctx context.Context, rec types.GlobalWireAutoradioScript) (types.GlobalWireAutoradioScript, error) {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
+	rec.CreatedAt = now
+	if strings.TrimSpace(rec.Status) == "" {
+		rec.Status = "script-ready"
+	}
+	citationRefsJSON, err := json.Marshal(rec.CitationRefs)
+	if err != nil {
+		return types.GlobalWireAutoradioScript{}, fmt.Errorf("marshal global wire autoradio script citation refs: %w", err)
+	}
+	rollbackRefsJSON, err := json.Marshal(rec.RollbackRefs)
+	if err != nil {
+		return types.GlobalWireAutoradioScript{}, fmt.Errorf("marshal global wire autoradio script rollback refs: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_autoradio_scripts (
+			owner_id, script_id, artifact_id, story_id, source_content_id,
+			status, title, script_body, voice_notes, citation_count,
+			rollback_count, citation_refs_json, rollback_refs_json, created_at,
+			updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.ArtifactID,
+		rec.StoryID,
+		rec.SourceContentID,
+		rec.Status,
+		rec.Title,
+		rec.ScriptBody,
+		rec.VoiceNotes,
+		rec.CitationCount,
+		rec.RollbackCount,
+		string(citationRefsJSON),
+		string(rollbackRefsJSON),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireAutoradioScript{}, fmt.Errorf("create global wire autoradio script: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireAutoradioScripts lists owner-scoped Autoradio scripts,
+// optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWireAutoradioScripts(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireAutoradioScript, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, script_id, artifact_id, story_id,
+	                source_content_id, status, title, script_body, voice_notes,
+	                citation_count, rollback_count, citation_refs_json,
+	                rollback_refs_json, created_at, updated_at
+	           FROM global_wire_autoradio_scripts
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire autoradio scripts: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireAutoradioScript
+	for rows.Next() {
+		rec, err := scanGlobalWireAutoradioScript(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire autoradio scripts: %w", err)
+	}
+	return out, nil
+}
+
+// GetGlobalWireAutoradioScript returns one owner-scoped Autoradio script.
+func (s *Store) GetGlobalWireAutoradioScript(ctx context.Context, ownerID, scriptID string) (types.GlobalWireAutoradioScript, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, script_id, artifact_id, story_id,
+		        source_content_id, status, title, script_body, voice_notes,
+		        citation_count, rollback_count, citation_refs_json,
+		        rollback_refs_json, created_at, updated_at
+		   FROM global_wire_autoradio_scripts
+		  WHERE owner_id = ? AND script_id = ?`,
+		ownerID,
+		scriptID,
+	)
+	return scanGlobalWireAutoradioScript(row)
+}
+
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
 func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.GlobalWireStoryProjection) error {
 	now := rec.UpdatedAt
@@ -3215,6 +3319,52 @@ func scanGlobalWirePublicationDelivery(row interface{ Scan(...any) error }) (typ
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWirePublicationDelivery{}, fmt.Errorf("parse global wire publication delivery updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireAutoradioScript(row interface{ Scan(...any) error }) (types.GlobalWireAutoradioScript, error) {
+	var rec types.GlobalWireAutoradioScript
+	var citationRefsJSON, rollbackRefsJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.ArtifactID,
+		&rec.StoryID,
+		&rec.SourceContentID,
+		&rec.Status,
+		&rec.Title,
+		&rec.ScriptBody,
+		&rec.VoiceNotes,
+		&rec.CitationCount,
+		&rec.RollbackCount,
+		&citationRefsJSON,
+		&rollbackRefsJSON,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireAutoradioScript{}, ErrNotFound
+		}
+		return types.GlobalWireAutoradioScript{}, fmt.Errorf("scan global wire autoradio script: %w", err)
+	}
+	if err := json.Unmarshal([]byte(citationRefsJSON), &rec.CitationRefs); err != nil {
+		return types.GlobalWireAutoradioScript{}, fmt.Errorf("unmarshal global wire autoradio script citation refs: %w", err)
+	}
+	if err := json.Unmarshal([]byte(rollbackRefsJSON), &rec.RollbackRefs); err != nil {
+		return types.GlobalWireAutoradioScript{}, fmt.Errorf("unmarshal global wire autoradio script rollback refs: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireAutoradioScript{}, fmt.Errorf("parse global wire autoradio script created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireAutoradioScript{}, fmt.Errorf("parse global wire autoradio script updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()

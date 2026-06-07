@@ -475,6 +475,29 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     await expect(app.locator('[data-global-wire-publication-delivery-detail]')).toContainText('delivery-ready');
     await expect(app.locator('[data-global-wire-publication-delivery-detail-citations]')).toContainText('citations:');
     await expect(app.locator('[data-global-wire-publication-delivery-detail-rollback]')).toContainText('rollback refs:');
+    const autoradioScriptResponsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/global-wire/autoradio-scripts' && response.request().method() === 'POST'
+    );
+    await app.locator('[data-global-wire-create-autoradio-script]').first().click();
+    const autoradioScriptResponse = await autoradioScriptResponsePromise;
+    expect(autoradioScriptResponse.status()).toBe(201);
+    const autoradioScriptPayload = await autoradioScriptResponse.json();
+    expect(autoradioScriptPayload.script.artifact_id).toBe(publicationArtifact.body.artifact.id);
+    expect(autoradioScriptPayload.script.status).toBe('script-ready');
+    expect(autoradioScriptPayload.script.script_body).toContain(publicationArtifact.body.artifact.body);
+    expect(autoradioScriptPayload.script.citation_count).toBeGreaterThanOrEqual(5);
+    expect(autoradioScriptPayload.source_item?.content_id).toBeTruthy();
+    await expect(app.locator('[data-global-wire-autoradio-script]').first()).toContainText('script-ready');
+    await expect(app.locator('[data-global-wire-autoradio-script]').first()).toContainText('Autoradio script for');
+    await expect(app.locator('[data-global-wire-autoradio-script-provenance]').first()).toContainText('script citations:');
+    const autoradioScriptQueue = await page.evaluate(async (scriptId) => {
+      const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
+      if (!res.ok) throw new Error(`load autoradio script queue failed: ${res.status}`);
+      const list = await res.json();
+      return (list.autoradio_scripts || []).find((item) => item.id === scriptId);
+    }, autoradioScriptPayload.script.id);
+    expect(autoradioScriptQueue.artifact_id).toBe(publicationArtifact.body.artifact.id);
+    expect(autoradioScriptQueue.rollback_refs).toContain(`publication_artifact:${publicationArtifact.body.artifact.id}`);
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

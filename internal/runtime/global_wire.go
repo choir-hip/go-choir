@@ -113,6 +113,7 @@ type globalWireReconciliationResponse struct {
 	PublicationUpdates    []types.GlobalWirePublicationUpdate        `json:"publication_updates"`
 	PublicationArtifacts  []types.GlobalWirePublicationArtifact      `json:"publication_artifacts"`
 	PublicationDeliveries []types.GlobalWirePublicationDelivery      `json:"publication_deliveries"`
+	AutoradioScripts      []types.GlobalWireAutoradioScript          `json:"autoradio_scripts"`
 	ProjectionReviews     []types.GlobalWireProjectionReview         `json:"projection_reviews"`
 }
 
@@ -210,6 +211,17 @@ type globalWirePublicationDeliveryResponse struct {
 
 type globalWirePublicationDeliveryDetailResponse struct {
 	Delivery   types.GlobalWirePublicationDelivery `json:"delivery"`
+	Artifact   types.GlobalWirePublicationArtifact `json:"artifact"`
+	Story      types.GlobalWireStory               `json:"story"`
+	SourceItem *types.ContentItem                  `json:"source_item,omitempty"`
+}
+
+type globalWireAutoradioScriptRequest struct {
+	ArtifactID string `json:"artifact_id"`
+}
+
+type globalWireAutoradioScriptResponse struct {
+	Script     types.GlobalWireAutoradioScript     `json:"script"`
 	Artifact   types.GlobalWirePublicationArtifact `json:"artifact"`
 	Story      types.GlobalWireStory               `json:"story"`
 	SourceItem *types.ContentItem                  `json:"source_item,omitempty"`
@@ -837,6 +849,11 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list publication deliveries"})
 			return
 		}
+		autoradioScripts, err := h.rt.Store().ListGlobalWireAutoradioScripts(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list autoradio scripts"})
+			return
+		}
 		projectionReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
@@ -857,6 +874,7 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			PublicationUpdates:    publicationUpdates,
 			PublicationArtifacts:  publicationArtifacts,
 			PublicationDeliveries: publicationDeliveries,
+			AutoradioScripts:      autoradioScripts,
 			ProjectionReviews:     projectionReviews,
 		})
 	case http.MethodPost:
@@ -1458,6 +1476,58 @@ func (h *APIHandler) HandleGlobalWirePublicationDeliveryDetail(w http.ResponseWr
 		Story:      story,
 		SourceItem: sourceItem,
 	})
+}
+
+// HandleGlobalWireAutoradioScripts materializes durable script artifacts over
+// approved publication artifacts. It does not generate audio or mutate stories.
+func (h *APIHandler) HandleGlobalWireAutoradioScripts(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		storyID := strings.TrimSpace(r.URL.Query().Get("story_id"))
+		scripts, err := h.rt.Store().ListGlobalWireAutoradioScripts(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list autoradio scripts"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, map[string]any{
+			"autoradio_scripts": scripts,
+		})
+	case http.MethodPost:
+		var req globalWireAutoradioScriptRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid autoradio script request"})
+			return
+		}
+		req.ArtifactID = strings.TrimSpace(req.ArtifactID)
+		if req.ArtifactID == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "artifact_id is required"})
+			return
+		}
+		script, artifact, story, sourceItem, err := h.createGlobalWireAutoradioScript(r, ownerID, req)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "approved publication artifact not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create autoradio script"})
+			return
+		}
+		writeAPIJSON(w, http.StatusCreated, globalWireAutoradioScriptResponse{
+			Script:     script,
+			Artifact:   artifact,
+			Story:      story,
+			SourceItem: sourceItem,
+		})
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
 }
 
 func normalizeGlobalWireReconciliationDecision(value string) string {
@@ -3040,6 +3110,49 @@ func (h *APIHandler) globalWirePublicationDeliveryDetail(r *http.Request, ownerI
 	return delivery, artifact, story, sourceItem, nil
 }
 
+func (h *APIHandler) createGlobalWireAutoradioScript(r *http.Request, ownerID string, req globalWireAutoradioScriptRequest) (types.GlobalWireAutoradioScript, types.GlobalWirePublicationArtifact, types.GlobalWireStory, *types.ContentItem, error) {
+	artifact, err := h.rt.Store().GetGlobalWirePublicationArtifact(r.Context(), ownerID, req.ArtifactID)
+	if err != nil {
+		return types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+	}
+	if artifact.Status != "publication-approved" {
+		return types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, store.ErrNotFound
+	}
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, artifact.StoryID)
+	if err != nil {
+		return types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+	}
+	var sourceItem *types.ContentItem
+	if strings.TrimSpace(artifact.SourceContentID) != "" {
+		rec, err := h.rt.Store().GetContentItem(r.Context(), ownerID, artifact.SourceContentID)
+		if err != nil {
+			return types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+		}
+		sourceItem = &rec
+	}
+	rollbackRefs := appendStringIfMissing(artifact.RollbackRefs, "publication_artifact:"+artifact.ID)
+	scriptID := "global-wire-autoradio-script-" + uuid.NewString()
+	script, err := h.rt.Store().CreateGlobalWireAutoradioScript(r.Context(), types.GlobalWireAutoradioScript{
+		ID:              scriptID,
+		OwnerID:         ownerID,
+		ArtifactID:      artifact.ID,
+		StoryID:         artifact.StoryID,
+		SourceContentID: artifact.SourceContentID,
+		Status:          "script-ready",
+		Title:           "Autoradio script: " + story.Headline,
+		ScriptBody:      globalWireAutoradioScriptBody(story, artifact, sourceItem),
+		VoiceNotes:      "Speak in Global Wire mode: concise, source-aware, and explicit about uncertainty. Do not add claims absent from the publication artifact.",
+		CitationCount:   len(artifact.CitationRefs),
+		RollbackCount:   len(rollbackRefs),
+		CitationRefs:    artifact.CitationRefs,
+		RollbackRefs:    rollbackRefs,
+	})
+	if err != nil {
+		return types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+	}
+	return script, artifact, story, sourceItem, nil
+}
+
 func (h *APIHandler) globalWirePublicationArtifactProjectionReviews(r *http.Request, ownerID string, update types.GlobalWirePublicationUpdate) ([]types.GlobalWireProjectionReview, error) {
 	if len(update.ProjectionReviewIDs) == 0 {
 		return []types.GlobalWireProjectionReview{}, nil
@@ -3402,6 +3515,30 @@ func globalWireProjectionDraftVTextContent(review types.GlobalWireProjectionRevi
 		"- Do not invent evidence or hide contrary evidence.",
 		"- This draft does not mutate the platform StoryGraph or publish a revised platform story.",
 	)
+	return strings.Join(lines, "\n")
+}
+
+func globalWireAutoradioScriptBody(story types.GlobalWireStory, artifact types.GlobalWirePublicationArtifact, sourceItem *types.ContentItem) string {
+	sourceLabel := artifact.SourceContentID
+	if sourceItem != nil && strings.TrimSpace(sourceItem.Title) != "" {
+		sourceLabel = sourceItem.Title
+	}
+	if strings.TrimSpace(sourceLabel) == "" {
+		sourceLabel = "StoryGraph source neighborhood"
+	}
+	lines := []string{
+		"Autoradio script for \"" + story.Headline + "\".",
+		"Open with the headline and name the evidence boundary: " + sourceLabel + ".",
+		"",
+		artifact.Body,
+		"",
+		fmt.Sprintf("Citations to name or display: %d.", len(artifact.CitationRefs)),
+		fmt.Sprintf("Rollback refs to keep attached: %d.", len(artifact.RollbackRefs)),
+		"Guardrail: speak only from this citeable publication artifact and preserve unresolved uncertainty.",
+	}
+	if story.Dek != "" {
+		lines = append(lines[:1], append([]string{"Context: " + story.Dek}, lines[1:]...)...)
+	}
 	return strings.Join(lines, "\n")
 }
 

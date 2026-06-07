@@ -323,6 +323,27 @@ type GlobalWirePublicationDelivery struct {
 	UpdatedAt     time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWireAutoradioScript is a durable text renderer over an approved
+// publication artifact. Audio/playback may render this later; the script itself
+// carries the citeable source and rollback provenance.
+type GlobalWireAutoradioScript struct {
+	ID              string    `json:"id"`
+	OwnerID         string    `json:"owner_id,omitempty"`
+	ArtifactID      string    `json:"artifact_id"`
+	StoryID         string    `json:"story_id"`
+	SourceContentID string    `json:"source_content_id,omitempty"`
+	Status          string    `json:"status"`
+	Title           string    `json:"title"`
+	ScriptBody      string    `json:"script_body"`
+	VoiceNotes      string    `json:"voice_notes"`
+	CitationCount   int       `json:"citation_count"`
+	RollbackCount   int       `json:"rollback_count"`
+	CitationRefs    []string  `json:"citation_refs"`
+	RollbackRefs    []string  `json:"rollback_refs"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
 // fetch cycle should use for one StoryGraph neighborhood.
 type GlobalWireSourceRegistryEntry struct {

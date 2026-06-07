@@ -181,6 +181,7 @@
   let publicationUpdates = [];
   let publicationArtifacts = [];
   let publicationDeliveries = [];
+  let autoradioScripts = [];
   let publicationFeedItems = [];
   let publicationFeedStatus = '';
   let publicationDeliveryDetail = null;
@@ -231,6 +232,7 @@
       extractionArtifacts = [];
       publicationArtifacts = [];
       publicationDeliveries = [];
+      autoradioScripts = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
@@ -287,6 +289,7 @@
       publicationUpdates = Array.isArray(payload.publication_updates) ? payload.publication_updates : [];
       publicationArtifacts = Array.isArray(payload.publication_artifacts) ? payload.publication_artifacts : [];
       publicationDeliveries = Array.isArray(payload.publication_deliveries) ? payload.publication_deliveries : [];
+      autoradioScripts = Array.isArray(payload.autoradio_scripts) ? payload.autoradio_scripts : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
       await loadPublicationFeed(storyId);
       await loadFetchCycles(storyId);
@@ -308,6 +311,7 @@
       publicationUpdates = [];
       publicationArtifacts = [];
       publicationDeliveries = [];
+      autoradioScripts = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
@@ -916,6 +920,11 @@
     return publicationDeliveries.find((delivery) => delivery.artifact_id === id);
   }
 
+  function autoradioScriptForArtifact(artifact) {
+    const id = artifact?.id || '';
+    return autoradioScripts.find((script) => script.artifact_id === id);
+  }
+
   function selectedPublicationFeedItem() {
     return publicationFeedItems.find((item) => item.story?.id === selectedStory.id || item.artifact?.story_id === selectedStory.id);
   }
@@ -1131,6 +1140,34 @@
       publicationDeliveryDetail = await response.json();
     } catch (error) {
       contributionStatus = error?.message || 'Publication delivery detail failed';
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
+  async function createAutoradioScript(item) {
+    const artifact = item?.artifact || item;
+    if (!authenticated || !artifact?.id) return;
+    reconciliationBusyId = `${artifact.id}:autoradio-script`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/autoradio-scripts', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artifact_id: artifact.id,
+        }),
+      });
+      if (!response.ok) throw new Error(`Autoradio script failed: ${response.status}`);
+      const payload = await response.json();
+      autoradioScripts = [payload.script, ...autoradioScripts.filter((script) => script.id !== payload.script?.id)]
+        .filter(Boolean)
+        .slice(0, 30);
+      contributionStatus = `Autoradio script ${payload.script?.status || 'created'}`;
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || 'Autoradio script failed';
     } finally {
       reconciliationBusyId = '';
     }
@@ -1640,6 +1677,7 @@
             </div>
             {#each publicationFeedItems.slice(0, 3) as item}
               {@const delivery = publicationDeliveryForArtifact(item.artifact)}
+              {@const autoradioScript = autoradioScriptForArtifact(item.artifact)}
               <article
                 data-global-wire-publication-feed-item
                 data-global-wire-publication-feed-artifact-id={item.artifact.id}
@@ -1660,6 +1698,19 @@
                   <small data-global-wire-publication-delivery-provenance>
                     delivery citations: {delivery.citation_count} · rollback refs: {delivery.rollback_count}
                   </small>
+                  {#if autoradioScript}
+                    <div
+                      class="autoradio-script"
+                      data-global-wire-autoradio-script
+                      data-global-wire-autoradio-script-id={autoradioScript.id}
+                    >
+                      <strong>{autoradioScript.status}: {autoradioScript.title}</strong>
+                      <span>{autoradioScript.script_body}</span>
+                      <small data-global-wire-autoradio-script-provenance>
+                        script citations: {autoradioScript.citation_count} · rollback refs: {autoradioScript.rollback_count}
+                      </small>
+                    </div>
+                  {/if}
                   <div class="publication-feed-actions">
                     <button
                       type="button"
@@ -1669,6 +1720,16 @@
                     >
                       Inspect
                     </button>
+                    {#if !autoradioScript}
+                      <button
+                        type="button"
+                        on:click={() => createAutoradioScript(item)}
+                        disabled={reconciliationBusyId === `${item.artifact.id}:autoradio-script`}
+                        data-global-wire-create-autoradio-script
+                      >
+                        Script
+                      </button>
+                    {/if}
                   </div>
                 {:else if authenticated && item.status === 'publication-approved'}
                   <div class="publication-feed-actions">
@@ -1680,6 +1741,20 @@
                     >
                       Deliver
                     </button>
+                    {#if autoradioScript}
+                      <small data-global-wire-autoradio-script>
+                        {autoradioScript.status}: {autoradioScript.title}
+                      </small>
+                    {:else}
+                      <button
+                        type="button"
+                        on:click={() => createAutoradioScript(item)}
+                        disabled={reconciliationBusyId === `${item.artifact.id}:autoradio-script`}
+                        data-global-wire-create-autoradio-script
+                      >
+                        Script
+                      </button>
+                    {/if}
                   </div>
                 {:else if authenticated && item.status === 'publication-review-ready'}
                   <div class="publication-feed-actions">
@@ -2511,6 +2586,19 @@
     font-size: 0.72rem;
     font-weight: 720;
     cursor: pointer;
+  }
+
+  .autoradio-script {
+    display: grid;
+    gap: 0.22rem;
+    padding: 0.38rem;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-pane);
+  }
+
+  .autoradio-script span {
+    -webkit-line-clamp: 6;
   }
 
   .publication-delivery-detail {

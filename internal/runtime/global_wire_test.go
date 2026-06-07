@@ -697,6 +697,42 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("publication delivery detail missing provenance: %+v", deliveryDetailResp)
 	}
 
+	scriptBody := fmt.Sprintf(`{"artifact_id":%q}`, artifactResp.Artifact.ID)
+	scriptW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/autoradio-scripts", scriptBody, "user-alpha")
+	if scriptW.Code != http.StatusCreated {
+		t.Fatalf("autoradio script status = %d body=%s", scriptW.Code, scriptW.Body.String())
+	}
+	var scriptResp globalWireAutoradioScriptResponse
+	if err := json.NewDecoder(scriptW.Body).Decode(&scriptResp); err != nil {
+		t.Fatalf("decode autoradio script response: %v", err)
+	}
+	if scriptResp.Script.ArtifactID != artifactResp.Artifact.ID ||
+		scriptResp.Script.StoryID != "story-supply-resilience" ||
+		scriptResp.Script.Status != "script-ready" ||
+		!strings.Contains(scriptResp.Script.ScriptBody, artifactResp.Artifact.Body) ||
+		scriptResp.Script.CitationCount < 5 ||
+		scriptResp.Script.RollbackCount < 5 ||
+		!slices.Contains(scriptResp.Script.RollbackRefs, "publication_artifact:"+artifactResp.Artifact.ID) ||
+		scriptResp.Artifact.Status != "publication-approved" ||
+		scriptResp.Story.ID != "story-supply-resilience" ||
+		scriptResp.SourceItem == nil {
+		t.Fatalf("autoradio script missing artifact provenance: %+v", scriptResp)
+	}
+	scriptListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/autoradio-scripts?story_id=story-supply-resilience", "", "user-alpha")
+	if scriptListW.Code != http.StatusOK {
+		t.Fatalf("autoradio script list status = %d body=%s", scriptListW.Code, scriptListW.Body.String())
+	}
+	var scriptListResp struct {
+		AutoradioScripts []types.GlobalWireAutoradioScript `json:"autoradio_scripts"`
+	}
+	if err := json.NewDecoder(scriptListW.Body).Decode(&scriptListResp); err != nil {
+		t.Fatalf("decode autoradio script list response: %v", err)
+	}
+	if len(scriptListResp.AutoradioScripts) != 1 ||
+		scriptListResp.AutoradioScripts[0].ArtifactID != artifactResp.Artifact.ID {
+		t.Fatalf("autoradio script missing from list: %+v", scriptListResp)
+	}
+
 	publicationListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
 	if publicationListW.Code != http.StatusOK {
 		t.Fatalf("list reconciliation after publication package status = %d body=%s", publicationListW.Code, publicationListW.Body.String())
@@ -713,8 +749,10 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		publicationListResp.PublicationArtifacts[0].UpdateID != publicationResp.Update.ID ||
 		len(publicationListResp.PublicationArtifacts[0].CitationRefs) < 5 ||
 		len(publicationListResp.PublicationDeliveries) != 1 ||
-		publicationListResp.PublicationDeliveries[0].ArtifactID != artifactResp.Artifact.ID {
-		t.Fatalf("publication artifacts missing from reconciliation list: updates=%+v artifacts=%+v deliveries=%+v", publicationListResp.PublicationUpdates, publicationListResp.PublicationArtifacts, publicationListResp.PublicationDeliveries)
+		publicationListResp.PublicationDeliveries[0].ArtifactID != artifactResp.Artifact.ID ||
+		len(publicationListResp.AutoradioScripts) != 1 ||
+		publicationListResp.AutoradioScripts[0].ArtifactID != artifactResp.Artifact.ID {
+		t.Fatalf("publication artifacts missing from reconciliation list: updates=%+v artifacts=%+v deliveries=%+v scripts=%+v", publicationListResp.PublicationUpdates, publicationListResp.PublicationArtifacts, publicationListResp.PublicationDeliveries, publicationListResp.AutoradioScripts)
 	}
 
 	storiesTaskAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
