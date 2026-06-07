@@ -1954,6 +1954,8 @@ var durableMetadataKeys = []string{
 	"source_maxx_request_kind",
 	"processor_key",
 	"reconciler_scope",
+	"selected_style_sources",
+	"selected_style_rationale",
 	runMetadataOwnerEmail,
 }
 

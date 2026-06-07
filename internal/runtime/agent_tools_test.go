@@ -2086,7 +2086,7 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	}
 
 	spawnVTextRaw, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
-		"objective":"write a source-grounded article from this processor brief",
+		"objective":"write a source-grounded article from this processor brief about Fed rates and inflation",
 		"role":"vtext",
 		"channel_id":"global-wire-story-candidate"
 	}`))
@@ -2130,6 +2130,13 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	if seedRev.AuthorKind != types.AuthorAppAgent || !strings.Contains(seedRev.Content, "SourceMaxx Brief") {
 		t.Fatalf("processor seed revision = author %q content %q", seedRev.AuthorKind, seedRev.Content)
 	}
+	if !strings.Contains(seedRev.Content, "Style.vtext: Market Brief") {
+		t.Fatalf("processor seed revision missing selected Style.vtext source: %q", seedRev.Content)
+	}
+	seedMeta := decodeRevisionMetadata(seedRev.Metadata)
+	if metadataString(seedMeta, "selected_style_rationale") == "" {
+		t.Fatalf("processor seed revision missing style rationale metadata: %+v", seedMeta)
+	}
 	vtextRun, err := rt.GetRun(context.Background(), vtextSpawn.LoopID, "user-alice")
 	if err != nil {
 		t.Fatalf("get processor-spawned vtext run: %v", err)
@@ -2139,6 +2146,9 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	}
 	if metadataString(vtextRun.Metadata, "source_maxx_cycle_id") != "cycle-test" || metadataString(vtextRun.Metadata, "processor_key") != "processor:global_firehose:global:gdelt" {
 		t.Fatalf("processor vtext run did not preserve SourceMaxx metadata: %+v", vtextRun.Metadata)
+	}
+	if metadataString(vtextRun.Metadata, "selected_style_rationale") == "" || !strings.Contains(vtextRun.Prompt, "Selected Style.vtext source context") || !strings.Contains(vtextRun.Prompt, "Style.vtext: Market Brief") {
+		t.Fatalf("processor vtext run missing Style.vtext context: metadata=%+v prompt=%q", vtextRun.Metadata, vtextRun.Prompt)
 	}
 	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"mutate code",

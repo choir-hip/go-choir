@@ -303,6 +303,7 @@ func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *ty
 
 	seedContent := coagentVTextSeedContent(parentRec, req)
 	seedRevisionID := uuid.New().String()
+	selectedStyles, styleRationale := coagentVTextSelectedStyles(req)
 	seedMeta, _ := json.Marshal(map[string]any{
 		"source":                   "coagent_vtext_seed",
 		"created_from":             canonicalAgentProfile(req.CallerProfile),
@@ -317,6 +318,8 @@ func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *ty
 		"source_maxx_request_kind": metadataString(parentRec.Metadata, "source_maxx_request_kind"),
 		"processor_key":            metadataString(parentRec.Metadata, runMetadataProcessorKey),
 		"reconciler_scope":         metadataString(parentRec.Metadata, runMetadataReconcilerScope),
+		"selected_style_sources":   selectedStyles,
+		"selected_style_rationale": styleRationale,
 	})
 	seedRev := types.Revision{
 		RevisionID: seedRevisionID,
@@ -385,6 +388,18 @@ func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRe
 	if seed[len(seed)-1] != '\n' {
 		b.WriteString("\n")
 	}
+	selectedStyles, styleRationale := coagentVTextSelectedStyles(req)
+	b.WriteString("\n## Style.vtext Source\n\n")
+	for _, style := range selectedStyles {
+		b.WriteString("- ")
+		b.WriteString(style.Title)
+		b.WriteString(" (")
+		b.WriteString(firstNonEmpty(style.DocID, style.SourcePath, style.ID))
+		b.WriteString(")\n")
+	}
+	b.WriteString("\nSelection rationale: ")
+	b.WriteString(styleRationale)
+	b.WriteString("\n")
 	b.WriteString("\n## Provenance\n\n")
 	b.WriteString("- Parent agent: ")
 	b.WriteString(strings.TrimSpace(firstNonEmpty(parentRec.AgentID, canonicalAgentProfile(req.CallerProfile))))
@@ -404,6 +419,7 @@ func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRe
 
 func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTextRouteRequest, doc types.Document, created bool) string {
 	var b strings.Builder
+	selectedStyles, styleRationale := coagentVTextSelectedStyles(req)
 	if created {
 		b.WriteString("Write the first publication-quality article revision for this VText document.")
 	} else {
@@ -415,11 +431,27 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 		b.WriteString("\n\nProcessor/reconciler brief to preserve as source context:\n")
 		b.WriteString(initial)
 	}
+	b.WriteString("\n\nSelected Style.vtext source context:\n")
+	for _, style := range selectedStyles {
+		b.WriteString("- ")
+		b.WriteString(style.Title)
+		b.WriteString(" [")
+		b.WriteString(style.ID)
+		b.WriteString("] source=")
+		b.WriteString(firstNonEmpty(style.DocID, style.SourcePath, style.ID))
+		if style.Summary != "" {
+			b.WriteString(" — ")
+			b.WriteString(style.Summary)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("Selection rationale: ")
+	b.WriteString(styleRationale)
 	b.WriteString("\n\nHard requirements:")
 	b.WriteString("\n- Use edit_vtext to write the canonical VText revision; do not leave the article only in the run result.")
 	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
 	b.WriteString("\n- Preserve source handles and cite source entities or source refs when available.")
-	b.WriteString("\n- If a Style.vtext source is relevant, cite or name the selected style source and explain the editorial fit inside the VText.")
+	b.WriteString("\n- Include a compact Style.vtext source note in the VText naming the selected Style.vtext source(s) above and the editorial fit; do not claim every style was run.")
 	b.WriteString("\n- If evidence is insufficient, write the best honest publishable draft with uncertainty and request researcher follow-up rather than inventing facts.")
 	b.WriteString("\n\nDocument: ")
 	b.WriteString(doc.DocID)
@@ -432,6 +464,45 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 		b.WriteString(cycleID)
 	}
 	return b.String()
+}
+
+func coagentVTextSelectedStyles(req coagentVTextRouteRequest) ([]types.GlobalWireStyleSource, string) {
+	styles := defaultGlobalWireStyleSourcesForRuntime()
+	byID := map[string]types.GlobalWireStyleSource{}
+	for _, style := range styles {
+		byID[style.ID] = style
+	}
+	text := strings.ToLower(strings.Join([]string{req.Title, req.Objective, req.InitialContent}, "\n"))
+	addSummary := func(style types.GlobalWireStyleSource, summary string) types.GlobalWireStyleSource {
+		style.Summary = summary
+		return style
+	}
+	marketTerms := []string{"fed", "fomc", "treasury", "market", "inflation", "rates", "yield", "bank", "earnings", "oil", "energy", "currency", "dollar", "stocks", "bond"}
+	auditTerms := []string{"correction", "correcting", "misinformation", "contradiction", "claim", "denied", "disputed", "uncertain", "unverified", "alleged", "propaganda", "false", "audit"}
+	hasMarket := textContainsAny(text, marketTerms)
+	hasAudit := textContainsAny(text, auditTerms)
+	wire := addSummary(byID["wire-style"], "Fast, readable global-wire treatment: direct headline, clear nut graf, source-rich context, visible uncertainty.")
+	audit := addSummary(byID["claim-audit-style"], "Claim-audit treatment: foreground what is verified, what is disputed, who says so, and what evidence would change the story.")
+	market := addSummary(byID["market-brief-style"], "Market-brief treatment: explain price, policy, institutional, and second-order effects without hiding uncertainty.")
+	switch {
+	case hasMarket && hasAudit:
+		return []types.GlobalWireStyleSource{market, audit}, "The brief mixes market/policy mechanics with contested or uncertain claims, so use Market Brief as primary style with Claim Audit as a secondary constraint."
+	case hasMarket:
+		return []types.GlobalWireStyleSource{market}, "The brief centers market, policy, inflation, rates, or financial transmission, so Market Brief is the fitting Style.vtext."
+	case hasAudit:
+		return []types.GlobalWireStyleSource{audit}, "The brief centers correction, contradiction, disputed claims, or verification risk, so Claim Audit is the fitting Style.vtext."
+	default:
+		return []types.GlobalWireStyleSource{wire}, "The brief is a general news article request, so Global Wire is the fitting Style.vtext."
+	}
+}
+
+func textContainsAny(text string, terms []string) bool {
+	for _, term := range terms {
+		if strings.Contains(text, term) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeDelegateTargetValue(raw string, allowedTargets []string) string {
