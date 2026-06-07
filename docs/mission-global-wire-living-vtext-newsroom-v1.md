@@ -232,13 +232,19 @@ source lists, related VText lists, a "My Edit" section, and no native source
 transclusion. 2026-06-07 source architecture correction removed static source
 trust tiers/standing from the registry design and expanded the registry toward
 broad RSS/Atom plus long-tail Telegram/social evidence. Staging deployed commit
-`1d4029c5` and sourcecycled loaded 170 configured sources.
+`1d4029c5` and sourcecycled loaded 170 configured sources. Parser fix commit
+`9613991f` handled non-UTF RSS charsets and common malformed entity text.
+Source-health commit `a4370fd4` added cycle-linked fetch records,
+`source_health`, and `/internal/source-service/global-wire/latest`.
 
 current artifact state: staging source service now runs the expanded registry:
 1 GDELT, 110 RSS/Atom, and 59 Telegram public-preview sources across 15
 language tags, with tech, science, industry, finance, regional, conflict, and
-long-tail social/sentiment sources. The first deployed expanded cycle produced
-3,753 deduped SourceItems, 96 processor requests, and 1 reconciler request.
+long-tail social/sentiment sources. The source-health deployed cycle
+`cycle_387ee9430ee4e637d7d124a8` at `2026-06-07T19:46:26Z` loaded 170
+configured sources, completed in about 5 seconds, produced 3,893 deduped
+SourceItems, reported 156 successful fetches, 14 failed fetches, 142
+item-producing sources, 99 processor requests, and 1 reconciler request.
 Global Wire has a clean-ish collection surface but still exposes old naming and
 weak typography; opened article VTexts are projection/stub documents rather
 than real living articles.
@@ -253,7 +259,10 @@ screenshots prove the current article/VText object is not acceptable. Local
 validation checked working RSS/Atom and Telegram public-preview URLs before
 adding them; `nix develop -c go test ./internal/sources ./internal/cycle`
 passed after removing static source tiers/standing from config. CI run
-`27102504563` passed and deployed `1d4029c5` to Node B.
+`27102504563` passed and deployed `1d4029c5` to Node B. CI run `27102661286`
+passed and deployed parser fix `9613991f`. CI run `27102854328` passed and
+deployed source-health proof surface `a4370fd4`; Node B git identity matched
+that commit and the new endpoint returned source health for the latest cycle.
 
 unproven or partial claims: full source health, learned source track-record
 state, per-source proof surfaces, VText agent as article owner,
@@ -264,22 +273,26 @@ responsive/typographic quality.
 belief-state changes: source breadth and VText ownership are the first
 architectural blockers. UI cleanup alone cannot solve the wrong object.
 
-remaining error field: staging logs show 403s for some locally-valid feeds
-from Node B, plus parser failures on ISO-8859-1 feeds and one malformed entity
-feed. Source health is not yet exposed cleanly in the product/API proof surface.
-Next, improve parser tolerance and source health reporting before returning to
-article lifecycle: normalize article lifecycle through VText agents; replace
+remaining error field: staging source health shows 14 failures, mostly provider
+403s from Node B (`rss:arabnews`, France 24 language feeds, `rss:mining_com`,
+RFI language feeds, `rss:sciencemag`, `rss:thehindu_news`) plus one parser
+failure for `rss:euronews_fr` with illegal control character U+001B. The
+source-health `item_count` sums pre-dedupe fetch item counts, while cycle
+`item_count` reports deduped SourceItems; this distinction should be named in
+the API before treating counts as owner-facing metrics. Next article lifecycle
+work remains: normalize article lifecycle through VText agents; replace
 source/related lists with transclusions; remove metadata/edit sludge from
 article documents; fix typography and mobile banner overlap.
 
-highest-impact remaining uncertainty: how many source failures are transient
-provider/network blocks versus parser limitations, and how to expose learned
-source track-record state without turning it into static editorial authority.
+highest-impact remaining uncertainty: how to turn the source-health stream into
+learned source track-record state without hardcoded editorial tiers, while
+keeping long-tail Telegram/social inputs valuable as sentiment and lead
+discovery rather than article authority.
 
-next executable probe: fix RSS parser charset/leniency where safe, expose
-source proof surfaces for registry/cycle counts and source failures, observe
-another staging source-service cycle, then return to VText-owned article
-generation.
+next executable probe: add learned source track-record aggregation and/or clean
+owner-facing source-health copy, then return to VText-owned article generation:
+VText agents must own real article creation/revision with native source and
+related-VText transclusion.
 
 suggested resume goal string: use the Goal String section above.
 
