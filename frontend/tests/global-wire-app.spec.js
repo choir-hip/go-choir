@@ -191,7 +191,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(sourceServiceBridge.body.message).toBeTruthy();
   }
 
-  const reconciliation = await page.evaluate(async (contributionId, sourceContentId) => {
+  const reconciliation = await page.evaluate(async ({ contributionId, sourceContentId }) => {
     const listRes = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', {
       credentials: 'include',
     });
@@ -201,7 +201,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     const decision = (list.decisions || []).find((item) => item.contribution_id === contributionId);
     const sourceItem = list.source_items?.[sourceContentId];
     return { contribution, decision, sourceItem };
-  }, queuedContribution.id, queuedContribution.source_content_id);
+  }, { contributionId: queuedContribution.id, sourceContentId: queuedContribution.source_content_id });
   expect(reconciliation.decision.decision).toBe('accepted');
   expect(reconciliation.contribution.research_state).toBe('accepted-for-graph-review');
   expect(reconciliation.sourceItem?.content_id).toBe(queuedContribution.source_content_id);
