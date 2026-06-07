@@ -126,6 +126,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   }, queuedContribution.source_content_id);
   expect(contributionSource.metadata?.schema).toBe('choir.global_wire_user_source_contribution.v1');
 
+  await openDeskApp(page, 'global-wire');
   await expect(app.locator('[data-global-wire-reconciliation-source]').first()).toContainText('Contribution source');
   await app.locator('[data-global-wire-reconcile-accept]').first().click();
   await expect(app.locator('[data-global-wire-reconciliation-decision]').first()).toContainText('accepted');
