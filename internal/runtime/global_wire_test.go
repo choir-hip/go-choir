@@ -597,6 +597,26 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("publication artifact missing citeable lineage: %+v", artifactResp)
 	}
 
+	feedW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/publication-feed?story_id=story-supply-resilience&channel=newsletter", "", "user-alpha")
+	if feedW.Code != http.StatusOK {
+		t.Fatalf("publication feed status = %d body=%s", feedW.Code, feedW.Body.String())
+	}
+	var feedResp globalWirePublicationFeedResponse
+	if err := json.NewDecoder(feedW.Body).Decode(&feedResp); err != nil {
+		t.Fatalf("decode publication feed response: %v", err)
+	}
+	if feedResp.Status != "ready" ||
+		feedResp.Channel != "newsletter" ||
+		len(feedResp.FeedItems) != 1 ||
+		feedResp.FeedItems[0].Artifact.ID != artifactResp.Artifact.ID ||
+		feedResp.FeedItems[0].Story.ID != "story-supply-resilience" ||
+		feedResp.FeedItems[0].SourceItem == nil ||
+		feedResp.FeedItems[0].CitationCount < 5 ||
+		feedResp.FeedItems[0].RollbackCount < 5 ||
+		feedResp.FeedItems[0].Status != "publication-review-ready" {
+		t.Fatalf("publication artifact missing from feed: %+v", feedResp)
+	}
+
 	publicationListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
 	if publicationListW.Code != http.StatusOK {
 		t.Fatalf("list reconciliation after publication package status = %d body=%s", publicationListW.Code, publicationListW.Body.String())

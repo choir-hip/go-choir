@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -166,6 +167,21 @@ type globalWirePublicationArtifactResponse struct {
 	Story             types.GlobalWireStory               `json:"story"`
 	ProjectionReviews []types.GlobalWireProjectionReview  `json:"projection_reviews,omitempty"`
 	SourceItem        *types.ContentItem                  `json:"source_item,omitempty"`
+}
+
+type globalWirePublicationFeedItem struct {
+	Artifact      types.GlobalWirePublicationArtifact `json:"artifact"`
+	Story         types.GlobalWireStory               `json:"story"`
+	SourceItem    *types.ContentItem                  `json:"source_item,omitempty"`
+	CitationCount int                                 `json:"citation_count"`
+	RollbackCount int                                 `json:"rollback_count"`
+	Status        string                              `json:"status"`
+}
+
+type globalWirePublicationFeedResponse struct {
+	FeedItems []globalWirePublicationFeedItem `json:"feed_items"`
+	Channel   string                          `json:"channel"`
+	Status    string                          `json:"status"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -1222,6 +1238,43 @@ func (h *APIHandler) HandleGlobalWirePublicationArtifacts(w http.ResponseWriter,
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
+}
+
+// HandleGlobalWirePublicationFeed composes review-ready publication artifacts
+// into an owner-scoped feed surface without publishing publicly or mutating the
+// platform StoryGraph.
+func (h *APIHandler) HandleGlobalWirePublicationFeed(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	storyID := strings.TrimSpace(r.URL.Query().Get("story_id"))
+	channel := strings.TrimSpace(r.URL.Query().Get("channel"))
+	limit := parseGlobalWireFeedLimit(r.URL.Query().Get("limit"))
+	artifacts, err := h.rt.Store().ListGlobalWirePublicationArtifacts(r.Context(), ownerID, storyID, limit)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list publication feed"})
+		return
+	}
+	items, err := h.globalWirePublicationFeedItems(r, ownerID, artifacts, channel)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to compose publication feed"})
+		return
+	}
+	status := "empty"
+	if len(items) > 0 {
+		status = "ready"
+	}
+	writeAPIJSON(w, http.StatusOK, globalWirePublicationFeedResponse{
+		FeedItems: items,
+		Channel:   firstNonEmptyString(channel, "all"),
+		Status:    status,
+	})
 }
 
 func normalizeGlobalWireReconciliationDecision(value string) string {
@@ -2683,6 +2736,55 @@ func (h *APIHandler) createGlobalWirePublicationArtifact(r *http.Request, ownerI
 		return types.GlobalWirePublicationArtifact{}, types.GlobalWirePublicationUpdate{}, types.GlobalWireStory{}, nil, nil, err
 	}
 	return artifact, update, story, reviews, sourceItem, nil
+}
+
+func parseGlobalWireFeedLimit(raw string) int {
+	limit := 20
+	if strings.TrimSpace(raw) == "" {
+		return limit
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return limit
+	}
+	if parsed <= 0 {
+		return limit
+	}
+	if parsed > 100 {
+		return 100
+	}
+	return parsed
+}
+
+func (h *APIHandler) globalWirePublicationFeedItems(r *http.Request, ownerID string, artifacts []types.GlobalWirePublicationArtifact, channel string) ([]globalWirePublicationFeedItem, error) {
+	channel = strings.TrimSpace(channel)
+	items := make([]globalWirePublicationFeedItem, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		if channel != "" && artifact.Channel != channel {
+			continue
+		}
+		story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, artifact.StoryID)
+		if err != nil {
+			return nil, err
+		}
+		var sourceItem *types.ContentItem
+		if strings.TrimSpace(artifact.SourceContentID) != "" {
+			rec, err := h.rt.Store().GetContentItem(r.Context(), ownerID, artifact.SourceContentID)
+			if err != nil {
+				return nil, err
+			}
+			sourceItem = &rec
+		}
+		items = append(items, globalWirePublicationFeedItem{
+			Artifact:      artifact,
+			Story:         story,
+			SourceItem:    sourceItem,
+			CitationCount: len(artifact.CitationRefs),
+			RollbackCount: len(artifact.RollbackRefs),
+			Status:        artifact.Status,
+		})
+	}
+	return items, nil
 }
 
 func (h *APIHandler) globalWirePublicationArtifactProjectionReviews(r *http.Request, ownerID string, update types.GlobalWirePublicationUpdate) ([]types.GlobalWireProjectionReview, error) {

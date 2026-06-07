@@ -417,6 +417,26 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     }, publicationArtifact.body.artifact.id);
     expect(artifactQueue.status).toBe('publication-review-ready');
     expect(artifactQueue.citation_refs.length).toBeGreaterThanOrEqual(5);
+    const publicationFeed = await page.evaluate(async (artifactId) => {
+      const res = await fetch('/api/global-wire/publication-feed?story_id=story-supply-resilience&channel=newsletter', { credentials: 'include' });
+      if (!res.ok) throw new Error(`load publication feed failed: ${res.status}`);
+      const list = await res.json();
+      return {
+        status: list.status,
+        item: (list.feed_items || []).find((feedItem) => feedItem.artifact?.id === artifactId),
+      };
+    }, publicationArtifact.body.artifact.id);
+    expect(publicationFeed.status).toBe('ready');
+    expect(publicationFeed.item.artifact.status).toBe('publication-review-ready');
+    expect(publicationFeed.item.story.id).toBe('story-supply-resilience');
+    expect(publicationFeed.item.source_item?.content_id).toBeTruthy();
+    expect(publicationFeed.item.citation_count).toBeGreaterThanOrEqual(5);
+    expect(publicationFeed.item.rollback_count).toBeGreaterThanOrEqual(5);
+    await page.reload();
+    await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: DESKTOP_BOOT_TIMEOUT_MS });
+    await openDeskApp(page, 'global-wire');
+    await expect(app.locator('[data-global-wire-publication-feed-item]').first()).toBeVisible();
+    await expect(app.locator('[data-global-wire-publication-feed-provenance]').first()).toContainText('citations:');
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

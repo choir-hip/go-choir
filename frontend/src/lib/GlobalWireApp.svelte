@@ -180,6 +180,8 @@
   let researchDecisions = [];
   let publicationUpdates = [];
   let publicationArtifacts = [];
+  let publicationFeedItems = [];
+  let publicationFeedStatus = '';
   let projectionReviews = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
@@ -226,6 +228,8 @@
       researchTasks = [];
       extractionArtifacts = [];
       publicationArtifacts = [];
+      publicationFeedItems = [];
+      publicationFeedStatus = '';
       projectionReviews = [];
       sourceSearchResults = [];
       sourceSearchStatus = '';
@@ -279,6 +283,7 @@
       publicationUpdates = Array.isArray(payload.publication_updates) ? payload.publication_updates : [];
       publicationArtifacts = Array.isArray(payload.publication_artifacts) ? payload.publication_artifacts : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
+      await loadPublicationFeed(storyId);
       await loadFetchCycles(storyId);
     } catch {
       contributions = [];
@@ -297,7 +302,25 @@
       researchDecisions = [];
       publicationUpdates = [];
       publicationArtifacts = [];
+      publicationFeedItems = [];
+      publicationFeedStatus = '';
       projectionReviews = [];
+    }
+  }
+
+  async function loadPublicationFeed(storyId = selectedStoryId) {
+    if (!authenticated || !storyId) return;
+    try {
+      const response = await fetch(`/api/global-wire/publication-feed?story_id=${encodeURIComponent(storyId)}&channel=newsletter`, {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error(`Publication feed load failed: ${response.status}`);
+      const payload = await response.json();
+      publicationFeedItems = Array.isArray(payload.feed_items) ? payload.feed_items : [];
+      publicationFeedStatus = payload.status || '';
+    } catch {
+      publicationFeedItems = [];
+      publicationFeedStatus = '';
     }
   }
 
@@ -1472,6 +1495,27 @@
             </div>
           {/if}
         </div>
+        {#if publicationFeedItems.length}
+          <div class="publication-feed" data-global-wire-publication-feed>
+            <div class="section-title">
+              <h4>Publication Feed</h4>
+              <span>{publicationFeedStatus || 'ready'} · newsletter</span>
+            </div>
+            {#each publicationFeedItems.slice(0, 3) as item}
+              <article
+                data-global-wire-publication-feed-item
+                data-global-wire-publication-feed-artifact-id={item.artifact.id}
+              >
+                <strong>{item.artifact.title}</strong>
+                <small>{item.status} · {item.artifact.channel} · {item.story.headline}</small>
+                <span>{item.artifact.body}</span>
+                <small data-global-wire-publication-feed-provenance>
+                  citations: {item.citation_count} · rollback refs: {item.rollback_count} · source {item.source_item?.title || item.artifact.source_content_id || 'story manifest'}
+                </small>
+              </article>
+            {/each}
+          </div>
+        {/if}
         <label>
           <span>Kind</span>
           <select bind:value={contributionKind}>
@@ -2203,6 +2247,39 @@
 
   .source-search-results strong {
     overflow-wrap: anywhere;
+  }
+
+  .publication-feed {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.55rem;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-pane);
+  }
+
+  .publication-feed article {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.45rem;
+    border: 1px solid var(--choir-border);
+    border-left: 3px solid var(--choir-border-strong);
+    border-radius: 8px;
+    background: var(--choir-surface-card);
+    font-size: 0.82rem;
+    line-height: 1.3;
+  }
+
+  .publication-feed strong,
+  .publication-feed span {
+    overflow-wrap: anywhere;
+  }
+
+  .publication-feed span {
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .contribution-list {
