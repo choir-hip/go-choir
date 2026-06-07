@@ -2422,3 +2422,79 @@ staging proof:
   visibility, hidden low-value policy text, explicit access/export policy
   payload forwarding, publish-result display, and public route handling.
 ```
+
+## Loop 8 Frontend Source State Helper Extraction Target
+
+Status: `implemented_local`.
+
+Next frontend simplification target: move pure source-state projection helpers
+out of `frontend/src/lib/VTextEditor.svelte` into a focused TypeScript helper
+module. After source diagnosis and publication-context extractions, the editor
+still owns deterministic source state shaping: revision media-source fallback,
+publication-bundle source entity preference, source-gap recovery, unresolved
+numeric citation detection, source repair candidate ordering, selected source
+entity lookup, and initial source-review/source-artifact form state.
+
+This is a behavior-preserving extraction. It must not change the source panel
+UI, source repair payload construction, source artifact creation/attachment,
+Source Viewer/Web Lens launch behavior, publication source entity preference,
+typed evidence states, or citation marker semantics. The editor should keep
+mutable Svelte state, event handlers, API calls, auth dispatch, save status,
+and source-open side effects; the helper module should own only pure projection
+from revision/content/bundle/entity inputs to UI-ready state.
+
+acceptance:
+
+- `frontend/src/lib/vtext-source-state.ts` owns pure source entity/gap,
+  citation candidate, selected-entity, and initial form-state helpers;
+- `VTextEditor.svelte` imports those helpers and no longer defines local pure
+  source-state projection logic;
+- frontend build passes;
+- focused source panel tests pass locally;
+- no backend, publication export, source contract, SSRF policy, or source
+  repair API behavior changes.
+
+local implementation/evidence:
+
+```text
+change:
+  Extracted revisionMediaSourceRefs, revisionSourceEntities,
+  revisionSourceGaps, unresolvedCitationMarkers, sourceRepairCandidates,
+  selectedSourceEntity, sourceReviewFormState, and sourceArtifactFormState into
+  frontend/src/lib/vtext-source-state.ts. VTextEditor.svelte still owns mutable
+  source panel state, source repair/artifact API calls, auth dispatch, save
+  status, and source open side effects.
+
+regression caught during proof:
+  The first extraction pass imported sourceRepairCandidates without preserving
+  the old editorValue/source-gaps closure in prepareSourceReviewForm's default
+  path. Local Playwright showed the source review apply button disabled with
+  "Choose a citation marker to repair" after the source panel had detected
+  [2]. The fix added currentSourceRepairCandidates(), passing editorValue and
+  current revision gaps explicitly to the pure helper.
+
+line-count effect:
+  frontend/src/lib/VTextEditor.svelte        2651 lines
+  frontend/src/lib/vtext-source-state.ts       88 lines
+
+local proof:
+  git diff --check
+  result: passed.
+
+  npm --prefix frontend run build
+  result: passed.
+
+  CHOIR_AUTH_STATE=/tmp/go-choir-source-state-auth.json
+  CHOIR_AUTH_META=/tmp/go-choir-source-state-auth.meta.json
+  npm --prefix frontend run e2e --
+  tests/vtext-markdown-lineage.spec.js -g
+  "VText Sources panel applies source-gap repair|structured edit evidence|bounded revision structure"
+  --timeout=60000
+
+  result: 3 passed. The first local attempt with the shared Playwright auth
+  state failed before reaching the source-state path because a persisted
+  Content window from earlier local tests could not be closed by the test
+  helper. The corrected proof used an isolated auth state and exercised
+  source-gap candidate selection, repair payload/open behavior, structured edit
+  evidence, and bounded revision structure summaries.
+```

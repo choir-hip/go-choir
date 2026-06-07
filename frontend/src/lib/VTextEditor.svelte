@@ -44,8 +44,6 @@
   import VTextToolbar from './VTextToolbar.svelte';
   import { sourceEntityLaunchPayload } from './vtext-source-launcher';
   import {
-    mediaRefToSourceEntity,
-    publicationBundleSourceEntities as publicationBundleSourceEntitiesFromRenderer,
     sourceEntityID,
     sourceEntityTargetURL,
     sourceEntityTitle,
@@ -58,6 +56,14 @@
     sourceEditEvidence,
     sourceStructureEvidence,
   } from './vtext-source-diagnosis';
+  import {
+    revisionSourceEntities as deriveRevisionSourceEntities,
+    revisionSourceGaps,
+    selectedSourceEntity as deriveSelectedSourceEntity,
+    sourceArtifactFormState,
+    sourceRepairCandidates,
+    sourceReviewFormState,
+  } from './vtext-source-state';
   import {
     draftStorageKey as buildDraftStorageKey,
     documentCurrentVersionNumber as computeDocumentCurrentVersionNumber,
@@ -167,72 +173,49 @@
   const SOURCE_FLOW_LINE_HEIGHT = 29;
   const SOURCE_DIAGNOSIS_TIMEOUT_MS = 12000;
 
-  function revisionMediaSourceRefs(revision = currentRevision) {
-    const refs = revision?.metadata?.media_source_refs;
-    return Array.isArray(refs) ? refs : [];
-  }
-
   function revisionSourceEntities(revision = currentRevision, bundle = publishedBundle) {
-    const publishedEntities = publicationBundleSourceEntities(bundle);
-    if (publishedEntities.length > 0) return publishedEntities;
-    const entities = revision?.metadata?.source_entities;
-    if (Array.isArray(entities) && entities.length > 0) return entities;
-    return revisionMediaSourceRefs(revision).map(mediaRefToSourceEntity).filter(Boolean);
+    return deriveRevisionSourceEntities({
+      revision,
+      bundle,
+      publishedRoutePath,
+      appContext,
+    });
   }
 
-  function revisionSourceGaps(revision = currentRevision) {
-    const gaps = revision?.metadata?.source_gaps;
-    return Array.isArray(gaps) ? gaps : [];
+  function currentSourceRepairCandidates(content = editorValue, gaps = revisionSourceGaps(currentRevision)) {
+    return sourceRepairCandidates(content, gaps);
   }
 
-  function unresolvedCitationMarkers(content = editorValue) {
-    const sourceLinked = new Set();
-    for (const match of String(content || '').matchAll(/\[([^\]]+)\]\(source:[^)]+\)/g)) {
-      sourceLinked.add(`[${match[1]}]`);
-    }
-    const markers = new Set();
-    for (const match of String(content || '').matchAll(/\[(\d+)\](?!\()/g)) {
-      const marker = `[${match[1]}]`;
-      if (!sourceLinked.has(marker)) markers.add(marker);
-    }
-    return [...markers];
+  function prepareSourceReviewForm(marker = currentSourceRepairCandidates()[0] || sourceReviewMarker) {
+    const state = sourceReviewFormState(marker);
+    sourceReviewMarker = state.marker;
+    sourceReviewTitle = state.title;
+    sourceReviewURL = state.url;
+    sourceReviewExcerpt = state.excerpt;
+    sourceReviewRelation = state.relation;
+    sourceReviewReason = state.reason;
+    sourceReviewStatus = state.status;
+    sourceRepairError = state.error;
   }
 
-  function sourceRepairCandidates(content = editorValue, gaps = revisionSourceGaps()) {
-    const fromGaps = gaps
-      .map((gap) => String(gap?.marker || '').trim())
-      .filter(Boolean);
-    return [...new Set([...fromGaps, ...unresolvedCitationMarkers(content)])];
-  }
-
-  function prepareSourceReviewForm(marker = sourceRepairCandidates()[0] || sourceReviewMarker) {
-    sourceReviewMarker = marker || '';
-    sourceReviewTitle = '';
-    sourceReviewURL = '';
-    sourceReviewExcerpt = '';
-    sourceReviewRelation = 'confirms';
-    sourceReviewReason = '';
-    sourceReviewStatus = '';
-    sourceRepairError = '';
-  }
-
-  function ensureSourceReviewSelection(candidates = sourceRepairCandidates()) {
+  function ensureSourceReviewSelection(candidates = currentSourceRepairCandidates()) {
     if (sourceReviewMarker && candidates.includes(sourceReviewMarker)) return;
     sourceReviewMarker = candidates[0] || '';
   }
 
   function selectedSourceEntity() {
-    return sourceEntities.find((entity) => sourceEntityID(entity) === selectedSourceEntityID) || sourceEntities[0] || null;
+    return deriveSelectedSourceEntity(sourceEntities, selectedSourceEntityID);
   }
 
   function prepareSourceArtifactForm(entity = selectedSourceEntity()) {
     if (!entity) return;
-    selectedSourceEntityID = sourceEntityID(entity);
-    sourceArtifactTitle = sourceEntityTitle(entity);
-    sourceArtifactURL = sourceEntityTargetURL(entity);
-    sourceArtifactText = '';
-    sourceArtifactStatus = '';
-    sourceArtifactError = '';
+    const state = sourceArtifactFormState(entity);
+    selectedSourceEntityID = state.selectedSourceEntityID;
+    sourceArtifactTitle = state.title;
+    sourceArtifactURL = state.url;
+    sourceArtifactText = state.text;
+    sourceArtifactStatus = state.status;
+    sourceArtifactError = state.error;
   }
 
   function ensureSourceArtifactSelection() {
@@ -240,10 +223,6 @@
     if (sourceEntities.length > 0) {
       prepareSourceArtifactForm(sourceEntities[0]);
     }
-  }
-
-  function publicationBundleSourceEntities(bundle = publishedBundle) {
-    return publicationBundleSourceEntitiesFromRenderer(bundle, publishedRoutePath, appContext);
   }
 
   function renderDocumentHTML(value = editorValue) {
