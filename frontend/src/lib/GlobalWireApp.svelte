@@ -184,6 +184,9 @@
   let autoradioScripts = [];
   let deliveryExports = [];
   let publicLinks = [];
+  let newsletterSubscribers = [];
+  let newsletterIssues = [];
+  let newsletterDeliveries = [];
   let publicationFeedItems = [];
   let publicationFeedStatus = '';
   let publicationDeliveryDetail = null;
@@ -237,6 +240,9 @@
       autoradioScripts = [];
       deliveryExports = [];
       publicLinks = [];
+      newsletterSubscribers = [];
+      newsletterIssues = [];
+      newsletterDeliveries = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
@@ -296,6 +302,9 @@
       autoradioScripts = Array.isArray(payload.autoradio_scripts) ? payload.autoradio_scripts : [];
       deliveryExports = Array.isArray(payload.delivery_exports) ? payload.delivery_exports : [];
       publicLinks = Array.isArray(payload.public_links) ? payload.public_links : [];
+      newsletterSubscribers = Array.isArray(payload.newsletter_subscribers) ? payload.newsletter_subscribers : [];
+      newsletterIssues = Array.isArray(payload.newsletter_issues) ? payload.newsletter_issues : [];
+      newsletterDeliveries = Array.isArray(payload.newsletter_deliveries) ? payload.newsletter_deliveries : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
       await loadPublicationFeed(storyId);
       await loadFetchCycles(storyId);
@@ -320,6 +329,9 @@
       autoradioScripts = [];
       deliveryExports = [];
       publicLinks = [];
+      newsletterSubscribers = [];
+      newsletterIssues = [];
+      newsletterDeliveries = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
@@ -943,6 +955,16 @@
     return publicLinks.find((item) => item.export_id === id);
   }
 
+  function newsletterIssueForPublicLink(publicLink) {
+    const id = publicLink?.id || '';
+    return newsletterIssues.find((issue) => (issue.public_link_ids || []).includes(id));
+  }
+
+  function newsletterDeliveriesForIssue(issue) {
+    const id = issue?.id || '';
+    return newsletterDeliveries.filter((delivery) => delivery.issue_id === id);
+  }
+
   function selectedPublicationFeedItem() {
     return publicationFeedItems.find((item) => item.story?.id === selectedStory.id || item.artifact?.story_id === selectedStory.id);
   }
@@ -1241,6 +1263,59 @@
       await loadContributions(selectedStory.id);
     } catch (error) {
       contributionStatus = error?.message || 'Public link failed';
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
+  async function createNewsletterIssue(publicLink) {
+    if (!authenticated || !publicLink?.id) return;
+    reconciliationBusyId = `${publicLink.id}:newsletter-issue`;
+    contributionStatus = '';
+    try {
+      let subscribers = newsletterSubscribers.filter((subscriber) => subscriber.status === 'active');
+      if (!subscribers.length) {
+        const subscriberResponse = await fetch('/api/global-wire/newsletter-subscribers', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'global-wire-subscriber@example.com',
+            label: 'Global Wire staging subscriber',
+          }),
+        });
+        if (!subscriberResponse.ok) throw new Error(`Newsletter subscriber failed: ${subscriberResponse.status}`);
+        const subscriberPayload = await subscriberResponse.json();
+        subscribers = [subscriberPayload.subscriber].filter(Boolean);
+        newsletterSubscribers = [subscriberPayload.subscriber, ...newsletterSubscribers.filter((item) => item.id !== subscriberPayload.subscriber?.id)]
+          .filter(Boolean)
+          .slice(0, 30);
+      }
+      const response = await fetch('/api/global-wire/newsletter-issues', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          public_link_ids: [publicLink.id],
+          story_id: publicLink.story_id,
+        }),
+      });
+      if (!response.ok) throw new Error(`Newsletter issue failed: ${response.status}`);
+      const payload = await response.json();
+      newsletterIssues = [payload.issue, ...newsletterIssues.filter((item) => item.id !== payload.issue?.id)]
+        .filter(Boolean)
+        .slice(0, 30);
+      newsletterDeliveries = [...(payload.deliveries || []), ...newsletterDeliveries]
+        .filter(Boolean)
+        .slice(0, 50);
+      newsletterSubscribers = [...(payload.subscribers || subscribers), ...newsletterSubscribers]
+        .filter(Boolean)
+        .filter((item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index)
+        .slice(0, 30);
+      contributionStatus = `Newsletter issue ${payload.issue?.status || 'created'}`;
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || 'Newsletter issue failed';
     } finally {
       reconciliationBusyId = '';
     }
@@ -1753,6 +1828,8 @@
               {@const autoradioScript = autoradioScriptForArtifact(item.artifact)}
               {@const deliveryExport = deliveryExportForDelivery(delivery)}
               {@const publicLink = publicLinkForExport(deliveryExport)}
+              {@const newsletterIssue = newsletterIssueForPublicLink(publicLink)}
+              {@const issueDeliveries = newsletterDeliveriesForIssue(newsletterIssue)}
               <article
                 data-global-wire-publication-feed-item
                 data-global-wire-publication-feed-artifact-id={item.artifact.id}
@@ -1805,6 +1882,27 @@
                       >
                         {publicLink.status}: {publicLink.route_path}
                       </small>
+                      {#if newsletterIssue}
+                        <div
+                          class="delivery-export"
+                          data-global-wire-newsletter-issue
+                          data-global-wire-newsletter-issue-id={newsletterIssue.id}
+                        >
+                          <strong>{newsletterIssue.status}: {newsletterIssue.subject}</strong>
+                          <span>{newsletterIssue.issue_body}</span>
+                          <small data-global-wire-newsletter-issue-provenance>
+                            subscribers: {newsletterIssue.subscriber_count} · citations: {newsletterIssue.citation_count} · rollback refs: {newsletterIssue.rollback_count}
+                          </small>
+                          {#each issueDeliveries.slice(0, 3) as issueDelivery}
+                            <small
+                              data-global-wire-newsletter-delivery
+                              data-global-wire-newsletter-delivery-id={issueDelivery.id}
+                            >
+                              {issueDelivery.status}: {issueDelivery.delivery_ref}
+                            </small>
+                          {/each}
+                        </div>
+                      {/if}
                     {/if}
                   {/if}
                   <div class="publication-feed-actions">
@@ -1844,6 +1942,16 @@
                         data-global-wire-create-public-link
                       >
                         Publish
+                      </button>
+                    {/if}
+                    {#if publicLink && !newsletterIssue}
+                      <button
+                        type="button"
+                        on:click={() => createNewsletterIssue(publicLink)}
+                        disabled={reconciliationBusyId === `${publicLink.id}:newsletter-issue`}
+                        data-global-wire-create-newsletter-issue
+                      >
+                        Issue
                       </button>
                     {/if}
                   </div>

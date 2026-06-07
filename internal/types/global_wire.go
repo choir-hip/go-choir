@@ -389,6 +389,56 @@ type GlobalWirePublicationPublicLink struct {
 	UpdatedAt     time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWireNewsletterSubscriber is an owner-scoped destination for newsletter
+// issue delivery bookkeeping. It does not send mail by itself.
+type GlobalWireNewsletterSubscriber struct {
+	ID        string    `json:"id"`
+	OwnerID   string    `json:"owner_id,omitempty"`
+	Email     string    `json:"email"`
+	Label     string    `json:"label"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+}
+
+// GlobalWireNewsletterIssue is a durable owner-composed issue over one or more
+// public links. It is downstream delivery evidence, not StoryGraph mutation.
+type GlobalWireNewsletterIssue struct {
+	ID              string    `json:"id"`
+	OwnerID         string    `json:"owner_id,omitempty"`
+	StoryID         string    `json:"story_id"`
+	Status          string    `json:"status"`
+	Subject         string    `json:"subject"`
+	IssueBody       string    `json:"issue_body"`
+	PublicLinkIDs   []string  `json:"public_link_ids"`
+	DeliveryIDs     []string  `json:"delivery_ids"`
+	SubscriberCount int       `json:"subscriber_count"`
+	CitationCount   int       `json:"citation_count"`
+	RollbackCount   int       `json:"rollback_count"`
+	CitationRefs    []string  `json:"citation_refs"`
+	RollbackRefs    []string  `json:"rollback_refs"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at,omitempty"`
+}
+
+// GlobalWireNewsletterDelivery records issue availability for one subscriber.
+// It is a delivery ledger row, not an outbound-provider send receipt.
+type GlobalWireNewsletterDelivery struct {
+	ID            string    `json:"id"`
+	OwnerID       string    `json:"owner_id,omitempty"`
+	IssueID       string    `json:"issue_id"`
+	SubscriberID  string    `json:"subscriber_id"`
+	StoryID       string    `json:"story_id"`
+	Status        string    `json:"status"`
+	DeliveryRef   string    `json:"delivery_ref"`
+	CitationCount int       `json:"citation_count"`
+	RollbackCount int       `json:"rollback_count"`
+	CitationRefs  []string  `json:"citation_refs"`
+	RollbackRefs  []string  `json:"rollback_refs"`
+	CreatedAt     time.Time `json:"created_at,omitempty"`
+	UpdatedAt     time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
 // fetch cycle should use for one StoryGraph neighborhood.
 type GlobalWireSourceRegistryEntry struct {

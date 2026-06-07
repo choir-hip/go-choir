@@ -820,15 +820,49 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		!strings.Contains(rssBody, "Rollback refs:") {
 		t.Fatalf("public link rss missing publication/provenance: %s", rssBody)
 	}
+	subscriberBody := `{"email":"global-wire-subscriber@example.com","label":"Staging subscriber"}`
+	subscriberW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/newsletter-subscribers", subscriberBody, "user-alpha")
+	if subscriberW.Code != http.StatusCreated {
+		t.Fatalf("newsletter subscriber status = %d body=%s", subscriberW.Code, subscriberW.Body.String())
+	}
+	var subscriberResp globalWireNewsletterSubscriberResponse
+	if err := json.NewDecoder(subscriberW.Body).Decode(&subscriberResp); err != nil {
+		t.Fatalf("decode newsletter subscriber response: %v", err)
+	}
+	if subscriberResp.Subscriber.Status != "active" || subscriberResp.Subscriber.Email != "global-wire-subscriber@example.com" {
+		t.Fatalf("newsletter subscriber missing active email: %+v", subscriberResp)
+	}
+	issueBody := fmt.Sprintf(`{"public_link_ids":[%q],"story_id":"story-supply-resilience"}`, linkResp.PublicLink.ID)
+	issueW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/newsletter-issues", issueBody, "user-alpha")
+	if issueW.Code != http.StatusCreated {
+		t.Fatalf("newsletter issue status = %d body=%s", issueW.Code, issueW.Body.String())
+	}
+	var issueResp globalWireNewsletterIssueResponse
+	if err := json.NewDecoder(issueW.Body).Decode(&issueResp); err != nil {
+		t.Fatalf("decode newsletter issue response: %v", err)
+	}
+	if issueResp.Issue.Status != "issue-ready" ||
+		issueResp.Issue.SubscriberCount != 1 ||
+		!slices.Contains(issueResp.Issue.PublicLinkIDs, linkResp.PublicLink.ID) ||
+		!slices.Contains(issueResp.Issue.RollbackRefs, "public_link:"+linkResp.PublicLink.ID) ||
+		len(issueResp.Deliveries) != 1 ||
+		issueResp.Deliveries[0].Status != "delivery-ready" ||
+		issueResp.Deliveries[0].SubscriberID != subscriberResp.Subscriber.ID {
+		t.Fatalf("newsletter issue/delivery missing provenance: %+v", issueResp)
+	}
 
 	publicationListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
 	if publicationListW.Code != http.StatusOK {
 		t.Fatalf("list reconciliation after publication package status = %d body=%s", publicationListW.Code, publicationListW.Body.String())
 	}
-	var publicationListResp globalWireReconciliationResponse
-	if err := json.NewDecoder(publicationListW.Body).Decode(&publicationListResp); err != nil {
-		t.Fatalf("decode reconciliation list after publication package: %v", err)
+	var finalReconciliation globalWireReconciliationResponse
+	if err := json.NewDecoder(publicationListW.Body).Decode(&finalReconciliation); err != nil {
+		t.Fatalf("decode reconciliation after newsletter issue: %v", err)
 	}
+	if len(finalReconciliation.NewsletterIssues) == 0 || len(finalReconciliation.NewsletterDeliveries) == 0 {
+		t.Fatalf("reconciliation missing newsletter ledger: %+v", finalReconciliation)
+	}
+	publicationListResp := finalReconciliation
 	if len(publicationListResp.PublicationUpdates) != 1 ||
 		publicationListResp.PublicationUpdates[0].ResearchDecisionID != handoffResp.Decision.ID ||
 		len(publicationListResp.PublicationUpdates[0].ExtractionIDs) != 1 ||

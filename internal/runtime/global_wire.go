@@ -116,6 +116,9 @@ type globalWireReconciliationResponse struct {
 	AutoradioScripts      []types.GlobalWireAutoradioScript           `json:"autoradio_scripts"`
 	DeliveryExports       []types.GlobalWirePublicationDeliveryExport `json:"delivery_exports"`
 	PublicLinks           []types.GlobalWirePublicationPublicLink     `json:"public_links"`
+	NewsletterSubscribers []types.GlobalWireNewsletterSubscriber      `json:"newsletter_subscribers"`
+	NewsletterIssues      []types.GlobalWireNewsletterIssue           `json:"newsletter_issues"`
+	NewsletterDeliveries  []types.GlobalWireNewsletterDelivery        `json:"newsletter_deliveries"`
 	ProjectionReviews     []types.GlobalWireProjectionReview          `json:"projection_reviews"`
 }
 
@@ -250,6 +253,28 @@ type globalWirePublicationPublicLinkRequest struct {
 type globalWirePublicationPublicLinkResponse struct {
 	PublicLink types.GlobalWirePublicationPublicLink     `json:"public_link"`
 	Export     types.GlobalWirePublicationDeliveryExport `json:"export,omitempty"`
+}
+
+type globalWireNewsletterSubscriberRequest struct {
+	Email string `json:"email"`
+	Label string `json:"label,omitempty"`
+}
+
+type globalWireNewsletterSubscriberResponse struct {
+	Subscriber types.GlobalWireNewsletterSubscriber `json:"subscriber"`
+}
+
+type globalWireNewsletterIssueRequest struct {
+	PublicLinkIDs []string `json:"public_link_ids,omitempty"`
+	StoryID       string   `json:"story_id,omitempty"`
+	Subject       string   `json:"subject,omitempty"`
+}
+
+type globalWireNewsletterIssueResponse struct {
+	Issue       types.GlobalWireNewsletterIssue         `json:"issue"`
+	Deliveries  []types.GlobalWireNewsletterDelivery    `json:"deliveries"`
+	PublicLinks []types.GlobalWirePublicationPublicLink `json:"public_links"`
+	Subscribers []types.GlobalWireNewsletterSubscriber  `json:"subscribers"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -889,6 +914,24 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list public links"})
 			return
 		}
+		for i := range publicLinks {
+			hydrateGlobalWirePublicLinkDerivedFields(&publicLinks[i])
+		}
+		newsletterSubscribers, err := h.rt.Store().ListGlobalWireNewsletterSubscribers(r.Context(), ownerID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter subscribers"})
+			return
+		}
+		newsletterIssues, err := h.rt.Store().ListGlobalWireNewsletterIssues(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter issues"})
+			return
+		}
+		newsletterDeliveries, err := h.rt.Store().ListGlobalWireNewsletterDeliveries(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter deliveries"})
+			return
+		}
 		projectionReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
@@ -912,6 +955,9 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			AutoradioScripts:      autoradioScripts,
 			DeliveryExports:       deliveryExports,
 			PublicLinks:           publicLinks,
+			NewsletterSubscribers: newsletterSubscribers,
+			NewsletterIssues:      newsletterIssues,
+			NewsletterDeliveries:  newsletterDeliveries,
 			ProjectionReviews:     projectionReviews,
 		})
 	case http.MethodPost:
@@ -1717,6 +1763,105 @@ func (h *APIHandler) HandleGlobalWirePublicationPublicLinkDetail(w http.Response
 	})
 }
 
+// HandleGlobalWireNewsletterSubscribers records owner-scoped newsletter
+// destinations. It does not expose subscribers publicly or send email.
+func (h *APIHandler) HandleGlobalWireNewsletterSubscribers(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		subscribers, err := h.rt.Store().ListGlobalWireNewsletterSubscribers(r.Context(), ownerID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter subscribers"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, map[string]any{"newsletter_subscribers": subscribers})
+	case http.MethodPost:
+		var req globalWireNewsletterSubscriberRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid newsletter subscriber request"})
+			return
+		}
+		email := strings.ToLower(strings.TrimSpace(req.Email))
+		if email == "" || !strings.Contains(email, "@") {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "valid email is required"})
+			return
+		}
+		subscriber, err := h.rt.Store().CreateGlobalWireNewsletterSubscriber(r.Context(), types.GlobalWireNewsletterSubscriber{
+			ID:      "global-wire-newsletter-subscriber-" + uuid.NewString(),
+			OwnerID: ownerID,
+			Email:   email,
+			Label:   firstNonEmptyString(strings.TrimSpace(req.Label), "Global Wire subscriber"),
+			Status:  "active",
+		})
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create newsletter subscriber"})
+			return
+		}
+		writeAPIJSON(w, http.StatusCreated, globalWireNewsletterSubscriberResponse{Subscriber: subscriber})
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
+// HandleGlobalWireNewsletterIssues creates/lists owner-scoped newsletter issue
+// ledgers from public links and subscriber destinations.
+func (h *APIHandler) HandleGlobalWireNewsletterIssues(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		storyID := strings.TrimSpace(r.URL.Query().Get("story_id"))
+		issues, err := h.rt.Store().ListGlobalWireNewsletterIssues(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter issues"})
+			return
+		}
+		deliveries, err := h.rt.Store().ListGlobalWireNewsletterDeliveries(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter deliveries"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, map[string]any{
+			"newsletter_issues":     issues,
+			"newsletter_deliveries": deliveries,
+		})
+	case http.MethodPost:
+		var req globalWireNewsletterIssueRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid newsletter issue request"})
+			return
+		}
+		issue, deliveries, links, subscribers, err := h.createGlobalWireNewsletterIssue(r, ownerID, req)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "newsletter public link not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusCreated, globalWireNewsletterIssueResponse{
+			Issue:       issue,
+			Deliveries:  deliveries,
+			PublicLinks: links,
+			Subscribers: subscribers,
+		})
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
 func normalizeGlobalWireReconciliationDecision(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "accept", "accepted":
@@ -2177,6 +2322,14 @@ func appendGlobalWireSourceIfMissing(items []types.GlobalWireSourceItem, source 
 
 func appendStringIfMissing(values []string, value string) []string {
 	out, _ := appendStringIfMissingWithStatus(values, value)
+	return out
+}
+
+func appendStringListIfMissing(values []string, additions []string) []string {
+	out := values
+	for _, value := range additions {
+		out = appendStringIfMissing(out, value)
+	}
 	return out
 }
 
@@ -3514,6 +3667,128 @@ func xmlText(value string) string {
 		"'", "&#39;",
 	)
 	return replacer.Replace(value)
+}
+
+func (h *APIHandler) createGlobalWireNewsletterIssue(r *http.Request, ownerID string, req globalWireNewsletterIssueRequest) (types.GlobalWireNewsletterIssue, []types.GlobalWireNewsletterDelivery, []types.GlobalWirePublicationPublicLink, []types.GlobalWireNewsletterSubscriber, error) {
+	publicLinkIDSet := map[string]bool{}
+	for _, id := range req.PublicLinkIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			publicLinkIDSet[id] = true
+		}
+	}
+	storyID := strings.TrimSpace(req.StoryID)
+	allLinks, err := h.rt.Store().ListGlobalWirePublicationPublicLinks(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, err
+	}
+	var links []types.GlobalWirePublicationPublicLink
+	for _, link := range allLinks {
+		if len(publicLinkIDSet) > 0 && !publicLinkIDSet[link.ID] {
+			continue
+		}
+		hydrateGlobalWirePublicLinkDerivedFields(&link)
+		links = append(links, link)
+	}
+	if len(links) == 0 {
+		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, store.ErrNotFound
+	}
+	if storyID == "" {
+		storyID = links[0].StoryID
+	}
+	var selected []types.GlobalWirePublicationPublicLink
+	for _, link := range links {
+		if link.StoryID == storyID {
+			selected = append(selected, link)
+		}
+	}
+	if len(selected) == 0 {
+		selected = links
+	}
+	subscribers, err := h.rt.Store().ListGlobalWireNewsletterSubscribers(r.Context(), ownerID, 100)
+	if err != nil {
+		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, err
+	}
+	var activeSubscribers []types.GlobalWireNewsletterSubscriber
+	for _, subscriber := range subscribers {
+		if subscriber.Status == "active" {
+			activeSubscribers = append(activeSubscribers, subscriber)
+		}
+	}
+	if len(activeSubscribers) == 0 {
+		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, fmt.Errorf("create global wire newsletter issue: active subscriber is required")
+	}
+
+	issueID := "global-wire-newsletter-issue-" + uuid.NewString()
+	var publicLinkIDs, citationRefs, rollbackRefs, bodySections []string
+	for _, link := range selected {
+		publicLinkIDs = appendStringIfMissing(publicLinkIDs, link.ID)
+		citationRefs = appendStringListIfMissing(citationRefs, link.CitationRefs)
+		rollbackRefs = appendStringListIfMissing(rollbackRefs, link.RollbackRefs)
+		rollbackRefs = appendStringIfMissing(rollbackRefs, "public_link:"+link.ID)
+		bodySections = append(bodySections,
+			"## "+link.Title+"\n\n"+
+				link.ExportBody+"\n\n"+
+				"Public reader: "+link.RoutePath+"\n"+
+				"RSS: "+link.FeedPath,
+		)
+	}
+	subject := strings.TrimSpace(req.Subject)
+	if subject == "" {
+		subject = "Global Wire newsletter: " + selected[0].Title
+	}
+	issueBody := strings.Join([]string{
+		"# " + subject,
+		"",
+		strings.Join(bodySections, "\n\n"),
+		"",
+		"## Delivery Ledger",
+		fmt.Sprintf("Subscribers: %d", len(activeSubscribers)),
+		fmt.Sprintf("Public links: %d", len(selected)),
+		"Guardrail: this issue is owner-scoped delivery evidence over public links, not platform StoryGraph mutation.",
+	}, "\n")
+	var deliveryIDs []string
+	var deliveries []types.GlobalWireNewsletterDelivery
+	for _, subscriber := range activeSubscribers {
+		deliveryID := "global-wire-newsletter-delivery-" + uuid.NewString()
+		deliveryIDs = append(deliveryIDs, deliveryID)
+		delivery, err := h.rt.Store().CreateGlobalWireNewsletterDelivery(r.Context(), types.GlobalWireNewsletterDelivery{
+			ID:            deliveryID,
+			OwnerID:       ownerID,
+			IssueID:       issueID,
+			SubscriberID:  subscriber.ID,
+			StoryID:       storyID,
+			Status:        "delivery-ready",
+			DeliveryRef:   "global-wire/newsletter/" + issueID + "/subscribers/" + subscriber.ID,
+			CitationCount: len(citationRefs),
+			RollbackCount: len(rollbackRefs),
+			CitationRefs:  citationRefs,
+			RollbackRefs:  rollbackRefs,
+		})
+		if err != nil {
+			return types.GlobalWireNewsletterIssue{}, nil, nil, nil, err
+		}
+		deliveries = append(deliveries, delivery)
+	}
+	issue, err := h.rt.Store().CreateGlobalWireNewsletterIssue(r.Context(), types.GlobalWireNewsletterIssue{
+		ID:              issueID,
+		OwnerID:         ownerID,
+		StoryID:         storyID,
+		Status:          "issue-ready",
+		Subject:         subject,
+		IssueBody:       issueBody,
+		PublicLinkIDs:   publicLinkIDs,
+		DeliveryIDs:     deliveryIDs,
+		SubscriberCount: len(activeSubscribers),
+		CitationCount:   len(citationRefs),
+		RollbackCount:   len(rollbackRefs),
+		CitationRefs:    citationRefs,
+		RollbackRefs:    rollbackRefs,
+	})
+	if err != nil {
+		return types.GlobalWireNewsletterIssue{}, nil, nil, nil, err
+	}
+	return issue, deliveries, selected, activeSubscribers, nil
 }
 
 func (h *APIHandler) globalWirePublicationArtifactProjectionReviews(r *http.Request, ownerID string, update types.GlobalWirePublicationUpdate) ([]types.GlobalWireProjectionReview, error) {

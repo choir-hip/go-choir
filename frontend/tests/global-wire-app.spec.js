@@ -607,6 +607,40 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(publicFeed.body).toContain(publicLinkPayload.public_link.title);
     expect(publicFeed.body).toContain('Citation refs:');
     expect(publicFeed.body).toContain('Rollback refs:');
+    const newsletterSubscriberResponsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/global-wire/newsletter-subscribers' && response.request().method() === 'POST'
+    );
+    const newsletterIssueResponsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/global-wire/newsletter-issues' && response.request().method() === 'POST'
+    );
+    await app.locator('[data-global-wire-create-newsletter-issue]').first().click();
+    const newsletterSubscriberResponse = await newsletterSubscriberResponsePromise;
+    expect(newsletterSubscriberResponse.status()).toBe(201);
+    const newsletterSubscriberPayload = await newsletterSubscriberResponse.json();
+    expect(newsletterSubscriberPayload.subscriber.status).toBe('active');
+    const newsletterIssueResponse = await newsletterIssueResponsePromise;
+    expect(newsletterIssueResponse.status()).toBe(201);
+    const newsletterIssuePayload = await newsletterIssueResponse.json();
+    expect(newsletterIssuePayload.issue.status).toBe('issue-ready');
+    expect(newsletterIssuePayload.issue.public_link_ids).toContain(publicLinkPayload.public_link.id);
+    expect(newsletterIssuePayload.issue.subscriber_count).toBeGreaterThanOrEqual(1);
+    expect(newsletterIssuePayload.deliveries?.[0]?.status).toBe('delivery-ready');
+    expect(newsletterIssuePayload.deliveries?.[0]?.subscriber_id).toBe(newsletterSubscriberPayload.subscriber.id);
+    await expect(app.locator('[data-global-wire-newsletter-issue]').first()).toContainText('issue-ready');
+    await expect(app.locator('[data-global-wire-newsletter-issue-provenance]').first()).toContainText('subscribers:');
+    await expect(app.locator('[data-global-wire-newsletter-delivery]').first()).toContainText('delivery-ready');
+    const newsletterQueue = await page.evaluate(async (issueId) => {
+      const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
+      if (!res.ok) throw new Error(`load newsletter queue failed: ${res.status}`);
+      const list = await res.json();
+      return {
+        issue: (list.newsletter_issues || []).find((item) => item.id === issueId),
+        delivery: (list.newsletter_deliveries || []).find((item) => item.issue_id === issueId),
+      };
+    }, newsletterIssuePayload.issue.id);
+    expect(newsletterQueue.issue.public_link_ids).toContain(publicLinkPayload.public_link.id);
+    expect(newsletterQueue.issue.rollback_refs).toContain(`public_link:${publicLinkPayload.public_link.id}`);
+    expect(newsletterQueue.delivery.status).toBe('delivery-ready');
     const publicReaderURL = new URL(publicLinkPayload.public_link.route_path, page.url()).toString();
     await page.goto(publicReaderURL);
     await expect(page.locator('[data-global-wire-public-reader]')).toBeVisible();

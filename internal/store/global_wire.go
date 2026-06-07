@@ -2681,6 +2681,255 @@ func (s *Store) GetGlobalWirePublicationPublicLinkByToken(ctx context.Context, t
 	return scanGlobalWirePublicationPublicLink(row)
 }
 
+// CreateGlobalWireNewsletterSubscriber stores an owner-scoped newsletter
+// destination for delivery bookkeeping.
+func (s *Store) CreateGlobalWireNewsletterSubscriber(ctx context.Context, rec types.GlobalWireNewsletterSubscriber) (types.GlobalWireNewsletterSubscriber, error) {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
+	rec.CreatedAt = now
+	if strings.TrimSpace(rec.Status) == "" {
+		rec.Status = "active"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_newsletter_subscribers (
+			owner_id, subscriber_id, email, label, status, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			label = VALUES(label),
+			status = VALUES(status),
+			updated_at = VALUES(updated_at)`,
+		rec.OwnerID,
+		rec.ID,
+		strings.ToLower(strings.TrimSpace(rec.Email)),
+		sanitizeStoreText(rec.Label),
+		rec.Status,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireNewsletterSubscriber{}, fmt.Errorf("create global wire newsletter subscriber: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireNewsletterSubscribers lists owner-scoped newsletter
+// destinations.
+func (s *Store) ListGlobalWireNewsletterSubscribers(ctx context.Context, ownerID string, limit int) ([]types.GlobalWireNewsletterSubscriber, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := s.readDB.QueryContext(ctx,
+		`SELECT owner_id, subscriber_id, email, label, status, created_at, updated_at
+		   FROM global_wire_newsletter_subscribers
+		  WHERE owner_id = ?
+		  ORDER BY updated_at DESC
+		  LIMIT ?`,
+		ownerID,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire newsletter subscribers: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireNewsletterSubscriber
+	for rows.Next() {
+		rec, err := scanGlobalWireNewsletterSubscriber(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire newsletter subscribers: %w", err)
+	}
+	return out, nil
+}
+
+// CreateGlobalWireNewsletterIssue stores a durable owner-composed issue over
+// public links.
+func (s *Store) CreateGlobalWireNewsletterIssue(ctx context.Context, rec types.GlobalWireNewsletterIssue) (types.GlobalWireNewsletterIssue, error) {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
+	rec.CreatedAt = now
+	if strings.TrimSpace(rec.Status) == "" {
+		rec.Status = "issue-ready"
+	}
+	publicLinkIDsJSON, err := json.Marshal(rec.PublicLinkIDs)
+	if err != nil {
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("marshal global wire newsletter issue public links: %w", err)
+	}
+	deliveryIDsJSON, err := json.Marshal(rec.DeliveryIDs)
+	if err != nil {
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("marshal global wire newsletter issue deliveries: %w", err)
+	}
+	citationRefsJSON, err := json.Marshal(rec.CitationRefs)
+	if err != nil {
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("marshal global wire newsletter issue citation refs: %w", err)
+	}
+	rollbackRefsJSON, err := json.Marshal(rec.RollbackRefs)
+	if err != nil {
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("marshal global wire newsletter issue rollback refs: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_newsletter_issues (
+			owner_id, issue_id, story_id, status, subject, issue_body,
+			public_link_ids_json, delivery_ids_json, subscriber_count,
+			citation_count, rollback_count, citation_refs_json,
+			rollback_refs_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.StoryID,
+		rec.Status,
+		sanitizeStoreText(rec.Subject),
+		sanitizeStoreText(rec.IssueBody),
+		string(publicLinkIDsJSON),
+		string(deliveryIDsJSON),
+		rec.SubscriberCount,
+		rec.CitationCount,
+		rec.RollbackCount,
+		string(citationRefsJSON),
+		string(rollbackRefsJSON),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("create global wire newsletter issue: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireNewsletterIssues lists owner-scoped newsletter issues,
+// optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWireNewsletterIssues(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireNewsletterIssue, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, issue_id, story_id, status, subject, issue_body,
+	                 public_link_ids_json, delivery_ids_json, subscriber_count,
+	                 citation_count, rollback_count, citation_refs_json,
+	                 rollback_refs_json, created_at, updated_at
+	            FROM global_wire_newsletter_issues
+	           WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire newsletter issues: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireNewsletterIssue
+	for rows.Next() {
+		rec, err := scanGlobalWireNewsletterIssue(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire newsletter issues: %w", err)
+	}
+	return out, nil
+}
+
+// CreateGlobalWireNewsletterDelivery stores one issue delivery ledger row.
+func (s *Store) CreateGlobalWireNewsletterDelivery(ctx context.Context, rec types.GlobalWireNewsletterDelivery) (types.GlobalWireNewsletterDelivery, error) {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
+	rec.CreatedAt = now
+	if strings.TrimSpace(rec.Status) == "" {
+		rec.Status = "delivery-ready"
+	}
+	citationRefsJSON, err := json.Marshal(rec.CitationRefs)
+	if err != nil {
+		return types.GlobalWireNewsletterDelivery{}, fmt.Errorf("marshal global wire newsletter delivery citation refs: %w", err)
+	}
+	rollbackRefsJSON, err := json.Marshal(rec.RollbackRefs)
+	if err != nil {
+		return types.GlobalWireNewsletterDelivery{}, fmt.Errorf("marshal global wire newsletter delivery rollback refs: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_newsletter_deliveries (
+			owner_id, delivery_id, issue_id, subscriber_id, story_id, status,
+			delivery_ref, citation_count, rollback_count, citation_refs_json,
+			rollback_refs_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.IssueID,
+		rec.SubscriberID,
+		rec.StoryID,
+		rec.Status,
+		sanitizeStoreText(rec.DeliveryRef),
+		rec.CitationCount,
+		rec.RollbackCount,
+		string(citationRefsJSON),
+		string(rollbackRefsJSON),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireNewsletterDelivery{}, fmt.Errorf("create global wire newsletter delivery: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireNewsletterDeliveries lists issue delivery ledger rows.
+func (s *Store) ListGlobalWireNewsletterDeliveries(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireNewsletterDelivery, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, delivery_id, issue_id, subscriber_id, story_id,
+	                 status, delivery_ref, citation_count, rollback_count,
+	                 citation_refs_json, rollback_refs_json, created_at, updated_at
+	            FROM global_wire_newsletter_deliveries
+	           WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire newsletter deliveries: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireNewsletterDelivery
+	for rows.Next() {
+		rec, err := scanGlobalWireNewsletterDelivery(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire newsletter deliveries: %w", err)
+	}
+	return out, nil
+}
+
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
 func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.GlobalWireStoryProjection) error {
 	now := rec.UpdatedAt
@@ -3673,6 +3922,133 @@ func scanGlobalWirePublicationPublicLink(row interface{ Scan(...any) error }) (t
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWirePublicationPublicLink{}, fmt.Errorf("parse global wire publication public link updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireNewsletterSubscriber(row interface{ Scan(...any) error }) (types.GlobalWireNewsletterSubscriber, error) {
+	var rec types.GlobalWireNewsletterSubscriber
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.Email,
+		&rec.Label,
+		&rec.Status,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireNewsletterSubscriber{}, ErrNotFound
+		}
+		return types.GlobalWireNewsletterSubscriber{}, fmt.Errorf("scan global wire newsletter subscriber: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireNewsletterSubscriber{}, fmt.Errorf("parse global wire newsletter subscriber created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireNewsletterSubscriber{}, fmt.Errorf("parse global wire newsletter subscriber updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireNewsletterIssue(row interface{ Scan(...any) error }) (types.GlobalWireNewsletterIssue, error) {
+	var rec types.GlobalWireNewsletterIssue
+	var publicLinkIDsJSON, deliveryIDsJSON, citationRefsJSON, rollbackRefsJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.StoryID,
+		&rec.Status,
+		&rec.Subject,
+		&rec.IssueBody,
+		&publicLinkIDsJSON,
+		&deliveryIDsJSON,
+		&rec.SubscriberCount,
+		&rec.CitationCount,
+		&rec.RollbackCount,
+		&citationRefsJSON,
+		&rollbackRefsJSON,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireNewsletterIssue{}, ErrNotFound
+		}
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("scan global wire newsletter issue: %w", err)
+	}
+	if err := json.Unmarshal([]byte(publicLinkIDsJSON), &rec.PublicLinkIDs); err != nil {
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("unmarshal global wire newsletter issue public links: %w", err)
+	}
+	if err := json.Unmarshal([]byte(deliveryIDsJSON), &rec.DeliveryIDs); err != nil {
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("unmarshal global wire newsletter issue deliveries: %w", err)
+	}
+	if err := json.Unmarshal([]byte(citationRefsJSON), &rec.CitationRefs); err != nil {
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("unmarshal global wire newsletter issue citation refs: %w", err)
+	}
+	if err := json.Unmarshal([]byte(rollbackRefsJSON), &rec.RollbackRefs); err != nil {
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("unmarshal global wire newsletter issue rollback refs: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("parse global wire newsletter issue created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireNewsletterIssue{}, fmt.Errorf("parse global wire newsletter issue updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireNewsletterDelivery(row interface{ Scan(...any) error }) (types.GlobalWireNewsletterDelivery, error) {
+	var rec types.GlobalWireNewsletterDelivery
+	var citationRefsJSON, rollbackRefsJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.IssueID,
+		&rec.SubscriberID,
+		&rec.StoryID,
+		&rec.Status,
+		&rec.DeliveryRef,
+		&rec.CitationCount,
+		&rec.RollbackCount,
+		&citationRefsJSON,
+		&rollbackRefsJSON,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireNewsletterDelivery{}, ErrNotFound
+		}
+		return types.GlobalWireNewsletterDelivery{}, fmt.Errorf("scan global wire newsletter delivery: %w", err)
+	}
+	if err := json.Unmarshal([]byte(citationRefsJSON), &rec.CitationRefs); err != nil {
+		return types.GlobalWireNewsletterDelivery{}, fmt.Errorf("unmarshal global wire newsletter delivery citation refs: %w", err)
+	}
+	if err := json.Unmarshal([]byte(rollbackRefsJSON), &rec.RollbackRefs); err != nil {
+		return types.GlobalWireNewsletterDelivery{}, fmt.Errorf("unmarshal global wire newsletter delivery rollback refs: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireNewsletterDelivery{}, fmt.Errorf("parse global wire newsletter delivery created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireNewsletterDelivery{}, fmt.Errorf("parse global wire newsletter delivery updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()
