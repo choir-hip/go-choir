@@ -389,6 +389,34 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(publicationQueue.status).toBe('packaged-for-publication-review');
     expect(publicationQueue.summary).toContain('does not publish or mutate');
     expect(publicationQueue.extraction_ids?.length || 0).toBeGreaterThanOrEqual(1);
+    const publicationArtifact = await page.evaluate(async (updateId) => {
+      const res = await fetch('/api/global-wire/publication-artifacts', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          update_id: updateId,
+          channel: 'newsletter',
+        }),
+      });
+      const body = await res.json();
+      return { statusCode: res.status, body };
+    }, publicationUpdate.body.update.id);
+    expect(publicationArtifact.statusCode).toBe(201);
+    expect(publicationArtifact.body.artifact.status).toBe('publication-review-ready');
+    expect(publicationArtifact.body.artifact.update_id).toBe(publicationUpdate.body.update.id);
+    expect(publicationArtifact.body.artifact.channel).toBe('newsletter');
+    expect(publicationArtifact.body.artifact.citation_refs.length).toBeGreaterThanOrEqual(5);
+    expect(publicationArtifact.body.artifact.extraction_ids?.length || 0).toBeGreaterThanOrEqual(1);
+    expect(publicationArtifact.body.artifact.body).toContain('does not mutate the platform story');
+    const artifactQueue = await page.evaluate(async (artifactId) => {
+      const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
+      if (!res.ok) throw new Error(`load publication artifact queue failed: ${res.status}`);
+      const list = await res.json();
+      return (list.publication_artifacts || []).find((item) => item.id === artifactId);
+    }, publicationArtifact.body.artifact.id);
+    expect(artifactQueue.status).toBe('publication-review-ready');
+    expect(artifactQueue.citation_refs.length).toBeGreaterThanOrEqual(5);
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

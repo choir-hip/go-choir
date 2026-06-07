@@ -179,6 +179,7 @@
   let researchEvidence = [];
   let researchDecisions = [];
   let publicationUpdates = [];
+  let publicationArtifacts = [];
   let projectionReviews = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
@@ -224,6 +225,7 @@
       claimRecords = [];
       researchTasks = [];
       extractionArtifacts = [];
+      publicationArtifacts = [];
       projectionReviews = [];
       sourceSearchResults = [];
       sourceSearchStatus = '';
@@ -275,6 +277,7 @@
       researchEvidence = Array.isArray(payload.research_evidence) ? payload.research_evidence : [];
       researchDecisions = Array.isArray(payload.research_decisions) ? payload.research_decisions : [];
       publicationUpdates = Array.isArray(payload.publication_updates) ? payload.publication_updates : [];
+      publicationArtifacts = Array.isArray(payload.publication_artifacts) ? payload.publication_artifacts : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
       await loadFetchCycles(storyId);
     } catch {
@@ -293,6 +296,7 @@
       researchEvidence = [];
       researchDecisions = [];
       publicationUpdates = [];
+      publicationArtifacts = [];
       projectionReviews = [];
     }
   }
@@ -834,6 +838,11 @@
     return publicationUpdates.find((update) => update.research_decision_id === id);
   }
 
+  function publicationArtifactForUpdate(update) {
+    const id = update?.id || '';
+    return publicationArtifacts.find((artifact) => artifact.update_id === id);
+  }
+
   function researchTaskEvidenceSummary(task, action) {
     if (action === 'assign') {
       return `Research task assigned for ${task.task_kind || 'claim review'}; no platform story mutation applied.`;
@@ -934,6 +943,34 @@
       await loadContributions(selectedStory.id);
     } catch (error) {
       contributionStatus = error?.message || 'Publication update package failed';
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
+  async function createPublicationArtifact(update) {
+    if (!authenticated || !update?.id) return;
+    reconciliationBusyId = `${update.id}:publication-artifact`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/publication-artifacts', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          update_id: update.id,
+          channel: 'newsletter',
+        }),
+      });
+      if (!response.ok) throw new Error(`Publication artifact failed: ${response.status}`);
+      const payload = await response.json();
+      publicationArtifacts = [payload.artifact, ...publicationArtifacts]
+        .filter(Boolean)
+        .slice(0, 30);
+      contributionStatus = `Publication artifact ${payload.artifact?.status || 'created'}`;
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || 'Publication artifact failed';
     } finally {
       reconciliationBusyId = '';
     }
@@ -1555,6 +1592,7 @@
                                         {handoff.decision}: {handoff.result_state}
                                       </small>
                                       {#if publicationUpdate}
+                                        {@const publicationArtifact = publicationArtifactForUpdate(publicationUpdate)}
                                         <small
                                           data-global-wire-publication-update
                                           data-global-wire-publication-update-id={publicationUpdate.id}
@@ -1567,6 +1605,28 @@
                                         <small data-global-wire-publication-extraction-refs>
                                           extraction refs: {(publicationUpdate.extraction_ids || []).length}
                                         </small>
+                                        {#if publicationArtifact}
+                                          <small
+                                            data-global-wire-publication-artifact
+                                            data-global-wire-publication-artifact-id={publicationArtifact.id}
+                                          >
+                                            {publicationArtifact.status}: {publicationArtifact.title}
+                                          </small>
+                                          <small data-global-wire-publication-artifact-citations>
+                                            citations: {(publicationArtifact.citation_refs || []).length} / scheduler refs: {(publicationArtifact.scheduler_run_ids || []).length}
+                                          </small>
+                                        {:else}
+                                          <div class="research-task-actions">
+                                            <button
+                                              type="button"
+                                              on:click={() => createPublicationArtifact(publicationUpdate)}
+                                              disabled={reconciliationBusyId === `${publicationUpdate.id}:publication-artifact`}
+                                              data-global-wire-create-publication-artifact
+                                            >
+                                              Build publication artifact
+                                            </button>
+                                          </div>
+                                        {/if}
                                       {:else if handoff.result_state === 'ready-for-platform-review'}
                                         <div class="research-task-actions">
                                           <button

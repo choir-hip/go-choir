@@ -2094,6 +2094,136 @@ func (s *Store) ListGlobalWirePublicationUpdates(ctx context.Context, ownerID, s
 	return out, nil
 }
 
+// GetGlobalWirePublicationUpdate returns one owner-scoped publication package.
+func (s *Store) GetGlobalWirePublicationUpdate(ctx context.Context, ownerID, updateID string) (types.GlobalWirePublicationUpdate, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, update_id, story_id, candidate_id,
+	                research_decision_id, evidence_id, source_content_id,
+	                extraction_ids_json, projection_review_ids_json,
+	                projection_states_json, rollback_refs_json, status, summary,
+	                created_at, updated_at
+		   FROM global_wire_publication_updates
+		  WHERE owner_id = ? AND update_id = ?`,
+		ownerID,
+		updateID,
+	)
+	return scanGlobalWirePublicationUpdate(row)
+}
+
+// CreateGlobalWirePublicationArtifact stores a review-ready publication/feed
+// artifact derived from a publication package.
+func (s *Store) CreateGlobalWirePublicationArtifact(ctx context.Context, rec types.GlobalWirePublicationArtifact) (types.GlobalWirePublicationArtifact, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = rec.CreatedAt
+	}
+	if rec.Status == "" {
+		rec.Status = "publication-review-ready"
+	}
+	if rec.Channel == "" {
+		rec.Channel = "newsletter"
+	}
+	styleDocIDsJSON, err := json.Marshal(rec.StyleDocIDs)
+	if err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("marshal global wire publication artifact style doc ids: %w", err)
+	}
+	projectionReviewIDsJSON, err := json.Marshal(rec.ProjectionReviewIDs)
+	if err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("marshal global wire publication artifact projection review ids: %w", err)
+	}
+	extractionIDsJSON, err := json.Marshal(rec.ExtractionIDs)
+	if err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("marshal global wire publication artifact extraction ids: %w", err)
+	}
+	schedulerRunIDsJSON, err := json.Marshal(rec.SchedulerRunIDs)
+	if err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("marshal global wire publication artifact scheduler run ids: %w", err)
+	}
+	citationRefsJSON, err := json.Marshal(rec.CitationRefs)
+	if err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("marshal global wire publication artifact citation refs: %w", err)
+	}
+	rollbackRefsJSON, err := json.Marshal(rec.RollbackRefs)
+	if err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("marshal global wire publication artifact rollback refs: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_publication_artifacts (
+			owner_id, artifact_id, update_id, story_id, candidate_id,
+			story_vtext_doc_id, source_content_id, channel, status, title, body,
+			style_doc_ids_json, projection_review_ids_json, extraction_ids_json,
+			scheduler_run_ids_json, citation_refs_json, rollback_refs_json,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.UpdateID,
+		rec.StoryID,
+		rec.CandidateID,
+		rec.StoryVTextDocID,
+		rec.SourceContentID,
+		rec.Channel,
+		rec.Status,
+		sanitizeStoreText(rec.Title),
+		sanitizeStoreText(rec.Body),
+		string(styleDocIDsJSON),
+		string(projectionReviewIDsJSON),
+		string(extractionIDsJSON),
+		string(schedulerRunIDsJSON),
+		string(citationRefsJSON),
+		string(rollbackRefsJSON),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("create global wire publication artifact: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWirePublicationArtifacts lists review-ready publication artifacts,
+// optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWirePublicationArtifacts(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWirePublicationArtifact, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, artifact_id, update_id, story_id, candidate_id,
+	                story_vtext_doc_id, source_content_id, channel, status,
+	                title, body, style_doc_ids_json, projection_review_ids_json,
+	                extraction_ids_json, scheduler_run_ids_json,
+	                citation_refs_json, rollback_refs_json, created_at,
+	                updated_at
+	           FROM global_wire_publication_artifacts
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire publication artifacts: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWirePublicationArtifact
+	for rows.Next() {
+		rec, err := scanGlobalWirePublicationArtifact(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire publication artifacts: %w", err)
+	}
+	return out, nil
+}
+
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
 func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.GlobalWireStoryProjection) error {
 	now := rec.UpdatedAt
@@ -2837,6 +2967,69 @@ func scanGlobalWirePublicationUpdate(row interface{ Scan(...any) error }) (types
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("parse global wire publication update updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWirePublicationArtifact(row interface{ Scan(...any) error }) (types.GlobalWirePublicationArtifact, error) {
+	var rec types.GlobalWirePublicationArtifact
+	var styleDocIDsJSON, projectionReviewIDsJSON, extractionIDsJSON string
+	var schedulerRunIDsJSON, citationRefsJSON, rollbackRefsJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.UpdateID,
+		&rec.StoryID,
+		&rec.CandidateID,
+		&rec.StoryVTextDocID,
+		&rec.SourceContentID,
+		&rec.Channel,
+		&rec.Status,
+		&rec.Title,
+		&rec.Body,
+		&styleDocIDsJSON,
+		&projectionReviewIDsJSON,
+		&extractionIDsJSON,
+		&schedulerRunIDsJSON,
+		&citationRefsJSON,
+		&rollbackRefsJSON,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWirePublicationArtifact{}, ErrNotFound
+		}
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("scan global wire publication artifact: %w", err)
+	}
+	if err := json.Unmarshal([]byte(styleDocIDsJSON), &rec.StyleDocIDs); err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("unmarshal global wire publication artifact style doc ids: %w", err)
+	}
+	if err := json.Unmarshal([]byte(projectionReviewIDsJSON), &rec.ProjectionReviewIDs); err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("unmarshal global wire publication artifact projection review ids: %w", err)
+	}
+	if err := json.Unmarshal([]byte(extractionIDsJSON), &rec.ExtractionIDs); err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("unmarshal global wire publication artifact extraction ids: %w", err)
+	}
+	if err := json.Unmarshal([]byte(schedulerRunIDsJSON), &rec.SchedulerRunIDs); err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("unmarshal global wire publication artifact scheduler run ids: %w", err)
+	}
+	if err := json.Unmarshal([]byte(citationRefsJSON), &rec.CitationRefs); err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("unmarshal global wire publication artifact citation refs: %w", err)
+	}
+	if err := json.Unmarshal([]byte(rollbackRefsJSON), &rec.RollbackRefs); err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("unmarshal global wire publication artifact rollback refs: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("parse global wire publication artifact created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWirePublicationArtifact{}, fmt.Errorf("parse global wire publication artifact updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()

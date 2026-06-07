@@ -445,6 +445,31 @@ CREATE TABLE IF NOT EXISTS global_wire_publication_updates (
 	KEY idx_global_wire_publication_updates_candidate (owner_id, candidate_id, updated_at)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_publication_artifacts (
+	owner_id                   VARCHAR(255) NOT NULL,
+	artifact_id                VARCHAR(255) NOT NULL,
+	update_id                  VARCHAR(255) NOT NULL,
+	story_id                   VARCHAR(255) NOT NULL,
+	candidate_id               VARCHAR(255) NOT NULL DEFAULT '',
+	story_vtext_doc_id         VARCHAR(255) NOT NULL DEFAULT '',
+	source_content_id          VARCHAR(255) NOT NULL DEFAULT '',
+	channel                    VARCHAR(255) NOT NULL DEFAULT '',
+	status                     VARCHAR(255) NOT NULL DEFAULT '',
+	title                      LONGTEXT NOT NULL DEFAULT '',
+	body                       LONGTEXT NOT NULL DEFAULT '',
+	style_doc_ids_json         LONGTEXT NOT NULL DEFAULT '[]',
+	projection_review_ids_json LONGTEXT NOT NULL DEFAULT '[]',
+	extraction_ids_json        LONGTEXT NOT NULL DEFAULT '[]',
+	scheduler_run_ids_json     LONGTEXT NOT NULL DEFAULT '[]',
+	citation_refs_json         LONGTEXT NOT NULL DEFAULT '[]',
+	rollback_refs_json         LONGTEXT NOT NULL DEFAULT '[]',
+	created_at                 DATETIME NOT NULL,
+	updated_at                 DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, artifact_id),
+	KEY idx_global_wire_publication_artifacts_story (owner_id, story_id, updated_at),
+	KEY idx_global_wire_publication_artifacts_update (owner_id, update_id, updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivery_id          VARCHAR(255) PRIMARY KEY,
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',

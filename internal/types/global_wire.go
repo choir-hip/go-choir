@@ -279,6 +279,31 @@ type GlobalWirePublicationUpdate struct {
 	UpdatedAt           time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWirePublicationArtifact is a review-ready output artifact derived from
+// a publication update package. It is citeable publication/feed material, not
+// an automatic public publish or platform story mutation.
+type GlobalWirePublicationArtifact struct {
+	ID                  string    `json:"id"`
+	OwnerID             string    `json:"owner_id,omitempty"`
+	UpdateID            string    `json:"update_id"`
+	StoryID             string    `json:"story_id"`
+	CandidateID         string    `json:"candidate_id,omitempty"`
+	StoryVTextDocID     string    `json:"story_vtext_doc_id,omitempty"`
+	SourceContentID     string    `json:"source_content_id,omitempty"`
+	Channel             string    `json:"channel"`
+	Status              string    `json:"status"`
+	Title               string    `json:"title"`
+	Body                string    `json:"body"`
+	StyleDocIDs         []string  `json:"style_doc_ids"`
+	ProjectionReviewIDs []string  `json:"projection_review_ids"`
+	ExtractionIDs       []string  `json:"extraction_ids"`
+	SchedulerRunIDs     []string  `json:"scheduler_run_ids"`
+	CitationRefs        []string  `json:"citation_refs"`
+	RollbackRefs        []string  `json:"rollback_refs"`
+	CreatedAt           time.Time `json:"created_at,omitempty"`
+	UpdatedAt           time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
 // fetch cycle should use for one StoryGraph neighborhood.
 type GlobalWireSourceRegistryEntry struct {

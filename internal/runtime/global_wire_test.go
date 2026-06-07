@@ -574,6 +574,29 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("publication update missing review package lineage: %+v", publicationResp)
 	}
 
+	artifactBody := fmt.Sprintf(`{"update_id":%q,"channel":"newsletter"}`, publicationResp.Update.ID)
+	artifactW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-artifacts", artifactBody, "user-alpha")
+	if artifactW.Code != http.StatusCreated {
+		t.Fatalf("publication artifact status = %d body=%s", artifactW.Code, artifactW.Body.String())
+	}
+	var artifactResp globalWirePublicationArtifactResponse
+	if err := json.NewDecoder(artifactW.Body).Decode(&artifactResp); err != nil {
+		t.Fatalf("decode publication artifact response: %v", err)
+	}
+	if artifactResp.Artifact.UpdateID != publicationResp.Update.ID ||
+		artifactResp.Artifact.StoryID != publicationResp.Update.StoryID ||
+		artifactResp.Artifact.StoryVTextDocID == "" ||
+		artifactResp.Artifact.SourceContentID != resp.ContentItem.ContentID ||
+		artifactResp.Artifact.Channel != "newsletter" ||
+		artifactResp.Artifact.Status != "publication-review-ready" ||
+		len(artifactResp.Artifact.ExtractionIDs) != len(publicationResp.Update.ExtractionIDs) ||
+		len(artifactResp.Artifact.CitationRefs) < 5 ||
+		!strings.Contains(artifactResp.Artifact.Body, "not public publication") ||
+		!strings.Contains(artifactResp.Artifact.Body, "does not mutate the platform story") ||
+		artifactResp.SourceItem == nil {
+		t.Fatalf("publication artifact missing citeable lineage: %+v", artifactResp)
+	}
+
 	publicationListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
 	if publicationListW.Code != http.StatusOK {
 		t.Fatalf("list reconciliation after publication package status = %d body=%s", publicationListW.Code, publicationListW.Body.String())
@@ -585,8 +608,11 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	if len(publicationListResp.PublicationUpdates) != 1 ||
 		publicationListResp.PublicationUpdates[0].ResearchDecisionID != handoffResp.Decision.ID ||
 		len(publicationListResp.PublicationUpdates[0].ExtractionIDs) != 1 ||
-		len(publicationListResp.PublicationUpdates[0].RollbackRefs) < 4 {
-		t.Fatalf("publication update missing from reconciliation list: %+v", publicationListResp.PublicationUpdates)
+		len(publicationListResp.PublicationUpdates[0].RollbackRefs) < 4 ||
+		len(publicationListResp.PublicationArtifacts) != 1 ||
+		publicationListResp.PublicationArtifacts[0].UpdateID != publicationResp.Update.ID ||
+		len(publicationListResp.PublicationArtifacts[0].CitationRefs) < 5 {
+		t.Fatalf("publication artifacts missing from reconciliation list: updates=%+v artifacts=%+v", publicationListResp.PublicationUpdates, publicationListResp.PublicationArtifacts)
 	}
 
 	storiesTaskAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
