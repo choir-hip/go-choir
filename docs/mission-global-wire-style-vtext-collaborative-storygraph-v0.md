@@ -1,6 +1,7 @@
 # Mission: Global Wire / Style.vtext Collaborative StoryGraph
 
-**Status:** draft MissionGradient mission  
+**Status:** overnight MissionGradient delivery mission, checkpoint-incomplete
+after first frontend slice  
 **Requirements contract:** `docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md`  
 **Current context:** `docs/news-system-current-state-and-improvements-2026-06-06.md`,
 `docs/vtext-styleguide-system-research-2026-06-06.md`,
@@ -9,12 +10,14 @@
 ## Goal String
 
 ```text
-/goal Run docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md as a MissionGradient mission. Build the Global Wire / Style.vtext collaborative StoryGraph product trajectory: live source evidence -> StoryGraph -> Story VTexts -> Style.vtext projections -> News app views -> user-owned edits/contributions -> research/reconciliation-ready state. Start from the lowest honest resolution of the whole object, then keep increasing resolution along the highest-value axes until a ship-worthy product slice is deployed and proven, or a true blocker remains after root-cause investigation, Computer Use/browser/product-path probes where useful, cognitive transforms, and serious alternative solution routes that reconceive the problem or architecture rather than patching around it. Preserve all invariants in docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md: every story is a normal editable VText; user edits create user-owned versions/forks and do not mutate platform stories; Style.vtext is a citeable source artifact that can be selected/composed/replaced; news is non-oracle and provenance-rich; graph nodes are story headlines with source-neighborhood semantics; all app views work in Future Noir, Carbon Kintsugi, and London Salmon. Use staging/product-path proof for platform behavior and update the mission doc with checkpoint/resumption state before stopping.
+/goal Run docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md as an overnight MissionGradient delivery mission. The objective is to deliver the spec in docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md, not merely ship another slice. Continue from checkpoint commit 60ef7179 and build the one real Global Wire / Style.vtext collaborative StoryGraph object end to end: live or Source Service-backed SourceItem evidence -> durable StoryGraph records -> platform Story VTexts -> citeable Style.vtext projections -> News app views -> user-owned forks/edits/contributions -> research/reconciliation-ready queues. Work for roughly 8 hours or until the spec is delivered and proven, or until a true blocker remains after serious root-cause investigation. Do not stop after a frontend slice, local test pass, staging smoke, or "ship-worthy product slice" if any required part of the spec remains undelivered and an authorized next probe can still move it uphill. Preserve every invariant in the spec: every story is a normal editable VText; user edits create user-owned versions/forks and do not mutate platform stories; Style.vtext is a citeable source artifact that can be selected/composed/replaced; news is non-oracle and provenance-rich; graph nodes are Story VText headlines with source-neighborhood semantics; all app views work in Future Noir, Carbon Kintsugi, and London Salmon. Apply cognitive transforms before each major route choice and before any stop; prefer backend/product-path realism over UI-only polish once the first surface works; use product-path/staging proof for platform behavior; commit, push, monitor CI/deploy, verify staging identity, run deployed acceptance proof, and update this mission doc with an owner-readable overnight checkpoint/resumption state before stopping.
 ```
 
-## Real Artifact
+## Real Artifact / Delivery Target
 
-A production-shaped collaborative story system in Choir:
+The delivery target is the full dual-object spec in
+`docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md`, expressed
+as a production-shaped collaborative story system in Choir:
 
 ```text
 source ingestion/search
@@ -26,9 +29,13 @@ source ingestion/search
 -> research/reconciliation-ready contribution records
 ```
 
-The mission is not complete when a demo exists. The mission continues up
-resolution axes until the product slice is ship-worthy or a true blocker is
-proven.
+The mission is not complete when a demo exists, when the app shell renders, or
+when a partial slice deploys. Completion means the spec's required object model,
+collaboration model, app views, graph semantics, theme requirements, and
+source-backed publication loop are implemented to the highest honest overnight
+resolution and proven through staging/product-path evidence. If the full spec
+cannot be delivered overnight, the stop state must be `checkpoint_incomplete` or
+`blocked_incomplete`, never "complete".
 
 ## Value Criterion
 
@@ -111,6 +118,96 @@ apply route-changing cognitive transforms. Useful starting transforms:
 Transforms must change implementation route, verifier, scope, evidence plan, or
 stopping condition. Decorative reframing does not count.
 
+## Overnight Cognitive Reframe - 2026-06-07
+
+Current obstacle: the first execution stopped after a deployed frontend slice.
+That was useful progress but an under-resolution of the mission. The overnight
+run must treat that slice as a foothold, not a finish line.
+
+Selected transforms:
+
+1. **Depth extraction / esoteric upgrade** - The banal object is a News app.
+   The deep object is a public-reality state machine whose projections are
+   editable VTexts. This changes the next route from UI expansion to durable
+   SourceItem/StoryGraph/Style.vtext contracts.
+2. **Topology preservation** - The app is only the viewing/editing instrument.
+   The artifact identity lives in the chain from source evidence to StoryGraph
+   to VText to user-owned/reconciliation state. This changes the verifier from
+   "does the screen render?" to "can a source-backed story become a normal
+   VText, fork, contribution, and reconciliation candidate without crossing an
+   ownership boundary?"
+3. **Stop-condition inversion** - A shipped slice is the minimum deployed
+   foothold, not the overnight stopping condition. This changes the stop rule:
+   continue while an authorized next probe can raise Source, StoryGraph, VText,
+   Style, Contribution, or Evidence realism.
+4. **Backend-first realism after surface proof** - Once the app shell exists,
+   UI polish has lower value than durable story/source/contribution state. This
+   changes the next implementation route toward backend contracts and frontend
+   consumption of those contracts, with seeded data only as fallback.
+5. **Sleeping-owner autonomy** - The owner will be asleep, so the run must not
+   depend on subjective approval between ordinary safe increments. This changes
+   the execution policy: make conservative implementation choices, checkpoint
+   evidence, and stop only on invariant-level risk, external authority, or an
+   investigated true blocker.
+
+Changed plan:
+
+- implementation: next raise backend/product realism: define durable
+  StoryGraph, projection, and contribution records; connect Global Wire to that
+  contract; create or reuse VText story/style artifacts through normal VText
+  APIs; preserve seeded records only as public-preview fallback.
+- verifier/evidence: add Go data-contract tests, frontend contract tests,
+  product-path authenticated tests, staging build identity checks, and deployed
+  proof for source-backed story -> VText -> fork/contribution behavior.
+- scope: keep one real story family if needed, but it must traverse the whole
+  topology. Reduce breadth of sources/styles before cutting any topology edge.
+- stopping condition: overnight checkpoint may stop after roughly 8 hours or a
+  true blocker; "deployed frontend works" is not sufficient.
+
+Next high-information action: inspect current Source Service item/search API,
+VText metadata/citation APIs, and available store migration patterns, then
+choose the smallest durable StoryGraph backend contract that can feed the
+existing Global Wire app and preserve VText ownership semantics.
+
+## Overnight Execution Contract
+
+This is an overnight delivery mission. The expected operating horizon is roughly
+8 hours, not a short interactive turn. The agent should continue through
+multiple receding-horizon loops while the owner is away, always measuring
+progress against the spec rather than against the last shipped slice.
+
+Priority order after the first frontend slice:
+
+0. Spec coverage audit: enumerate every MUST/required object/view/invariant in
+   `docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md`, map it
+   to current code/proof, and keep an explicit undelivered-spec list in this
+   mission doc.
+1. Durable backend contracts for `SourceItem`, `StoryGraph`, `StoryProjection`,
+   `Style.vtext` source refs, and contribution/reconciliation records.
+2. Product path from source-backed StoryGraph into ordinary VText story/style
+   artifacts with owner-scoped fork/edit behavior.
+3. Global Wire app consumption of durable records, with seeded frontend records
+   retained only as preview/fallback.
+4. Evidence and graph semantics richer than the current seeded manifest:
+   lead/supporting/contrary/context tiers, claims, tension, related story
+   neighborhoods, freshness/change state.
+5. Theme/mobile polish only after the product path is behaviorally real.
+
+Autonomous stop rules:
+
+- Do not stop for ordinary test failures; investigate root cause and fix within
+  authority.
+- Do not stop after any single successful deploy if a clear next realism axis
+  remains and is safe to pursue.
+- Stop with `checkpoint_incomplete` only when the overnight/time/context window
+  is exhausted after useful progress and the mission doc is updated.
+- Stop with `blocked_incomplete` only after root-cause probes, product/browser
+  probes where useful, cognitive transforms, and at least one serious alternate
+  route have failed or crossed an authority/invariant boundary.
+- Stop with `complete` only if the full source-backed StoryGraph/VText/style
+  projection/user-owned contribution trajectory delivers the spec and is
+  deployed/proven at the level defined below.
+
 ## Receding-Horizon Execution
 
 Operate in short loops:
@@ -167,10 +264,16 @@ Use evidence appropriate to the axis:
 
 Stop only when one is true:
 
-- `complete`: A ship-worthy product slice exists and is proven through product
-  path/staging evidence: live/source-backed StoryGraph, Story VTexts,
-  `Style.vtext` projections, News app views in all themes, user-owned edit/fork
-  path, contribution/research-ready path, and documented residual risks.
+- `complete`: The spec is delivered and proven through
+  product-path/staging evidence: live or Source Service backed `SourceItem`
+  evidence feeds durable StoryGraph records; StoryGraphs produce normal
+  editable Story VTexts; selected `Style.vtext` artifacts are cited by
+  projections; News app views consume the durable records and work in all three
+  themes; signed-in users can create user-owned forks/edits/contributions
+  without mutating platform stories; contribution records are
+  research/reconciliation-ready; all required News app views exist; graph
+  semantics match the spec; all three themes are verified; residual risks are
+  documented. A UI-only, seeded-data, or partial-backend slice is not complete.
 - `checkpoint_incomplete`: Significant uphill product resolution is landed, but
   authorized time/context ends. Mission doc contains resumable state and the
   next executable probe.
