@@ -4030,3 +4030,49 @@ Next executable probe:
   over `GlobalWirePublicationArtifact`, dedicated Autoradio script/audio
   artifact persistence, or honest `RunAcceptanceRecord` synthesis from a real
   product trajectory.
+
+## Problem Checkpoint - Publication Artifacts Lack Owner Review State - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transform:
+
+- Treat publication as an owner-reviewed state transition on the citeable
+  artifact, not as a new oracle surface and not as automatic public delivery.
+- The lowest honest resolution is a durable artifact status transition that
+  proves review intent and preserves rollback/provenance, before building
+  newsletters, syndication, or email delivery.
+
+Observed gap:
+
+- `GlobalWirePublicationArtifact` rows are created with
+  `publication-review-ready`, consumed by the feed, and traversed by
+  Autoradio, but the owner cannot approve or reject them through the product
+  path.
+- The store has create/list operations for publication artifacts, but no
+  owner-scoped get/update status transition.
+- The News app does not expose review controls for publication artifacts.
+
+Why this matters:
+
+- The spec requires user-owned edits/contributions and research/
+  reconciliation-ready state. A review-ready artifact without an owner review
+  transition stops short of an auditable publication decision.
+- Public delivery should not be built until there is an explicit review state
+  that distinguishes ready, approved, and rejected artifacts.
+- Updating artifact review state must not mutate StoryGraph or platform Story
+  VTexts.
+
+Remaining error field:
+
+- No durable publication artifact review action exists.
+- No UI control marks a publication artifact approved/rejected.
+- Feed and Autoradio can consume artifacts, but cannot distinguish owner
+  approval from review readiness except by initial status.
+
+Next executable probe:
+
+- Add owner-scoped artifact status review over existing
+  `global_wire_publication_artifacts`, expose approve/reject controls in the
+  News app feed, and prove the status transition through deployed owner
+  Playwright without mutating platform stories.
