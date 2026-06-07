@@ -289,75 +289,90 @@ Stop only when one is true:
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: 2026-06-07 Global Wire app slice deployed to staging at
-  f3e6a59db82e7a08f27829bfa7f9469104e789fe
+last checkpoint: 2026-06-07 Global Wire extraction overlay slice deployed to
+  staging at 2cbadc6be3e542d99c5ba30d7dd62e2d72df3dac
 current artifact state: Choir has a user-facing Global Wire app registered in
-  the Desk/mobile app registry. The app renders seeded StoryGraph-shaped story
-  nodes, source manifests with lead/supporting/contrary/context tiers, story
-  reader, style projection switcher, StoryGraph headline neighborhood, normal
-  VText launch/fork controls, and a user contribution surface.
+  the Desk/mobile app registry and backed by durable Global Wire story,
+  Style.vtext, source, reconciliation, candidate, projection review, research,
+  publication package, source registry/fetch-cycle, and extraction overlay
+  records. The product path now runs:
+  live/source-service evidence -> SourceItem -> source-refresh run ->
+  StoryGraph headline candidate -> claim record -> extraction overlay ->
+  research task/evidence -> research handoff -> projection review ->
+  publication update package -> News app review views. User forks and edits
+  remain owner-owned VTexts and do not mutate platform stories.
 what shipped:
-  - docs/spec/problem checkpoint commit b60c1076
-  - product slice commit f3e6a59d
-  - `frontend/src/lib/GlobalWireApp.svelte`
-  - `frontend/tests/global-wire-app.spec.js`
+  - source/claim richness problem checkpoint commit
+    7a5ddcd2a0c8927f5e58c47389b7d2df8ca1cebf
+  - extraction overlay behavior commit
+    2cbadc6be3e542d99c5ba30d7dd62e2d72df3dac
+  - `GlobalWireExtractionArtifact` store/type/API path
+  - extraction ids on `GlobalWirePublicationUpdate`
+  - News app rendering of extraction overlay counts/timeline and publication
+    extraction refs
 what was proven:
-  - local `npm run build` passed
-  - local `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npx playwright test
-    tests/global-wire-app.spec.js` passed with 4 public UI tests and the
-    deployed-auth proof skipped by default
-  - staging CI run 27080878731 passed, including frontend build, Go gates,
-    runtime shards, and Deploy to Staging (Node B)
-  - FlakeHub publish run 27080878720 passed
+  - local `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+    passed
+  - local `npm run build` in `frontend/` passed
+  - local `git diff --check` passed
+  - CI run 27085651324 passed, including runtime shards, Go vet/build,
+    non-runtime tests, integration smoke, frontend build, and Deploy to Staging
+    (Node B)
+  - FlakeHub publish run 27085651314 passed
   - `https://choir.news/health` reported proxy and sandbox deployed commit
-    f3e6a59db82e7a08f27829bfa7f9469104e789fe at 2026-06-07T02:56:36Z
-  - deployed public proof
+    2cbadc6be3e542d99c5ba30d7dd62e2d72df3dac at 2026-06-07T07:06:28Z
+  - deployed public proof:
     `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test
-    tests/global-wire-app.spec.js` passed 4/4
-  - deployed ownership proof
+    tests/global-wire-app.spec.js --project=chromium` passed 4 tests with the
+    auth-gated flow skipped
+  - deployed ownership/source proof:
     `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news
-    npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
-    passed and verified signed-in fork/contribution actions create
-    owner-scoped VText documents
-  - Browser visual proof on staging observed 3 story nodes, style switcher,
-    VText launch, contribution surface, no horizontal overflow, and no
-    evidence/graph rail overlap
+    npx playwright test tests/global-wire-app.spec.js --project=chromium
+    --grep "owner-scoped"` passed and verified owner-scoped VText
+    fork/contribution, source refresh, extraction artifact creation,
+    reconciliation listing, research completion, handoff, publication update
+    packaging, and extraction ids in the package
 unproven or partial claims:
-  - StoryGraph records are seeded frontend records, not yet durable backend
-    StoryGraph objects derived from live Source Service ingestion
-  - source evidence is source-shaped and provenance-rich but not yet fetched
-    live in the News app product path
-  - contribution queue is represented through user-owned VTexts and local app
-    state; it is not yet a durable backend reconciliation queue
-  - Style.vtext sources open as ordinary VTexts, but style selection/composition
-    is not yet backed by durable Style.vtext source refs or permissions
+  - source registry/fetch cycles are durable and manual-bounded, but not yet a
+    24/7 autonomous scheduler
+  - extraction overlays are low-resolution review artifacts derived from
+    headline/source/classification fields, not normalized NLP entity/event
+    extraction
+  - source standing policy is still thin and not backed by a curated catalog
+  - publication packages are review artifacts, not newsletter/public-route or
+    Autoradio publication
   - no run acceptance record was synthesized in this checkpoint
 belief-state changes:
-  - the shortest topology-preserving slice is frontend app + existing VText API,
-    not a static mock and not a new backend API first
-  - existing VText launch/createInitialVersion semantics are sufficient to prove
-    the ownership boundary for first-resolution story forks and contributions
-  - the next realism axis should move seeded StoryGraph data into a durable
-    source-backed backend contract without changing the app topology
+  - the correct next representation for source/entity/event/timeline structure
+    is an owner-scoped overlay artifact tied to SourceItem/claim/candidate, not
+    changing StoryGraph nodes away from headline neighborhoods
+  - publication packages should cite extraction ids before any public-route
+    publication work, so review state remains visible and rollback-friendly
 remaining error field: the shipped slice is product-shaped and deployed, but
-  still needs live Source Service backed StoryGraph persistence, durable
-  contribution/reconciliation records, and citeable Style.vtext source relation
-  storage before the full dual-object mission can be complete
-highest-impact remaining uncertainty: exact backend boundary for
-  SourceItem/StoryGraph/Style.vtext projection records that can feed the News
-  app while preserving normal VText ownership and publication semantics
-next executable probe: define and implement a small backend StoryGraph API or
-  store module that reads Source Service items into durable StoryGraph records,
-  then have Global Wire consume that contract with the seeded records as a
-  fallback only
+  still lacks autonomous recurring source ingestion, curated source standing,
+  normalized entity/event/timeline extraction, full Style.vtext revision
+  workflow, newsletter/public-route publication, Autoradio playback/scheduling,
+  and a synthesized RunAcceptanceRecord
+highest-impact remaining uncertainty: whether the next best realism increase is
+  a recurring source scheduler/source-standing catalog or deeper extraction
+  normalization; current evidence favors source standing and scheduler because
+  extraction artifacts now have a durable citation target
+next executable probe: add a low-resolution autonomous source scheduler/source
+  standing catalog path that periodically refreshes selected StoryGraph headline
+  neighborhoods, records scheduler evidence and source standing policy, and
+  proves staging behavior without mutating platform stories
 suggested resume goal string: see Goal String above
 evidence artifact refs:
-  - GitHub Actions CI run 27080878731
-  - FlakeHub publish run 27080878720
-  - staging health JSON at 2026-06-07 showing deployed commit f3e6a59d...
+  - GitHub Actions CI run 27085651324
+  - FlakeHub publish run 27085651314
+  - staging health JSON at 2026-06-07T07:06:28Z showing deployed commit
+    2cbadc6be3e542d99c5ba30d7dd62e2d72df3dac
   - Playwright commands listed in what was proven
 rollback refs:
-  - pre-mission base d5bc2193
+  - source/claim richness problem checkpoint
+    7a5ddcd2a0c8927f5e58c47389b7d2df8ca1cebf
+  - prior publication package checkpoint
+    07a7aabd
   - docs checkpoint b60c1076
   - product slice f3e6a59d
 ```
@@ -3306,3 +3321,88 @@ Next executable probe:
   claim/research artifact is created; expose them from reconciliation and News;
   add extraction ids to publication update packages; and prove locally/staging
   that extraction overlays are review artifacts only, not graph-node mutation.
+
+## Checkpoint - Extraction Overlay Package Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Artifact advanced:
+
+- Global Wire now has durable `GlobalWireExtractionArtifact` records.
+- Source refresh creates a provisional extraction overlay whenever it creates a
+  claim record and research task.
+- Extraction artifacts are owner-scoped and linked to story id, claim id,
+  refresh id, SourceItem id, candidate id, entities, events, timeline,
+  uncertainty, rationale, status, and timestamps.
+- `/api/global-wire/reconciliation` now returns `extraction_artifacts`.
+- Bounded fetch cycles return extraction artifacts when they reuse the source
+  refresh artifact path.
+- Publication update packages now carry `extraction_ids` and rollback refs for
+  linked extraction artifacts.
+- The News app displays extraction overlay status/counts/timeline under claim
+  records and displays publication package extraction-ref counts.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `7a5ddcd2a0c8927f5e58c47389b7d2df8ca1cebf`.
+- Behavior commit:
+  `2cbadc6be3e542d99c5ba30d7dd62e2d72df3dac`.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`,
+  `npm run build` in `frontend/`, and `git diff --check`.
+- CI run `27085651324`: success, including runtime shards, Go vet/build,
+  non-runtime tests, integration smoke, frontend build, and staging deploy.
+- FlakeHub run `27085651314`: success.
+- Staging health at `2026-06-07T07:06:28Z` reported proxy and sandbox
+  `deployed_commit` =
+  `2cbadc6be3e542d99c5ba30d7dd62e2d72df3dac`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium --grep "owner-scoped"`
+  with 1 passed. The proof verified extraction artifact creation in the source
+  refresh response, reconciliation listing, and extraction ids on publication
+  update packages.
+
+Invariants preserved:
+
+- Extraction artifacts are review overlays. They do not create, replace, or
+  mutate StoryGraph headline nodes.
+- StoryGraph nodes remain story headlines with source-neighborhood semantics.
+- User forks/edits remain owner-owned VText versions and do not mutate platform
+  stories.
+- Publication packages remain non-oracle review artifacts and cite extraction
+  ids instead of hiding structured source evidence in prose.
+- Future Noir, Carbon Kintsugi, and London Salmon app views continue to pass
+  on staging.
+
+Belief-state update:
+
+- The product trajectory now includes a durable structured-source overlay:
+  SourceItem -> claim record -> extraction artifact -> research evidence ->
+  publication package.
+- Low-resolution extraction is useful only because it is citeable and visibly
+  provisional. Richer extraction can now increase resolution without changing
+  the graph object.
+
+Remaining error field:
+
+- There is still no autonomous 24/7 scheduler or recurring source-fetch worker.
+- Source standing policy is still thin and not backed by a curated source
+  catalog.
+- Extraction artifacts are not normalized NLP outputs; they are conservative
+  review overlays derived from SourceItem/story/classification fields.
+- Style.vtext composition/replacement is proven, but not yet a full style
+  revision workflow with forks, merge conflict handling, permissions, or
+  publication review.
+- Publication updates do not yet produce newsletter/public-route artifacts or
+  Autoradio scripts/playback.
+
+Next executable probe:
+
+- Add a low-resolution autonomous source scheduler/source standing catalog path
+  that periodically refreshes selected StoryGraph headline neighborhoods,
+  records scheduler evidence and source standing policy, and proves staging
+  behavior without mutating platform stories.
