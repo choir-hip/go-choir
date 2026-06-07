@@ -10,7 +10,7 @@ design-language correction.
 ## Goal String
 
 ```text
-/goal Run docs/mission-global-wire-sourcemaxx-publication-system-v0.md as an overnight MissionGradient delivery mission. Deliver the Global Wire SourceMaxx newsroom runtime to shipped, staging-proven status: source firehose, processors, reconcilers, existing researcher/VText agents, publication-quality Style.vtext use, VText-native provenance, user-owned edits, and a clean newspaper UI. Preserve the mission/spec/design invariants, delete wrong-object paths, make it nice, prove it on staging, and checkpoint the mission before stopping.
+/goal Run docs/mission-global-wire-sourcemaxx-publication-system-v0.md to shipped staging proof. Deliver SourceMaxx -> processors/reconcilers -> researcher/VText reuse -> publication-quality Global Wire. Make it nice.
 ```
 
 ## Why This Mission Exists
@@ -270,10 +270,14 @@ Reconcilers may request existing researcher agents and existing VText agents.
 They also write durable relationship/question/contradiction notes so the News
 app and other agents can expose their work.
 
-Processors and reconcilers use the same underlying agentic loop as other Choir
-agents. They are role/prompt/capability specializations with durable state,
-tool calls, compaction, continuation, and channel/request records, not separate
-harnesses.
+Processors and reconcilers use the same underlying shared Choir agent harness
+as the existing researcher, VText, super, vsuper, and co-super agents. They are
+role/prompt/capability specializations with profile-specific toolsets, durable
+state, tool calls, compaction, continuation, and channel/request records. They
+must not grow a parallel loop, provider adapter, run store, event stream,
+delegation mechanism, compaction mechanism, or worker-update path unless a
+future invariant proves the shared harness cannot protect correctness,
+security, authority boundaries, or resource isolation.
 
 ### Existing Researcher Agents
 
@@ -765,15 +769,46 @@ belief-state changes:
   reconciler request rows, expose only aggregate run-state/update evidence
   through the product-safe SourceMaxx status route, and keep raw prompts,
   internal run endpoints, and source-service internals private.
+- Commit `677b3497ed4e7ac860cabae492d9ec6b226515a4` adds durable
+  `runtime_run_id` columns for processor/reconciler requests, persists
+  submitted runtime run IDs from `sourcecycled`, carries those IDs through the
+  source-service response DTOs, and extends
+  `/api/global-wire/sourcemaxx-status` with product-safe aggregate run-state,
+  worker-update, and child-profile counts. CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27096173481` and
+  FlakeHub run `https://github.com/choir-hip/go-choir/actions/runs/27096173478`
+  completed successfully, and `https://choir.news/health` reported proxy and
+  sandbox deployed commit `677b3497ed4e7ac860cabae492d9ec6b226515a4` at
+  `2026-06-07T15:05:37Z`. Local focused tests passed for cycle storage,
+  sourcecycled dispatch, and runtime status aggregation; local builds passed
+  for `./cmd/sourcecycled` and `./cmd/sandbox`.
+- Deployed authenticated SourceMaxx status proof after that commit returned
+  cycle `cycle_f0d8b5056c405d541887b17d`, started
+  `2026-06-07T15:05:44Z`, with 686 SourceItems, 14 fetches, 17 processor
+  requests, 1 reconciler request,
+  `processor_status_counts: {"queued":10,"submitted":7}`, and
+  `reconciler_status_counts: {"submitted":1}`. It did not include the new
+  runtime-run aggregate fields. This narrows the current problem: the shared
+  harness submission path works at the status-count level, and the code now
+  persists run IDs, but deployed product evidence still cannot resolve the
+  submitted handoffs into runtime lifecycle evidence. The next fix must
+  root-cause whether `sourcecycled` is running updated code, whether its
+  SourceMaxx storage rows carry `runtime_run_id`, whether the source-service
+  API is dropping those fields, or whether the sandbox runtime store cannot
+  see the submitted runs because `sourcecycled` and sandbox are writing to
+  different stores/owners. Do not add another agent architecture to patch
+  around this; processors and reconcilers remain shared-harness profiles with
+  profile-specific toolsets.
 
 remaining error field:
 
 - sustained staging source daemon/storage behavior across repeated cycles,
   including provider-level distribution, freshness, dedupe, and backoff;
 - first-class processor/reconciler shared-harness profiles are present and
-  sourcecycled submits capped staging handoffs to them, but resident
-  output/result quality, compaction continuity, researcher delegation, and
-  VText delegation/publication remain incomplete;
+  sourcecycled submits capped staging handoffs to them, but deployed
+  runtime-run aggregate evidence is not yet visible on the product-safe status
+  route; resident output/result quality, compaction continuity, researcher
+  delegation, and VText delegation/publication remain incomplete;
 - processor load budget and routing scheme after live staging data;
 - current researcher/VText agent invocation contracts for this workflow;
 - deletion/reuse map for current Global Wire backend source paths;
@@ -781,24 +816,22 @@ remaining error field:
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether submitted processor/reconciler
-runs produce useful durable cognition with preserved context and existing
-researcher/VText agent reuse without deeper runtime changes. Staging has now
-proven expanded source cycles, product-safe status observability, and capped
-handoff submission into shared-harness profiles, so the next realism axis is
-resident output/result quality and publication-quality VText production, not
-source-volume visibility or basic dispatch.
+highest-impact remaining uncertainty: whether the deployed SourceMaxx
+submission lineage is visible end to end across sourcecycled storage,
+source-service DTOs, and sandbox runtime storage. Once that is proven, the next
+realism axis is resident output/result quality and publication-quality VText
+production, not source-volume visibility or basic dispatch.
 
 next executable delivery loop:
 
-1. Probe repeated staging SourceMaxx cycles through
-   `/api/global-wire/sourcemaxx-status` and add provider-level product-safe
-   observability only if needed for debugging source freshness/distribution.
-2. Add first-class `processor` and `reconciler` agent profiles in the shared
-   runtime harness with profile-specific toolsets/prompts, then connect queued
-   handoffs to resident agent runs using existing request/result records.
-   Preserve long-running context/compaction handles rather than reconstructing
-   all context from text.
+1. Root-cause missing deployed runtime-run aggregate fields without bypassing
+   product boundaries: confirm sourcecycled binary/deploy identity, inspect
+   SourceMaxx request rows for `runtime_run_id`, confirm source-service DTO
+   serialization, and confirm the sandbox runtime store can resolve submitted
+   run IDs under the expected owner/request metadata.
+2. Keep processors and reconcilers on the shared runtime harness with
+   profile-specific prompts/toolsets only. Do not create a separate processor
+   service loop to mask lineage gaps.
 3. Route processor/reconciler research needs into existing researcher agents
    and route article/update needs into existing VText agents. Do not create a
    parallel researcher/writer system.

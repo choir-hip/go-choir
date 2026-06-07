@@ -131,6 +131,14 @@ working.
 Processors are long-running agents that maintain live understanding over
 routed source flow. They are not necessarily vertical-specific.
 
+Processors are shared-harness Choir agents. Their specialization is profile
+prompt, model/tool policy, source/query capability, durable continuity state,
+and source-batch inputs. They must reuse the same core loop, provider
+semantics, run store, event stream, compaction/continuation mechanics,
+delegation path, and worker-update path used by existing agent profiles unless
+a later invariant proves shared-harness reuse cannot protect correctness,
+security, authority boundaries, or resource isolation.
+
 A processor may own:
 
 - a broad topic area;
@@ -174,6 +182,10 @@ every processor turn to reconstruct understanding from scratch.
 
 Reconcilers are corpus-level story agents, not a downstream stage after
 processors.
+
+Reconcilers are also shared-harness Choir agents. They use a reconciler
+profile and corpus/source/VText traversal toolset, not a separate runtime
+architecture.
 
 They review articles/stories and surrounding evidence across:
 
