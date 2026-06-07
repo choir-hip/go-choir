@@ -3164,3 +3164,94 @@ Next executable probe:
   decision id, SourceItem id, projection review ids/states, rollback refs, and
   a non-publication status. Expose it in reconciliation and News, prove locally
   and on staging that package creation does not mutate platform stories.
+
+## Checkpoint - Publication Update Package Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Artifact advanced:
+
+- Global Wire now has durable `GlobalWirePublicationUpdate` records.
+- `/api/global-wire/publication-updates` supports GET/POST.
+- POST packages an accepted `GlobalWireResearchEvidenceDecision` into an
+  owner-visible update-feed artifact with story id, candidate id, research
+  decision id, evidence id, SourceItem id, projection review ids/states,
+  rollback refs, status, summary, and timestamps.
+- `/api/global-wire/reconciliation` now returns `publication_updates`.
+- The News app can package an accepted research handoff into a publication
+  update and render the package status plus rollback-ref count under the
+  evidence/reconciliation surface.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `55de1feef1c016f686704bd2185df98c65666cbd`.
+- Behavior commit:
+  `b70747b2290a77aa8b0868f7f7b9e7bdfd1d9861`.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`,
+  `npm run build` in `frontend/`, and `git diff --check`.
+- CI run `27085413013`: success, including runtime shards, Go vet/build,
+  non-runtime tests, integration smoke, frontend build, and staging deploy.
+- FlakeHub run `27085413008`: success.
+- Staging health at `2026-06-07T06:54:35Z` reported proxy and sandbox
+  `deployed_commit` =
+  `b70747b2290a77aa8b0868f7f7b9e7bdfd1d9861`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium --grep "owner-scoped"`
+  with 1 passed. The proof created source-refresh research artifacts,
+  completed research, accepted the research evidence, packaged a publication
+  update through `/api/global-wire/publication-updates`, and verified
+  reconciliation returned `packaged-for-publication-review`.
+
+Invariants preserved:
+
+- Publication updates are queue/package artifacts, not automatic publication.
+- Package creation does not mutate platform StoryGraph manifests or Story
+  VTexts.
+- User-owned forks and edits remain separate from platform stories.
+- The package cites provenance and rollback anchors rather than hiding review
+  state behind an oracle result.
+- News remains provenance-rich and non-oracle: it shows source/research/handoff
+  and publication package state as separate steps.
+- The required Future Noir, Carbon Kintsugi, and London Salmon app views
+  continue to pass on staging.
+
+Belief-state update:
+
+- The product trajectory now includes:
+  source registry -> bounded fetch cycle -> SourceItem -> source-refresh run ->
+  claim/research task -> research evidence packet -> research handoff decision
+  -> publication update package.
+- This closes the gap where accepted research/candidate/projection state had no
+  owner-visible publication/update-feed package.
+- The implementation remains low-resolution: publication packages are review
+  artifacts, not newsletter/public-route publication; rollback refs are
+  string anchors over current StoryGraph/VText/candidate/review records rather
+  than a full transactional restore plan.
+
+Remaining error field:
+
+- There is still no autonomous 24/7 scheduler or recurring source-fetch worker.
+- Claim/event/entity extraction is not yet a rich structured model with
+  entity/event/timeline normalization.
+- Source registry entries are still seeded from StoryGraph headlines rather
+  than a curated source catalog with standing policy.
+- Style.vtext composition/replacement is proven, but not yet a full style
+  revision workflow with forks, merge conflict handling, permissions, or
+  publication review.
+- Publication updates do not yet produce newsletter/public-route artifacts or
+  Autoradio scripts.
+- Autoradio remains a prompt-bar/VText handoff rather than a dedicated audio
+  playback or scheduling subsystem.
+
+Next executable probe:
+
+- Highest-value next realism axis is upstream source/claim richness: add a
+  low-resolution structured entity/event/timeline extraction artifact tied to
+  SourceItems, claim records, and StoryGraph overlays, so publication packages
+  can cite more than headline-level claim summaries without making the graph
+  object itself a source/entity graph.
