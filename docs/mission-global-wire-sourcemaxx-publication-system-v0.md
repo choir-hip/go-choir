@@ -738,15 +738,32 @@ belief-state changes:
   hard service dependency cycle and make dispatch tolerate runtime startup by
   retrying transient runtime unavailability before marking handoffs
   `dispatch_failed`.
+- Commit `d1f692f9e45c7b653d7909598019be5c744ea438` adds bounded retry for
+  transient runtime dispatch failures. CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27095762398` and
+  FlakeHub run `https://github.com/choir-hip/go-choir/actions/runs/27095762408`
+  completed successfully, and `https://choir.news/health` reported proxy and
+  sandbox deployed commit `d1f692f9e45c7b653d7909598019be5c744ea438` at
+  `2026-06-07T14:48:30Z`. Authenticated staging proof for new post-deploy
+  cycle `cycle_1e2aba70774480fdbf66ccbc` reported 686 SourceItems, 14
+  fetches, 17 processor requests, 1 reconciler request,
+  `processor_status_counts: {"submitted":7,"queued":10}`, and
+  `reconciler_status_counts: {"submitted":1}`. This proves sourcecycled can
+  now submit capped SourceMaxx processor/reconciler handoffs into first-class
+  shared-harness agent profiles on staging. The 10 queued processor requests
+  are the configured dispatch cap, not a failure. The remaining gap is
+  resident agent result quality and lifecycle: processor/reconciler outputs,
+  researcher delegation, VText delegation/publication, compaction/continuity,
+  and publication-quality Style.vtext use.
 
 remaining error field:
 
 - sustained staging source daemon/storage behavior across repeated cycles,
   including provider-level distribution, freshness, dedupe, and backoff;
 - first-class processor/reconciler shared-harness profiles are present and
-  sourcecycled attempts to dispatch to them, but staging currently records
-  transient `dispatch_failed` request statuses instead of submitted resident
-  runs; resident output/result channels remain incomplete;
+  sourcecycled submits capped staging handoffs to them, but resident
+  output/result quality, compaction continuity, researcher delegation, and
+  VText delegation/publication remain incomplete;
 - processor load budget and routing scheme after live staging data;
 - current researcher/VText agent invocation contracts for this workflow;
 - deletion/reuse map for current Global Wire backend source paths;
@@ -754,12 +771,13 @@ remaining error field:
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether queued processor/reconciler
-handoffs can be consumed by resident agents with preserved context and existing
+highest-impact remaining uncertainty: whether submitted processor/reconciler
+runs produce useful durable cognition with preserved context and existing
 researcher/VText agent reuse without deeper runtime changes. Staging has now
-proven an expanded source cycle through a product-safe authenticated aggregate
-route, so the next realism axis is agent consumption and publication-quality
-VText production, not source-volume visibility.
+proven expanded source cycles, product-safe status observability, and capped
+handoff submission into shared-harness profiles, so the next realism axis is
+resident output/result quality and publication-quality VText production, not
+source-volume visibility or basic dispatch.
 
 next executable delivery loop:
 
