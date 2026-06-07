@@ -4305,3 +4305,48 @@ Next executable probe:
   The next topology-preserving route is likely a read-only delivery detail
   endpoint/view over owner-scoped delivery records, because it raises
   publication realism while preserving auth and non-oracle provenance.
+
+## Problem Checkpoint - Delivery Records Lack Detail Publication Surface - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transform:
+
+- Treat the delivery record as a publication object that must be inspectable,
+  not just as a status badge inside the research/feed panel.
+- Preserve auth and provenance for this resolution. A public unauthenticated
+  permalink can come later, but the next honest step is an owner-scoped detail
+  endpoint/view that composes delivery, artifact, story, source context,
+  citation refs, and rollback refs.
+
+Observed gap:
+
+- `GlobalWirePublicationDelivery` exists and the News app shows a compact
+  delivery-ready row, but there is no delivery detail surface.
+- `/api/global-wire/publication-deliveries` can list and create delivery
+  records, but there is no owner-scoped detail route that returns the composed
+  delivery object with artifact/story/source context.
+- The News app does not provide an inspectable delivered-publication view.
+
+Why this matters:
+
+- A publication/delivery object should be reviewable in isolation. Otherwise
+  delivery remains a side-effect status, not a usable publication artifact.
+- Delivery detail is the topology-preserving predecessor to public permalinks,
+  newsletters, delivery exports, and syndication.
+- The detail view must remain non-oracle and provenance-rich: it should show
+  artifact body, story headline, citation/rollback refs, SourceItem context,
+  and delivery ref without mutating platform stories.
+
+Remaining error field:
+
+- No owner-scoped delivery detail endpoint exists.
+- No News app detail surface renders delivered publication body/provenance.
+- Public route/subscription/email delivery remains intentionally unbuilt.
+
+Next executable probe:
+
+- Add a delivery detail route under `/api/global-wire/publication-deliveries/*`
+  and a News app detail surface opened from the delivery row; prove through
+  deployed owner Playwright that the detail includes delivery, artifact, story,
+  source, citation, and rollback evidence.
