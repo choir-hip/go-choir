@@ -113,6 +113,17 @@ export const APP_REGISTRY = [
     theme: { surface: 'document', shellDataAttr: 'data-vtext-app', contentClass: 'vtext-content' },
   },
   {
+    id: 'global-wire',
+    name: 'Global Wire',
+    icon: '🗞️',
+    description: 'StoryGraph news desk',
+    component: () => import('../GlobalWireApp.svelte'),
+    launcher: { desk: true, desktopIcon: false, mobileSwitcher: true, order: 65 },
+    window: { singleton: true, heavy: true, desktop: { width: 1180, height: 760, minWidth: 820, minHeight: 560 }, compact: compactDefault },
+    auth: { preview: 'public-preview', requiresAuthFor: ['save_vtext', 'publish_vtext'] },
+    theme: { surface: 'standard', shellDataAttr: 'data-global-wire-window', contentClass: 'global-wire-content' },
+  },
+  {
     id: 'podcast',
     name: 'Podcast',
     icon: '📡',
