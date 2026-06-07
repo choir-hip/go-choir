@@ -3406,3 +3406,56 @@ Next executable probe:
   that periodically refreshes selected StoryGraph headline neighborhoods,
   records scheduler evidence and source standing policy, and proves staging
   behavior without mutating platform stories.
+
+## Problem Checkpoint - Source Scheduler And Standing Are Still Manual - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Observed gap:
+
+- Global Wire has durable source registry entries and manual bounded fetch
+  cycles, but the source-ingestion loop is still a user/button-triggered action.
+- Registry entries hold story id, query, scope, status, and last cycle id, but
+  not source standing policy, cadence, next due time, or scheduler ownership.
+- Fetch cycle runs record trigger, status, story ids, registry ids, refresh ids,
+  SourceItem ids, and messages, but not a scheduler run/policy artifact that
+  can prove why a story neighborhood was refreshed.
+- Claim records have a `source_standing` string derived from SourceItem type,
+  but there is no source standing catalog/policy that reviewers can inspect.
+
+Why this matters:
+
+- The spec's 24/7 ingestion loop requires `source registry -> fetch cycles /
+  live source ingestion -> normalized SourceItems -> dedupe and source
+  standing`. A manual fetch button is a useful control, but it is not yet a
+  recurrence policy or source standing catalog.
+- News must remain non-oracle. Source standing should be visible review input
+  with policy rationale, not a hidden verdict or a hardcoded string.
+- A scheduler should preserve StoryGraph headline node semantics. It should
+  decide which story neighborhoods to refresh and record evidence, not mutate
+  platform stories.
+
+Belief-state update:
+
+- The next topology-preserving improvement is a low-resolution
+  `GlobalWireSourceSchedule` / scheduler-run artifact family tied to existing
+  source registry entries and fetch cycles.
+- Source standing should begin as explicit policy fields on registry/schedule
+  evidence and claim/research prompts, not as a separate graph node type.
+
+Remaining error field:
+
+- No durable scheduler policy/run records exist for Global Wire source
+  ingestion.
+- No API can trigger a scheduler-style due-run distinct from manual fetch.
+- Registry entries do not expose source standing policy/cadence evidence.
+- News cannot show whether the current source evidence came from a manual
+  probe, scheduled refresh, or standing-policy selection.
+
+Next executable probe:
+
+- Add low-resolution source schedule records and scheduler-run API behavior that
+  creates/updates registry entries with cadence and standing policy, runs due
+  StoryGraph headline neighborhoods through the existing bounded fetch cycle
+  path, exposes schedule/run evidence in News, and proves locally/staging that
+  this records ingestion-loop evidence without mutating platform stories.
