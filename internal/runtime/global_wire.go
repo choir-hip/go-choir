@@ -5113,7 +5113,7 @@ func globalWireBuildDossierPublicationRefs(
 }
 
 func globalWireDossierMissingFields(dossier globalWireSourceDossier) []string {
-	var missing []string
+	missing := []string{}
 	if len(dossier.ClaimDossiers) == 0 {
 		missing = append(missing, "claim_dossiers")
 	}
