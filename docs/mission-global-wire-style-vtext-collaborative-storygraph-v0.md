@@ -4489,3 +4489,95 @@ Next executable probe:
   latest script in the News app, include scripts in reconciliation, and prove
   on staging that creating a script preserves artifact/story/source/citation/
   rollback provenance without mutating platform stories or user-owned forks.
+
+## Checkpoint - Durable Autoradio Script Artifacts - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What changed:
+
+- Added `GlobalWireAutoradioScript` as a durable owner-scoped text renderer
+  over an approved `GlobalWirePublicationArtifact`.
+- Added `global_wire_autoradio_scripts` with artifact/story/source/citation/
+  rollback provenance fields.
+- Added authenticated `GET/POST /api/global-wire/autoradio-scripts`.
+- Script creation requires a `publication-approved` artifact and does not
+  mutate StoryGraph, platform Story VTexts, or user-owned forks.
+- Reconciliation now returns `autoradio_scripts`.
+- The News app publication feed now lets an owner create a script from an
+  approved or delivered artifact and displays script body plus citation/
+  rollback counts.
+
+Evidence:
+
+- Problem-first checkpoint commit:
+  `ec054335` (`docs: record global wire autoradio script gap`).
+- Behavior commit:
+  `287cab883f4db45e68cf783a51723875e3ebae20`
+  (`feat: persist global wire autoradio scripts`).
+- Local runtime proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`.
+- Local frontend proof passed:
+  `npm run build` in `frontend/`.
+- Diff hygiene passed:
+  `git diff --check`.
+- CI run `27087270723`: success. Runtime shards, non-runtime tests,
+  integration smoke, Go vet/build, frontend build, aggregate gate, and Deploy
+  to Staging all passed.
+- FlakeHub publish run `27087270722`: success.
+- Staging health after deploy reported proxy and upstream deployed commit
+  `287cab883f4db45e68cf783a51723875e3ebae20`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in"`
+  with 1 passed. The proof creates the publication artifact trajectory,
+  approves the artifact, creates delivery evidence, creates an Autoradio script
+  through the News app, verifies visible script body/provenance, and verifies
+  reconciliation returns the script with rollback refs.
+
+Invariants preserved:
+
+- Autoradio scripts are owner-scoped artifacts over approved publication
+  artifacts, not autonomous oracle audio or platform story mutations.
+- Script body is deterministic product composition over the citeable
+  publication artifact and source neighborhood context.
+- Citation and rollback refs remain attached to the script.
+- Publication artifact approval remains the owner review gate.
+- Future Noir, Carbon Kintsugi, and London Salmon view proofs still pass on
+  staging.
+
+Belief-state update:
+
+- The proven product trajectory now reaches:
+  SourceItem -> source refresh/fetch/scheduler evidence -> StoryGraph headline
+  candidate -> extraction/research artifacts -> research handoff ->
+  projection review -> publication update package -> publication artifact ->
+  owner-scoped publication feed item -> Autoradio artifact traversal prompt ->
+  owner artifact approval -> owner-scoped delivery-ready publication record ->
+  owner-scoped delivered-publication detail view -> durable Autoradio script
+  artifact.
+- Autoradio is no longer only a prompt-bar handoff. It has a durable,
+  reconciliation-visible script artifact that can later be rendered as audio,
+  exported, reviewed, or attached to a public/newsletter delivery.
+
+Remaining error field:
+
+- Autoradio scripts are text artifacts only; there is no audio synthesis,
+  playback, scheduling, or podcast/feed delivery.
+- Delivery detail remains authenticated and owner-scoped; there is no public
+  permalink, newsletter issue, email delivery, subscription event, or
+  syndication feed.
+- No durable `RunAcceptanceRecord` exists for this mission.
+- Source standing policy, extraction normalization, full Style.vtext revision
+  workflows, and public delivery remain below the full spec target.
+
+Next executable probe:
+
+- Apply cognitive transforms before the next route choice. The highest-value
+  realism axes are now public/read-only delivery export over approved delivery
+  records, a `RunAcceptanceRecord` synthesized from the accumulated staging
+  evidence if honest run/trajectory ids are available, or deeper source
+  standing/extraction normalization so the live evidence foundation is less
+  demo-shaped.
