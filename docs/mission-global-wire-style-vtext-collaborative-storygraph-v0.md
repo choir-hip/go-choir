@@ -3549,3 +3549,53 @@ Next executable probe:
   Style.vtext, SourceItems, extraction ids, projection review state, scheduler
   evidence, and rollback refs; expose it in News; and prove staging behavior
   without mutating platform stories.
+
+## Problem Checkpoint - Publication Packages Are Not Yet Output Artifacts - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Observed gap:
+
+- Global Wire has `GlobalWirePublicationUpdate` packages that bundle review
+  evidence, candidate state, projection review state, extraction ids, and
+  rollback refs.
+- Those packages are still queue/review packets. They do not produce a
+  newsletter/public-route/reader-ready artifact that can be inspected as the
+  next output in the spec trajectory.
+- The News app can show package status and refs, but cannot yet show a
+  publication artifact with cited Story VText, Style.vtext, SourceItems,
+  extraction overlays, scheduler evidence, and rollback anchors.
+
+Why this matters:
+
+- The spec's loop includes `Story VText revisions -> publication/update feed`
+  and the top-level trajectory ends in newsletters/researchers/Autoradio. A
+  package queue is not the same as a review-ready output artifact.
+- A publication artifact must remain non-oracle: it should cite evidence and
+  preserve uncertainty rather than silently becoming a public truth surface.
+- Publication output must not mutate platform stories or user forks. It should
+  be a citeable artifact derived from existing package evidence.
+
+Belief-state update:
+
+- The next topology-preserving improvement is a low-resolution
+  `GlobalWirePublicationArtifact` created from an existing
+  `GlobalWirePublicationUpdate`.
+- The artifact should be owner-scoped, statused as review-ready rather than
+  published, and include citation/rollback/source/scheduler/extraction refs.
+
+Remaining error field:
+
+- No durable publication/newsletter artifact table exists.
+- No product endpoint creates a review-ready output from publication packages.
+- News cannot display publication artifact text or citeable evidence refs.
+- Autoradio still receives prompt-bar handoffs rather than a dedicated output
+  artifact it can traverse.
+
+Next executable probe:
+
+- Add `GlobalWirePublicationArtifact` records and an API that creates one from
+  a `GlobalWirePublicationUpdate`, using the linked story, Style.vtext
+  projection reviews, SourceItem, extraction ids, scheduler evidence, and
+  rollback refs. Expose it in reconciliation/News and prove locally/staging
+  that artifact creation does not mutate platform stories.
