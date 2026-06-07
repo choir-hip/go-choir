@@ -1638,3 +1638,96 @@ Next executable probe:
   promotion for candidates whose `projection_action` is
   `projection-review-required`. Return and display them in reconciliation state
   and prove through runtime and staging product-path tests.
+
+## Overnight Checkpoint - Projection Review Queue - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What shipped:
+
+- Added `GlobalWireProjectionReview`, a durable owner-scoped artifact recording
+  that a promoted StoryGraph source update may require review of one or more
+  Style.vtext projections.
+- Added `global_wire_projection_reviews` with story, candidate, promotion,
+  source content, Style.vtext source, projection action, status, and rationale
+  lineage.
+- `/api/global-wire/reconciliation` now returns `projection_reviews` alongside
+  contributions, source items, reconciliation decisions, graph candidates,
+  promotion decisions, and source-refresh runs.
+- `/api/global-wire/graph-candidates` now creates projection-review records
+  when a promoted candidate carries `projection-review-required`.
+- Promotion creates one projection-review obligation per attached Style.vtext
+  source, preserving the fact that a StoryGraph evidence update may affect
+  each projection differently.
+- The Global Wire app now shows projection-review obligations below promoted
+  candidates.
+- The implementation does not regenerate or rewrite projection Story VTexts
+  automatically. It records the downstream obligation first.
+
+What was proven locally:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed.
+- `npm run build` passed in `frontend/`.
+
+What was proven on staging:
+
+- Pushed `5f9b22f1318de293b186627205ec95be49246657` to `origin/main`.
+- GitHub Actions CI run `27083146467` completed successfully, including
+  runtime shards, non-runtime tests, frontend build, Go vet/build, and staging
+  deploy.
+- FlakeHub publish run `27083146469` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `5f9b22f1318de293b186627205ec95be49246657`, deployed at
+  `2026-06-07T04:55:42Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded auth proof skipped.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed against staging and verified promoted candidates create visible
+  `projection-review-required` records returned from reconciliation state.
+
+Current delivered trajectory:
+
+```text
+Source Service evidence / user source artifact
+-> owner-scoped ContentItem SourceItem
+-> source refresh or user contribution
+-> reconciliation decision
+-> graph-update candidate
+-> explicit platform promotion/rejection
+-> bounded StoryGraph source-manifest update
+-> projection-review obligations for Style.vtext projections
+-> Ask/Autoradio prompt-bar handoff with StoryGraph and Style.vtext context
+```
+
+Invariants preserved:
+
+- User edits/contributions remain user-owned and do not mutate platform stories.
+- Platform StoryGraph mutation happens only through an explicit graph-candidate
+  promotion step.
+- Source refresh creates candidates, not silent story rewrites.
+- Style.vtext remains a citeable source artifact attached to projection
+  obligations, not hidden app config.
+- The app views and proof continue to cover Future Noir, Carbon Kintsugi, and
+  London Salmon.
+
+Remaining error field:
+
+- Projection-review records do not yet create revised ProjectionStory VTexts.
+- Promotion does not update existing projection relation text or VText
+  revisions.
+- Source refresh is request-triggered and low-resolution, not a scheduled 24/7
+  ingestion worker.
+- No claim extraction, contradiction classifier, story clustering, front-page
+  prominence revision, or publication/update feed exists yet.
+- Autoradio remains a prompt-bar/VText handoff rather than a dedicated audio
+  playback or scheduling subsystem.
+
+Next executable probe:
+
+- Add a bounded projection-revision draft path. A reviewer should be able to
+  select a projection-review record, create a new ordinary ProjectionStory
+  VText draft that cites the StoryGraph, promoted SourceItem, promotion
+  decision, and Style.vtext source, and mark the review as `draft-created`
+  without mutating the platform story or pretending the draft is final
+  publication.
