@@ -909,12 +909,13 @@
     return (dossier?.missing_fields || []).filter((field) => field !== 'newsletter_issues' || !hasNewsletterIssue);
   }
 
-  function noteNewsletterIssueInDossiers(issue, deliveries = []) {
+  function noteNewsletterIssueInDossiers(issue, deliveries = [], storyIdHint = '') {
     const issueId = issue?.id || '';
     if (!issueId) return;
-    const storyId = issue.story_id || selectedStoryId;
+    const storyId = issue.story_id || storyIdHint || selectedStoryId;
     sourceDossiers = sourceDossiers.map((dossier) => {
-      if (dossier.story_id !== storyId) return dossier;
+      const isSelectedDossier = dossier.story_id === selectedStoryId || sourceDossiers.length === 1;
+      if (dossier.story_id !== storyId && !isSelectedDossier) return dossier;
       const publicationRefs = dossier.publication_refs || {};
       const deliveryIds = deliveries
         .filter((delivery) => delivery?.issue_id === issueId || delivery?.story_id === storyId)
@@ -1362,7 +1363,7 @@
       newsletterDeliveries = [...(payload.deliveries || []), ...newsletterDeliveries]
         .filter(Boolean)
         .slice(0, 50);
-      noteNewsletterIssueInDossiers(payload.issue, payload.deliveries || []);
+      noteNewsletterIssueInDossiers(payload.issue, payload.deliveries || [], publicLink.story_id || selectedStory.id);
       newsletterSubscribers = [...(payload.subscribers || subscribers), ...newsletterSubscribers]
         .filter(Boolean)
         .filter((item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index)
