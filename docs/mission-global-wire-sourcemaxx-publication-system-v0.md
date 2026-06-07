@@ -1228,6 +1228,78 @@ updated remaining error field:
   processors/reconcilers, followed by VText child documents whose current
   heads are publication article drafts with selected Style.vtext notes.
 
+2026-06-07 source handle lookup repair and article-head staging proof:
+
+- Commit `85751dc5c2968bec0ad6ad67165d31b17f6f8b6b` repaired the deployed
+  Source Service search path for durable SourceItem handles. `SearchItems`
+  now detects `srcitem_*` handles, including `source_service_item:<id>`
+  citations and handles embedded in natural language, and resolves them by
+  exact item id before falling back to lexical search.
+- Local proof passed:
+  `nix develop -c go test ./internal/cycle -run
+  'TestSearchItemsResolvesDurableSourceItemHandles|TestSearchItemsTokenizesNaturalQueriesAndRanksMatches|TestBuildSourceMaxxHandoffRoutesSourceItemsToProcessorsAndReconciler'`,
+  `nix develop -c go test ./cmd/sourcecycled -run
+  'TestSourceServiceAPISearchAndResolveItems|TestSourceServiceAPISourceMaxxLatestReportsAgentHandoffs|TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles'`,
+  and `git diff --check`.
+- CI/deploy proof passed for `85751dc5c2968bec0ad6ad67165d31b17f6f8b6b`: CI
+  run `27099394514`, FlakeHub run `27099394517`, and Node B staging deploy all
+  succeeded. `https://choir.news/health` reported proxy and sandbox deployed
+  commit `85751dc5c2968bec0ad6ad67165d31b17f6f8b6b` at
+  `2026-06-07T17:18:48Z`.
+- Direct staging Source Service proof after deploy showed exact handle queries
+  now resolve:
+  `srcitem_003f7a703a9160b3ebce75cb` and
+  `source_service_item:srcitem_003f7a703a9160b3ebce75cb` both returned the
+  Liveuamap Telegram SourceItem, and
+  `srcitem_ff8cd01eb2b7ac445cf3f4fa` returned the GDELT item from
+  `morungexpress.com`.
+- A fresh post-fix SourceMaxx cycle, `cycle_7aae518f7f50f008fb3998a8`, fetched
+  686 deduped SourceItems from 14 fetches and queued 17 processor requests plus
+  1 reconciler request. Authenticated public product status later reported 7
+  processor runtime runs, 1 reconciler runtime run, processor child profile
+  counts `researcher: 10`, `vtext: 3`, and reconciler child profile counts
+  `researcher: 1`, `vtext: 3`.
+- Direct reconciler event proof for run
+  `5afb6d10-b402-40d5-9aa4-9e15c34492b0` showed three normal VText child
+  article documents plus one researcher:
+  `177628ae-9f72-4e02-9626-c52179e34c4a` / loop
+  `f08871be-d487-4d1a-83d3-73a4c7e3e1f8` for Pope Leo XIV Madrid,
+  `e300c4cd-70a8-4c94-8aaf-9627426bcaa0` / loop
+  `0bac5639-87ec-4975-b2f7-cd5bd2217784` for the Delhi hotel fire, and
+  `6dda0284-eb82-47e0-9924-92c6cc14b288` / loop
+  `e689b96f-0ade-4c8e-9f84-74b014b030f5` for the Congo Ebola / World Cup
+  travel-restriction story.
+- All three VText child runs completed as normal `vtext:<doc_id>` appagent
+  revision runs, carried `source_maxx_cycle_id:
+  cycle_7aae518f7f50f008fb3998a8`, selected `Style.vtext: Global Wire`, and
+  recorded the selected-style rationale.
+- Durable VText store proof showed the current document heads for all three
+  docs had `author_kind=appagent`, metadata containing `source=edit_vtext` and
+  `selected_style_sources`, content mentioning `style.vtext`, and no
+  `SourceMaxx Brief`, `Working Revision`, or `Evidence Gathering` markers. The
+  content prefixes were publication article drafts:
+  `MADRID -- Pope Leo XIV...`, `NEW DELHI -- The death toll...`, and a Congo
+  Ebola / World Cup travel-restriction lead.
+
+updated remaining error field:
+
+- The SourceMaxx -> source_search -> processor/reconciler -> researcher/VText
+  path is now staging-proven for a high-volume cycle, source-handle
+  resolution, VText ownership, Style.vtext metadata, and article-head
+  generation at three-document scale.
+- The proof is still not mission-complete: some processor runs remain running
+  during the proof window, the reconciler was still running after spawning
+  three VTexts, and the clean newspaper UI has not been rebuilt/proven.
+- SourceMaxx breadth is still only 14 configured fetches in this deployed
+  proof. The source-maxx target needs many more RSS/Telegram/GDELT/provider
+  feeds and provider health/backoff visibility before calling the firehose
+  mature.
+- The next highest-value axis is the Global Wire UI: show these VText article
+  heads in clean newspaper columns with quiet repeated VText-open affordances
+  and a source chronology column, across Futuristic Noir, Carbon Fiber
+  Kintsugi, and London Salmon, without cards, borders, nested scrolling, or
+  panel repetition.
+
 suggested resume goal string: use the Goal String section above.
 
 evidence artifact refs: local browser screenshot emitted through Browser
