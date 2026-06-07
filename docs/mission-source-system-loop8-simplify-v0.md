@@ -1994,4 +1994,27 @@ local proof:
 
   nix develop -c go test ./internal/platform ./internal/sourcecontract
   result: passed
+
+commit/deploy proof:
+  commit 57aca0664b6f0b82895c0c98cf0600c0022121a7
+  GitHub Actions CI 27077645215 passed.
+  FlakeHub publish 27077645214 passed.
+  Node B deploy job 79917700568 passed.
+  /health reported proxy and sandbox deployed_commit
+  57aca0664b6f0b82895c0c98cf0600c0022121a7, deployed_at
+  2026-06-07T00:10:07Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000
+  npm --prefix frontend run e2e --
+  tests/publication-export-format-boundary-staging.tmp.spec.js
+  result: 1 passed; temporary spec and Playwright .last-run.json were deleted
+  after the run.
+
+  The proof created a VText document through deployed product APIs, published
+  it with txt/md/html/docx/pdf export policy, and verified deployed Markdown
+  export still repairs a valid table whose final row lost its trailing
+  delimiter. It also verified HTML export contains the source-manifest script,
+  DOCX/PDF exports return binary signatures, and all rich exports expose the
+  expected export metadata/source manifest through the moved export spine.
 ```
