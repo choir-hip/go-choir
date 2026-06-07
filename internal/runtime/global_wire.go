@@ -115,6 +115,7 @@ type globalWireReconciliationResponse struct {
 	PublicationArtifacts  []types.GlobalWirePublicationArtifact       `json:"publication_artifacts"`
 	PublicationDeliveries []types.GlobalWirePublicationDelivery       `json:"publication_deliveries"`
 	AutoradioScripts      []types.GlobalWireAutoradioScript           `json:"autoradio_scripts"`
+	AutoradioEpisodes     []types.GlobalWireAutoradioEpisode          `json:"autoradio_episodes"`
 	DeliveryExports       []types.GlobalWirePublicationDeliveryExport `json:"delivery_exports"`
 	PublicLinks           []types.GlobalWirePublicationPublicLink     `json:"public_links"`
 	NewsletterSubscribers []types.GlobalWireNewsletterSubscriber      `json:"newsletter_subscribers"`
@@ -161,6 +162,7 @@ type globalWireDossierPublicationRefs struct {
 	ArtifactIDs           []string `json:"artifact_ids"`
 	DeliveryIDs           []string `json:"delivery_ids"`
 	AutoradioScriptIDs    []string `json:"autoradio_script_ids"`
+	AutoradioEpisodeIDs   []string `json:"autoradio_episode_ids"`
 	DeliveryExportIDs     []string `json:"delivery_export_ids"`
 	PublicLinkIDs         []string `json:"public_link_ids"`
 	NewsletterIssueIDs    []string `json:"newsletter_issue_ids"`
@@ -296,6 +298,18 @@ type globalWireAutoradioScriptRequest struct {
 }
 
 type globalWireAutoradioScriptResponse struct {
+	Script     types.GlobalWireAutoradioScript     `json:"script"`
+	Artifact   types.GlobalWirePublicationArtifact `json:"artifact"`
+	Story      types.GlobalWireStory               `json:"story"`
+	SourceItem *types.ContentItem                  `json:"source_item,omitempty"`
+}
+
+type globalWireAutoradioEpisodeRequest struct {
+	ScriptID string `json:"script_id"`
+}
+
+type globalWireAutoradioEpisodeResponse struct {
+	Episode    types.GlobalWireAutoradioEpisode    `json:"episode"`
 	Script     types.GlobalWireAutoradioScript     `json:"script"`
 	Artifact   types.GlobalWirePublicationArtifact `json:"artifact"`
 	Story      types.GlobalWireStory               `json:"story"`
@@ -974,6 +988,11 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list autoradio scripts"})
 			return
 		}
+		autoradioEpisodes, err := h.rt.Store().ListGlobalWireAutoradioEpisodes(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list autoradio episodes"})
+			return
+		}
 		deliveryExports, err := h.rt.Store().ListGlobalWirePublicationDeliveryExports(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list delivery exports"})
@@ -1007,7 +1026,7 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
 			return
 		}
-		dossiers, err := h.globalWireSourceDossiers(r, ownerID, storyID, contributions, refreshes, claimRecords, researchTasks, extractionArtifacts, researchEvidence, researchDecisions, candidates, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
+		dossiers, err := h.globalWireSourceDossiers(r, ownerID, storyID, contributions, refreshes, claimRecords, researchTasks, extractionArtifacts, researchEvidence, researchDecisions, candidates, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, autoradioEpisodes, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to build source dossiers"})
 			return
@@ -1029,6 +1048,7 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			PublicationArtifacts:  publicationArtifacts,
 			PublicationDeliveries: publicationDeliveries,
 			AutoradioScripts:      autoradioScripts,
+			AutoradioEpisodes:     autoradioEpisodes,
 			DeliveryExports:       deliveryExports,
 			PublicLinks:           publicLinks,
 			NewsletterSubscribers: newsletterSubscribers,
@@ -1188,6 +1208,11 @@ func (h *APIHandler) HandleGlobalWireSourceDossiers(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list autoradio scripts"})
 		return
 	}
+	autoradioEpisodes, err := h.rt.Store().ListGlobalWireAutoradioEpisodes(r.Context(), ownerID, storyID, 100)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list autoradio episodes"})
+		return
+	}
 	deliveryExports, err := h.rt.Store().ListGlobalWirePublicationDeliveryExports(r.Context(), ownerID, storyID, 100)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list delivery exports"})
@@ -1208,7 +1233,7 @@ func (h *APIHandler) HandleGlobalWireSourceDossiers(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list newsletter deliveries"})
 		return
 	}
-	dossiers, err := h.globalWireSourceDossiers(r, ownerID, storyID, contributions, refreshes, claimRecords, researchTasks, extractionArtifacts, researchEvidence, researchDecisions, candidates, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
+	dossiers, err := h.globalWireSourceDossiers(r, ownerID, storyID, contributions, refreshes, claimRecords, researchTasks, extractionArtifacts, researchEvidence, researchDecisions, candidates, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, autoradioEpisodes, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to build source dossiers"})
 		return
@@ -1784,6 +1809,59 @@ func (h *APIHandler) HandleGlobalWireAutoradioScripts(w http.ResponseWriter, r *
 			return
 		}
 		writeAPIJSON(w, http.StatusCreated, globalWireAutoradioScriptResponse{
+			Script:     script,
+			Artifact:   artifact,
+			Story:      story,
+			SourceItem: sourceItem,
+		})
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
+// HandleGlobalWireAutoradioEpisodes materializes durable browser-speech
+// playback packages over approved Autoradio scripts.
+func (h *APIHandler) HandleGlobalWireAutoradioEpisodes(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		storyID := strings.TrimSpace(r.URL.Query().Get("story_id"))
+		episodes, err := h.rt.Store().ListGlobalWireAutoradioEpisodes(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list autoradio episodes"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, map[string]any{
+			"autoradio_episodes": episodes,
+		})
+	case http.MethodPost:
+		var req globalWireAutoradioEpisodeRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid autoradio episode request"})
+			return
+		}
+		req.ScriptID = strings.TrimSpace(req.ScriptID)
+		if req.ScriptID == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "script_id is required"})
+			return
+		}
+		episode, script, artifact, story, sourceItem, err := h.createGlobalWireAutoradioEpisode(r, ownerID, req)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "autoradio script not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create autoradio episode"})
+			return
+		}
+		writeAPIJSON(w, http.StatusCreated, globalWireAutoradioEpisodeResponse{
+			Episode:    episode,
 			Script:     script,
 			Artifact:   artifact,
 			Story:      story,
@@ -3674,6 +3752,59 @@ func (h *APIHandler) createGlobalWireAutoradioScript(r *http.Request, ownerID st
 	return script, artifact, story, sourceItem, nil
 }
 
+func (h *APIHandler) createGlobalWireAutoradioEpisode(r *http.Request, ownerID string, req globalWireAutoradioEpisodeRequest) (types.GlobalWireAutoradioEpisode, types.GlobalWireAutoradioScript, types.GlobalWirePublicationArtifact, types.GlobalWireStory, *types.ContentItem, error) {
+	script, err := h.rt.Store().GetGlobalWireAutoradioScript(r.Context(), ownerID, req.ScriptID)
+	if err != nil {
+		return types.GlobalWireAutoradioEpisode{}, types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+	}
+	if script.Status != "script-ready" {
+		return types.GlobalWireAutoradioEpisode{}, types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, store.ErrNotFound
+	}
+	artifact, err := h.rt.Store().GetGlobalWirePublicationArtifact(r.Context(), ownerID, script.ArtifactID)
+	if err != nil {
+		return types.GlobalWireAutoradioEpisode{}, types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+	}
+	if artifact.Status != "publication-approved" {
+		return types.GlobalWireAutoradioEpisode{}, types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, store.ErrNotFound
+	}
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, script.StoryID)
+	if err != nil {
+		return types.GlobalWireAutoradioEpisode{}, types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+	}
+	var sourceItem *types.ContentItem
+	if strings.TrimSpace(script.SourceContentID) != "" {
+		rec, err := h.rt.Store().GetContentItem(r.Context(), ownerID, script.SourceContentID)
+		if err != nil {
+			return types.GlobalWireAutoradioEpisode{}, types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+		}
+		sourceItem = &rec
+	}
+	rollbackRefs := appendStringIfMissing(script.RollbackRefs, "autoradio_script:"+script.ID)
+	episodeID := "global-wire-autoradio-episode-" + uuid.NewString()
+	episode, err := h.rt.Store().CreateGlobalWireAutoradioEpisode(r.Context(), types.GlobalWireAutoradioEpisode{
+		ID:              episodeID,
+		OwnerID:         ownerID,
+		ScriptID:        script.ID,
+		ArtifactID:      script.ArtifactID,
+		StoryID:         script.StoryID,
+		SourceContentID: script.SourceContentID,
+		Status:          "episode-ready",
+		PlaybackMode:    "browser-speech",
+		Title:           "Autoradio episode: " + story.Headline,
+		Transcript:      script.ScriptBody,
+		VoiceNotes:      script.VoiceNotes + " Playback mode: browser speech synthesis; no external TTS/audio-file provider receipt is claimed.",
+		DurationSeconds: globalWireEstimateSpokenDurationSeconds(script.ScriptBody),
+		CitationCount:   len(script.CitationRefs),
+		RollbackCount:   len(rollbackRefs),
+		CitationRefs:    script.CitationRefs,
+		RollbackRefs:    rollbackRefs,
+	})
+	if err != nil {
+		return types.GlobalWireAutoradioEpisode{}, types.GlobalWireAutoradioScript{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+	}
+	return episode, script, artifact, story, sourceItem, nil
+}
+
 func (h *APIHandler) createGlobalWirePublicationDeliveryExport(r *http.Request, ownerID string, req globalWirePublicationDeliveryExportRequest) (types.GlobalWirePublicationDeliveryExport, types.GlobalWirePublicationDelivery, types.GlobalWirePublicationArtifact, types.GlobalWireStory, *types.GlobalWireAutoradioScript, *types.ContentItem, error) {
 	delivery, err := h.rt.Store().GetGlobalWirePublicationDelivery(r.Context(), ownerID, req.DeliveryID)
 	if err != nil {
@@ -4764,6 +4895,18 @@ func globalWireMinInt(a, b int) int {
 	return b
 }
 
+func globalWireEstimateSpokenDurationSeconds(text string) int {
+	words := len(strings.Fields(text))
+	if words == 0 {
+		return 0
+	}
+	seconds := (words * 60) / 155
+	if seconds < 10 {
+		return 10
+	}
+	return seconds
+}
+
 func (h *APIHandler) globalWireContributionSourceItems(r *http.Request, ownerID string, contributions []types.GlobalWireContribution) map[string]types.ContentItem {
 	items := map[string]types.ContentItem{}
 	for _, contribution := range contributions {
@@ -4802,6 +4945,7 @@ func (h *APIHandler) globalWireSourceDossiers(
 	publicationArtifacts []types.GlobalWirePublicationArtifact,
 	publicationDeliveries []types.GlobalWirePublicationDelivery,
 	autoradioScripts []types.GlobalWireAutoradioScript,
+	autoradioEpisodes []types.GlobalWireAutoradioEpisode,
 	deliveryExports []types.GlobalWirePublicationDeliveryExport,
 	publicLinks []types.GlobalWirePublicationPublicLink,
 	newsletterIssues []types.GlobalWireNewsletterIssue,
@@ -4837,6 +4981,7 @@ func (h *APIHandler) globalWireSourceDossiers(
 			publicationArtifacts,
 			publicationDeliveries,
 			autoradioScripts,
+			autoradioEpisodes,
 			deliveryExports,
 			publicLinks,
 			newsletterIssues,
@@ -4860,6 +5005,7 @@ func globalWireBuildSourceDossier(
 	publicationArtifacts []types.GlobalWirePublicationArtifact,
 	publicationDeliveries []types.GlobalWirePublicationDelivery,
 	autoradioScripts []types.GlobalWireAutoradioScript,
+	autoradioEpisodes []types.GlobalWireAutoradioEpisode,
 	deliveryExports []types.GlobalWirePublicationDeliveryExport,
 	publicLinks []types.GlobalWirePublicationPublicLink,
 	newsletterIssues []types.GlobalWireNewsletterIssue,
@@ -4936,7 +5082,7 @@ func globalWireBuildSourceDossier(
 		dossier.SourceContentIDs = appendStringListIfMissing(dossier.SourceContentIDs, []string{claim.SourceContentID})
 		dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, []string{"claim:" + claim.ID})
 	}
-	dossier.PublicationRefs = globalWireBuildDossierPublicationRefs(story.ID, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
+	dossier.PublicationRefs = globalWireBuildDossierPublicationRefs(story.ID, publicationUpdates, publicationArtifacts, publicationDeliveries, autoradioScripts, autoradioEpisodes, deliveryExports, publicLinks, newsletterIssues, newsletterDeliveries)
 	dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, dossier.PublicationRefs.CitationRefs)
 	dossier.ProvenanceRefs = appendStringListIfMissing(dossier.ProvenanceRefs, dossier.PublicationRefs.RollbackRefs)
 	dossier.MissingFields = globalWireDossierMissingFields(dossier)
@@ -5040,6 +5186,7 @@ func globalWireBuildDossierPublicationRefs(
 	publicationArtifacts []types.GlobalWirePublicationArtifact,
 	publicationDeliveries []types.GlobalWirePublicationDelivery,
 	autoradioScripts []types.GlobalWireAutoradioScript,
+	autoradioEpisodes []types.GlobalWireAutoradioEpisode,
 	deliveryExports []types.GlobalWirePublicationDeliveryExport,
 	publicLinks []types.GlobalWirePublicationPublicLink,
 	newsletterIssues []types.GlobalWireNewsletterIssue,
@@ -5076,6 +5223,14 @@ func globalWireBuildDossierPublicationRefs(
 		out.AutoradioScriptIDs = appendStringListIfMissing(out.AutoradioScriptIDs, []string{script.ID})
 		out.CitationRefs = appendStringListIfMissing(out.CitationRefs, script.CitationRefs)
 		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, script.RollbackRefs)
+	}
+	for _, episode := range autoradioEpisodes {
+		if episode.StoryID != storyID {
+			continue
+		}
+		out.AutoradioEpisodeIDs = appendStringListIfMissing(out.AutoradioEpisodeIDs, []string{episode.ID})
+		out.CitationRefs = appendStringListIfMissing(out.CitationRefs, episode.CitationRefs)
+		out.RollbackRefs = appendStringListIfMissing(out.RollbackRefs, episode.RollbackRefs)
 	}
 	for _, export := range deliveryExports {
 		if export.StoryID != storyID {

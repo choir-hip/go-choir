@@ -2469,6 +2469,116 @@ func (s *Store) GetGlobalWireAutoradioScript(ctx context.Context, ownerID, scrip
 	return scanGlobalWireAutoradioScript(row)
 }
 
+// CreateGlobalWireAutoradioEpisode stores a durable owner-scoped playback
+// package over an Autoradio script.
+func (s *Store) CreateGlobalWireAutoradioEpisode(ctx context.Context, rec types.GlobalWireAutoradioEpisode) (types.GlobalWireAutoradioEpisode, error) {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
+	rec.CreatedAt = now
+	if strings.TrimSpace(rec.Status) == "" {
+		rec.Status = "episode-ready"
+	}
+	if strings.TrimSpace(rec.PlaybackMode) == "" {
+		rec.PlaybackMode = "browser-speech"
+	}
+	citationRefsJSON, err := json.Marshal(rec.CitationRefs)
+	if err != nil {
+		return types.GlobalWireAutoradioEpisode{}, fmt.Errorf("marshal global wire autoradio episode citation refs: %w", err)
+	}
+	rollbackRefsJSON, err := json.Marshal(rec.RollbackRefs)
+	if err != nil {
+		return types.GlobalWireAutoradioEpisode{}, fmt.Errorf("marshal global wire autoradio episode rollback refs: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_autoradio_episodes (
+			owner_id, episode_id, script_id, artifact_id, story_id,
+			source_content_id, status, playback_mode, title, transcript,
+			voice_notes, duration_seconds, citation_count, rollback_count,
+			citation_refs_json, rollback_refs_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.ScriptID,
+		rec.ArtifactID,
+		rec.StoryID,
+		rec.SourceContentID,
+		rec.Status,
+		rec.PlaybackMode,
+		rec.Title,
+		rec.Transcript,
+		rec.VoiceNotes,
+		rec.DurationSeconds,
+		rec.CitationCount,
+		rec.RollbackCount,
+		string(citationRefsJSON),
+		string(rollbackRefsJSON),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireAutoradioEpisode{}, fmt.Errorf("create global wire autoradio episode: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireAutoradioEpisodes lists owner-scoped playback packages,
+// optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWireAutoradioEpisodes(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireAutoradioEpisode, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, episode_id, script_id, artifact_id, story_id,
+	                source_content_id, status, playback_mode, title, transcript,
+	                voice_notes, duration_seconds, citation_count, rollback_count,
+	                citation_refs_json, rollback_refs_json, created_at, updated_at
+	           FROM global_wire_autoradio_episodes
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire autoradio episodes: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireAutoradioEpisode
+	for rows.Next() {
+		rec, err := scanGlobalWireAutoradioEpisode(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire autoradio episodes: %w", err)
+	}
+	return out, nil
+}
+
+// GetGlobalWireAutoradioEpisode returns one owner-scoped playback package.
+func (s *Store) GetGlobalWireAutoradioEpisode(ctx context.Context, ownerID, episodeID string) (types.GlobalWireAutoradioEpisode, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, episode_id, script_id, artifact_id, story_id,
+		        source_content_id, status, playback_mode, title, transcript,
+		        voice_notes, duration_seconds, citation_count, rollback_count,
+		        citation_refs_json, rollback_refs_json, created_at, updated_at
+		   FROM global_wire_autoradio_episodes
+		  WHERE owner_id = ? AND episode_id = ?`,
+		ownerID,
+		episodeID,
+	)
+	return scanGlobalWireAutoradioEpisode(row)
+}
+
 // CreateGlobalWirePublicationDeliveryExport stores a portable owner-scoped
 // export over a delivered publication.
 func (s *Store) CreateGlobalWirePublicationDeliveryExport(ctx context.Context, rec types.GlobalWirePublicationDeliveryExport) (types.GlobalWirePublicationDeliveryExport, error) {
@@ -3826,6 +3936,55 @@ func scanGlobalWireAutoradioScript(row interface{ Scan(...any) error }) (types.G
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWireAutoradioScript{}, fmt.Errorf("parse global wire autoradio script updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireAutoradioEpisode(row interface{ Scan(...any) error }) (types.GlobalWireAutoradioEpisode, error) {
+	var rec types.GlobalWireAutoradioEpisode
+	var citationRefsJSON, rollbackRefsJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.ScriptID,
+		&rec.ArtifactID,
+		&rec.StoryID,
+		&rec.SourceContentID,
+		&rec.Status,
+		&rec.PlaybackMode,
+		&rec.Title,
+		&rec.Transcript,
+		&rec.VoiceNotes,
+		&rec.DurationSeconds,
+		&rec.CitationCount,
+		&rec.RollbackCount,
+		&citationRefsJSON,
+		&rollbackRefsJSON,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireAutoradioEpisode{}, ErrNotFound
+		}
+		return types.GlobalWireAutoradioEpisode{}, fmt.Errorf("scan global wire autoradio episode: %w", err)
+	}
+	if err := json.Unmarshal([]byte(citationRefsJSON), &rec.CitationRefs); err != nil {
+		return types.GlobalWireAutoradioEpisode{}, fmt.Errorf("unmarshal global wire autoradio episode citation refs: %w", err)
+	}
+	if err := json.Unmarshal([]byte(rollbackRefsJSON), &rec.RollbackRefs); err != nil {
+		return types.GlobalWireAutoradioEpisode{}, fmt.Errorf("unmarshal global wire autoradio episode rollback refs: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireAutoradioEpisode{}, fmt.Errorf("parse global wire autoradio episode created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireAutoradioEpisode{}, fmt.Errorf("parse global wire autoradio episode updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()

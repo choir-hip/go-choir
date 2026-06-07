@@ -183,6 +183,7 @@
   let publicationArtifacts = [];
   let publicationDeliveries = [];
   let autoradioScripts = [];
+  let autoradioEpisodes = [];
   let deliveryExports = [];
   let publicLinks = [];
   let newsletterSubscribers = [];
@@ -260,6 +261,7 @@
       publicationArtifacts = [];
       publicationDeliveries = [];
       autoradioScripts = [];
+      autoradioEpisodes = [];
       deliveryExports = [];
       publicLinks = [];
       newsletterSubscribers = [];
@@ -323,6 +325,7 @@
       publicationArtifacts = Array.isArray(payload.publication_artifacts) ? payload.publication_artifacts : [];
       publicationDeliveries = Array.isArray(payload.publication_deliveries) ? payload.publication_deliveries : [];
       autoradioScripts = Array.isArray(payload.autoradio_scripts) ? payload.autoradio_scripts : [];
+      autoradioEpisodes = Array.isArray(payload.autoradio_episodes) ? payload.autoradio_episodes : [];
       deliveryExports = Array.isArray(payload.delivery_exports) ? payload.delivery_exports : [];
       publicLinks = Array.isArray(payload.public_links) ? payload.public_links : [];
       newsletterSubscribers = Array.isArray(payload.newsletter_subscribers) ? payload.newsletter_subscribers : [];
@@ -351,6 +354,7 @@
       publicationArtifacts = [];
       publicationDeliveries = [];
       autoradioScripts = [];
+      autoradioEpisodes = [];
       deliveryExports = [];
       publicLinks = [];
       newsletterSubscribers = [];
@@ -1033,6 +1037,11 @@
     return autoradioScripts.find((script) => script.artifact_id === id);
   }
 
+  function autoradioEpisodeForScript(script) {
+    const id = script?.id || '';
+    return autoradioEpisodes.find((episode) => episode.script_id === id);
+  }
+
   function deliveryExportForDelivery(delivery) {
     const id = delivery?.id || '';
     return deliveryExports.find((item) => item.delivery_id === id);
@@ -1299,6 +1308,55 @@
     } finally {
       reconciliationBusyId = '';
     }
+  }
+
+  async function createAutoradioEpisode(script) {
+    if (!authenticated || !script?.id) return;
+    reconciliationBusyId = `${script.id}:autoradio-episode`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/autoradio-episodes', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script_id: script.id,
+        }),
+      });
+      if (!response.ok) throw new Error(`Autoradio episode failed: ${response.status}`);
+      const payload = await response.json();
+      autoradioEpisodes = [payload.episode, ...autoradioEpisodes.filter((episode) => episode.id !== payload.episode?.id)]
+        .filter(Boolean)
+        .slice(0, 30);
+      contributionStatus = `Autoradio episode ${payload.episode?.status || 'created'}`;
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || 'Autoradio episode failed';
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
+  function playAutoradioEpisode(episode) {
+    if (!episode?.transcript) return;
+    if (typeof window === 'undefined' || !window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+      contributionStatus = 'Browser speech playback unavailable';
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new window.SpeechSynthesisUtterance(episode.transcript);
+    utterance.rate = 0.96;
+    utterance.pitch = 0.92;
+    utterance.onstart = () => {
+      contributionStatus = `Playing ${episode.title}`;
+    };
+    utterance.onend = () => {
+      contributionStatus = `Played ${episode.title}`;
+    };
+    utterance.onerror = () => {
+      contributionStatus = 'Autoradio playback failed';
+    };
+    window.speechSynthesis.speak(utterance);
   }
 
   async function createDeliveryExport(delivery) {
@@ -1916,6 +1974,7 @@
             {#each publicationFeedItems.slice(0, 3) as item}
               {@const delivery = publicationDeliveryForArtifact(item.artifact)}
               {@const autoradioScript = autoradioScriptForArtifact(item.artifact)}
+              {@const autoradioEpisode = autoradioEpisodeForScript(autoradioScript)}
               {@const deliveryExport = deliveryExportForDelivery(delivery)}
               {@const publicLink = publicLinkForExport(deliveryExport)}
               {@const newsletterIssue = newsletterIssueForPublicLink(publicLink)}
@@ -1951,6 +2010,34 @@
                       <small data-global-wire-autoradio-script-provenance>
                         script citations: {autoradioScript.citation_count} · rollback refs: {autoradioScript.rollback_count}
                       </small>
+                      {#if autoradioEpisode}
+                        <div
+                          class="autoradio-episode"
+                          data-global-wire-autoradio-episode
+                          data-global-wire-autoradio-episode-id={autoradioEpisode.id}
+                        >
+                          <strong>{autoradioEpisode.status}: {autoradioEpisode.title}</strong>
+                          <small data-global-wire-autoradio-episode-provenance>
+                            {autoradioEpisode.playback_mode} · {autoradioEpisode.duration_seconds}s · citations: {autoradioEpisode.citation_count} · rollback refs: {autoradioEpisode.rollback_count}
+                          </small>
+                          <button
+                            type="button"
+                            on:click={() => playAutoradioEpisode(autoradioEpisode)}
+                            data-global-wire-play-autoradio-episode
+                          >
+                            Play
+                          </button>
+                        </div>
+                      {:else}
+                        <button
+                          type="button"
+                          on:click={() => createAutoradioEpisode(autoradioScript)}
+                          disabled={reconciliationBusyId === `${autoradioScript.id}:autoradio-episode`}
+                          data-global-wire-create-autoradio-episode
+                        >
+                          Episode
+                        </button>
+                      {/if}
                     </div>
                   {/if}
                   {#if deliveryExport}
@@ -2056,9 +2143,33 @@
                       Deliver
                     </button>
                     {#if autoradioScript}
-                      <small data-global-wire-autoradio-script>
-                        {autoradioScript.status}: {autoradioScript.title}
-                      </small>
+                      <div class="autoradio-script compact" data-global-wire-autoradio-script>
+                        <small>{autoradioScript.status}: {autoradioScript.title}</small>
+                        {#if autoradioEpisode}
+                          <small
+                            data-global-wire-autoradio-episode
+                            data-global-wire-autoradio-episode-id={autoradioEpisode.id}
+                          >
+                            {autoradioEpisode.status}: {autoradioEpisode.playback_mode}
+                          </small>
+                          <button
+                            type="button"
+                            on:click={() => playAutoradioEpisode(autoradioEpisode)}
+                            data-global-wire-play-autoradio-episode
+                          >
+                            Play
+                          </button>
+                        {:else}
+                          <button
+                            type="button"
+                            on:click={() => createAutoradioEpisode(autoradioScript)}
+                            disabled={reconciliationBusyId === `${autoradioScript.id}:autoradio-episode`}
+                            data-global-wire-create-autoradio-episode
+                          >
+                            Episode
+                          </button>
+                        {/if}
+                      </div>
                     {:else}
                       <button
                         type="button"
@@ -2951,6 +3062,19 @@
 
   .autoradio-script span {
     -webkit-line-clamp: 6;
+  }
+
+  .autoradio-script.compact {
+    padding: 0.25rem;
+  }
+
+  .autoradio-episode {
+    display: grid;
+    gap: 0.22rem;
+    padding: 0.35rem;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-surface-card);
   }
 
   .delivery-export {

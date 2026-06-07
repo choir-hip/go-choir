@@ -733,6 +733,44 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("autoradio script missing from list: %+v", scriptListResp)
 	}
 
+	episodeBody := fmt.Sprintf(`{"script_id":%q}`, scriptResp.Script.ID)
+	episodeW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/autoradio-episodes", episodeBody, "user-alpha")
+	if episodeW.Code != http.StatusCreated {
+		t.Fatalf("autoradio episode status = %d body=%s", episodeW.Code, episodeW.Body.String())
+	}
+	var episodeResp globalWireAutoradioEpisodeResponse
+	if err := json.NewDecoder(episodeW.Body).Decode(&episodeResp); err != nil {
+		t.Fatalf("decode autoradio episode response: %v", err)
+	}
+	if episodeResp.Episode.ScriptID != scriptResp.Script.ID ||
+		episodeResp.Episode.ArtifactID != artifactResp.Artifact.ID ||
+		episodeResp.Episode.StoryID != "story-supply-resilience" ||
+		episodeResp.Episode.Status != "episode-ready" ||
+		episodeResp.Episode.PlaybackMode != "browser-speech" ||
+		!strings.Contains(episodeResp.Episode.Transcript, scriptResp.Script.ScriptBody) ||
+		episodeResp.Episode.DurationSeconds <= 0 ||
+		!slices.Contains(episodeResp.Episode.RollbackRefs, "autoradio_script:"+scriptResp.Script.ID) ||
+		episodeResp.Script.ID != scriptResp.Script.ID ||
+		episodeResp.Artifact.Status != "publication-approved" ||
+		episodeResp.Story.ID != "story-supply-resilience" ||
+		episodeResp.SourceItem == nil {
+		t.Fatalf("autoradio episode missing playback provenance: %+v", episodeResp)
+	}
+	episodeListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/autoradio-episodes?story_id=story-supply-resilience", "", "user-alpha")
+	if episodeListW.Code != http.StatusOK {
+		t.Fatalf("autoradio episode list status = %d body=%s", episodeListW.Code, episodeListW.Body.String())
+	}
+	var episodeListResp struct {
+		AutoradioEpisodes []types.GlobalWireAutoradioEpisode `json:"autoradio_episodes"`
+	}
+	if err := json.NewDecoder(episodeListW.Body).Decode(&episodeListResp); err != nil {
+		t.Fatalf("decode autoradio episode list response: %v", err)
+	}
+	if len(episodeListResp.AutoradioEpisodes) != 1 ||
+		episodeListResp.AutoradioEpisodes[0].ScriptID != scriptResp.Script.ID {
+		t.Fatalf("autoradio episode missing from list: %+v", episodeListResp)
+	}
+
 	exportBody := fmt.Sprintf(`{"delivery_id":%q,"format":"md"}`, deliveryResp.Delivery.ID)
 	exportW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-delivery-exports", exportBody, "user-alpha")
 	if exportW.Code != http.StatusCreated {
@@ -874,11 +912,17 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		publicationListResp.PublicationDeliveries[0].ArtifactID != artifactResp.Artifact.ID ||
 		len(publicationListResp.AutoradioScripts) != 1 ||
 		publicationListResp.AutoradioScripts[0].ArtifactID != artifactResp.Artifact.ID ||
+		len(publicationListResp.AutoradioEpisodes) != 1 ||
+		publicationListResp.AutoradioEpisodes[0].ScriptID != scriptResp.Script.ID ||
 		len(publicationListResp.DeliveryExports) != 1 ||
 		publicationListResp.DeliveryExports[0].DeliveryID != deliveryResp.Delivery.ID ||
 		len(publicationListResp.PublicLinks) != 1 ||
 		publicationListResp.PublicLinks[0].ExportID != exportResp.Export.ID {
-		t.Fatalf("publication artifacts missing from reconciliation list: updates=%+v artifacts=%+v deliveries=%+v scripts=%+v exports=%+v links=%+v", publicationListResp.PublicationUpdates, publicationListResp.PublicationArtifacts, publicationListResp.PublicationDeliveries, publicationListResp.AutoradioScripts, publicationListResp.DeliveryExports, publicationListResp.PublicLinks)
+		t.Fatalf("publication artifacts missing from reconciliation list: updates=%+v artifacts=%+v deliveries=%+v scripts=%+v episodes=%+v exports=%+v links=%+v", publicationListResp.PublicationUpdates, publicationListResp.PublicationArtifacts, publicationListResp.PublicationDeliveries, publicationListResp.AutoradioScripts, publicationListResp.AutoradioEpisodes, publicationListResp.DeliveryExports, publicationListResp.PublicLinks)
+	}
+	if len(finalReconciliation.SourceDossiers) == 0 ||
+		!slices.Contains(finalReconciliation.SourceDossiers[0].PublicationRefs.AutoradioEpisodeIDs, episodeResp.Episode.ID) {
+		t.Fatalf("source dossier missing autoradio episode ref: %+v", finalReconciliation.SourceDossiers)
 	}
 
 	storiesTaskAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")

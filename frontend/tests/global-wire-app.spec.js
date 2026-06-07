@@ -546,6 +546,48 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     }, autoradioScriptPayload.script.id);
     expect(autoradioScriptQueue.artifact_id).toBe(publicationArtifact.body.artifact.id);
     expect(autoradioScriptQueue.rollback_refs).toContain(`publication_artifact:${publicationArtifact.body.artifact.id}`);
+    const autoradioEpisodeResponsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/global-wire/autoradio-episodes' && response.request().method() === 'POST'
+    );
+    await app.locator('[data-global-wire-create-autoradio-episode]').first().click();
+    const autoradioEpisodeResponse = await autoradioEpisodeResponsePromise;
+    expect(autoradioEpisodeResponse.status()).toBe(201);
+    const autoradioEpisodePayload = await autoradioEpisodeResponse.json();
+    expect(autoradioEpisodePayload.episode.script_id).toBe(autoradioScriptPayload.script.id);
+    expect(autoradioEpisodePayload.episode.artifact_id).toBe(publicationArtifact.body.artifact.id);
+    expect(autoradioEpisodePayload.episode.status).toBe('episode-ready');
+    expect(autoradioEpisodePayload.episode.playback_mode).toBe('browser-speech');
+    expect(autoradioEpisodePayload.episode.transcript).toContain(autoradioScriptPayload.script.script_body);
+    expect(autoradioEpisodePayload.episode.rollback_refs).toContain(`autoradio_script:${autoradioScriptPayload.script.id}`);
+    await expect(app.locator('[data-global-wire-autoradio-episode]').first()).toContainText('episode-ready');
+    await expect(app.locator('[data-global-wire-autoradio-episode-provenance]').first()).toContainText('browser-speech');
+    const autoradioEpisodeQueue = await page.evaluate(async (episodeId) => {
+      const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
+      if (!res.ok) throw new Error(`load autoradio episode queue failed: ${res.status}`);
+      const list = await res.json();
+      const episode = (list.autoradio_episodes || []).find((item) => item.id === episodeId);
+      const dossier = (list.source_dossiers || []).find((item) => item.story_id === 'story-supply-resilience');
+      return { episode, dossier };
+    }, autoradioEpisodePayload.episode.id);
+    expect(autoradioEpisodeQueue.episode.script_id).toBe(autoradioScriptPayload.script.id);
+    expect(autoradioEpisodeQueue.dossier.publication_refs.autoradio_episode_ids).toContain(autoradioEpisodePayload.episode.id);
+    await page.evaluate(() => {
+      window.__globalWireSpoken = [];
+      window.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) {
+        this.text = text;
+      };
+      window.speechSynthesis = {
+        cancel() {},
+        speak(utterance) {
+          window.__globalWireSpoken.push(utterance.text);
+          if (utterance.onstart) utterance.onstart();
+          if (utterance.onend) utterance.onend();
+        },
+      };
+    });
+    await app.locator('[data-global-wire-play-autoradio-episode]').first().click();
+    const spoken = await page.evaluate(() => window.__globalWireSpoken || []);
+    expect(spoken[0]).toContain(autoradioScriptPayload.script.script_body);
     const deliveryExportResponsePromise = page.waitForResponse((response) =>
       new URL(response.url()).pathname === '/api/global-wire/publication-delivery-exports' && response.request().method() === 'POST'
     );

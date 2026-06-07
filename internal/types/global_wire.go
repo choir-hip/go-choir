@@ -344,6 +344,30 @@ type GlobalWireAutoradioScript struct {
 	UpdatedAt       time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWireAutoradioEpisode is an owner-scoped playback package over an
+// approved Autoradio script. Browser-speech playback is honest playback
+// readiness without claiming an external TTS/audio-file provider.
+type GlobalWireAutoradioEpisode struct {
+	ID              string    `json:"id"`
+	OwnerID         string    `json:"owner_id,omitempty"`
+	ScriptID        string    `json:"script_id"`
+	ArtifactID      string    `json:"artifact_id"`
+	StoryID         string    `json:"story_id"`
+	SourceContentID string    `json:"source_content_id,omitempty"`
+	Status          string    `json:"status"`
+	PlaybackMode    string    `json:"playback_mode"`
+	Title           string    `json:"title"`
+	Transcript      string    `json:"transcript"`
+	VoiceNotes      string    `json:"voice_notes"`
+	DurationSeconds int       `json:"duration_seconds"`
+	CitationCount   int       `json:"citation_count"`
+	RollbackCount   int       `json:"rollback_count"`
+	CitationRefs    []string  `json:"citation_refs"`
+	RollbackRefs    []string  `json:"rollback_refs"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWirePublicationDeliveryExport is a portable owner-scoped export over a
 // delivered publication and optional Autoradio script. It is not a public route.
 type GlobalWirePublicationDeliveryExport struct {
