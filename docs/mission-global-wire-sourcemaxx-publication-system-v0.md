@@ -1359,3 +1359,52 @@ updated remaining error field:
   686 deduped items from 14 fetches. SourceMaxx still needs many more RSS,
   Telegram, GDELT/provider feeds and health/backoff visibility before calling
   ingestion complete.
+
+2026-06-07 clean newspaper UI shipped proof:
+
+- Documentation checkpoint commit:
+  `2194e6a4b0b6e6d3cf0fb0a94304eebc8f591e31`
+  (`docs: checkpoint sourcemaxx newspaper ui`).
+- Behavior commit:
+  `0c784a0073ff0bec4dea144360a01cfdf7f14df9`
+  (`frontend: clean up global wire newspaper view`).
+- Local proof before push:
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 pnpm --dir frontend exec
+    playwright test tests/global-wire-app.spec.js` passed 4/4.
+  - `pnpm --dir frontend build` passed with the existing large-chunk warning.
+  - `git diff --check` passed.
+- CI/deploy proof for `0c784a0073ff0bec4dea144360a01cfdf7f14df9`:
+  - GitHub Actions CI run `27099927834` passed, including frontend build,
+    non-runtime tests, runtime shards, vet/build, and Node B staging deploy.
+  - FlakeHub publish run `27099927829` passed.
+  - `https://choir.news/health` reported proxy and sandbox deployed commit
+    `0c784a0073ff0bec4dea144360a01cfdf7f14df9`, with deployed_at
+    `2026-06-07T17:41:30Z`.
+- Deployed acceptance proof:
+  `PLAYWRIGHT_BASE_URL=https://choir.news pnpm --dir frontend exec playwright
+  test tests/global-wire-app.spec.js` passed 4/4. This proves the deployed
+  Global Wire preview surface has the Global Wire masthead, SourceMaxx
+  newsroom signal, three unboxed article columns, all stories openable as
+  normal VTexts, compact Style.vtext provenance, no app-local theme selector,
+  no StoryGraph desk/news-desk label, no Autoradio or contribution surface,
+  and responsive behavior across Futuristic Noir, Carbon Fiber Kintsugi, and
+  London Salmon.
+- Browser visual proof captured deployed screenshot
+  `/tmp/global-wire-staging-0c784a00.png`.
+
+updated remaining error field:
+
+- Clean newspaper UI is now shipped and staging-proven for the public preview
+  product path.
+- This is still not mission-complete. The next high-value axis is authenticated
+  Global Wire data realism: prove that fresh SourceMaxx VText article heads
+  from processor/reconciler runs appear in the clean surface, not only seeded
+  preview stories.
+- SourceMaxx breadth remains below the requested source-maxxing target. The
+  deployed firehose proof remains hundreds of items per cycle but only 14
+  configured fetches; add many more RSS, Telegram, GDELT/provider feeds with
+  provider health/backoff visibility.
+- User-published VText feed exploration remains future work. The app now
+  preserves the right architecture for it by treating article reading/editing
+  as normal VText work, but the public user-published VText feed is not yet
+  implemented.
