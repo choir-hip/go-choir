@@ -203,9 +203,23 @@
   $: selectedStory = stories.find((story) => story.id === selectedStoryId) || stories[0];
   $: selectedStyle = styleSources.find((style) => style.id === selectedStyleId) || styleSources[0];
   $: projectionText = selectedStory.projections[selectedStyle.id] || selectedStory.projections['wire-style'];
-  $: selectedDossier = selectedSourceDossier();
-  $: selectedDossierNewsletterIssueIds = sourceDossierNewsletterIssueIds(selectedDossier);
-  $: selectedDossierMissingFields = sourceDossierMissingFields(selectedDossier);
+  $: selectedDossier = sourceDossiers.find((dossier) => dossier.story_id === selectedStoryId) || sourceDossiers[0] || null;
+  $: selectedDossierNewsletterIssueIds = (() => {
+    const storyId = selectedDossier?.story_id || selectedStoryId;
+    const storyPublicLinkIds = new Set(
+      publicLinks
+        .filter((link) => link?.story_id === storyId)
+        .map((link) => link.id)
+        .filter(Boolean)
+    );
+    const issueIds = newsletterIssues
+      .filter((issue) => issue?.story_id === storyId || (issue?.public_link_ids || []).some((id) => storyPublicLinkIds.has(id)))
+      .map((issue) => issue.id)
+      .filter(Boolean);
+    return Array.from(new Set([...(selectedDossier?.publication_refs?.newsletter_issue_ids || []), ...issueIds]));
+  })();
+  $: selectedDossierMissingFields = (selectedDossier?.missing_fields || [])
+    .filter((field) => field !== 'newsletter_issues' || selectedDossierNewsletterIssueIds.length === 0);
   $: allSources = [
     ...selectedStory.manifest.lead,
     ...selectedStory.manifest.supporting,
