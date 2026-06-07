@@ -527,10 +527,10 @@ safe executable probe or external authority requirement are recorded.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-07 product-surface checkpoint after replacing the
-dense Global Wire dashboard with a SourceMaxx newspaper/source-chronology
-surface. This is useful shipped-direction progress, not delivered mission
-completion.
+last checkpoint: 2026-06-07 SourceMaxx aggregate-status checkpoint after
+shipping a product-safe authenticated staging proof of the expanded source
+firehose and queued processor/reconciler handoffs. This is useful
+shipped-direction progress, not delivered mission completion.
 
 current artifact state: prior Global Wire slices still exist in backend
 storage/runtime APIs and staging has some Source Service-backed paths,
@@ -543,11 +543,14 @@ theme selector, no contribution dashboard, no Autoradio surface, no repeated
 scrolling. Sourcecycled now has a SourceMaxx handoff substrate: expanded
 GDELT/RSS/Telegram registry, configurable per-source poll caps, durable
 processor request records, durable corpus-reconciler request records, and an
-internal SourceMaxx latest-cycle endpoint. Processors/reconcilers still do not
-yet execute as resident product agents, source handoffs are not yet connected
-to existing researcher/VText agent request channels, and Style.vtexts are not
-yet deep publication artifacts. A partial source-refresh
-batch experiment from the superseded route is preserved in
+internal SourceMaxx latest-cycle endpoint. Runtime now also exposes an
+authenticated product API projection at `/api/global-wire/sourcemaxx-status`
+that reports only non-sensitive aggregate SourceMaxx cycle/handoff metrics
+while preserving the `/internal/*` public-edge boundary.
+Processors/reconcilers still do not yet execute as resident product agents,
+source handoffs are not yet connected to existing researcher/VText agent
+request channels, and Style.vtexts are not yet deep publication artifacts. A
+partial source-refresh batch experiment from the superseded route is preserved in
 `stash@{1}` named
 `superseded-global-wire-source-refresh-batch-experiment-2026-06-07`.
 The wrong pipeline-shaped processor/reconciler request code is preserved in
@@ -559,13 +562,18 @@ what shipped: behavior checkpoint in
 `frontend/src/lib/GlobalWireApp.svelte` and
 `frontend/tests/global-wire-app.spec.js`, followed by a source-runtime
 checkpoint in `cmd/sourcecycled`, `internal/cycle`, `internal/sources`,
-`internal/sourceapi`, and `configs/sources.json`. The visible Global Wire app
-now projects the mission design language: clean newspaper columns plus source
-chronology instead of a dense StoryGraph/contribution/newsletter/Autoradio
-dashboard. Every article has a quiet VText button and fork button. Style.vtext
-routing remains compact and citeable. Sourcecycled no longer routes every
-cycle through a monolithic LLM issue synthesizer; it persists source items and
-queues processor/reconciler work records by source handles.
+`internal/sourceapi`, `configs/sources.json`, and the authenticated aggregate
+SourceMaxx status route in `internal/runtime/global_wire.go`,
+`internal/runtime/tools_research.go`, and `internal/runtime/api.go`. The
+visible Global Wire app now projects the mission design language: clean
+newspaper columns plus source chronology instead of a dense
+StoryGraph/contribution/newsletter/Autoradio dashboard. Every article has a
+quiet VText button and fork button. Style.vtext routing remains compact and
+citeable. Sourcecycled no longer routes every cycle through a monolithic LLM
+issue synthesizer; it persists source items and queues processor/reconciler
+work records by source handles. The product-safe status route lets staging
+verification prove SourceMaxx source volume and handoff counts without exposing
+internal source-service routes publicly.
 
 what was proven:
 
@@ -629,14 +637,39 @@ what was proven:
   confirms the internal boundary; it does not prove staging sourcecycled volume.
 - `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/global-wire-app.spec.js --project=chromium --workers=1 --reporter=line`
   passed on deployed staging after the source-runtime change: 4 tests.
+- Commit `d43e22b66de181985e4e222dfb39d1288506053d` was pushed to
+  `origin/main`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27094692531` completed
+  successfully for commit `d43e22b66de181985e4e222dfb39d1288506053d`,
+  including staging deploy.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27094692551` completed
+  successfully for commit `d43e22b66de181985e4e222dfb39d1288506053d`.
+- `https://choir.news/health` reported deployed commit
+  `d43e22b66de181985e4e222dfb39d1288506053d` with deployed_at
+  `2026-06-07T14:03:21Z`.
+- `curl -i https://choir.news/api/global-wire/sourcemaxx-status` returned
+  HTTP 401, matching authenticated Global Wire API behavior rather than a
+  source-status-specific failure.
+- Authenticated Playwright product-path probe using the real staging WebAuthn
+  session helper returned HTTP 200 from
+  `https://choir.news/api/global-wire/sourcemaxx-status`: cycle
+  `cycle_8a3fd397a071c7d2b1f27b05`, status `completed`, started_at
+  `2026-06-07T13:55:56Z`, ended_at `2026-06-07T13:55:57Z`, `item_count: 686`,
+  `fetch_count: 14`, `processor_request_count: 17`,
+  `reconciler_request_count: 1`, reconciler scope `story-corpus`, and
+  `source_service_internal_only: true`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/global-wire-app.spec.js --project=chromium --workers=1 --reporter=line`
+  passed on deployed staging after the aggregate-status route: 4 tests.
 
 unproven or partial claims:
 
-- hundreds of source items per 15 minutes on staging; local sourcecycled
-  proved 710 items in one cycle, but public staging cannot expose `/internal/*`
-  as proof;
-- expanded GDELT/RSS/Telegram source configuration observed on staging beyond
-  deployed commit identity;
+- sustained hundreds of source items per 15-minute window over multiple
+  staging cycles; the authenticated product path proved one completed staging
+  cycle with 686 items and 14 source fetches;
+- exact per-source staging distribution, dedupe counts, provider health by
+  source, and freshness over time;
 - processor contracts and long-running context continuity;
 - processor compaction with handles to full source content;
 - reconciler contracts and corpus-level contradiction/question behavior across
@@ -668,14 +701,16 @@ belief-state changes:
 - GDELT should be routed honestly as a global firehose until processors
   interpret it. The deterministic router should not pretend a feed-wide
   vertical label is semantic classification.
+- The deployed product path can now prove aggregate source volume and handoff
+  topology without exposing source-service `/internal/*` routes at the public
+  edge. The remaining mission risk has moved from source-volume visibility to
+  whether queued handoffs become resident processor/reconciler cognition and
+  VText publication through existing agent loops.
 
 remaining error field:
 
-- exact current sourcecycled staging runtime state and source volume after
-  deploy; public-edge `/internal/*` correctly returns 403, so a verifier needs
-  an authorized internal or product-path source-service probe;
-- source daemon/storage ability to handle hundreds of items per 15 minutes on
-  staging;
+- sustained staging source daemon/storage behavior across repeated cycles,
+  including provider-level distribution, freshness, dedupe, and backoff;
 - processor/reconciler runtime contracts, same-loop tool use, request/result
   channels, and compaction policy;
 - processor load budget and routing scheme after live staging data;
@@ -685,44 +720,37 @@ remaining error field:
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether staging sourcecycled has run the
-expanded registry and whether queued processor/reconciler handoffs can be
-consumed by resident agents with preserved context and existing researcher/VText
-agent reuse without deeper runtime changes. The source-service internal API is
-not public-edge accessible, so staging source volume proof needs an authorized
-internal verifier, source_search-mediated researcher proof, or a product-safe
-acceptance endpoint.
+highest-impact remaining uncertainty: whether queued processor/reconciler
+handoffs can be consumed by resident agents with preserved context and existing
+researcher/VText agent reuse without deeper runtime changes. Staging has now
+proven an expanded source cycle through a product-safe authenticated aggregate
+route, so the next realism axis is agent consumption and publication-quality
+VText production, not source-volume visibility.
 
 next executable delivery loop:
 
-1. Commit and push the SourceMaxx source-runtime checkpoint; monitor CI,
-   staging deploy identity, and sourcecycled/source-service behavior.
-2. Add or use an authorized staging verifier for SourceMaxx internals without
-   exposing `/internal/*` publicly. Acceptable routes: deployment-side command,
-   product-safe run acceptance synthesis from internal evidence, authenticated
-   researcher `source_search` proof, or a narrow browser-public product API
-   that reports non-sensitive SourceMaxx aggregate metrics.
-3. Probe staging sourcecycled source volume, fetch statuses, processor
-   handoffs, and reconciler handoff evidence through that verifier.
-4. Connect queued processor/reconciler handoffs to resident agent runs using
+1. Probe repeated staging SourceMaxx cycles through
+   `/api/global-wire/sourcemaxx-status` and add provider-level product-safe
+   observability only if needed for debugging source freshness/distribution.
+2. Connect queued processor/reconciler handoffs to resident agent runs using
    the existing runtime loop and request/result records. Preserve long-running
    context/compaction handles rather than reconstructing all context from text.
-5. Route processor/reconciler research needs into existing researcher agents
+3. Route processor/reconciler research needs into existing researcher agents
    and route article/update needs into existing VText agents. Do not create a
    parallel researcher/writer system.
-6. Replace remaining wrong-object paths while preserving product topology:
+4. Replace remaining wrong-object paths while preserving product topology:
    high-volume
    source ingestion, durable SourceItems, routing, processor state,
    reconciler corpus review, researcher request/result reuse, VText
    write/revision reuse, Style.vtext routing, VText traversal/source indexes,
    and user-owned VText boundaries.
-7. Discard or selectively mine the stashed source-refresh experiment only if it
+5. Discard or selectively mine the stashed source-refresh experiment only if it
    helps the delivered architecture; do not revive click-time source refresh as
    the product object.
-8. Build through to staging behavior: tests, commit, push, CI/deploy monitor,
+6. Build through to staging behavior: tests, commit, push, CI/deploy monitor,
    staging identity, product-path source volume, processor/reconciler evidence,
    researcher/VText reuse evidence, ownership evidence, and browser screenshots.
-9. Perform a quality pass before claiming delivery: simplify names and data
+7. Perform a quality pass before claiming delivery: simplify names and data
    flows, remove obsolete panels/routes/tests, make Style.vtexts publication
    quality, and make the Global Wire UI nice in Futuristic Noir, Carbon Fiber
    Kintsugi, London Salmon, and responsive Choir web desktop layouts.
