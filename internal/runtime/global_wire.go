@@ -48,12 +48,31 @@ type globalWireSourceSearchResponse struct {
 	Contribution *types.GlobalWireContribution `json:"contribution,omitempty"`
 }
 
+type globalWireSourceRefreshRequest struct {
+	StoryID    string `json:"story_id"`
+	Query      string `json:"query,omitempty"`
+	MaxResults int    `json:"max_results,omitempty"`
+}
+
+type globalWireSourceRefreshResponse struct {
+	Status       string                                  `json:"status"`
+	Source       string                                  `json:"source"`
+	Query        string                                  `json:"query,omitempty"`
+	Message      string                                  `json:"message,omitempty"`
+	RefreshRun   types.GlobalWireSourceRefreshRun        `json:"refresh_run"`
+	ContentItem  *types.ContentItem                      `json:"content_item,omitempty"`
+	Contribution *types.GlobalWireContribution           `json:"contribution,omitempty"`
+	Decision     *types.GlobalWireReconciliationDecision `json:"decision,omitempty"`
+	Candidate    *types.GlobalWireGraphUpdateCandidate   `json:"candidate,omitempty"`
+}
+
 type globalWireReconciliationResponse struct {
 	Contributions []types.GlobalWireContribution           `json:"contributions"`
 	SourceItems   map[string]types.ContentItem             `json:"source_items,omitempty"`
 	Decisions     []types.GlobalWireReconciliationDecision `json:"decisions"`
 	Candidates    []types.GlobalWireGraphUpdateCandidate   `json:"candidates"`
 	Promotions    []types.GlobalWireGraphPromotionDecision `json:"promotions"`
+	Refreshes     []types.GlobalWireSourceRefreshRun       `json:"refreshes"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -207,6 +226,163 @@ func (h *APIHandler) HandleGlobalWireSourceSearch(w http.ResponseWriter, r *http
 	})
 }
 
+// HandleGlobalWireSourceRefresh runs a bounded source-ingestion/classification
+// pass for one StoryGraph node. It creates review artifacts and a graph-update
+// candidate, but does not mutate the StoryGraph manifest.
+func (h *APIHandler) HandleGlobalWireSourceRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req globalWireSourceRefreshRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid source refresh request"})
+		return
+	}
+	req.StoryID = strings.TrimSpace(req.StoryID)
+	req.Query = strings.TrimSpace(req.Query)
+	if req.StoryID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "story_id is required"})
+		return
+	}
+	if req.MaxResults <= 0 {
+		req.MaxResults = 3
+	}
+	if req.MaxResults > 10 {
+		req.MaxResults = 10
+	}
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, req.StoryID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "story not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load StoryGraph"})
+		return
+	}
+	query := req.Query
+	if query == "" {
+		query = story.Headline
+	}
+	sourceClient := newSourceSearchClientFromEnv()
+	if sourceClient == nil {
+		run, runErr := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+			ID:       "global-wire-source-refresh-" + uuid.NewString(),
+			OwnerID:  ownerID,
+			StoryID:  story.ID,
+			Query:    query,
+			Status:   "unavailable",
+			Provider: "source-service",
+			Message:  "Source Service is not configured for this runtime.",
+		})
+		if runErr != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
+			return
+		}
+		writeAPIJSON(w, http.StatusServiceUnavailable, globalWireSourceRefreshResponse{
+			Status:     run.Status,
+			Source:     run.Provider,
+			Query:      run.Query,
+			Message:    run.Message,
+			RefreshRun: run,
+		})
+		return
+	}
+	resp, err := sourceClient.SearchSources(r.Context(), query, req.MaxResults)
+	if err != nil {
+		run, runErr := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+			ID:       "global-wire-source-refresh-" + uuid.NewString(),
+			OwnerID:  ownerID,
+			StoryID:  story.ID,
+			Query:    query,
+			Status:   "unavailable",
+			Provider: "source-service",
+			Message:  err.Error(),
+		})
+		if runErr != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
+			return
+		}
+		writeAPIJSON(w, http.StatusBadGateway, globalWireSourceRefreshResponse{
+			Status:     run.Status,
+			Source:     run.Provider,
+			Query:      run.Query,
+			Message:    run.Message,
+			RefreshRun: run,
+		})
+		return
+	}
+	provider := firstNonEmptyString(resp.Provider, sourceapi.ProviderName)
+	if len(resp.Results) == 0 {
+		run, runErr := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+			ID:       "global-wire-source-refresh-" + uuid.NewString(),
+			OwnerID:  ownerID,
+			StoryID:  story.ID,
+			Query:    firstNonEmptyString(resp.Query, query),
+			Status:   "no-evidence",
+			Provider: provider,
+			Message:  "Source Service returned no matching evidence.",
+		})
+		if runErr != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, globalWireSourceRefreshResponse{
+			Status:     run.Status,
+			Source:     run.Provider,
+			Query:      run.Query,
+			Message:    run.Message,
+			RefreshRun: run,
+		})
+		return
+	}
+	item, err := h.ensureGlobalWireSourceServiceContentItem(r, ownerID, resp.Results[0])
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to import source refresh result"})
+		return
+	}
+	contribution, decision, candidate, err := h.createGlobalWireSourceRefreshArtifacts(r, ownerID, story, item)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create source refresh artifacts"})
+		return
+	}
+	run, err := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+		ID:              "global-wire-source-refresh-" + uuid.NewString(),
+		OwnerID:         ownerID,
+		StoryID:         story.ID,
+		Query:           firstNonEmptyString(resp.Query, query),
+		Status:          "candidate-review",
+		Provider:        provider,
+		Message:         "Source refresh imported live evidence and created a non-mutating graph-update candidate for platform review.",
+		SourceContentID: item.ContentID,
+		ContributionID:  contribution.ID,
+		DecisionID:      decision.ID,
+		CandidateID:     candidate.ID,
+	})
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, globalWireSourceRefreshResponse{
+		Status:       run.Status,
+		Source:       run.Provider,
+		Query:        run.Query,
+		Message:      run.Message,
+		RefreshRun:   run,
+		ContentItem:  &item,
+		Contribution: &contribution,
+		Decision:     &decision,
+		Candidate:    &candidate,
+	})
+}
+
 // HandleGlobalWireContributions lists and creates owner-owned contribution
 // records for later research/reconciliation.
 func (h *APIHandler) HandleGlobalWireContributions(w http.ResponseWriter, r *http.Request) {
@@ -301,12 +477,18 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list graph promotion decisions"})
 			return
 		}
+		refreshes, err := h.rt.Store().ListGlobalWireSourceRefreshRuns(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list source refresh runs"})
+			return
+		}
 		writeAPIJSON(w, http.StatusOK, globalWireReconciliationResponse{
 			Contributions: contributions,
 			SourceItems:   h.globalWireContributionSourceItems(r, ownerID, contributions),
 			Decisions:     decisions,
 			Candidates:    candidates,
 			Promotions:    promotions,
+			Refreshes:     refreshes,
 		})
 	case http.MethodPost:
 		var req globalWireReconciliationCreateRequest
@@ -598,6 +780,45 @@ func (h *APIHandler) globalWireGraphUpdateCandidate(ownerID string, story types.
 		Status:           "candidate-review",
 		Rationale:        "Accepted reconciliation decision created a non-mutating StoryGraph update candidate; platform StoryGraph review is still required before manifest, edge, prominence, or projection changes.",
 	}
+}
+
+func (h *APIHandler) createGlobalWireSourceRefreshArtifacts(r *http.Request, ownerID string, story types.GlobalWireStory, item types.ContentItem) (types.GlobalWireContribution, types.GlobalWireReconciliationDecision, types.GlobalWireGraphUpdateCandidate, error) {
+	contribution, err := h.rt.Store().CreateGlobalWireContribution(r.Context(), types.GlobalWireContribution{
+		ID:              "global-wire-contribution-" + uuid.NewString(),
+		OwnerID:         ownerID,
+		StoryID:         story.ID,
+		Kind:            "source",
+		Headline:        firstNonEmptyString(item.Title, story.Headline),
+		Text:            firstNonEmptyString(item.TextContent, "Source refresh imported evidence for graph review."),
+		SourceContentID: item.ContentID,
+		ResearchState:   "accepted-for-graph-review",
+	})
+	if err != nil {
+		return types.GlobalWireContribution{}, types.GlobalWireReconciliationDecision{}, types.GlobalWireGraphUpdateCandidate{}, err
+	}
+	decision, err := h.rt.Store().CreateGlobalWireReconciliationDecision(r.Context(), types.GlobalWireReconciliationDecision{
+		ID:              "global-wire-reconciliation-" + uuid.NewString(),
+		OwnerID:         ownerID,
+		ContributionID:  contribution.ID,
+		StoryID:         story.ID,
+		Decision:        "accepted",
+		Note:            "Source refresh classified this Source Service item as candidate evidence for StoryGraph platform review.",
+		SourceContentID: item.ContentID,
+	})
+	if err != nil {
+		return types.GlobalWireContribution{}, types.GlobalWireReconciliationDecision{}, types.GlobalWireGraphUpdateCandidate{}, err
+	}
+	candidate := h.globalWireGraphUpdateCandidate(ownerID, story, contribution, decision)
+	candidate.Rationale = "Source refresh imported Source Service evidence and classified it as a non-mutating StoryGraph update candidate; platform review is required before manifest, edge, prominence, or projection changes."
+	saved, err := h.rt.Store().UpsertGlobalWireGraphUpdateCandidate(r.Context(), candidate)
+	if err != nil {
+		return types.GlobalWireContribution{}, types.GlobalWireReconciliationDecision{}, types.GlobalWireGraphUpdateCandidate{}, err
+	}
+	return contribution, decision, saved, nil
+}
+
+func (h *APIHandler) createGlobalWireSourceRefreshRun(r *http.Request, rec types.GlobalWireSourceRefreshRun) (types.GlobalWireSourceRefreshRun, error) {
+	return h.rt.Store().CreateGlobalWireSourceRefreshRun(r.Context(), rec)
 }
 
 func (h *APIHandler) globalWireContributionSourceItems(r *http.Request, ownerID string, contributions []types.GlobalWireContribution) map[string]types.ContentItem {

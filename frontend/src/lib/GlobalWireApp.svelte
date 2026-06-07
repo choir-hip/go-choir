@@ -155,6 +155,8 @@
   let sourceSearchMessage = '';
   let sourceSearchResults = [];
   let sourceSearchBusy = false;
+  let sourceRefreshStatus = '';
+  let sourceRefreshBusy = false;
   let queueTopSourceResult = true;
   let storyActionStatus = '';
   let storyActionBusy = '';
@@ -163,6 +165,7 @@
   let reconciliationDecisions = [];
   let graphUpdateCandidates = [];
   let graphPromotionDecisions = [];
+  let sourceRefreshes = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
   let loadError = '';
@@ -200,9 +203,11 @@
       reconciliationDecisions = [];
       graphUpdateCandidates = [];
       graphPromotionDecisions = [];
+      sourceRefreshes = [];
       sourceSearchResults = [];
       sourceSearchStatus = '';
       sourceSearchMessage = '';
+      sourceRefreshStatus = '';
       return;
     }
     try {
@@ -240,12 +245,14 @@
       reconciliationDecisions = Array.isArray(payload.decisions) ? payload.decisions : [];
       graphUpdateCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
       graphPromotionDecisions = Array.isArray(payload.promotions) ? payload.promotions : [];
+      sourceRefreshes = Array.isArray(payload.refreshes) ? payload.refreshes : [];
     } catch {
       contributions = [];
       reconciliationSourceItems = {};
       reconciliationDecisions = [];
       graphUpdateCandidates = [];
       graphPromotionDecisions = [];
+      sourceRefreshes = [];
     }
   }
 
@@ -554,6 +561,64 @@
     }
   }
 
+  async function refreshStorySources() {
+    if (!authenticated) {
+      sourceRefreshStatus = 'Sign in to refresh source evidence.';
+      return;
+    }
+    if (!selectedStory?.id) return;
+    sourceRefreshBusy = true;
+    sourceRefreshStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/source-refresh', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          story_id: selectedStory.id,
+          query: sourceSearchQuery.trim() || selectedStory.headline,
+          max_results: 3,
+        }),
+      });
+      const payload = await response.json();
+      sourceRefreshStatus = payload.message || payload.status || `Source refresh ${response.status}`;
+      if (payload.content_item?.content_id) {
+        reconciliationSourceItems = {
+          ...reconciliationSourceItems,
+          [payload.content_item.content_id]: payload.content_item,
+        };
+      }
+      if (payload.contribution?.id) {
+        contributions = [payload.contribution, ...contributions]
+          .filter(Boolean)
+          .slice(0, 6);
+      }
+      if (payload.decision?.id) {
+        reconciliationDecisions = [payload.decision, ...reconciliationDecisions]
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+      if (payload.candidate?.id) {
+        graphUpdateCandidates = [payload.candidate, ...graphUpdateCandidates]
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+      if (payload.refresh_run?.id) {
+        sourceRefreshes = [payload.refresh_run, ...sourceRefreshes]
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+      if (response.status === 201) {
+        contributionStatus = 'Source refresh created a graph candidate for review';
+        await loadContributions(selectedStory.id);
+      }
+    } catch (error) {
+      sourceRefreshStatus = error?.message || 'Source refresh failed';
+    } finally {
+      sourceRefreshBusy = false;
+    }
+  }
+
   function contributionSource(item) {
     const contentId = item?.source_content_id || item?.sourceContentId || '';
     return contentId ? reconciliationSourceItems[contentId] : null;
@@ -838,10 +903,34 @@
           >
             {sourceSearchBusy ? 'Searching...' : 'Search sources'}
           </button>
+          <button
+            type="button"
+            class="source-search-button"
+            on:click={refreshStorySources}
+            disabled={sourceRefreshBusy}
+            data-global-wire-source-refresh
+          >
+            {sourceRefreshBusy ? 'Refreshing...' : 'Refresh story evidence'}
+          </button>
           {#if sourceSearchStatus}
             <p class="source-search-status" data-global-wire-source-search-status>
               {sourceSearchStatus}: {sourceSearchMessage}
             </p>
+          {/if}
+          {#if sourceRefreshStatus}
+            <p class="source-search-status" data-global-wire-source-refresh-status>
+              {sourceRefreshStatus}
+            </p>
+          {/if}
+          {#if sourceRefreshes.length}
+            <div class="source-search-results" data-global-wire-source-refresh-runs>
+              {#each sourceRefreshes.slice(0, 2) as run}
+                <article>
+                  <strong>{run.status}</strong>
+                  <small>{run.provider} · {run.query}</small>
+                </article>
+              {/each}
+            </div>
           {/if}
           {#if sourceSearchResults.length}
             <div class="source-search-results" data-global-wire-source-search-results>

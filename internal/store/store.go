@@ -226,6 +226,24 @@ CREATE TABLE IF NOT EXISTS global_wire_graph_promotion_decisions (
 	KEY idx_global_wire_promotions_story (owner_id, story_id, created_at)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_source_refresh_runs (
+	owner_id           VARCHAR(255) NOT NULL,
+	refresh_id         VARCHAR(255) NOT NULL,
+	story_id           VARCHAR(255) NOT NULL,
+	query              LONGTEXT NOT NULL DEFAULT '',
+	status             VARCHAR(64) NOT NULL DEFAULT '',
+	provider           VARCHAR(255) NOT NULL DEFAULT '',
+	message            LONGTEXT NOT NULL DEFAULT '',
+	source_content_id  VARCHAR(255) NOT NULL DEFAULT '',
+	contribution_id    VARCHAR(255) NOT NULL DEFAULT '',
+	decision_id        VARCHAR(255) NOT NULL DEFAULT '',
+	candidate_id       VARCHAR(255) NOT NULL DEFAULT '',
+	created_at         DATETIME NOT NULL,
+	updated_at         DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, refresh_id),
+	KEY idx_global_wire_source_refresh_story (owner_id, story_id, updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivery_id          VARCHAR(255) PRIMARY KEY,
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',

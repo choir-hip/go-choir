@@ -1020,6 +1020,80 @@ func (s *Store) ListGlobalWireGraphPromotionDecisions(ctx context.Context, owner
 	return out, nil
 }
 
+// CreateGlobalWireSourceRefreshRun records a bounded Source Service refresh
+// pass and the review artifacts it produced.
+func (s *Store) CreateGlobalWireSourceRefreshRun(ctx context.Context, rec types.GlobalWireSourceRefreshRun) (types.GlobalWireSourceRefreshRun, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = rec.CreatedAt
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_source_refresh_runs (
+			owner_id, refresh_id, story_id, query, status, provider, message,
+			source_content_id, contribution_id, decision_id, candidate_id,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.StoryID,
+		sanitizeStoreText(rec.Query),
+		rec.Status,
+		rec.Provider,
+		sanitizeStoreText(rec.Message),
+		rec.SourceContentID,
+		rec.ContributionID,
+		rec.DecisionID,
+		rec.CandidateID,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireSourceRefreshRun{}, fmt.Errorf("create global wire source refresh run: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireSourceRefreshRuns lists recent source refresh/classification
+// passes, optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWireSourceRefreshRuns(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireSourceRefreshRun, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	query := `SELECT owner_id, refresh_id, story_id, query, status, provider, message,
+	                source_content_id, contribution_id, decision_id, candidate_id,
+	                created_at, updated_at
+	           FROM global_wire_source_refresh_runs
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire source refresh runs: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireSourceRefreshRun
+	for rows.Next() {
+		rec, err := scanGlobalWireSourceRefreshRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire source refresh runs: %w", err)
+	}
+	return out, nil
+}
+
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
 func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.GlobalWireStoryProjection) error {
 	now := rec.UpdatedAt
@@ -1286,5 +1360,42 @@ func scanGlobalWireGraphPromotionDecision(row interface{ Scan(...any) error }) (
 		return types.GlobalWireGraphPromotionDecision{}, fmt.Errorf("parse global wire graph promotion created_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireSourceRefreshRun(row interface{ Scan(...any) error }) (types.GlobalWireSourceRefreshRun, error) {
+	var rec types.GlobalWireSourceRefreshRun
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.StoryID,
+		&rec.Query,
+		&rec.Status,
+		&rec.Provider,
+		&rec.Message,
+		&rec.SourceContentID,
+		&rec.ContributionID,
+		&rec.DecisionID,
+		&rec.CandidateID,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireSourceRefreshRun{}, ErrNotFound
+		}
+		return types.GlobalWireSourceRefreshRun{}, fmt.Errorf("scan global wire source refresh run: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireSourceRefreshRun{}, fmt.Errorf("parse global wire source refresh created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireSourceRefreshRun{}, fmt.Errorf("parse global wire source refresh updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
 	return rec, nil
 }

@@ -259,6 +259,103 @@ func TestHandleGlobalWireSourceSearchReportsUnconfiguredSourceService(t *testing
 	}
 }
 
+func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(t *testing.T) {
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/source-service/search" {
+			t.Fatalf("unexpected source service path %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("q"); got != "port congestion refresh" {
+			t.Fatalf("query = %q, want port congestion refresh", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(sourceapi.SearchResponse{
+			Query:    "port congestion refresh",
+			Provider: sourceapi.ProviderName,
+			Metadata: sourceapi.Metadata{TargetKind: sourceapi.TargetKind},
+			Results: []sourceapi.ItemResult{{
+				Rank:          1,
+				TargetKind:    sourceapi.TargetKind,
+				ItemID:        "srcitem_port_refresh",
+				SourceID:      "rss:ports",
+				SourceType:    "rss",
+				FetchID:       "fetch-port-refresh",
+				Title:         "Rail slots improve at port complex",
+				Body:          "A new operations bulletin says additional rail slots reduced terminal dwell.",
+				URL:           "https://example.test/ports-refresh",
+				CanonicalURL:  "https://example.test/ports-refresh",
+				ContentHash:   "hash-port-refresh",
+				EvidenceLevel: "source-service-ledger",
+			}},
+		})
+	}))
+	defer sourceServer.Close()
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+
+	_, handler := testAPISetup(t)
+	storiesBeforeW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
+	if storiesBeforeW.Code != http.StatusOK {
+		t.Fatalf("stories before status = %d body=%s", storiesBeforeW.Code, storiesBeforeW.Body.String())
+	}
+	var storiesBefore globalWireStoriesResponse
+	if err := json.NewDecoder(storiesBeforeW.Body).Decode(&storiesBefore); err != nil {
+		t.Fatalf("decode stories before: %v", err)
+	}
+	beforeManifest := storiesBefore.Stories[0].Manifest
+
+	body := `{"story_id":"story-supply-resilience","query":"port congestion refresh","max_results":2}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/source-refresh", body, "user-alpha")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("source refresh status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp globalWireSourceRefreshResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode source refresh: %v", err)
+	}
+	if resp.Status != "candidate-review" || resp.ContentItem == nil || resp.Contribution == nil || resp.Decision == nil || resp.Candidate == nil {
+		t.Fatalf("unexpected source refresh response: %+v", resp)
+	}
+	if resp.RefreshRun.SourceContentID != resp.ContentItem.ContentID ||
+		resp.RefreshRun.ContributionID != resp.Contribution.ID ||
+		resp.RefreshRun.DecisionID != resp.Decision.ID ||
+		resp.RefreshRun.CandidateID != resp.Candidate.ID {
+		t.Fatalf("refresh run lineage mismatch: %+v", resp.RefreshRun)
+	}
+	if resp.Contribution.ResearchState != "accepted-for-graph-review" ||
+		resp.Decision.Decision != "accepted" ||
+		resp.Candidate.Status != "candidate-review" ||
+		resp.Candidate.SourceContentID != resp.ContentItem.ContentID {
+		t.Fatalf("refresh artifacts not candidate-ready: contribution=%+v decision=%+v candidate=%+v", resp.Contribution, resp.Decision, resp.Candidate)
+	}
+
+	storiesAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
+	if storiesAfterW.Code != http.StatusOK {
+		t.Fatalf("stories after status = %d body=%s", storiesAfterW.Code, storiesAfterW.Body.String())
+	}
+	var storiesAfter globalWireStoriesResponse
+	if err := json.NewDecoder(storiesAfterW.Body).Decode(&storiesAfter); err != nil {
+		t.Fatalf("decode stories after: %v", err)
+	}
+	afterManifest := storiesAfter.Stories[0].Manifest
+	if len(afterManifest.Lead) != len(beforeManifest.Lead) || len(afterManifest.Supporting) != len(beforeManifest.Supporting) ||
+		len(afterManifest.Contrary) != len(beforeManifest.Contrary) || len(afterManifest.Context) != len(beforeManifest.Context) {
+		t.Fatalf("StoryGraph manifest mutated during source refresh: before=%+v after=%+v", beforeManifest, afterManifest)
+	}
+
+	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
+	if listW.Code != http.StatusOK {
+		t.Fatalf("list reconciliation status = %d body=%s", listW.Code, listW.Body.String())
+	}
+	var listResp globalWireReconciliationResponse
+	if err := json.NewDecoder(listW.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode reconciliation list: %v", err)
+	}
+	if len(listResp.Refreshes) != 1 || listResp.Refreshes[0].CandidateID != resp.Candidate.ID {
+		t.Fatalf("refresh run missing from reconciliation list: %+v", listResp.Refreshes)
+	}
+}
+
 func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(t *testing.T) {
 	_, handler := testAPISetup(t)
 

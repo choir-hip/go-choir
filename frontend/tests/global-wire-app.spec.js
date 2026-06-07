@@ -44,6 +44,7 @@ test('Global Wire preserves StoryGraph, Style.vtext, VText fork, and contributio
   await expect(app.locator('[data-global-wire-evidence] [data-source-tier="lead"]')).toContainText('Port authority throughput bulletin');
   await expect(app.locator('[data-global-wire-story-graph]')).toContainText('Grid operators add reserve alerts');
   await expect(app.locator('[data-global-wire-source-search]')).toBeVisible();
+  await expect(app.locator('[data-global-wire-source-refresh]')).toBeVisible();
   await expect(app.locator('[data-global-wire-ask-choir]')).toBeVisible();
   await expect(app.locator('[data-global-wire-autoradio]')).toBeVisible();
 
@@ -202,6 +203,33 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   } else {
     expect(sourceServiceBridge.body.source).toBeTruthy();
     expect(sourceServiceBridge.body.message).toBeTruthy();
+  }
+
+  const sourceRefresh = await page.evaluate(async () => {
+    const res = await fetch('/api/global-wire/source-refresh', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        story_id: 'story-supply-resilience',
+        query: 'port congestion',
+        max_results: 2,
+      }),
+    });
+    const body = await res.json();
+    return { statusCode: res.status, body };
+  });
+  expect([201, 200, 502, 503]).toContain(sourceRefresh.statusCode);
+  expect(['candidate-review', 'no-evidence', 'unavailable']).toContain(sourceRefresh.body.status);
+  expect(sourceRefresh.body.refresh_run?.story_id).toBe('story-supply-resilience');
+  if (sourceRefresh.statusCode === 201) {
+    expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
+    expect(sourceRefresh.body.contribution?.research_state).toBe('accepted-for-graph-review');
+    expect(sourceRefresh.body.decision?.decision).toBe('accepted');
+    expect(sourceRefresh.body.candidate?.status).toBe('candidate-review');
+    expect(sourceRefresh.body.refresh_run?.candidate_id).toBe(sourceRefresh.body.candidate?.id);
+  } else {
+    expect(sourceRefresh.body.message).toBeTruthy();
   }
 
   const reconciliation = await page.evaluate(async ({ contributionId, sourceContentId }) => {
