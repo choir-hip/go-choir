@@ -2871,3 +2871,95 @@ Next executable probe:
   expose those packets in reconciliation and the News app; and prove on staging
   that completing a task creates reconciliation-visible evidence without
   mutating platform stories.
+
+## Checkpoint - Research Task Lifecycle Evidence Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Artifact advanced:
+
+- Global Wire now has durable `GlobalWireResearchTaskEvidence` records.
+- `/api/global-wire/research-tasks` can advance owner-scoped research tasks via
+  `assign`, `complete`, or `block`.
+- Each lifecycle transition creates a reconciliation-visible evidence packet
+  with task id, story id, claim id, source content id, status, evidence level,
+  summary, reviewer note, and timestamp.
+- `/api/global-wire/reconciliation` now returns `research_evidence` beside
+  claims and research tasks.
+- The News app exposes compact task lifecycle controls and displays evidence
+  packets under the claim/research surface.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `2a7741f13f19f8e73aeea52475320a9ae1d4177a`.
+- Behavior commit:
+  `fd57db5816423b4c808e923b20b3705176571c92`.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`,
+  `npm run build` in `frontend/`, and `git diff --check`.
+- CI run `27085059204`: success, including runtime shards, Go vet/build,
+  non-runtime tests, integration smoke, frontend build, and staging deploy.
+- FlakeHub run `27085059209`: success.
+- Staging health at `2026-06-07T06:36:00Z` reported proxy and sandbox
+  `deployed_commit` =
+  `fd57db5816423b4c808e923b20b3705176571c92`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium --grep "owner-scoped"`
+  with 1 passed. The proof created source-refresh research artifacts,
+  completed a research task through `/api/global-wire/research-tasks`, and
+  verified reconciliation returned completed task evidence.
+
+Invariants preserved:
+
+- Research task lifecycle transitions update only task/evidence records.
+- Platform StoryGraph stories and Story VTexts are not mutated by task
+  assignment, completion, or blocking.
+- Evidence packets remain owner-scoped and provenance-rich; they cite task,
+  story, claim, and SourceItem lineage.
+- News remains non-oracle: completed research means evidence is ready for
+  reconciliation, not that the platform story has been automatically rewritten.
+- Graph nodes remain Story VText headlines; research evidence is a review lane
+  overlay attached to claim/source neighborhoods.
+- The required Future Noir, Carbon Kintsugi, and London Salmon app views
+  continue to pass on staging.
+
+Belief-state update:
+
+- The product trajectory now includes:
+  source registry -> bounded fetch cycle -> Source Service search ->
+  SourceItem -> source-refresh run -> claim/research task ->
+  research-task evidence packet -> reconciliation-visible review state.
+- This closes the narrow gap where research tasks existed but could not carry
+  investigator output.
+- The implementation remains low-resolution: completed evidence is visible to
+  reconciliation, but there is not yet a dedicated acceptance path that turns a
+  research evidence packet into a publication/update decision with reviewer
+  contracts and rollback refs.
+
+Remaining error field:
+
+- Completed research evidence does not yet have a first-class reconciliation
+  handoff decision separate from contribution acceptance.
+- There is still no autonomous 24/7 scheduler or recurring source-fetch worker.
+- Claim/event/entity extraction is not yet a rich structured model with
+  entity/event/timeline normalization.
+- Source registry entries are still seeded from StoryGraph headlines rather
+  than a curated source catalog with standing policy.
+- Style.vtext composition/replacement is proven, but not yet a full style
+  revision workflow with forks, merge conflict handling, permissions, or
+  publication review.
+- There is no dedicated publication/update-feed/newsletter queue.
+- Autoradio remains a prompt-bar/VText handoff rather than a dedicated audio
+  playback or scheduling subsystem.
+
+Next executable probe:
+
+- Highest-value next realism axis is a research-evidence reconciliation
+  handoff: allow completed `GlobalWireResearchTaskEvidence` packets to be
+  reviewed into explicit reconciliation/publication decisions that can propose
+  StoryGraph candidate updates or block them, while preserving the invariant
+  that no platform story mutates without explicit platform review.
