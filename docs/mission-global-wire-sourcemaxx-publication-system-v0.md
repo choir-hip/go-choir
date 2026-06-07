@@ -978,8 +978,9 @@ remaining error field:
   sourcecycled submits capped staging handoffs to them, staging logs show
   shared-harness tool loops, and browser-visible product status now resolves
   aggregate lifecycle evidence including processor/reconciler completion,
-  updates, and researcher/VText child delegation; publication-quality VText
-  production remains incomplete;
+  updates, researcher/VText child delegation, and canonical VText article
+  ownership; publication-quality Style.vtext selection and clean news UI
+  production remain incomplete;
 - deploys can interrupt active SourceMaxx runs because gateway/sandbox restart
   while processor/reconciler loops are mid-inference; provider 429 pressure was
   also observed under the current dispatch volume;
@@ -990,10 +991,10 @@ remaining error field:
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether the resolved processor/reconciler
-updates and delegated researcher/VText children produce publication-quality
-VTexts with appropriate Style.vtext sources, and how to surface that output in
-the clean newspaper UI without reviving the old busy panel/card design.
+highest-impact remaining uncertainty: how to make the VText articles
+publication-quality through explicit Style.vtext source selection/composition
+and how to surface those VTexts in the clean newspaper UI without reviving the
+old busy panel/card design.
 
 2026-06-07 VText normalization finding:
 
@@ -1027,11 +1028,58 @@ the clean newspaper UI without reviving the old busy panel/card design.
   parallel story table, a second writer role, or a special SourceMaxx-only
   document owner.
 
+2026-06-07 VText normalization delivery:
+
+- Commit `020d68467bc020a403939d1e1cc2913ef9a1589a` normalized
+  processor/reconciler `spawn_agent role=vtext` delegation. For processor and
+  reconciler callers, VText delegation now creates or selects a normal VText
+  document, writes a SourceMaxx brief seed revision, persists `vtext:<doc_id>`
+  as the appagent, and starts an existing VText `vtext_agent_revision` run on
+  the document channel. Existing VText documents can be revised by passing the
+  document id as `channel_id`.
+- Local proof passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText`,
+  and `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalRunSubmissionAllowsSourceMaxxProcessorAndReconcilerProfiles|TestPromptStore|TestVText'`.
+- CI/deploy proof passed for `020d68467bc020a403939d1e1cc2913ef9a1589a`:
+  CI run `27098388192`, FlakeHub run `27098388205`, and Node B staging deploy
+  all succeeded. `https://choir.news/health` reported proxy and sandbox
+  deployed commit `020d68467bc020a403939d1e1cc2913ef9a1589a` at
+  `2026-06-07T16:36:30Z`.
+- A fresh post-deploy SourceMaxx cycle was forced by restarting only
+  `go-choir-sourcecycled.service`, which intentionally runs a first cycle on
+  daemon start. The cycle `cycle_690af0efdfdd6727b4b29643` fetched 686 items
+  from 14 fetches and queued 17 processor requests plus 1 reconciler request.
+  Authenticated public product status
+  `/api/global-wire/sourcemaxx-status` resolved 7 processor runs and 1
+  reconciler run for that cycle; after execution it reported the reconciler
+  completed with child profile counts `vtext: 4`.
+- Direct runtime event evidence for reconciler run
+  `ae2b81bf-3db4-43e7-8078-0370d7961c2b` showed four VText child results with
+  `agent_id=vtext:<doc_id>`, `channel_id=<doc_id>`, `seed_revision_id`, and
+  `revision_loop_id`: docs
+  `c93608d5-8698-49d1-98c2-093432d06f86`,
+  `39146705-ebe6-4b20-a2f2-feaa5e46c9e2`,
+  `784a39fa-dd9d-4f54-a3c0-24c4b39fab53`, and
+  `2fbeb7e2-7e23-4a17-b960-6cbd53cfb8a4`.
+- Dolt VText store proof showed all four documents existed with `.vtext`
+  titles and current canonical heads. The head revisions were version `2`,
+  `author_kind=appagent`, had metadata containing `source=edit_vtext` and
+  `source_maxx_cycle_id`, and contained article text. This proves the fixed
+  path produces canonical VText revisions rather than generic writer run
+  output.
+- New residual gap from the same proof: the four article heads did not mention
+  or cite Style.vtext selection (`mentions_style=false` in the proof query).
+  The next delivery loop must make Style.vtext a real cited editorial source
+  in the VText revision prompt/context, not merely an optional sentence in the
+  agent instructions.
+
 next executable delivery loop:
 
-1. Normalize processor/reconciler article requests into existing VText document
-   creation/revision flow so SourceMaxx articles become canonical VText
-   revisions, not generic child-run text.
+1. Add explicit Style.vtext source selection/composition to the normalized
+   processor/reconciler -> VText route so each article revision receives
+   citeable style source context and records why the selected style fits.
 2. Keep processors and reconcilers on the shared runtime harness with
    profile-specific prompts/toolsets only. Do not create a separate processor
    service loop to mask lineage gaps.
