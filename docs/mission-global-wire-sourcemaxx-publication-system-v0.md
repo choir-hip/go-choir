@@ -755,6 +755,16 @@ belief-state changes:
   resident agent result quality and lifecycle: processor/reconciler outputs,
   researcher delegation, VText delegation/publication, compaction/continuity,
   and publication-quality Style.vtext use.
+- Current product evidence still cannot correlate individual SourceMaxx
+  processor/reconciler handoffs to their resident runtime run records because
+  sourcecycled persists request status but not `runtime_run_id`. The
+  authenticated status route can prove aggregate submission counts, but it
+  cannot yet inspect run state, errors, successful `submit_coagent_update`
+  checkpoints, child researcher/VText runs, or other lifecycle evidence per
+  handoff. The next fix should add durable run-id lineage to processor and
+  reconciler request rows, expose only aggregate run-state/update evidence
+  through the product-safe SourceMaxx status route, and keep raw prompts,
+  internal run endpoints, and source-service internals private.
 
 remaining error field:
 
