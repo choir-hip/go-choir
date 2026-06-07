@@ -345,7 +345,7 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 				{
 					RequestID:    "processor_1",
 					ProcessorKey: "processor:global_firehose:global:gdelt",
-					Status:       "queued",
+					Status:       "submitted",
 					SourceCount:  50,
 				},
 				{
@@ -358,7 +358,7 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 			ReconcilerRequests: []sourceapi.ReconcilerRequest{{
 				RequestID: "reconciler_1",
 				Scope:     "story-corpus",
-				Status:    "queued",
+				Status:    "dispatch_failed",
 			}},
 			Metadata: sourceapi.SourceMaxxMetadata{
 				Topology:      "source-items -> processor-handoffs -> corpus-reconciler-handoff",
@@ -385,6 +385,12 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 	}
 	if resp.ProcessorRequestCount != 2 || resp.ReconcilerRequestCount != 1 {
 		t.Fatalf("unexpected handoff counts: %+v", resp)
+	}
+	if resp.ProcessorStatusCounts["submitted"] != 1 || resp.ProcessorStatusCounts["queued"] != 1 {
+		t.Fatalf("unexpected processor status counts: %+v", resp.ProcessorStatusCounts)
+	}
+	if resp.ReconcilerStatusCounts["dispatch_failed"] != 1 {
+		t.Fatalf("unexpected reconciler status counts: %+v", resp.ReconcilerStatusCounts)
 	}
 	if len(resp.ProcessorKeys) != 2 || resp.ProcessorKeys[0] != "processor:global_firehose:global:gdelt" {
 		t.Fatalf("unexpected processor keys: %+v", resp.ProcessorKeys)

@@ -101,22 +101,24 @@ type globalWireFetchCycleResponse struct {
 }
 
 type globalWireSourceMaxxStatusResponse struct {
-	Status                    string   `json:"status"`
-	Source                    string   `json:"source"`
-	Message                   string   `json:"message,omitempty"`
-	CycleID                   string   `json:"cycle_id,omitempty"`
-	CycleStatus               string   `json:"cycle_status,omitempty"`
-	StartedAt                 string   `json:"started_at,omitempty"`
-	EndedAt                   string   `json:"ended_at,omitempty"`
-	ItemCount                 int      `json:"item_count,omitempty"`
-	FetchCount                int      `json:"fetch_count,omitempty"`
-	ProcessorRequestCount     int      `json:"processor_request_count,omitempty"`
-	ReconcilerRequestCount    int      `json:"reconciler_request_count,omitempty"`
-	ProcessorKeys             []string `json:"processor_keys,omitempty"`
-	ReconcilerScopes          []string `json:"reconciler_scopes,omitempty"`
-	Topology                  string   `json:"topology,omitempty"`
-	AuthorityRule             string   `json:"authority_rule,omitempty"`
-	SourceServiceInternalOnly bool     `json:"source_service_internal_only"`
+	Status                    string         `json:"status"`
+	Source                    string         `json:"source"`
+	Message                   string         `json:"message,omitempty"`
+	CycleID                   string         `json:"cycle_id,omitempty"`
+	CycleStatus               string         `json:"cycle_status,omitempty"`
+	StartedAt                 string         `json:"started_at,omitempty"`
+	EndedAt                   string         `json:"ended_at,omitempty"`
+	ItemCount                 int            `json:"item_count,omitempty"`
+	FetchCount                int            `json:"fetch_count,omitempty"`
+	ProcessorRequestCount     int            `json:"processor_request_count,omitempty"`
+	ReconcilerRequestCount    int            `json:"reconciler_request_count,omitempty"`
+	ProcessorStatusCounts     map[string]int `json:"processor_status_counts,omitempty"`
+	ReconcilerStatusCounts    map[string]int `json:"reconciler_status_counts,omitempty"`
+	ProcessorKeys             []string       `json:"processor_keys,omitempty"`
+	ReconcilerScopes          []string       `json:"reconciler_scopes,omitempty"`
+	Topology                  string         `json:"topology,omitempty"`
+	AuthorityRule             string         `json:"authority_rule,omitempty"`
+	SourceServiceInternalOnly bool           `json:"source_service_internal_only"`
 }
 
 type globalWireReconciliationResponse struct {
@@ -526,16 +528,20 @@ func globalWireSourceMaxxStatusFromAPI(resp *sourceapi.SourceMaxxResponse) globa
 		}
 	}
 	processorKeys := make([]string, 0, len(resp.ProcessorRequests))
+	processorStatusCounts := make(map[string]int)
 	for _, req := range resp.ProcessorRequests {
 		if strings.TrimSpace(req.ProcessorKey) != "" {
 			processorKeys = append(processorKeys, req.ProcessorKey)
 		}
+		processorStatusCounts[normalizedSourceMaxxRequestStatus(req.Status)]++
 	}
 	reconcilerScopes := make([]string, 0, len(resp.ReconcilerRequests))
+	reconcilerStatusCounts := make(map[string]int)
 	for _, req := range resp.ReconcilerRequests {
 		if strings.TrimSpace(req.Scope) != "" {
 			reconcilerScopes = append(reconcilerScopes, req.Scope)
 		}
+		reconcilerStatusCounts[normalizedSourceMaxxRequestStatus(req.Status)]++
 	}
 	status := "ok"
 	if strings.TrimSpace(resp.Cycle.Status) != "" && resp.Cycle.Status != "completed" {
@@ -552,12 +558,29 @@ func globalWireSourceMaxxStatusFromAPI(resp *sourceapi.SourceMaxxResponse) globa
 		FetchCount:                resp.Cycle.FetchCount,
 		ProcessorRequestCount:     len(resp.ProcessorRequests),
 		ReconcilerRequestCount:    len(resp.ReconcilerRequests),
+		ProcessorStatusCounts:     emptyMapToNil(processorStatusCounts),
+		ReconcilerStatusCounts:    emptyMapToNil(reconcilerStatusCounts),
 		ProcessorKeys:             processorKeys,
 		ReconcilerScopes:          reconcilerScopes,
 		Topology:                  resp.Metadata.Topology,
 		AuthorityRule:             resp.Metadata.AuthorityRule,
 		SourceServiceInternalOnly: true,
 	}
+}
+
+func normalizedSourceMaxxRequestStatus(status string) string {
+	status = strings.TrimSpace(status)
+	if status == "" {
+		return "unknown"
+	}
+	return status
+}
+
+func emptyMapToNil(m map[string]int) map[string]int {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }
 
 // HandleGlobalWireSourceSearch imports configured Source Service evidence into
