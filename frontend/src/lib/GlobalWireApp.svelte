@@ -389,6 +389,7 @@
   }
 
   function storyPromptContext(mode) {
+    const feedItem = mode === 'autoradio' ? selectedPublicationFeedItem() : null;
     const sourceManifest = [
       sourceLines('lead', selectedStory.manifest.lead),
       sourceLines('supporting', selectedStory.manifest.supporting),
@@ -402,6 +403,43 @@
     const task = mode === 'autoradio'
       ? 'Create an Autoradio-ready spoken brief for this story projection. Use only the evidence below, keep uncertainty audible, cite source tiers, and name evidence gaps instead of filling them.'
       : 'Answer as Choir about this Global Wire story. Use only the evidence below, explain what changed, what remains uncertain, and what evidence should be checked next.';
+    if (feedItem?.artifact?.id) {
+      return [
+        'Create an Autoradio-ready spoken brief from the selected Global Wire publication artifact. Use the artifact body as the primary traversal object, keep uncertainty audible, cite the artifact and source neighborhood, and do not add facts beyond the artifact and source context.',
+        '',
+        `StoryGraph id: ${selectedStory.id}`,
+        `Headline: ${selectedStory.headline}`,
+        `State: ${selectedStory.changeState}; ${selectedStory.tension}`,
+        `Style.vtext source: ${selectedStyle.title}`,
+        '',
+        'Publication Artifact:',
+        `Artifact id: ${feedItem.artifact.id}`,
+        `Status: ${feedItem.status || feedItem.artifact.status}`,
+        `Channel: ${feedItem.artifact.channel}`,
+        `Title: ${feedItem.artifact.title}`,
+        `Citation count: ${feedItem.citation_count}`,
+        `Rollback count: ${feedItem.rollback_count}`,
+        '',
+        'Artifact Body:',
+        feedItem.artifact.body,
+        '',
+        'Source Context:',
+        feedItem.source_item
+          ? `${feedItem.source_item.title} (${feedItem.source_item.source_type}; ${feedItem.source_item.content_id})`
+          : feedItem.artifact.source_content_id || 'Source manifest context only',
+        '',
+        'Citation Refs:',
+        ...(feedItem.artifact.citation_refs || []).map((ref) => `- ${ref}`),
+        '',
+        'Rollback Refs:',
+        ...(feedItem.artifact.rollback_refs || []).map((ref) => `- ${ref}`),
+        '',
+        'Related Story VTexts:',
+        related,
+        '',
+        'Guardrail: speak from this citeable publication artifact, keep provenance audible, do not mutate the platform StoryGraph, and do not invent facts.',
+      ].join('\n');
+    }
     return [
       task,
       '',
@@ -864,6 +902,10 @@
   function publicationArtifactForUpdate(update) {
     const id = update?.id || '';
     return publicationArtifacts.find((artifact) => artifact.update_id === id);
+  }
+
+  function selectedPublicationFeedItem() {
+    return publicationFeedItems.find((item) => item.story?.id === selectedStory.id || item.artifact?.story_id === selectedStory.id);
   }
 
   function researchTaskEvidenceSummary(task, action) {

@@ -267,6 +267,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   expect([201, 200, 502, 503]).toContain(sourceRefresh.statusCode);
   expect(['candidate-review', 'no-visible-change', 'no-evidence', 'unavailable']).toContain(sourceRefresh.body.status);
   expect(sourceRefresh.body.refresh_run?.story_id).toBe('story-supply-resilience');
+  let publicationArtifactId = '';
   if (sourceRefresh.statusCode === 201) {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.contribution?.research_state).toBe('accepted-for-graph-review');
@@ -409,6 +410,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(publicationArtifact.body.artifact.citation_refs.length).toBeGreaterThanOrEqual(5);
     expect(publicationArtifact.body.artifact.extraction_ids?.length || 0).toBeGreaterThanOrEqual(1);
     expect(publicationArtifact.body.artifact.body).toContain('does not mutate the platform story');
+    publicationArtifactId = publicationArtifact.body.artifact.id;
     const artifactQueue = await page.evaluate(async (artifactId) => {
       const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
       if (!res.ok) throw new Error(`load publication artifact queue failed: ${res.status}`);
@@ -566,6 +568,23 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   expect(promoted.source.content_id).toBe(queuedContribution.source_content_id);
 
   await focusDeskApp(page, 'global-wire', 'Global Wire');
+  if (publicationArtifactId) {
+    const autoradioResponsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST'
+    );
+    await app.locator('[data-global-wire-autoradio]').click();
+    const autoradioResponse = await autoradioResponsePromise;
+    expect(autoradioResponse.status()).toBe(202);
+    const autoradioPayload = autoradioResponse.request().postDataJSON();
+    expect(autoradioPayload.text).toContain('Create an Autoradio-ready spoken brief from the selected Global Wire publication artifact');
+    expect(autoradioPayload.text).toContain(`Artifact id: ${publicationArtifactId}`);
+    expect(autoradioPayload.text).toContain('Citation count:');
+    expect(autoradioPayload.text).toContain('Rollback count:');
+    expect(autoradioPayload.text).toContain('Citation Refs:');
+    expect(autoradioPayload.text).toContain('Guardrail: speak from this citeable publication artifact');
+    await expect(app.locator('[data-global-wire-story-action-status]')).toContainText('Autoradio brief submitted');
+  }
+
   const askResponsePromise = page.waitForResponse((response) =>
     new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST'
   );
