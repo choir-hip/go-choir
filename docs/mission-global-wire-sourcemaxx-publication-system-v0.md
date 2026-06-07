@@ -10,7 +10,7 @@ or publication-quality `Style.vtext` requirements.
 ## Goal String
 
 ```text
-/goal Run docs/mission-global-wire-sourcemaxx-publication-system-v0.md as an overnight MissionGradient mission. Re-architect Global Wire as a continuous high-volume source ingestion and publication-quality collaborative StoryGraph system, not a click-time source-refresh demo. Deliver the spec in docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md by building SourceMaxx ingestion that can ingest hundreds of GDELT/RSS/Telegram/search SourceItems per 15 minutes or faster where feasible, normalize/dedupe them, cluster them into story source neighborhoods, compute provenance/source-standing/contradiction/relevance/change signals, and feed StoryGraph without oracle mutation. Redesign the News app into clean readable newspaper-style columns with no nested scrolling panels, no repeated card wall, and no low-density artifact repetition. Deepen Style.vtext into citeable publication-grade editorial source artifacts that produce genuinely high-quality VText projections with voice, structure, evidence rules, examples, anti-patterns, revision policy, and projection evaluations. Delete or replace architecture/UI/data paths that encode the wrong object, including one-result refresh bottlenecks, frontend-only preview authority, redundant panels, and shallow style tabs. Preserve all invariants: every story is a normal editable VText; user edits/forks/contributions are user-owned and never mutate platform stories; Style.vtext is selectable/composable/replacable/citeable; news is non-oracle and provenance-rich; graph nodes are Story VText headlines with source-neighborhood semantics; all app views work in Future Noir, Carbon Kintsugi, and London Salmon. Use cognitive transforms before major route changes and before stopping. Use staging/product-path proof for real ingestion volume, StoryGraph propagation, VText ownership, publication-quality projections, readable app behavior, and deployed commit identity. Update this mission doc with checkpoint/resumption state before stopping.
+/goal Run docs/mission-global-wire-sourcemaxx-publication-system-v0.md as an overnight MissionGradient mission. Re-architect Global Wire as a continuous high-volume source ingestion and publication-quality collaborative StoryGraph system, not a click-time source-refresh demo. Deliver the spec in docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md by building SourceMaxx ingestion that can ingest hundreds of GDELT/RSS/Telegram/search SourceItems per 15 minutes or faster where feasible, normalize/dedupe them, cluster them into story source neighborhoods, compute provenance/source-standing/contradiction/relevance/change signals, and feed StoryGraph without oracle mutation. Redesign the News app into clean readable newspaper-style columns with no nested scrolling panels, no repeated card wall, and no low-density artifact repetition. Deepen Style.vtext into citeable publication-grade editorial source artifacts that produce genuinely high-quality VText projections with voice, structure, evidence rules, examples, anti-patterns, revision policy, projection evaluations, and intelligent story-style matching. Do not run every style over every story by default; select, rank, compose, or withhold Style.vtexts based on story domain, audience, source neighborhood, editorial need, and user/publication context. Delete or replace architecture/UI/data paths that encode the wrong object, including one-result refresh bottlenecks, frontend-only preview authority, redundant panels, and shallow style tabs. Preserve all invariants: every story is a normal editable VText; user edits/forks/contributions are user-owned and never mutate platform stories; Style.vtext is selectable/composable/replacable/citeable; news is non-oracle and provenance-rich; graph nodes are Story VText headlines with source-neighborhood semantics; all app views work in Future Noir, Carbon Kintsugi, and London Salmon. Use cognitive transforms before major route changes and before stopping. Use staging/product-path proof for real ingestion volume, StoryGraph propagation, VText ownership, intelligent style matching, publication-quality projections, readable app behavior, and deployed commit identity. Update this mission doc with checkpoint/resumption state before stopping.
 ```
 
 ## Why This Is A New Mission
@@ -52,6 +52,9 @@ Selected transforms:
 5. **Publication-quality transform:** `Style.vtext` is not a style tab or
    prompt snippet. It is a citeable editorial source artifact whose quality is
    evaluated by actual resulting prose.
+6. **Editorial routing:** not every story wants every style. The system should
+   choose style because it serves a story, audience, source neighborhood, or
+   user/publication intent, not because a projection matrix is easy to render.
 
 Changed plan:
 
@@ -104,6 +107,8 @@ The product moves uphill when:
 - Story VTexts are normal editable VTexts;
 - user edits create user-owned forks/versions;
 - `Style.vtext` artifacts are deep enough to shape publication-quality prose;
+- style matching chooses, ranks, composes, or withholds styles based on story
+  fit instead of projecting every style over every story;
 - projected stories are readable, sourced, different in meaningful ways, and
   not generic assistant summaries;
 - the app reads like a clean newspaper/workbench, not a set of nested panels;
@@ -191,11 +196,24 @@ Style.vtext should include:
 - anti-patterns;
 - revision policy;
 - composition rules for hybrid styles;
+- applicability metadata: domains, audience, source-neighborhood conditions,
+  story states, publication contexts, and explicit "do not use" cases;
+- routing policy for when the style should be selected, composed with another
+  style, replaced, or withheld;
 - projection evaluation criteria.
 
 Projection quality is part of product correctness. A projection fails if it is
 generic, shallow, repetitive, source-thin, stylistically indistinct, or
 publication-unworthy even when it preserves facts.
+
+Style routing quality is also part of correctness. The system should not create
+a cartesian matrix of every style over every story by default. It should make
+editorial matches: a market brief belongs on market-moving business evidence,
+a skeptical claim audit belongs on disputed or weakly sourced claims, a policy
+brief belongs on institutional/legal/regulatory stories, and a wire style may
+serve baseline public updates. User or publication preferences can override
+the default route, but the default product behavior should be selective and
+explainable.
 
 ### News App Redesign
 
@@ -224,6 +242,8 @@ Audit and delete, replace, or quarantine paths that encode the wrong object:
 - nested scroll containers inside app panels;
 - card-heavy layouts that prevent scanning stories like news;
 - shallow style tabs that do not open/select citeable `Style.vtext` artifacts;
+- projection matrices that run every style over every story without editorial
+  routing or story-fit evidence;
 - deterministic single-signal source review paths that erase neighborhoods;
 - tests that only prove a button or singleton response when the product needs
   source volume and neighborhood behavior.
@@ -248,8 +268,11 @@ Increase resolution along these axes without changing object identity:
   related-story graph.
 - **Style depth:** simple style source -> publication-quality Style.vtext ->
   composed/replaced/revised style artifacts.
-- **Projection quality:** generic summary -> sourced article -> distinct
-  editorial voice -> publication-ready update package.
+- **Style routing:** manual style choice -> story-fit ranking -> automatic
+  select/compose/withhold decisions -> user/publication override with
+  provenance.
+- **Projection quality:** generic summary -> sourced article -> intelligently
+  matched editorial voice -> publication-ready update package.
 - **UI readability:** panel wall -> columns -> responsive newspaper/workbench
   across all themes.
 - **Product proof:** local tests -> source daemon metrics -> staging ingestion
@@ -268,8 +291,9 @@ Use layered proof:
   high-volume sources;
 - Playwright/browser/Computer Use screenshots across desktop and mobile for
   Future Noir, Carbon Kintsugi, and London Salmon;
-- projection evaluation fixtures comparing at least two deep Style.vtexts over
-  the same StoryGraph evidence;
+- projection evaluation fixtures proving at least two deep Style.vtexts can
+  produce strong projections when they fit, and that at least one non-fitting
+  style is withheld or deprioritized with an explainable reason;
 - ownership proof that user forks/edits remain user-owned;
 - mission doc checkpoint with evidence refs before stopping.
 
@@ -282,6 +306,7 @@ Use layered proof:
 - Do not hide provenance to make the app look clean.
 - Do not let user edits mutate platform stories.
 - Do not treat `Style.vtext` as a short prompt string.
+- Do not run all styles over all stories as the default product behavior.
 - Do not ship generic assistant prose as publication-quality content.
 - Do not use internal/test-only routes for product proof.
 - Do not claim staging behavior from local-only evidence.
@@ -296,7 +321,8 @@ Mark `complete` only when staging proves:
 - dedupe and story-neighborhood signals;
 - StoryGraph candidate/reconciliation state from source neighborhoods;
 - normal Story VText and user-owned fork/edit behavior;
-- citeable, deep `Style.vtext` artifacts and publication-quality projections;
+- citeable, deep `Style.vtext` artifacts, intelligent style-story matching,
+  and publication-quality projections;
 - clean newspaper-style Global Wire views with no nested panel scrolling;
 - all required views work in Future Noir, Carbon Kintsugi, and London Salmon;
 - deployed commit identity, CI, and product-path acceptance are recorded.
@@ -332,6 +358,7 @@ unproven or partial claims:
 - high-volume ingestion of hundreds of source items per 15 minutes;
 - many Telegram/RSS/GDELT sources configured and observed on staging;
 - source-neighborhood clustering over high-volume batches;
+- intelligent Style.vtext-to-story matching and withholding/deprioritization;
 - publication-quality Style.vtext projections;
 - redesigned readable newspaper UI;
 - all-theme visual proof.
@@ -342,6 +369,8 @@ belief-state changes:
   surface, not more Global Wire panels;
 - deletion of wrong abstractions is likely necessary;
 - Style.vtext quality must be treated as product correctness.
+- Style.vtext routing must be treated as editorial judgment, not exhaustive
+  permutation.
 
 remaining error field:
 
