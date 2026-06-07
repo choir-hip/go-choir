@@ -59,6 +59,9 @@ Use these buckets when reading or editing docs:
   source/news code-state and code-review note. Use it for sourcecycled,
   source_search, VText source-service refs, News app gaps, and rough future
   directions; do not treat its improvement list as accepted mission scope.
+- `docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md` -
+  product/architecture spec for Global Wire + Style.vtext as one collaborative
+  StoryGraph/VText system.
 - `docs/vtext-styleguide-system-research-2026-06-06.md` - research synthesis
   for VText-native `Style.vtext` support, client corpus ingestion, learned style
   memory, edit feedback, style review, and optional future fine-tuning.
@@ -94,6 +97,9 @@ Use these buckets when reading or editing docs:
 - `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.
 - `docs/mission-run-memory-v0.md` - run-memory/compaction mission.
 - `docs/mission-web-surface-rationalization-v0.md` - Obscura/browser surface rationalization mission.
+- `docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md` -
+  draft MissionGradient for the Global Wire / Style.vtext collaborative
+  StoryGraph trajectory.
 
 Read the current Campaign Compiler mission first. Older promotion-queue mission
 docs have been pruned; use the consolidated learnings doc when that context is
