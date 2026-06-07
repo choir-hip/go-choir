@@ -159,6 +159,7 @@
   let fetchCycles = [];
   let sourceRegistryEntries = [];
   let sourceSchedulerRuns = [];
+  let sourceServiceStatus = null;
   let styleSourceStatus = '';
   let styleSourceBusy = false;
   let storyActionStatus = '';
@@ -170,6 +171,14 @@
   $: sourceChronology = buildSourceChronology(stories, sourceSearchResults);
   $: sourceClassCount = new Set(sourceChronology.map((source) => source.role || source.source_type || 'source')).size;
   $: sourceItemCount = sourceChronology.length;
+  $: liveSourceCount = sourceServiceStatus?.fetch_count || 0;
+  $: liveItemCount = sourceServiceStatus?.item_count || 0;
+  $: displayedSourceCount = liveSourceCount || sourceItemCount;
+  $: displayedSourceLabel = liveSourceCount ? 'live sources' : 'sources';
+  $: displayedSourceSummary = sourceServiceStatus?.status === 'ok'
+    ? `${liveItemCount.toLocaleString()} source items · ${sourceServiceStatus.processor_request_count || 0} processors · ${sourceServiceStatus.reconciler_request_count || 0} reconcilers`
+    : `${sourceClassCount} source groups · ${stories.length} article VTexts · ${dataSource}`;
+  $: chronologyCount = liveItemCount || sourceItemCount;
   $: ownerLabel = authenticated ? (currentUser?.email || 'owner computer') : 'public preview';
 
   onMount(() => {
@@ -192,6 +201,7 @@
       fetchCycles = [];
       sourceRegistryEntries = [];
       sourceSchedulerRuns = [];
+      sourceServiceStatus = null;
       return;
     }
     try {
@@ -207,12 +217,26 @@
         if (!stories.some((story) => story.id === selectedStoryId)) selectedStoryId = stories[0].id;
         if (!styleSources.some((style) => style.id === selectedStyleId)) selectedStyleId = styleSources[0].id;
         await loadFetchCycles(selectedStoryId);
+        await loadSourceStatus();
       }
     } catch (error) {
       loadError = error?.message || 'Global Wire load failed';
       stories = previewStories;
       styleSources = previewStyleSources;
       dataSource = 'preview-source-network';
+      sourceServiceStatus = null;
+    }
+  }
+
+  async function loadSourceStatus() {
+    if (!authenticated) return;
+    try {
+      const response = await fetch('/api/global-wire/source-status', { credentials: 'include' });
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (payload?.status) sourceServiceStatus = payload;
+    } catch {
+      sourceServiceStatus = null;
     }
   }
 
@@ -548,6 +572,7 @@
       if (Array.isArray(payload.registry_entries)) sourceRegistryEntries = [...payload.registry_entries, ...sourceRegistryEntries].slice(0, 30);
       if (Array.isArray(payload.content_items)) sourceSearchResults = [...payload.content_items, ...sourceSearchResults].slice(0, 30);
       await loadFetchCycles(selectedStory.id);
+      await loadSourceStatus();
     } catch (error) {
       fetchCycleStatus = error?.message || 'Fetch cycle failed';
     } finally {
@@ -607,8 +632,8 @@
     </div>
     <div class="wire-state" data-global-wire-state>
       <span>{ownerLabel}</span>
-      <strong>{sourceItemCount} sources</strong>
-      <small>{sourceClassCount} source groups · {stories.length} article VTexts · {dataSource}</small>
+      <strong>{displayedSourceCount.toLocaleString()} {displayedSourceLabel}</strong>
+      <small>{displayedSourceSummary}</small>
     </div>
   </header>
 
@@ -660,7 +685,7 @@
           <p class="kicker">Sources</p>
           <h3>Chronology</h3>
         </div>
-        <span>{sourceItemCount}</span>
+        <span>{chronologyCount.toLocaleString()}</span>
       </div>
 
       <form class="source-search" data-global-wire-source-search on:submit|preventDefault={searchSources}>
@@ -688,6 +713,11 @@
       </div>
       {#if fetchCycleStatus}
         <p class="source-status" data-global-wire-fetch-cycle-status>{fetchCycleStatus}</p>
+      {/if}
+      {#if sourceServiceStatus?.cycle_id}
+        <p class="source-status" data-global-wire-source-status>
+          {sourceServiceStatus.cycle_status || sourceServiceStatus.status} · cycle {sourceServiceStatus.cycle_id}
+        </p>
       {/if}
 
       {#if fetchCycles.length || sourceRegistryEntries.length || sourceSchedulerRuns.length}

@@ -578,3 +578,29 @@ sources without static trust tiers; then drive processor/reconciler/researcher
 briefs into VText agents that produce full article revisions with native
 source and related-VText transclusions. Use Comet for authenticated
 Computer Use proof unless a stronger product-path browser session is available.
+
+## Checkpoint 2026-06-07T22:24Z: desktop icon and live source-status wiring shaped locally
+
+objective: remove two concrete product lies found in Comet proof: Global Wire
+was not a desktop icon, and the app header still presented the seeded
+16-source article neighborhood as if it were the live source system.
+
+local change: Global Wire is now configured as a normal desktop-icon app in
+the shared app registry. The runtime exposes a neutral
+`/api/global-wire/source-status` product route, with the older
+`/api/global-wire/sourcemaxx-status` kept only as a compatibility alias. The
+Global Wire UI now fetches the neutral route when authenticated and, when the
+source service is available, displays live source count, source item count,
+processor request count, reconciler request count, and latest cycle id instead
+of only the seeded story-manifest count. The source chronology rows still
+represent the visible article source neighborhood.
+
+local proof: `nix develop -c go test -tags comprehensive ./internal/runtime
+-run
+'TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs|TestHandleGlobalWireSourceMaxxStatusResolvesRemoteRuntimeEvidence|TestHandleGlobalWireSourceMaxxStatusReportsUnconfiguredSourceService'
+-count=1` passed. `npm run build` in `frontend` passed.
+
+remaining proof: commit, push, monitor CI/deploy, verify Node B deployed
+identity, then use Comet to confirm the left desktop icon includes Global Wire
+and the authenticated app header reports the source-service count rather than
+`16 sources`.

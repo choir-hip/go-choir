@@ -802,10 +802,10 @@ func prependGlobalWireStories(prefix, existing []types.GlobalWireStory) []types.
 	return out
 }
 
-// HandleGlobalWireSourceMaxxStatus reports non-sensitive SourceMaxx aggregate
+// HandleGlobalWireSourceStatus reports non-sensitive source-service aggregate
 // status through the product API while preserving the private /internal source
 // service boundary.
-func (h *APIHandler) HandleGlobalWireSourceMaxxStatus(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) HandleGlobalWireSourceStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -834,6 +834,12 @@ func (h *APIHandler) HandleGlobalWireSourceMaxxStatus(w http.ResponseWriter, r *
 	status := globalWireSourceMaxxStatusFromAPI(resp)
 	h.addSourceMaxxRuntimeEvidence(r.Context(), resp, &status)
 	writeAPIJSON(w, http.StatusOK, status)
+}
+
+// HandleGlobalWireSourceMaxxStatus is kept as a compatibility alias for older
+// clients. New product surfaces should use /api/global-wire/source-status.
+func (h *APIHandler) HandleGlobalWireSourceMaxxStatus(w http.ResponseWriter, r *http.Request) {
+	h.HandleGlobalWireSourceStatus(w, r)
 }
 
 func globalWireSourceMaxxStatusFromAPI(resp *sourceapi.SourceMaxxResponse) globalWireSourceMaxxStatusResponse {

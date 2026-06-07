@@ -584,9 +584,9 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 	t.Setenv("SOURCE_SERVICE_URL", "")
 	t.Setenv("SOURCECYCLED_API_URL", "")
 
-	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/sourcemaxx-status", "", "")
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/source-status", "", "")
 	if w.Code != http.StatusOK {
-		t.Fatalf("sourcemaxx status = %d body=%s", w.Code, w.Body.String())
+		t.Fatalf("source status = %d body=%s", w.Code, w.Body.String())
 	}
 	var resp globalWireSourceMaxxStatusResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
@@ -627,6 +627,11 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 	}
 	if resp.AuthorityRule == "" || !resp.SourceServiceInternalOnly {
 		t.Fatalf("missing provenance/internal boundary metadata: %+v", resp)
+	}
+
+	compat := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/sourcemaxx-status", "", "")
+	if compat.Code != http.StatusOK {
+		t.Fatalf("legacy sourcemaxx status alias = %d body=%s", compat.Code, compat.Body.String())
 	}
 }
 
