@@ -152,6 +152,52 @@ func TestSearchItemsTokenizesNaturalQueriesAndRanksMatches(t *testing.T) {
 	}
 }
 
+func TestSearchItemsResolvesDurableSourceItemHandles(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("open storage: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	items := []sources.Item{
+		{
+			ID:        "srcitem_target_handle",
+			SourceID:  "gdelt:15min",
+			Title:     "Target event",
+			Body:      "Body does not contain the durable id.",
+			Published: now,
+			FetchedAt: now,
+		},
+		{
+			ID:        "srcitem_other_handle",
+			SourceID:  "rss:other",
+			Title:     "Other event",
+			Body:      "Also does not contain the target id.",
+			Published: now.Add(time.Minute),
+			FetchedAt: now.Add(time.Minute),
+		},
+	}
+	if err := store.SaveItems(items); err != nil {
+		t.Fatalf("save items: %v", err)
+	}
+
+	for _, query := range []string{
+		"srcitem_target_handle",
+		"source_service_item:srcitem_target_handle",
+		"Please inspect srcitem_target_handle before publication.",
+	} {
+		results, err := store.SearchItems(ctx, query, 10)
+		if err != nil {
+			t.Fatalf("search items for %q: %v", query, err)
+		}
+		if len(results) != 1 || results[0].ID != "srcitem_target_handle" {
+			t.Fatalf("search %q results = %+v, want exact durable handle", query, results)
+		}
+	}
+}
+
 func TestStorageRecordsCycleEvents(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))

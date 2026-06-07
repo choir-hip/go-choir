@@ -666,6 +666,9 @@ func (s *Storage) SearchItems(ctx context.Context, query string, limit int) ([]s
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
+	if itemIDs := sourceSearchItemIDs(query); len(itemIDs) > 0 {
+		return s.searchItemsByID(ctx, itemIDs, limit)
+	}
 	terms := sourceSearchTerms(query)
 	selectFields := `id, source_id, source_type, fetch_id, original_id, title, body, url,
 		canonical_url, published, fetched_at, verticals, language, region, content_hash,
@@ -730,6 +733,69 @@ func (s *Storage) SearchItems(ctx context.Context, query string, limit int) ([]s
 		out = append(out, item)
 	}
 	return out, rows.Err()
+}
+
+func (s *Storage) searchItemsByID(ctx context.Context, itemIDs []string, limit int) ([]sources.Item, error) {
+	if len(itemIDs) == 0 {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	if len(itemIDs) > limit {
+		itemIDs = itemIDs[:limit]
+	}
+	placeholders := make([]string, 0, len(itemIDs))
+	args := make([]any, 0, len(itemIDs)+1)
+	for _, itemID := range itemIDs {
+		placeholders = append(placeholders, "?")
+		args = append(args, itemID)
+	}
+	args = append(args, limit)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, source_id, source_type, fetch_id, original_id, title, body, url,
+		canonical_url, published, fetched_at, verticals, language, region, content_hash,
+		raw_json, evidence_level, vintage_policy, lookahead_status, release_date
+		FROM items WHERE id IN (`+strings.Join(placeholders, ",")+`) ORDER BY published DESC, fetched_at DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []sources.Item
+	for rows.Next() {
+		var item sources.Item
+		var published, fetchedAt, verticals string
+		if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
+			&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
+			&verticals, &item.Language, &item.Region, &item.ContentHash, &item.RawJSON,
+			&item.EvidenceLevel, &item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
+			return nil, err
+		}
+		item.Published = parseStoredTime(published)
+		item.FetchedAt = parseStoredTime(fetchedAt)
+		_ = json.Unmarshal([]byte(verticals), &item.Verticals)
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func sourceSearchItemIDs(query string) []string {
+	fields := strings.FieldsFunc(query, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-')
+	})
+	seen := map[string]bool{}
+	out := make([]string, 0, len(fields))
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if !strings.HasPrefix(field, "srcitem_") || seen[field] {
+			continue
+		}
+		seen[field] = true
+		out = append(out, field)
+		if len(out) >= 50 {
+			break
+		}
+	}
+	return out
 }
 
 func sourceSearchTerms(query string) []string {

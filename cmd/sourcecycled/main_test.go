@@ -69,6 +69,20 @@ func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 		t.Fatalf("unexpected search result: %+v", got)
 	}
 
+	handleReq := httptest.NewRequest(http.MethodGet, "/internal/source-service/search?q=source_service_item:"+item.ID+"&max_results=5", nil)
+	handleRec := httptest.NewRecorder()
+	handleSourceServiceSearch(store).ServeHTTP(handleRec, handleReq)
+	if handleRec.Code != http.StatusOK {
+		t.Fatalf("handle search status = %d body=%s", handleRec.Code, handleRec.Body.String())
+	}
+	var handleSearch sourceapi.SearchResponse
+	if err := json.Unmarshal(handleRec.Body.Bytes(), &handleSearch); err != nil {
+		t.Fatalf("decode handle search: %v", err)
+	}
+	if len(handleSearch.Results) != 1 || handleSearch.Results[0].ItemID != item.ID {
+		t.Fatalf("handle search results = %+v, want exact source item", handleSearch.Results)
+	}
+
 	resolveReq := httptest.NewRequest(http.MethodGet, "/internal/source-service/items/"+item.ID, nil)
 	resolveRec := httptest.NewRecorder()
 	handleSourceServiceItem(store).ServeHTTP(resolveRec, resolveReq)
