@@ -244,6 +244,27 @@ CREATE TABLE IF NOT EXISTS global_wire_source_refresh_runs (
 	KEY idx_global_wire_source_refresh_story (owner_id, story_id, updated_at)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_projection_reviews (
+	owner_id           VARCHAR(255) NOT NULL,
+	review_id          VARCHAR(255) NOT NULL,
+	story_id           VARCHAR(255) NOT NULL,
+	candidate_id       VARCHAR(255) NOT NULL,
+	promotion_id       VARCHAR(255) NOT NULL,
+	source_content_id  VARCHAR(255) NOT NULL DEFAULT '',
+	style_id           VARCHAR(255) NOT NULL DEFAULT '',
+	style_doc_id       VARCHAR(255) NOT NULL DEFAULT '',
+	style_title        LONGTEXT NOT NULL DEFAULT '',
+	projection_action  VARCHAR(255) NOT NULL DEFAULT '',
+	status             VARCHAR(255) NOT NULL DEFAULT '',
+	rationale          LONGTEXT NOT NULL DEFAULT '',
+	created_at         DATETIME NOT NULL,
+	updated_at         DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, review_id),
+	KEY idx_global_wire_projection_reviews_story (owner_id, story_id, updated_at),
+	KEY idx_global_wire_projection_reviews_candidate (owner_id, candidate_id, updated_at),
+	KEY idx_global_wire_projection_reviews_promotion (owner_id, promotion_id, updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivery_id          VARCHAR(255) PRIMARY KEY,
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',

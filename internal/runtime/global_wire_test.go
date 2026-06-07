@@ -469,6 +469,15 @@ func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(
 		promoteResp.Promotion.SourceContentID != contribution.SourceContentID {
 		t.Fatalf("unexpected graph promotion response: %+v", promoteResp)
 	}
+	if len(promoteResp.ProjectionReviews) != len(promoteResp.Story.StyleSources) {
+		t.Fatalf("projection review count = %d, want %d: %+v", len(promoteResp.ProjectionReviews), len(promoteResp.Story.StyleSources), promoteResp.ProjectionReviews)
+	}
+	if len(promoteResp.ProjectionReviews) == 0 ||
+		promoteResp.ProjectionReviews[0].CandidateID != decisionResp.Candidate.ID ||
+		promoteResp.ProjectionReviews[0].PromotionID != promoteResp.Promotion.ID ||
+		promoteResp.ProjectionReviews[0].Status != "projection-review-required" {
+		t.Fatalf("projection review lineage missing: %+v", promoteResp.ProjectionReviews)
+	}
 	if len(promoteResp.Story.Manifest.Supporting) != len(beforeManifest.Supporting)+1 {
 		t.Fatalf("promoted story supporting count = %d, want %d", len(promoteResp.Story.Manifest.Supporting), len(beforeManifest.Supporting)+1)
 	}
@@ -487,5 +496,8 @@ func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(
 	}
 	if len(promotedList.Promotions) != 1 || promotedList.Promotions[0].CandidateID != decisionResp.Candidate.ID {
 		t.Fatalf("promotion decision missing from reconciliation list: %+v", promotedList.Promotions)
+	}
+	if len(promotedList.ProjectionReviews) != len(promoteResp.ProjectionReviews) {
+		t.Fatalf("projection reviews missing from reconciliation list: %+v", promotedList.ProjectionReviews)
 	}
 }

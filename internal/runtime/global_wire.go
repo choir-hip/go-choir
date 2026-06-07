@@ -67,12 +67,13 @@ type globalWireSourceRefreshResponse struct {
 }
 
 type globalWireReconciliationResponse struct {
-	Contributions []types.GlobalWireContribution           `json:"contributions"`
-	SourceItems   map[string]types.ContentItem             `json:"source_items,omitempty"`
-	Decisions     []types.GlobalWireReconciliationDecision `json:"decisions"`
-	Candidates    []types.GlobalWireGraphUpdateCandidate   `json:"candidates"`
-	Promotions    []types.GlobalWireGraphPromotionDecision `json:"promotions"`
-	Refreshes     []types.GlobalWireSourceRefreshRun       `json:"refreshes"`
+	Contributions     []types.GlobalWireContribution           `json:"contributions"`
+	SourceItems       map[string]types.ContentItem             `json:"source_items,omitempty"`
+	Decisions         []types.GlobalWireReconciliationDecision `json:"decisions"`
+	Candidates        []types.GlobalWireGraphUpdateCandidate   `json:"candidates"`
+	Promotions        []types.GlobalWireGraphPromotionDecision `json:"promotions"`
+	Refreshes         []types.GlobalWireSourceRefreshRun       `json:"refreshes"`
+	ProjectionReviews []types.GlobalWireProjectionReview       `json:"projection_reviews"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -95,9 +96,10 @@ type globalWireGraphCandidateReviewRequest struct {
 }
 
 type globalWireGraphCandidateReviewResponse struct {
-	Candidate types.GlobalWireGraphUpdateCandidate   `json:"candidate"`
-	Promotion types.GlobalWireGraphPromotionDecision `json:"promotion"`
-	Story     types.GlobalWireStory                  `json:"story,omitempty"`
+	Candidate         types.GlobalWireGraphUpdateCandidate   `json:"candidate"`
+	Promotion         types.GlobalWireGraphPromotionDecision `json:"promotion"`
+	Story             types.GlobalWireStory                  `json:"story,omitempty"`
+	ProjectionReviews []types.GlobalWireProjectionReview     `json:"projection_reviews,omitempty"`
 }
 
 // HandleGlobalWireStories returns the authenticated owner's durable StoryGraph.
@@ -482,13 +484,19 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list source refresh runs"})
 			return
 		}
+		projectionReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
+			return
+		}
 		writeAPIJSON(w, http.StatusOK, globalWireReconciliationResponse{
-			Contributions: contributions,
-			SourceItems:   h.globalWireContributionSourceItems(r, ownerID, contributions),
-			Decisions:     decisions,
-			Candidates:    candidates,
-			Promotions:    promotions,
-			Refreshes:     refreshes,
+			Contributions:     contributions,
+			SourceItems:       h.globalWireContributionSourceItems(r, ownerID, contributions),
+			Decisions:         decisions,
+			Candidates:        candidates,
+			Promotions:        promotions,
+			Refreshes:         refreshes,
+			ProjectionReviews: projectionReviews,
 		})
 	case http.MethodPost:
 		var req globalWireReconciliationCreateRequest
@@ -650,10 +658,19 @@ func (h *APIHandler) HandleGlobalWireGraphCandidates(w http.ResponseWriter, r *h
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create graph promotion decision"})
 		return
 	}
+	projectionReviews := []types.GlobalWireProjectionReview{}
+	if req.Decision == "promoted" && strings.TrimSpace(candidate.ProjectionAction) == "projection-review-required" {
+		projectionReviews, err = h.createGlobalWireProjectionReviews(r, ownerID, story, updatedCandidate, promotion)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create projection reviews"})
+			return
+		}
+	}
 	writeAPIJSON(w, http.StatusCreated, globalWireGraphCandidateReviewResponse{
-		Candidate: updatedCandidate,
-		Promotion: promotion,
-		Story:     story,
+		Candidate:         updatedCandidate,
+		Promotion:         promotion,
+		Story:             story,
+		ProjectionReviews: projectionReviews,
 	})
 }
 
@@ -819,6 +836,47 @@ func (h *APIHandler) createGlobalWireSourceRefreshArtifacts(r *http.Request, own
 
 func (h *APIHandler) createGlobalWireSourceRefreshRun(r *http.Request, rec types.GlobalWireSourceRefreshRun) (types.GlobalWireSourceRefreshRun, error) {
 	return h.rt.Store().CreateGlobalWireSourceRefreshRun(r.Context(), rec)
+}
+
+func (h *APIHandler) createGlobalWireProjectionReviews(r *http.Request, ownerID string, story types.GlobalWireStory, candidate types.GlobalWireGraphUpdateCandidate, promotion types.GlobalWireGraphPromotionDecision) ([]types.GlobalWireProjectionReview, error) {
+	styleSources := story.StyleSources
+	if len(styleSources) == 0 {
+		styleSources = defaultGlobalWireStyleSourcesForRuntime()
+	}
+	reviews := make([]types.GlobalWireProjectionReview, 0, len(styleSources))
+	for _, style := range styleSources {
+		styleID := strings.TrimSpace(style.ID)
+		if styleID == "" {
+			continue
+		}
+		rec, err := h.rt.Store().CreateGlobalWireProjectionReview(r.Context(), types.GlobalWireProjectionReview{
+			ID:               "global-wire-projection-review-" + uuid.NewString(),
+			OwnerID:          ownerID,
+			StoryID:          story.ID,
+			CandidateID:      candidate.ID,
+			PromotionID:      promotion.ID,
+			SourceContentID:  candidate.SourceContentID,
+			StyleID:          styleID,
+			StyleDocID:       style.DocID,
+			StyleTitle:       firstNonEmptyString(style.Title, style.Label),
+			ProjectionAction: candidate.ProjectionAction,
+			Status:           "projection-review-required",
+			Rationale:        "Promoted StoryGraph evidence may change salience, uncertainty, or ordering for this Style.vtext projection; review before revising the Story VText.",
+		})
+		if err != nil {
+			return nil, err
+		}
+		reviews = append(reviews, rec)
+	}
+	return reviews, nil
+}
+
+func defaultGlobalWireStyleSourcesForRuntime() []types.GlobalWireStyleSource {
+	return []types.GlobalWireStyleSource{
+		{ID: "wire-style", Title: "Style.vtext: Global Wire", Label: "Wire", SourcePath: "styles/global-wire.style.vtext"},
+		{ID: "claim-audit-style", Title: "Style.vtext: Claim Audit", Label: "Audit", SourcePath: "styles/claim-audit.style.vtext"},
+		{ID: "market-brief-style", Title: "Style.vtext: Market Brief", Label: "Market", SourcePath: "styles/market-brief.style.vtext"},
+	}
 }
 
 func (h *APIHandler) globalWireContributionSourceItems(r *http.Request, ownerID string, contributions []types.GlobalWireContribution) map[string]types.ContentItem {

@@ -166,6 +166,7 @@
   let graphUpdateCandidates = [];
   let graphPromotionDecisions = [];
   let sourceRefreshes = [];
+  let projectionReviews = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
   let loadError = '';
@@ -204,6 +205,7 @@
       graphUpdateCandidates = [];
       graphPromotionDecisions = [];
       sourceRefreshes = [];
+      projectionReviews = [];
       sourceSearchResults = [];
       sourceSearchStatus = '';
       sourceSearchMessage = '';
@@ -246,6 +248,7 @@
       graphUpdateCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
       graphPromotionDecisions = Array.isArray(payload.promotions) ? payload.promotions : [];
       sourceRefreshes = Array.isArray(payload.refreshes) ? payload.refreshes : [];
+      projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
     } catch {
       contributions = [];
       reconciliationSourceItems = {};
@@ -253,6 +256,7 @@
       graphUpdateCandidates = [];
       graphPromotionDecisions = [];
       sourceRefreshes = [];
+      projectionReviews = [];
     }
   }
 
@@ -639,6 +643,11 @@
     return graphPromotionDecisions.find((promotion) => promotion.candidate_id === id);
   }
 
+  function candidateProjectionReviews(candidate) {
+    const id = candidate?.id || '';
+    return projectionReviews.filter((review) => review.candidate_id === id);
+  }
+
   async function reconcileContribution(item, decision) {
     if (!authenticated || !item?.id) return;
     reconciliationBusyId = `${item.id}:${decision}`;
@@ -711,6 +720,11 @@
       graphPromotionDecisions = [payload.promotion, ...graphPromotionDecisions]
         .filter(Boolean)
         .slice(0, 20);
+      if (Array.isArray(payload.projection_reviews) && payload.projection_reviews.length) {
+        projectionReviews = [...payload.projection_reviews, ...projectionReviews]
+          .filter(Boolean)
+          .slice(0, 30);
+      }
       if (payload.story?.id) {
         stories = stories.map((story) => (story.id === payload.story.id ? payload.story : story));
       }
@@ -970,6 +984,7 @@
               {@const decision = contributionDecision(item)}
               {@const candidate = contributionCandidate(item)}
               {@const promotion = candidatePromotion(candidate)}
+              {@const reviews = candidateProjectionReviews(candidate)}
               <article class="contribution-card" data-global-wire-reconciliation-item>
                 <p><strong>{item.kind.replaceAll('-', ' ')}</strong> · {item.text}</p>
                 <small>{item.research_state || 'pending-researcher-review'}</small>
@@ -990,6 +1005,15 @@
                         <small data-global-wire-graph-promotion>
                           {promotion.decision}: {promotion.applied_change}
                         </small>
+                        {#if reviews.length}
+                          <div class="projection-review-list" data-global-wire-projection-reviews>
+                            {#each reviews.slice(0, 3) as review}
+                              <small data-global-wire-projection-review>
+                                {review.status}: {review.style_title || review.style_id}
+                              </small>
+                            {/each}
+                          </div>
+                        {/if}
                       {:else if authenticated && candidate.status === 'candidate-review'}
                         <div class="reconciliation-actions">
                           <button

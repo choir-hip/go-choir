@@ -256,6 +256,7 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   await app.locator('[data-global-wire-promote-candidate]').first().evaluate((button) => button.click());
   await expect(app.locator('[data-global-wire-graph-promotion]').first()).toContainText('promoted');
   await expect(app.locator('[data-global-wire-graph-promotion]').first()).toContainText('appended source_content_id');
+  await expect(app.locator('[data-global-wire-projection-review]').first()).toContainText('projection-review-required');
 
   const promoted = await page.evaluate(async ({ candidateId, sourceContentId }) => {
     const listRes = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', {
@@ -265,15 +266,18 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     const list = await listRes.json();
     const candidate = (list.candidates || []).find((item) => item.id === candidateId);
     const promotion = (list.promotions || []).find((item) => item.candidate_id === candidateId);
+    const projectionReviews = (list.projection_reviews || []).filter((item) => item.candidate_id === candidateId);
     const storyRes = await fetch('/api/global-wire/stories', { credentials: 'include' });
     if (!storyRes.ok) throw new Error(`load promoted StoryGraph failed: ${storyRes.status}`);
     const storyGraphAfter = await storyRes.json();
     const story = (storyGraphAfter.stories || []).find((item) => item.id === 'story-supply-resilience');
     const source = (story?.manifest?.supporting || []).find((item) => item.content_id === sourceContentId);
-    return { candidate, promotion, source };
+    return { candidate, promotion, projectionReviews, source };
   }, { candidateId: reconciliation.candidate.id, sourceContentId: queuedContribution.source_content_id });
   expect(promoted.candidate.status).toBe('promoted-to-storygraph');
   expect(promoted.promotion.decision).toBe('promoted');
+  expect(promoted.projectionReviews.length).toBeGreaterThanOrEqual(1);
+  expect(promoted.projectionReviews[0].status).toBe('projection-review-required');
   expect(promoted.source.content_id).toBe(queuedContribution.source_content_id);
 
   const askResponsePromise = page.waitForResponse((response) =>
