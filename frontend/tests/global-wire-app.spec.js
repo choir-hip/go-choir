@@ -159,6 +159,32 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     return contributionRes.json();
   });
   expect(importedSourceQueue.source_content_id).toBeTruthy();
+
+  const sourceServiceBridge = await page.evaluate(async () => {
+    const res = await fetch('/api/global-wire/source-search', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: 'port congestion',
+        max_results: 2,
+        story_id: 'story-supply-resilience',
+        queue_top_result: true,
+      }),
+    });
+    const body = await res.json();
+    return { statusCode: res.status, body };
+  });
+  expect([200, 502, 503]).toContain(sourceServiceBridge.statusCode);
+  expect(['ok', 'no-evidence', 'unavailable']).toContain(sourceServiceBridge.body.status);
+  if (sourceServiceBridge.body.status === 'ok') {
+    expect(sourceServiceBridge.body.content_items?.[0]?.source_type).toBe('source_service_item');
+    expect(sourceServiceBridge.body.content_items?.[0]?.metadata?.schema).toBe('choir.global_wire_source_service_item.v1');
+    expect(sourceServiceBridge.body.contribution?.source_content_id).toBe(sourceServiceBridge.body.content_items?.[0]?.content_id);
+  } else {
+    expect(sourceServiceBridge.body.source).toBeTruthy();
+    expect(sourceServiceBridge.body.message).toBeTruthy();
+  }
 });
 
 for (const themeId of ['futuristic-noir', 'carbon-fiber-kintsugi', 'london-salmon']) {

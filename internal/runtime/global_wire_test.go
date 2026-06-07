@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -161,5 +163,98 @@ func TestHandleGlobalWireContributionCanReferenceExistingContentItem(t *testing.
 	beta := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/contributions", body, "user-beta")
 	if beta.Code != http.StatusBadRequest {
 		t.Fatalf("cross-owner source contribution status = %d body=%s", beta.Code, beta.Body.String())
+	}
+}
+
+func TestHandleGlobalWireSourceSearchImportsAndQueuesSourceServiceEvidence(t *testing.T) {
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/source-service/search" {
+			t.Fatalf("unexpected source service path %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("q"); got != "port congestion" {
+			t.Fatalf("query = %q, want port congestion", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(sourceapi.SearchResponse{
+			Query:    "port congestion",
+			Provider: sourceapi.ProviderName,
+			Metadata: sourceapi.Metadata{TargetKind: sourceapi.TargetKind},
+			Results: []sourceapi.ItemResult{{
+				Rank:          1,
+				TargetKind:    sourceapi.TargetKind,
+				ItemID:        "srcitem_port_congestion",
+				SourceID:      "rss:ports",
+				SourceType:    "rss",
+				FetchID:       "fetch-port-1",
+				Title:         "Port congestion eases",
+				Body:          "Terminal dwell times fell after additional rail slots opened.",
+				URL:           "https://example.test/ports",
+				CanonicalURL:  "https://example.test/ports",
+				ContentHash:   "hash-port-congestion",
+				EvidenceLevel: "source-service-ledger",
+			}},
+		})
+	}))
+	defer sourceServer.Close()
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+
+	_, handler := testAPISetup(t)
+	body := `{"query":"port congestion","max_results":2,"story_id":"story-supply-resilience","queue_top_result":true}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/source-search", body, "user-alpha")
+	if w.Code != http.StatusOK {
+		t.Fatalf("source search status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp globalWireSourceSearchResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode source search: %v", err)
+	}
+	if resp.Status != "ok" || len(resp.ContentItems) != 1 {
+		t.Fatalf("unexpected source search response: %+v", resp)
+	}
+	item := resp.ContentItems[0]
+	if item.SourceType != "source_service_item" || item.AppHint != "global-wire" || item.ContentHash != "hash-port-congestion" {
+		t.Fatalf("unexpected imported item: %+v", item)
+	}
+	if resp.Contribution == nil || resp.Contribution.SourceContentID != item.ContentID {
+		t.Fatalf("queued contribution missing source content: %+v", resp.Contribution)
+	}
+	if resp.Contribution.ResearchState != "pending-researcher-review" {
+		t.Fatalf("research_state = %q", resp.Contribution.ResearchState)
+	}
+	sourceW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/content/items/"+item.ContentID, "", "user-alpha")
+	if sourceW.Code != http.StatusOK {
+		t.Fatalf("get source-service content item status = %d body=%s", sourceW.Code, sourceW.Body.String())
+	}
+	var stored types.ContentItem
+	if err := json.NewDecoder(sourceW.Body).Decode(&stored); err != nil {
+		t.Fatalf("decode stored content item: %v", err)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(stored.Metadata, &metadata); err != nil {
+		t.Fatalf("decode metadata: %v", err)
+	}
+	if metadata["schema"] != "choir.global_wire_source_service_item.v1" || metadata["source_item_id"] != "srcitem_port_congestion" {
+		t.Fatalf("unexpected source-service metadata: %+v", metadata)
+	}
+}
+
+func TestHandleGlobalWireSourceSearchReportsUnconfiguredSourceService(t *testing.T) {
+	t.Setenv("SOURCE_SERVICE_BASE_URL", "")
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+
+	_, handler := testAPISetup(t)
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/source-search", `{"query":"rates"}`, "user-alpha")
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unconfigured source search status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp globalWireSourceSearchResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode unconfigured source search: %v", err)
+	}
+	if resp.Status != "unavailable" || resp.Source != "source-service" {
+		t.Fatalf("unexpected unconfigured response: %+v", resp)
 	}
 }
