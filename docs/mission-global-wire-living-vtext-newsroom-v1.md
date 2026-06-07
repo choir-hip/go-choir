@@ -266,6 +266,19 @@ draft/approval or style-compose path on staging, open the resulting VText, and
 verify the article body has no visible projection/review/source-manifest
 scaffolding while source refs open through the native VText source system.
 
+CI failure checkpoint 2026-06-07T21:16Z: pushed behavior commit
+`2c7b7d45939f865913f5effeb21272588949f359` failed CI run
+`27104991253` in `Go Test (internal/runtime shard 3)`, job
+`79992421865`. The failing test was
+`TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads`, which still
+expected an indexed source-network story's visible claims to contain
+`Style.vtext: Global Wire`. That expectation is the old visible-provenance
+contract. Under the corrected architecture, style/source provenance belongs in
+revision metadata, citations, and source/style transclusions, not reader-facing
+claim prose. Staging deploy was skipped because the aggregate Go gate failed.
+Next fix: update the test to assert the new provenance separation contract
+rather than restoring visible style-source claims.
+
 last checkpoint: 2026-06-07 user visual/product review confirmed the current
 Global Wire/VText output is wrong-object work: poor desktop typography,
 normal-width layout failure, mobile issues, article stubs, visible metadata,
