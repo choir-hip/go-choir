@@ -359,6 +359,20 @@
     }
   }
 
+  async function loadSourceDossiers(storyId = selectedStoryId) {
+    if (!authenticated || !storyId) return;
+    try {
+      const response = await fetch(`/api/global-wire/source-dossiers?story_id=${encodeURIComponent(storyId)}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error(`Source dossier load failed: ${response.status}`);
+      const payload = await response.json();
+      sourceDossiers = Array.isArray(payload.dossiers) ? payload.dossiers : [];
+    } catch {
+      sourceDossiers = [];
+    }
+  }
+
   async function loadFetchCycles(storyId = selectedStoryId) {
     if (!authenticated) return;
     try {
@@ -1348,6 +1362,7 @@
         .slice(0, 30);
       contributionStatus = `Newsletter issue ${payload.issue?.status || 'created'}`;
       await loadContributions(selectedStory.id);
+      await loadSourceDossiers(publicLink.story_id || selectedStory.id);
     } catch (error) {
       contributionStatus = error?.message || 'Newsletter issue failed';
     } finally {
