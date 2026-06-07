@@ -1,6 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/fixtures.js';
+import { registerPasskey } from './helpers/auth.js';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
+const DESKTOP_BOOT_TIMEOUT_MS = Number(process.env.GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS || 120000);
+
+function uniqueEmail() {
+  return `global-wire-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+}
 
 async function openDeskApp(page, appId) {
   await page.locator('[data-desk-menu-button]').click();
@@ -47,6 +53,37 @@ test('Global Wire preserves StoryGraph, Style.vtext, VText fork, and contributio
   await expect(vtext).toBeVisible();
   await expect(vtext).toContainText('Source Manifest');
   await expect(vtext).toContainText('Style source: Style.vtext: Claim Audit');
+});
+
+test('Global Wire fork and contribution create owner-scoped VTexts when signed in', async ({ page, authenticator }) => {
+  test.skip(process.env.GLOBAL_WIRE_AUTH_PROOF !== '1', 'Set GLOBAL_WIRE_AUTH_PROOF=1 for deployed auth-backed ownership proof.');
+  const email = uniqueEmail();
+  await page.goto(BASE_URL);
+  await registerPasskey(page, email, BASE_URL);
+  await page.reload();
+  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: DESKTOP_BOOT_TIMEOUT_MS });
+
+  await openDeskApp(page, 'global-wire');
+  const app = page.locator('[data-global-wire-app]');
+  await expect(app).toBeVisible();
+
+  await app.locator('[data-global-wire-fork-story]').click();
+  await expect(page.locator('[data-vtext-editor]').last()).toContainText('My Edit');
+  await expect(page.locator('[data-vtext-editor]').last()).toContainText('User edits create user-owned versions');
+
+  await openDeskApp(page, 'global-wire');
+  await app.locator('[data-global-wire-contribution] textarea').fill('Add a local utility filing as a qualifying source before reconciliation.');
+  await app.locator('[data-global-wire-submit-contribution]').click();
+  await expect(page.locator('[data-vtext-editor]').last()).toContainText('Research/Reconciliation State');
+
+  const docs = await page.evaluate(async () => {
+    const res = await fetch('/api/vtext/documents', { credentials: 'include' });
+    if (!res.ok) throw new Error(`list documents failed: ${res.status}`);
+    return res.json();
+  });
+  const titles = (docs.documents || []).map((doc) => doc.title || '');
+  expect(titles.some((title) => title.startsWith('My version of Port backlog recedes'))).toBeTruthy();
+  expect(titles.some((title) => title.startsWith('Contribution: Port backlog recedes'))).toBeTruthy();
 });
 
 for (const themeId of ['futuristic-noir', 'carbon-fiber-kintsugi', 'london-salmon']) {

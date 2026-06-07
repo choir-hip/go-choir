@@ -185,24 +185,78 @@ Stop only when one is true:
 ## Run Checkpoint & Resumption State
 
 ```text
-status: draft
-last checkpoint: mission authored
-current artifact state: no mission execution yet
-what shipped: none
-what was proven: none
-unproven or partial claims: all implementation claims
-belief-state changes: none
-remaining error field: full dual-object product path is unbuilt
-highest-impact remaining uncertainty: where the existing VText/source/news code
-  allows the shortest production-shaped StoryGraph -> Story VText -> Style.vtext
-  projection -> News app path
-next executable probe: inspect current Source Service, VText creation/editing,
-  frontend app registry/theme system, source ref rendering, and publication
-  paths; then choose the first resolution axis to raise without breaking
-  topology
+status: checkpoint_incomplete
+last checkpoint: 2026-06-07 Global Wire app slice deployed to staging at
+  f3e6a59db82e7a08f27829bfa7f9469104e789fe
+current artifact state: Choir has a user-facing Global Wire app registered in
+  the Desk/mobile app registry. The app renders seeded StoryGraph-shaped story
+  nodes, source manifests with lead/supporting/contrary/context tiers, story
+  reader, style projection switcher, StoryGraph headline neighborhood, normal
+  VText launch/fork controls, and a user contribution surface.
+what shipped:
+  - docs/spec/problem checkpoint commit b60c1076
+  - product slice commit f3e6a59d
+  - `frontend/src/lib/GlobalWireApp.svelte`
+  - `frontend/tests/global-wire-app.spec.js`
+what was proven:
+  - local `npm run build` passed
+  - local `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npx playwright test
+    tests/global-wire-app.spec.js` passed with 4 public UI tests and the
+    deployed-auth proof skipped by default
+  - staging CI run 27080878731 passed, including frontend build, Go gates,
+    runtime shards, and Deploy to Staging (Node B)
+  - FlakeHub publish run 27080878720 passed
+  - `https://choir.news/health` reported proxy and sandbox deployed commit
+    f3e6a59db82e7a08f27829bfa7f9469104e789fe at 2026-06-07T02:56:36Z
+  - deployed public proof
+    `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test
+    tests/global-wire-app.spec.js` passed 4/4
+  - deployed ownership proof
+    `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news
+    npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+    passed and verified signed-in fork/contribution actions create
+    owner-scoped VText documents
+  - Browser visual proof on staging observed 3 story nodes, style switcher,
+    VText launch, contribution surface, no horizontal overflow, and no
+    evidence/graph rail overlap
+unproven or partial claims:
+  - StoryGraph records are seeded frontend records, not yet durable backend
+    StoryGraph objects derived from live Source Service ingestion
+  - source evidence is source-shaped and provenance-rich but not yet fetched
+    live in the News app product path
+  - contribution queue is represented through user-owned VTexts and local app
+    state; it is not yet a durable backend reconciliation queue
+  - Style.vtext sources open as ordinary VTexts, but style selection/composition
+    is not yet backed by durable Style.vtext source refs or permissions
+  - no run acceptance record was synthesized in this checkpoint
+belief-state changes:
+  - the shortest topology-preserving slice is frontend app + existing VText API,
+    not a static mock and not a new backend API first
+  - existing VText launch/createInitialVersion semantics are sufficient to prove
+    the ownership boundary for first-resolution story forks and contributions
+  - the next realism axis should move seeded StoryGraph data into a durable
+    source-backed backend contract without changing the app topology
+remaining error field: the shipped slice is product-shaped and deployed, but
+  still needs live Source Service backed StoryGraph persistence, durable
+  contribution/reconciliation records, and citeable Style.vtext source relation
+  storage before the full dual-object mission can be complete
+highest-impact remaining uncertainty: exact backend boundary for
+  SourceItem/StoryGraph/Style.vtext projection records that can feed the News
+  app while preserving normal VText ownership and publication semantics
+next executable probe: define and implement a small backend StoryGraph API or
+  store module that reads Source Service items into durable StoryGraph records,
+  then have Global Wire consume that contract with the seeded records as a
+  fallback only
 suggested resume goal string: see Goal String above
-evidence artifact refs: none yet
-rollback refs: git history before mission execution
+evidence artifact refs:
+  - GitHub Actions CI run 27080878731
+  - FlakeHub publish run 27080878720
+  - staging health JSON at 2026-06-07 showing deployed commit f3e6a59d...
+  - Playwright commands listed in what was proven
+rollback refs:
+  - pre-mission base d5bc2193
+  - docs checkpoint b60c1076
+  - product slice f3e6a59d
 ```
 
 ## Execution Problem Record - 2026-06-07
