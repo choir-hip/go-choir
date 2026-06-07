@@ -192,6 +192,9 @@
   let publicationFeedStatus = '';
   let publicationDeliveryDetail = null;
   let projectionReviews = [];
+  let selectedDossier = null;
+  let selectedDossierNewsletterIssueIds = [];
+  let selectedDossierMissingFields = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
   let loadError = '';
@@ -200,6 +203,9 @@
   $: selectedStory = stories.find((story) => story.id === selectedStoryId) || stories[0];
   $: selectedStyle = styleSources.find((style) => style.id === selectedStyleId) || styleSources[0];
   $: projectionText = selectedStory.projections[selectedStyle.id] || selectedStory.projections['wire-style'];
+  $: selectedDossier = selectedSourceDossier();
+  $: selectedDossierNewsletterIssueIds = sourceDossierNewsletterIssueIds(selectedDossier);
+  $: selectedDossierMissingFields = sourceDossierMissingFields(selectedDossier);
   $: allSources = [
     ...selectedStory.manifest.lead,
     ...selectedStory.manifest.supporting,
@@ -2395,41 +2401,40 @@
               </article>
             {/each}
           </div>
-          {@const dossier = selectedSourceDossier()}
-          {#if dossier}
+          {#if selectedDossier}
             <article
               class="source-dossier"
               data-global-wire-source-dossier
-              data-global-wire-source-dossier-id={dossier.id}
+              data-global-wire-source-dossier-id={selectedDossier.id}
             >
               <div>
-                <strong>{dossier.review_state}</strong>
-                <small>{dossier.headline}</small>
+                <strong>{selectedDossier.review_state}</strong>
+                <small>{selectedDossier.headline}</small>
               </div>
               <div class="dossier-grid">
-                {#each dossier.manifest_tiers || [] as tier}
+                {#each selectedDossier.manifest_tiers || [] as tier}
                   <small data-global-wire-source-dossier-tier data-global-wire-source-tier={tier.tier}>
                     {tier.tier}: {tier.count}
                   </small>
                 {/each}
               </div>
               <small data-global-wire-source-dossier-claims>
-                claims: {(dossier.claim_dossiers || []).length} · extractions: {(dossier.extraction_ids || []).length} · tasks: {(dossier.research_task_ids || []).length}
+                claims: {(selectedDossier.claim_dossiers || []).length} · extractions: {(selectedDossier.extraction_ids || []).length} · tasks: {(selectedDossier.research_task_ids || []).length}
               </small>
               <small data-global-wire-source-dossier-publication>
-                publications: {(dossier.publication_refs?.artifact_ids || []).length} · deliveries: {(dossier.publication_refs?.delivery_ids || []).length} · newsletter issues: {sourceDossierNewsletterIssueIds(dossier).length}
+                publications: {(selectedDossier.publication_refs?.artifact_ids || []).length} · deliveries: {(selectedDossier.publication_refs?.delivery_ids || []).length} · newsletter issues: {selectedDossierNewsletterIssueIds.length}
               </small>
               <small data-global-wire-source-dossier-provenance>
-                citations: {(dossier.publication_refs?.citation_refs || []).length} · rollback refs: {(dossier.publication_refs?.rollback_refs || []).length} · missing: {sourceDossierMissingFields(dossier).join(', ') || 'none'}
+                citations: {(selectedDossier.publication_refs?.citation_refs || []).length} · rollback refs: {(selectedDossier.publication_refs?.rollback_refs || []).length} · missing: {selectedDossierMissingFields.join(', ') || 'none'}
               </small>
-              {#if (dossier.entity_terms || []).length || (dossier.event_terms || []).length}
+              {#if (selectedDossier.entity_terms || []).length || (selectedDossier.event_terms || []).length}
                 <small data-global-wire-source-dossier-overlay>
-                  entities: {(dossier.entity_terms || []).slice(0, 3).join(', ')} · events: {(dossier.event_terms || []).slice(0, 2).join(', ')}
+                  entities: {(selectedDossier.entity_terms || []).slice(0, 3).join(', ')} · events: {(selectedDossier.event_terms || []).slice(0, 2).join(', ')}
                 </small>
               {/if}
-              {#if (dossier.timeline || []).length}
+              {#if (selectedDossier.timeline || []).length}
                 <small data-global-wire-source-dossier-timeline>
-                  {(dossier.timeline || [])[0]}
+                  {(selectedDossier.timeline || [])[0]}
                 </small>
               {/if}
             </article>
