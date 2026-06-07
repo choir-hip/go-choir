@@ -289,38 +289,39 @@ Stop only when one is true:
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: 2026-06-07 Global Wire extraction overlay slice deployed to
-  staging at 2cbadc6be3e542d99c5ba30d7dd62e2d72df3dac
+last checkpoint: 2026-06-07 Global Wire scheduler/source-standing slice
+  deployed to staging at 92d37f0267c37329f4534c5b7e41c01bf7180b7a
 current artifact state: Choir has a user-facing Global Wire app registered in
   the Desk/mobile app registry and backed by durable Global Wire story,
   Style.vtext, source, reconciliation, candidate, projection review, research,
-  publication package, source registry/fetch-cycle, and extraction overlay
-  records. The product path now runs:
+  publication package, source registry/fetch-cycle, extraction overlay, and
+  source scheduler-run records. The product path now runs:
   live/source-service evidence -> SourceItem -> source-refresh run ->
   StoryGraph headline candidate -> claim record -> extraction overlay ->
   research task/evidence -> research handoff -> projection review ->
-  publication update package -> News app review views. User forks and edits
-  remain owner-owned VTexts and do not mutate platform stories.
+  publication update package -> source standing scheduler evidence -> News app
+  review views. User forks and edits remain owner-owned VTexts and do not
+  mutate platform stories.
 what shipped:
-  - source/claim richness problem checkpoint commit
-    7a5ddcd2a0c8927f5e58c47389b7d2df8ca1cebf
-  - extraction overlay behavior commit
-    2cbadc6be3e542d99c5ba30d7dd62e2d72df3dac
-  - `GlobalWireExtractionArtifact` store/type/API path
-  - extraction ids on `GlobalWirePublicationUpdate`
-  - News app rendering of extraction overlay counts/timeline and publication
-    extraction refs
+  - scheduler/source-standing problem checkpoint commit
+    3590a5d9
+  - scheduler/source-standing behavior commit
+    92d37f0267c37329f4534c5b7e41c01bf7180b7a
+  - source registry cadence/standing policy fields
+  - durable `GlobalWireSourceSchedulerRun` records
+  - scheduler-mode `/api/global-wire/fetch-cycles` behavior
+  - News app scheduler control and source-standing policy display
 what was proven:
   - local `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
     passed
   - local `npm run build` in `frontend/` passed
   - local `git diff --check` passed
-  - CI run 27085651324 passed, including runtime shards, Go vet/build,
+  - CI run 27085880644 passed, including runtime shards, Go vet/build,
     non-runtime tests, integration smoke, frontend build, and Deploy to Staging
     (Node B)
-  - FlakeHub publish run 27085651314 passed
+  - FlakeHub publish run 27085880634 passed
   - `https://choir.news/health` reported proxy and sandbox deployed commit
-    2cbadc6be3e542d99c5ba30d7dd62e2d72df3dac at 2026-06-07T07:06:28Z
+    92d37f0267c37329f4534c5b7e41c01bf7180b7a at 2026-06-07T07:17:50Z
   - deployed public proof:
     `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test
     tests/global-wire-app.spec.js --project=chromium` passed 4 tests with the
@@ -329,50 +330,52 @@ what was proven:
     `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news
     npx playwright test tests/global-wire-app.spec.js --project=chromium
     --grep "owner-scoped"` passed and verified owner-scoped VText
-    fork/contribution, source refresh, extraction artifact creation,
+    fork/contribution, source refresh, extraction artifact creation, manual
+    fetch-cycle evidence, scheduler-mode source-standing run evidence,
     reconciliation listing, research completion, handoff, publication update
     packaging, and extraction ids in the package
 unproven or partial claims:
-  - source registry/fetch cycles are durable and manual-bounded, but not yet a
-    24/7 autonomous scheduler
+  - source registry/fetch cycles now have scheduler-mode evidence, but not yet a
+    resident 24/7 background worker
   - extraction overlays are low-resolution review artifacts derived from
     headline/source/classification fields, not normalized NLP entity/event
     extraction
-  - source standing policy is still thin and not backed by a curated catalog
+  - source standing policy is visible and durable, but still thin and not backed
+    by a curated source catalog
   - publication packages are review artifacts, not newsletter/public-route or
     Autoradio publication
   - no run acceptance record was synthesized in this checkpoint
 belief-state changes:
-  - the correct next representation for source/entity/event/timeline structure
-    is an owner-scoped overlay artifact tied to SourceItem/claim/candidate, not
-    changing StoryGraph nodes away from headline neighborhoods
-  - publication packages should cite extraction ids before any public-route
-    publication work, so review state remains visible and rollback-friendly
+  - the scheduler can be represented first as product-visible policy/run
+    evidence over the same fetch-cycle path; a daemon can later call this path
+    without changing the artifact topology
+  - source standing should remain review input with rationale, not an oracle or
+    graph-node type
 remaining error field: the shipped slice is product-shaped and deployed, but
-  still lacks autonomous recurring source ingestion, curated source standing,
+  still lacks a resident autonomous scheduler worker, curated source standing,
   normalized entity/event/timeline extraction, full Style.vtext revision
   workflow, newsletter/public-route publication, Autoradio playback/scheduling,
   and a synthesized RunAcceptanceRecord
 highest-impact remaining uncertainty: whether the next best realism increase is
-  a recurring source scheduler/source-standing catalog or deeper extraction
-  normalization; current evidence favors source standing and scheduler because
-  extraction artifacts now have a durable citation target
-next executable probe: add a low-resolution autonomous source scheduler/source
-  standing catalog path that periodically refreshes selected StoryGraph headline
-  neighborhoods, records scheduler evidence and source standing policy, and
-  proves staging behavior without mutating platform stories
+  publication/output readiness or deeper source normalization. Current evidence
+  favors publication/output readiness because the trajectory already has
+  source, claim, extraction, research, handoff, projection, package, and
+  scheduler evidence but no public/newsletter artifact.
+next executable probe: add a low-resolution publication/newsletter artifact
+  created from `GlobalWirePublicationUpdate` packages, citing Story VText,
+  Style.vtext, SourceItems, extraction ids, projection review state, scheduler
+  evidence, and rollback refs; prove it is a review/publication-ready artifact
+  without mutating platform stories
 suggested resume goal string: see Goal String above
 evidence artifact refs:
-  - GitHub Actions CI run 27085651324
-  - FlakeHub publish run 27085651314
-  - staging health JSON at 2026-06-07T07:06:28Z showing deployed commit
-    2cbadc6be3e542d99c5ba30d7dd62e2d72df3dac
+  - GitHub Actions CI run 27085880644
+  - FlakeHub publish run 27085880634
+  - staging health JSON at 2026-06-07T07:17:50Z showing deployed commit
+    92d37f0267c37329f4534c5b7e41c01bf7180b7a
   - Playwright commands listed in what was proven
 rollback refs:
-  - source/claim richness problem checkpoint
-    7a5ddcd2a0c8927f5e58c47389b7d2df8ca1cebf
-  - prior publication package checkpoint
-    07a7aabd
+  - scheduler/source-standing problem checkpoint 3590a5d9
+  - prior extraction overlay checkpoint a5c7ab4d
   - docs checkpoint b60c1076
   - product slice f3e6a59d
 ```
@@ -3459,3 +3462,90 @@ Next executable probe:
   StoryGraph headline neighborhoods through the existing bounded fetch cycle
   path, exposes schedule/run evidence in News, and proves locally/staging that
   this records ingestion-loop evidence without mutating platform stories.
+
+## Checkpoint - Source Scheduler Standing Cycle Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Artifact advanced:
+
+- `GlobalWireSourceRegistryEntry` now carries source standing policy, standing
+  rationale, cadence seconds, next due time, last cycle id, and last scheduled
+  run id.
+- Global Wire now has durable `GlobalWireSourceSchedulerRun` records that cite
+  selected story ids, registry entry ids, fetch cycle id, standing policies,
+  trigger, status, message, and timestamps.
+- `/api/global-wire/fetch-cycles` GET now returns recent `scheduler_runs`.
+- `/api/global-wire/fetch-cycles` POST accepts `scheduler_mode` and
+  `cadence_seconds`, runs the same bounded fetch-cycle path, then records a
+  scheduler-run artifact tied to the fetch cycle.
+- The News app now has a `Run source schedule` control and displays
+  scheduler-run status, standing policy, source-standing rationale, cadence,
+  and next due evidence alongside fetch-cycle evidence.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `3590a5d9`.
+- Behavior commit:
+  `92d37f0267c37329f4534c5b7e41c01bf7180b7a`.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`,
+  `npm run build` in `frontend/`, and `git diff --check`.
+- CI run `27085880644`: success, including runtime shards, Go vet/build,
+  non-runtime tests, integration smoke, frontend build, and staging deploy.
+- FlakeHub run `27085880634`: success.
+- Staging health at `2026-06-07T07:17:50Z` reported proxy and sandbox
+  `deployed_commit` =
+  `92d37f0267c37329f4534c5b7e41c01bf7180b7a`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium --grep "owner-scoped"`
+  with 1 passed. The proof verified manual fetch-cycle evidence, scheduler-mode
+  source-standing run evidence, registry standing policy, cadence evidence,
+  and the existing owner fork/source/research/handoff/package path.
+
+Invariants preserved:
+
+- Scheduler-mode cycles record source-ingestion evidence and do not mutate
+  platform stories.
+- Source standing is visible policy/rationale input, not an oracle verdict.
+- StoryGraph nodes remain Story VText headline neighborhoods, not source or
+  scheduler nodes.
+- User forks/edits remain owner-owned VText versions and do not mutate platform
+  stories.
+- Future Noir, Carbon Kintsugi, and London Salmon app views continue to pass
+  on staging.
+
+Belief-state update:
+
+- The ingestion loop now has low-resolution scheduler evidence:
+  source registry -> scheduler policy/run -> fetch cycle -> SourceItem ->
+  claim/extraction/research/reconciliation.
+- A future resident worker can call the same scheduler-mode product path, so the
+  current slice is a continuous deformation toward 24/7 ingestion rather than a
+  separate fake scheduler.
+
+Remaining error field:
+
+- There is still no resident 24/7 background scheduler worker.
+- Source standing policy is durable and visible, but not yet backed by a curated
+  source catalog or source reputation history.
+- Extraction artifacts are not normalized NLP outputs; they are conservative
+  review overlays derived from SourceItem/story/classification fields.
+- Style.vtext composition/replacement is proven, but not yet a full style
+  revision workflow with forks, merge conflict handling, permissions, or
+  publication review.
+- Publication updates do not yet produce newsletter/public-route artifacts or
+  Autoradio scripts/playback.
+- No `RunAcceptanceRecord` has been synthesized for the full trajectory.
+
+Next executable probe:
+
+- Add a low-resolution publication/newsletter artifact created from
+  `GlobalWirePublicationUpdate` packages. It should cite Story VText,
+  Style.vtext, SourceItems, extraction ids, projection review state, scheduler
+  evidence, and rollback refs; expose it in News; and prove staging behavior
+  without mutating platform stories.
