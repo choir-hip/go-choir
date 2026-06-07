@@ -35,6 +35,10 @@ type sourceSearchClient interface {
 	SearchSources(ctx context.Context, query string, maxResults int) (*sourceSearchResponse, error)
 }
 
+type sourceMaxxStatusClient interface {
+	SourceMaxxLatest(ctx context.Context) (*sourceapi.SourceMaxxResponse, error)
+}
+
 type sourceSearchResponse struct {
 	Query    string           `json:"query"`
 	Provider string           `json:"provider"`
@@ -119,6 +123,35 @@ func (c *httpSourceSearchClient) SearchSources(ctx context.Context, query string
 		BaseURL:  c.baseURL,
 		Metadata: metadata,
 	}, nil
+}
+
+func (c *httpSourceSearchClient) SourceMaxxLatest(ctx context.Context) (*sourceapi.SourceMaxxResponse, error) {
+	if c == nil || strings.TrimSpace(c.baseURL) == "" {
+		return nil, fmt.Errorf("source search client not configured")
+	}
+	endpoint, err := url.Parse(c.baseURL + "/internal/source-service/sourcemaxx/latest")
+	if err != nil {
+		return nil, fmt.Errorf("parse source service sourcemaxx URL: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("create source service sourcemaxx request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("call source service sourcemaxx: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("source service sourcemaxx returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	var apiResp sourceapi.SourceMaxxResponse
+	err = json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&apiResp)
+	if err != nil {
+		return nil, fmt.Errorf("decode source service sourcemaxx response: %w", err)
+	}
+	return &apiResp, nil
 }
 
 func sourceAPIItemMap(item sourceapi.ItemResult) map[string]any {

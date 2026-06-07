@@ -325,6 +325,94 @@ func TestHandleGlobalWireSourceSearchReportsUnconfiguredSourceService(t *testing
 	}
 }
 
+func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) {
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/source-service/sourcemaxx/latest" {
+			t.Fatalf("unexpected source service path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(sourceapi.SourceMaxxResponse{
+			Provider: sourceapi.ProviderName,
+			Cycle: sourceapi.CycleSummary{
+				CycleID:    "cycle_source_maxx",
+				StartedAt:  "2026-06-07T13:50:27Z",
+				EndedAt:    "2026-06-07T13:50:27Z",
+				Status:     "completed",
+				ItemCount:  710,
+				FetchCount: 14,
+			},
+			ProcessorRequests: []sourceapi.ProcessorRequest{
+				{
+					RequestID:    "processor_1",
+					ProcessorKey: "processor:global_firehose:global:gdelt",
+					Status:       "queued",
+					SourceCount:  50,
+				},
+				{
+					RequestID:    "processor_2",
+					ProcessorKey: "processor:conflict:global:telegram",
+					Status:       "queued",
+					SourceCount:  38,
+				},
+			},
+			ReconcilerRequests: []sourceapi.ReconcilerRequest{{
+				RequestID: "reconciler_1",
+				Scope:     "story-corpus",
+				Status:    "queued",
+			}},
+			Metadata: sourceapi.SourceMaxxMetadata{
+				Topology:      "source-items -> processor-handoffs -> corpus-reconciler-handoff",
+				AuthorityRule: "source and version provenance stay in source items and VText",
+			},
+		})
+	}))
+	defer sourceServer.Close()
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+
+	_, handler := testAPISetup(t)
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/sourcemaxx-status", "", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("sourcemaxx status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp globalWireSourceMaxxStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode sourcemaxx status: %v", err)
+	}
+	if resp.Status != "ok" || resp.ItemCount != 710 || resp.FetchCount != 14 {
+		t.Fatalf("unexpected status response: %+v", resp)
+	}
+	if resp.ProcessorRequestCount != 2 || resp.ReconcilerRequestCount != 1 {
+		t.Fatalf("unexpected handoff counts: %+v", resp)
+	}
+	if len(resp.ProcessorKeys) != 2 || resp.ProcessorKeys[0] != "processor:global_firehose:global:gdelt" {
+		t.Fatalf("unexpected processor keys: %+v", resp.ProcessorKeys)
+	}
+	if resp.AuthorityRule == "" || !resp.SourceServiceInternalOnly {
+		t.Fatalf("missing provenance/internal boundary metadata: %+v", resp)
+	}
+}
+
+func TestHandleGlobalWireSourceMaxxStatusReportsUnconfiguredSourceService(t *testing.T) {
+	t.Setenv("SOURCE_SERVICE_BASE_URL", "")
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+
+	_, handler := testAPISetup(t)
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/sourcemaxx-status", "", "")
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unconfigured sourcemaxx status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp globalWireSourceMaxxStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode unconfigured sourcemaxx status: %v", err)
+	}
+	if resp.Status != "unavailable" || resp.Source != "source-service" || !resp.SourceServiceInternalOnly {
+		t.Fatalf("unexpected unconfigured response: %+v", resp)
+	}
+}
+
 func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(t *testing.T) {
 	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/source-service/search" {

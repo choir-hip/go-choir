@@ -100,6 +100,25 @@ type globalWireFetchCycleResponse struct {
 	RecentCycles        []types.GlobalWireFetchCycleRun        `json:"recent_cycles,omitempty"`
 }
 
+type globalWireSourceMaxxStatusResponse struct {
+	Status                    string   `json:"status"`
+	Source                    string   `json:"source"`
+	Message                   string   `json:"message,omitempty"`
+	CycleID                   string   `json:"cycle_id,omitempty"`
+	CycleStatus               string   `json:"cycle_status,omitempty"`
+	StartedAt                 string   `json:"started_at,omitempty"`
+	EndedAt                   string   `json:"ended_at,omitempty"`
+	ItemCount                 int      `json:"item_count,omitempty"`
+	FetchCount                int      `json:"fetch_count,omitempty"`
+	ProcessorRequestCount     int      `json:"processor_request_count,omitempty"`
+	ReconcilerRequestCount    int      `json:"reconciler_request_count,omitempty"`
+	ProcessorKeys             []string `json:"processor_keys,omitempty"`
+	ReconcilerScopes          []string `json:"reconciler_scopes,omitempty"`
+	Topology                  string   `json:"topology,omitempty"`
+	AuthorityRule             string   `json:"authority_rule,omitempty"`
+	SourceServiceInternalOnly bool     `json:"source_service_internal_only"`
+}
+
 type globalWireReconciliationResponse struct {
 	Contributions         []types.GlobalWireContribution              `json:"contributions"`
 	SourceItems           map[string]types.ContentItem                `json:"source_items,omitempty"`
@@ -463,6 +482,82 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 		StyleSources: styleSources,
 		Source:       "durable-storygraph",
 	})
+}
+
+// HandleGlobalWireSourceMaxxStatus reports non-sensitive SourceMaxx aggregate
+// status through the product API while preserving the private /internal source
+// service boundary.
+func (h *APIHandler) HandleGlobalWireSourceMaxxStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	sourceClient := newSourceSearchClientFromEnv()
+	statusClient, ok := sourceClient.(sourceMaxxStatusClient)
+	if sourceClient == nil || !ok {
+		writeAPIJSON(w, http.StatusServiceUnavailable, globalWireSourceMaxxStatusResponse{
+			Status:                    "unavailable",
+			Source:                    "source-service",
+			Message:                   "Source Service is not configured for this runtime.",
+			SourceServiceInternalOnly: true,
+		})
+		return
+	}
+	resp, err := statusClient.SourceMaxxLatest(r.Context())
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadGateway, globalWireSourceMaxxStatusResponse{
+			Status:                    "unavailable",
+			Source:                    "source-service",
+			Message:                   err.Error(),
+			SourceServiceInternalOnly: true,
+		})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, globalWireSourceMaxxStatusFromAPI(resp))
+}
+
+func globalWireSourceMaxxStatusFromAPI(resp *sourceapi.SourceMaxxResponse) globalWireSourceMaxxStatusResponse {
+	if resp == nil {
+		return globalWireSourceMaxxStatusResponse{
+			Status:                    "unavailable",
+			Source:                    "source-service",
+			Message:                   "Source Service did not return SourceMaxx status.",
+			SourceServiceInternalOnly: true,
+		}
+	}
+	processorKeys := make([]string, 0, len(resp.ProcessorRequests))
+	for _, req := range resp.ProcessorRequests {
+		if strings.TrimSpace(req.ProcessorKey) != "" {
+			processorKeys = append(processorKeys, req.ProcessorKey)
+		}
+	}
+	reconcilerScopes := make([]string, 0, len(resp.ReconcilerRequests))
+	for _, req := range resp.ReconcilerRequests {
+		if strings.TrimSpace(req.Scope) != "" {
+			reconcilerScopes = append(reconcilerScopes, req.Scope)
+		}
+	}
+	status := "ok"
+	if strings.TrimSpace(resp.Cycle.Status) != "" && resp.Cycle.Status != "completed" {
+		status = resp.Cycle.Status
+	}
+	return globalWireSourceMaxxStatusResponse{
+		Status:                    status,
+		Source:                    firstNonEmptyString(resp.Provider, sourceapi.ProviderName),
+		CycleID:                   resp.Cycle.CycleID,
+		CycleStatus:               resp.Cycle.Status,
+		StartedAt:                 resp.Cycle.StartedAt,
+		EndedAt:                   resp.Cycle.EndedAt,
+		ItemCount:                 resp.Cycle.ItemCount,
+		FetchCount:                resp.Cycle.FetchCount,
+		ProcessorRequestCount:     len(resp.ProcessorRequests),
+		ReconcilerRequestCount:    len(resp.ReconcilerRequests),
+		ProcessorKeys:             processorKeys,
+		ReconcilerScopes:          reconcilerScopes,
+		Topology:                  resp.Metadata.Topology,
+		AuthorityRule:             resp.Metadata.AuthorityRule,
+		SourceServiceInternalOnly: true,
+	}
 }
 
 // HandleGlobalWireSourceSearch imports configured Source Service evidence into
