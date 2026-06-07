@@ -257,6 +257,8 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   await expect(app.locator('[data-global-wire-graph-promotion]').first()).toContainText('promoted');
   await expect(app.locator('[data-global-wire-graph-promotion]').first()).toContainText('appended source_content_id');
   await expect(app.locator('[data-global-wire-projection-review]').first()).toContainText('projection-review-required');
+  await app.locator('[data-global-wire-create-projection-draft]').first().evaluate((button) => button.click());
+  await expect(page.locator('[data-vtext-editor]').last()).toContainText('Draft state: review draft, not platform publication');
 
   const promoted = await page.evaluate(async ({ candidateId, sourceContentId }) => {
     const listRes = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', {
@@ -277,7 +279,8 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   expect(promoted.candidate.status).toBe('promoted-to-storygraph');
   expect(promoted.promotion.decision).toBe('promoted');
   expect(promoted.projectionReviews.length).toBeGreaterThanOrEqual(1);
-  expect(promoted.projectionReviews[0].status).toBe('projection-review-required');
+  const draftedReview = promoted.projectionReviews.find((item) => item.status === 'draft-created');
+  expect(draftedReview?.draft_story_doc_id).toBeTruthy();
   expect(promoted.source.content_id).toBe(queuedContribution.source_content_id);
 
   const askResponsePromise = page.waitForResponse((response) =>

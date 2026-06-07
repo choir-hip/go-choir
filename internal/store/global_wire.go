@@ -1111,8 +1111,9 @@ func (s *Store) CreateGlobalWireProjectionReview(ctx context.Context, rec types.
 		`INSERT INTO global_wire_projection_reviews (
 			owner_id, review_id, story_id, candidate_id, promotion_id,
 			source_content_id, style_id, style_doc_id, style_title,
-			projection_action, status, rationale, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			projection_action, status, rationale, draft_story_doc_id,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.OwnerID,
 		rec.ID,
 		rec.StoryID,
@@ -1125,6 +1126,7 @@ func (s *Store) CreateGlobalWireProjectionReview(ctx context.Context, rec types.
 		rec.ProjectionAction,
 		rec.Status,
 		sanitizeStoreText(rec.Rationale),
+		rec.DraftStoryDocID,
 		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	)
@@ -1142,7 +1144,8 @@ func (s *Store) ListGlobalWireProjectionReviews(ctx context.Context, ownerID, st
 	}
 	query := `SELECT owner_id, review_id, story_id, candidate_id, promotion_id,
 	                source_content_id, style_id, style_doc_id, style_title,
-	                projection_action, status, rationale, created_at, updated_at
+	                projection_action, status, rationale, draft_story_doc_id,
+	                created_at, updated_at
 	           FROM global_wire_projection_reviews
 	          WHERE owner_id = ?`
 	args := []any{ownerID}
@@ -1170,6 +1173,45 @@ func (s *Store) ListGlobalWireProjectionReviews(ctx context.Context, ownerID, st
 		return nil, fmt.Errorf("iterate global wire projection reviews: %w", err)
 	}
 	return out, nil
+}
+
+// GetGlobalWireProjectionReview returns one owner-scoped projection review.
+func (s *Store) GetGlobalWireProjectionReview(ctx context.Context, ownerID, reviewID string) (types.GlobalWireProjectionReview, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, review_id, story_id, candidate_id, promotion_id,
+		        source_content_id, style_id, style_doc_id, style_title,
+		        projection_action, status, rationale, draft_story_doc_id,
+		        created_at, updated_at
+		   FROM global_wire_projection_reviews
+		  WHERE owner_id = ? AND review_id = ?`,
+		ownerID,
+		reviewID,
+	)
+	return scanGlobalWireProjectionReview(row)
+}
+
+// MarkGlobalWireProjectionReviewDraftCreated links a projection review to the
+// ordinary VText draft created for it.
+func (s *Store) MarkGlobalWireProjectionReviewDraftCreated(ctx context.Context, ownerID, reviewID, draftDocID string) (types.GlobalWireProjectionReview, error) {
+	now := time.Now().UTC()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE global_wire_projection_reviews
+		    SET status = 'draft-created',
+		        draft_story_doc_id = ?,
+		        updated_at = ?
+		  WHERE owner_id = ? AND review_id = ?`,
+		strings.TrimSpace(draftDocID),
+		now.UTC().Format(time.RFC3339Nano),
+		ownerID,
+		reviewID,
+	)
+	if err != nil {
+		return types.GlobalWireProjectionReview{}, fmt.Errorf("mark global wire projection review draft created: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return types.GlobalWireProjectionReview{}, ErrNotFound
+	}
+	return s.GetGlobalWireProjectionReview(ctx, ownerID, reviewID)
 }
 
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
@@ -1494,6 +1536,7 @@ func scanGlobalWireProjectionReview(row interface{ Scan(...any) error }) (types.
 		&rec.ProjectionAction,
 		&rec.Status,
 		&rec.Rationale,
+		&rec.DraftStoryDocID,
 		&createdAt,
 		&updatedAt,
 	)

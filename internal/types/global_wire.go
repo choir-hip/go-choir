@@ -171,6 +171,7 @@ type GlobalWireProjectionReview struct {
 	ProjectionAction string    `json:"projection_action"`
 	Status           string    `json:"status"`
 	Rationale        string    `json:"rationale"`
+	DraftStoryDocID  string    `json:"draft_story_doc_id,omitempty"`
 	CreatedAt        time.Time `json:"created_at,omitempty"`
 	UpdatedAt        time.Time `json:"updated_at,omitempty"`
 }

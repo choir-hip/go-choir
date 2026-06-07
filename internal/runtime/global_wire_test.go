@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -499,5 +500,51 @@ func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(
 	}
 	if len(promotedList.ProjectionReviews) != len(promoteResp.ProjectionReviews) {
 		t.Fatalf("projection reviews missing from reconciliation list: %+v", promotedList.ProjectionReviews)
+	}
+
+	draftBody := `{"review_id":"` + promoteResp.ProjectionReviews[0].ID + `"}`
+	draftW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/projection-reviews", draftBody, "user-alpha")
+	if draftW.Code != http.StatusCreated {
+		t.Fatalf("create projection draft status = %d body=%s", draftW.Code, draftW.Body.String())
+	}
+	var draftResp globalWireProjectionReviewDraftResponse
+	if err := json.NewDecoder(draftW.Body).Decode(&draftResp); err != nil {
+		t.Fatalf("decode projection draft: %v", err)
+	}
+	if draftResp.Review.Status != "draft-created" ||
+		draftResp.Review.DraftStoryDocID != draftResp.Document.DocID ||
+		draftResp.Document.CurrentRevisionID != draftResp.Revision.RevisionID {
+		t.Fatalf("projection draft response missing lineage: %+v", draftResp)
+	}
+	if draftResp.Revision.AuthorKind != types.AuthorAppAgent ||
+		!strings.Contains(draftResp.Revision.Content, "Draft state: review draft, not platform publication") ||
+		!strings.Contains(draftResp.Revision.Content, contribution.SourceContentID) {
+		t.Fatalf("projection draft VText content/authorship invalid: %+v", draftResp.Revision)
+	}
+	var draftCitations []types.Citation
+	if err := json.Unmarshal(draftResp.Revision.Citations, &draftCitations); err != nil {
+		t.Fatalf("decode projection draft citations: %v", err)
+	}
+	if len(draftCitations) < 5 {
+		t.Fatalf("projection draft citations too sparse: %+v", draftCitations)
+	}
+
+	draftedListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
+	if draftedListW.Code != http.StatusOK {
+		t.Fatalf("list drafted reconciliation status = %d body=%s", draftedListW.Code, draftedListW.Body.String())
+	}
+	var draftedList globalWireReconciliationResponse
+	if err := json.NewDecoder(draftedListW.Body).Decode(&draftedList); err != nil {
+		t.Fatalf("decode drafted list: %v", err)
+	}
+	var draftedReview types.GlobalWireProjectionReview
+	for _, rec := range draftedList.ProjectionReviews {
+		if rec.ID == draftResp.Review.ID {
+			draftedReview = rec
+			break
+		}
+	}
+	if draftedReview.Status != "draft-created" || draftedReview.DraftStoryDocID == "" {
+		t.Fatalf("drafted projection review missing from reconciliation list: %+v", draftedList.ProjectionReviews)
 	}
 }

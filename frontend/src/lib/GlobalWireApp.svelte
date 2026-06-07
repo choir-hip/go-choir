@@ -648,6 +648,41 @@
     return projectionReviews.filter((review) => review.candidate_id === id);
   }
 
+  async function createProjectionDraft(review) {
+    if (!authenticated || !review?.id) return;
+    reconciliationBusyId = `${review.id}:draft`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/projection-reviews', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ review_id: review.id }),
+      });
+      if (!response.ok) throw new Error(`Projection draft failed: ${response.status}`);
+      const payload = await response.json();
+      projectionReviews = projectionReviews.map((item) => (
+        item.id === review.id ? payload.review : item
+      ));
+      contributionStatus = 'Projection draft VText created';
+      if (payload.document?.doc_id) {
+        launchVText({
+          title: payload.document.title || `Draft projection: ${selectedStory.headline}`,
+          content: payload.revision?.content || '',
+          createdFrom: 'global_wire_projection_review_draft',
+          sourcePath: `global-wire/projection-drafts/${review.id}.vtext`,
+          docId: payload.document.doc_id,
+          createInitialVersion: false,
+        });
+      }
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || 'Projection draft failed';
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
   async function reconcileContribution(item, decision) {
     if (!authenticated || !item?.id) return;
     reconciliationBusyId = `${item.id}:${decision}`;
@@ -1011,6 +1046,31 @@
                               <small data-global-wire-projection-review>
                                 {review.status}: {review.style_title || review.style_id}
                               </small>
+                              {#if review.draft_story_doc_id}
+                                <button
+                                  type="button"
+                                  on:click={() => launchVText({
+                                    title: `Draft projection: ${selectedStory.headline}`,
+                                    content: '',
+                                    createdFrom: 'global_wire_projection_review_draft',
+                                    sourcePath: `global-wire/projection-drafts/${review.id}.vtext`,
+                                    docId: review.draft_story_doc_id,
+                                    createInitialVersion: false,
+                                  })}
+                                  data-global-wire-open-projection-draft
+                                >
+                                  Open draft
+                                </button>
+                              {:else if authenticated}
+                                <button
+                                  type="button"
+                                  on:click={() => createProjectionDraft(review)}
+                                  disabled={reconciliationBusyId !== ''}
+                                  data-global-wire-create-projection-draft
+                                >
+                                  Draft VText
+                                </button>
+                              {/if}
                             {/each}
                           </div>
                         {/if}

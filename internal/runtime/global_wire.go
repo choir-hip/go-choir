@@ -95,6 +95,16 @@ type globalWireGraphCandidateReviewRequest struct {
 	Note        string `json:"note,omitempty"`
 }
 
+type globalWireProjectionReviewDraftRequest struct {
+	ReviewID string `json:"review_id"`
+}
+
+type globalWireProjectionReviewDraftResponse struct {
+	Review   types.GlobalWireProjectionReview `json:"review"`
+	Document types.Document                   `json:"document"`
+	Revision types.Revision                   `json:"revision"`
+}
+
 type globalWireGraphCandidateReviewResponse struct {
 	Candidate         types.GlobalWireGraphUpdateCandidate   `json:"candidate"`
 	Promotion         types.GlobalWireGraphPromotionDecision `json:"promotion"`
@@ -685,6 +695,55 @@ func normalizeGlobalWirePromotionDecision(value string) string {
 	}
 }
 
+// HandleGlobalWireProjectionReviews creates ordinary VText drafts from
+// projection-review obligations without publishing or mutating platform stories.
+func (h *APIHandler) HandleGlobalWireProjectionReviews(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req globalWireProjectionReviewDraftRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid projection review request"})
+		return
+	}
+	req.ReviewID = strings.TrimSpace(req.ReviewID)
+	if req.ReviewID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "review_id is required"})
+		return
+	}
+	review, err := h.rt.Store().GetGlobalWireProjectionReview(r.Context(), ownerID, req.ReviewID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "projection review not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load projection review"})
+		return
+	}
+	doc, rev, review, err := h.ensureGlobalWireProjectionReviewDraft(r, ownerID, review)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "projection review source, story, or draft not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create projection draft"})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, globalWireProjectionReviewDraftResponse{
+		Review:   review,
+		Document: doc,
+		Revision: rev,
+	})
+}
+
 func (h *APIHandler) applyGlobalWireGraphCandidate(r *http.Request, ownerID string, candidate types.GlobalWireGraphUpdateCandidate) (types.GlobalWireStory, string, error) {
 	if strings.TrimSpace(candidate.SourceContentID) == "" {
 		return types.GlobalWireStory{}, "", store.ErrNotFound
@@ -869,6 +928,164 @@ func (h *APIHandler) createGlobalWireProjectionReviews(r *http.Request, ownerID 
 		reviews = append(reviews, rec)
 	}
 	return reviews, nil
+}
+
+func (h *APIHandler) ensureGlobalWireProjectionReviewDraft(r *http.Request, ownerID string, review types.GlobalWireProjectionReview) (types.Document, types.Revision, types.GlobalWireProjectionReview, error) {
+	if strings.TrimSpace(review.DraftStoryDocID) != "" {
+		doc, err := h.rt.Store().GetDocument(r.Context(), review.DraftStoryDocID, ownerID)
+		if err != nil {
+			return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+		}
+		rev, err := h.rt.Store().GetRevision(r.Context(), doc.CurrentRevisionID, ownerID)
+		if err != nil {
+			return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+		}
+		return doc, rev, review, nil
+	}
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, review.StoryID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+	}
+	var sourceItem *types.ContentItem
+	if strings.TrimSpace(review.SourceContentID) != "" {
+		item, err := h.rt.Store().GetContentItem(r.Context(), ownerID, review.SourceContentID)
+		if err != nil {
+			return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+		}
+		sourceItem = &item
+	}
+	now := time.Now().UTC()
+	doc := types.Document{
+		DocID:     uuid.NewString(),
+		OwnerID:   ownerID,
+		Title:     "Draft projection: " + story.Headline + " - " + firstNonEmptyString(review.StyleTitle, review.StyleID),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := h.rt.Store().CreateDocument(r.Context(), doc); err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+	}
+	citations, err := json.Marshal(globalWireProjectionDraftCitations(review, story, sourceItem))
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"created_from":      "global_wire_projection_review_draft",
+		"storygraph_id":     story.ID,
+		"projection_review": review.ID,
+		"candidate_id":      review.CandidateID,
+		"promotion_id":      review.PromotionID,
+		"source_content_id": review.SourceContentID,
+		"style_id":          review.StyleID,
+		"style_doc_id":      review.StyleDocID,
+		"draft_state":       "review-draft-not-published",
+	})
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+	}
+	rev := types.Revision{
+		RevisionID:  uuid.NewString(),
+		DocID:       doc.DocID,
+		OwnerID:     ownerID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "Global Wire",
+		Content:     globalWireProjectionDraftVTextContent(review, story, sourceItem),
+		Citations:   citations,
+		Metadata:    metadata,
+		CreatedAt:   now,
+	}
+	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+	}
+	sourcePath := "global-wire/projection-drafts/" + review.ID + ".vtext"
+	if err := h.rt.Store().UpsertDocumentAlias(r.Context(), ownerID, sourcePath, doc.DocID, now); err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+	}
+	doc, err = h.rt.Store().GetDocument(r.Context(), doc.DocID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+	}
+	rev, err = h.rt.Store().GetRevision(r.Context(), rev.RevisionID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+	}
+	updatedReview, err := h.rt.Store().MarkGlobalWireProjectionReviewDraftCreated(r.Context(), ownerID, review.ID, doc.DocID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
+	}
+	return doc, rev, updatedReview, nil
+}
+
+func globalWireProjectionDraftCitations(review types.GlobalWireProjectionReview, story types.GlobalWireStory, sourceItem *types.ContentItem) []types.Citation {
+	citations := []types.Citation{
+		{ID: "projection-review", Type: "global_wire_projection_review", Value: review.ID, Label: "Projection review"},
+		{ID: "storygraph-node", Type: "storygraph", Value: story.ID, Label: story.Headline},
+		{ID: "graph-candidate", Type: "global_wire_graph_candidate", Value: review.CandidateID, Label: "Graph update candidate"},
+		{ID: "promotion-decision", Type: "global_wire_graph_promotion", Value: review.PromotionID, Label: "Promotion decision"},
+	}
+	if strings.TrimSpace(review.StyleDocID) != "" {
+		citations = append(citations, types.Citation{ID: "style-source", Type: "vtext", Value: review.StyleDocID, Label: firstNonEmptyString(review.StyleTitle, review.StyleID)})
+	} else if strings.TrimSpace(review.StyleID) != "" {
+		citations = append(citations, types.Citation{ID: "style-source", Type: "style_vtext", Value: review.StyleID, Label: firstNonEmptyString(review.StyleTitle, review.StyleID)})
+	}
+	if sourceItem != nil {
+		citations = append(citations, types.Citation{ID: "promoted-source", Type: "content_item", Value: sourceItem.ContentID, Label: sourceItem.Title})
+	}
+	return citations
+}
+
+func globalWireProjectionDraftVTextContent(review types.GlobalWireProjectionReview, story types.GlobalWireStory, sourceItem *types.ContentItem) string {
+	projection := strings.TrimSpace(story.Projections[review.StyleID])
+	if projection == "" {
+		projection = strings.TrimSpace(story.Projections["wire-style"])
+	}
+	sourceTitle := "No promoted source content item was linked."
+	sourceBody := ""
+	if sourceItem != nil {
+		sourceTitle = sourceItem.Title
+		sourceBody = strings.TrimSpace(sourceItem.TextContent)
+	}
+	sourceContentID := strings.TrimSpace(review.SourceContentID)
+	if sourceContentID == "" && sourceItem != nil {
+		sourceContentID = sourceItem.ContentID
+	}
+	lines := []string{
+		"# Draft projection: " + story.Headline,
+		"",
+		"StoryGraph id: " + story.ID,
+		"Style.vtext source: " + firstNonEmptyString(review.StyleTitle, review.StyleID),
+		"Projection review id: " + review.ID,
+		"Graph candidate id: " + review.CandidateID,
+		"Promotion decision id: " + review.PromotionID,
+		"Draft state: review draft, not platform publication",
+		"",
+		"## Current Projection Baseline",
+		"",
+		projection,
+		"",
+		"## Newly Promoted Evidence",
+		"",
+		"Promoted source content id: " + firstNonEmptyString(sourceContentID, "none"),
+		"",
+		"- " + sourceTitle,
+	}
+	if sourceBody != "" {
+		lines = append(lines, "", sourceBody)
+	}
+	lines = append(lines,
+		"",
+		"## Review Rationale",
+		"",
+		review.Rationale,
+		"",
+		"## Draft Revision Notes",
+		"",
+		"- Re-check salience, uncertainty, and source ordering for this Style.vtext projection.",
+		"- Preserve lead, supporting, contrary, and context tiers.",
+		"- Do not invent evidence or hide contrary evidence.",
+		"- This draft does not mutate the platform StoryGraph or publish a revised platform story.",
+	)
+	return strings.Join(lines, "\n")
 }
 
 func defaultGlobalWireStyleSourcesForRuntime() []types.GlobalWireStyleSource {
