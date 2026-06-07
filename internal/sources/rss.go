@@ -82,8 +82,12 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 		return PollResult{Fetch: fetch}, fmt.Errorf("failed to parse feed: %w", err)
 	}
 
-	items := make([]Item, 0, len(feed.Items))
+	maxItems := source.EffectiveMaxItemsPerPoll(100)
+	items := make([]Item, 0, minInt(len(feed.Items), maxItems))
 	for _, feedItem := range feed.Items {
+		if len(items) >= maxItems {
+			break
+		}
 		published := time.Now()
 		if parsed, ok := parseFeedTime(feedItem.Published); ok {
 			published = parsed
@@ -196,4 +200,11 @@ func firstString(values []string) string {
 		}
 	}
 	return ""
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

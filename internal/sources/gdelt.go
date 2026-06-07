@@ -129,6 +129,7 @@ func (f *GDELTFetcher) fetchGKG(ctx context.Context, url string, source *Source,
 	}
 
 	var items []Item
+	maxItems := source.EffectiveMaxItemsPerPoll(500)
 	for _, file := range r.File {
 		if strings.HasSuffix(file.Name, ".csv") {
 			rc, err := file.Open()
@@ -179,11 +180,13 @@ func (f *GDELTFetcher) fetchGKG(ctx context.Context, url string, source *Source,
 				}
 				item.ContentHash = ContentHash(item.Title, item.Body, item.CanonicalURL)
 				items = append(items, item)
-
-				if len(items) >= 100 { // Limit for toy version
+				if len(items) >= maxItems {
 					break
 				}
 			}
+		}
+		if len(items) >= maxItems {
+			break
 		}
 	}
 

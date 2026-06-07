@@ -30,6 +30,7 @@ type Source struct {
 	Jurisdictions       []string   `json:"jurisdictions,omitempty"`
 	Tier                string     `json:"tier,omitempty"`
 	PollIntervalSeconds int        `json:"poll_interval_seconds"`
+	MaxItemsPerPoll     int        `json:"max_items_per_poll,omitempty"`
 	RateLimit           string     `json:"rate_limit,omitempty"`
 	ConditionalMode     string     `json:"conditional_request_mode,omitempty"`
 	UserAgent           string     `json:"user_agent,omitempty"`
@@ -44,6 +45,16 @@ type Source struct {
 	LastPolled          time.Time  `json:"last_polled,omitempty"`
 	LastETag            string     `json:"last_etag,omitempty"`
 	LastModified        string     `json:"last_modified,omitempty"`
+}
+
+func (s Source) EffectiveMaxItemsPerPoll(fallback int) int {
+	if s.MaxItemsPerPoll > 0 {
+		return s.MaxItemsPerPoll
+	}
+	if fallback > 0 {
+		return fallback
+	}
+	return 100
 }
 
 type Item struct {

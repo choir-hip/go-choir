@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -124,5 +125,61 @@ func TestSourceServiceAPIHealthReportsLedgerCounts(t *testing.T) {
 	}
 	if health.Status != "ok" || health.ItemCount != 1 || health.FetchCount != 1 {
 		t.Fatalf("unexpected health: %+v", health)
+	}
+}
+
+func TestSourceServiceAPISourceMaxxLatestReportsAgentHandoffs(t *testing.T) {
+	ctx := context.Background()
+	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	defer store.Close()
+
+	cycleID, err := store.StartCycle(ctx)
+	if err != nil {
+		t.Fatalf("start cycle: %v", err)
+	}
+	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	items := []sources.Item{{
+		ID:         "srcitem_source_maxx",
+		SourceID:   "gdelt:15min",
+		SourceType: sources.SourceTypeGDELT,
+		Title:      "SourceMaxx event",
+		Verticals:  []string{"supply_chain"},
+		Region:     "global",
+	}}
+	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, now)
+	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
+		t.Fatalf("save processors: %v", err)
+	}
+	if err := store.SaveReconcilerRequests(ctx, handoff.ReconcilerRequests); err != nil {
+		t.Fatalf("save reconcilers: %v", err)
+	}
+	if err := store.FinishCycle(ctx, cycleID, "completed", len(items), 1, nil); err != nil {
+		t.Fatalf("finish cycle: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/source-service/sourcemaxx/latest", nil)
+	rec := httptest.NewRecorder()
+	handleSourceServiceSourceMaxxLatest(store).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("sourcemaxx latest status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp sourceapi.SourceMaxxResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode sourcemaxx latest: %v", err)
+	}
+	if resp.Provider != sourceapi.ProviderName || resp.Cycle.CycleID != cycleID {
+		t.Fatalf("unexpected sourcemaxx identity: %+v", resp)
+	}
+	if len(resp.ProcessorRequests) != 1 || resp.ProcessorRequests[0].SourceItemIDs[0] != "srcitem_source_maxx" {
+		t.Fatalf("unexpected processor requests: %+v", resp.ProcessorRequests)
+	}
+	if len(resp.ReconcilerRequests) != 1 || len(resp.ReconcilerRequests[0].ProcessorRequestIDs) != 1 {
+		t.Fatalf("unexpected reconciler requests: %+v", resp.ReconcilerRequests)
+	}
+	if resp.Metadata.AuthorityRule == "" {
+		t.Fatalf("missing authority metadata: %+v", resp.Metadata)
 	}
 }

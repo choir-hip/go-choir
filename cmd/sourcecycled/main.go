@@ -119,6 +119,7 @@ func startSourceServiceAPI(ctx context.Context, store *cycle.Storage) *http.Serv
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/source-service/health", handleSourceServiceHealth(store))
 	mux.HandleFunc("/internal/source-service/search", handleSourceServiceSearch(store))
+	mux.HandleFunc("/internal/source-service/sourcemaxx/latest", handleSourceServiceSourceMaxxLatest(store))
 	mux.HandleFunc("/internal/source-service/items/", handleSourceServiceItem(store))
 	server := &http.Server{
 		Addr:              sourceServiceAddr(),
@@ -189,6 +190,30 @@ func handleSourceServiceSearch(store *cycle.Storage) http.HandlerFunc {
 	}
 }
 
+func handleSourceServiceSourceMaxxLatest(store *cycle.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		summary, err := store.LatestCycleSummary(r.Context())
+		if err != nil {
+			http.Error(w, "latest sourcemaxx cycle: "+err.Error(), http.StatusNotFound)
+			return
+		}
+		writeSourceServiceJSON(w, http.StatusOK, sourceapi.SourceMaxxResponse{
+			Provider:           sourceapi.ProviderName,
+			Cycle:              sourceAPICycleSummary(summary),
+			ProcessorRequests:  sourceAPIProcessorRequests(summary.ProcessorRequests),
+			ReconcilerRequests: sourceAPIReconcilerRequests(summary.ReconcilerRequests),
+			Metadata: sourceapi.SourceMaxxMetadata{
+				Topology:      "source-items -> processor-handoffs -> corpus-reconciler-handoff",
+				AuthorityRule: "source and version provenance stay in source items and VText; handoffs are queues, not publication authority",
+			},
+		})
+	}
+}
+
 func handleSourceServiceItem(store *cycle.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -210,6 +235,58 @@ func handleSourceServiceItem(store *cycle.Storage) http.HandlerFunc {
 			Item:     sourceAPIItemResult(1, item),
 		})
 	}
+}
+
+func sourceAPICycleSummary(summary cycle.CycleSummary) sourceapi.CycleSummary {
+	return sourceapi.CycleSummary{
+		CycleID:    summary.CycleID,
+		StartedAt:  formatSourceTime(summary.StartedAt),
+		EndedAt:    formatSourceTime(summary.EndedAt),
+		Status:     summary.Status,
+		ItemCount:  summary.ItemCount,
+		FetchCount: summary.FetchCount,
+		Error:      summary.Error,
+	}
+}
+
+func sourceAPIProcessorRequests(requests []cycle.ProcessorRequest) []sourceapi.ProcessorRequest {
+	out := make([]sourceapi.ProcessorRequest, 0, len(requests))
+	for _, req := range requests {
+		out = append(out, sourceapi.ProcessorRequest{
+			RequestID:     req.RequestID,
+			CycleID:       req.CycleID,
+			ProcessorKey:  req.ProcessorKey,
+			Status:        req.Status,
+			SourceItemIDs: req.SourceItemIDs,
+			SourceCount:   req.SourceCount,
+			SourceTypes:   req.SourceTypes,
+			Verticals:     req.Verticals,
+			Regions:       req.Regions,
+			ContinuityRef: req.ContinuityRef,
+			Prompt:        req.Prompt,
+			CreatedAt:     formatSourceTime(req.CreatedAt),
+			UpdatedAt:     formatSourceTime(req.UpdatedAt),
+		})
+	}
+	return out
+}
+
+func sourceAPIReconcilerRequests(requests []cycle.ReconcilerRequest) []sourceapi.ReconcilerRequest {
+	out := make([]sourceapi.ReconcilerRequest, 0, len(requests))
+	for _, req := range requests {
+		out = append(out, sourceapi.ReconcilerRequest{
+			RequestID:           req.RequestID,
+			CycleID:             req.CycleID,
+			Status:              req.Status,
+			Scope:               req.Scope,
+			SourceItemIDs:       req.SourceItemIDs,
+			ProcessorRequestIDs: req.ProcessorRequestIDs,
+			Prompt:              req.Prompt,
+			CreatedAt:           formatSourceTime(req.CreatedAt),
+			UpdatedAt:           formatSourceTime(req.UpdatedAt),
+		})
+	}
+	return out
 }
 
 func sourceAPIItemResult(rank int, item sources.Item) sourceapi.ItemResult {
@@ -304,46 +381,26 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 	}
 	_ = store.RecordCycleEvent(ctx, cycleID, "", "items_saved", "source items saved", map[string]any{"item_count": len(items), "fetch_count": len(pollResult.Fetches)})
 
-	// Phase 3: Vertical Scoring and Clustering
-	clusters := engine.Cluster(items)
-	log.Printf("Formed %d clusters based on verticals", len(clusters))
-
-	// Phase 4: LLM Synthesis (The 4,000-word Global Wire)
-	log.Println("Phase 4: LLM Synthesis...")
-	synth, err := cycle.NewSynthesizer()
-	if err != nil {
-		log.Printf("Failed to initialize synthesizer: %v", err)
-		_ = store.RecordCycleEvent(ctx, cycleID, "", "synthesis_skipped", "synthesizer unavailable; source ledger persisted", map[string]any{"error": err.Error()})
-		_ = store.FinishCycle(ctx, cycleID, "completed_without_synthesis", len(items), len(pollResult.Fetches), nil)
-		return
-	}
-
-	issueContent, err := synth.Synthesize(ctx, clusters)
-	if err != nil {
-		log.Printf("Synthesis failed: %v", err)
-		_ = store.RecordCycleEvent(ctx, cycleID, "", "synthesis_failed", "source ledger persisted; synthesis failed", map[string]any{"error": err.Error()})
-		_ = store.FinishCycle(ctx, cycleID, "completed_without_synthesis", len(items), len(pollResult.Fetches), nil)
-		return
-	}
-	log.Printf("Successfully synthesized %d-character issue", len(issueContent))
-
-	// Phase 5: Artifact Storage
-	log.Println("Phase 5: Artifact Storage...")
-
-	var itemIDs []string
-	for _, item := range items {
-		itemIDs = append(itemIDs, item.ID)
-	}
-
-	if err := store.SaveIssue(issueContent, itemIDs, synth.Model, 0); err != nil {
-		log.Printf("Failed to save issue: %v", err)
+	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, time.Now().UTC())
+	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
+		log.Printf("Failed to save processor requests: %v", err)
 		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
 		return
 	}
+	if err := store.SaveReconcilerRequests(ctx, handoff.ReconcilerRequests); err != nil {
+		log.Printf("Failed to save reconciler requests: %v", err)
+		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
+		return
+	}
+	_ = store.RecordCycleEvent(ctx, cycleID, "", "sourcemaxx_handoffs_queued", "source items routed to processor and reconciler handoffs", map[string]any{
+		"processor_request_count":  len(handoff.ProcessorRequests),
+		"reconciler_request_count": len(handoff.ReconcilerRequests),
+		"source_item_count":        len(items),
+	})
 
 	cycleDuration := time.Since(cycleStartTime)
 	_ = store.RecordCycleEvent(ctx, cycleID, "", "cycle_completed", "source cycle completed", map[string]any{"duration_ms": cycleDuration.Milliseconds(), "item_count": len(items), "fetch_count": len(pollResult.Fetches)})
 	_ = store.FinishCycle(ctx, cycleID, "completed", len(items), len(pollResult.Fetches), nil)
 	log.Printf("Cycle completed in %v", cycleDuration)
-	log.Printf("--- LATEST GLOBAL WIRE ISSUE ---\n%s\n--- END ISSUE ---", issueContent)
+	log.Printf("Queued %d processor request(s) and %d reconciler request(s)", len(handoff.ProcessorRequests), len(handoff.ReconcilerRequests))
 }

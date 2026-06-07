@@ -53,6 +53,7 @@ func createTables(db *sql.DB) error {
 			jurisdictions              TEXT NOT NULL DEFAULT '[]',
 			tier                       TEXT NOT NULL DEFAULT '',
 			poll_interval_seconds      INTEGER NOT NULL DEFAULT 900,
+			max_items_per_poll         INTEGER NOT NULL DEFAULT 0,
 			rate_limit                 TEXT NOT NULL DEFAULT '',
 			conditional_request_mode   TEXT NOT NULL DEFAULT '',
 			user_agent                 TEXT NOT NULL DEFAULT '',
@@ -139,6 +140,34 @@ func createTables(db *sql.DB) error {
 			model       TEXT,
 			tokens      INTEGER
 		)`,
+		`CREATE TABLE IF NOT EXISTS processor_requests (
+			request_id       TEXT PRIMARY KEY,
+			cycle_id         TEXT NOT NULL,
+			processor_key    TEXT NOT NULL,
+			status           TEXT NOT NULL,
+			source_item_ids   TEXT NOT NULL DEFAULT '[]',
+			source_count      INTEGER NOT NULL DEFAULT 0,
+			source_types_json TEXT NOT NULL DEFAULT '[]',
+			verticals_json    TEXT NOT NULL DEFAULT '[]',
+			regions_json      TEXT NOT NULL DEFAULT '[]',
+			continuity_ref    TEXT NOT NULL DEFAULT '',
+			prompt            TEXT NOT NULL DEFAULT '',
+			created_at        TEXT NOT NULL,
+			updated_at        TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_processor_requests_cycle ON processor_requests(cycle_id, processor_key)`,
+		`CREATE TABLE IF NOT EXISTS reconciler_requests (
+			request_id                 TEXT PRIMARY KEY,
+			cycle_id                   TEXT NOT NULL,
+			status                     TEXT NOT NULL,
+			scope                      TEXT NOT NULL,
+			source_item_ids            TEXT NOT NULL DEFAULT '[]',
+			processor_request_ids      TEXT NOT NULL DEFAULT '[]',
+			prompt                     TEXT NOT NULL DEFAULT '',
+			created_at                 TEXT NOT NULL,
+			updated_at                 TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_reconciler_requests_cycle ON reconciler_requests(cycle_id, scope)`,
 	}
 
 	for _, q := range queries {
@@ -156,6 +185,7 @@ func migrateTables(db *sql.DB) error {
 		`ALTER TABLE sources ADD COLUMN jurisdictions TEXT NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE sources ADD COLUMN tier TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE sources ADD COLUMN poll_interval_seconds INTEGER NOT NULL DEFAULT 900`,
+		`ALTER TABLE sources ADD COLUMN max_items_per_poll INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE sources ADD COLUMN rate_limit TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE sources ADD COLUMN conditional_request_mode TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE sources ADD COLUMN user_agent TEXT NOT NULL DEFAULT ''`,
@@ -188,6 +218,46 @@ func migrateTables(db *sql.DB) error {
 	return nil
 }
 
+type ProcessorRequest struct {
+	RequestID     string
+	CycleID       string
+	ProcessorKey  string
+	Status        string
+	SourceItemIDs []string
+	SourceCount   int
+	SourceTypes   []string
+	Verticals     []string
+	Regions       []string
+	ContinuityRef string
+	Prompt        string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type ReconcilerRequest struct {
+	RequestID           string
+	CycleID             string
+	Status              string
+	Scope               string
+	SourceItemIDs       []string
+	ProcessorRequestIDs []string
+	Prompt              string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+type CycleSummary struct {
+	CycleID            string
+	StartedAt          time.Time
+	EndedAt            time.Time
+	Status             string
+	ItemCount          int
+	FetchCount         int
+	Error              string
+	ProcessorRequests  []ProcessorRequest
+	ReconcilerRequests []ReconcilerRequest
+}
+
 func (s *Storage) Close() error {
 	if s == nil || s.DB == nil {
 		return nil
@@ -206,16 +276,16 @@ func (s *Storage) SaveSources(registry *sources.Registry) error {
 	defer tx.Rollback()
 	stmt, err := tx.Prepare(`INSERT INTO sources (
 		id, type, url, name, verticals, languages, regions, jurisdictions, tier,
-		poll_interval_seconds, rate_limit, conditional_request_mode, user_agent,
+		poll_interval_seconds, max_items_per_poll, rate_limit, conditional_request_mode, user_agent,
 		tos_class, robots_policy, auth_policy, store_body_policy, retention_days,
 		official, source_standing, status, last_polled, last_etag, last_modified, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(id) DO UPDATE SET
 		type=excluded.type, url=excluded.url, name=excluded.name,
 		verticals=excluded.verticals, languages=excluded.languages,
 		regions=excluded.regions, jurisdictions=excluded.jurisdictions,
 		tier=excluded.tier, poll_interval_seconds=excluded.poll_interval_seconds,
-		rate_limit=excluded.rate_limit, conditional_request_mode=excluded.conditional_request_mode,
+		max_items_per_poll=excluded.max_items_per_poll, rate_limit=excluded.rate_limit, conditional_request_mode=excluded.conditional_request_mode,
 		user_agent=excluded.user_agent, tos_class=excluded.tos_class,
 		robots_policy=excluded.robots_policy, auth_policy=excluded.auth_policy,
 		store_body_policy=excluded.store_body_policy, retention_days=excluded.retention_days,
@@ -239,7 +309,7 @@ func (s *Storage) SaveSources(registry *sources.Registry) error {
 		if _, err := stmt.Exec(
 			source.ID, source.Type, source.URL, source.Name,
 			mustJSON(source.Verticals), mustJSON(source.Languages), mustJSON(source.Regions), mustJSON(source.Jurisdictions),
-			source.Tier, source.PollIntervalSeconds, source.RateLimit, source.ConditionalMode,
+			source.Tier, source.PollIntervalSeconds, source.MaxItemsPerPoll, source.RateLimit, source.ConditionalMode,
 			source.EffectiveUserAgent(registry.UserAgent), source.TOSClass, source.RobotsPolicy,
 			source.AuthPolicy, source.StoreBodyPolicy, source.RetentionDays, boolInt(source.Official),
 			source.SourceStanding, status, formatTime(source.LastPolled), source.LastETag, source.LastModified, now,
@@ -360,6 +430,170 @@ func (s *Storage) RecordCycleEvent(ctx context.Context, cycleID, sourceID, kind,
 	_, err := s.DB.ExecContext(ctx, `INSERT INTO cycle_events (event_id, cycle_id, source_id, kind, message, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		eventID, cycleID, sourceID, kind, message, mustJSON(metadata), formatTime(now))
 	return err
+}
+
+func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []ProcessorRequest) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO processor_requests (
+		request_id, cycle_id, processor_key, status, source_item_ids, source_count,
+		source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, req := range requests {
+		if strings.TrimSpace(req.RequestID) == "" || strings.TrimSpace(req.CycleID) == "" || strings.TrimSpace(req.ProcessorKey) == "" {
+			return fmt.Errorf("processor request id, cycle id, and processor key are required")
+		}
+		status := strings.TrimSpace(req.Status)
+		if status == "" {
+			status = "queued"
+		}
+		now := time.Now().UTC()
+		createdAt := req.CreatedAt
+		if createdAt.IsZero() {
+			createdAt = now
+		}
+		updatedAt := req.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = now
+		}
+		sourceCount := req.SourceCount
+		if sourceCount == 0 {
+			sourceCount = len(req.SourceItemIDs)
+		}
+		if _, err := stmt.ExecContext(ctx, req.RequestID, req.CycleID, req.ProcessorKey, status,
+			mustJSON(req.SourceItemIDs), sourceCount, mustJSON(req.SourceTypes), mustJSON(req.Verticals),
+			mustJSON(req.Regions), req.ContinuityRef, req.Prompt, formatTime(createdAt), formatTime(updatedAt)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Storage) SaveReconcilerRequests(ctx context.Context, requests []ReconcilerRequest) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO reconciler_requests (
+		request_id, cycle_id, status, scope, source_item_ids, processor_request_ids, prompt, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, req := range requests {
+		if strings.TrimSpace(req.RequestID) == "" || strings.TrimSpace(req.CycleID) == "" || strings.TrimSpace(req.Scope) == "" {
+			return fmt.Errorf("reconciler request id, cycle id, and scope are required")
+		}
+		status := strings.TrimSpace(req.Status)
+		if status == "" {
+			status = "queued"
+		}
+		now := time.Now().UTC()
+		createdAt := req.CreatedAt
+		if createdAt.IsZero() {
+			createdAt = now
+		}
+		updatedAt := req.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = now
+		}
+		if _, err := stmt.ExecContext(ctx, req.RequestID, req.CycleID, status, req.Scope,
+			mustJSON(req.SourceItemIDs), mustJSON(req.ProcessorRequestIDs), req.Prompt,
+			formatTime(createdAt), formatTime(updatedAt)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Storage) ListProcessorRequests(ctx context.Context, cycleID string, limit int) ([]ProcessorRequest, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	where := ""
+	args := []any{}
+	if strings.TrimSpace(cycleID) != "" {
+		where = " WHERE cycle_id = ?"
+		args = append(args, strings.TrimSpace(cycleID))
+	}
+	args = append(args, limit)
+	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, processor_key, status, source_item_ids,
+		source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
+		FROM processor_requests`+where+` ORDER BY created_at DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ProcessorRequest
+	for rows.Next() {
+		req, err := scanProcessorRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, req)
+	}
+	return out, rows.Err()
+}
+
+func (s *Storage) ListReconcilerRequests(ctx context.Context, cycleID string, limit int) ([]ReconcilerRequest, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	where := ""
+	args := []any{}
+	if strings.TrimSpace(cycleID) != "" {
+		where = " WHERE cycle_id = ?"
+		args = append(args, strings.TrimSpace(cycleID))
+	}
+	args = append(args, limit)
+	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, status, scope, source_item_ids,
+		processor_request_ids, prompt, created_at, updated_at
+		FROM reconciler_requests`+where+` ORDER BY created_at DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ReconcilerRequest
+	for rows.Next() {
+		req, err := scanReconcilerRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, req)
+	}
+	return out, rows.Err()
+}
+
+func (s *Storage) LatestCycleSummary(ctx context.Context) (CycleSummary, error) {
+	row := s.DB.QueryRowContext(ctx, `SELECT cycle_id, started_at, ended_at, status, item_count, fetch_count, error
+		FROM cycles ORDER BY started_at DESC LIMIT 1`)
+	var summary CycleSummary
+	var startedAt, endedAt string
+	if err := row.Scan(&summary.CycleID, &startedAt, &endedAt, &summary.Status, &summary.ItemCount, &summary.FetchCount, &summary.Error); err != nil {
+		return CycleSummary{}, err
+	}
+	summary.StartedAt = parseStoredTime(startedAt)
+	summary.EndedAt = parseStoredTime(endedAt)
+	processors, err := s.ListProcessorRequests(ctx, summary.CycleID, 200)
+	if err != nil {
+		return CycleSummary{}, err
+	}
+	reconcilers, err := s.ListReconcilerRequests(ctx, summary.CycleID, 200)
+	if err != nil {
+		return CycleSummary{}, err
+	}
+	summary.ProcessorRequests = processors
+	summary.ReconcilerRequests = reconcilers
+	return summary, nil
 }
 
 func (s *Storage) CountItems(ctx context.Context) (int, error) {
@@ -485,6 +719,37 @@ func (s *Storage) GetItem(ctx context.Context, itemID string) (sources.Item, err
 	item.FetchedAt = parseStoredTime(fetchedAt)
 	_ = json.Unmarshal([]byte(verticals), &item.Verticals)
 	return item, nil
+}
+
+func scanProcessorRequest(rows interface{ Scan(...any) error }) (ProcessorRequest, error) {
+	var req ProcessorRequest
+	var itemIDs, sourceTypes, verticals, regions, createdAt, updatedAt string
+	if err := rows.Scan(&req.RequestID, &req.CycleID, &req.ProcessorKey, &req.Status, &itemIDs,
+		&req.SourceCount, &sourceTypes, &verticals, &regions, &req.ContinuityRef, &req.Prompt,
+		&createdAt, &updatedAt); err != nil {
+		return ProcessorRequest{}, err
+	}
+	_ = json.Unmarshal([]byte(itemIDs), &req.SourceItemIDs)
+	_ = json.Unmarshal([]byte(sourceTypes), &req.SourceTypes)
+	_ = json.Unmarshal([]byte(verticals), &req.Verticals)
+	_ = json.Unmarshal([]byte(regions), &req.Regions)
+	req.CreatedAt = parseStoredTime(createdAt)
+	req.UpdatedAt = parseStoredTime(updatedAt)
+	return req, nil
+}
+
+func scanReconcilerRequest(rows interface{ Scan(...any) error }) (ReconcilerRequest, error) {
+	var req ReconcilerRequest
+	var itemIDs, processorRequestIDs, createdAt, updatedAt string
+	if err := rows.Scan(&req.RequestID, &req.CycleID, &req.Status, &req.Scope, &itemIDs,
+		&processorRequestIDs, &req.Prompt, &createdAt, &updatedAt); err != nil {
+		return ReconcilerRequest{}, err
+	}
+	_ = json.Unmarshal([]byte(itemIDs), &req.SourceItemIDs)
+	_ = json.Unmarshal([]byte(processorRequestIDs), &req.ProcessorRequestIDs)
+	req.CreatedAt = parseStoredTime(createdAt)
+	req.UpdatedAt = parseStoredTime(updatedAt)
+	return req, nil
 }
 
 func mustJSON(v any) string {

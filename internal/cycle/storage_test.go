@@ -177,3 +177,108 @@ func TestStorageRecordsCycleEvents(t *testing.T) {
 		t.Fatalf("cycle status = %q, want completed", status)
 	}
 }
+
+func TestBuildSourceMaxxHandoffRoutesSourceItemsToProcessorsAndReconciler(t *testing.T) {
+	now := time.Date(2026, 6, 7, 10, 30, 0, 0, time.UTC)
+	items := []sources.Item{
+		{
+			ID:         "srcitem_gdelt_supply",
+			SourceID:   "gdelt:15min",
+			SourceType: sources.SourceTypeGDELT,
+			Title:      "Port disruption mention",
+			Verticals:  []string{"supply_chain"},
+			Region:     "global",
+		},
+		{
+			ID:         "srcitem_rss_supply",
+			SourceID:   "rss:logistics",
+			SourceType: sources.SourceTypeRSS,
+			Title:      "Carrier advisory",
+			Verticals:  []string{"supply_chain"},
+			Region:     "global",
+		},
+		{
+			ID:         "srcitem_telegram_conflict",
+			SourceID:   "telegram:conflict",
+			SourceType: sources.SourceTypeTelegram,
+			Title:      "Field report",
+			Verticals:  []string{"conflict"},
+			Region:     "mena",
+		},
+	}
+
+	handoff := BuildSourceMaxxHandoff("cycle_source_maxx", items, now)
+	if len(handoff.ProcessorRequests) != 3 {
+		t.Fatalf("processor requests = %d, want one per source-class route: %+v", len(handoff.ProcessorRequests), handoff.ProcessorRequests)
+	}
+	if len(handoff.ReconcilerRequests) != 1 {
+		t.Fatalf("reconciler requests = %d, want 1", len(handoff.ReconcilerRequests))
+	}
+	for _, req := range handoff.ProcessorRequests {
+		if req.Status != "queued" || req.CycleID != "cycle_source_maxx" || req.ContinuityRef == "" {
+			t.Fatalf("processor request missing durable handoff fields: %+v", req)
+		}
+		if len(req.SourceItemIDs) == 0 || req.Prompt == "" {
+			t.Fatalf("processor request missing source handles or prompt: %+v", req)
+		}
+	}
+	foundGDELT := false
+	for _, req := range handoff.ProcessorRequests {
+		if req.ProcessorKey == "processor:global_firehose:global:gdelt" {
+			foundGDELT = true
+		}
+	}
+	if !foundGDELT {
+		t.Fatalf("GDELT route missing global firehose processor: %+v", handoff.ProcessorRequests)
+	}
+	reconciler := handoff.ReconcilerRequests[0]
+	if reconciler.Scope != "story-corpus" || len(reconciler.SourceItemIDs) != 3 || len(reconciler.ProcessorRequestIDs) != len(handoff.ProcessorRequests) {
+		t.Fatalf("unexpected reconciler request: %+v", reconciler)
+	}
+}
+
+func TestStoragePersistsSourceMaxxHandoffsAndLatestCycleSummary(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("open storage: %v", err)
+	}
+	defer store.Close()
+
+	cycleID, err := store.StartCycle(ctx)
+	if err != nil {
+		t.Fatalf("start cycle: %v", err)
+	}
+	now := time.Date(2026, 6, 7, 11, 0, 0, 0, time.UTC)
+	handoff := BuildSourceMaxxHandoff(cycleID, []sources.Item{{
+		ID:         "srcitem_ai_policy",
+		SourceID:   "rss:ai_policy",
+		SourceType: sources.SourceTypeRSS,
+		Title:      "AI policy update",
+		Verticals:  []string{"ai", "policy"},
+		Region:     "us",
+	}}, now)
+	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
+		t.Fatalf("save processor requests: %v", err)
+	}
+	if err := store.SaveReconcilerRequests(ctx, handoff.ReconcilerRequests); err != nil {
+		t.Fatalf("save reconciler requests: %v", err)
+	}
+	if err := store.FinishCycle(ctx, cycleID, "completed", 1, 1, nil); err != nil {
+		t.Fatalf("finish cycle: %v", err)
+	}
+
+	summary, err := store.LatestCycleSummary(ctx)
+	if err != nil {
+		t.Fatalf("latest cycle summary: %v", err)
+	}
+	if summary.CycleID != cycleID || summary.ItemCount != 1 || summary.FetchCount != 1 {
+		t.Fatalf("unexpected cycle summary: %+v", summary)
+	}
+	if len(summary.ProcessorRequests) != 1 || summary.ProcessorRequests[0].ProcessorKey != "processor:ai:us:rss" {
+		t.Fatalf("unexpected processor summary: %+v", summary.ProcessorRequests)
+	}
+	if len(summary.ReconcilerRequests) != 1 || summary.ReconcilerRequests[0].Scope != "story-corpus" {
+		t.Fatalf("unexpected reconciler summary: %+v", summary.ReconcilerRequests)
+	}
+}

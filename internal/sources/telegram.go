@@ -70,14 +70,21 @@ func (s *TelegramScraper) Poll(ctx context.Context, source *Source) (PollResult,
 	}
 
 	var items []Item
+	maxItems := source.EffectiveMaxItemsPerPoll(100)
 	var f func(*html.Node)
 	f = func(n *html.Node) {
+		if len(items) >= maxItems {
+			return
+		}
 		if n.Type == html.ElementNode && n.Data == "div" {
 			for _, a := range n.Attr {
 				if a.Key == "class" && strings.Contains(a.Val, "tgme_widget_message_wrap") {
 					item := s.parseMessage(n, source, fetch.FetchID)
 					if item != nil {
 						items = append(items, *item)
+					}
+					if len(items) >= maxItems {
+						return
 					}
 				}
 			}
