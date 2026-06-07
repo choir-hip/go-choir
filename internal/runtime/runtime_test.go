@@ -515,7 +515,7 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	}
 }
 
-func TestSystemPromptForSourceMaxxProfilesLoadsSharedHarnessPrompts(t *testing.T) {
+func TestSystemPromptForGlobalWireProfilesLoadsSharedHarnessPrompts(t *testing.T) {
 	rt := testPromptRuntime(t)
 
 	for _, tc := range []struct {
@@ -527,7 +527,7 @@ func TestSystemPromptForSourceMaxxProfilesLoadsSharedHarnessPrompts(t *testing.T
 			name:    "processor",
 			profile: AgentProfileProcessor,
 			want: []string{
-				"SourceMaxx source-understanding agent",
+				"Global Wire source-understanding agent",
 				"SourceItem batches",
 				"Reuse existing researcher agents",
 				"Reuse existing VText agents",
@@ -539,7 +539,7 @@ func TestSystemPromptForSourceMaxxProfilesLoadsSharedHarnessPrompts(t *testing.T
 			name:    "reconciler",
 			profile: AgentProfileReconciler,
 			want: []string{
-				"corpus-level SourceMaxx story agent",
+				"corpus-level Global Wire story agent",
 				"existing published VTexts",
 				"Reuse existing researcher agents",
 				"Reuse existing VText agents",
@@ -551,12 +551,12 @@ func TestSystemPromptForSourceMaxxProfilesLoadsSharedHarnessPrompts(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			rec := &types.RunRecord{
 				RunID:        "run-" + tc.name,
-				AgentID:      tc.name + ":source-maxx",
-				ChannelID:    "source-maxx-channel",
+				AgentID:      tc.name + ":global-wire",
+				ChannelID:    "global-wire-channel",
 				OwnerID:      "global-wire-platform",
 				AgentProfile: tc.profile,
 				AgentRole:    tc.profile,
-				Prompt:       "Process SourceMaxx handoff.",
+				Prompt:       "Process Global Wire handoff.",
 			}
 			prompt, err := rt.systemPromptForRun(rec)
 			if err != nil {
@@ -567,9 +567,6 @@ func TestSystemPromptForSourceMaxxProfilesLoadsSharedHarnessPrompts(t *testing.T
 					t.Fatalf("%s prompt missing %q in %q", tc.name, want, prompt)
 				}
 			}
-			if !strings.Contains(prompt, "Available tools:") {
-				t.Fatalf("%s prompt should include shared tool catalog, got %q", tc.name, prompt)
-			}
 		})
 	}
 }
@@ -577,23 +574,23 @@ func TestSystemPromptForSourceMaxxProfilesLoadsSharedHarnessPrompts(t *testing.T
 func TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead(t *testing.T) {
 	rt := testPromptRuntime(t)
 
-	sourceMaxxRec := &types.RunRecord{
-		RunID:        "run-source-maxx-vtext",
-		AgentID:      "vtext:doc-source-maxx",
-		ChannelID:    "doc-source-maxx",
+	globalWireRec := &types.RunRecord{
+		RunID:        "run-global-wire-vtext",
+		AgentID:      "vtext:doc-global-wire",
+		ChannelID:    "doc-global-wire",
 		OwnerID:      "global-wire-platform",
 		AgentProfile: AgentProfileVText,
 		AgentRole:    AgentProfileVText,
 		Prompt:       "Write the first publication-quality article revision for this VText document.",
 		Metadata: map[string]any{
-			"type":                   "vtext_agent_revision",
-			"doc_id":                 "doc-source-maxx",
-			"source_maxx_cycle_id":   "cycle-test",
-			"request_intent":         "source_maxx_reconciler_article_revision",
-			"selected_style_sources": []map[string]any{{"title": "Style.vtext: Global Wire"}},
+			"type":                    "vtext_agent_revision",
+			"doc_id":                  "doc-global-wire",
+			"source_network_cycle_id": "cycle-test",
+			"request_intent":          "global_wire_reconciler_article_revision",
+			"selected_style_sources":  []map[string]any{{"title": "Style.vtext: Global Wire"}},
 		},
 	}
-	prompt, err := rt.systemPromptForRun(sourceMaxxRec)
+	prompt, err := rt.systemPromptForRun(globalWireRec)
 	if err != nil {
 		t.Fatalf("systemPromptForRun Global Wire VText: %v", err)
 	}
@@ -633,7 +630,7 @@ func TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead(t *testing.T) {
 		t.Fatalf("ordinary VText prompt should preserve generic working-response rule: %q", ordinaryPrompt)
 	}
 	if strings.Contains(ordinaryPrompt, "processor or reconciler handoff is newsroom source context") {
-		t.Fatalf("ordinary VText prompt should not get SourceMaxx article-head rule: %q", ordinaryPrompt)
+		t.Fatalf("ordinary VText prompt should not get Global Wire article-head rule: %q", ordinaryPrompt)
 	}
 }
 

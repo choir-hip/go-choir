@@ -238,7 +238,8 @@ func (rt *Runtime) ensureCoagentVTextRevisionRoute(ctx context.Context, parentRe
 	}
 
 	now := time.Now().UTC()
-	doc, created, seedRevisionID, err := rt.coagentVTextTargetDocument(ctx, parentRec, req, now)
+	sourceEntities := rt.coagentVTextSourceEntities(ctx, parentRec, req)
+	doc, created, seedRevisionID, err := rt.coagentVTextTargetDocument(ctx, parentRec, req, now, sourceEntities)
 	if err != nil {
 		return coagentVTextRouteDecision{}, err
 	}
@@ -259,9 +260,9 @@ func (rt *Runtime) ensureCoagentVTextRevisionRoute(ctx context.Context, parentRe
 		return coagentVTextRouteDecision{}, fmt.Errorf("persist persistent super appagent: %w", err)
 	}
 
-	prompt := buildCoagentVTextRevisionPrompt(parentRec, req, doc, created)
+	prompt := buildCoagentVTextRevisionPrompt(parentRec, req, doc, created, sourceEntities)
 	rec, err := rt.submitVTextAgentRevisionRun(ctx, doc, ownerID, vtextAgentRevisionRequest{
-		Intent: "source_maxx_" + callerProfile + "_article_revision",
+		Intent: "global_wire_" + callerProfile + "_article_revision",
 		Prompt: prompt,
 	}, parentRec.RunID, 0)
 	if err != nil {
@@ -278,7 +279,7 @@ func (rt *Runtime) ensureCoagentVTextRevisionRoute(ctx context.Context, parentRe
 	}, nil
 }
 
-func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *types.RunRecord, req coagentVTextRouteRequest, now time.Time) (types.Document, bool, string, error) {
+func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *types.RunRecord, req coagentVTextRouteRequest, now time.Time, sourceEntities []vtextSourceEntity) (types.Document, bool, string, error) {
 	ownerID := strings.TrimSpace(parentRec.OwnerID)
 	channelID := strings.TrimSpace(req.ChannelID)
 	if channelID != "" {
@@ -301,27 +302,36 @@ func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *ty
 		return types.Document{}, false, "", fmt.Errorf("create vtext document: %w", err)
 	}
 
-	seedContent := coagentVTextSeedContent(parentRec, req)
+	seedContent := coagentVTextSeedContent(parentRec, req, sourceEntities)
 	seedRevisionID := uuid.New().String()
 	selectedStyles, styleRationale := coagentVTextSelectedStyles(req)
-	seedMeta, _ := json.Marshal(map[string]any{
-		"source":                   "coagent_vtext_seed",
-		"created_from":             canonicalAgentProfile(req.CallerProfile),
-		"parent_loop_id":           parentRec.RunID,
-		"parent_agent_id":          strings.TrimSpace(parentRec.AgentID),
-		"parent_channel_id":        strings.TrimSpace(parentRec.ChannelID),
-		"requested_channel_id":     strings.TrimSpace(req.ChannelID),
-		"seed_prompt":              strings.TrimSpace(req.Objective),
-		"vtext_version":            "v0",
-		"source_maxx_cycle_id":     metadataString(parentRec.Metadata, "source_maxx_cycle_id"),
-		"source_maxx_request_id":   metadataString(parentRec.Metadata, "source_maxx_request_id"),
-		"source_maxx_request_kind": metadataString(parentRec.Metadata, "source_maxx_request_kind"),
-		"source_item_ids":          parentRec.Metadata["source_item_ids"],
-		"processor_key":            metadataString(parentRec.Metadata, runMetadataProcessorKey),
-		"reconciler_scope":         metadataString(parentRec.Metadata, runMetadataReconcilerScope),
-		"selected_style_sources":   selectedStyles,
-		"selected_style_rationale": styleRationale,
-	})
+	seedMetaMap := map[string]any{
+		"source":                      "coagent_vtext_seed",
+		"artifact_kind":               "source_brief",
+		"article_version":             false,
+		"vtext_version_stage":         "pre_article_brief",
+		"created_from":                canonicalAgentProfile(req.CallerProfile),
+		"parent_loop_id":              parentRec.RunID,
+		"parent_agent_id":             strings.TrimSpace(parentRec.AgentID),
+		"parent_channel_id":           strings.TrimSpace(parentRec.ChannelID),
+		"requested_channel_id":        strings.TrimSpace(req.ChannelID),
+		"seed_prompt":                 strings.TrimSpace(req.Objective),
+		"source_network_cycle_id":     firstNonEmpty(metadataString(parentRec.Metadata, "source_network_cycle_id"), metadataString(parentRec.Metadata, "source_maxx_cycle_id")),
+		"source_network_request_id":   firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_id"), metadataString(parentRec.Metadata, "source_maxx_request_id")),
+		"source_network_request_kind": firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_kind"), metadataString(parentRec.Metadata, "source_maxx_request_kind")),
+		"source_maxx_cycle_id":        metadataString(parentRec.Metadata, "source_maxx_cycle_id"),
+		"source_maxx_request_id":      metadataString(parentRec.Metadata, "source_maxx_request_id"),
+		"source_maxx_request_kind":    metadataString(parentRec.Metadata, "source_maxx_request_kind"),
+		"source_item_ids":             parentRec.Metadata["source_item_ids"],
+		"processor_key":               metadataString(parentRec.Metadata, runMetadataProcessorKey),
+		"reconciler_scope":            metadataString(parentRec.Metadata, runMetadataReconcilerScope),
+		"selected_style_sources":      selectedStyles,
+		"selected_style_rationale":    styleRationale,
+	}
+	if len(sourceEntities) > 0 {
+		seedMetaMap["source_entities"] = sourceEntities
+	}
+	seedMeta, _ := json.Marshal(seedMetaMap)
 	seedRev := types.Revision{
 		RevisionID: seedRevisionID,
 		DocID:      doc.DocID,
@@ -374,12 +384,11 @@ func coagentVTextTitle(req coagentVTextRouteRequest) string {
 	return text
 }
 
-func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRequest) string {
+func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRequest, sourceEntities []vtextSourceEntity) string {
 	var b strings.Builder
-	b.WriteString("# ")
+	b.WriteString("# Source brief: ")
 	b.WriteString(strings.TrimSuffix(coagentVTextTitle(req), ".vtext"))
 	b.WriteString("\n\n")
-	b.WriteString("## Source Brief\n\n")
 	if initial := strings.TrimSpace(req.InitialContent); initial != "" {
 		b.WriteString(initial)
 	} else {
@@ -401,24 +410,23 @@ func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRe
 	b.WriteString("\nSelection rationale: ")
 	b.WriteString(styleRationale)
 	b.WriteString("\n")
-	b.WriteString("\n## Provenance\n\n")
-	b.WriteString("- Parent agent: ")
-	b.WriteString(strings.TrimSpace(firstNonEmpty(parentRec.AgentID, canonicalAgentProfile(req.CallerProfile))))
-	b.WriteString("\n- Parent loop: ")
-	b.WriteString(strings.TrimSpace(parentRec.RunID))
-	if cycleID := metadataString(parentRec.Metadata, "source_maxx_cycle_id"); cycleID != "" {
-		b.WriteString("\n- Source network cycle: ")
-		b.WriteString(cycleID)
+	if len(sourceEntities) > 0 {
+		b.WriteString("\n## Source Handles\n\n")
+		for _, entity := range sourceEntities {
+			if strings.TrimSpace(entity.EntityID) == "" {
+				continue
+			}
+			b.WriteString("- [")
+			b.WriteString(firstNonEmpty(entity.Label, entity.Kind, "Source"))
+			b.WriteString("](source:")
+			b.WriteString(entity.EntityID)
+			b.WriteString(")\n")
+		}
 	}
-	if requestID := metadataString(parentRec.Metadata, "source_maxx_request_id"); requestID != "" {
-		b.WriteString("\n- Source network request: ")
-		b.WriteString(requestID)
-	}
-	b.WriteString("\n")
 	return b.String()
 }
 
-func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTextRouteRequest, doc types.Document, created bool) string {
+func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTextRouteRequest, doc types.Document, created bool, sourceEntities []vtextSourceEntity) string {
 	var b strings.Builder
 	selectedStyles, styleRationale := coagentVTextSelectedStyles(req)
 	if created {
@@ -448,11 +456,34 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 	}
 	b.WriteString("Selection rationale: ")
 	b.WriteString(styleRationale)
+	if len(sourceEntities) > 0 {
+		b.WriteString("\n\nNative source handles available to this article revision:\n")
+		for _, entity := range sourceEntities {
+			if strings.TrimSpace(entity.EntityID) == "" {
+				continue
+			}
+			b.WriteString("- [")
+			b.WriteString(firstNonEmpty(entity.Label, entity.Kind, "Source"))
+			b.WriteString("](source:")
+			b.WriteString(entity.EntityID)
+			b.WriteString(")")
+			if entity.Target.ContentID != "" {
+				b.WriteString(" content_id=")
+				b.WriteString(entity.Target.ContentID)
+			}
+			if entity.Target.ItemID != "" {
+				b.WriteString(" source_service_item=")
+				b.WriteString(entity.Target.ItemID)
+			}
+			b.WriteString("\n")
+		}
+	}
 	b.WriteString("\n\nHard requirements:")
 	b.WriteString("\n- Use edit_vtext to write the canonical VText revision; do not leave the article only in the run result.")
 	b.WriteString("\n- The current document head after this run must be a publishable article or correction/update draft, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
-	b.WriteString("\n- Preserve source handles and cite source entities or source refs when available.")
+	b.WriteString("\n- Preserve source handles and use native VText source refs like [label](source:entity_id); do not replace them with a plain source manifest.")
+	b.WriteString("\n- Transclude related VTexts where editorially useful; do not render bare related-VText ID lists as article content.")
 	b.WriteString("\n- Include a compact Style.vtext source note in the VText naming the selected Style.vtext source(s) above and the editorial fit; do not claim every style was run.")
 	b.WriteString("\n- If evidence is insufficient, write the best honest publishable draft with uncertainty and request researcher follow-up rather than inventing facts.")
 	b.WriteString("\n\nDocument: ")
@@ -461,11 +492,92 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 	b.WriteString(doc.Title)
 	b.WriteString("\nParent loop: ")
 	b.WriteString(strings.TrimSpace(parentRec.RunID))
-	if cycleID := metadataString(parentRec.Metadata, "source_maxx_cycle_id"); cycleID != "" {
+	if cycleID := firstNonEmpty(metadataString(parentRec.Metadata, "source_network_cycle_id"), metadataString(parentRec.Metadata, "source_maxx_cycle_id")); cycleID != "" {
 		b.WriteString("\nSource network cycle: ")
 		b.WriteString(cycleID)
 	}
 	return b.String()
+}
+
+func (rt *Runtime) coagentVTextSourceEntities(ctx context.Context, parentRec *types.RunRecord, req coagentVTextRouteRequest) []vtextSourceEntity {
+	if parentRec == nil {
+		return nil
+	}
+	entities := decodeVTextSourceEntities(parentRec.Metadata["source_entities"])
+	seenText := strings.Join([]string{strings.TrimSpace(req.Objective), strings.TrimSpace(req.InitialContent)}, "\n")
+	for _, itemID := range sourceServiceItemIDsFromText(seenText) {
+		entities, _ = mergeVTextSourceEntities(entities, []vtextSourceEntity{sourceServiceItemRefToSourceEntity(itemID, seenText)})
+	}
+
+	ownerID := strings.TrimSpace(parentRec.OwnerID)
+	if rt == nil || rt.store == nil || ownerID == "" {
+		return entities
+	}
+	for _, contentID := range coagentVTextSourceContentIDs(parentRec, seenText) {
+		item, err := rt.Store().GetContentItem(ctx, ownerID, contentID)
+		if err != nil {
+			continue
+		}
+		entity := contentItemRefToSourceEntity(item, seenText)
+		entity.Provenance.CreatedBy = firstNonEmpty(canonicalAgentProfile(req.CallerProfile), entity.Provenance.CreatedBy)
+		entities, _ = mergeVTextSourceEntities(entities, []vtextSourceEntity{entity})
+	}
+	return entities
+}
+
+func coagentVTextSourceContentIDs(parentRec *types.RunRecord, text string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	add := func(raw string) {
+		raw = strings.Trim(strings.TrimSpace(raw), `"'`)
+		if raw == "" || seen[raw] {
+			return
+		}
+		seen[raw] = true
+		out = append(out, raw)
+	}
+	for _, key := range []string{"source_item_ids", "source_content_ids", "source_content_id", "content_id"} {
+		for _, value := range metadataStringSlice(parentRec.Metadata[key]) {
+			add(value)
+		}
+	}
+	for _, value := range contentItemIDsFromWorkerMessage(text) {
+		add(value)
+	}
+	return out
+}
+
+func metadataStringSlice(value any) []string {
+	switch typed := value.(type) {
+	case nil:
+		return nil
+	case string:
+		return []string{typed}
+	case []string:
+		return typed
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if s := strings.TrimSpace(fmt.Sprint(item)); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		data, err := json.Marshal(typed)
+		if err != nil {
+			return nil
+		}
+		var out []string
+		if err := json.Unmarshal(data, &out); err == nil {
+			return out
+		}
+		var anyOut []any
+		if err := json.Unmarshal(data, &anyOut); err != nil {
+			return nil
+		}
+		return metadataStringSlice(anyOut)
+	}
 }
 
 func coagentVTextSelectedStyles(req coagentVTextRouteRequest) ([]types.GlobalWireStyleSource, string) {

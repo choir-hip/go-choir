@@ -2040,18 +2040,39 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 }
 
 func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText(t *testing.T) {
-	rt, _, cwd := testRuntimeWithTempCWD(t)
+	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
 	}
+	now := time.Now().UTC()
+	sourceItem := types.ContentItem{
+		ContentID:    "content-fed-rates-brief",
+		OwnerID:      "user-alice",
+		SourceType:   "url",
+		MediaType:    "text/html",
+		AppHint:      "source",
+		Title:        "Central bank rate bulletin",
+		SourceURL:    "https://example.test/rates",
+		CanonicalURL: "https://example.test/rates",
+		TextContent:  "The central bank held rates steady while inflation remained above target.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := s.CreateContentItem(context.Background(), sourceItem); err != nil {
+		t.Fatalf("create source content item: %v", err)
+	}
 
 	processorRun, err := rt.StartRunWithMetadata(context.Background(), "ingest source batch", "user-alice", map[string]any{
-		runMetadataAgentProfile:    "source-processor",
-		runMetadataAgentRole:       "source-processor",
-		runMetadataProcessorKey:    "processor:global_firehose:global:gdelt",
-		"source_maxx_cycle_id":     "cycle-test",
-		"source_maxx_request_id":   "processor-test",
-		"source_maxx_request_kind": "processor",
+		runMetadataAgentProfile:       "source-processor",
+		runMetadataAgentRole:          "source-processor",
+		runMetadataProcessorKey:       "processor:global_firehose:global:gdelt",
+		"source_network_cycle_id":     "cycle-test",
+		"source_network_request_id":   "processor-test",
+		"source_network_request_kind": "processor",
+		"source_maxx_cycle_id":        "cycle-test",
+		"source_maxx_request_id":      "processor-test",
+		"source_maxx_request_kind":    "processor",
+		"source_item_ids":             []string{sourceItem.ContentID},
 	})
 	if err != nil {
 		t.Fatalf("start processor run: %v", err)
@@ -2127,13 +2148,26 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	if err != nil {
 		t.Fatalf("get processor-spawned seed revision: %v", err)
 	}
-	if seedRev.AuthorKind != types.AuthorAppAgent || !strings.Contains(seedRev.Content, "Source Brief") {
+	if seedRev.AuthorKind != types.AuthorAppAgent || !strings.Contains(seedRev.Content, "Source brief:") {
 		t.Fatalf("processor seed revision = author %q content %q", seedRev.AuthorKind, seedRev.Content)
 	}
 	if !strings.Contains(seedRev.Content, "Style.vtext: Market Brief") {
 		t.Fatalf("processor seed revision missing selected Style.vtext source: %q", seedRev.Content)
 	}
 	seedMeta := decodeRevisionMetadata(seedRev.Metadata)
+	if metadataString(seedMeta, "artifact_kind") != "source_brief" || metadataString(seedMeta, "vtext_version") == "v0" {
+		t.Fatalf("processor seed should be a non-article source brief, metadata=%+v", seedMeta)
+	}
+	if articleVersion, ok := seedMeta["article_version"].(bool); !ok || articleVersion {
+		t.Fatalf("processor seed should not mark article_version true: %+v", seedMeta)
+	}
+	sourceEntities := decodeVTextSourceEntities(seedMeta["source_entities"])
+	if len(sourceEntities) != 1 || sourceEntities[0].Target.ContentID != sourceItem.ContentID {
+		t.Fatalf("processor seed source_entities = %#v, want content item %q", sourceEntities, sourceItem.ContentID)
+	}
+	if !strings.Contains(seedRev.Content, "(source:"+sourceEntities[0].EntityID+")") {
+		t.Fatalf("processor seed should contain native source ref %q in %q", sourceEntities[0].EntityID, seedRev.Content)
+	}
 	if metadataString(seedMeta, "selected_style_rationale") == "" {
 		t.Fatalf("processor seed revision missing style rationale metadata: %+v", seedMeta)
 	}
@@ -2144,14 +2178,23 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	if vtextRun.AgentID != "vtext:"+vtextSpawn.DocID || vtextRun.ChannelID != vtextSpawn.DocID || metadataString(vtextRun.Metadata, "type") != "vtext_agent_revision" {
 		t.Fatalf("processor vtext run is not a vtext revision run: %+v", vtextRun)
 	}
-	if metadataString(vtextRun.Metadata, "source_maxx_cycle_id") != "cycle-test" || metadataString(vtextRun.Metadata, "processor_key") != "processor:global_firehose:global:gdelt" {
-		t.Fatalf("processor vtext run did not preserve SourceMaxx metadata: %+v", vtextRun.Metadata)
+	if metadataString(vtextRun.Metadata, "source_network_cycle_id") != "cycle-test" || metadataString(vtextRun.Metadata, "processor_key") != "processor:global_firehose:global:gdelt" {
+		t.Fatalf("processor vtext run did not preserve source-network metadata: %+v", vtextRun.Metadata)
+	}
+	if metadataString(vtextRun.Metadata, "request_intent") != "global_wire_processor_article_revision" {
+		t.Fatalf("processor vtext run request_intent = %q", metadataString(vtextRun.Metadata, "request_intent"))
+	}
+	runSourceEntities := decodeVTextSourceEntities(vtextRun.Metadata["source_entities"])
+	if len(runSourceEntities) != 1 || runSourceEntities[0].Target.ContentID != sourceItem.ContentID {
+		t.Fatalf("processor vtext run source_entities = %#v", runSourceEntities)
 	}
 	if metadataString(vtextRun.Metadata, "selected_style_rationale") == "" || !strings.Contains(vtextRun.Prompt, "Selected Style.vtext source context") || !strings.Contains(vtextRun.Prompt, "Style.vtext: Market Brief") {
 		t.Fatalf("processor vtext run missing Style.vtext context: metadata=%+v prompt=%q", vtextRun.Metadata, vtextRun.Prompt)
 	}
 	if !strings.Contains(vtextRun.Prompt, "must be a publishable article or correction/update draft") ||
-		!strings.Contains(vtextRun.Prompt, "not a Source Brief, Working Revision, Evidence Gathering note") {
+		!strings.Contains(vtextRun.Prompt, "not a Source Brief, Working Revision, Evidence Gathering note") ||
+		!strings.Contains(vtextRun.Prompt, "(source:"+sourceEntities[0].EntityID+")") ||
+		!strings.Contains(vtextRun.Prompt, "do not replace them with a plain source manifest") {
 		t.Fatalf("processor vtext run missing article-head completion contract: %q", vtextRun.Prompt)
 	}
 	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{

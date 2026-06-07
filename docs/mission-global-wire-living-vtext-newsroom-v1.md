@@ -274,12 +274,23 @@ revisions so promotion/source evidence is carried in structured revision
 metadata and `source_entities`, while the visible VText body remains article
 prose with native source refs instead of `source_content_id` lines, manifest
 mutation text, fork disclaimers, or raw provenance dumps.
+Current working checkpoint on 2026-06-07 updates the shared coagent VText
+handoff route: processor/reconciler `spawn_agent(role=vtext)` now starts a
+Global Wire VText revision run with source-network metadata, creates any
+initial handoff as `artifact_kind=source_brief` with `article_version=false`
+instead of a fake article `v0`, derives native `source_entities` from
+ContentItem/source-service handles, writes source refs into the brief, and
+prompts the VText agent to write the canonical publishable article revision
+with source refs/transclusions rather than a manifest or outline.
 
 what shipped: prior work shipped source service substrate, processor/reconciler
 handoff scaffolding, some VText agent usage, and a cleaner newspaper preview.
 Those are substrate only. Latest shipped code also removes the old failed
 promotion-body contract that made platform story revisions read like internal
-metadata.
+metadata. Current unshipped source changes further normalize the
+processor/reconciler-to-VText handoff around VText ownership and native source
+entities, while preserving legacy `source_maxx_*` metadata only for
+continuation compatibility.
 
 what was proven: source service can ingest GDELT/RSS/Telegram-class items at
 substantially larger breadth; staging can deploy and show Global Wire; the
@@ -302,6 +313,9 @@ deploy. FlakeHub run `27103946461` also passed for the same SHA. The CI
 frontend build job was skipped for `46298119` because that final fix was
 runtime-only; the earlier frontend-changing commit `e8728cb6` had passed local
 `npm run build` before push.
+Current local proof for the coagent handoff checkpoint passed
+`nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText|TestSystemPromptForGlobalWireProfilesLoadsSharedHarnessPrompts|TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead' -count=1`.
+Current local frontend proof passed `npm run build` in `frontend`.
 
 staging identity proof: deploy job `79989704732` completed successfully and
 reported proxy, sandbox upstream, and platformd build/deployed commit
@@ -322,10 +336,11 @@ reported installed=false for selected profile `Default`), so Codex could not
 take over an authenticated browser session without bypassing the product path.
 
 unproven or partial claims: full source health, learned source track-record
-state, per-source proof surfaces, VText agent as article owner,
-publication-quality articles, native source transclusion, related VText
-transclusion, living updates, reconciler-driven revisions, and
-responsive/typographic quality.
+state, per-source proof surfaces, VText agent producing publication-quality
+article heads from the new handoff route, native source transclusion rendering
+inside those resulting article revisions, related VText transclusion, living
+updates, reconciler-driven revisions on existing articles, and
+responsive/typographic quality on authenticated staging.
 
 belief-state changes: source breadth and VText ownership are the first
 architectural blockers. UI cleanup alone cannot solve the wrong object.
@@ -360,7 +375,10 @@ Resolved by `46298119`: the test now asserts readable article prose plus
 source-ref markup in the body and structured promotion/source evidence in
 revision metadata/source entities. Remaining blocker is not CI; it is
 authenticated staging product proof and the still-incomplete deeper VText-agent
-article ownership/source-transclusion mission.
+article ownership/source-transclusion mission. The current checkpoint improves
+the VText handoff route, but it does not yet prove that the VText agent's edit
+result is a full article with rendered source/related-VText transclusions on
+staging.
 
 highest-impact remaining uncertainty: how to turn source-health, corrections,
 corroboration, freshness, and researcher/model judgment into learned source
@@ -368,13 +386,14 @@ track-record state without hardcoded editorial tiers, while keeping long-tail
 Telegram/social inputs valuable as sentiment and lead discovery rather than
 standalone publication support.
 
-next executable probe: install/enable the Codex Chrome Extension or otherwise
-provide a usable authenticated staging browser session, then run the deployed
-Global Wire/VText proof: open Global Wire on `choir.news`, verify article
-columns, open every article through the compact VText affordance, verify native
-source refs/transclusion chips and absence of metadata sludge, then submit one
-product-path prompt or source refresh through `/api/prompt-bar` or Global Wire
-controls and inspect the resulting VText revision metadata/source entities.
+next executable probe: land/deploy the coagent handoff checkpoint, verify the
+deployed commit identity, then install/enable the Codex Chrome Extension or
+otherwise provide a usable authenticated staging browser session. Run the
+deployed Global Wire/VText proof: open Global Wire on `choir.news`, verify
+article columns, open every article through the compact VText affordance,
+trigger a processor/reconciler-to-VText handoff or equivalent product-path
+prompt, and inspect the resulting VText revision metadata/source entities and
+rendered source refs/transclusions.
 
 suggested resume goal string: use the Goal String section above.
 
@@ -382,5 +401,6 @@ evidence artifact refs: user screenshots from 2026-06-07 at 14:36-14:39 show
 the UI/article/VText failures; staging source service latest observed cycle
 had hundreds of items but only 14 configured sources.
 
-rollback refs: docs draft only unless later committed/pushed. Behavior
-rollback remains prior deployed code until implementation commits ship.
+rollback refs: prior deployed behavior commit
+`4629811947f803a1104b33706186cb9e032ca83e` remains the rollback target until
+the current coagent handoff checkpoint lands and deploys.

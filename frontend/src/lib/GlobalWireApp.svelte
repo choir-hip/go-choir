@@ -18,7 +18,7 @@
       id: 'claim-audit-style',
       title: 'Style.vtext: Claim Audit',
       label: 'Audit',
-      summary: 'Foregrounds dispute state, evidence gaps, counterclaims, and source standing.',
+      summary: 'Foregrounds dispute state, evidence gaps, counterclaims, track-record signals, and uncertainty.',
       sourcePath: 'styles/claim-audit.style.vtext',
     },
     {
