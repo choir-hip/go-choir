@@ -381,6 +381,26 @@ CREATE TABLE IF NOT EXISTS global_wire_projection_reviews (
 	KEY idx_global_wire_projection_reviews_promotion (owner_id, promotion_id, updated_at)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_publication_updates (
+	owner_id              VARCHAR(255) NOT NULL,
+	update_id             VARCHAR(255) NOT NULL,
+	story_id              VARCHAR(255) NOT NULL,
+	candidate_id          VARCHAR(255) NOT NULL DEFAULT '',
+	research_decision_id  VARCHAR(255) NOT NULL DEFAULT '',
+	evidence_id           VARCHAR(255) NOT NULL DEFAULT '',
+	source_content_id     VARCHAR(255) NOT NULL DEFAULT '',
+	projection_review_ids_json LONGTEXT NOT NULL DEFAULT '[]',
+	projection_states_json     LONGTEXT NOT NULL DEFAULT '[]',
+	rollback_refs_json        LONGTEXT NOT NULL DEFAULT '[]',
+	status                VARCHAR(255) NOT NULL DEFAULT '',
+	summary               LONGTEXT NOT NULL DEFAULT '',
+	created_at            DATETIME NOT NULL,
+	updated_at            DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, update_id),
+	KEY idx_global_wire_publication_updates_story (owner_id, story_id, updated_at),
+	KEY idx_global_wire_publication_updates_candidate (owner_id, candidate_id, updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivery_id          VARCHAR(255) PRIMARY KEY,
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',

@@ -354,6 +354,30 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     }, completedQueue.evidence[0].id);
     expect(handoffQueue.decision.result_state).toBe('ready-for-platform-review');
     expect(handoffQueue.candidate.status).toBeTruthy();
+    const publicationUpdate = await page.evaluate(async (researchDecisionId) => {
+      const res = await fetch('/api/global-wire/publication-updates', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          research_decision_id: researchDecisionId,
+        }),
+      });
+      const body = await res.json();
+      return { statusCode: res.status, body };
+    }, researchEvidenceHandoff.body.decision.id);
+    expect(publicationUpdate.statusCode).toBe(201);
+    expect(publicationUpdate.body.update.status).toBe('packaged-for-publication-review');
+    expect(publicationUpdate.body.update.research_decision_id).toBe(researchEvidenceHandoff.body.decision.id);
+    expect(publicationUpdate.body.update.rollback_refs.length).toBeGreaterThanOrEqual(4);
+    const publicationQueue = await page.evaluate(async (updateId) => {
+      const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
+      if (!res.ok) throw new Error(`load publication update queue failed: ${res.status}`);
+      const list = await res.json();
+      return (list.publication_updates || []).find((item) => item.id === updateId);
+    }, publicationUpdate.body.update.id);
+    expect(publicationQueue.status).toBe('packaged-for-publication-review');
+    expect(publicationQueue.summary).toContain('does not publish or mutate');
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

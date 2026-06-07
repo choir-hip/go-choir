@@ -238,6 +238,25 @@ type GlobalWireResearchEvidenceDecision struct {
 	CreatedAt       time.Time `json:"created_at,omitempty"`
 }
 
+// GlobalWirePublicationUpdate packages review-ready Global Wire evidence for
+// publication/update-feed review. It is a queue artifact, not publication.
+type GlobalWirePublicationUpdate struct {
+	ID                  string    `json:"id"`
+	OwnerID             string    `json:"owner_id,omitempty"`
+	StoryID             string    `json:"story_id"`
+	CandidateID         string    `json:"candidate_id,omitempty"`
+	ResearchDecisionID  string    `json:"research_decision_id,omitempty"`
+	EvidenceID          string    `json:"evidence_id,omitempty"`
+	SourceContentID     string    `json:"source_content_id,omitempty"`
+	ProjectionReviewIDs []string  `json:"projection_review_ids"`
+	ProjectionStates    []string  `json:"projection_states"`
+	RollbackRefs        []string  `json:"rollback_refs"`
+	Status              string    `json:"status"`
+	Summary             string    `json:"summary"`
+	CreatedAt           time.Time `json:"created_at,omitempty"`
+	UpdatedAt           time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
 // fetch cycle should use for one StoryGraph neighborhood.
 type GlobalWireSourceRegistryEntry struct {

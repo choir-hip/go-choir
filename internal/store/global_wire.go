@@ -1455,6 +1455,21 @@ func (s *Store) ListGlobalWireResearchEvidenceDecisions(ctx context.Context, own
 	return out, nil
 }
 
+// GetGlobalWireResearchEvidenceDecision returns one owner-scoped handoff
+// decision.
+func (s *Store) GetGlobalWireResearchEvidenceDecision(ctx context.Context, ownerID, decisionID string) (types.GlobalWireResearchEvidenceDecision, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, decision_id, evidence_id, task_id, story_id,
+		        claim_id, candidate_id, source_content_id, decision, note,
+		        result_state, created_at
+		   FROM global_wire_research_evidence_decisions
+		  WHERE owner_id = ? AND decision_id = ?`,
+		ownerID,
+		decisionID,
+	)
+	return scanGlobalWireResearchEvidenceDecision(row)
+}
+
 // UpsertGlobalWireSourceRegistryEntry stores the source/query basis for a
 // StoryGraph neighborhood fetch cycle.
 func (s *Store) UpsertGlobalWireSourceRegistryEntry(ctx context.Context, rec types.GlobalWireSourceRegistryEntry) (types.GlobalWireSourceRegistryEntry, error) {
@@ -1784,6 +1799,98 @@ func (s *Store) MarkGlobalWireProjectionReviewRejected(ctx context.Context, owne
 		return types.GlobalWireProjectionReview{}, ErrNotFound
 	}
 	return s.GetGlobalWireProjectionReview(ctx, ownerID, reviewID)
+}
+
+// CreateGlobalWirePublicationUpdate stores an owner-visible package for
+// publication/update-feed review without publishing by itself.
+func (s *Store) CreateGlobalWirePublicationUpdate(ctx context.Context, rec types.GlobalWirePublicationUpdate) (types.GlobalWirePublicationUpdate, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = rec.CreatedAt
+	}
+	if rec.Status == "" {
+		rec.Status = "packaged-for-publication-review"
+	}
+	projectionReviewIDsJSON, err := json.Marshal(rec.ProjectionReviewIDs)
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("marshal global wire publication projection review ids: %w", err)
+	}
+	projectionStatesJSON, err := json.Marshal(rec.ProjectionStates)
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("marshal global wire publication projection states: %w", err)
+	}
+	rollbackRefsJSON, err := json.Marshal(rec.RollbackRefs)
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("marshal global wire publication rollback refs: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_publication_updates (
+			owner_id, update_id, story_id, candidate_id, research_decision_id,
+			evidence_id, source_content_id, projection_review_ids_json,
+			projection_states_json, rollback_refs_json, status, summary,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.StoryID,
+		rec.CandidateID,
+		rec.ResearchDecisionID,
+		rec.EvidenceID,
+		rec.SourceContentID,
+		string(projectionReviewIDsJSON),
+		string(projectionStatesJSON),
+		string(rollbackRefsJSON),
+		rec.Status,
+		sanitizeStoreText(rec.Summary),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("create global wire publication update: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWirePublicationUpdates lists publication/update-feed packages,
+// optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWirePublicationUpdates(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWirePublicationUpdate, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, update_id, story_id, candidate_id,
+	                research_decision_id, evidence_id, source_content_id,
+	                projection_review_ids_json, projection_states_json,
+	                rollback_refs_json, status, summary, created_at, updated_at
+	           FROM global_wire_publication_updates
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire publication updates: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWirePublicationUpdate
+	for rows.Next() {
+		rec, err := scanGlobalWirePublicationUpdate(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire publication updates: %w", err)
+	}
+	return out, nil
 }
 
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
@@ -2370,6 +2477,54 @@ func scanGlobalWireProjectionReview(row interface{ Scan(...any) error }) (types.
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWireProjectionReview{}, fmt.Errorf("parse global wire projection review updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWirePublicationUpdate(row interface{ Scan(...any) error }) (types.GlobalWirePublicationUpdate, error) {
+	var rec types.GlobalWirePublicationUpdate
+	var projectionReviewIDsJSON, projectionStatesJSON, rollbackRefsJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.StoryID,
+		&rec.CandidateID,
+		&rec.ResearchDecisionID,
+		&rec.EvidenceID,
+		&rec.SourceContentID,
+		&projectionReviewIDsJSON,
+		&projectionStatesJSON,
+		&rollbackRefsJSON,
+		&rec.Status,
+		&rec.Summary,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWirePublicationUpdate{}, ErrNotFound
+		}
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("scan global wire publication update: %w", err)
+	}
+	if err := json.Unmarshal([]byte(projectionReviewIDsJSON), &rec.ProjectionReviewIDs); err != nil {
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("unmarshal global wire publication projection review ids: %w", err)
+	}
+	if err := json.Unmarshal([]byte(projectionStatesJSON), &rec.ProjectionStates); err != nil {
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("unmarshal global wire publication projection states: %w", err)
+	}
+	if err := json.Unmarshal([]byte(rollbackRefsJSON), &rec.RollbackRefs); err != nil {
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("unmarshal global wire publication rollback refs: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("parse global wire publication update created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, fmt.Errorf("parse global wire publication update updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()

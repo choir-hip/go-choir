@@ -535,6 +535,41 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("research evidence handoff missing from reconciliation list: %+v", handoffListResp)
 	}
 
+	publicationBody := fmt.Sprintf(`{"research_decision_id":%q}`, handoffResp.Decision.ID)
+	publicationW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-updates", publicationBody, "user-alpha")
+	if publicationW.Code != http.StatusCreated {
+		t.Fatalf("publication update package status = %d body=%s", publicationW.Code, publicationW.Body.String())
+	}
+	var publicationResp globalWirePublicationUpdateResponse
+	if err := json.NewDecoder(publicationW.Body).Decode(&publicationResp); err != nil {
+		t.Fatalf("decode publication update response: %v", err)
+	}
+	if publicationResp.Update.ResearchDecisionID != handoffResp.Decision.ID ||
+		publicationResp.Update.EvidenceID != taskResp.Evidence.ID ||
+		publicationResp.Update.CandidateID != resp.Candidate.ID ||
+		publicationResp.Update.SourceContentID != resp.ContentItem.ContentID ||
+		publicationResp.Update.Status != "packaged-for-publication-review" ||
+		!strings.Contains(publicationResp.Update.Summary, "does not publish or mutate") ||
+		len(publicationResp.Update.RollbackRefs) < 4 ||
+		publicationResp.Candidate == nil ||
+		publicationResp.SourceItem == nil {
+		t.Fatalf("publication update missing review package lineage: %+v", publicationResp)
+	}
+
+	publicationListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
+	if publicationListW.Code != http.StatusOK {
+		t.Fatalf("list reconciliation after publication package status = %d body=%s", publicationListW.Code, publicationListW.Body.String())
+	}
+	var publicationListResp globalWireReconciliationResponse
+	if err := json.NewDecoder(publicationListW.Body).Decode(&publicationListResp); err != nil {
+		t.Fatalf("decode reconciliation list after publication package: %v", err)
+	}
+	if len(publicationListResp.PublicationUpdates) != 1 ||
+		publicationListResp.PublicationUpdates[0].ResearchDecisionID != handoffResp.Decision.ID ||
+		len(publicationListResp.PublicationUpdates[0].RollbackRefs) < 4 {
+		t.Fatalf("publication update missing from reconciliation list: %+v", publicationListResp.PublicationUpdates)
+	}
+
 	storiesTaskAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
 	if storiesTaskAfterW.Code != http.StatusOK {
 		t.Fatalf("stories after task status = %d body=%s", storiesTaskAfterW.Code, storiesTaskAfterW.Body.String())

@@ -176,6 +176,7 @@
   let researchTasks = [];
   let researchEvidence = [];
   let researchDecisions = [];
+  let publicationUpdates = [];
   let projectionReviews = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
@@ -268,6 +269,7 @@
       researchTasks = Array.isArray(payload.research_tasks) ? payload.research_tasks : [];
       researchEvidence = Array.isArray(payload.research_evidence) ? payload.research_evidence : [];
       researchDecisions = Array.isArray(payload.research_decisions) ? payload.research_decisions : [];
+      publicationUpdates = Array.isArray(payload.publication_updates) ? payload.publication_updates : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
       await loadFetchCycles(storyId);
     } catch {
@@ -283,6 +285,7 @@
       researchTasks = [];
       researchEvidence = [];
       researchDecisions = [];
+      publicationUpdates = [];
       projectionReviews = [];
     }
   }
@@ -795,6 +798,11 @@
     return researchDecisions.find((decision) => decision.evidence_id === id);
   }
 
+  function publicationUpdateForDecision(decision) {
+    const id = decision?.id || '';
+    return publicationUpdates.find((update) => update.research_decision_id === id);
+  }
+
   function researchTaskEvidenceSummary(task, action) {
     if (action === 'assign') {
       return `Research task assigned for ${task.task_kind || 'claim review'}; no platform story mutation applied.`;
@@ -868,6 +876,33 @@
       await loadContributions(selectedStory.id);
     } catch (error) {
       contributionStatus = error?.message || `Research evidence ${decision} failed`;
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
+  async function packagePublicationUpdate(decision) {
+    if (!authenticated || !decision?.id) return;
+    reconciliationBusyId = `${decision.id}:publication-update`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/publication-updates', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          research_decision_id: decision.id,
+        }),
+      });
+      if (!response.ok) throw new Error(`Publication update package failed: ${response.status}`);
+      const payload = await response.json();
+      publicationUpdates = [payload.update, ...publicationUpdates]
+        .filter(Boolean)
+        .slice(0, 30);
+      contributionStatus = `Publication update ${payload.update?.status || 'packaged'}`;
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || 'Publication update package failed';
     } finally {
       reconciliationBusyId = '';
     }
@@ -1439,6 +1474,7 @@
                                   </div>
                                   {#each evidencePackets.slice(0, 2) as evidence}
                                     {@const handoff = evidenceDecision(evidence)}
+                                    {@const publicationUpdate = publicationUpdateForDecision(handoff)}
                                     <small
                                       data-global-wire-research-task-evidence
                                       data-global-wire-research-evidence-id={evidence.id}
@@ -1449,6 +1485,28 @@
                                       <small data-global-wire-research-evidence-decision>
                                         {handoff.decision}: {handoff.result_state}
                                       </small>
+                                      {#if publicationUpdate}
+                                        <small
+                                          data-global-wire-publication-update
+                                          data-global-wire-publication-update-id={publicationUpdate.id}
+                                        >
+                                          {publicationUpdate.status}: {publicationUpdate.summary}
+                                        </small>
+                                        <small data-global-wire-publication-rollback>
+                                          rollback refs: {(publicationUpdate.rollback_refs || []).length}
+                                        </small>
+                                      {:else if handoff.result_state === 'ready-for-platform-review'}
+                                        <div class="research-task-actions">
+                                          <button
+                                            type="button"
+                                            on:click={() => packagePublicationUpdate(handoff)}
+                                            disabled={reconciliationBusyId === `${handoff.id}:publication-update`}
+                                            data-global-wire-package-publication-update
+                                          >
+                                            Package update
+                                          </button>
+                                        </div>
+                                      {/if}
                                     {:else}
                                       <div class="research-task-actions">
                                         <button

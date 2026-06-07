@@ -91,17 +91,18 @@ type globalWireFetchCycleResponse struct {
 }
 
 type globalWireReconciliationResponse struct {
-	Contributions     []types.GlobalWireContribution             `json:"contributions"`
-	SourceItems       map[string]types.ContentItem               `json:"source_items,omitempty"`
-	Decisions         []types.GlobalWireReconciliationDecision   `json:"decisions"`
-	Candidates        []types.GlobalWireGraphUpdateCandidate     `json:"candidates"`
-	Promotions        []types.GlobalWireGraphPromotionDecision   `json:"promotions"`
-	Refreshes         []types.GlobalWireSourceRefreshRun         `json:"refreshes"`
-	ClaimRecords      []types.GlobalWireClaimRecord              `json:"claim_records"`
-	ResearchTasks     []types.GlobalWireResearchTask             `json:"research_tasks"`
-	ResearchEvidence  []types.GlobalWireResearchTaskEvidence     `json:"research_evidence"`
-	ResearchDecisions []types.GlobalWireResearchEvidenceDecision `json:"research_decisions"`
-	ProjectionReviews []types.GlobalWireProjectionReview         `json:"projection_reviews"`
+	Contributions      []types.GlobalWireContribution             `json:"contributions"`
+	SourceItems        map[string]types.ContentItem               `json:"source_items,omitempty"`
+	Decisions          []types.GlobalWireReconciliationDecision   `json:"decisions"`
+	Candidates         []types.GlobalWireGraphUpdateCandidate     `json:"candidates"`
+	Promotions         []types.GlobalWireGraphPromotionDecision   `json:"promotions"`
+	Refreshes          []types.GlobalWireSourceRefreshRun         `json:"refreshes"`
+	ClaimRecords       []types.GlobalWireClaimRecord              `json:"claim_records"`
+	ResearchTasks      []types.GlobalWireResearchTask             `json:"research_tasks"`
+	ResearchEvidence   []types.GlobalWireResearchTaskEvidence     `json:"research_evidence"`
+	ResearchDecisions  []types.GlobalWireResearchEvidenceDecision `json:"research_decisions"`
+	PublicationUpdates []types.GlobalWirePublicationUpdate        `json:"publication_updates"`
+	ProjectionReviews  []types.GlobalWireProjectionReview         `json:"projection_reviews"`
 }
 
 type globalWireResearchTaskLifecycleRequest struct {
@@ -129,6 +130,19 @@ type globalWireResearchEvidenceDecisionResponse struct {
 	Task      types.GlobalWireResearchTask             `json:"task"`
 	Evidence  types.GlobalWireResearchTaskEvidence     `json:"evidence"`
 	Candidate *types.GlobalWireGraphUpdateCandidate    `json:"candidate,omitempty"`
+}
+
+type globalWirePublicationUpdateRequest struct {
+	ResearchDecisionID string `json:"research_decision_id"`
+	Summary            string `json:"summary,omitempty"`
+}
+
+type globalWirePublicationUpdateResponse struct {
+	Update            types.GlobalWirePublicationUpdate        `json:"update"`
+	ResearchDecision  types.GlobalWireResearchEvidenceDecision `json:"research_decision"`
+	Candidate         *types.GlobalWireGraphUpdateCandidate    `json:"candidate,omitempty"`
+	ProjectionReviews []types.GlobalWireProjectionReview       `json:"projection_reviews,omitempty"`
+	SourceItem        *types.ContentItem                       `json:"source_item,omitempty"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -712,23 +726,29 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list research evidence decisions"})
 			return
 		}
+		publicationUpdates, err := h.rt.Store().ListGlobalWirePublicationUpdates(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list publication updates"})
+			return
+		}
 		projectionReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, globalWireReconciliationResponse{
-			Contributions:     contributions,
-			SourceItems:       h.globalWireContributionSourceItems(r, ownerID, contributions),
-			Decisions:         decisions,
-			Candidates:        candidates,
-			Promotions:        promotions,
-			Refreshes:         refreshes,
-			ClaimRecords:      claimRecords,
-			ResearchTasks:     researchTasks,
-			ResearchEvidence:  researchEvidence,
-			ResearchDecisions: researchDecisions,
-			ProjectionReviews: projectionReviews,
+			Contributions:      contributions,
+			SourceItems:        h.globalWireContributionSourceItems(r, ownerID, contributions),
+			Decisions:          decisions,
+			Candidates:         candidates,
+			Promotions:         promotions,
+			Refreshes:          refreshes,
+			ClaimRecords:       claimRecords,
+			ResearchTasks:      researchTasks,
+			ResearchEvidence:   researchEvidence,
+			ResearchDecisions:  researchDecisions,
+			PublicationUpdates: publicationUpdates,
+			ProjectionReviews:  projectionReviews,
 		})
 	case http.MethodPost:
 		var req globalWireReconciliationCreateRequest
@@ -1036,6 +1056,60 @@ func globalWireResearchEvidenceResultState(decision string) string {
 		return "research-evidence-blocked"
 	}
 	return "ready-for-platform-review"
+}
+
+// HandleGlobalWirePublicationUpdates packages review-ready evidence into an
+// owner-visible update-feed artifact without publishing or mutating stories.
+func (h *APIHandler) HandleGlobalWirePublicationUpdates(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		storyID := strings.TrimSpace(r.URL.Query().Get("story_id"))
+		updates, err := h.rt.Store().ListGlobalWirePublicationUpdates(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list publication updates"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, map[string]any{
+			"publication_updates": updates,
+		})
+	case http.MethodPost:
+		var req globalWirePublicationUpdateRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid publication update request"})
+			return
+		}
+		req.ResearchDecisionID = strings.TrimSpace(req.ResearchDecisionID)
+		req.Summary = strings.TrimSpace(req.Summary)
+		if req.ResearchDecisionID == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "research_decision_id is required"})
+			return
+		}
+		update, decision, candidate, reviews, sourceItem, err := h.createGlobalWirePublicationUpdate(r, ownerID, req)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "publication update source artifact not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create publication update"})
+			return
+		}
+		writeAPIJSON(w, http.StatusCreated, globalWirePublicationUpdateResponse{
+			Update:            update,
+			ResearchDecision:  decision,
+			Candidate:         candidate,
+			ProjectionReviews: reviews,
+			SourceItem:        sourceItem,
+		})
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
 }
 
 func normalizeGlobalWireReconciliationDecision(value string) string {
@@ -2187,6 +2261,114 @@ func (h *APIHandler) createGlobalWireProjectionReviews(r *http.Request, ownerID 
 		reviews = append(reviews, rec)
 	}
 	return reviews, nil
+}
+
+func (h *APIHandler) createGlobalWirePublicationUpdate(r *http.Request, ownerID string, req globalWirePublicationUpdateRequest) (types.GlobalWirePublicationUpdate, types.GlobalWireResearchEvidenceDecision, *types.GlobalWireGraphUpdateCandidate, []types.GlobalWireProjectionReview, *types.ContentItem, error) {
+	decision, err := h.rt.Store().GetGlobalWireResearchEvidenceDecision(r.Context(), ownerID, req.ResearchDecisionID)
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, err
+	}
+	if decision.Decision != "accepted-for-review" || decision.ResultState != "ready-for-platform-review" {
+		return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, store.ErrNotFound
+	}
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, decision.StoryID)
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, err
+	}
+	var candidate *types.GlobalWireGraphUpdateCandidate
+	if strings.TrimSpace(decision.CandidateID) != "" {
+		rec, err := h.rt.Store().GetGlobalWireGraphUpdateCandidate(r.Context(), ownerID, decision.CandidateID)
+		if err != nil {
+			return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, err
+		}
+		candidate = &rec
+	}
+	var sourceItem *types.ContentItem
+	if strings.TrimSpace(decision.SourceContentID) != "" {
+		rec, err := h.rt.Store().GetContentItem(r.Context(), ownerID, decision.SourceContentID)
+		if err != nil {
+			return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, err
+		}
+		sourceItem = &rec
+	}
+	allReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, decision.StoryID, 100)
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, err
+	}
+	reviews := make([]types.GlobalWireProjectionReview, 0, len(allReviews))
+	for _, review := range allReviews {
+		if decision.CandidateID == "" || review.CandidateID == decision.CandidateID {
+			reviews = append(reviews, review)
+		}
+	}
+	reviewIDs := make([]string, 0, len(reviews))
+	reviewStates := make([]string, 0, len(reviews))
+	for _, review := range reviews {
+		reviewIDs = append(reviewIDs, review.ID)
+		reviewStates = append(reviewStates, review.Status)
+	}
+	summary := req.Summary
+	if summary == "" {
+		summary = globalWirePublicationUpdateSummary(story, decision, candidate, reviews)
+	}
+	update, err := h.rt.Store().CreateGlobalWirePublicationUpdate(r.Context(), types.GlobalWirePublicationUpdate{
+		ID:                  "global-wire-publication-update-" + uuid.NewString(),
+		OwnerID:             ownerID,
+		StoryID:             decision.StoryID,
+		CandidateID:         decision.CandidateID,
+		ResearchDecisionID:  decision.ID,
+		EvidenceID:          decision.EvidenceID,
+		SourceContentID:     decision.SourceContentID,
+		ProjectionReviewIDs: reviewIDs,
+		ProjectionStates:    reviewStates,
+		RollbackRefs:        globalWirePublicationRollbackRefs(story, decision, candidate, reviews),
+		Status:              "packaged-for-publication-review",
+		Summary:             summary,
+	})
+	if err != nil {
+		return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, err
+	}
+	return update, decision, candidate, reviews, sourceItem, nil
+}
+
+func globalWirePublicationRollbackRefs(story types.GlobalWireStory, decision types.GlobalWireResearchEvidenceDecision, candidate *types.GlobalWireGraphUpdateCandidate, reviews []types.GlobalWireProjectionReview) []string {
+	refs := []string{
+		"story:" + story.ID,
+		"story_vtext:" + story.StoryVTextDoc,
+		"research_decision:" + decision.ID,
+		"research_evidence:" + decision.EvidenceID,
+	}
+	if candidate != nil {
+		refs = append(refs, "candidate:"+candidate.ID, "candidate_status:"+candidate.Status)
+	}
+	for _, review := range reviews {
+		refs = append(refs, "projection_review:"+review.ID+":"+review.Status)
+		if strings.TrimSpace(review.ApprovedStoryDocID) != "" {
+			refs = append(refs, "approved_projection_doc:"+review.ApprovedStoryDocID)
+		}
+		if strings.TrimSpace(review.ApprovedRevisionID) != "" {
+			refs = append(refs, "approved_projection_revision:"+review.ApprovedRevisionID)
+		}
+		if strings.TrimSpace(review.DraftStoryDocID) != "" {
+			refs = append(refs, "draft_projection_doc:"+review.DraftStoryDocID)
+		}
+	}
+	out := []string{}
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref != "" && !strings.HasSuffix(ref, ":") {
+			out = append(out, ref)
+		}
+	}
+	return out
+}
+
+func globalWirePublicationUpdateSummary(story types.GlobalWireStory, decision types.GlobalWireResearchEvidenceDecision, candidate *types.GlobalWireGraphUpdateCandidate, reviews []types.GlobalWireProjectionReview) string {
+	candidateState := "no linked candidate"
+	if candidate != nil {
+		candidateState = candidate.Status
+	}
+	return fmt.Sprintf("Publication update package for %q: research decision %s, candidate state %s, %d projection review(s). This is queued for owner/platform publication review and does not publish or mutate the platform story.", story.Headline, decision.ID, candidateState, len(reviews))
 }
 
 func (h *APIHandler) ensureGlobalWireProjectionReviewDraft(r *http.Request, ownerID string, review types.GlobalWireProjectionReview) (types.Document, types.Revision, types.GlobalWireProjectionReview, error) {
