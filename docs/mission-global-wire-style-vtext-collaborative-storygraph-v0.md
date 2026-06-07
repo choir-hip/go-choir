@@ -775,3 +775,85 @@ Next executable probe:
   contribution by ID, preserving ownership and avoiding direct platform story
   mutation. This closes the product API side of "uploaded/user-provided
   sources -> contribution queue" before tackling sourcecycled clustering.
+
+## Overnight Checkpoint - Imported Source Contribution Path - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+commit delivered: `35068316314c6c3c5c776de4a0ef921caa3a517e`
+(`feat: queue imported global wire sources`)
+
+What changed:
+
+- `POST /api/global-wire/contributions` now accepts `source_content_id`.
+- Source and counter-source contributions may now reference an existing
+  owner-scoped `ContentItem` instead of forcing the route to create a new text
+  SourceItem from the contribution body.
+- Existing `ContentItem` references are validated against the authenticated
+  owner before they can enter the Global Wire contribution queue.
+- Cross-owner source reuse is rejected with a bad request response; the platform
+  story and source manifest remain unmutated.
+- Runtime and deployed Playwright proof now create an imported `ContentItem`,
+  queue it as a Global Wire source contribution, and verify the returned
+  contribution preserves the imported `source_content_id`.
+
+What was proven locally:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed.
+- `npm run build` passed in `frontend/`.
+
+What was proven on staging:
+
+- Pushed `35068316314c6c3c5c776de4a0ef921caa3a517e` to `origin/main`.
+- GitHub Actions CI run `27081835814` completed successfully, including
+  runtime shards, non-runtime tests, Go vet/build, and staging deploy.
+- FlakeHub publish run `27081835810` completed successfully.
+- `https://choir.news/health` reported both proxy and sandbox deployed at
+  `35068316314c6c3c5c776de4a0ef921caa3a517e`, deployed at
+  `2026-06-07T03:46:26Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded auth proof skipped when run from
+  `frontend/`.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed when run from `frontend/`, including:
+  - durable StoryGraph provenance;
+  - platform source `ContentItem` lookup;
+  - selected-style projection VText lookup;
+  - user-owned fork VText creation;
+  - contribution VText creation;
+  - newly created source contribution `ContentItem` lookup;
+  - imported `ContentItem` contribution by `source_content_id`;
+  - durable pending researcher review queue state.
+
+Belief-state changes:
+
+- The contribution side now supports both typed user-authored source artifacts
+  and user-imported source artifacts. That closes the API-level path from
+  `uploaded/user-provided source -> contribution queue` without granting users
+  authority to mutate platform StoryGraph nodes.
+- The current system is now a credible low-resolution collaborative object, not
+  just a mock: evidence, graph, Story VTexts, Style.vtext projections, app
+  views, owner forks, owner source artifacts, and reconciliation-ready queues
+  all exist through product APIs.
+- The next highest-value realism gap has shifted from artifact topology to feed
+  dynamics: live/sourcecycled evidence still does not create or update graph
+  neighborhoods.
+
+Remaining error field:
+
+- Sourcecycled/live ingestion still does not update StoryGraph records.
+- Story clustering, edge classification, and update classification are not
+  implemented.
+- The app does not yet expose a picker for existing imported `ContentItem`
+  source contributions, even though the API path is proven.
+- Reconciliation remains a queue state, not an active researcher workflow.
+- Autoradio/Ask hooks remain outside this slice.
+
+Next executable probe:
+
+- Inspect the existing sourcecycled/source service surface and choose the
+  narrowest product-path bridge that can turn real source service output into
+  StoryGraph candidate evidence or document why staging lacks the required live
+  service. If sourcecycled is not deployably available, switch to a
+  reconciliation workflow slice rather than faking live ingestion.
