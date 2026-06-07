@@ -666,3 +666,64 @@ shared agent harness to request research and VText-owned article revisions;
 articles must become publication-quality living VTexts with native source and
 related-VText transclusion; and the newspaper collection surface plus VText
 mobile toolbar still need visual/product proof across themes and viewports.
+
+## Checkpoint 2026-06-07T22:52Z: source registry expanded and deployed; feed-quality gaps documented
+
+objective: move the first realism axis upward by increasing actual source
+breadth without reintroducing static source trust tiers.
+
+what shipped: commit `1ce64fe6bebd694914ca583899e11bdea25c270f`
+expanded `configs/sources.json` from 170 to 211 configured sources: 1 GDELT,
+137 RSS/Atom feeds, and 73 Telegram public-preview channels. The added batch
+targets Hacker News/community surfaces, non-English/open-source technology,
+science/health, finance/economics, semiconductors, data centers, energy,
+agriculture, logistics, and long-tail Telegram/social channels. The config has
+zero `tier` or `source_standing` fields. `cmd/sourcecycled` now has a
+registry-shape regression test that fails if the tracked Global Wire source
+config drops below broad coverage, loses required source classes/verticals, or
+reintroduces static tier/standing fields.
+
+local proof before push: `jq` counted 211 sources, 137 RSS, 73 Telegram, and
+no forbidden tier/standing fields. `nix develop -c go test ./cmd/sourcecycled
+./internal/cycle ./internal/sources -count=1` passed. `nix develop -c go build
+./cmd/sourcecycled` passed. A bounded local live `sourcecycled` cycle using the
+expanded config fetched all 211 sources, recorded 210 `ok` fetches and 1
+error, produced 5,314 deduped SourceItems, queued 131 processor requests and 1
+reconciler request, and proved sample added sources produced items:
+`rss:hn_best` 30, `rss:hn_ask` 20, `rss:semiconductor_digest` 100,
+`telegram:androidpolice` 20, and `telegram:sciencealert` 20. Candidate
+Telegram channels that fetched but produced zero parsed posts were removed
+before commit and replaced with channels that produced parsed SourceItems.
+
+staging proof: CI run `27107122236` for
+`1ce64fe6bebd694914ca583899e11bdea25c270f` passed Go vet/build, non-runtime
+tests, integration-tagged smoke, all four runtime shards, aggregate gate, and
+Node B deploy job `79998280003`. Node B `/opt/go-choir` reports git HEAD
+`1ce64fe6bebd694914ca583899e11bdea25c270f`; deployed `configs/sources.json`
+reports 211 sources by type: 1 GDELT, 137 RSS, 73 Telegram, with zero
+forbidden tier/standing fields. Source Service health reported `status=ok`,
+`item_count=49480`, `fetch_count=4740`. Latest deployed source cycle
+`cycle_194dad3060e4425410f0483c` started `2026-06-07T22:48:22Z`, completed
+`2026-06-07T22:48:28Z`, fetched 211 sources, produced 4,947 new deduped items,
+queued 123 processor requests, and queued 1 reconciler request. Runtime
+dispatch had a startup-race refusal on attempt 1 while runtime port 8085 was
+not yet accepting connections, then recovered enough to submit 7 processor
+runs and 1 reconciler run; 116 processor requests remain queued by the
+configured dispatch limit rather than by a hard failure.
+
+new documented problems before further fixes: staging logs show several
+pre-existing RFI feeds and `rss:arabnews` currently return HTTP 403 from Node
+B, and `rss:euronews_fr` returns content containing illegal control character
+`U+001B`, causing the RSS parser to fail that feed. These are source-quality
+and parser-hardening problems, not blockers for the expanded registry slice:
+the latest deployed cycle still completed with 4,947 items. If fixed in this
+mission, the first follow-up should sanitize illegal XML control characters in
+RSS-like feeds and decide whether 403 sources should stay active, be retried
+with a different fetch policy, or be marked temporarily degraded.
+
+remaining error field: source breadth is materially better, but the mission is
+still incomplete. The next highest-impact axis is to turn processor/reconciler
+handoffs into VText-agent-owned, publication-quality article revisions with
+native source and related-VText transclusions, then prove the Global Wire
+collection surface opens those living articles cleanly across the product
+viewports and themes.
