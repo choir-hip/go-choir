@@ -1,5 +1,12 @@
 # Mission: Global Wire Broad-Source VText Newsroom
 
+> **Superseded active target:** Use
+> `docs/mission-global-wire-living-vtext-newsroom-v1.md` instead. The newer
+> mission incorporates the 2026-06-07 visual/product review: VText agents own
+> articles, article stubs are not articles, sources and related VTexts must be
+> transcluded, no Global Wire edit subsystem, and mobile/desktop typography are
+> delivery gates.
+
 **Status:** replacement MissionGradient mission after architecture correction.  
 **Spec:** `docs/choir-global-wire-broad-source-vtext-newsroom-spec-2026-06-07.md`  
 **Supersedes:** `docs/mission-global-wire-sourcemaxx-publication-system-v0.md` as
