@@ -382,7 +382,7 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	if resp.Status != "candidate-review" || resp.ContentItem == nil || resp.Contribution == nil || resp.Decision == nil || resp.Candidate == nil {
 		t.Fatalf("unexpected source refresh response: %+v", resp)
 	}
-	if resp.ClaimRecord == nil || resp.ResearchTask == nil || resp.ExtractionArtifact == nil {
+	if resp.ClaimRecord == nil || resp.SourceReviewSignal == nil || resp.ResearchTask == nil || resp.ExtractionArtifact == nil {
 		t.Fatalf("source refresh did not create structured claim/research state: %+v", resp)
 	}
 	if resp.RefreshRun.SourceContentID != resp.ContentItem.ContentID ||
@@ -427,6 +427,19 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		!strings.Contains(resp.ResearchTask.Prompt, "Do not treat the source as an oracle") {
 		t.Fatalf("research task missing review contract: %+v", resp.ResearchTask)
 	}
+	if resp.SourceReviewSignal.ClaimID != resp.ClaimRecord.ID ||
+		resp.SourceReviewSignal.RefreshID != resp.RefreshRun.ID ||
+		resp.SourceReviewSignal.SourceContentID != resp.ContentItem.ContentID ||
+		resp.SourceReviewSignal.CandidateID != resp.Candidate.ID ||
+		resp.SourceReviewSignal.SignalKind != "claim-change" ||
+		resp.SourceReviewSignal.UpdateClassification != "claim-changed" ||
+		resp.SourceReviewSignal.OverlapState != "claim-overlap-review-required" ||
+		resp.SourceReviewSignal.ContradictionState != "no-contradiction-claimed" ||
+		resp.SourceReviewSignal.ProjectionAction != "projection-review-required" ||
+		!slices.Contains(resp.SourceReviewSignal.EvidenceRefs, "claim:"+resp.ClaimRecord.ID) ||
+		!strings.Contains(resp.SourceReviewSignal.Rationale, "non-oracle review input") {
+		t.Fatalf("source review signal missing normalization contract: %+v", resp.SourceReviewSignal)
+	}
 	if resp.ExtractionArtifact.ClaimID != resp.ClaimRecord.ID ||
 		resp.ExtractionArtifact.RefreshID != resp.RefreshRun.ID ||
 		resp.ExtractionArtifact.SourceContentID != resp.ContentItem.ContentID ||
@@ -466,6 +479,11 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	}
 	if len(listResp.ClaimRecords) != 1 || listResp.ClaimRecords[0].ID != resp.ClaimRecord.ID {
 		t.Fatalf("claim record missing from reconciliation list: %+v", listResp.ClaimRecords)
+	}
+	if len(listResp.SourceReviewSignals) != 1 ||
+		listResp.SourceReviewSignals[0].ID != resp.SourceReviewSignal.ID ||
+		listResp.SourceReviewSignals[0].OverlapState != "claim-overlap-review-required" {
+		t.Fatalf("source review signal missing from reconciliation list: %+v", listResp.SourceReviewSignals)
 	}
 	if len(listResp.ResearchTasks) != 1 || listResp.ResearchTasks[0].ClaimID != resp.ClaimRecord.ID {
 		t.Fatalf("research task missing from reconciliation list: %+v", listResp.ResearchTasks)
@@ -923,6 +941,11 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	if len(finalReconciliation.SourceDossiers) == 0 ||
 		!slices.Contains(finalReconciliation.SourceDossiers[0].PublicationRefs.AutoradioEpisodeIDs, episodeResp.Episode.ID) {
 		t.Fatalf("source dossier missing autoradio episode ref: %+v", finalReconciliation.SourceDossiers)
+	}
+	if len(finalReconciliation.SourceDossiers[0].SourceReviewSignals) != 1 ||
+		finalReconciliation.SourceDossiers[0].SourceReviewSignals[0].ID != resp.SourceReviewSignal.ID ||
+		!slices.Contains(finalReconciliation.SourceDossiers[0].ClaimDossiers[0].SourceReviewSignalIDs, resp.SourceReviewSignal.ID) {
+		t.Fatalf("source dossier missing review signal: %+v", finalReconciliation.SourceDossiers[0])
 	}
 
 	storiesTaskAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")

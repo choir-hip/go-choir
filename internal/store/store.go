@@ -271,6 +271,32 @@ CREATE TABLE IF NOT EXISTS global_wire_claim_records (
 	KEY idx_global_wire_claim_records_refresh (owner_id, refresh_id)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_source_review_signals (
+	owner_id              VARCHAR(255) NOT NULL,
+	signal_id             VARCHAR(255) NOT NULL,
+	story_id              VARCHAR(255) NOT NULL,
+	refresh_id            VARCHAR(255) NOT NULL DEFAULT '',
+	claim_id              VARCHAR(255) NOT NULL DEFAULT '',
+	source_content_id     VARCHAR(255) NOT NULL DEFAULT '',
+	candidate_id          VARCHAR(255) NOT NULL DEFAULT '',
+	signal_kind           VARCHAR(255) NOT NULL DEFAULT '',
+	update_classification VARCHAR(255) NOT NULL DEFAULT '',
+	source_standing       VARCHAR(255) NOT NULL DEFAULT '',
+	overlap_state         VARCHAR(255) NOT NULL DEFAULT '',
+	contradiction_state   VARCHAR(255) NOT NULL DEFAULT '',
+	related_story_id      VARCHAR(255) NOT NULL DEFAULT '',
+	projection_action     VARCHAR(255) NOT NULL DEFAULT '',
+	status                VARCHAR(255) NOT NULL DEFAULT '',
+	rationale             LONGTEXT NOT NULL DEFAULT '',
+	evidence_refs_json    LONGTEXT NOT NULL DEFAULT '[]',
+	created_at            DATETIME NOT NULL,
+	updated_at            DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, signal_id),
+	KEY idx_global_wire_source_review_signals_story (owner_id, story_id, updated_at),
+	KEY idx_global_wire_source_review_signals_claim (owner_id, claim_id),
+	KEY idx_global_wire_source_review_signals_refresh (owner_id, refresh_id)
+);
+
 CREATE TABLE IF NOT EXISTS global_wire_research_tasks (
 	owner_id              VARCHAR(255) NOT NULL,
 	task_id               VARCHAR(255) NOT NULL,

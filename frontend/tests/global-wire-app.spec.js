@@ -324,6 +324,12 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(sourceRefresh.body.claim_record?.status).toBe('research-review-required');
     expect(sourceRefresh.body.claim_record?.candidate_id).toBe(sourceRefresh.body.candidate?.id);
     expect(sourceRefresh.body.claim_record?.uncertainty_state).toBeTruthy();
+    expect(sourceRefresh.body.source_review_signal?.claim_id).toBe(sourceRefresh.body.claim_record?.id);
+    expect(sourceRefresh.body.source_review_signal?.candidate_id).toBe(sourceRefresh.body.candidate?.id);
+    expect(sourceRefresh.body.source_review_signal?.update_classification).toBe(sourceRefresh.body.refresh_run?.update_classification);
+    expect(sourceRefresh.body.source_review_signal?.overlap_state).toBeTruthy();
+    expect(sourceRefresh.body.source_review_signal?.contradiction_state).toBeTruthy();
+    expect(sourceRefresh.body.source_review_signal?.evidence_refs || []).toContain(`claim:${sourceRefresh.body.claim_record?.id}`);
     expect(sourceRefresh.body.research_task?.claim_id).toBe(sourceRefresh.body.claim_record?.id);
     expect(sourceRefresh.body.research_task?.status).toBe('open');
     expect(sourceRefresh.body.extraction_artifact?.claim_id).toBe(sourceRefresh.body.claim_record?.id);
@@ -341,16 +347,34 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
       if (!res.ok) throw new Error(`load refresh claim queue failed: ${res.status}`);
       const list = await res.json();
       const claimRecords = (list.claim_records || []).filter((item) => item.candidate_id === candidateId);
+      const sourceReviewSignals = (list.source_review_signals || []).filter((item) => claimRecords.some((claim) => claim.id === item.claim_id));
       const researchTasks = (list.research_tasks || []).filter((item) => claimRecords.some((claim) => claim.id === item.claim_id));
       const extractionArtifacts = (list.extraction_artifacts || []).filter((item) => claimRecords.some((claim) => claim.id === item.claim_id));
-      return { claimRecords, researchTasks, extractionArtifacts };
+      const dossier = (list.source_dossiers || []).find((item) => item.story_id === 'story-supply-resilience');
+      return { claimRecords, sourceReviewSignals, researchTasks, extractionArtifacts, dossier };
     }, sourceRefresh.body.candidate.id);
     expect(refreshQueue.claimRecords.length).toBeGreaterThanOrEqual(1);
     expect(refreshQueue.claimRecords[0].status).toBe('research-review-required');
+    expect(refreshQueue.sourceReviewSignals.length).toBeGreaterThanOrEqual(1);
+    expect(refreshQueue.sourceReviewSignals[0].status).toBe('review-signal-open');
+    expect(refreshQueue.sourceReviewSignals[0].overlap_state).toBeTruthy();
+    expect(refreshQueue.dossier?.source_review_signals?.length || 0).toBeGreaterThanOrEqual(1);
+    expect(refreshQueue.dossier?.claim_dossiers?.[0]?.source_review_signal_ids || []).toContain(refreshQueue.sourceReviewSignals[0].id);
     expect(refreshQueue.researchTasks.length).toBeGreaterThanOrEqual(1);
     expect(refreshQueue.researchTasks[0].status).toBe('open');
     expect(refreshQueue.extractionArtifacts.length).toBeGreaterThanOrEqual(1);
     expect(refreshQueue.extractionArtifacts[0].status).toBe('provisional-review');
+    await app.locator('[data-global-wire-source-search-input]').fill('port congestion');
+    const uiRefreshPromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/global-wire/source-refresh' && response.request().method() === 'POST'
+    );
+    await app.locator('[data-global-wire-source-refresh]').click();
+    const uiRefreshResponse = await uiRefreshPromise;
+    expect([201, 200, 502, 503]).toContain(uiRefreshResponse.status());
+    if (uiRefreshResponse.status() === 201) {
+      await expect(app.locator('[data-global-wire-source-dossier-claims]')).toContainText('signals:');
+      await expect(app.locator('[data-global-wire-source-review-signal]').first()).toBeVisible();
+    }
     const researchTaskLifecycle = await page.evaluate(async (taskId) => {
       const res = await fetch('/api/global-wire/research-tasks', {
         method: 'POST',

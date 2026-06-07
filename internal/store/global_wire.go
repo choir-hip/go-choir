@@ -1189,6 +1189,97 @@ func (s *Store) ListGlobalWireClaimRecords(ctx context.Context, ownerID, storyID
 	return out, nil
 }
 
+// CreateGlobalWireSourceReviewSignal stores a durable non-oracle source
+// normalization signal tied to refresh/claim/candidate lineage.
+func (s *Store) CreateGlobalWireSourceReviewSignal(ctx context.Context, rec types.GlobalWireSourceReviewSignal) (types.GlobalWireSourceReviewSignal, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = rec.CreatedAt
+	}
+	if rec.Status == "" {
+		rec.Status = "review-signal-open"
+	}
+	evidenceRefsJSON, err := json.Marshal(rec.EvidenceRefs)
+	if err != nil {
+		return types.GlobalWireSourceReviewSignal{}, fmt.Errorf("marshal global wire source review signal evidence refs: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_source_review_signals (
+			owner_id, signal_id, story_id, refresh_id, claim_id,
+			source_content_id, candidate_id, signal_kind, update_classification,
+			source_standing, overlap_state, contradiction_state, related_story_id,
+			projection_action, status, rationale, evidence_refs_json, created_at,
+			updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.StoryID,
+		rec.RefreshID,
+		rec.ClaimID,
+		rec.SourceContentID,
+		rec.CandidateID,
+		rec.SignalKind,
+		rec.UpdateClassification,
+		rec.SourceStanding,
+		rec.OverlapState,
+		rec.ContradictionState,
+		rec.RelatedStoryID,
+		rec.ProjectionAction,
+		rec.Status,
+		sanitizeStoreText(rec.Rationale),
+		string(evidenceRefsJSON),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireSourceReviewSignal{}, fmt.Errorf("create global wire source review signal: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireSourceReviewSignals lists source normalization review signals,
+// optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWireSourceReviewSignals(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireSourceReviewSignal, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, signal_id, story_id, refresh_id, claim_id,
+	                source_content_id, candidate_id, signal_kind,
+	                update_classification, source_standing, overlap_state,
+	                contradiction_state, related_story_id, projection_action,
+	                status, rationale, evidence_refs_json, created_at, updated_at
+	           FROM global_wire_source_review_signals
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire source review signals: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireSourceReviewSignal
+	for rows.Next() {
+		rec, err := scanGlobalWireSourceReviewSignal(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire source review signals: %w", err)
+	}
+	return out, nil
+}
+
 // CreateGlobalWireResearchTask stores a reviewer/researcher follow-up task
 // derived from source refresh classification.
 func (s *Store) CreateGlobalWireResearchTask(ctx context.Context, rec types.GlobalWireResearchTask) (types.GlobalWireResearchTask, error) {
@@ -3402,6 +3493,53 @@ func scanGlobalWireClaimRecord(row interface{ Scan(...any) error }) (types.Globa
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWireClaimRecord{}, fmt.Errorf("parse global wire claim record updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireSourceReviewSignal(row interface{ Scan(...any) error }) (types.GlobalWireSourceReviewSignal, error) {
+	var rec types.GlobalWireSourceReviewSignal
+	var evidenceRefsJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.StoryID,
+		&rec.RefreshID,
+		&rec.ClaimID,
+		&rec.SourceContentID,
+		&rec.CandidateID,
+		&rec.SignalKind,
+		&rec.UpdateClassification,
+		&rec.SourceStanding,
+		&rec.OverlapState,
+		&rec.ContradictionState,
+		&rec.RelatedStoryID,
+		&rec.ProjectionAction,
+		&rec.Status,
+		&rec.Rationale,
+		&evidenceRefsJSON,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireSourceReviewSignal{}, ErrNotFound
+		}
+		return types.GlobalWireSourceReviewSignal{}, fmt.Errorf("scan global wire source review signal: %w", err)
+	}
+	if err := json.Unmarshal([]byte(evidenceRefsJSON), &rec.EvidenceRefs); err != nil {
+		return types.GlobalWireSourceReviewSignal{}, fmt.Errorf("unmarshal global wire source review signal evidence refs: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireSourceReviewSignal{}, fmt.Errorf("parse global wire source review signal created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireSourceReviewSignal{}, fmt.Errorf("parse global wire source review signal updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()

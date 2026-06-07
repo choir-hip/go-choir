@@ -183,6 +183,32 @@ type GlobalWireClaimRecord struct {
 	UpdatedAt            time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWireSourceReviewSignal is a durable, non-oracle normalization signal
+// derived from source refresh evidence. It makes contradiction, overlap,
+// standing, and projection-review implications reviewable without mutating the
+// platform StoryGraph.
+type GlobalWireSourceReviewSignal struct {
+	ID                   string    `json:"id"`
+	OwnerID              string    `json:"owner_id,omitempty"`
+	StoryID              string    `json:"story_id"`
+	RefreshID            string    `json:"refresh_id,omitempty"`
+	ClaimID              string    `json:"claim_id,omitempty"`
+	SourceContentID      string    `json:"source_content_id,omitempty"`
+	CandidateID          string    `json:"candidate_id,omitempty"`
+	SignalKind           string    `json:"signal_kind"`
+	UpdateClassification string    `json:"update_classification"`
+	SourceStanding       string    `json:"source_standing"`
+	OverlapState         string    `json:"overlap_state"`
+	ContradictionState   string    `json:"contradiction_state"`
+	RelatedStoryID       string    `json:"related_story_id,omitempty"`
+	ProjectionAction     string    `json:"projection_action"`
+	Status               string    `json:"status"`
+	Rationale            string    `json:"rationale"`
+	EvidenceRefs         []string  `json:"evidence_refs"`
+	CreatedAt            time.Time `json:"created_at,omitempty"`
+	UpdatedAt            time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireResearchTask is the reviewer-facing follow-up generated from a
 // provisional claim/update classification.
 type GlobalWireResearchTask struct {

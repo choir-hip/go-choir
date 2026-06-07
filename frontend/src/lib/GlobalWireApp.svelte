@@ -175,6 +175,7 @@
   let graphPromotionDecisions = [];
   let sourceRefreshes = [];
   let claimRecords = [];
+  let sourceReviewSignals = [];
   let researchTasks = [];
   let extractionArtifacts = [];
   let researchEvidence = [];
@@ -257,6 +258,7 @@
       sourceRegistryEntries = [];
       sourceSchedulerRuns = [];
       claimRecords = [];
+      sourceReviewSignals = [];
       researchTasks = [];
       extractionArtifacts = [];
       publicationArtifacts = [];
@@ -319,6 +321,7 @@
       graphPromotionDecisions = Array.isArray(payload.promotions) ? payload.promotions : [];
       sourceRefreshes = Array.isArray(payload.refreshes) ? payload.refreshes : [];
       claimRecords = Array.isArray(payload.claim_records) ? payload.claim_records : [];
+      sourceReviewSignals = Array.isArray(payload.source_review_signals) ? payload.source_review_signals : [];
       researchTasks = Array.isArray(payload.research_tasks) ? payload.research_tasks : [];
       extractionArtifacts = Array.isArray(payload.extraction_artifacts) ? payload.extraction_artifacts : [];
       researchEvidence = Array.isArray(payload.research_evidence) ? payload.research_evidence : [];
@@ -348,6 +351,7 @@
       sourceRegistryEntries = [];
       sourceSchedulerRuns = [];
       claimRecords = [];
+      sourceReviewSignals = [];
       researchTasks = [];
       extractionArtifacts = [];
       researchEvidence = [];
@@ -810,6 +814,11 @@
       }
       if (payload.claim_record?.id) {
         claimRecords = [payload.claim_record, ...claimRecords]
+          .filter(Boolean)
+          .slice(0, 30);
+      }
+      if (payload.source_review_signal?.id) {
+        sourceReviewSignals = [payload.source_review_signal, ...sourceReviewSignals]
           .filter(Boolean)
           .slice(0, 30);
       }
@@ -2554,8 +2563,20 @@
                 {/each}
               </div>
               <small data-global-wire-source-dossier-claims>
-                claims: {(selectedDossier.claim_dossiers || []).length} · extractions: {(selectedDossier.extraction_ids || []).length} · tasks: {(selectedDossier.research_task_ids || []).length}
+                claims: {(selectedDossier.claim_dossiers || []).length} · signals: {(selectedDossier.source_review_signals || []).length} · extractions: {(selectedDossier.extraction_ids || []).length} · tasks: {(selectedDossier.research_task_ids || []).length}
               </small>
+              {#if (selectedDossier.source_review_signals || []).length}
+                <div class="dossier-signals" data-global-wire-source-review-signals>
+                  {#each (selectedDossier.source_review_signals || []).slice(0, 3) as signal}
+                    <small
+                      data-global-wire-source-review-signal
+                      data-global-wire-source-review-signal-id={signal.id}
+                    >
+                      {signal.signal_kind}: {signal.update_classification} · {signal.overlap_state} · {signal.contradiction_state} · {signal.source_standing}
+                    </small>
+                  {/each}
+                </div>
+              {/if}
               <small data-global-wire-source-dossier-publication>
                 publications: {(selectedDossier.publication_refs?.artifact_ids || []).length} · deliveries: {(selectedDossier.publication_refs?.delivery_ids || []).length} · newsletter issues: {selectedDossierNewsletterIssueIds.length}
               </small>
@@ -3173,6 +3194,11 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.25rem;
+  }
+
+  .dossier-signals {
+    display: grid;
+    gap: 0.2rem;
   }
 
   .source-dossier small {
