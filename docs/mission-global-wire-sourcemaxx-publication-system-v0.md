@@ -872,6 +872,33 @@ belief-state changes:
   The next proof should use a post-deploy scheduled cycle with gateway already
   stable, then check for processor/reconciler `submit_coagent_update`,
   researcher/VText delegation, and produced lifecycle output.
+- Clean post-deploy cycle `cycle_448e8ace146d7a6579ce9a6b` started at
+  `2026-06-07T15:35:44Z` and completed at `2026-06-07T15:35:45Z` with 502
+  SourceItems, 14 fetches, 11 processor requests, and 1 reconciler request.
+  Product status returned the same cycle with 7 processor runtime IDs and 1
+  reconciler runtime ID. Node B internal runtime evidence for those submitted
+  run IDs showed six processor runs completed cleanly by `15:38:24Z`, one
+  processor was still running, and the reconciler was still running. Completed
+  processors called `submit_coagent_update`; the running processor called
+  `spawn_agent` twice and `wait_agent` once; the reconciler called
+  `spawn_agent` three times and `wait_agent` once. Tool evidence also included
+  `source_search`, `read_content_item`, `fetch_url`, `save_evidence`,
+  `web_search`, and evidence/listing tools. Gateway logs for the clean cycle
+  showed sustained Fireworks inference successes and search successes without
+  the deploy-window `connect: connection refused` failure.
+- The browser-visible status route still reports
+  `processor_unresolved_runtime_run_count: 7` and
+  `reconciler_unresolved_runtime_run_count: 1` for the clean cycle, even
+  though the Node B internal runtime endpoint can resolve the same run IDs and
+  list their events with `owner_id=global-wire-platform`. The root cause is
+  now narrower: `/api/global-wire/sourcemaxx-status` joins lifecycle evidence
+  through the request-serving runtime store, while sourcecycled submits these
+  global SourceMaxx runs to the Node B runtime endpoint configured by
+  `SOURCE_SERVICE_RUNTIME_BASE_URL`/`SOURCECYCLED_RUNTIME_BASE_URL`. The next
+  code fix should make the product-safe status projection resolve lifecycle
+  evidence through the same configured runtime endpoint that accepted the
+  SourceMaxx submissions, using internal-caller auth over Node B only, instead
+  of assuming the current handler's local store owns the submitted run IDs.
 
 remaining error field:
 
@@ -879,10 +906,11 @@ remaining error field:
   including provider-level distribution, freshness, dedupe, and backoff;
 - first-class processor/reconciler shared-harness profiles are present,
   sourcecycled submits capped staging handoffs to them, and staging logs show
-  post-fix shared-harness tool loops; product-safe status now exposes submitted
-  runtime-run lineage counts and unresolved detailed joins; resident
-  output/result quality, compaction continuity, researcher delegation, and
-  VText delegation/publication remain incomplete;
+  post-fix shared-harness tool loops; clean-cycle internal evidence shows
+  processor `submit_coagent_update` and researcher/VText-capable delegation
+  calls, but browser-visible product status still cannot resolve detailed
+  lifecycle events through the correct runtime endpoint; publication-quality
+  VText production remains incomplete;
 - deploys can interrupt active SourceMaxx runs because gateway/sandbox restart
   while processor/reconciler loops are mid-inference; provider 429 pressure was
   also observed under the current dispatch volume;
@@ -893,20 +921,18 @@ remaining error field:
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether processors and reconcilers
-produce useful resident outputs, request existing researcher/VText agents when
-needed, preserve continuity/compaction state, and create publication-quality
-VTexts with appropriate Style.vtext sources. Source volume, sourcecycled
-handoffs, submitted runtime lineage, and prompt-role execution are now proven
-on staging; the next realism axis is product-visible lifecycle output and
-publication-quality VText production.
+highest-impact remaining uncertainty: whether product-visible lifecycle status
+can follow SourceMaxx runs into the runtime endpoint that actually accepted
+them, then whether the produced processor/reconciler updates and delegated
+researcher/VText children are good enough to create publication-quality VTexts
+with appropriate Style.vtext sources.
 
 next executable delivery loop:
 
-1. Wait for or trigger a clean post-deploy SourceMaxx cycle with gateway
-   already stable, then inspect processor/reconciler lifecycle output:
-   `submit_coagent_update`, child researcher/VText delegation, produced VText
-   revisions, and failure/backpressure rates.
+1. Fix product-safe lifecycle join for SourceMaxx status: use the configured
+   sourcecycled runtime base URL/owner when resolving submitted run IDs, expose
+   only aggregate lifecycle counts through `/api/global-wire/sourcemaxx-status`,
+   and keep raw event content/internal endpoints private.
 2. Keep processors and reconcilers on the shared runtime harness with
    profile-specific prompts/toolsets only. Do not create a separate processor
    service loop to mask lineage gaps.
