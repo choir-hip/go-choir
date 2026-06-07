@@ -1469,3 +1469,48 @@ updated remaining error field:
   `durable-storygraph+source-maxx-vtexts` and at least one
   `source-maxx-vtext-*` row with VText content, source/style provenance, and a
   normal VText open path.
+
+2026-06-07 authenticated runtime split root cause:
+
+- Follow-up staging investigation after commit
+  `b139e518f360c044bd89bca3ff31cf19e5a4145d`
+  (`nix: persist node b sandbox runtime store`) showed that the host sandbox
+  now persists SourceMaxx VTexts correctly. Direct Node B Dolt queries under
+  `/var/lib/go-choir/runtime/runtime.vtext` found four current
+  `global-wire-platform` VText documents with `source: edit_vtext`,
+  `source_maxx_cycle_id`, selected style metadata, and non-seed article
+  content.
+- The authenticated product response still did not surface those VTexts:
+  `/api/global-wire/stories` returned `source: durable-storygraph` with only
+  the three seeded story rows, while `/api/global-wire/sourcemaxx-status`
+  resolved the live host SourceMaxx cycle and processor/reconciler runtime
+  evidence.
+- Root cause is now identified as a cross-runtime index lookup, not missing
+  VText creation. The deployed proxy is configured with
+  `PROXY_VMCTL_URL=http://127.0.0.1:8083`, and generic authenticated
+  `/api/*` routes are resolved through vmctl to the user's active VM sandbox.
+  SourceMaxx writes platform VTexts into the host/platform runtime at
+  `SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085`. The
+  `/api/global-wire/stories` handler only calls `ListDocumentsByOwner` on the
+  local request-serving runtime, so a user VM asks its own store for
+  `global-wire-platform` article VTexts and receives none.
+- This confirms the user's architectural concern: VText must be the article
+  authority, but the news surface needs a normalized platform-VText read path.
+  Processors and reconcilers can continue to use the shared harness and VText
+  appagent ownership model; the Global Wire news app must index/transclude
+  the platform-owned VText articles from the platform runtime instead of
+  treating the request-serving user VM store as the whole article corpus.
+
+updated remaining error field:
+
+- Implement a product-safe platform SourceMaxx VText article projection path
+  for `/api/global-wire/stories`, analogous to the existing SourceMaxx status
+  remote-runtime evidence path, without creating a new canonical article data
+  structure.
+- Preserve user-owned edits by keeping open/fork actions in normal VText
+  flows. The cross-runtime index may expose platform article heads and VText
+  handles, but it must not mutate platform stories from user requests.
+- Prove on staging with a passkey-authenticated browser session that the
+  vmctl-routed Global Wire app receives at least one `source-maxx-vtext-*`
+  story row sourced from platform VTexts, while the clean newspaper UI and
+  public preview acceptance still pass.
