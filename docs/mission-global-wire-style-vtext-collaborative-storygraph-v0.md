@@ -5340,3 +5340,51 @@ Next executable probe:
   links, an email-style delivery/subscription artifact, or deeper
   source/extraction normalization. The strongest product gap after RSS is no
   durable newsletter issue/subscriber delivery object.
+
+## Problem Checkpoint - RSS Lacks Newsletter Issue And Subscriber Delivery Ledger - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transforms:
+
+- Treat a newsletter as a delivery ledger, not as outbound email
+  infrastructure. The first durable object should prove owner issue creation
+  and subscriber delivery refs before attempting real SMTP/provider send.
+- Derive newsletter issues from owner-created public links. This preserves the
+  publication artifact topology and avoids a parallel story-publishing path.
+- Keep subscriber state owner-scoped and explicit. A delivery ledger can name
+  recipients and status without exposing private owner queues or mutating
+  platform stories.
+
+Observed gap:
+
+- Global Wire now has public links, a public reader, token-scoped RSS, and
+  Autoradio/RunAcceptance evidence.
+- RSS is one token and one item. It is feed-consumable, but it is not a durable
+  newsletter issue, subscriber list, or subscriber delivery record.
+- The spec trajectory includes newsletters/researchers/Autoradio as downstream
+  outputs; only Autoradio and RSS have durable product evidence so far.
+
+Why this matters:
+
+- Newsletter delivery is a distinct product state: an owner chooses public
+  publication artifacts, composes an issue, and records which subscriber
+  destinations received or are ready to receive that issue.
+- Without a ledger, there is no reviewable state for issue composition,
+  subscriber intent, delivery refs, rollback refs, or reconciliation of
+  publication output.
+
+Remaining error field:
+
+- No `GlobalWireNewsletterIssue` or subscriber delivery artifact exists.
+- No owner product path can create a newsletter issue from public links.
+- No deployed proof shows issue/subscriber delivery state derived from the
+  publication trajectory.
+
+Next executable probe:
+
+- Add the smallest owner-scoped newsletter ledger: create/list newsletter
+  subscribers, create a newsletter issue from one or more public links, record
+  issue delivery refs for active subscribers, surface it in the News app, and
+  prove on staging that issue/delivery records preserve citation and rollback
+  provenance without mutating StoryGraph or user forks.
