@@ -310,6 +310,14 @@ func TestStoragePersistsSourceMaxxHandoffsAndLatestCycleSummary(t *testing.T) {
 	if err := store.SaveReconcilerRequests(ctx, handoff.ReconcilerRequests); err != nil {
 		t.Fatalf("save reconciler requests: %v", err)
 	}
+	fetch := sources.NewFetchRecord(sources.Source{ID: "rss:ai_policy", Type: sources.SourceTypeRSS, URL: "https://example.test/feed"}, "https://example.test/feed", now)
+	fetch.Status = "ok"
+	fetch.StatusCode = 200
+	fetch.ItemCount = 1
+	fetch.EndedAt = now.Add(time.Second)
+	if err := store.SaveCycleFetches(cycleID, []sources.FetchRecord{fetch}); err != nil {
+		t.Fatalf("save cycle fetches: %v", err)
+	}
 	if err := store.FinishCycle(ctx, cycleID, "completed", 1, 1, nil); err != nil {
 		t.Fatalf("finish cycle: %v", err)
 	}
@@ -320,6 +328,9 @@ func TestStoragePersistsSourceMaxxHandoffsAndLatestCycleSummary(t *testing.T) {
 	}
 	if summary.CycleID != cycleID || summary.ItemCount != 1 || summary.FetchCount != 1 {
 		t.Fatalf("unexpected cycle summary: %+v", summary)
+	}
+	if len(summary.Fetches) != 1 || summary.Fetches[0].SourceID != "rss:ai_policy" {
+		t.Fatalf("unexpected cycle fetches: %+v", summary.Fetches)
 	}
 	if len(summary.ProcessorRequests) != 1 || summary.ProcessorRequests[0].ProcessorKey != "processor:ai:us:rss" {
 		t.Fatalf("unexpected processor summary: %+v", summary.ProcessorRequests)

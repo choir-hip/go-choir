@@ -17,9 +17,34 @@ type HealthResponse struct {
 type SourceMaxxResponse struct {
 	Provider           string              `json:"provider"`
 	Cycle              CycleSummary        `json:"cycle"`
+	SourceHealth       SourceHealth        `json:"source_health,omitempty"`
 	ProcessorRequests  []ProcessorRequest  `json:"processor_requests"`
 	ReconcilerRequests []ReconcilerRequest `json:"reconciler_requests"`
 	Metadata           SourceMaxxMetadata  `json:"metadata,omitempty"`
+}
+
+type SourceHealth struct {
+	ConfiguredSourceCount    int                  `json:"configured_source_count"`
+	SuccessFetchCount        int                  `json:"success_fetch_count"`
+	FailedFetchCount         int                  `json:"failed_fetch_count"`
+	ItemProducingSourceCount int                  `json:"item_producing_source_count"`
+	ItemCount                int                  `json:"item_count"`
+	Failures                 []SourceFetchSummary `json:"failures,omitempty"`
+	Fetches                  []SourceFetchSummary `json:"fetches,omitempty"`
+}
+
+type SourceFetchSummary struct {
+	SourceID     string `json:"source_id"`
+	SourceType   string `json:"source_type,omitempty"`
+	Status       string `json:"status"`
+	StatusCode   int    `json:"status_code,omitempty"`
+	ErrorClass   string `json:"error_class,omitempty"`
+	Error        string `json:"error,omitempty"`
+	ItemCount    int    `json:"item_count,omitempty"`
+	StartedAt    string `json:"started_at,omitempty"`
+	EndedAt      string `json:"ended_at,omitempty"`
+	RequestURL   string `json:"request_url,omitempty"`
+	CanonicalURL string `json:"canonical_url,omitempty"`
 }
 
 type CycleSummary struct {

@@ -72,6 +72,7 @@ func createTables(db *sql.DB) error {
 		)`,
 		`CREATE TABLE IF NOT EXISTS fetches (
 			fetch_id          TEXT PRIMARY KEY,
+			cycle_id          TEXT NOT NULL DEFAULT '',
 			source_id         TEXT NOT NULL,
 			source_type       TEXT NOT NULL,
 			request_url       TEXT NOT NULL,
@@ -213,6 +214,7 @@ func migrateTables(db *sql.DB) error {
 		`ALTER TABLE issues ADD COLUMN citation_map_json TEXT NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE processor_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE reconciler_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE fetches ADD COLUMN cycle_id TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, stmt := range alterStatements {
 		if _, err := db.Exec(stmt); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
@@ -260,6 +262,7 @@ type CycleSummary struct {
 	ItemCount          int
 	FetchCount         int
 	Error              string
+	Fetches            []sources.FetchRecord
 	ProcessorRequests  []ProcessorRequest
 	ReconcilerRequests []ReconcilerRequest
 }
@@ -327,16 +330,20 @@ func (s *Storage) SaveSources(registry *sources.Registry) error {
 }
 
 func (s *Storage) SaveFetches(fetches []sources.FetchRecord) error {
+	return s.SaveCycleFetches("", fetches)
+}
+
+func (s *Storage) SaveCycleFetches(cycleID string, fetches []sources.FetchRecord) error {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO fetches (
-		fetch_id, source_id, source_type, request_url, canonical_url, status_code,
+		fetch_id, cycle_id, source_id, source_type, request_url, canonical_url, status_code,
 		status, started_at, ended_at, response_etag, response_modified,
 		content_hash, raw_snapshot_ref, error_class, error, item_count
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -345,7 +352,7 @@ func (s *Storage) SaveFetches(fetches []sources.FetchRecord) error {
 		if strings.TrimSpace(fetch.FetchID) == "" {
 			continue
 		}
-		if _, err := stmt.Exec(fetch.FetchID, fetch.SourceID, fetch.SourceType, fetch.RequestURL,
+		if _, err := stmt.Exec(fetch.FetchID, cycleID, fetch.SourceID, fetch.SourceType, fetch.RequestURL,
 			fetch.CanonicalURL, fetch.StatusCode, fetch.Status, formatTime(fetch.StartedAt),
 			formatTime(fetch.EndedAt), fetch.ResponseETag, fetch.ResponseModified, fetch.ContentHash,
 			fetch.RawSnapshotRef, fetch.ErrorClass, fetch.Error, fetch.ItemCount); err != nil {
@@ -645,9 +652,40 @@ func (s *Storage) LatestCycleSummary(ctx context.Context) (CycleSummary, error) 
 	if err != nil {
 		return CycleSummary{}, err
 	}
+	fetches, err := s.ListFetchesForCycle(ctx, summary.CycleID)
+	if err != nil {
+		return CycleSummary{}, err
+	}
+	summary.Fetches = fetches
 	summary.ProcessorRequests = processors
 	summary.ReconcilerRequests = reconcilers
 	return summary, nil
+}
+
+func (s *Storage) ListFetchesForCycle(ctx context.Context, cycleID string) ([]sources.FetchRecord, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT fetch_id, source_id, source_type, request_url,
+		canonical_url, status_code, status, started_at, ended_at, response_etag,
+		response_modified, content_hash, raw_snapshot_ref, error_class, error, item_count
+		FROM fetches WHERE cycle_id = ? ORDER BY source_id`, cycleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []sources.FetchRecord
+	for rows.Next() {
+		var fetch sources.FetchRecord
+		var startedAt, endedAt string
+		if err := rows.Scan(&fetch.FetchID, &fetch.SourceID, &fetch.SourceType, &fetch.RequestURL,
+			&fetch.CanonicalURL, &fetch.StatusCode, &fetch.Status, &startedAt, &endedAt,
+			&fetch.ResponseETag, &fetch.ResponseModified, &fetch.ContentHash,
+			&fetch.RawSnapshotRef, &fetch.ErrorClass, &fetch.Error, &fetch.ItemCount); err != nil {
+			return nil, err
+		}
+		fetch.StartedAt = parseStoredTime(startedAt)
+		fetch.EndedAt = parseStoredTime(endedAt)
+		out = append(out, fetch)
+	}
+	return out, rows.Err()
 }
 
 func (s *Storage) CountItems(ctx context.Context) (int, error) {

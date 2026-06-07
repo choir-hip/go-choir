@@ -192,6 +192,7 @@ func startSourceServiceAPI(ctx context.Context, store *cycle.Storage) *http.Serv
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/source-service/health", handleSourceServiceHealth(store))
 	mux.HandleFunc("/internal/source-service/search", handleSourceServiceSearch(store))
+	mux.HandleFunc("/internal/source-service/global-wire/latest", handleSourceServiceSourceMaxxLatest(store))
 	mux.HandleFunc("/internal/source-service/sourcemaxx/latest", handleSourceServiceSourceMaxxLatest(store))
 	mux.HandleFunc("/internal/source-service/items/", handleSourceServiceItem(store))
 	server := &http.Server{
@@ -277,6 +278,7 @@ func handleSourceServiceSourceMaxxLatest(store *cycle.Storage) http.HandlerFunc 
 		writeSourceServiceJSON(w, http.StatusOK, sourceapi.SourceMaxxResponse{
 			Provider:           sourceapi.ProviderName,
 			Cycle:              sourceAPICycleSummary(summary),
+			SourceHealth:       sourceAPISourceHealth(summary),
 			ProcessorRequests:  sourceAPIProcessorRequests(summary.ProcessorRequests),
 			ReconcilerRequests: sourceAPIReconcilerRequests(summary.ReconcilerRequests),
 			Metadata: sourceapi.SourceMaxxMetadata{
@@ -320,6 +322,49 @@ func sourceAPICycleSummary(summary cycle.CycleSummary) sourceapi.CycleSummary {
 		FetchCount: summary.FetchCount,
 		Error:      summary.Error,
 	}
+}
+
+func sourceAPISourceHealth(summary cycle.CycleSummary) sourceapi.SourceHealth {
+	health := sourceapi.SourceHealth{
+		ConfiguredSourceCount: summary.FetchCount,
+	}
+	for _, fetch := range summary.Fetches {
+		if fetch.Status == "ok" {
+			health.SuccessFetchCount++
+		} else {
+			health.FailedFetchCount++
+			health.Failures = append(health.Failures, sourceapi.SourceFetchSummary{
+				SourceID:     fetch.SourceID,
+				SourceType:   string(fetch.SourceType),
+				Status:       fetch.Status,
+				StatusCode:   fetch.StatusCode,
+				ErrorClass:   fetch.ErrorClass,
+				Error:        fetch.Error,
+				StartedAt:    formatSourceTime(fetch.StartedAt),
+				EndedAt:      formatSourceTime(fetch.EndedAt),
+				RequestURL:   fetch.RequestURL,
+				CanonicalURL: fetch.CanonicalURL,
+			})
+		}
+		if fetch.ItemCount > 0 {
+			health.ItemProducingSourceCount++
+		}
+		health.ItemCount += fetch.ItemCount
+		health.Fetches = append(health.Fetches, sourceapi.SourceFetchSummary{
+			SourceID:     fetch.SourceID,
+			SourceType:   string(fetch.SourceType),
+			Status:       fetch.Status,
+			StatusCode:   fetch.StatusCode,
+			ErrorClass:   fetch.ErrorClass,
+			Error:        fetch.Error,
+			ItemCount:    fetch.ItemCount,
+			StartedAt:    formatSourceTime(fetch.StartedAt),
+			EndedAt:      formatSourceTime(fetch.EndedAt),
+			RequestURL:   fetch.RequestURL,
+			CanonicalURL: fetch.CanonicalURL,
+		})
+	}
+	return health
 }
 
 func sourceAPIProcessorRequests(requests []cycle.ProcessorRequest) []sourceapi.ProcessorRequest {
@@ -617,7 +662,7 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 	// Phase 1 & 2: Source Polling & Deduplication
 	pollResult := engine.PollAll(ctx)
 	items := pollResult.Items
-	if err := store.SaveFetches(pollResult.Fetches); err != nil {
+	if err := store.SaveCycleFetches(cycleID, pollResult.Fetches); err != nil {
 		log.Printf("Failed to save fetch records: %v", err)
 		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
 		return
