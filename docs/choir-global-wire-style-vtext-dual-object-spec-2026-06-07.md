@@ -3,9 +3,9 @@
 **Status:** product/architecture spec for SourceMaxx Global Wire and
 publication-quality `Style.vtext`.
 **Scope:** high-volume source ingestion, long-running processors,
-reconcilers, existing researcher agents, existing VText agents, Story VTexts,
-deep Style.vtext routing, user-owned versions, graph lineage, and the News app
-surface.
+reconcilers, existing researcher agents, existing VText agents, story/article
+VTexts, deep Style.vtext routing, user-owned versions, publication feeds,
+VText traversal/indexing, and the News app surface.
 
 ## Purpose
 
@@ -22,8 +22,8 @@ SourceMaxx ingestion
 -> reconcilers
 -> existing researcher agents
 -> existing VText agents
--> Story VTexts shaped by Style.vtext
--> durable graph/source/research/lineage records
+-> story/article VTexts shaped by Style.vtext
+-> durable VText traversal/source indexes
 -> readable News app
 -> user-owned edits, forks, contributions, and publications
 ```
@@ -35,34 +35,37 @@ quality.
 
 ## Core Invariants
 
-- Every story is a normal VText. The News app may add news affordances, but the
-  story must remain viewable and editable through ordinary VText semantics.
+- Every story/article is a normal VText. Do not introduce a separate story
+  object type, renderer, or ownership class.
 - User edits do not mutate the platform story. They create user-owned VText
   versions/forks that the user can publish.
-- Platform story mutation requires explicit versioned update/review records.
+- Platform story correction/update is just a new version of the relevant VText
+  through explicit candidate/review/version records.
   No source, processor, reconciler, researcher, VText agent, or user edit may
   silently rewrite a canonical story.
 - Stories cite raw sources, sourcecycled items, web/search evidence, other
-  Story VTexts, processor/reconciler/research artifacts where relevant, user
-  artifacts, and `Style.vtext` artifacts.
+  VTexts, processor/reconciler/research VTexts where relevant, user artifacts,
+  and `Style.vtext` artifacts.
 - `Style.vtext` is a source artifact, not hardcoded app config. It can be
   selected, replaced, composed, merged, hybridized, forked, published, or
   permissioned.
 - News is non-oracle. It represents claims, counterclaims, uncertainty, source
   standing, evidence gaps, corrections, unanswered questions, contradictions,
   and changes over time.
-- Processors and reconcilers are live cognition roles. Durable graph records
-  preserve the projection and lineage of their work; graph records do not
-  replace the live agent roles.
+- Processors and reconcilers are live cognition roles. VText transclusion and
+  version structure create the implicit graph. Any explicit index is a
+  rebuildable accelerator over VTexts, versions, sources, and transclusions; it
+  does not replace VText-native provenance or the live agent roles.
 - Existing researcher agents are reused for bounded evidence work.
 - Existing VText agents are reused for article writing and revision.
-- Graph nodes are story headlines / Story VTexts by default. Sources, claims,
-  entities, processor artifacts, reconciler artifacts, and timelines are
-  overlays.
+- Relationship nodes are story/article headlines by default. Sources, claims,
+  entities, processor notes, reconciler notes, and timelines are overlays over
+  VTexts and source records.
 - All UI views must work in Future Noir, Carbon Kintsugi, and London Salmon.
 - Low-resolution implementation must preserve topology: source ingestion,
   processors, reconcilers, researcher reuse, VText agent reuse, Style.vtext
-  routing, Story VTexts, user ownership, graph lineage, and app views.
+  routing, story/article VTexts, user ownership, VText traversal/indexing,
+  publication feeds, and app views.
 
 ## Product Runtime
 
@@ -168,21 +171,35 @@ every processor turn to reconstruct understanding from scratch.
 
 ### Reconcilers
 
-Reconcilers are live agents that bridge processor outputs.
+Reconcilers are corpus-level story agents, not a downstream stage after
+processors.
+
+They review articles/stories and surrounding evidence across:
+
+- existing published VTexts;
+- current platform VTexts;
+- authorized user-owned VTexts and published user versions;
+- processor notes/briefs;
+- source ledger state;
+- researcher evidence packets;
+- VText traversal/index records;
+- open questions, contradictions, and change history.
 
 They look for:
 
-- cross-processor story links;
-- contradictions;
+- consensus across pieces;
+- contradictions within and between pieces;
+- claims that drifted since publication;
 - duplicate or overlapping developments;
 - missing evidence;
 - questions that need research;
-- stories that need linking, updating, or splitting;
-- stories that need VText treatment because the public meaning changed.
+- articles that need ordinary VText updates/corrections;
+- new ideas, insights, or perspectives that should become new VTexts.
 
 Reconcilers may request existing researcher agents and existing VText agents.
-They also write durable reconciler artifacts so the graph and News app can show
-relationships, contradictions, questions, and follow-up work.
+They write durable reconciler notes and relationship/question records so other
+agents and the News app can expose connections without turning the News app
+into a control dashboard.
 
 ### Existing Researcher Agents
 
@@ -211,53 +228,56 @@ VText agents receive:
 - processor briefs;
 - reconciler briefs;
 - researcher evidence packets;
-- current Story VText handles when revising;
+- current VText handles when revising;
 - matched `Style.vtext` artifacts;
 - user/publication context.
 
-They produce or revise normal VTexts:
+They produce or revise normal VTexts. Platform articles, user-owned forks,
+published user versions, counterstories, and style-shaped projections are all
+ordinary VTexts with ownership, publication, citation, and version metadata.
 
-- `PlatformStory.vtext`: platform/public story projection.
-- `ProjectionStory.vtext`: style-specific projection over the same evidence.
-- `UserStory.vtext`: user-owned fork/edit/projection, publishable by user.
-- `CounterStory.vtext`: user or publication argument that extends, disputes,
-  or reframes an existing story.
+Processor notes, reconciler notes, and researcher packets should also use VText
+where practical. A processor brief or reconciler note can become the early VText
+version that the writing agent develops, rather than a parallel artifact that
+must be copied into VText later.
 
 VText agents may request additional research when the brief is too thin,
 contradictory, or risky.
 
-## Durable Graph And Lineage
+## VText Traversal And Indexing
 
-The durable graph is not the whole intelligence. It is the product-visible
-lineage and relationship layer over source, processor, reconciler, researcher,
-VText, Style.vtext, and user artifacts.
+The primary graph is implicit in VText markup, transclusion, native
+Dolt-backed versions, per-version sources, multimedia source references,
+`Style.vtext` citations, and links between VTexts. Build skill at walking
+VTexts before introducing new graph-shaped authority.
 
-Default graph:
+An explicit index may be useful for performance and discovery. It should index
+VTexts and VText versions, not merely extracted facts, because future surfaces
+such as Autoradio will need to turn paths through VText graph space into a
+single fluid narrative. Autoradio itself is beyond this mission; TTS/STT model
+work has not started and should not distract the first SourceMaxx slice.
 
-- node = Story VText / headline;
-- edge = source overlap, citation, update relation, contradiction, claim
-  overlap, reconciler link, or publication/update lineage;
-- neighborhood = story family/source relationship;
-- color = recency/live-change state;
-- size = prominence/source density/retrieval demand/editorial weight;
-- outline/badge = tension, contradiction, source-quality issue, research
-  pending, or processor/reconciler attention.
+Index design rules:
 
-Overlays:
+- key by VText id and version id;
+- index per-version source transclusions and citations;
+- index VText-to-VText transclusions and links;
+- index `Style.vtext` citations and style composition;
+- index processor/reconciler/research VTexts where they exist;
+- index publication state and user-owned published versions;
+- support fast neighborhood/path queries for reading and later audio traversal;
+- remain rebuildable from VText/source state;
+- never become the authority for version provenance, source provenance, or
+  canonical text.
 
-- sources;
-- processor briefs;
-- reconciler questions/links;
-- researcher evidence packets;
-- claims;
-- entities;
-- timelines;
-- styles/projections;
-- user contributions;
-- research tasks.
+Relationship views may show source overlap, citation, update relation,
+contradiction, claim overlap, reconciler link, publication/update lineage,
+recency, source density, tension, research pending state, and related article
+neighborhoods. Those are views over VText/index state, not separate truth.
 
-Canonical platform stories change only through explicit versioned update paths.
-User-owned VTexts can diverge immediately without becoming platform truth.
+Canonical platform articles change only through explicit VText version/update
+paths. User-owned VTexts can diverge immediately and may also be published by
+their owners without becoming platform truth.
 
 ## Deep Style.vtext
 
@@ -298,7 +318,7 @@ Projection is a relation:
 
 ```text
 evidence + processor/reconciler/research context + Style.vtext + audience/task
--> Story VText
+-> VText
 ```
 
 Do not run every style over every story by default.
@@ -313,6 +333,11 @@ The system should select, rank, compose, replace, or withhold styles based on:
 - story maturity;
 - urgency;
 - whether the style is applicable.
+
+VText agents may choose from a collection of `Style.vtext` sources, mix or
+compose compatible styles, or withhold styles that do not fit the story. Users
+may request a different style, customize a style, or create a new `Style.vtext`
+that their VText agents can use going forward.
 
 Allowed projection variation:
 
@@ -333,7 +358,7 @@ Not allowed:
 - impersonating real people without explicit authority;
 - rendering a non-fitting style just because it exists.
 
-## Collaboration Model
+## Collaboration And Publication Model
 
 Users can contribute:
 
@@ -352,35 +377,42 @@ Contribution flow:
 user contribution
 -> user-owned VText/source/style artifact
 -> research task, processor note, or reconciler note
--> graph evidence/contribution queue
+-> VText traversal/source index for discovery where needed
 -> possible platform reconciliation later
 ```
 
 The user contribution may improve the user's own published version immediately.
 It does not automatically become the platform story.
 
+The public `choir.news` platform should eventually surface a feed of published
+user-owned VTexts. That feed is part of the publication object, even if the
+first SourceMaxx mission prioritizes platform Global Wire ingestion,
+processing, and readable article output before full user-publication discovery.
+
 ## News App Views
 
-The News app is a VText-centered newsroom surface.
+The News app is a minimal VText-centered newsroom collection surface. It should
+transclude VTexts rather than replacing the VText app.
 
 Required views:
 
-- **Front Page:** readable newspaper/broadsheet columns of current Story VTexts.
-- **Story Reader:** normal VText story view with news metadata and provenance.
-- **Story Editor/Fork:** user-owned editing path from a platform story.
-- **Evidence/Trace:** source manifest, processor/reconciler/research lineage,
-  related Story VTexts, and change history.
-- **Graph:** story-headline node graph with source/reconciler relationship
-  semantics.
-- **Processor/Reconciler View:** inspect live processor/reconciler outputs,
-  questions, and requested research/VText work without turning the front page into a
-  dashboard.
-- **Style Routing View:** inspect selected/composed/withheld `Style.vtext`
-  choices and reasons.
-- **Contribution Surface:** add source, dispute point, argument, request more
-  research, or publish user version.
-- **Autoradio/Ask Choir hooks:** ask about the story, play/read projections,
-  and follow related story neighborhoods.
+- **Front Page:** readable newspaper/broadsheet columns of current VTexts.
+- **Source Chronology:** reverse-chronological source feed with filters by
+  source class, geography, topic/vertical hints, and later search.
+- **Open In VText:** button/action on every full article that opens the normal
+  VText app for reading, editing, forking, style changes, or user publication.
+- **Style/Provenance Disclosure:** compact access to selected/composed
+  `Style.vtext` sources, per-version sources, and change history.
+
+Deferred or optional views:
+
+- VText traversal/relationship exploration;
+- processor notes;
+- reconciler notes;
+- research queues;
+- published user VText discovery feed.
+- Autoradio/voice traversal after TTS/STT models and VText path narration are
+  explored separately.
 
 UI requirements:
 
@@ -388,7 +420,9 @@ UI requirements:
 - no nested scrolling panels;
 - no repeated display of the same limited information;
 - details by progressive disclosure;
-- evidence visible without overwhelming the reading surface;
+- evidence visible without overwhelming the collection surface;
+- no contribution dashboard inside the News app; contribution and editing
+  happen through VText/source/style flows;
 - all views render in Future Noir, Carbon Kintsugi, and London Salmon.
 
 Theme changes may change typography, density, contrast, and mood. They must not
@@ -405,11 +439,12 @@ source registry
 -> dedupe and routing
 -> processors absorb source flow
 -> processor compaction when needed
--> reconcilers connect/conflict/question across processors
+-> reconcilers review articles, source state, and live notes for consensus,
+   contradictions, updates, and follow-up ideas
 -> existing researchers answer targeted evidence requests
 -> existing VText agents write/revise using Style.vtext
--> Story VTexts and publication/update feed
--> user contributions and reconciliation queues
+-> VTexts and publication/update feed
+-> user-owned VTexts and later user-publication discovery
 ```
 
 A new SourceItem should not blindly rewrite every story. The system should
@@ -418,7 +453,7 @@ classify or route the update into work such as:
 - no visible change;
 - processor watch update;
 - research needed;
-- contradiction/question for reconciler;
+- contradiction/question for reconciler review;
 - VText write request;
 - VText revision request;
 - related story link;
@@ -444,10 +479,12 @@ classify or route the update into work such as:
 
 ### Reconciler Evaluation
 
-- Did reconcilers find meaningful cross-story connections?
+- Did reconcilers review articles/stories, not just processor outputs?
+- Did they find meaningful cross-story connections?
 - Did they surface contradictions and open questions?
 - Did they request research when evidence was insufficient?
-- Did they create useful related-story/update records?
+- Did they create useful related-story/update records and VText update/new
+  VText requests?
 
 ### Researcher Evaluation
 
@@ -458,7 +495,7 @@ classify or route the update into work such as:
 ### VText And Style Evaluation
 
 - Were existing VText agents reused?
-- Did Story VTexts remain normal editable VTexts?
+- Did every article/story remain a normal editable VText?
 - Did projections cite source/style lineage honestly?
 - Did `Style.vtext` materially improve framing, rhythm, salience, and judgment?
 - Was style routing selective and explainable?
@@ -487,7 +524,7 @@ Resolution axes:
 - reconciler connections/questions/contradictions;
 - existing researcher reuse;
 - existing VText reuse;
-- graph/source/research/VText lineage durability;
+- VText traversal/index durability;
 - Style.vtext depth and routing;
 - publication-quality prose;
 - user-owned VText editing/forking/publication;
@@ -498,10 +535,11 @@ Resolution axes:
 
 - Clustering or embeddings as a prerequisite.
 - Full final merge/reconciliation UX.
+- Full published-user-VText discovery feed.
 - Real-person impersonation.
 - Detector optimization.
 - Theme-specific feature divergence.
-- Graph as decorative visualization without story semantics.
+- Decorative graph visualization without VText traversal semantics.
 - User edits directly mutating the platform story.
 - Skipping existing researcher agents.
 - Skipping existing VText agents.
