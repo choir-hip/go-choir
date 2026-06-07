@@ -1826,3 +1826,51 @@ Next executable probe:
   return/focus operation, or add a small product affordance that keeps the
   Global Wire continuation reachable after opening a projection draft. Then
   rerun deployed authenticated proof before claiming the slice.
+
+## Problem Checkpoint - Projection Draft Button Hit Target Blocked - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- After staging deployed candidate/review provenance attributes, the
+  authenticated proof could target the exact graph candidate created during the
+  run, but a normal browser click on that candidate's `Draft VText` control
+  could not complete.
+- Playwright resolved the visible, enabled button, but the enclosing Global
+  Wire contribution section intercepted pointer events. That means the product
+  surface is not yet honestly owner-clickable at this resolution.
+
+Evidence:
+
+- Staging is serving commit
+  `79eafd3ad77933fb814055458f61fbcfed59aa53`.
+- Public deployed proof passed
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`.
+- Authenticated deployed proof failed at
+  `tests/global-wire-app.spec.js:276-281`: the target was
+  `[data-global-wire-create-projection-draft]` with a concrete
+  `data-global-wire-projection-review-id`, but click retry logs showed
+  `<section data-global-wire-contribution>` intercepting pointer events.
+
+Belief-state update:
+
+- The endpoint and data model can create projection draft VTexts, but the
+  deployed product path still needs a real clickable control from the
+  reconciliation list.
+- The acceptance proof should continue using normal Playwright clicks for this
+  step; forcing the click or calling the handler directly would hide the
+  owner-path defect.
+
+Remaining error field:
+
+- No deployed authenticated proof yet shows the owner clicking `Draft VText`
+  from the exact promoted candidate and receiving the draft VText.
+- The Global Wire contribution/reconciliation layout has a hit-testing defect
+  around nested projection-review buttons.
+
+Next executable probe:
+
+- Fix the Global Wire contribution layout or button stacking so projection
+  draft controls are normally clickable. Then rerun local build and deployed
+  authenticated proof without force-clicking or direct DOM handler invocation.
