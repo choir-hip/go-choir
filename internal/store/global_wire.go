@@ -211,24 +211,142 @@ func (s *Store) ensureDefaultGlobalWireStories(ctx context.Context, ownerID stri
 		seed.SourceState = globalWireSeedState
 		seed.CreatedAt = now
 		seed.UpdatedAt = now
-		docID, err := s.createGlobalWireSeedVText(ctx, ownerID, seed.Headline, globalWireStoryVTextContent(seed), []types.Citation{
+		sourceBackedStory, err := s.ensureGlobalWireSourceItems(ctx, ownerID, seed, now)
+		if err != nil {
+			return err
+		}
+		sourceBackedStory.StyleSources = styleSources
+		docID, err := s.createGlobalWireSeedVText(ctx, ownerID, sourceBackedStory.Headline, globalWireStoryVTextContent(sourceBackedStory), append([]types.Citation{
 			{ID: "style-source", Type: "vtext", Value: styleSources[0].SourcePath, Label: styleSources[0].Title},
-			{ID: "storygraph-node", Type: "storygraph", Value: seed.ID, Label: seed.Headline},
-		}, map[string]any{
+			{ID: "storygraph-node", Type: "storygraph", Value: sourceBackedStory.ID, Label: sourceBackedStory.Headline},
+		}, globalWireSourceCitations(sourceBackedStory)...), map[string]any{
 			"created_from":     "global_wire_storygraph_seed",
-			"storygraph_id":    seed.ID,
+			"storygraph_id":    sourceBackedStory.ID,
 			"source_state":     globalWireSeedState,
 			"immutable_notice": "User edits must fork and never mutate this platform story.",
 		}, now)
 		if err != nil {
 			return err
 		}
-		seed.StoryVTextDoc = docID
-		if err := s.UpsertGlobalWireStory(ctx, seed); err != nil {
+		sourceBackedStory.StoryVTextDoc = docID
+		if err := s.UpsertGlobalWireStory(ctx, sourceBackedStory); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Store) ensureGlobalWireSourceItems(ctx context.Context, ownerID string, story types.GlobalWireStory, now time.Time) (types.GlobalWireStory, error) {
+	var err error
+	story.Manifest.Lead, err = s.ensureGlobalWireSourceTier(ctx, ownerID, story, "lead", story.Manifest.Lead, now)
+	if err != nil {
+		return types.GlobalWireStory{}, err
+	}
+	story.Manifest.Supporting, err = s.ensureGlobalWireSourceTier(ctx, ownerID, story, "supporting", story.Manifest.Supporting, now)
+	if err != nil {
+		return types.GlobalWireStory{}, err
+	}
+	story.Manifest.Contrary, err = s.ensureGlobalWireSourceTier(ctx, ownerID, story, "contrary", story.Manifest.Contrary, now)
+	if err != nil {
+		return types.GlobalWireStory{}, err
+	}
+	story.Manifest.Context, err = s.ensureGlobalWireSourceTier(ctx, ownerID, story, "context", story.Manifest.Context, now)
+	if err != nil {
+		return types.GlobalWireStory{}, err
+	}
+	return story, nil
+}
+
+func (s *Store) ensureGlobalWireSourceTier(ctx context.Context, ownerID string, story types.GlobalWireStory, tier string, items []types.GlobalWireSourceItem, now time.Time) ([]types.GlobalWireSourceItem, error) {
+	out := make([]types.GlobalWireSourceItem, 0, len(items))
+	for _, item := range items {
+		item.Role = firstNonEmptyString(item.Role, tier)
+		item.CanonicalURL = "choir://global-wire/source/" + item.ID
+		content := strings.Join([]string{
+			"# " + item.Title,
+			"",
+			"StoryGraph id: " + story.ID,
+			"Source id: " + item.ID,
+			"Evidence tier: " + tier,
+			"Standing: " + item.Standing,
+			"",
+			"This normalized SourceItem backs a Global Wire source-neighborhood manifest entry. It is seed evidence until replaced by live Source Service ingestion.",
+		}, "\n")
+		metadata, err := json.Marshal(map[string]any{
+			"schema":        "choir.global_wire_source_item.v1",
+			"story_id":      story.ID,
+			"source_id":     item.ID,
+			"tier":          tier,
+			"standing":      item.Standing,
+			"source_class":  item.Role,
+			"source_state":  globalWireSeedState,
+			"source_system": "global_wire",
+		})
+		if err != nil {
+			return nil, fmt.Errorf("marshal global wire source metadata: %w", err)
+		}
+		provenance, err := json.Marshal(map[string]any{
+			"created_from": "global_wire_seed_source_item",
+			"story_id":     story.ID,
+			"source_id":    item.ID,
+			"created_at":   now.UTC().Format(time.RFC3339Nano),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("marshal global wire source provenance: %w", err)
+		}
+		contentItem := types.ContentItem{
+			ContentID:    uuid.NewString(),
+			OwnerID:      ownerID,
+			SourceType:   "text",
+			MediaType:    "text/markdown",
+			AppHint:      "global-wire",
+			Title:        item.Title,
+			CanonicalURL: item.CanonicalURL,
+			TextContent:  content,
+			ContentHash:  uuid.NewSHA1(uuid.NameSpaceURL, []byte(ownerID+":"+story.ID+":"+item.ID)).String(),
+			Metadata:     metadata,
+			Provenance:   provenance,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		if err := s.CreateContentItem(ctx, contentItem); err != nil {
+			return nil, err
+		}
+		item.ContentID = contentItem.ContentID
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+func globalWireSourceCitations(story types.GlobalWireStory) []types.Citation {
+	all := []types.GlobalWireSourceItem{}
+	all = append(all, story.Manifest.Lead...)
+	all = append(all, story.Manifest.Supporting...)
+	all = append(all, story.Manifest.Contrary...)
+	all = append(all, story.Manifest.Context...)
+	citations := make([]types.Citation, 0, len(all))
+	for _, item := range all {
+		if strings.TrimSpace(item.ContentID) == "" {
+			continue
+		}
+		citations = append(citations, types.Citation{
+			ID:    item.ID,
+			Type:  "content_item",
+			Value: item.ContentID,
+			Label: item.Title,
+		})
+	}
+	return citations
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *Store) ensureDefaultGlobalWireStyleVTexts(ctx context.Context, ownerID string, now time.Time) ([]types.GlobalWireStyleSource, error) {

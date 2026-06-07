@@ -30,6 +30,9 @@ func TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts(t *testing.T) {
 	if len(story.Manifest.Lead) == 0 || len(story.Manifest.Supporting) == 0 || len(story.Manifest.Contrary) == 0 || len(story.Manifest.Context) == 0 {
 		t.Fatalf("story manifest is missing required evidence tiers: %+v", story.Manifest)
 	}
+	if story.Manifest.Lead[0].ContentID == "" {
+		t.Fatalf("lead source has no backing content item: %+v", story.Manifest.Lead[0])
+	}
 	if len(resp.StyleSources) != 3 {
 		t.Fatalf("style_sources length = %d, want 3", len(resp.StyleSources))
 	}
@@ -40,6 +43,10 @@ func TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts(t *testing.T) {
 	docW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/vtext/documents/"+story.StoryVTextDoc, "", "user-global-wire")
 	if docW.Code != http.StatusOK {
 		t.Fatalf("get linked story VText status = %d body=%s", docW.Code, docW.Body.String())
+	}
+	sourceW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/content/items/"+story.Manifest.Lead[0].ContentID, "", "user-global-wire")
+	if sourceW.Code != http.StatusOK {
+		t.Fatalf("get linked source content item status = %d body=%s", sourceW.Code, sourceW.Body.String())
 	}
 }
 

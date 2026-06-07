@@ -15,10 +15,12 @@ type GlobalWireStyleSource struct {
 
 // GlobalWireSourceItem is a source-neighborhood entry attached to a story node.
 type GlobalWireSourceItem struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Standing string `json:"standing"`
-	Role     string `json:"role"`
+	ID           string `json:"id"`
+	ContentID    string `json:"content_id,omitempty"`
+	Title        string `json:"title"`
+	Standing     string `json:"standing"`
+	Role         string `json:"role"`
+	CanonicalURL string `json:"canonical_url,omitempty"`
 }
 
 // GlobalWireSourceManifest keeps lead, supporting, contrary, and ambient context
