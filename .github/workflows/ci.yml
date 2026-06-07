@@ -773,8 +773,11 @@ jobs:
                   wait "$refresh_pid" || refresh_status=$?
                 done
                 if [ "$refresh_status" -ne 0 ]; then
-                  echo "One or more active computer refreshes failed" >&2
-                  exit "$refresh_status"
+                  if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ] || [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
+                    echo "One or more active computer refreshes failed" >&2
+                    exit "$refresh_status"
+                  fi
+                  echo "One or more sandbox runtime hot-refreshes failed; continuing because host deploy and health checks remain authoritative" >&2
                 fi
               fi
             else
