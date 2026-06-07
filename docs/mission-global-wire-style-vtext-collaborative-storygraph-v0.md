@@ -5539,3 +5539,62 @@ Run Checkpoint & Resumption State:
 - rollback refs: git revert of `4ba5b6ef87a7c440a5894e179a415bcc0f9429f2` for
   newsletter ledger behavior; previous proven RSS/public-link behavior commit
   `c4570ceb4c18cf850029845b1d928abab877b8a8`.
+
+## Problem Checkpoint - Reconciliation Lacks Composed Source Dossiers - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transforms:
+
+- Treat reconciliation as a review dossier, not a bag of tables. The reviewer
+  needs one composed source-neighborhood object that carries manifest tiers,
+  claims, extraction overlays, research tasks, publication refs, and delivery
+  refs together.
+- Do not add an oracle summarizer. The dossier should be a deterministic
+  projection over already-durable evidence, with explicit missing/partial
+  fields.
+- Preserve graph topology. Dossier entities/events/timeline points are overlays
+  for review; graph nodes remain story headlines with source-neighborhood
+  semantics.
+- Prefer a derived product API over a new canonical mutation path. The next
+  slice should increase research readiness without mutating Story VTexts,
+  Style.vtext sources, user forks, or platform graph records.
+
+Observed gap:
+
+- The reconciliation endpoint now returns contributions, decisions, candidates,
+  claims, research tasks, extraction artifacts, publication artifacts,
+  deliveries, public links, newsletter issues, and newsletter deliveries.
+- Those records are useful but still arrive as parallel lists. A verifier or
+  reviewer must manually join them by story, claim, source content, candidate,
+  artifact, delivery, and issue ids.
+- The spec calls for research/reconciliation-ready state, source manifests with
+  lead/supporting/contrary/context tiers, source overlap/citation/update edges,
+  entity/event/timeline overlays, and contribution/research queue refs. The
+  current API has the parts but not a composed dossier.
+
+Why this matters:
+
+- Without a composed dossier, downstream research and reconciliation remain
+  fragile: the app can display cards, but the product path cannot hand a single
+  non-oracle evidence packet to a researcher, verifier, or future reconciliation
+  worker.
+- A deterministic dossier is the lowest honest resolution of a research
+  workbench. It can prove the system is ready to reconcile without pretending
+  source truth has been decided.
+
+Remaining error field:
+
+- No `/api/global-wire/source-dossiers` product API exists.
+- No app view shows a single dossier with manifest tier counts, claim/update
+  overlays, extraction refs, research refs, publication refs, and newsletter
+  delivery refs.
+- Deployed proof does not yet assert that a created source/research/publication
+  trajectory can be reconciled as one dossier.
+
+Next executable probe:
+
+- Add a derived owner-scoped source dossier projection for a story, include it
+  in reconciliation and/or a product API, surface it in the Global Wire app, and
+  prove on staging that the dossier composes the existing evidence chain without
+  mutating platform stories or user-owned forks.
