@@ -2445,3 +2445,91 @@ Next executable probe:
   with citations to parent style docs, update the story's selectable style
   sources, create a projection VText/relation for the story, and preserve
   evidence/provenance invariants.
+
+## Checkpoint - Style.vtext Compose/Replace Product Path Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Artifact advanced:
+
+- Global Wire now has an owner-authenticated
+  `/api/global-wire/style-sources` product path for `compose` and `replace`.
+- A composed/replacement Style.vtext is a normal VText document/revision with
+  citations to parent Style.vtext sources and the StoryGraph headline node.
+- The composed/replacement style becomes a selectable StoryGraph style source,
+  receives a durable projection relation, and creates a projection Story VText
+  that cites the composed Style.vtext and runtime source artifacts.
+- The app exposes authenticated Compose and Replace controls in the
+  Style.vtext projection surface; public preview remains read-only.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `77fb434fd407fb2e719dc1d64f2394e5e76d4438`.
+- Behavior commit:
+  `8badef03009ff6a8de39f60112437aef53b74b72`.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  and `npm run build` in `frontend/`.
+- CI run `27084379921`: success, including runtime shards, Go vet/build,
+  non-runtime tests, integration smoke, frontend build, and staging deploy.
+- FlakeHub run `27084379922`: success.
+- Staging health at `2026-06-07T06:01:17Z` reported proxy and sandbox
+  `deployed_commit` =
+  `8badef03009ff6a8de39f60112437aef53b74b72`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium --grep "owner-scoped"`
+  with 1 passed. This proof clicked the app Compose control, observed
+  `/api/global-wire/style-sources` returning 201, loaded the composed
+  Style.vtext through `/api/vtext/documents/{doc_id}`, and verified the
+  refreshed StoryGraph exposes the new style source plus projection VText doc.
+
+Invariants preserved:
+
+- Every story/projection artifact remains a normal editable VText document or
+  revision.
+- User-owned forks and contributions remain separate from platform stories.
+- Style.vtext is now citeable, selectable, composable, and replaceable through
+  a product path rather than only through seeded app configuration.
+- News remains non-oracle and provenance-rich: new style and projection VTexts
+  cite parent style sources, the StoryGraph headline node, and runtime source
+  artifacts.
+- Graph nodes remain story headlines with source-neighborhood semantics.
+- The Global Wire app continues to pass Future Noir, Carbon Kintsugi, and
+  London Salmon view proofs on staging.
+
+Belief-state update:
+
+- The product slice now supports:
+  live/source evidence -> StoryGraph -> Story VTexts -> selectable Style.vtext
+  projections -> composed/replaced Style.vtext source artifact -> durable
+  projection Story VText -> News app visibility -> user-owned edits and
+  contributions -> research/reconciliation queue.
+- This closes the specific style-source gap recorded above: Style.vtext is no
+  longer merely a seeded projection selector.
+- The style workflow is still intentionally low-resolution: composition uses
+  explicit parent-style selection and authored metadata, not a full merge UI,
+  permission model, version graph, or researcher style-review queue.
+
+Remaining error field:
+
+- There is still no scheduled 24/7 source registry/fetch-cycle worker.
+- Claim/event/entity extraction is not yet a durable structured claim model
+  with uncertainty/dispute state.
+- Style.vtext composition/replacement is proven, but not yet a full style
+  revision workflow with forks, merge conflict handling, permissions, or
+  publication review.
+- There is no dedicated publication/update-feed/newsletter/researcher queue
+  beyond the current reconciliation/projection-review queues.
+- Autoradio remains a prompt-bar/VText handoff rather than a dedicated audio
+  playback or scheduling subsystem.
+
+Next executable probe:
+
+- Highest-value next realism axis is structured claim/research-task state tied
+  to refresh classifications: turn source-refresh outcomes into durable claim,
+  dispute, uncertainty, and research-task records that can feed reconciliation
+  and projection review without pretending the News app is an oracle.
