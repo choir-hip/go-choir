@@ -465,6 +465,7 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 					RequestID:    "processor_2",
 					ProcessorKey: "processor:conflict:global:telegram",
 					Status:       "queued",
+					RuntimeRunID:  "run_processor_missing_from_request_runtime",
 					SourceCount:  38,
 				},
 			},
@@ -505,8 +506,14 @@ func TestHandleGlobalWireSourceMaxxStatusReportsAggregateHandoffs(t *testing.T) 
 	if resp.ReconcilerStatusCounts["submitted"] != 1 {
 		t.Fatalf("unexpected reconciler status counts: %+v", resp.ReconcilerStatusCounts)
 	}
-	if resp.ProcessorRuntimeRunCount != 1 || resp.ReconcilerRuntimeRunCount != 1 {
+	if resp.ProcessorRuntimeRunCount != 2 || resp.ReconcilerRuntimeRunCount != 1 {
 		t.Fatalf("unexpected runtime run counts: %+v", resp)
+	}
+	if resp.ProcessorResolvedRunCount != 1 || resp.ProcessorUnresolvedRunCount != 1 {
+		t.Fatalf("unexpected processor runtime resolution counts: %+v", resp)
+	}
+	if resp.ReconcilerResolvedRunCount != 1 || resp.ReconcilerUnresolvedRunCount != 0 {
+		t.Fatalf("unexpected reconciler runtime resolution counts: %+v", resp)
 	}
 	if resp.ProcessorRunStateCounts[string(types.RunPending)] != 1 || resp.ReconcilerRunStateCounts[string(types.RunRunning)] != 1 {
 		t.Fatalf("unexpected runtime run states: processor=%+v reconciler=%+v", resp.ProcessorRunStateCounts, resp.ReconcilerRunStateCounts)

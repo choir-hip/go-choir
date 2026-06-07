@@ -117,6 +117,10 @@ type globalWireSourceMaxxStatusResponse struct {
 	ReconcilerStatusCounts       map[string]int `json:"reconciler_status_counts,omitempty"`
 	ProcessorRuntimeRunCount     int            `json:"processor_runtime_run_count,omitempty"`
 	ReconcilerRuntimeRunCount    int            `json:"reconciler_runtime_run_count,omitempty"`
+	ProcessorResolvedRunCount    int            `json:"processor_resolved_runtime_run_count,omitempty"`
+	ReconcilerResolvedRunCount   int            `json:"reconciler_resolved_runtime_run_count,omitempty"`
+	ProcessorUnresolvedRunCount  int            `json:"processor_unresolved_runtime_run_count,omitempty"`
+	ReconcilerUnresolvedRunCount int            `json:"reconciler_unresolved_runtime_run_count,omitempty"`
 	ProcessorRunStateCounts      map[string]int `json:"processor_run_state_counts,omitempty"`
 	ReconcilerRunStateCounts     map[string]int `json:"reconciler_run_state_counts,omitempty"`
 	ProcessorUpdateCount         int            `json:"processor_update_count,omitempty"`
@@ -540,19 +544,27 @@ func globalWireSourceMaxxStatusFromAPI(resp *sourceapi.SourceMaxxResponse) globa
 	}
 	processorKeys := make([]string, 0, len(resp.ProcessorRequests))
 	processorStatusCounts := make(map[string]int)
+	processorRuntimeRunCount := 0
 	for _, req := range resp.ProcessorRequests {
 		if strings.TrimSpace(req.ProcessorKey) != "" {
 			processorKeys = append(processorKeys, req.ProcessorKey)
 		}
 		processorStatusCounts[normalizedSourceMaxxRequestStatus(req.Status)]++
+		if strings.TrimSpace(req.RuntimeRunID) != "" {
+			processorRuntimeRunCount++
+		}
 	}
 	reconcilerScopes := make([]string, 0, len(resp.ReconcilerRequests))
 	reconcilerStatusCounts := make(map[string]int)
+	reconcilerRuntimeRunCount := 0
 	for _, req := range resp.ReconcilerRequests {
 		if strings.TrimSpace(req.Scope) != "" {
 			reconcilerScopes = append(reconcilerScopes, req.Scope)
 		}
 		reconcilerStatusCounts[normalizedSourceMaxxRequestStatus(req.Status)]++
+		if strings.TrimSpace(req.RuntimeRunID) != "" {
+			reconcilerRuntimeRunCount++
+		}
 	}
 	status := "ok"
 	if strings.TrimSpace(resp.Cycle.Status) != "" && resp.Cycle.Status != "completed" {
@@ -571,6 +583,8 @@ func globalWireSourceMaxxStatusFromAPI(resp *sourceapi.SourceMaxxResponse) globa
 		ReconcilerRequestCount:    len(resp.ReconcilerRequests),
 		ProcessorStatusCounts:     emptyMapToNil(processorStatusCounts),
 		ReconcilerStatusCounts:    emptyMapToNil(reconcilerStatusCounts),
+		ProcessorRuntimeRunCount:  processorRuntimeRunCount,
+		ReconcilerRuntimeRunCount: reconcilerRuntimeRunCount,
 		ProcessorKeys:             processorKeys,
 		ReconcilerScopes:          reconcilerScopes,
 		Topology:                  resp.Metadata.Topology,
@@ -602,9 +616,12 @@ func (h *APIHandler) addSourceMaxxRuntimeEvidence(ctx context.Context, resp *sou
 	for _, req := range resp.ProcessorRequests {
 		rec, ok := h.sourceMaxxRuntimeRun(ctx, req.RuntimeRunID)
 		if !ok {
+			if strings.TrimSpace(req.RuntimeRunID) != "" {
+				out.ProcessorUnresolvedRunCount++
+			}
 			continue
 		}
-		out.ProcessorRuntimeRunCount++
+		out.ProcessorResolvedRunCount++
 		if out.ProcessorRunStateCounts == nil {
 			out.ProcessorRunStateCounts = make(map[string]int)
 		}
@@ -615,9 +632,12 @@ func (h *APIHandler) addSourceMaxxRuntimeEvidence(ctx context.Context, resp *sou
 	for _, req := range resp.ReconcilerRequests {
 		rec, ok := h.sourceMaxxRuntimeRun(ctx, req.RuntimeRunID)
 		if !ok {
+			if strings.TrimSpace(req.RuntimeRunID) != "" {
+				out.ReconcilerUnresolvedRunCount++
+			}
 			continue
 		}
-		out.ReconcilerRuntimeRunCount++
+		out.ReconcilerResolvedRunCount++
 		if out.ReconcilerRunStateCounts == nil {
 			out.ReconcilerRunStateCounts = make(map[string]int)
 		}
