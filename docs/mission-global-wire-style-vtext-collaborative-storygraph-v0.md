@@ -6064,3 +6064,50 @@ Next executable probe:
   Style.vtext replacement review. The most direct publication route is a real
   newsletter provider delivery path with send receipt, bounce/open telemetry,
   unsubscribe handling, and source-dossier delivery evidence.
+
+## Overnight Problem Checkpoint - Newsletter Provider Receipt Staging Proof Timeout - 2026-06-07
+
+Problem:
+
+- Behavior commit `aff0acd0db6722117b028c1a4463a1ff25753ab3` added durable
+  newsletter provider receipt records and deployed successfully, but the first
+  authenticated staging proof did not reach the new receipt assertions.
+- The proof timed out after 180 seconds while waiting for the Promote button on
+  graph candidate
+  `global-wire-graph-candidate-c4661b8e-c96b-542d-a1c4-c055a7f769a7`.
+
+Evidence:
+
+- CI run `27090372751`: success, including staging deploy.
+- FlakeHub run `27090372753`: success.
+- Staging `/health` reported proxy and upstream deployed commit
+  `aff0acd0db6722117b028c1a4463a1ff25753ab3`, deployed at
+  `2026-06-07T10:51:49Z`.
+- Public deployed proof:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  returned 4 passed and 1 auth-gated skip.
+- Authenticated deployed proof:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in" --timeout 180000`
+  failed with `Test timeout of 180000ms exceeded` at
+  `frontend/tests/global-wire-app.spec.js:832`, waiting for
+  `[data-global-wire-promote-candidate]` inside the candidate card.
+
+Belief state:
+
+- The deployed platform is serving the intended commit and the public app/theme
+  path still works.
+- The failing observation is upstream of the new newsletter provider receipt
+  checks. The likely failure surface is candidate-card visibility/actionability
+  or long end-to-end test time under staging conditions, not yet proven to be a
+  provider receipt schema/runtime defect.
+- No product completion claim is made for the receipt slice until the
+  authenticated staging proof reaches and verifies provider receipt creation,
+  reconciliation visibility, and source-dossier refs.
+
+Next executable probe:
+
+- Investigate the authenticated product path around candidate-card rendering and
+  promotion actionability. Use the Playwright error context and, if needed,
+  targeted staging/API probes to decide whether this is a product UI state
+  regression, a stale selector/card mismatch, or a test timeout/budget issue.
+  Only then patch the implicated layer and rerun the deployed proof.
