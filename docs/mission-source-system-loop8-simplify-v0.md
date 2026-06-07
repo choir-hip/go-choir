@@ -2531,7 +2531,7 @@ staging proof:
 
 ### Problem 49: Mobile Inline Source Transclusion Expands The Reading Surface Horizontally
 
-status: `documented_before_fix`.
+status: `fixed_local_proof_pending_deploy`.
 
 problem: on a phone-width published VText reader, opening an inline source
 transclusion can widen the document/read surface beyond the visual viewport.
@@ -2573,3 +2573,35 @@ acceptance:
 - staging proof should include a mobile viewport Playwright check that opens a
   source transclusion and asserts bounded `scrollWidth`, no left-edge clipping,
   and a screenshot artifact.
+
+fix/evidence:
+
+```text
+local implementation:
+  frontend/src/lib/vtext-source-flow.css now neutralizes desktop source-flow
+  inline measurement widths and fragment margins in the mobile fallback. Mobile
+  source-flow lines, note bodies, fragments, and actions are bounded to the
+  rendered document width and wrap long text/URLs instead of widening the
+  reader.
+
+  frontend/tests/vtext-source-entities.spec.js adds a mobile regression that
+  creates a source-backed VText document through product APIs, opens the VText
+  app at a 390px viewport, expands the source journal flow, captures a
+  screenshot, and asserts bounded rendered/document scroll width plus aligned
+  flow, note, and following paragraph geometry.
+
+local proof:
+  git diff --check
+  result: passed
+
+  npm --prefix frontend run build
+  result: passed
+
+  CHOIR_AUTH_STATE=/tmp/go-choir-mobile-source-flow-auth.json
+  CHOIR_AUTH_META=/tmp/go-choir-mobile-source-flow-auth.meta.json
+  npm --prefix frontend run e2e --
+  tests/vtext-source-entities.spec.js -g
+  "VText lays out expanded text sources as noncanonical journal flow|VText uses stacked journal flow instead of old source card|VText mobile source journal flow stays within the reader width"
+  --timeout=90000
+  result: 3 passed.
+```

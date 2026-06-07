@@ -1247,6 +1247,126 @@ test('VText uses stacked journal flow instead of old source card when side routi
   expect(geometry.lineLayerHasOldCard).toBe(false);
 });
 
+test('VText mobile source journal flow stays within the reader width', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(async () => {
+    await fetch('/api/desktop/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windows: [], active_window_id: '' }),
+    });
+  });
+  await page.reload();
+  await expect(page.locator('[data-desktop]')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-window]')).toHaveCount(0);
+
+  const created = await page.evaluate(async () => {
+    const title = `Mobile Source Flow Fixture ${Date.now()}`;
+    const docRes = await fetch('/api/vtext/documents', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
+    const doc = await docRes.json();
+    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: [
+          '# Mobile Source Flow Fixture',
+          '',
+          'Operating system. The server should run a Linux distribution that supports reproducible, version-controlled system configurations with rollback capability [1](source:src-mobile-flow). This normal paragraph must stay aligned with the phone viewport after the source is opened.',
+          '',
+          'Base architecture. The architecture is European host, encrypted storage, vector database, open-weight embeddings, and private inference routing.',
+        ].join('\n'),
+        author_kind: 'user',
+        author_label: 'browser-test',
+        metadata: {
+          source_entities: [
+            {
+              entity_id: 'src-mobile-flow',
+              kind: 'content_item',
+              label: 'NixOS reproducible configuration and rollback',
+              target: {
+                target_kind: 'url',
+                url: 'https://example.com/mobile-source-flow-with-a-long-url-that-must-not-expand-the-reader-width',
+                canonical_url: 'https://example.com/mobile-source-flow-with-a-long-url-that-must-not-expand-the-reader-width',
+              },
+              selectors: [
+                {
+                  selector_kind: 'text_quote',
+                  text_quote: 'NixOS declarative configuration helps reproduce system configuration and supports rollback.',
+                },
+              ],
+              display: {
+                inline_mode: 'embedded_excerpt',
+                expanded_mode: 'source_card',
+                open_surface: 'source',
+                default_collapsed: true,
+              },
+              evidence: { state: 'available', research_state: 'confirmed' },
+              provenance: { created_by: 'browser-test', rights_scope: 'public_source' },
+            },
+          ],
+        },
+      }),
+    });
+    if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);
+    return doc;
+  });
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-mobile-flow"]').first();
+  await expect(citation).toBeVisible({ timeout: 10000 });
+  await citation.click();
+
+  const flow = rendered.locator('[data-vtext-source-flow]');
+  await expect(flow).toBeVisible({ timeout: 5000 });
+  await expect(flow.locator('[data-vtext-source-flow-note]')).toContainText('NixOS reproducible configuration and rollback');
+  await page.screenshot({ path: test.info().outputPath('vtext-mobile-source-flow.png'), fullPage: true });
+
+  const geometry = await rendered.evaluate((node) => {
+    const rendered = /** @type {HTMLElement} */ (node);
+    const flow = rendered.querySelector('[data-vtext-source-flow]');
+    const note = rendered.querySelector('[data-vtext-source-flow-note]');
+    const paragraph = Array.from(rendered.querySelectorAll('p')).find((item) => item.textContent?.includes('Base architecture'));
+    const renderedBox = rendered.getBoundingClientRect();
+    const flowBox = flow?.getBoundingClientRect();
+    const noteBox = note?.getBoundingClientRect();
+    const paragraphBox = paragraph?.getBoundingClientRect();
+    return {
+      renderedClientWidth: rendered.clientWidth,
+      renderedScrollWidth: rendered.scrollWidth,
+      documentClientWidth: document.documentElement.clientWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+      flowLeft: flowBox?.left ?? 0,
+      flowRight: flowBox?.right ?? 0,
+      noteLeft: noteBox?.left ?? 0,
+      noteRight: noteBox?.right ?? 0,
+      paragraphLeft: paragraphBox?.left ?? 0,
+      renderedLeft: renderedBox.left,
+    };
+  });
+
+  expect(geometry.renderedScrollWidth - geometry.renderedClientWidth).toBeLessThanOrEqual(2);
+  expect(geometry.documentScrollWidth - geometry.documentClientWidth).toBeLessThanOrEqual(2);
+  expect(geometry.flowLeft).toBeGreaterThanOrEqual(geometry.renderedLeft - 1);
+  expect(geometry.flowRight).toBeLessThanOrEqual(geometry.renderedLeft + geometry.renderedClientWidth + 1);
+  expect(geometry.noteLeft).toBeGreaterThanOrEqual(geometry.renderedLeft - 1);
+  expect(geometry.noteRight).toBeLessThanOrEqual(geometry.renderedLeft + geometry.renderedClientWidth + 1);
+  expect(geometry.paragraphLeft).toBeGreaterThanOrEqual(geometry.renderedLeft - 1);
+});
+
 test('VText autosave roundtrips rendered markdown tables without flattening cells', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const created = await page.evaluate(async () => {

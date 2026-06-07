@@ -133,26 +133,61 @@
 @media (max-width: 720px) {
   .rendered-doc .vtext-source-journal-flow {
     height: auto !important;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .rendered-doc .vtext-source-journal-lines {
     position: static;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .rendered-doc .vtext-source-journal-line {
     position: static;
-    display: inline;
+    display: block;
+    width: auto !important;
+    max-width: 100%;
+    min-width: 0;
     white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .rendered-doc .vtext-source-journal-fragment {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .rendered-doc .vtext-source-journal-fragment[style] {
+    margin-left: 0 !important;
   }
 
   .rendered-doc .vtext-source-journal-note {
     position: static;
     width: auto;
-    max-width: none;
+    max-width: 100%;
+    min-width: 0;
     margin: 0.52rem 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .rendered-doc .vtext-source-journal-flow[data-vtext-source-flow-mode="stacked"] .vtext-source-journal-note {
     width: auto;
+    max-width: 100%;
+  }
+
+  .rendered-doc .vtext-source-journal-actions {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .rendered-doc .vtext-source-journal-note .vtext-source-journal-actions .vtext-source-open,
+  .rendered-doc .vtext-source-journal-note .vtext-source-journal-actions .vtext-source-flow-close {
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 }
