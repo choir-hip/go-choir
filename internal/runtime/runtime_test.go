@@ -574,6 +574,68 @@ func TestSystemPromptForSourceMaxxProfilesLoadsSharedHarnessPrompts(t *testing.T
 	}
 }
 
+func TestSystemPromptForSourceMaxxVTextRunsRequiresArticleHead(t *testing.T) {
+	rt := testPromptRuntime(t)
+
+	sourceMaxxRec := &types.RunRecord{
+		RunID:        "run-source-maxx-vtext",
+		AgentID:      "vtext:doc-source-maxx",
+		ChannelID:    "doc-source-maxx",
+		OwnerID:      "global-wire-platform",
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		Prompt:       "Write the first publication-quality article revision for this VText document.",
+		Metadata: map[string]any{
+			"type":                   "vtext_agent_revision",
+			"doc_id":                 "doc-source-maxx",
+			"source_maxx_cycle_id":   "cycle-test",
+			"request_intent":         "source_maxx_reconciler_article_revision",
+			"selected_style_sources": []map[string]any{{"title": "Style.vtext: Global Wire"}},
+		},
+	}
+	prompt, err := rt.systemPromptForRun(sourceMaxxRec)
+	if err != nil {
+		t.Fatalf("systemPromptForRun SourceMaxx VText: %v", err)
+	}
+	for _, want := range []string{
+		"processor or reconciler handoff is newsroom source context",
+		"first edit_vtext call must write a publishable article",
+		"not a SourceMaxx Brief, Working Revision, Evidence Gathering note, or placeholder",
+		"do not end the run with the document head still at a brief or status checkpoint",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("SourceMaxx VText prompt missing %q in %q", want, prompt)
+		}
+	}
+	if strings.Contains(prompt, "first call edit_vtext with a short owner-readable working response") {
+		t.Fatalf("SourceMaxx VText prompt should not use generic working-response rule: %q", prompt)
+	}
+
+	ordinaryRec := &types.RunRecord{
+		RunID:        "run-ordinary-vtext",
+		AgentID:      "vtext:doc-ordinary",
+		ChannelID:    "doc-ordinary",
+		OwnerID:      "user-alice",
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		Prompt:       "What is going on today?",
+		Metadata: map[string]any{
+			"type":   "vtext_agent_revision",
+			"doc_id": "doc-ordinary",
+		},
+	}
+	ordinaryPrompt, err := rt.systemPromptForRun(ordinaryRec)
+	if err != nil {
+		t.Fatalf("systemPromptForRun ordinary VText: %v", err)
+	}
+	if !strings.Contains(ordinaryPrompt, "first call edit_vtext with a short owner-readable working response") {
+		t.Fatalf("ordinary VText prompt should preserve generic working-response rule: %q", ordinaryPrompt)
+	}
+	if strings.Contains(ordinaryPrompt, "processor or reconciler handoff is newsroom source context") {
+		t.Fatalf("ordinary VText prompt should not get SourceMaxx article-head rule: %q", ordinaryPrompt)
+	}
+}
+
 func TestSystemPromptIncludesRepoSkillContext(t *testing.T) {
 	rt := testPromptRuntime(t)
 	skillsRoot := t.TempDir()

@@ -385,14 +385,21 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		}
 	}
 	if profile == AgentProfileVText {
+		isSourceMaxxVText := metadataString(rec.Metadata, "source_maxx_cycle_id") != "" ||
+			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "source_maxx_")
 		b.WriteString("\n\nVText is a durable document owner, not a one-shot answerer.")
 		b.WriteString("\nCanonical document versions are created only when you call edit_vtext. Your final text is run output only and is never stored as document content.")
 		b.WriteString("\nWhen the document should change, call edit_vtext with the exact current base_revision_id. Use apply_edits by default for ordinary line, paragraph, section, citation, or metadata changes. Use replace_all only for explicit whole-document rewrites and include a clear rationale.")
 		b.WriteString("\nAfter edit_vtext succeeds, do not call edit_vtext again in the same revision run. If the request needs help, send the next durable co-agent message with spawn_agent, request_super_execution, or request_email_draft; otherwise end the turn.")
 		b.WriteString("\nDo not write knowledge or coding content from model priors. Depend on researcher messages for factual/current knowledge and super messages for coding, artifacts, execution, and verification.")
 		b.WriteString("\nConductor may create only the user prompt seed. VText owns the first useful document revision.")
-		b.WriteString("\nIf there are no worker messages yet, first call edit_vtext with a short owner-readable working response, then start the needed researcher and/or super work before ending the run.")
-		b.WriteString("\nFor factual/current/search requests with no worker messages yet, the first working response must not include factual background, definitions, examples, sports details, weather, current claims, citations, or coding results. It should name the request, say evidence is being gathered, and describe the next expected revision.")
+		if isSourceMaxxVText {
+			b.WriteString("\nFor SourceMaxx article revision runs, the processor or reconciler handoff is newsroom source context. Your first edit_vtext call must write a publishable article or explicit correction/update draft from that handoff and the current VText, not a SourceMaxx Brief, Working Revision, Evidence Gathering note, or placeholder.")
+			b.WriteString("\nUse uncertainty, source handles, and the selected Style.vtext source in the article itself. If more evidence is needed, publish the best honest article draft first, then request researcher follow-up; do not end the run with the document head still at a brief or status checkpoint.")
+		} else {
+			b.WriteString("\nIf there are no worker messages yet, first call edit_vtext with a short owner-readable working response, then start the needed researcher and/or super work before ending the run.")
+			b.WriteString("\nFor factual/current/search requests with no worker messages yet, the first working response must not include factual background, definitions, examples, sports details, weather, current claims, citations, or coding results. It should name the request, say evidence is being gathered, and describe the next expected revision.")
+		}
 		b.WriteString("\nLater addressed worker deliveries can be threaded into this loop or wake the next VText run and trigger another revision.")
 		b.WriteString("\nWhen a VText run is woken by researcher or super findings, prefer making those findings visible with edit_vtext as the next document revision before spawning more workers. If the findings are partial, blocked, or inconclusive, write an honest partial/blocker checkpoint; do not leave the visible document at the pre-findings state while opening additional research.")
 		b.WriteString("\nBuild each revision from the current canonical version, recent worker messages, recent change context, and user-authored diffs.")

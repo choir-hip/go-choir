@@ -2150,6 +2150,10 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	if metadataString(vtextRun.Metadata, "selected_style_rationale") == "" || !strings.Contains(vtextRun.Prompt, "Selected Style.vtext source context") || !strings.Contains(vtextRun.Prompt, "Style.vtext: Market Brief") {
 		t.Fatalf("processor vtext run missing Style.vtext context: metadata=%+v prompt=%q", vtextRun.Metadata, vtextRun.Prompt)
 	}
+	if !strings.Contains(vtextRun.Prompt, "must be a publishable article or correction/update draft") ||
+		!strings.Contains(vtextRun.Prompt, "not a SourceMaxx Brief, Working Revision, Evidence Gathering note") {
+		t.Fatalf("processor vtext run missing article-head completion contract: %q", vtextRun.Prompt)
+	}
 	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"mutate code",
 		"role":"co-super"

@@ -449,6 +449,7 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 	b.WriteString(styleRationale)
 	b.WriteString("\n\nHard requirements:")
 	b.WriteString("\n- Use edit_vtext to write the canonical VText revision; do not leave the article only in the run result.")
+	b.WriteString("\n- The current document head after this run must be a publishable article or correction/update draft, not a SourceMaxx Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
 	b.WriteString("\n- Preserve source handles and cite source entities or source refs when available.")
 	b.WriteString("\n- Include a compact Style.vtext source note in the VText naming the selected Style.vtext source(s) above and the editorial fit; do not claim every style was run.")
