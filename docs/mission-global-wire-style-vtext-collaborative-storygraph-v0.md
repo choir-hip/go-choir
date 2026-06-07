@@ -2819,3 +2819,55 @@ Next executable probe:
   structured research tasks produced by source refresh/fetch cycles to move
   from `open` to assigned/completed/blocked with evidence packets, then feed
   reconciliation without mutating platform stories directly.
+
+## Problem - Research Tasks Are Passive Queue Entries - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Observed gap:
+
+- Source refresh and fetch cycles can now create structured
+  `GlobalWireResearchTask` records, but those records are passive `open` queue
+  entries.
+- There is no product-path transition for assigning, completing, or blocking a
+  task.
+- There is no durable researcher evidence packet attached to a task, so a
+  completed investigation cannot be cited by the reconciliation surface.
+- The News app can show that a task exists, but it cannot show that a researcher
+  investigated it or what evidence they produced.
+
+Why this matters:
+
+- The spec asks for a trajectory from source evidence through StoryGraph and
+  Story VTexts into user-owned edits/contributions and a
+  research/reconciliation-ready state.
+- A task record without a lifecycle is not yet reconciliation-ready. It names
+  work to do, but it does not carry the result of that work.
+- The product invariant is that research evidence may inform reconciliation, but
+  must not directly mutate platform stories. Without an explicit evidence
+  packet, the system has no honest place to put researcher output.
+
+Belief-state update:
+
+- The next topology-preserving improvement is a low-resolution research-task
+  lifecycle: `open -> assigned -> completed|blocked`, with evidence packets
+  visible from reconciliation and News.
+- This should remain owner-scoped and product-path driven. It should update the
+  task/evidence lane only, not rewrite platform Story VTexts or StoryGraph
+  candidates.
+
+Remaining error field:
+
+- No endpoint accepts researcher task lifecycle transitions.
+- No durable evidence-packet table exists for task output.
+- No reconciliation response includes research-task evidence.
+- No staging proof shows a task being completed or blocked through the product
+  path.
+
+Next executable probe:
+
+- Add a bounded `/api/global-wire/research-tasks` product path that can assign,
+  complete, or block a task; persist a `GlobalWireResearchTaskEvidence` packet;
+  expose those packets in reconciliation and the News app; and prove on staging
+  that completing a task creates reconciliation-visible evidence without
+  mutating platform stories.
