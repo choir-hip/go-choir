@@ -269,10 +269,17 @@ preview no longer displayed the old source-volume label, `My Edit`, `Source
 Manifest`, or visible story metadata; three article rows had compact VText
 affordances; headline font was serif; desktop, medium, mobile, and opened
 VText mobile checks had no horizontal overflow. This is local evidence only.
+Follow-up runtime fix commit `46298119` changed graph-candidate promotion
+revisions so promotion/source evidence is carried in structured revision
+metadata and `source_entities`, while the visible VText body remains article
+prose with native source refs instead of `source_content_id` lines, manifest
+mutation text, fork disclaimers, or raw provenance dumps.
 
 what shipped: prior work shipped source service substrate, processor/reconciler
 handoff scaffolding, some VText agent usage, and a cleaner newspaper preview.
-Those are substrate only.
+Those are substrate only. Latest shipped code also removes the old failed
+promotion-body contract that made platform story revisions read like internal
+metadata.
 
 what was proven: source service can ingest GDELT/RSS/Telegram-class items at
 substantially larger breadth; staging can deploy and show Global Wire; the
@@ -284,6 +291,35 @@ passed after removing static source tiers/standing from config. CI run
 passed and deployed parser fix `9613991f`. CI run `27102854328` passed and
 deployed source-health proof surface `a4370fd4`; Node B git identity matched
 that commit and the new endpoint returned source health for the latest cycle.
+Local targeted proof for the promotion revision fix passed
+`nix develop -c go test ./internal/runtime -run TestHandleGlobalWirePromotesClassifiedRefreshIntoStoryGraphAndPlatformVText -count=1`.
+Local shard proof passed
+`nix develop -c env SHARD_INDEX=0 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`.
+GitHub CI run `27103946463` passed for
+`4629811947f803a1104b33706186cb9e032ca83e`: Go vet/build, non-runtime tests,
+integration-tagged smoke, all four runtime shards, aggregate gate, and staging
+deploy. FlakeHub run `27103946461` also passed for the same SHA. The CI
+frontend build job was skipped for `46298119` because that final fix was
+runtime-only; the earlier frontend-changing commit `e8728cb6` had passed local
+`npm run build` before push.
+
+staging identity proof: deploy job `79989704732` completed successfully and
+reported proxy, sandbox upstream, and platformd build/deployed commit
+`4629811947f803a1104b33706186cb9e032ca83e`, deployed at
+`2026-06-07T20:32:11Z`. Node B `/opt/go-choir` also reports that exact git
+HEAD with a clean worktree. The deploy job verified service health and public
+frontend asset graph.
+
+staging product-path proof: unauthenticated `https://choir.news` browser proof
+loaded the deployed signed-out desktop preview with no console errors, no
+horizontal overflow at 1440px, no old source-volume label, no `My Edit`, and no
+`Source Manifest`; screenshot saved outside the repo at
+`/tmp/choir-news-global-wire-staging-desktop.png`. This is only signed-out
+surface proof. Authenticated Global Wire proof remains blocked because public
+API calls correctly returned 401 and the local Chrome profile does not have
+the Codex Chrome Extension installed (`check-extension-installed.js --json`
+reported installed=false for selected profile `Default`), so Codex could not
+take over an authenticated browser session without bypassing the product path.
 
 unproven or partial claims: full source health, learned source track-record
 state, per-source proof surfaces, VText agent as article owner,
@@ -320,6 +356,11 @@ Root-cause hypothesis: the test is asserting the old visible-provenance body
 contract instead of the new article-body/provenance separation contract, and
 the implementation may also need to ensure the same promotion evidence is
 present in revision metadata/source entity context.
+Resolved by `46298119`: the test now asserts readable article prose plus
+source-ref markup in the body and structured promotion/source evidence in
+revision metadata/source entities. Remaining blocker is not CI; it is
+authenticated staging product proof and the still-incomplete deeper VText-agent
+article ownership/source-transclusion mission.
 
 highest-impact remaining uncertainty: how to turn source-health, corrections,
 corroboration, freshness, and researcher/model judgment into learned source
@@ -327,10 +368,13 @@ track-record state without hardcoded editorial tiers, while keeping long-tail
 Telegram/social inputs valuable as sentiment and lead discovery rather than
 standalone publication support.
 
-next executable probe: update the graph-candidate promotion contract so article
-body assertions check prose/source refs rather than metadata sludge, while
-structured revision metadata/source entity context preserves the promotion and
-source evidence; rerun shard 0 locally, then push and re-run the staging loop.
+next executable probe: install/enable the Codex Chrome Extension or otherwise
+provide a usable authenticated staging browser session, then run the deployed
+Global Wire/VText proof: open Global Wire on `choir.news`, verify article
+columns, open every article through the compact VText affordance, verify native
+source refs/transclusion chips and absence of metadata sludge, then submit one
+product-path prompt or source refresh through `/api/prompt-bar` or Global Wire
+controls and inspect the resulting VText revision metadata/source entities.
 
 suggested resume goal string: use the Goal String section above.
 
