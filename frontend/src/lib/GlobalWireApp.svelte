@@ -613,7 +613,7 @@
           .slice(0, 20);
       }
       if (response.status === 201) {
-        contributionStatus = 'Source refresh created a graph candidate for review';
+        contributionStatus = `Source refresh classified ${payload.refresh_run?.update_classification || 'candidate evidence'} for review`;
         await loadContributions(selectedStory.id);
       }
     } catch (error) {
@@ -711,7 +711,8 @@
           docId: payload.document.doc_id,
           createInitialVersion: false,
         });
-        await loadStories();
+        lastLoadKey = '';
+        await loadDurableStoryGraph();
       }
       await loadContributions(selectedStory.id);
     } catch (error) {
@@ -1013,8 +1014,9 @@
             <div class="source-search-results" data-global-wire-source-refresh-runs>
               {#each sourceRefreshes.slice(0, 2) as run}
                 <article>
-                  <strong>{run.status}</strong>
-                  <small>{run.provider} · {run.query}</small>
+                  <strong>{run.update_classification || run.status}</strong>
+                  <small>{run.storygraph_action || run.status} · {run.projection_action || 'projection pending'} · {run.provider}</small>
+                  <span>{run.query}</span>
                 </article>
               {/each}
             </div>

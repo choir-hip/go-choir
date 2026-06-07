@@ -1039,9 +1039,10 @@ func (s *Store) CreateGlobalWireSourceRefreshRun(ctx context.Context, rec types.
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO global_wire_source_refresh_runs (
 			owner_id, refresh_id, story_id, query, status, provider, message,
+			update_classification, storygraph_action, projection_action,
 			source_content_id, contribution_id, decision_id, candidate_id,
 			created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.OwnerID,
 		rec.ID,
 		rec.StoryID,
@@ -1049,6 +1050,9 @@ func (s *Store) CreateGlobalWireSourceRefreshRun(ctx context.Context, rec types.
 		rec.Status,
 		rec.Provider,
 		sanitizeStoreText(rec.Message),
+		rec.UpdateClassification,
+		rec.StoryGraphAction,
+		rec.ProjectionAction,
 		rec.SourceContentID,
 		rec.ContributionID,
 		rec.DecisionID,
@@ -1069,6 +1073,7 @@ func (s *Store) ListGlobalWireSourceRefreshRuns(ctx context.Context, ownerID, st
 		limit = 20
 	}
 	query := `SELECT owner_id, refresh_id, story_id, query, status, provider, message,
+	                update_classification, storygraph_action, projection_action,
 	                source_content_id, contribution_id, decision_id, candidate_id,
 	                created_at, updated_at
 	           FROM global_wire_source_refresh_runs
@@ -1567,6 +1572,9 @@ func scanGlobalWireSourceRefreshRun(row interface{ Scan(...any) error }) (types.
 		&rec.Status,
 		&rec.Provider,
 		&rec.Message,
+		&rec.UpdateClassification,
+		&rec.StoryGraphAction,
+		&rec.ProjectionAction,
 		&rec.SourceContentID,
 		&rec.ContributionID,
 		&rec.DecisionID,

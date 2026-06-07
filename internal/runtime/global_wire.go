@@ -114,6 +114,19 @@ type globalWireGraphCandidateReviewResponse struct {
 	ProjectionReviews []types.GlobalWireProjectionReview     `json:"projection_reviews,omitempty"`
 }
 
+type globalWireSourceUpdateClassification struct {
+	UpdateClassification string
+	ContributionKind     string
+	CandidateKind        string
+	SourceTier           string
+	EdgeKind             string
+	StoryGraphAction     string
+	ProjectionAction     string
+	Status               string
+	Message              string
+	Rationale            string
+}
+
 // HandleGlobalWireStories returns the authenticated owner's durable StoryGraph.
 func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -362,23 +375,55 @@ func (h *APIHandler) HandleGlobalWireSourceRefresh(w http.ResponseWriter, r *htt
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to import source refresh result"})
 		return
 	}
-	contribution, decision, candidate, err := h.createGlobalWireSourceRefreshArtifacts(r, ownerID, story, item)
+	classification := classifyGlobalWireSourceRefresh(story, item)
+	if classification.UpdateClassification == "no-visible-change" {
+		run, runErr := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+			ID:                   "global-wire-source-refresh-" + uuid.NewString(),
+			OwnerID:              ownerID,
+			StoryID:              story.ID,
+			Query:                firstNonEmptyString(resp.Query, query),
+			Status:               classification.Status,
+			Provider:             provider,
+			Message:              classification.Message,
+			UpdateClassification: classification.UpdateClassification,
+			StoryGraphAction:     classification.StoryGraphAction,
+			ProjectionAction:     classification.ProjectionAction,
+			SourceContentID:      item.ContentID,
+		})
+		if runErr != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, globalWireSourceRefreshResponse{
+			Status:      run.Status,
+			Source:      run.Provider,
+			Query:       run.Query,
+			Message:     run.Message,
+			RefreshRun:  run,
+			ContentItem: &item,
+		})
+		return
+	}
+	contribution, decision, candidate, err := h.createGlobalWireSourceRefreshArtifacts(r, ownerID, story, item, classification)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create source refresh artifacts"})
 		return
 	}
 	run, err := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
-		ID:              "global-wire-source-refresh-" + uuid.NewString(),
-		OwnerID:         ownerID,
-		StoryID:         story.ID,
-		Query:           firstNonEmptyString(resp.Query, query),
-		Status:          "candidate-review",
-		Provider:        provider,
-		Message:         "Source refresh imported live evidence and created a non-mutating graph-update candidate for platform review.",
-		SourceContentID: item.ContentID,
-		ContributionID:  contribution.ID,
-		DecisionID:      decision.ID,
-		CandidateID:     candidate.ID,
+		ID:                   "global-wire-source-refresh-" + uuid.NewString(),
+		OwnerID:              ownerID,
+		StoryID:              story.ID,
+		Query:                firstNonEmptyString(resp.Query, query),
+		Status:               classification.Status,
+		Provider:             provider,
+		Message:              classification.Message,
+		UpdateClassification: classification.UpdateClassification,
+		StoryGraphAction:     classification.StoryGraphAction,
+		ProjectionAction:     classification.ProjectionAction,
+		SourceContentID:      item.ContentID,
+		ContributionID:       contribution.ID,
+		DecisionID:           decision.ID,
+		CandidateID:          candidate.ID,
 	})
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
@@ -895,12 +940,12 @@ func (h *APIHandler) globalWireGraphUpdateCandidate(ownerID string, story types.
 	}
 }
 
-func (h *APIHandler) createGlobalWireSourceRefreshArtifacts(r *http.Request, ownerID string, story types.GlobalWireStory, item types.ContentItem) (types.GlobalWireContribution, types.GlobalWireReconciliationDecision, types.GlobalWireGraphUpdateCandidate, error) {
+func (h *APIHandler) createGlobalWireSourceRefreshArtifacts(r *http.Request, ownerID string, story types.GlobalWireStory, item types.ContentItem, classification globalWireSourceUpdateClassification) (types.GlobalWireContribution, types.GlobalWireReconciliationDecision, types.GlobalWireGraphUpdateCandidate, error) {
 	contribution, err := h.rt.Store().CreateGlobalWireContribution(r.Context(), types.GlobalWireContribution{
 		ID:              "global-wire-contribution-" + uuid.NewString(),
 		OwnerID:         ownerID,
 		StoryID:         story.ID,
-		Kind:            "source",
+		Kind:            firstNonEmptyString(classification.ContributionKind, "source"),
 		Headline:        firstNonEmptyString(item.Title, story.Headline),
 		Text:            firstNonEmptyString(item.TextContent, "Source refresh imported evidence for graph review."),
 		SourceContentID: item.ContentID,
@@ -915,19 +960,133 @@ func (h *APIHandler) createGlobalWireSourceRefreshArtifacts(r *http.Request, own
 		ContributionID:  contribution.ID,
 		StoryID:         story.ID,
 		Decision:        "accepted",
-		Note:            "Source refresh classified this Source Service item as candidate evidence for StoryGraph platform review.",
+		Note:            "Source refresh classified this Source Service item as " + firstNonEmptyString(classification.UpdateClassification, "source-manifest-update") + " for StoryGraph platform review.",
 		SourceContentID: item.ContentID,
 	})
 	if err != nil {
 		return types.GlobalWireContribution{}, types.GlobalWireReconciliationDecision{}, types.GlobalWireGraphUpdateCandidate{}, err
 	}
 	candidate := h.globalWireGraphUpdateCandidate(ownerID, story, contribution, decision)
-	candidate.Rationale = "Source refresh imported Source Service evidence and classified it as a non-mutating StoryGraph update candidate; platform review is required before manifest, edge, prominence, or projection changes."
+	candidate.CandidateKind = firstNonEmptyString(classification.CandidateKind, candidate.CandidateKind)
+	candidate.SourceTier = firstNonEmptyString(classification.SourceTier, candidate.SourceTier)
+	candidate.EdgeKind = firstNonEmptyString(classification.EdgeKind, candidate.EdgeKind)
+	candidate.ProjectionAction = firstNonEmptyString(classification.ProjectionAction, candidate.ProjectionAction)
+	candidate.Rationale = firstNonEmptyString(classification.Rationale, "Source refresh imported Source Service evidence and classified it as a non-mutating StoryGraph update candidate; platform review is required before manifest, edge, prominence, or projection changes.")
 	saved, err := h.rt.Store().UpsertGlobalWireGraphUpdateCandidate(r.Context(), candidate)
 	if err != nil {
 		return types.GlobalWireContribution{}, types.GlobalWireReconciliationDecision{}, types.GlobalWireGraphUpdateCandidate{}, err
 	}
 	return contribution, decision, saved, nil
+}
+
+func classifyGlobalWireSourceRefresh(story types.GlobalWireStory, item types.ContentItem) globalWireSourceUpdateClassification {
+	text := strings.ToLower(strings.Join([]string{
+		item.Title,
+		item.TextContent,
+		item.CanonicalURL,
+		item.SourceURL,
+	}, " "))
+	base := globalWireSourceUpdateClassification{
+		UpdateClassification: "source-manifest-update",
+		ContributionKind:     "source",
+		CandidateKind:        "source-manifest-update",
+		SourceTier:           "supporting",
+		EdgeKind:             "shared-source-neighborhood",
+		StoryGraphAction:     "source-manifest-update",
+		ProjectionAction:     "projection-review-required",
+		Status:               "candidate-review",
+		Message:              "Source refresh classified live evidence as a source-manifest update and created a non-mutating graph-update candidate for platform review.",
+		Rationale:            "Source refresh imported Source Service evidence and classified it as a source-manifest update; platform review is required before manifest, edge, prominence, or projection changes.",
+	}
+	if globalWireSourceAlreadyInManifest(story, item) || containsAny(text, "no visible change", "unchanged", "already reflected", "duplicate") {
+		return globalWireSourceUpdateClassification{
+			UpdateClassification: "no-visible-change",
+			ContributionKind:     "source",
+			CandidateKind:        "no-visible-change",
+			SourceTier:           "context",
+			EdgeKind:             "already-known-source",
+			StoryGraphAction:     "no-storygraph-change",
+			ProjectionAction:     "no-projection-change-yet",
+			Status:               "no-visible-change",
+			Message:              "Source refresh imported evidence but classified it as no visible StoryGraph change; no graph candidate was created.",
+			Rationale:            "Source refresh classified this evidence as already reflected in the current StoryGraph source neighborhood.",
+		}
+	}
+	if containsAny(text, "contradict", "contrary", "counter", "dispute", "denies", "denied", "false", "warning", "warns", "caution") {
+		return globalWireSourceUpdateClassification{
+			UpdateClassification: "contradiction-added",
+			ContributionKind:     "counter-source",
+			CandidateKind:        "contradiction-added",
+			SourceTier:           "contrary",
+			EdgeKind:             "contradiction-or-qualification",
+			StoryGraphAction:     "contrary-source-review",
+			ProjectionAction:     "projection-review-required",
+			Status:               "candidate-review",
+			Message:              "Source refresh classified live evidence as a contradiction or qualification and queued a contrary-source graph candidate.",
+			Rationale:            "Source refresh found evidence that may qualify or contradict the current StoryGraph claim set; platform review must decide whether to attach it as contrary evidence.",
+		}
+	}
+	if containsAny(text, "breaking", "urgent", "major", "front page", "front-page", "prominence", "surge", "plunge", "emergency") {
+		return globalWireSourceUpdateClassification{
+			UpdateClassification: "front-page-prominence-changed",
+			ContributionKind:     "source",
+			CandidateKind:        "front-page-prominence-changed",
+			SourceTier:           "lead",
+			EdgeKind:             "prominence-change",
+			StoryGraphAction:     "prominence-review",
+			ProjectionAction:     "projection-review-required",
+			Status:               "candidate-review",
+			Message:              "Source refresh classified live evidence as a possible front-page prominence change and queued a lead-source graph candidate.",
+			Rationale:            "Source refresh found evidence that may change prominence or editorial weight; platform review must decide before the News front page changes.",
+		}
+	}
+	if containsAny(text, "related", "linked", "spillover", "neighbor", "adjacent", "same source") {
+		return globalWireSourceUpdateClassification{
+			UpdateClassification: "related-story-edge-added",
+			ContributionKind:     "argument",
+			CandidateKind:        "related-story-edge-added",
+			SourceTier:           "context",
+			EdgeKind:             "related-story-edge",
+			StoryGraphAction:     "related-edge-review",
+			ProjectionAction:     "no-projection-change-yet",
+			Status:               "candidate-review",
+			Message:              "Source refresh classified live evidence as a possible related-story edge and queued a context graph candidate.",
+			Rationale:            "Source refresh found evidence that may connect this StoryGraph node to another source neighborhood; platform review must decide before graph topology changes.",
+		}
+	}
+	if containsAny(text, "claim changed", "revised", "updated", "correction", "corrected", "fell", "rose", "reduced", "increased", "improved", "worsened", "shifted") {
+		base.UpdateClassification = "claim-changed"
+		base.CandidateKind = "claim-changed"
+		base.EdgeKind = "update-relation"
+		base.StoryGraphAction = "claim-review"
+		base.Message = "Source refresh classified live evidence as a claim change and queued a graph candidate for platform review."
+		base.Rationale = "Source refresh found evidence that may alter the current claim set or timeline; platform review is required before StoryGraph or projection revisions."
+	}
+	return base
+}
+
+func globalWireSourceAlreadyInManifest(story types.GlobalWireStory, item types.ContentItem) bool {
+	candidates := []string{strings.TrimSpace(item.ContentID), strings.TrimSpace(item.CanonicalURL), strings.TrimSpace(item.SourceURL), strings.TrimSpace(item.Title)}
+	for _, source := range append(append(append(story.Manifest.Lead, story.Manifest.Supporting...), story.Manifest.Contrary...), story.Manifest.Context...) {
+		for _, candidate := range candidates {
+			if candidate == "" {
+				continue
+			}
+			if strings.EqualFold(source.ContentID, candidate) || strings.EqualFold(source.CanonicalURL, candidate) || strings.EqualFold(source.Title, candidate) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containsAny(text string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *APIHandler) createGlobalWireSourceRefreshRun(r *http.Request, rec types.GlobalWireSourceRefreshRun) (types.GlobalWireSourceRefreshRun, error) {

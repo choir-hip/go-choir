@@ -323,11 +323,21 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		resp.RefreshRun.CandidateID != resp.Candidate.ID {
 		t.Fatalf("refresh run lineage mismatch: %+v", resp.RefreshRun)
 	}
+	if resp.RefreshRun.UpdateClassification != "claim-changed" ||
+		resp.RefreshRun.StoryGraphAction != "claim-review" ||
+		resp.RefreshRun.ProjectionAction != "projection-review-required" {
+		t.Fatalf("refresh run classification missing: %+v", resp.RefreshRun)
+	}
 	if resp.Contribution.ResearchState != "accepted-for-graph-review" ||
 		resp.Decision.Decision != "accepted" ||
 		resp.Candidate.Status != "candidate-review" ||
 		resp.Candidate.SourceContentID != resp.ContentItem.ContentID {
 		t.Fatalf("refresh artifacts not candidate-ready: contribution=%+v decision=%+v candidate=%+v", resp.Contribution, resp.Decision, resp.Candidate)
+	}
+	if resp.Candidate.CandidateKind != "claim-changed" ||
+		resp.Candidate.EdgeKind != "update-relation" ||
+		resp.Candidate.ProjectionAction != "projection-review-required" {
+		t.Fatalf("refresh candidate did not inherit classification: %+v", resp.Candidate)
 	}
 
 	storiesAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
@@ -354,6 +364,77 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	}
 	if len(listResp.Refreshes) != 1 || listResp.Refreshes[0].CandidateID != resp.Candidate.ID {
 		t.Fatalf("refresh run missing from reconciliation list: %+v", listResp.Refreshes)
+	}
+	if listResp.Refreshes[0].UpdateClassification != "claim-changed" {
+		t.Fatalf("refresh classification missing from reconciliation list: %+v", listResp.Refreshes[0])
+	}
+}
+
+func TestHandleGlobalWireSourceRefreshClassifiesNoVisibleChangeWithoutCandidate(t *testing.T) {
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/source-service/search" {
+			t.Fatalf("unexpected source service path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(sourceapi.SearchResponse{
+			Query:    "unchanged port refresh",
+			Provider: sourceapi.ProviderName,
+			Metadata: sourceapi.Metadata{TargetKind: sourceapi.TargetKind},
+			Results: []sourceapi.ItemResult{{
+				Rank:          1,
+				TargetKind:    sourceapi.TargetKind,
+				ItemID:        "srcitem_port_unchanged",
+				SourceID:      "rss:ports",
+				SourceType:    "rss",
+				FetchID:       "fetch-port-unchanged",
+				Title:         "Port unchanged update",
+				Body:          "No visible change from the existing port source neighborhood.",
+				URL:           "https://example.test/ports-unchanged",
+				CanonicalURL:  "https://example.test/ports-unchanged",
+				ContentHash:   "hash-port-unchanged",
+				EvidenceLevel: "source-service-ledger",
+			}},
+		})
+	}))
+	defer sourceServer.Close()
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+
+	_, handler := testAPISetup(t)
+	body := `{"story_id":"story-supply-resilience","query":"unchanged port refresh","max_results":1}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/source-refresh", body, "user-alpha")
+	if w.Code != http.StatusOK {
+		t.Fatalf("source refresh status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp globalWireSourceRefreshResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode source refresh: %v", err)
+	}
+	if resp.Status != "no-visible-change" ||
+		resp.RefreshRun.UpdateClassification != "no-visible-change" ||
+		resp.RefreshRun.StoryGraphAction != "no-storygraph-change" ||
+		resp.RefreshRun.ProjectionAction != "no-projection-change-yet" {
+		t.Fatalf("unexpected no-visible-change refresh: %+v", resp)
+	}
+	if resp.ContentItem == nil || resp.Contribution != nil || resp.Decision != nil || resp.Candidate != nil {
+		t.Fatalf("no-visible-change should import source without review artifacts: %+v", resp)
+	}
+
+	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
+	if listW.Code != http.StatusOK {
+		t.Fatalf("list reconciliation status = %d body=%s", listW.Code, listW.Body.String())
+	}
+	var listResp globalWireReconciliationResponse
+	if err := json.NewDecoder(listW.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode reconciliation list: %v", err)
+	}
+	if len(listResp.Refreshes) != 1 || listResp.Refreshes[0].CandidateID != "" ||
+		listResp.Refreshes[0].UpdateClassification != "no-visible-change" {
+		t.Fatalf("no-visible-change refresh run missing or created candidate: %+v", listResp.Refreshes)
+	}
+	if len(listResp.Candidates) != 0 || len(listResp.Contributions) != 0 || len(listResp.Decisions) != 0 {
+		t.Fatalf("no-visible-change should not create review queue artifacts: contributions=%+v decisions=%+v candidates=%+v", listResp.Contributions, listResp.Decisions, listResp.Candidates)
 	}
 }
 

@@ -141,19 +141,22 @@ type GlobalWireGraphPromotionDecision struct {
 // pass for one StoryGraph node. It may create review artifacts, but never
 // mutates the StoryGraph directly.
 type GlobalWireSourceRefreshRun struct {
-	ID              string    `json:"id"`
-	OwnerID         string    `json:"owner_id,omitempty"`
-	StoryID         string    `json:"story_id"`
-	Query           string    `json:"query"`
-	Status          string    `json:"status"`
-	Provider        string    `json:"provider"`
-	Message         string    `json:"message"`
-	SourceContentID string    `json:"source_content_id,omitempty"`
-	ContributionID  string    `json:"contribution_id,omitempty"`
-	DecisionID      string    `json:"decision_id,omitempty"`
-	CandidateID     string    `json:"candidate_id,omitempty"`
-	CreatedAt       time.Time `json:"created_at,omitempty"`
-	UpdatedAt       time.Time `json:"updated_at,omitempty"`
+	ID                   string    `json:"id"`
+	OwnerID              string    `json:"owner_id,omitempty"`
+	StoryID              string    `json:"story_id"`
+	Query                string    `json:"query"`
+	Status               string    `json:"status"`
+	Provider             string    `json:"provider"`
+	Message              string    `json:"message"`
+	UpdateClassification string    `json:"update_classification,omitempty"`
+	StoryGraphAction     string    `json:"storygraph_action,omitempty"`
+	ProjectionAction     string    `json:"projection_action,omitempty"`
+	SourceContentID      string    `json:"source_content_id,omitempty"`
+	ContributionID       string    `json:"contribution_id,omitempty"`
+	DecisionID           string    `json:"decision_id,omitempty"`
+	CandidateID          string    `json:"candidate_id,omitempty"`
+	CreatedAt            time.Time `json:"created_at,omitempty"`
+	UpdatedAt            time.Time `json:"updated_at,omitempty"`
 }
 
 // GlobalWireProjectionReview records that a StoryGraph change may require a

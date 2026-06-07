@@ -233,14 +233,22 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     return { statusCode: res.status, body };
   });
   expect([201, 200, 502, 503]).toContain(sourceRefresh.statusCode);
-  expect(['candidate-review', 'no-evidence', 'unavailable']).toContain(sourceRefresh.body.status);
+  expect(['candidate-review', 'no-visible-change', 'no-evidence', 'unavailable']).toContain(sourceRefresh.body.status);
   expect(sourceRefresh.body.refresh_run?.story_id).toBe('story-supply-resilience');
   if (sourceRefresh.statusCode === 201) {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.contribution?.research_state).toBe('accepted-for-graph-review');
     expect(sourceRefresh.body.decision?.decision).toBe('accepted');
     expect(sourceRefresh.body.candidate?.status).toBe('candidate-review');
+    expect(sourceRefresh.body.refresh_run?.update_classification).toBeTruthy();
+    expect(sourceRefresh.body.refresh_run?.storygraph_action).toBeTruthy();
+    expect(sourceRefresh.body.refresh_run?.projection_action).toBeTruthy();
     expect(sourceRefresh.body.refresh_run?.candidate_id).toBe(sourceRefresh.body.candidate?.id);
+  } else if (sourceRefresh.body.status === 'no-visible-change') {
+    expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
+    expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');
+    expect(sourceRefresh.body.refresh_run?.storygraph_action).toBe('no-storygraph-change');
+    expect(sourceRefresh.body.refresh_run?.candidate_id || '').toBe('');
   } else {
     expect(sourceRefresh.body.message).toBeTruthy();
   }
