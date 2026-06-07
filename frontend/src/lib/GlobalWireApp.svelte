@@ -173,14 +173,14 @@
   $: ownerLabel = authenticated ? (currentUser?.email || 'owner computer') : 'public preview';
 
   onMount(() => {
-    loadDurableStoryGraph();
+    loadGlobalWireVTexts();
   });
 
   $: if (authenticated) {
-    loadDurableStoryGraph();
+    loadGlobalWireVTexts();
   }
 
-  async function loadDurableStoryGraph() {
+  async function loadGlobalWireVTexts() {
     const loadKey = authenticated ? 'authenticated' : 'preview';
     if (lastLoadKey === loadKey) return;
     lastLoadKey = loadKey;
@@ -554,7 +554,7 @@
       }
       styleSourceStatus = action === 'compose' ? 'Composed Style.vtext source created' : 'Replacement Style.vtext source created';
       lastLoadKey = '';
-      await loadDurableStoryGraph();
+      await loadGlobalWireVTexts();
     } catch (error) {
       styleSourceStatus = error?.message || `Style ${action} failed`;
     } finally {
@@ -566,13 +566,13 @@
 <section class="global-wire" data-global-wire-app data-global-wire-data-source={dataSource}>
   <header class="wire-masthead">
     <div>
-      <p class="kicker">Global Wire</p>
-      <h2>SourceMaxx desk</h2>
+      <p class="kicker">SourceMaxx newsroom</p>
+      <h2>Global Wire</h2>
     </div>
     <div class="wire-state" data-global-wire-state>
       <span>{ownerLabel}</span>
       <strong>{sourceItemCount} sources</strong>
-      <small>{sourceClassCount} source classes · {stories.length} VTexts · {dataSource}</small>
+      <small>{sourceClassCount} source classes · {stories.length} article VTexts · {dataSource}</small>
     </div>
   </header>
 
@@ -600,7 +600,7 @@
           >
             <div class="article-tools">
               <button type="button" aria-label="Open article VText" title="Open article VText" on:click={() => openStoryVText(story, style)} data-global-wire-open-vtext>V</button>
-              <button type="button" aria-label="Fork article VText" title="Fork article VText" on:click={() => forkStory(story)} data-global-wire-fork-story>F</button>
+              <button type="button" aria-label="Fork article VText" title="Fork article VText" on:click={() => forkStory(story)} data-global-wire-fork-story>+</button>
             </div>
             <p class="article-meta">{story.changeState} · {story.freshness} · {story.tension}</p>
             <h1>{story.headline}</h1>
@@ -799,7 +799,7 @@
 
   h2 {
     font-family: var(--choir-font-display);
-    font-size: clamp(2rem, 4vw, 4.4rem);
+    font-size: 3.15rem;
     line-height: 0.95;
   }
 
@@ -810,7 +810,7 @@
   }
 
   .wire-state strong {
-    font-size: 1.35rem;
+    font-size: 1.2rem;
   }
 
   .wire-load-error {
@@ -834,13 +834,14 @@
   }
 
   .article-columns {
-    column-width: 320px;
-    column-gap: clamp(28px, 4vw, 54px);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: clamp(28px, 4vw, 48px);
+    row-gap: 36px;
   }
 
   .wire-article {
     position: relative;
-    break-inside: avoid;
     margin: 0 0 clamp(28px, 4vw, 48px);
     padding: 0 0 2px;
   }
@@ -854,8 +855,8 @@
     top: 0;
     right: 0;
     display: flex;
-    gap: 6px;
-    opacity: 0.72;
+    gap: 4px;
+    opacity: 0.58;
   }
 
   .wire-article:hover .article-tools,
@@ -878,6 +879,15 @@
     cursor: pointer;
   }
 
+  .article-tools button {
+    min-width: 28px;
+    min-height: 28px;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: none;
+    color: var(--choir-text-muted);
+  }
+
   .article-tools button:hover,
   .article-tools button:focus-visible,
   .wire-disclosure button:hover,
@@ -893,15 +903,15 @@
   }
 
   .article-meta {
-    padding-right: 82px;
+    padding-right: 68px;
     margin-bottom: 8px;
     text-transform: uppercase;
   }
 
   .wire-article h1 {
     font-family: var(--choir-font-display);
-    font-size: clamp(1.75rem, 3.4vw, 3.3rem);
-    line-height: 0.98;
+    font-size: 2.05rem;
+    line-height: 1.02;
     margin-bottom: 12px;
   }
 
@@ -909,7 +919,7 @@
   .projection,
   .claims p {
     font-family: Georgia, 'Times New Roman', ui-serif, serif;
-    font-size: clamp(1.02rem, 1.4vw, 1.28rem);
+    font-size: 1.05rem;
     line-height: 1.48;
     color: var(--choir-text-primary);
   }
@@ -1100,18 +1110,37 @@
       text-align: left;
     }
 
+    h2 {
+      font-size: 2rem;
+    }
+
+    .wire-state strong {
+      font-size: 1.05rem;
+    }
+
+    .article-meta,
+    .edition-head {
+      font-size: 0.7rem;
+    }
+
     .wire-paper {
       display: block;
     }
 
     .article-columns {
-      column-width: auto;
-      column-count: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 30px;
     }
 
     .source-column {
       position: static;
       margin-top: 28px;
+    }
+
+    .wire-article h1 {
+      font-size: 1.55rem;
+      line-height: 1.06;
     }
 
     .wire-disclosure {

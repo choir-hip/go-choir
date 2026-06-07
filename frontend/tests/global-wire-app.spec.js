@@ -33,7 +33,8 @@ test('Global Wire renders as a newspaper SourceMaxx surface with every article o
 
   const app = page.locator('[data-global-wire-app]');
   await expect(app).toBeVisible();
-  await expect(app.locator('text=SourceMaxx desk')).toBeVisible();
+  await expect(app.getByRole('heading', { name: 'Global Wire' })).toBeVisible();
+  await expect(app.locator('text=SourceMaxx newsroom')).toBeVisible();
   await expect(app.locator('[data-global-wire-story]')).toHaveCount(3);
   await expect(app.locator('[data-global-wire-story-reader]').first()).toContainText('Port congestion indicators eased');
   await expect(app.locator('[data-global-wire-evidence]')).toContainText('Port authority throughput bulletin');
@@ -68,6 +69,7 @@ test('Global Wire has no nested dashboard panels, story boxes, theme selector, o
   await expect(app.locator('text=Autoradio')).toHaveCount(0);
   await expect(app.locator('text=Contribute')).toHaveCount(0);
   await expect(app.locator('text=StoryGraph desk')).toHaveCount(0);
+  await expect(app.locator('text=StoryGraph news desk')).toHaveCount(0);
 
   const storyBoxBorder = await app.locator('[data-global-wire-story]').first().evaluate((node) => {
     const style = getComputedStyle(node);
@@ -101,9 +103,9 @@ test('Global Wire remains a responsive Choir web desktop app across all three th
     const columns = node.querySelector('.article-columns');
     return {
       paperDisplay: getComputedStyle(paper).display,
-      columnCount: getComputedStyle(columns).columnCount,
+      columnTracks: getComputedStyle(columns).gridTemplateColumns.split(' ').length,
     };
   });
   expect(layout.paperDisplay).toBe('block');
-  expect(layout.columnCount).toBe('1');
+  expect(layout.columnTracks).toBe(1);
 });
