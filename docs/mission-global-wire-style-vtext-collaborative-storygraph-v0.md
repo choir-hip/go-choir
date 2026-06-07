@@ -4773,3 +4773,101 @@ Next executable probe:
   the public ref in the News app, and prove on staging that public reads expose
   only the selected export body/provenance while preserving owner scope for all
   other queues.
+
+## Checkpoint - Owner-Created Unlisted Public Export Links - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What changed:
+
+- Added `GlobalWirePublicationPublicLink` as an owner-created unlisted
+  read-only public reference to one delivery export.
+- Added `global_wire_publication_public_links` with export/delivery/artifact/
+  story/citation/rollback provenance fields and a unique token.
+- Added authenticated
+  `GET/POST /api/global-wire/publication-public-links` for owner create/list.
+- Added unauthenticated read-only
+  `GET /api/global-wire/publication-public-links/{token}` that returns only the
+  selected public link payload and strips owner id.
+- Reconciliation now returns owner-visible `public_links`.
+- The News app now lets an owner publish an export link from an exported
+  delivery row and displays the public route/ref.
+
+Evidence:
+
+- Problem-first checkpoint commit:
+  `864a135b` (`docs: record global wire public export link gap`).
+- Behavior commit:
+  `4384c933ef2a8b6890161e8885087c26a9a8fe56`
+  (`feat: publish global wire export links`).
+- Local runtime proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`.
+- Local frontend proof passed:
+  `npm run build` in `frontend/`.
+- Diff hygiene passed:
+  `git diff --check`.
+- CI run `27087620398`: success. Runtime shards, non-runtime tests,
+  integration smoke, Go vet/build, frontend build, aggregate gate, and Deploy
+  to Staging all passed.
+- FlakeHub publish run `27087620391`: success.
+- Staging health after deploy reported proxy and upstream deployed commit
+  `4384c933ef2a8b6890161e8885087c26a9a8fe56`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in"`
+  with 1 passed. The proof creates the publication artifact trajectory,
+  approves it, creates delivery evidence, creates an Autoradio script, creates
+  a delivery export, creates a public link through the News app, verifies the
+  public ref in the UI, and fetches the unauthenticated token endpoint to prove
+  it returns the selected export body without owner id.
+
+Invariants preserved:
+
+- Public visibility is explicit owner action over a single export, not ambient
+  exposure of all delivery/export rows.
+- The unauthenticated token route returns one public link payload only; it does
+  not expose owner queues, reconciliation state, user forks, or private
+  platform mutation paths.
+- Public link creation composes existing export provenance and appends a
+  rollback ref to the delivery export.
+- Platform Story VTexts, StoryGraph records, user-owned forks, and
+  Style.vtext source artifacts are not mutated.
+- Future Noir, Carbon Kintsugi, and London Salmon view proofs still pass on
+  staging.
+
+Belief-state update:
+
+- The proven product trajectory now reaches:
+  SourceItem -> source refresh/fetch/scheduler evidence -> StoryGraph headline
+  candidate -> extraction/research artifacts -> research handoff ->
+  projection review -> publication update package -> publication artifact ->
+  owner-scoped publication feed item -> Autoradio artifact traversal prompt ->
+  owner artifact approval -> owner-scoped delivery-ready publication record ->
+  owner-scoped delivered-publication detail view -> durable Autoradio script
+  artifact -> owner-scoped delivery export artifact -> owner-created unlisted
+  public export link.
+- This is the first honest public/read surface for the Global Wire trajectory.
+  It is intentionally unlisted and token-scoped; newsletter issues, feeds, and
+  email/syndication still remain outside this slice.
+
+Remaining error field:
+
+- Public links are token-scoped JSON/publication payloads, not full public web
+  pages, newsletter issues, email deliveries, subscription events, or
+  syndication feed items.
+- Autoradio scripts are text artifacts only; there is no audio synthesis,
+  playback, scheduling, or podcast/feed delivery.
+- No durable `RunAcceptanceRecord` exists for this mission.
+- Source standing policy, extraction normalization, full Style.vtext revision
+  workflows, and richer public reader presentation remain below the full spec
+  target.
+
+Next executable probe:
+
+- Apply cognitive transforms before the next route choice. Highest-value
+  remaining axes: render the public link as a simple public reader page rather
+  than JSON only, synthesize an honest `RunAcceptanceRecord` if a real
+  trajectory/run can be bound, or strengthen source standing/extraction
+  normalization now that publication surfaces are end-to-end.
