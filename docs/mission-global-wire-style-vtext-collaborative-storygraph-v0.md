@@ -4166,3 +4166,53 @@ Next executable probe:
   RunAcceptanceRecord synthesis from product evidence. The strongest current
   route is likely a delivery record over approved artifacts because it raises
   publication realism without pretending to solve email/syndication yet.
+
+## Problem Checkpoint - Approved Artifacts Lack Delivery Records - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Cognitive transform:
+
+- Treat delivery as a durable availability claim over an already approved,
+  citeable publication artifact, not as a public oracle route and not as
+  email/newsletter blast infrastructure.
+- The lowest honest resolution is an owner-scoped delivery record with channel,
+  status, permalink/ref, citation count, rollback count, and artifact lineage.
+  That can later deform into newsletter/public/feed/email delivery without
+  changing the artifact topology.
+
+Observed gap:
+
+- Publication artifacts can now move from `publication-review-ready` to
+  `publication-approved`, but approval does not create a delivery/publication
+  record.
+- Feed and Autoradio can consume approved artifacts, but there is no durable
+  object that says "this approved artifact is available in this channel."
+- Without a delivery record, the trajectory still stops before the
+  newsletter/publication side of the spec.
+
+Why this matters:
+
+- The spec trajectory includes newsletters/researchers/Autoradio. We have
+  Autoradio traversal, but newsletter/publication realism is still only an
+  approved review state.
+- A delivery record lets the system prove publication intent and provenance
+  without prematurely exposing unauthenticated public routes, email delivery,
+  subscriptions, or syndication.
+- Delivery must not mutate StoryGraph, platform Story VTexts, or user-owned
+  forks.
+
+Remaining error field:
+
+- No `GlobalWirePublicationDelivery` or equivalent durable delivery record
+  exists.
+- No owner product path creates a delivery from a `publication-approved`
+  artifact.
+- No News app view distinguishes "approved" from "delivered/available."
+
+Next executable probe:
+
+- Add owner-scoped delivery records over approved artifacts, expose a delivery
+  action/status in the News app, and prove on staging that delivery records
+  carry artifact/story/source/citation/rollback provenance without mutating
+  platform stories.
