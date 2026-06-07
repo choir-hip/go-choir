@@ -550,3 +550,84 @@ Rollback refs:
 - overnight mission rewrite: `82e80dd1`
 - backend coverage audit: `bc5e4a8d`
 - durable StoryGraph slice: `d9d9e670`
+
+## Overnight Checkpoint - SourceItem-Backed Evidence - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+commit delivered: `3a804bc1e864c0b439108234dc4097551c99449a`
+(`feat: back global wire sources with content items`)
+
+Route choice and cognitive transform:
+
+- Applied source-substrate inversion: the next resolution increase should make
+  evidence ownable/inspectable as SourceItems, not merely make the StoryGraph
+  UI richer.
+- Reused existing `ContentItem` as the SourceItem substrate because it already
+  carries stable ID, owner scope, source type, media type, title, content,
+  metadata, provenance, and product API access through `/api/content/items/*`.
+
+What changed:
+
+- Each seeded Global Wire source manifest entry now gets a backing
+  `ContentItem` before its Story VText is created.
+- `GlobalWireSourceItem` now carries `content_id` and `canonical_url`.
+- Story VText seed revisions cite the backing content items with
+  `content_item` citations.
+- The focused runtime test now proves that a lead StoryGraph source can be
+  loaded through `/api/content/items/{content_id}`.
+- The guarded deployed Playwright auth proof now verifies:
+  - durable StoryGraph provenance;
+  - source manifest `content_id`;
+  - `ContentItem.app_hint == "global-wire"`;
+  - `ContentItem.metadata.schema == "choir.global_wire_source_item.v1"`;
+  - owner-scoped fork VTexts;
+  - durable contribution queue records.
+
+What was proven locally:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed after the SourceItem-backed change.
+
+What was proven on staging:
+
+- Pushed `3a804bc1e864c0b439108234dc4097551c99449a` to `origin/main`.
+- GitHub Actions CI run `27081554053` completed successfully, including
+  runtime shards, non-runtime tests, Go vet/build, and staging deploy. Frontend
+  build was skipped because this behavior change did not affect frontend
+  artifacts.
+- FlakeHub publish run `27081554052` completed successfully.
+- `https://choir.news/health` reported both proxy and sandbox deployed at
+  `3a804bc1e864c0b439108234dc4097551c99449a`, deployed at
+  `2026-06-07T03:31:18Z`.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed with the new SourceItem assertions.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded authenticated proof skipped.
+
+Belief-state changes:
+
+- Global Wire now has the minimum SourceItem -> StoryGraph -> Story VText link
+  for authenticated users, but the SourceItems are still seed-normalized inside
+  the Global Wire bootstrap path.
+- The next realism axis should connect real imported/sourcecycled content into
+  the same normalization layer rather than adding another table first.
+
+Remaining error field:
+
+- SourceItems are not yet pulled from the running sourcecycled Source Service,
+  web search, upload, or user import flow.
+- There is still no story clustering/update classifier from new SourceItems.
+- Projection records remain embedded in the story object rather than separate
+  projection relations.
+- Research/reconciliation records exist as a queue, but there is no researcher
+  worker path that consumes a contribution and proposes a StoryGraph update.
+
+Next executable probe:
+
+- Add an authenticated product route or app control that imports/promotes an
+  existing `ContentItem` into a Global Wire StoryGraph source manifest without
+  mutating the platform story from arbitrary user text.
+- Prefer reusing `/api/content/items` and the current contribution queue over a
+  new SourceItem table unless sourcecycled import requires additional standing
+  or dedupe metadata.

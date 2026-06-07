@@ -69,6 +69,21 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   await expect(app).toHaveAttribute('data-global-wire-data-source', 'durable-storygraph');
   await expect(app.locator('[data-global-wire-state]')).toContainText('durable-storygraph');
 
+  const storyGraph = await page.evaluate(async () => {
+    const res = await fetch('/api/global-wire/stories', { credentials: 'include' });
+    if (!res.ok) throw new Error(`load durable StoryGraph failed: ${res.status}`);
+    return res.json();
+  });
+  const leadSource = storyGraph.stories?.[0]?.manifest?.lead?.[0];
+  expect(leadSource?.content_id).toBeTruthy();
+  const sourceItem = await page.evaluate(async (contentId) => {
+    const res = await fetch(`/api/content/items/${contentId}`, { credentials: 'include' });
+    if (!res.ok) throw new Error(`load SourceItem failed: ${res.status}`);
+    return res.json();
+  }, leadSource.content_id);
+  expect(sourceItem.app_hint).toBe('global-wire');
+  expect(sourceItem.metadata?.schema).toBe('choir.global_wire_source_item.v1');
+
   await app.locator('[data-global-wire-fork-story]').click();
   await expect(page.locator('[data-vtext-editor]').last()).toContainText('My Edit');
   await expect(page.locator('[data-vtext-editor]').last()).toContainText('User edits create user-owned versions');
