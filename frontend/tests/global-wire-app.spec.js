@@ -27,6 +27,46 @@ async function ensureDeskApp(page, appId, title) {
   await openDeskApp(page, appId);
 }
 
+async function fetchJSON(page, path) {
+  return page.evaluate(async (requestPath) => {
+    const res = await fetch(requestPath, { credentials: 'include' });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`${requestPath} failed: ${res.status} ${body}`);
+    }
+    return res.json();
+  }, path);
+}
+
+async function postJSON(page, path, body) {
+  return page.evaluate(async ({ requestPath, payload }) => {
+    const res = await fetch(requestPath, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const responseBody = await res.text();
+      throw new Error(`${requestPath} failed: ${res.status} ${responseBody}`);
+    }
+    return res.json();
+  }, { requestPath: path, payload: body });
+}
+
+async function waitForPromptDecision(page, submissionId, timeout = 120_000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const status = await fetchJSON(page, `/api/prompt-bar/submissions/${encodeURIComponent(submissionId)}`);
+    if (status.decision) return status.decision;
+    if (['failed', 'blocked', 'cancelled'].includes(status.state)) {
+      throw new Error(`prompt submission ${submissionId} ended as ${status.state}: ${status.error || ''}`);
+    }
+    await page.waitForTimeout(1000);
+  }
+  throw new Error(`prompt submission ${submissionId} did not produce a decision`);
+}
+
 async function applyTheme(page, id) {
   const names = {
     'futuristic-noir': 'Futuristic Noir',
@@ -699,6 +739,8 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     await app.locator('[data-global-wire-autoradio]').click();
     const autoradioResponse = await autoradioResponsePromise;
     expect(autoradioResponse.status()).toBe(202);
+    const autoradioSubmitted = await autoradioResponse.json();
+    expect(autoradioSubmitted.submission_id).toBeTruthy();
     const autoradioPayload = autoradioResponse.request().postDataJSON();
     expect(autoradioPayload.text).toContain('Create an Autoradio-ready spoken brief from the selected Global Wire publication artifact');
     expect(autoradioPayload.text).toContain(`Artifact id: ${publicationArtifactId}`);
@@ -707,6 +749,22 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(autoradioPayload.text).toContain('Citation Refs:');
     expect(autoradioPayload.text).toContain('Guardrail: speak from this citeable publication artifact');
     await expect(app.locator('[data-global-wire-story-action-status]')).toContainText('Autoradio brief submitted');
+    await waitForPromptDecision(page, autoradioSubmitted.submission_id);
+    const acceptance = await postJSON(page, '/api/run-acceptances/synthesize', {
+      target_mission_id: 'mission-global-wire-style-vtext-collaborative-storygraph-v0',
+      source_prompt_or_objective: autoradioPayload.text,
+      trajectory_id: autoradioSubmitted.submission_id,
+      staging_url: new URL(BASE_URL).origin,
+    });
+    expect(acceptance.acceptance_id).toBeTruthy();
+    expect(acceptance.target_mission_id).toBe('mission-global-wire-style-vtext-collaborative-storygraph-v0');
+    expect(acceptance.trajectory_id).toBe(autoradioSubmitted.submission_id);
+    expect(acceptance.acceptance_level).not.toBe('promotion-level');
+    expect(acceptance.checkpoints?.length || 0).toBeGreaterThan(0);
+    expect(acceptance.evidence_refs?.length || 0).toBeGreaterThan(0);
+    expect(acceptance.verifier_contracts?.length || 0).toBeGreaterThan(0);
+    const storedAcceptance = await fetchJSON(page, `/api/run-acceptances/${encodeURIComponent(acceptance.acceptance_id)}`);
+    expect(storedAcceptance.acceptance_id).toBe(acceptance.acceptance_id);
   }
 
   const askResponsePromise = page.waitForResponse((response) =>
