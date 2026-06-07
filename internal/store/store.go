@@ -189,6 +189,28 @@ CREATE TABLE IF NOT EXISTS global_wire_reconciliation_decisions (
 	KEY idx_global_wire_reconciliation_story (owner_id, story_id, created_at)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_graph_update_candidates (
+	owner_id           VARCHAR(255) NOT NULL,
+	candidate_id       VARCHAR(255) NOT NULL,
+	story_id           VARCHAR(255) NOT NULL,
+	contribution_id    VARCHAR(255) NOT NULL,
+	decision_id        VARCHAR(255) NOT NULL,
+	source_content_id  VARCHAR(255) NOT NULL DEFAULT '',
+	candidate_kind     VARCHAR(255) NOT NULL DEFAULT '',
+	title              LONGTEXT NOT NULL DEFAULT '',
+	summary            LONGTEXT NOT NULL DEFAULT '',
+	source_tier        VARCHAR(255) NOT NULL DEFAULT '',
+	edge_kind          VARCHAR(255) NOT NULL DEFAULT '',
+	projection_action  VARCHAR(255) NOT NULL DEFAULT '',
+	status             VARCHAR(255) NOT NULL DEFAULT '',
+	rationale          LONGTEXT NOT NULL DEFAULT '',
+	created_at         DATETIME NOT NULL,
+	updated_at         DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, candidate_id),
+	KEY idx_global_wire_candidates_story (owner_id, story_id, updated_at),
+	KEY idx_global_wire_candidates_decision (owner_id, decision_id)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivery_id          VARCHAR(255) PRIMARY KEY,
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',

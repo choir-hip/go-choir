@@ -99,3 +99,25 @@ type GlobalWireReconciliationDecision struct {
 	SourceContentID string    `json:"source_content_id,omitempty"`
 	CreatedAt       time.Time `json:"created_at,omitempty"`
 }
+
+// GlobalWireGraphUpdateCandidate is a non-mutating proposal produced from an
+// accepted reconciliation decision. It bridges accepted evidence into
+// StoryGraph source-neighborhood semantics without rewriting the platform story.
+type GlobalWireGraphUpdateCandidate struct {
+	ID               string    `json:"id"`
+	OwnerID          string    `json:"owner_id,omitempty"`
+	StoryID          string    `json:"story_id"`
+	ContributionID   string    `json:"contribution_id"`
+	DecisionID       string    `json:"decision_id"`
+	SourceContentID  string    `json:"source_content_id,omitempty"`
+	CandidateKind    string    `json:"candidate_kind"`
+	Title            string    `json:"title"`
+	Summary          string    `json:"summary"`
+	SourceTier       string    `json:"source_tier"`
+	EdgeKind         string    `json:"edge_kind"`
+	ProjectionAction string    `json:"projection_action"`
+	Status           string    `json:"status"`
+	Rationale        string    `json:"rationale"`
+	CreatedAt        time.Time `json:"created_at,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at,omitempty"`
+}

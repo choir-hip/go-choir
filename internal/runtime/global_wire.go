@@ -52,6 +52,7 @@ type globalWireReconciliationResponse struct {
 	Contributions []types.GlobalWireContribution           `json:"contributions"`
 	SourceItems   map[string]types.ContentItem             `json:"source_items,omitempty"`
 	Decisions     []types.GlobalWireReconciliationDecision `json:"decisions"`
+	Candidates    []types.GlobalWireGraphUpdateCandidate   `json:"candidates"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -64,6 +65,7 @@ type globalWireReconciliationCreateResponse struct {
 	Decision     types.GlobalWireReconciliationDecision `json:"decision"`
 	Contribution types.GlobalWireContribution           `json:"contribution"`
 	SourceItem   *types.ContentItem                     `json:"source_item,omitempty"`
+	Candidate    *types.GlobalWireGraphUpdateCandidate  `json:"candidate,omitempty"`
 }
 
 // HandleGlobalWireStories returns the authenticated owner's durable StoryGraph.
@@ -276,10 +278,16 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list reconciliation decisions"})
 			return
 		}
+		candidates, err := h.rt.Store().ListGlobalWireGraphUpdateCandidates(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list graph update candidates"})
+			return
+		}
 		writeAPIJSON(w, http.StatusOK, globalWireReconciliationResponse{
 			Contributions: contributions,
 			SourceItems:   h.globalWireContributionSourceItems(r, ownerID, contributions),
 			Decisions:     decisions,
+			Candidates:    candidates,
 		})
 	case http.MethodPost:
 		var req globalWireReconciliationCreateRequest
@@ -327,6 +335,21 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create reconciliation decision"})
 			return
 		}
+		var candidate *types.GlobalWireGraphUpdateCandidate
+		if req.Decision == "accepted" {
+			story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, contribution.StoryID)
+			if err != nil {
+				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load StoryGraph for graph update candidate"})
+				return
+			}
+			rec := h.globalWireGraphUpdateCandidate(ownerID, story, updatedContribution, decision)
+			saved, err := h.rt.Store().UpsertGlobalWireGraphUpdateCandidate(r.Context(), rec)
+			if err != nil {
+				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create graph update candidate"})
+				return
+			}
+			candidate = &saved
+		}
 		var sourceItem *types.ContentItem
 		if contribution.SourceContentID != "" {
 			item, err := h.rt.Store().GetContentItem(r.Context(), ownerID, contribution.SourceContentID)
@@ -338,6 +361,7 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			Decision:     decision,
 			Contribution: updatedContribution,
 			SourceItem:   sourceItem,
+			Candidate:    candidate,
 		})
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -352,6 +376,58 @@ func normalizeGlobalWireReconciliationDecision(value string) string {
 		return "rejected"
 	default:
 		return ""
+	}
+}
+
+func (h *APIHandler) globalWireGraphUpdateCandidate(ownerID string, story types.GlobalWireStory, contribution types.GlobalWireContribution, decision types.GlobalWireReconciliationDecision) types.GlobalWireGraphUpdateCandidate {
+	sourceTier := "context"
+	edgeKind := "source-neighborhood-update"
+	projectionAction := "projection-review-required"
+	candidateKind := "source-manifest-update"
+	switch contribution.Kind {
+	case "source":
+		sourceTier = "supporting"
+		edgeKind = "shared-source-neighborhood"
+	case "counter-source", "claim-dispute":
+		sourceTier = "contrary"
+		edgeKind = "contradiction-or-qualification"
+		candidateKind = "contradiction-added"
+	case "argument":
+		sourceTier = "context"
+		edgeKind = "claim-overlap"
+		candidateKind = "claim-context-update"
+	case "research-request":
+		sourceTier = "context"
+		edgeKind = "retrieval-demand"
+		candidateKind = "research-followup"
+		projectionAction = "no-projection-change-yet"
+	}
+	title := strings.TrimSpace(contribution.Headline)
+	if title == "" {
+		title = story.Headline
+	}
+	summary := strings.TrimSpace(contribution.Text)
+	if summary == "" {
+		summary = "Accepted contribution queued as a graph update candidate."
+	}
+	if len(summary) > 280 {
+		summary = summary[:280]
+	}
+	return types.GlobalWireGraphUpdateCandidate{
+		ID:               "global-wire-graph-candidate-" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ownerID+":"+decision.ID)).String(),
+		OwnerID:          ownerID,
+		StoryID:          story.ID,
+		ContributionID:   contribution.ID,
+		DecisionID:       decision.ID,
+		SourceContentID:  contribution.SourceContentID,
+		CandidateKind:    candidateKind,
+		Title:            title,
+		Summary:          summary,
+		SourceTier:       sourceTier,
+		EdgeKind:         edgeKind,
+		ProjectionAction: projectionAction,
+		Status:           "candidate-review",
+		Rationale:        "Accepted reconciliation decision created a non-mutating StoryGraph update candidate; platform StoryGraph review is still required before manifest, edge, prominence, or projection changes.",
 	}
 }
 

@@ -153,6 +153,7 @@
   let contributions = [];
   let reconciliationSourceItems = {};
   let reconciliationDecisions = [];
+  let graphUpdateCandidates = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
   let loadError = '';
@@ -188,6 +189,7 @@
       contributions = [];
       reconciliationSourceItems = {};
       reconciliationDecisions = [];
+      graphUpdateCandidates = [];
       return;
     }
     try {
@@ -223,10 +225,12 @@
       contributions = Array.isArray(payload.contributions) ? payload.contributions.slice(0, 6) : [];
       reconciliationSourceItems = payload.source_items || {};
       reconciliationDecisions = Array.isArray(payload.decisions) ? payload.decisions : [];
+      graphUpdateCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
     } catch {
       contributions = [];
       reconciliationSourceItems = {};
       reconciliationDecisions = [];
+      graphUpdateCandidates = [];
     }
   }
 
@@ -433,6 +437,11 @@
     return reconciliationDecisions.find((decision) => decision.contribution_id === id);
   }
 
+  function contributionCandidate(item) {
+    const id = item?.id || '';
+    return graphUpdateCandidates.find((candidate) => candidate.contribution_id === id);
+  }
+
   async function reconcileContribution(item, decision) {
     if (!authenticated || !item?.id) return;
     reconciliationBusyId = `${item.id}:${decision}`;
@@ -464,6 +473,11 @@
       reconciliationDecisions = [payload.decision, ...reconciliationDecisions]
         .filter(Boolean)
         .slice(0, 20);
+      if (payload.candidate?.id) {
+        graphUpdateCandidates = [payload.candidate, ...graphUpdateCandidates]
+          .filter(Boolean)
+          .slice(0, 20);
+      }
       contributionStatus = decision === 'accepted'
         ? 'Contribution accepted for graph review'
         : 'Contribution rejected for this story neighborhood';
@@ -636,6 +650,7 @@
             {#each contributions as item}
               {@const source = contributionSource(item)}
               {@const decision = contributionDecision(item)}
+              {@const candidate = contributionCandidate(item)}
               <article class="contribution-card" data-global-wire-reconciliation-item>
                 <p><strong>{item.kind.replaceAll('-', ' ')}</strong> · {item.text}</p>
                 <small>{item.research_state || 'pending-researcher-review'}</small>
@@ -647,6 +662,13 @@
                 {/if}
                 {#if decision}
                   <small data-global-wire-reconciliation-decision>{decision.decision}: {decision.note}</small>
+                  {#if candidate}
+                    <div class="graph-candidate" data-global-wire-graph-candidate>
+                      <strong>{candidate.candidate_kind}</strong>
+                      <small>{candidate.source_tier} · {candidate.edge_kind} · {candidate.status}</small>
+                      <span>{candidate.projection_action}</span>
+                    </div>
+                  {/if}
                 {:else if authenticated}
                   <div class="reconciliation-actions">
                     <button
@@ -1064,7 +1086,8 @@
     line-height: 1.3;
   }
 
-  .reconciliation-source {
+  .reconciliation-source,
+  .graph-candidate {
     display: grid;
     gap: 0.15rem;
     padding: 0.45rem;
@@ -1073,7 +1096,13 @@
     background: var(--choir-surface-pane);
   }
 
-  .reconciliation-source strong {
+  .graph-candidate {
+    border-left: 3px solid var(--choir-border-strong);
+  }
+
+  .reconciliation-source strong,
+  .graph-candidate strong,
+  .graph-candidate span {
     overflow-wrap: anywhere;
   }
 

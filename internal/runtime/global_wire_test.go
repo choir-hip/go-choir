@@ -318,6 +318,31 @@ func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(
 	if decisionResp.SourceItem == nil || decisionResp.SourceItem.ContentID != contribution.SourceContentID {
 		t.Fatalf("decision source item missing: %+v", decisionResp.SourceItem)
 	}
+	if decisionResp.Candidate == nil {
+		t.Fatalf("accepted decision did not create graph update candidate")
+	}
+	if decisionResp.Candidate.SourceContentID != contribution.SourceContentID ||
+		decisionResp.Candidate.SourceTier != "supporting" ||
+		decisionResp.Candidate.EdgeKind != "shared-source-neighborhood" ||
+		decisionResp.Candidate.Status != "candidate-review" {
+		t.Fatalf("unexpected graph update candidate: %+v", decisionResp.Candidate)
+	}
+
+	candidateListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
+	if candidateListW.Code != http.StatusOK {
+		t.Fatalf("list candidates status = %d body=%s", candidateListW.Code, candidateListW.Body.String())
+	}
+	var candidateList globalWireReconciliationResponse
+	if err := json.NewDecoder(candidateListW.Body).Decode(&candidateList); err != nil {
+		t.Fatalf("decode candidate list: %v", err)
+	}
+	if len(candidateList.Candidates) != 1 {
+		t.Fatalf("candidate count = %d, want 1; response=%+v", len(candidateList.Candidates), candidateList)
+	}
+	if candidateList.Candidates[0].DecisionID != decisionResp.Decision.ID ||
+		candidateList.Candidates[0].ContributionID != contribution.ID {
+		t.Fatalf("candidate lineage missing: %+v", candidateList.Candidates[0])
+	}
 
 	storiesAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
 	if storiesAfterW.Code != http.StatusOK {

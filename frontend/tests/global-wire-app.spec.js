@@ -130,6 +130,8 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   await expect(app.locator('[data-global-wire-reconciliation-source]').first()).toContainText('Contribution source');
   await app.locator('[data-global-wire-reconcile-accept]').first().evaluate((button) => button.click());
   await expect(app.locator('[data-global-wire-reconciliation-decision]').first()).toContainText('accepted');
+  await expect(app.locator('[data-global-wire-graph-candidate]').first()).toContainText('source-manifest-update');
+  await expect(app.locator('[data-global-wire-graph-candidate]').first()).toContainText('shared-source-neighborhood');
 
   const importedSourceQueue = await page.evaluate(async () => {
     const itemRes = await fetch('/api/content/items', {
@@ -199,11 +201,16 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     const list = await listRes.json();
     const contribution = (list.contributions || []).find((item) => item.id === contributionId);
     const decision = (list.decisions || []).find((item) => item.contribution_id === contributionId);
+    const candidate = (list.candidates || []).find((item) => item.contribution_id === contributionId);
     const sourceItem = list.source_items?.[sourceContentId];
-    return { contribution, decision, sourceItem };
+    return { contribution, decision, candidate, sourceItem };
   }, { contributionId: queuedContribution.id, sourceContentId: queuedContribution.source_content_id });
   expect(reconciliation.decision.decision).toBe('accepted');
   expect(reconciliation.contribution.research_state).toBe('accepted-for-graph-review');
+  expect(reconciliation.candidate.status).toBe('candidate-review');
+  expect(reconciliation.candidate.source_tier).toBe('supporting');
+  expect(reconciliation.candidate.edge_kind).toBe('shared-source-neighborhood');
+  expect(reconciliation.candidate.source_content_id).toBe(queuedContribution.source_content_id);
   expect(reconciliation.sourceItem?.content_id).toBe(queuedContribution.source_content_id);
   expect(reconciliation.sourceItem?.metadata?.schema).toBe('choir.global_wire_user_source_contribution.v1');
 });
