@@ -1454,3 +1454,58 @@ Next executable probe:
   the durable StoryGraph manifest if absent, update candidate status, and
   record the platform review note. Rejecting a candidate should update only
   candidate status and record the decision.
+
+## Problem Checkpoint - Missing Autonomous Evidence Candidate Loop - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- Global Wire can import Source Service evidence when a user searches, can queue
+  that evidence for reconciliation, can create graph-update candidates from
+  accepted decisions, and can promote candidates through an explicit platform
+  review step.
+- The system still lacks even a low-resolution product path for "new source
+  evidence arrived, classify it against a StoryGraph node, and create a
+  reviewable graph-update candidate."
+- Without that loop, the trajectory remains short of the spec's 24/7 ingestion
+  and publication shape even though the manual contribution/reconciliation path
+  is now platform-shaped.
+
+Evidence:
+
+- `/api/global-wire/source-search` imports Source Service results and can queue
+  the top result as a pending contribution.
+- `/api/global-wire/reconciliation` creates candidates only after an explicit
+  accepted review decision over an existing contribution.
+- `/api/global-wire/graph-candidates` can promote/reject an existing candidate,
+  but no route currently connects source refresh/classification directly to a
+  candidate-ready review artifact.
+
+Belief-state update:
+
+- The next topology-preserving move is not a blind auto-publish worker.
+- The next honest overnight resolution is a source-refresh/classification
+  product path that imports Source Service evidence, records a bounded
+  classification decision, and emits a non-mutating graph-update candidate for
+  later platform review.
+- This preserves the invariant that source arrival never silently rewrites the
+  platform StoryGraph.
+
+Remaining error field:
+
+- No durable ingestion/classification run record exists.
+- No API or app control can refresh a story from Source Service and return the
+  resulting contribution, decision, candidate, and source artifact lineage as a
+  single reviewable product-path object.
+- No staging proof shows live Source Service evidence progressing to candidate
+  review without a human manually assembling every intermediate artifact.
+
+Next executable probe:
+
+- Add a bounded Global Wire source-refresh endpoint and UI control. It should
+  load a StoryGraph node, search Source Service using the story headline or
+  supplied query, import the top SourceItem, create a contribution, record an
+  accepted classification/reconciliation decision whose note names the refresh
+  route, create a graph-update candidate, and return all lineage without
+  mutating the StoryGraph manifest.
