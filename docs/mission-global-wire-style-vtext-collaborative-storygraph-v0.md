@@ -1270,3 +1270,71 @@ Next executable probe:
 - Add a visible source search/import control backed by
   `/api/global-wire/source-search`, with explicit unavailable/no-evidence states
   and queue-top-result behavior that creates a source-backed contribution.
+
+## Overnight Checkpoint - Visible Source Search - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+deployed product commit: `2246b9f468c511bde4af59534d34f91ff29a9531`
+(`feat: expose global wire source search`)
+
+What changed:
+
+- Added a visible Source Service search control in the Global Wire contribution
+  rail.
+- Search calls `/api/global-wire/source-search` with the selected StoryGraph id
+  and optional queue-top-result behavior.
+- The app now shows explicit `ok`, `no-evidence`, `unavailable`, query-required,
+  and sign-in-required states instead of silently falling back to seeded
+  evidence.
+- Imported source results display as source artifacts when Source Service
+  evidence is available.
+- If the backend queues the top result, the contribution/reconciliation queue is
+  refreshed so the imported SourceItem can move through review.
+
+What was proven locally:
+
+- `npm run build` passed in `frontend/`.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed.
+
+What was proven on staging:
+
+- Pushed `2246b9f468c511bde4af59534d34f91ff29a9531` to `origin/main`.
+- GitHub Actions CI run `27082604455` completed successfully, including
+  runtime shards, non-runtime tests, frontend build, Go vet/build, and staging
+  deploy.
+- FlakeHub publish run `27082604446` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `2246b9f468c511bde4af59534d34f91ff29a9531`, deployed at
+  `2026-06-07T04:27:20Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded auth proof skipped.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed against staging and verified the visible source search status path
+  alongside StoryGraph, VText, Style.vtext, contribution, reconciliation, and
+  graph-candidate behavior.
+
+Belief-state changes:
+
+- The live/source-service evidence path is now owner-visible in the app, not
+  only API/proof-backed.
+- The current object now covers manual source discovery/import, durable
+  StoryGraph, Story VTexts, Style.vtext projections, news app views,
+  user-owned contributions, reconciliation decisions, and non-mutating graph
+  update candidates.
+- Remaining realism is now primarily automation and downstream consumption:
+  autonomous ingestion/classification, candidate promotion/review workflow, and
+  Ask/Autoradio traversal hooks.
+
+Remaining error field:
+
+- Candidate review does not yet promote to a platform StoryGraph process.
+- There is no autonomous feed-to-cluster-to-update loop.
+- Autoradio/Ask hooks remain outside this slice.
+
+Next executable probe:
+
+- Add non-oracle Ask/Autoradio hooks that hand the selected story/projection,
+  source manifest, and related story neighborhood to existing app routes or
+  product events without inventing answers or mutating the StoryGraph.
