@@ -33,6 +33,8 @@ func promptRoles() []string {
 		AgentProfileConductor,
 		AgentProfileVText,
 		AgentProfileResearcher,
+		AgentProfileProcessor,
+		AgentProfileReconciler,
 		AgentProfileSuper,
 		AgentProfileCoSuper,
 		AgentProfileVSuper,

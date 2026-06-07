@@ -515,6 +515,65 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	}
 }
 
+func TestSystemPromptForSourceMaxxProfilesLoadsSharedHarnessPrompts(t *testing.T) {
+	rt := testPromptRuntime(t)
+
+	for _, tc := range []struct {
+		name    string
+		profile string
+		want    []string
+	}{
+		{
+			name:    "processor",
+			profile: AgentProfileProcessor,
+			want: []string{
+				"SourceMaxx source-understanding agent",
+				"SourceItem batches",
+				"Reuse existing researcher agents",
+				"Reuse existing VText agents",
+				"Do not call VText editing tools",
+				"submit_coagent_update",
+			},
+		},
+		{
+			name:    "reconciler",
+			profile: AgentProfileReconciler,
+			want: []string{
+				"corpus-level SourceMaxx story agent",
+				"existing published VTexts",
+				"Reuse existing researcher agents",
+				"Reuse existing VText agents",
+				"Do not call VText editing tools",
+				"submit_coagent_update",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &types.RunRecord{
+				RunID:        "run-" + tc.name,
+				AgentID:      tc.name + ":source-maxx",
+				ChannelID:    "source-maxx-channel",
+				OwnerID:      "global-wire-platform",
+				AgentProfile: tc.profile,
+				AgentRole:    tc.profile,
+				Prompt:       "Process SourceMaxx handoff.",
+			}
+			prompt, err := rt.systemPromptForRun(rec)
+			if err != nil {
+				t.Fatalf("systemPromptForRun: %v", err)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(prompt, want) {
+					t.Fatalf("%s prompt missing %q in %q", tc.name, want, prompt)
+				}
+			}
+			if !strings.Contains(prompt, "Available tools:") {
+				t.Fatalf("%s prompt should include shared tool catalog, got %q", tc.name, prompt)
+			}
+		})
+	}
+}
+
 func TestSystemPromptIncludesRepoSkillContext(t *testing.T) {
 	rt := testPromptRuntime(t)
 	skillsRoot := t.TempDir()

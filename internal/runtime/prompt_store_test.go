@@ -36,6 +36,12 @@ func TestPromptStoreSeedsDefaults(t *testing.T) {
 			t.Fatalf("prompt %s source = %q, want default", prompt.Role, prompt.Source)
 		}
 	}
+	if _, err := store.Load("user-alice", AgentProfileProcessor); err != nil {
+		t.Fatalf("load processor prompt: %v", err)
+	}
+	if _, err := store.Load("user-alice", AgentProfileReconciler); err != nil {
+		t.Fatalf("load reconciler prompt: %v", err)
+	}
 }
 
 func TestPromptStoreSupportsUserOverridesAndReset(t *testing.T) {
