@@ -157,6 +157,8 @@
   let sourceSearchBusy = false;
   let sourceRefreshStatus = '';
   let sourceRefreshBusy = false;
+  let styleSourceStatus = '';
+  let styleSourceBusy = false;
   let queueTopSourceResult = true;
   let storyActionStatus = '';
   let storyActionBusy = '';
@@ -210,6 +212,7 @@
       sourceSearchStatus = '';
       sourceSearchMessage = '';
       sourceRefreshStatus = '';
+      styleSourceStatus = '';
       return;
     }
     try {
@@ -722,6 +725,53 @@
     }
   }
 
+  async function updateStyleSource(action) {
+    if (!authenticated || !selectedStory?.id || styleSourceBusy) return;
+    styleSourceBusy = true;
+    styleSourceStatus = '';
+    const baseStyleIds = action === 'compose'
+      ? styleSources.slice(0, 2).map((style) => style.id)
+      : [selectedStyle.id];
+    try {
+      const response = await fetch('/api/global-wire/style-sources', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          story_id: selectedStory.id,
+          action,
+          base_style_ids: baseStyleIds,
+          replace_style_id: action === 'replace' ? selectedStyle.id : '',
+          title: action === 'compose'
+            ? 'Style.vtext: Wire + Audit Hybrid'
+            : `Style.vtext: Replacement ${selectedStyle.label || selectedStyle.title}`,
+          label: action === 'compose' ? 'Hybrid' : 'Replace',
+          summary: action === 'compose'
+            ? 'Hybrid composed style preserving wire speed while foregrounding claim audit uncertainty.'
+            : `Replacement style source derived from ${selectedStyle.title} with explicit provenance.`,
+        }),
+      });
+      if (!response.ok) throw new Error(`Style ${action} failed: ${response.status}`);
+      const payload = await response.json();
+      if (payload.story?.id) {
+        stories = stories.map((story) => (story.id === payload.story.id ? payload.story : story));
+      }
+      if (payload.style?.id) {
+        styleSources = payload.story?.style_sources || [...styleSources, payload.style];
+        selectedStyleId = payload.style.id;
+      }
+      styleSourceStatus = action === 'compose'
+        ? 'Composed Style.vtext source created'
+        : 'Replacement Style.vtext source created';
+      lastLoadKey = '';
+      await loadDurableStoryGraph();
+    } catch (error) {
+      styleSourceStatus = error?.message || `Style ${action} failed`;
+    } finally {
+      styleSourceBusy = false;
+    }
+  }
+
   async function reconcileContribution(item, decision) {
     if (!authenticated || !item?.id) return;
     reconciliationBusyId = `${item.id}:${decision}`;
@@ -893,7 +943,13 @@
       <div class="style-switcher" data-global-wire-style-switcher>
         <div class="section-title">
           <h3>Style.vtext Projection</h3>
-          <button type="button" on:click={openStyleVText} data-global-wire-open-style>Open style source</button>
+          <div class="style-actions">
+            <button type="button" on:click={openStyleVText} data-global-wire-open-style>Open style source</button>
+            {#if authenticated}
+              <button type="button" on:click={() => updateStyleSource('compose')} disabled={styleSourceBusy} data-global-wire-compose-style>Compose</button>
+              <button type="button" on:click={() => updateStyleSource('replace')} disabled={styleSourceBusy} data-global-wire-replace-style>Replace</button>
+            {/if}
+          </div>
         </div>
         <div class="style-tabs" role="tablist" aria-label="Style source">
           {#each styleSources as style}
@@ -912,6 +968,9 @@
           <p>{projectionText}</p>
           <small>Cites {selectedStyle.title}; evidence manifest unchanged.</small>
         </article>
+        {#if styleSourceStatus}
+          <p class="style-source-status" data-global-wire-style-source-status>{styleSourceStatus}</p>
+        {/if}
       </div>
 
       <div class="claims" data-global-wire-claims>
@@ -1455,6 +1514,13 @@
     gap: 0.45rem;
   }
 
+  .style-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    justify-content: flex-end;
+  }
+
   .projection {
     display: grid;
     gap: 0.55rem;
@@ -1466,6 +1532,11 @@
   .projection p,
   .claims li {
     line-height: 1.45;
+  }
+
+  .style-source-status {
+    color: var(--choir-text-accent);
+    font-size: 0.82rem;
   }
 
   .claims ul {

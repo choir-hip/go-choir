@@ -64,6 +64,69 @@ func TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts(t *testing.T) {
 	}
 }
 
+func TestHandleGlobalWireStyleSourcesComposeAndReplace(t *testing.T) {
+	_, handler := testAPISetup(t)
+
+	composeBody := `{"story_id":"story-supply-resilience","action":"compose","base_style_ids":["wire-style","claim-audit-style"],"title":"Style.vtext: Wire Audit Hybrid","label":"Hybrid","summary":"Hybrid style preserving wire speed and claim-audit uncertainty."}`
+	composeW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/style-sources", composeBody, "user-style")
+	if composeW.Code != http.StatusCreated {
+		t.Fatalf("compose style status = %d body=%s", composeW.Code, composeW.Body.String())
+	}
+	var composeResp globalWireStyleSourceResponse
+	if err := json.NewDecoder(composeW.Body).Decode(&composeResp); err != nil {
+		t.Fatalf("decode compose style: %v", err)
+	}
+	if composeResp.Style.ID == "" ||
+		composeResp.Style.DocID != composeResp.Document.DocID ||
+		composeResp.Revision.AuthorKind != types.AuthorAppAgent ||
+		composeResp.Projection.StyleID != composeResp.Style.ID ||
+		composeResp.Projection.StyleDocID != composeResp.Style.DocID {
+		t.Fatalf("compose response missing style/projection lineage: %+v", composeResp)
+	}
+	if !strings.Contains(composeResp.Revision.Content, "Parent Style.vtext Sources") ||
+		!strings.Contains(composeResp.Projection.Text, "composed/replacement Style.vtext source") {
+		t.Fatalf("compose VText/projection content missing provenance: rev=%q projection=%q", composeResp.Revision.Content, composeResp.Projection.Text)
+	}
+	var citations []types.Citation
+	if err := json.Unmarshal(composeResp.Revision.Citations, &citations); err != nil {
+		t.Fatalf("decode compose citations: %v", err)
+	}
+	if len(citations) < 3 {
+		t.Fatalf("compose style citations too sparse: %+v", citations)
+	}
+
+	storiesW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-style")
+	if storiesW.Code != http.StatusOK {
+		t.Fatalf("stories after compose status = %d body=%s", storiesW.Code, storiesW.Body.String())
+	}
+	var storiesResp globalWireStoriesResponse
+	if err := json.NewDecoder(storiesW.Body).Decode(&storiesResp); err != nil {
+		t.Fatalf("decode stories after compose: %v", err)
+	}
+	composedStory := storiesResp.Stories[0]
+	if findGlobalWireStyleSource(composedStory.StyleSources, composeResp.Style.ID).ID == "" ||
+		composedStory.ProjectionVTextDocs[composeResp.Style.ID] == "" ||
+		!strings.Contains(composedStory.Projections[composeResp.Style.ID], "composed/replacement Style.vtext source") {
+		t.Fatalf("composed style not visible in StoryGraph response: %+v", composedStory)
+	}
+
+	replaceBody := `{"story_id":"story-supply-resilience","action":"replace","base_style_ids":["` + composeResp.Style.ID + `"],"replace_style_id":"` + composeResp.Style.ID + `","title":"Style.vtext: Replacement Hybrid","label":"Replace","summary":"Replacement style source with explicit provenance."}`
+	replaceW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/style-sources", replaceBody, "user-style")
+	if replaceW.Code != http.StatusCreated {
+		t.Fatalf("replace style status = %d body=%s", replaceW.Code, replaceW.Body.String())
+	}
+	var replaceResp globalWireStyleSourceResponse
+	if err := json.NewDecoder(replaceW.Body).Decode(&replaceResp); err != nil {
+		t.Fatalf("decode replace style: %v", err)
+	}
+	if replaceResp.Style.ID == composeResp.Style.ID ||
+		findGlobalWireStyleSource(replaceResp.Story.StyleSources, replaceResp.Style.ID).ID == "" ||
+		findGlobalWireStyleSource(replaceResp.Story.StyleSources, composeResp.Style.ID).ID != "" ||
+		replaceResp.Projection.StyleID != replaceResp.Style.ID {
+		t.Fatalf("replace style did not swap selectable source/projection: %+v", replaceResp)
+	}
+}
+
 func TestHandleGlobalWireRequiresAuth(t *testing.T) {
 	_, handler := testAPISetup(t)
 

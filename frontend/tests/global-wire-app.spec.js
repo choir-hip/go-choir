@@ -109,6 +109,38 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
   }, auditProjectionDoc);
   expect(projectionDoc.document?.title || projectionDoc.title || '').toContain('Audit');
 
+  const composeStyleResponsePromise = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/global-wire/style-sources' && response.request().method() === 'POST'
+  );
+  await app.locator('[data-global-wire-compose-style]').click();
+  const composeStyleResponse = await composeStyleResponsePromise;
+  expect(composeStyleResponse.status()).toBe(201);
+  const composedStyle = await composeStyleResponse.json();
+  expect(composedStyle.style?.doc_id).toBe(composedStyle.document?.doc_id);
+  expect(composedStyle.projection?.style_id).toBe(composedStyle.style?.id);
+  await expect(app.locator('[data-global-wire-style-source-status]')).toContainText('Composed Style.vtext source created');
+  await expect(app.locator('[data-global-wire-style-switcher]')).toContainText('Hybrid');
+  const composedStyleDoc = await page.evaluate(async (docId) => {
+    const res = await fetch(`/api/vtext/documents/${docId}`, { credentials: 'include' });
+    if (!res.ok) throw new Error(`load composed Style.vtext failed: ${res.status}`);
+    return res.json();
+  }, composedStyle.document.doc_id);
+  expect(composedStyleDoc.revisions?.[0]?.content || composedStyle.revision?.content || '').toContain('Parent Style.vtext Sources');
+  const composedStoryGraph = await page.evaluate(async (styleId) => {
+    const res = await fetch('/api/global-wire/stories', { credentials: 'include' });
+    if (!res.ok) throw new Error(`load composed StoryGraph failed: ${res.status}`);
+    const graph = await res.json();
+    const story = (graph.stories || []).find((item) => item.id === 'story-supply-resilience');
+    return {
+      style: (story?.style_sources || []).find((item) => item.id === styleId),
+      projectionDocId: story?.projection_vtext_docs?.[styleId],
+      projectionText: story?.projections?.[styleId],
+    };
+  }, composedStyle.style.id);
+  expect(composedStoryGraph.style?.doc_id).toBe(composedStyle.document.doc_id);
+  expect(composedStoryGraph.projectionDocId).toBeTruthy();
+  expect(composedStoryGraph.projectionText).toContain('composed/replacement Style.vtext source');
+
   await app.locator('[data-global-wire-fork-story]').click();
   await expect(page.locator('[data-vtext-editor]').last()).toContainText('My Edit');
   await expect(page.locator('[data-vtext-editor]').last()).toContainText('User edits create user-owned versions');

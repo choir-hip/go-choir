@@ -96,6 +96,24 @@ type globalWireGraphCandidateReviewRequest struct {
 	Note        string `json:"note,omitempty"`
 }
 
+type globalWireStyleSourceRequest struct {
+	StoryID        string   `json:"story_id"`
+	Action         string   `json:"action"`
+	BaseStyleIDs   []string `json:"base_style_ids,omitempty"`
+	ReplaceStyleID string   `json:"replace_style_id,omitempty"`
+	Title          string   `json:"title,omitempty"`
+	Label          string   `json:"label,omitempty"`
+	Summary        string   `json:"summary,omitempty"`
+}
+
+type globalWireStyleSourceResponse struct {
+	Story      types.GlobalWireStory           `json:"story"`
+	Style      types.GlobalWireStyleSource     `json:"style"`
+	Document   types.Document                  `json:"document"`
+	Revision   types.Revision                  `json:"revision"`
+	Projection types.GlobalWireStoryProjection `json:"projection"`
+}
+
 type globalWireProjectionReviewDraftRequest struct {
 	ReviewID string `json:"review_id"`
 	Action   string `json:"action,omitempty"`
@@ -741,6 +759,66 @@ func normalizeGlobalWirePromotionDecision(value string) string {
 	default:
 		return ""
 	}
+}
+
+// HandleGlobalWireStyleSources creates composed or replacement Style.vtext
+// artifacts and attaches them to a StoryGraph projection relation.
+func (h *APIHandler) HandleGlobalWireStyleSources(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req globalWireStyleSourceRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid style source request"})
+		return
+	}
+	req.StoryID = strings.TrimSpace(req.StoryID)
+	req.Action = strings.TrimSpace(strings.ToLower(req.Action))
+	req.ReplaceStyleID = strings.TrimSpace(req.ReplaceStyleID)
+	req.Title = strings.TrimSpace(req.Title)
+	req.Label = strings.TrimSpace(req.Label)
+	req.Summary = strings.TrimSpace(req.Summary)
+	if req.StoryID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "story_id is required"})
+		return
+	}
+	if req.Action != "compose" && req.Action != "replace" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "action must be compose or replace"})
+		return
+	}
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, req.StoryID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "story not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load StoryGraph"})
+		return
+	}
+	doc, rev, style, projection, story, err := h.createGlobalWireComposedStyleSource(r, ownerID, story, req)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "base or replacement style not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create Style.vtext source"})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, globalWireStyleSourceResponse{
+		Story:      story,
+		Style:      style,
+		Document:   doc,
+		Revision:   rev,
+		Projection: projection,
+	})
 }
 
 // HandleGlobalWireProjectionReviews creates ordinary VText drafts from
@@ -1633,6 +1711,348 @@ func defaultGlobalWireStyleSourcesForRuntime() []types.GlobalWireStyleSource {
 		{ID: "claim-audit-style", Title: "Style.vtext: Claim Audit", Label: "Audit", SourcePath: "styles/claim-audit.style.vtext"},
 		{ID: "market-brief-style", Title: "Style.vtext: Market Brief", Label: "Market", SourcePath: "styles/market-brief.style.vtext"},
 	}
+}
+
+func (h *APIHandler) createGlobalWireComposedStyleSource(r *http.Request, ownerID string, story types.GlobalWireStory, req globalWireStyleSourceRequest) (types.Document, types.Revision, types.GlobalWireStyleSource, types.GlobalWireStoryProjection, types.GlobalWireStory, error) {
+	baseStyles := selectGlobalWireBaseStyles(story.StyleSources, req.BaseStyleIDs)
+	if len(baseStyles) == 0 {
+		return types.Document{}, types.Revision{}, types.GlobalWireStyleSource{}, types.GlobalWireStoryProjection{}, types.GlobalWireStory{}, store.ErrNotFound
+	}
+	if req.Action == "replace" && findGlobalWireStyleSource(story.StyleSources, req.ReplaceStyleID).ID == "" {
+		return types.Document{}, types.Revision{}, types.GlobalWireStyleSource{}, types.GlobalWireStoryProjection{}, types.GlobalWireStory{}, store.ErrNotFound
+	}
+	now := time.Now().UTC()
+	styleID := "composed-style-" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ownerID+":"+story.ID+":"+req.Action+":"+strings.Join(req.BaseStyleIDs, ",")+":"+req.Title+":"+req.ReplaceStyleID+":"+now.Format(time.RFC3339Nano))).String()
+	if req.Action == "replace" {
+		styleID = "replacement-style-" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ownerID+":"+story.ID+":"+req.ReplaceStyleID+":"+req.Title+":"+now.Format(time.RFC3339Nano))).String()
+	}
+	title := firstNonEmptyString(req.Title, defaultGlobalWireComposedStyleTitle(req.Action, baseStyles))
+	label := firstNonEmptyString(req.Label, defaultGlobalWireComposedStyleLabel(req.Action, baseStyles))
+	summary := firstNonEmptyString(req.Summary, defaultGlobalWireComposedStyleSummary(req.Action, baseStyles))
+	sourcePath := "global-wire/styles/" + styleID + ".style.vtext"
+
+	doc := types.Document{
+		DocID:     uuid.NewString(),
+		OwnerID:   ownerID,
+		Title:     title,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := h.rt.Store().CreateDocument(r.Context(), doc); err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStyleSource{}, types.GlobalWireStoryProjection{}, types.GlobalWireStory{}, err
+	}
+	citations, err := json.Marshal(globalWireComposedStyleCitations(story, baseStyles))
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStyleSource{}, types.GlobalWireStoryProjection{}, types.GlobalWireStory{}, err
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"created_from":     "global_wire_style_source_" + req.Action,
+		"storygraph_id":    story.ID,
+		"style_id":         styleID,
+		"base_style_ids":   globalWireStyleIDs(baseStyles),
+		"replace_style_id": req.ReplaceStyleID,
+		"source_path":      sourcePath,
+	})
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStyleSource{}, types.GlobalWireStoryProjection{}, types.GlobalWireStory{}, err
+	}
+	rev := types.Revision{
+		RevisionID:  uuid.NewString(),
+		DocID:       doc.DocID,
+		OwnerID:     ownerID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "Global Wire",
+		Content:     globalWireComposedStyleVTextContent(req.Action, title, summary, story, baseStyles),
+		Citations:   citations,
+		Metadata:    metadata,
+		CreatedAt:   now,
+	}
+	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStyleSource{}, types.GlobalWireStoryProjection{}, types.GlobalWireStory{}, err
+	}
+	storedRev, err := h.rt.Store().GetRevision(r.Context(), rev.RevisionID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStyleSource{}, types.GlobalWireStoryProjection{}, types.GlobalWireStory{}, err
+	}
+	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, storedRev)
+	if err := h.rt.Store().UpsertDocumentAlias(r.Context(), ownerID, sourcePath, doc.DocID, now); err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStyleSource{}, types.GlobalWireStoryProjection{}, types.GlobalWireStory{}, err
+	}
+	style := types.GlobalWireStyleSource{
+		ID:         styleID,
+		Title:      title,
+		Label:      label,
+		Summary:    summary,
+		SourcePath: sourcePath,
+		DocID:      doc.DocID,
+	}
+	story.StyleSources = applyGlobalWireStyleSourceTransition(story.StyleSources, style, req)
+	projectionText := globalWireComposedStyleProjectionText(story, style, baseStyles)
+	if story.Projections == nil {
+		story.Projections = map[string]string{}
+	}
+	story.Projections[style.ID] = projectionText
+	story.SourceState = "style-source-" + req.Action
+	story.UpdatedAt = now
+	if err := h.rt.Store().UpsertGlobalWireStory(r.Context(), story); err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStyleSource{}, types.GlobalWireStoryProjection{}, types.GlobalWireStory{}, err
+	}
+	projectionDoc, projectionRev, err := h.createGlobalWireComposedProjectionVText(r, ownerID, story, style, baseStyles, projectionText, now)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStyleSource{}, types.GlobalWireStoryProjection{}, types.GlobalWireStory{}, err
+	}
+	projection := types.GlobalWireStoryProjection{
+		ID:          "global-wire-projection-" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ownerID+":"+story.ID+":"+style.ID)).String(),
+		OwnerID:     ownerID,
+		StoryID:     story.ID,
+		StyleID:     style.ID,
+		StyleDocID:  style.DocID,
+		StoryDocID:  projectionDoc.DocID,
+		ContextJSON: `{"audience":"global-wire","task":"news_projection","style_transition":"` + req.Action + `"}`,
+		Text:        projectionRev.Content,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := h.rt.Store().UpsertGlobalWireStoryProjection(r.Context(), projection); err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStyleSource{}, types.GlobalWireStoryProjection{}, types.GlobalWireStory{}, err
+	}
+	story.ProjectionVTextDocs = map[string]string{style.ID: projectionDoc.DocID}
+	return doc, storedRev, style, projection, story, nil
+}
+
+func selectGlobalWireBaseStyles(styles []types.GlobalWireStyleSource, ids []string) []types.GlobalWireStyleSource {
+	out := []types.GlobalWireStyleSource{}
+	if len(ids) == 0 {
+		return styles[:globalWireMinInt(len(styles), 2)]
+	}
+	for _, id := range ids {
+		style := findGlobalWireStyleSource(styles, id)
+		if style.ID != "" {
+			out = append(out, style)
+		}
+	}
+	return out
+}
+
+func findGlobalWireStyleSource(styles []types.GlobalWireStyleSource, id string) types.GlobalWireStyleSource {
+	id = strings.TrimSpace(id)
+	for _, style := range styles {
+		if style.ID == id {
+			return style
+		}
+	}
+	return types.GlobalWireStyleSource{}
+}
+
+func applyGlobalWireStyleSourceTransition(styles []types.GlobalWireStyleSource, style types.GlobalWireStyleSource, req globalWireStyleSourceRequest) []types.GlobalWireStyleSource {
+	if req.Action == "replace" {
+		out := make([]types.GlobalWireStyleSource, 0, len(styles))
+		replaced := false
+		for _, existing := range styles {
+			if existing.ID == req.ReplaceStyleID {
+				out = append(out, style)
+				replaced = true
+				continue
+			}
+			out = append(out, existing)
+		}
+		if !replaced {
+			out = append(out, style)
+		}
+		return out
+	}
+	return append(styles, style)
+}
+
+func globalWireComposedStyleCitations(story types.GlobalWireStory, styles []types.GlobalWireStyleSource) []types.Citation {
+	citations := []types.Citation{
+		{ID: "storygraph-node", Type: "storygraph", Value: story.ID, Label: story.Headline},
+	}
+	for _, style := range styles {
+		citations = append(citations, types.Citation{
+			ID:    "base-style-" + style.ID,
+			Type:  "vtext",
+			Value: firstNonEmptyString(style.DocID, style.SourcePath),
+			Label: firstNonEmptyString(style.Title, style.Label),
+		})
+	}
+	return citations
+}
+
+func globalWireStyleIDs(styles []types.GlobalWireStyleSource) []string {
+	out := make([]string, 0, len(styles))
+	for _, style := range styles {
+		out = append(out, style.ID)
+	}
+	return out
+}
+
+func defaultGlobalWireComposedStyleTitle(action string, styles []types.GlobalWireStyleSource) string {
+	if action == "replace" {
+		return "Style.vtext: Replacement " + firstNonEmptyString(styles[0].Label, styles[0].Title)
+	}
+	secondIndex := globalWireMinInt(len(styles)-1, 1)
+	return "Style.vtext: " + firstNonEmptyString(styles[0].Label, styles[0].Title) + " + " + firstNonEmptyString(styles[secondIndex].Label, styles[secondIndex].Title)
+}
+
+func defaultGlobalWireComposedStyleLabel(action string, styles []types.GlobalWireStyleSource) string {
+	if action == "replace" {
+		return "Replace"
+	}
+	if len(styles) >= 2 {
+		return firstNonEmptyString(styles[0].Label, "A") + "+" + firstNonEmptyString(styles[1].Label, "B")
+	}
+	return "Hybrid"
+}
+
+func defaultGlobalWireComposedStyleSummary(action string, styles []types.GlobalWireStyleSource) string {
+	names := []string{}
+	for _, style := range styles {
+		names = append(names, firstNonEmptyString(style.Title, style.Label))
+	}
+	if action == "replace" {
+		return "Replacement Style.vtext source derived from " + strings.Join(names, ", ") + " with explicit provenance."
+	}
+	return "Hybrid Style.vtext source composed from " + strings.Join(names, ", ") + " while preserving source provenance and non-oracle guardrails."
+}
+
+func globalWireComposedStyleVTextContent(action, title, summary string, story types.GlobalWireStory, styles []types.GlobalWireStyleSource) string {
+	lines := []string{
+		"# " + title,
+		"",
+		summary,
+		"",
+		"Style transition: " + action,
+		"StoryGraph id: " + story.ID,
+		"",
+		"## Parent Style.vtext Sources",
+		"",
+	}
+	for _, style := range styles {
+		lines = append(lines, "- "+firstNonEmptyString(style.Title, style.Label)+" ("+firstNonEmptyString(style.DocID, style.SourcePath)+")")
+	}
+	lines = append(lines,
+		"",
+		"## Projection Guardrails",
+		"",
+		"- Preserve the same StoryGraph evidence manifest.",
+		"- Change framing, salience, rhythm, and uncertainty emphasis without inventing facts.",
+		"- Keep contrary and qualifying evidence visible.",
+		"- Cite this composed Style.vtext when it materially shapes a projection.",
+	)
+	return strings.Join(lines, "\n")
+}
+
+func globalWireComposedStyleProjectionText(story types.GlobalWireStory, style types.GlobalWireStyleSource, baseStyles []types.GlobalWireStyleSource) string {
+	return strings.Join([]string{
+		"Composed Style.vtext projection for " + story.Headline + ".",
+		"Style source: " + style.Title + ".",
+		"Parent styles: " + strings.Join(globalWireStyleIDs(baseStyles), ", ") + ".",
+		"Evidence manifest unchanged: lead, supporting, contrary, and context tiers remain attached to the StoryGraph.",
+		"Projection emphasis: " + style.Summary,
+	}, " ")
+}
+
+func (h *APIHandler) createGlobalWireComposedProjectionVText(r *http.Request, ownerID string, story types.GlobalWireStory, style types.GlobalWireStyleSource, baseStyles []types.GlobalWireStyleSource, projectionText string, now time.Time) (types.Document, types.Revision, error) {
+	doc := types.Document{
+		DocID:     uuid.NewString(),
+		OwnerID:   ownerID,
+		Title:     story.Headline + " - " + style.Label + " projection",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := h.rt.Store().CreateDocument(r.Context(), doc); err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	citations := globalWireComposedStyleCitations(story, append([]types.GlobalWireStyleSource{style}, baseStyles...))
+	citations = append(citations, globalWireRuntimeSourceCitations(story)...)
+	citationsJSON, err := json.Marshal(citations)
+	if err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"created_from":  "global_wire_composed_style_projection",
+		"storygraph_id": story.ID,
+		"style_id":      style.ID,
+		"style_doc_id":  style.DocID,
+		"base_styles":   globalWireStyleIDs(baseStyles),
+	})
+	if err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	rev := types.Revision{
+		RevisionID:  uuid.NewString(),
+		DocID:       doc.DocID,
+		OwnerID:     ownerID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "Global Wire",
+		Content:     globalWireComposedProjectionVTextContent(story, style, projectionText),
+		Citations:   citationsJSON,
+		Metadata:    metadata,
+		CreatedAt:   now,
+	}
+	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	storedRev, err := h.rt.Store().GetRevision(r.Context(), rev.RevisionID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, storedRev)
+	sourcePath := "global-wire/" + story.ID + "." + style.ID + ".story.vtext"
+	if err := h.rt.Store().UpsertDocumentAlias(r.Context(), ownerID, sourcePath, doc.DocID, now); err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	return doc, storedRev, nil
+}
+
+func globalWireRuntimeSourceCitations(story types.GlobalWireStory) []types.Citation {
+	all := []types.GlobalWireSourceItem{}
+	all = append(all, story.Manifest.Lead...)
+	all = append(all, story.Manifest.Supporting...)
+	all = append(all, story.Manifest.Contrary...)
+	all = append(all, story.Manifest.Context...)
+	citations := make([]types.Citation, 0, len(all))
+	for _, item := range all {
+		if strings.TrimSpace(item.ContentID) == "" {
+			continue
+		}
+		citations = append(citations, types.Citation{
+			ID:    item.ID,
+			Type:  "content_item",
+			Value: item.ContentID,
+			Label: item.Title,
+		})
+	}
+	return citations
+}
+
+func globalWireComposedProjectionVTextContent(story types.GlobalWireStory, style types.GlobalWireStyleSource, projectionText string) string {
+	lines := []string{
+		"# " + story.Headline,
+		"",
+		story.Dek,
+		"",
+		"Style source: " + style.Title,
+		"StoryGraph id: " + story.ID,
+		"Projection relation: StoryGraph + composed Style.vtext + audience/task context -> Story VText",
+		"",
+		"## Projection",
+		"",
+		projectionText,
+		"",
+		"## Evidence Invariant",
+		"",
+		"This projection cites a composed/replacement Style.vtext source. It changes framing and salience without changing the StoryGraph evidence manifest or mutating user-owned forks.",
+	}
+	return strings.Join(lines, "\n")
+}
+
+func globalWireMinInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (h *APIHandler) globalWireContributionSourceItems(r *http.Request, ownerID string, contributions []types.GlobalWireContribution) map[string]types.ContentItem {
