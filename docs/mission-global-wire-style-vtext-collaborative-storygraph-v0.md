@@ -1000,3 +1000,85 @@ Next executable probe:
   reviewer note, and record a non-mutating reconciliation decision artifact.
   That increases the research/reconciliation axis without pretending the graph
   classifier is solved.
+
+## Overnight Checkpoint - Reconciliation Decision Surface - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+commit delivered: `494bd3621e30ebff0b690cb91d22a84c26af90cf`
+(`feat: add global wire reconciliation decisions`)
+
+What changed:
+
+- Added `GlobalWireReconciliationDecision`, a durable owner-scoped decision
+  artifact over a Global Wire contribution.
+- Added `global_wire_reconciliation_decisions`.
+- Added authenticated `GET /api/global-wire/reconciliation` to list queued
+  contributions, attached source artifacts, and prior decisions.
+- Added authenticated `POST /api/global-wire/reconciliation` to record an
+  `accepted` or `rejected` decision with reviewer note.
+- Accepted decisions update contribution state to
+  `accepted-for-graph-review`; rejected decisions update state to
+  `rejected-by-review`.
+- Decisions do not mutate platform StoryGraph stories or source manifests.
+- Runtime tests prove a source contribution can be listed with its SourceItem,
+  accepted for graph review, and leave the StoryGraph manifest unchanged.
+- Deployed Playwright proof now records a reconciliation decision over a
+  user-owned contribution and verifies the source artifact remains attached.
+
+What was proven locally:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed.
+- `npm run build` passed in `frontend/`.
+
+What was proven on staging:
+
+- Pushed `494bd3621e30ebff0b690cb91d22a84c26af90cf` to `origin/main`.
+- GitHub Actions CI run `27082121549` completed successfully, including
+  runtime shards, non-runtime tests, Go vet/build, and staging deploy.
+- FlakeHub publish run `27082121570` completed successfully.
+- `https://choir.news/health` reported both proxy and sandbox deployed at
+  `494bd3621e30ebff0b690cb91d22a84c26af90cf`, deployed at
+  `2026-06-07T04:01:51Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded auth proof skipped when run from
+  `frontend/`.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed when run from `frontend/`, including:
+  - durable StoryGraph provenance;
+  - platform source `ContentItem` lookup;
+  - selected-style projection VText lookup;
+  - user-owned fork VText creation;
+  - contribution VText creation;
+  - imported source contribution by `source_content_id`;
+  - Source Service bridge accepted states;
+  - reconciliation decision creation;
+  - reconciliation list lookup with attached source artifact.
+
+Belief-state changes:
+
+- The system now has a low-resolution but deployed research/reconciliation
+  state, not only a pending queue. A contribution can be reviewed, decided, and
+  kept as a citeable artifact for later graph update work.
+- The full trajectory remains invariant-preserving: user-owned edits,
+  user-owned source artifacts, and reconciliation decisions do not mutate
+  platform stories.
+- The next missing realism is classification/promotion, not artifact topology:
+  the product can ingest, queue, and decide; it does not yet compute graph edge
+  updates or merge reviewer decisions into story neighborhoods.
+
+Remaining error field:
+
+- Reconciliation is API-backed but not yet visible as a first-class app control.
+- Accepted decisions do not yet create graph update candidates, edge
+  classifications, or amended source-neighborhood proposals.
+- There is still no autonomous graph update/classification loop.
+- Autoradio/Ask hooks remain outside this slice.
+
+Next executable probe:
+
+- Add the smallest visible Global Wire reconciliation control: show queued
+  source contributions with their attached source artifact, allow accept/reject,
+  and reflect decision state without changing the StoryGraph manifest. Then use
+  Browser/Playwright proof across the three themes.
