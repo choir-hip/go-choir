@@ -100,7 +100,7 @@ func TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads(t *testing.T) {
 			"",
 			"MADRID -- Pope Leo XIV addressed a packed crowd while city officials adjusted transport and security plans around the visit.",
 			"",
-			"The article keeps the sourcing narrow: official crowd-control notices, local transit updates, and SourceMaxx conflict-free context remain separate from commentary.",
+			"The article keeps the sourcing narrow: official crowd-control notices, local transit updates, and source-network context remain separate from commentary.",
 		}, "\n"),
 		Citations: json.RawMessage("[]"),
 		Metadata:  meta,
@@ -137,8 +137,10 @@ func TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads(t *testing.T) {
 	if len(story.Manifest.Lead) != 2 || story.Manifest.Lead[0].ID != "srcitem_live_1" {
 		t.Fatalf("indexed source-network story missing source handles: %+v", story.Manifest)
 	}
-	if !strings.Contains(strings.Join(story.Claims, "\n"), "Style.vtext: Global Wire") {
-		t.Fatalf("indexed source-network story missing style provenance claims: %+v", story.Claims)
+	claimText := strings.Join(story.Claims, "\n")
+	if strings.Contains(claimText, "Style.vtext: Global Wire") ||
+		!strings.Contains(claimText, "Source and style provenance are carried by the VText revision metadata and citations") {
+		t.Fatalf("indexed source-network story claims did not preserve provenance/body separation: %+v", story.Claims)
 	}
 }
 
