@@ -724,14 +724,29 @@ belief-state changes:
   dispatch-failed handoffs. The next fix should expose non-sensitive
   processor/reconciler status counts through `/api/global-wire/sourcemaxx-status`
   before using it as dispatch acceptance evidence.
+- Commit `65a74e60fee15ca4ce78b576fd9512deeb3eff34` adds those product-safe
+  status counts and is deployed on staging. Authenticated staging proof for
+  cycle `cycle_1b8dbcb84048e3cb949be6d0` now reports 686 SourceItems, 14
+  fetches, 17 processor requests, 1 reconciler request,
+  `processor_status_counts: {"dispatch_failed":7,"queued":10}`, and
+  `reconciler_status_counts: {"dispatch_failed":1}`. This proves the shared
+  harness dispatcher attempted the capped processor/reconciler submissions,
+  but did not successfully create resident runs for that cycle. The likely
+  root cause is Node B startup ordering: `sourcecycled` starts and runs its
+  immediate cycle before the host-process sandbox at `127.0.0.1:8085` is ready,
+  while the sandbox is ordered after sourcecycled. The next fix should avoid a
+  hard service dependency cycle and make dispatch tolerate runtime startup by
+  retrying transient runtime unavailability before marking handoffs
+  `dispatch_failed`.
 
 remaining error field:
 
 - sustained staging source daemon/storage behavior across repeated cycles,
   including provider-level distribution, freshness, dedupe, and backoff;
 - first-class processor/reconciler shared-harness profiles are present and
-  sourcecycled dispatches to them, but product-safe observability of dispatch
-  status and resident output/result channels remains incomplete;
+  sourcecycled attempts to dispatch to them, but staging currently records
+  transient `dispatch_failed` request statuses instead of submitted resident
+  runs; resident output/result channels remain incomplete;
 - processor load budget and routing scheme after live staging data;
 - current researcher/VText agent invocation contracts for this workflow;
 - deletion/reuse map for current Global Wire backend source paths;
