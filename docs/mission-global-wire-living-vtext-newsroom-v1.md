@@ -764,3 +764,44 @@ mission remains unchanged: the source graph is now wider, but Global Wire
 still needs VText-agent-owned full article revisions, native source and
 related-VText transclusions, living reconciler updates, and product-path UI
 proof across the required themes and viewports.
+
+## Checkpoint 2026-06-07T23:17Z: VText article ownership transition fault found
+
+objective: move from source breadth into the article lifecycle, specifically
+the processor/reconciler to VText handoff that should produce normal,
+publication-quality article revisions.
+
+finding: the current handoff correctly creates a non-article source brief as
+the VText seed context, with `artifact_kind=source_brief` and
+`article_version=false`. The bug is that these durable metadata fields are
+then carried forward into the first VText agent `edit_vtext` mutation. That
+means the visible document can be rewritten as article prose while its stored
+revision still classifies itself as pre-article source-brief context. This is
+an architecture fault, not a typography fault: it confuses the VText-owned
+article boundary and can make later renderers, indexes, reconciliation logic,
+and product proof treat a real article as a brief.
+
+evidence: `submitVTextAgentRevisionRun` copies durable metadata from the
+current revision into the VText run, and `buildAppagentRevisionMetadata`
+copies durable metadata from both the parent revision and run into the new
+appagent revision. `durableMetadataKeys` includes `artifact_kind`,
+`article_version`, and `vtext_version_stage`. The processor/reconciler route
+sets the seed brief to `artifact_kind=source_brief`,
+`article_version=false`, and `vtext_version_stage=pre_article_brief`, while
+the VText prompt requires the first `edit_vtext` call to write a publishable
+article. No later normalization currently converts the stored revision
+metadata to an article revision for the Global Wire article request.
+
+required correction: when a VText agent run is explicitly a Global Wire
+article revision request, the resulting `edit_vtext` revision must mark the
+new revision as `artifact_kind=article_revision`, `article_version=true`, and
+an article-stage VText version, while preserving source entities, source
+network IDs, selected Style.vtext source context, worker-update metadata, and
+the normal edit provenance. This must be tested through the VText tool path,
+not just by checking prompt text.
+
+remaining error field: after metadata normalization is fixed, the mission
+still needs article-body quality and native transclusion proof: article
+content should be prose with inline `source:` refs and editorially useful
+related-VText transclusions, not outlines, source manifests, raw related-ID
+lists, or app-specific edit sections.
