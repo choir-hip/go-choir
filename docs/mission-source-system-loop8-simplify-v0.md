@@ -2094,3 +2094,38 @@ staging proof:
   and PDF export endpoints after the formatter move; this checkpoint adds CI,
   deploy, and health identity for the dead-branch prune.
 ```
+
+### Problem L8-8: Proposal Result Panel Exposes Internal Delivery Metadata
+
+Status: `documented_before_fix`.
+
+problem: after a published reader submits a proposal, the VText publication
+result component renders internal delivery state and a proposal revision hash
+as visible panel facts. This is the same class of UI issue as the earlier
+publication policy banner: technically useful metadata is escaping into a
+content-forward document surface where the reader needs an outcome, not an
+internal state tuple.
+
+evidence:
+
+```text
+frontend/src/lib/VTextPublicationResult.svelte:
+  {#if publishedProposal}
+    <p class="eyebrow">Proposal</p>
+    <h2>{publishedProposal.state || 'recorded'}</h2>
+    <span>{publishedProposal.delivery_state || 'recorded_for_author'}</span>
+    <span>{shortHash(publishedProposal.proposal_revision_hash || '')}</span>
+  {/if}
+
+classification:
+  product UI / visible metadata leakage.
+```
+
+acceptance:
+
+- proposal result text is reader-facing and content-forward;
+- delivery state and revision hashes are not shown as visible copy;
+- machine/test data attributes may preserve proposal identifiers/states where
+  useful for automation, but the visible UI must not read like an internal
+  publication/proposal record;
+- frontend build passes and staging proof exercises the proposal-result UI.

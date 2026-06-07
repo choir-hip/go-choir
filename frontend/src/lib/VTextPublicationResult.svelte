@@ -7,12 +7,6 @@
 
   const dispatch = createEventDispatcher();
 
-  function shortHash(value) {
-    const text = String(value || '');
-    if (text.length <= 18) return text;
-    return `${text.slice(0, 10)}…${text.slice(-6)}`;
-  }
-
   function handleLinkClick(event) {
     event.preventDefault();
     dispatch('open-public');
@@ -66,11 +60,10 @@
   >
     <div class="publication-heading">
       <p class="eyebrow">Proposal</p>
-      <h2>{publishedProposal.state || 'recorded'}</h2>
+      <h2>Proposal sent to author</h2>
     </div>
     <div class="publication-facts">
-      <span>{publishedProposal.delivery_state || 'recorded_for_author'}</span>
-      <span>{shortHash(publishedProposal.proposal_revision_hash || '')}</span>
+      <span>Your private version is ready for review.</span>
     </div>
   </section>
 {/if}
