@@ -233,6 +233,39 @@ Required proof:
 
 status: checkpoint_incomplete
 
+checkpoint 2026-06-07T21:11Z: current run corrected the actively generated
+VText article/projection body shape before continuing source expansion or UI
+work. The root cause was not only rendering: backend Global Wire constructors
+were still writing projection-review scaffolding, StoryGraph ids, approval
+notes, style-source lines, claim lists, and source-manifest-like text into
+reader-facing VText bodies. The implemented slice changes projection-review
+drafts to article revision drafts with source-entity metadata and native
+`source:` refs; changes projection approvals to normal article revisions
+without an appended approval section; changes composed/replacement style
+projection documents to article revisions with source entities and no visible
+graph/projection scaffolding; and removes claim-list/style-source prose from
+store/client fallback article bodies. Local proof passed
+`nix develop -c go test -tags comprehensive ./internal/runtime -run
+'TestHandleGlobalWireStyleSourcesComposeAndReplace|TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph|TestHandleGlobalWirePromotesClassifiedRefreshIntoStoryGraphAndPlatformVText'
+-count=1` and `npm run build` in `frontend`.
+
+residual truth after the 21:11Z slice: this makes current direct Global Wire
+article/projection VText output less wrong, but it does not complete the
+desired architecture. Article ownership still needs to normalize around VText
+agents producing and revising publication-quality prose from source
+briefs/reconciler updates. Broad source ingestion remains priority one:
+GDELT, large RSS/Atom catalogs, long-tail Telegram/social, Hacker News and
+broader tech sources, science, finance, industry media, and multilingual/local
+sources. Do not hardcode source trust tiers; learn track records over time and
+let models apply soft contextual judgment. Existing deployed/stored bad VTexts
+may remain until migrated or regenerated, so staging proof must inspect newly
+generated revisions, not only old documents.
+
+next executable proof after landing this slice: trigger the projection-review
+draft/approval or style-compose path on staging, open the resulting VText, and
+verify the article body has no visible projection/review/source-manifest
+scaffolding while source refs open through the native VText source system.
+
 last checkpoint: 2026-06-07 user visual/product review confirmed the current
 Global Wire/VText output is wrong-object work: poor desktop typography,
 normal-width layout failure, mobile issues, article stubs, visible metadata,
