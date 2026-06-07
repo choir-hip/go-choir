@@ -1731,3 +1731,51 @@ Next executable probe:
   decision, and Style.vtext source, and mark the review as `draft-created`
   without mutating the platform story or pretending the draft is final
   publication.
+
+## Problem Checkpoint - Missing Projection Draft Path - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- Projection-review records now prove that a promoted StoryGraph evidence
+  change creates downstream Style.vtext review obligations, but there is no
+  product path that turns one obligation into an ordinary ProjectionStory VText
+  draft.
+- Without that path, the system still stops short of the spec's loop from
+  StoryGraph update to projection jobs to Story VText revisions.
+
+Evidence:
+
+- `GlobalWireProjectionReview` records carry story, candidate, promotion,
+  source content, Style.vtext source, projection action, status, and rationale.
+- `/api/global-wire/reconciliation` lists projection reviews and the app shows
+  them under promoted candidates.
+- No endpoint or app control creates a VText draft from a projection-review
+  record, and no review state can point to a draft VText.
+
+Belief-state update:
+
+- The next topology-preserving step is not automatic publication and not a
+  hidden prose rewrite.
+- The next real artifact should be a draft ProjectionStory VText: normal VText,
+  appagent-authored, owner-scoped, citation-rich, and linked back to the
+  projection review.
+- The projection review should move to `draft-created`; platform/public story
+  state and user-owned edits remain separate.
+
+Remaining error field:
+
+- No projection-review draft endpoint exists.
+- No projection-review state can record a draft Story VText doc id.
+- The app cannot create or open a projection draft from a review obligation.
+- No staging proof shows promoted evidence leading to an ordinary VText draft
+  while preserving platform-story invariants.
+
+Next executable probe:
+
+- Add a bounded projection-draft endpoint and app control. The endpoint should
+  create an ordinary VText document from a projection-review record, cite the
+  StoryGraph, promoted source ContentItem, promotion decision, and Style.vtext
+  source, update the review to `draft-created`, and return the draft doc id for
+  opening through the existing VText editor path.
