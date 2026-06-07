@@ -2160,3 +2160,99 @@ Next executable probe:
   run fields and visible reconciliation/research queue semantics. The
   classifier can be heuristic at this resolution, but it must preserve the real
   ingestion loop topology and never mutate StoryGraph without platform review.
+
+## Source Refresh Classification Slice Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What changed:
+
+- Added durable update-classification fields to Global Wire source refresh
+  runs:
+  `update_classification`, `storygraph_action`, and `projection_action`.
+- Source Service-backed refresh now classifies the imported SourceItem before
+  creating review artifacts.
+- `no-visible-change` refreshes import and record the SourceItem but do not
+  create contribution, reconciliation, or graph-candidate artifacts.
+- Candidate-producing refreshes now shape contribution kind, candidate kind,
+  source tier, edge kind, StoryGraph action, and projection action from the
+  classification.
+- The Global Wire app surfaces refresh classification/action fields in the
+  research queue and reloads the durable StoryGraph correctly after projection
+  approval.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `507408d4cbf275b0e4f77f331338b5865fadfb02`.
+- Behavior commit:
+  `91f3b1c36dcd22c441e439dc96b0a5ab1f96af58`.
+- CI run `27084033464`: success, including frontend build, runtime shards,
+  Go vet/build, non-runtime tests, integration smoke, and staging deploy.
+- FlakeHub run `27084033473`: success.
+- Staging health at `2026-06-07T05:42:49Z` reported proxy and sandbox
+  `deployed_commit` =
+  `91f3b1c36dcd22c441e439dc96b0a5ab1f96af58`.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  and `npm run build` in `frontend/`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  with 1 passed. The path now accepts source-refresh responses with durable
+  classification fields, then continues through reconciliation, graph
+  promotion, projection draft, projection approval, News visibility, and Ask
+  Choir.
+
+Invariants preserved:
+
+- Source refresh classification does not mutate the StoryGraph directly.
+- Platform StoryGraph mutation still requires explicit graph-candidate
+  promotion.
+- `no-visible-change` creates no fake review work.
+- Candidate-producing classifications remain provenance-rich and owner-scoped
+  until platform review.
+- Projection changes still require projection review/draft/approval before the
+  durable StoryGraph + Style.vtext relation advances.
+- User-owned forks, edits, and contributions remain separate from platform
+  stories.
+- The app still renders core Global Wire views in Future Noir, Carbon Kintsugi,
+  and London Salmon.
+
+Belief-state update:
+
+- The proven trajectory now includes a low-resolution but real ingestion
+  classifier:
+  Source Service SourceItem -> refresh classification -> optional
+  research/reconciliation artifacts -> graph candidate -> platform promotion
+  -> projection-review obligation -> normal ProjectionStory revision.
+- This moves the object closer to the spec's 24/7 ingestion/publication loop
+  without pretending to have full claim extraction or scheduled ingestion.
+- The classifier is intentionally heuristic. It is a topology-preserving
+  placeholder for stronger claim/event/entity extraction, not a final newsroom
+  judgment engine.
+
+Remaining error field:
+
+- There is still no scheduled 24/7 source registry/fetch-cycle worker.
+- Claim/event/entity extraction is still heuristic and not stored as a rich
+  claim set with uncertainty/dispute state.
+- Story clustering and related-story edge promotion are low-resolution.
+- Front-page prominence classification exists as a candidate kind but does not
+  yet apply a bounded prominence update on promotion.
+- Style.vtext can be selected and cited, but not yet composed, replaced,
+  forked, or proposed through a full style-revision workflow.
+- There is no dedicated update-feed/newsletter/researcher publishing queue
+  beyond the current reconciliation/projection-review queues.
+- Autoradio remains a prompt-bar/VText handoff rather than a dedicated audio
+  playback or scheduling subsystem.
+
+Next executable probe:
+
+- Apply a cognitive-transform route choice before the next change. The highest
+  value candidates are:
+  add bounded prominence/related-edge application on graph promotion, add
+  Style.vtext composition/replacement as citeable VText artifacts, or add a
+  richer claim extraction/research-task record tied to refresh classifications.
