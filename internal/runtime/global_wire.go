@@ -208,6 +208,13 @@ type globalWirePublicationDeliveryResponse struct {
 	Story    types.GlobalWireStory               `json:"story"`
 }
 
+type globalWirePublicationDeliveryDetailResponse struct {
+	Delivery   types.GlobalWirePublicationDelivery `json:"delivery"`
+	Artifact   types.GlobalWirePublicationArtifact `json:"artifact"`
+	Story      types.GlobalWireStory               `json:"story"`
+	SourceItem *types.ContentItem                  `json:"source_item,omitempty"`
+}
+
 type globalWireReconciliationCreateRequest struct {
 	ContributionID string `json:"contribution_id"`
 	Decision       string `json:"decision"`
@@ -1416,6 +1423,41 @@ func (h *APIHandler) HandleGlobalWirePublicationDeliveries(w http.ResponseWriter
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
+}
+
+// HandleGlobalWirePublicationDeliveryDetail returns an owner-scoped composed
+// delivery publication object with artifact/story/source provenance.
+func (h *APIHandler) HandleGlobalWirePublicationDeliveryDetail(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	deliveryID := strings.TrimPrefix(r.URL.Path, "/api/global-wire/publication-deliveries/")
+	deliveryID = strings.Trim(strings.TrimSpace(deliveryID), "/")
+	if deliveryID == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "publication delivery not found"})
+		return
+	}
+	delivery, artifact, story, sourceItem, err := h.globalWirePublicationDeliveryDetail(r, ownerID, deliveryID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "publication delivery not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load publication delivery"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, globalWirePublicationDeliveryDetailResponse{
+		Delivery:   delivery,
+		Artifact:   artifact,
+		Story:      story,
+		SourceItem: sourceItem,
+	})
 }
 
 func normalizeGlobalWireReconciliationDecision(value string) string {
@@ -2972,6 +3014,30 @@ func (h *APIHandler) createGlobalWirePublicationDelivery(r *http.Request, ownerI
 		return types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, err
 	}
 	return delivery, artifact, story, nil
+}
+
+func (h *APIHandler) globalWirePublicationDeliveryDetail(r *http.Request, ownerID, deliveryID string) (types.GlobalWirePublicationDelivery, types.GlobalWirePublicationArtifact, types.GlobalWireStory, *types.ContentItem, error) {
+	delivery, err := h.rt.Store().GetGlobalWirePublicationDelivery(r.Context(), ownerID, deliveryID)
+	if err != nil {
+		return types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+	}
+	artifact, err := h.rt.Store().GetGlobalWirePublicationArtifact(r.Context(), ownerID, delivery.ArtifactID)
+	if err != nil {
+		return types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+	}
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, delivery.StoryID)
+	if err != nil {
+		return types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+	}
+	var sourceItem *types.ContentItem
+	if strings.TrimSpace(artifact.SourceContentID) != "" {
+		rec, err := h.rt.Store().GetContentItem(r.Context(), ownerID, artifact.SourceContentID)
+		if err != nil {
+			return types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, err
+		}
+		sourceItem = &rec
+	}
+	return delivery, artifact, story, sourceItem, nil
 }
 
 func (h *APIHandler) globalWirePublicationArtifactProjectionReviews(r *http.Request, ownerID string, update types.GlobalWirePublicationUpdate) ([]types.GlobalWireProjectionReview, error) {

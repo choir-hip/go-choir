@@ -679,6 +679,23 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		deliveryListResp.PublicationDeliveries[0].ArtifactID != artifactResp.Artifact.ID {
 		t.Fatalf("publication delivery missing from list: %+v", deliveryListResp)
 	}
+	deliveryDetailW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/publication-deliveries/"+deliveryResp.Delivery.ID, "", "user-alpha")
+	if deliveryDetailW.Code != http.StatusOK {
+		t.Fatalf("publication delivery detail status = %d body=%s", deliveryDetailW.Code, deliveryDetailW.Body.String())
+	}
+	var deliveryDetailResp globalWirePublicationDeliveryDetailResponse
+	if err := json.NewDecoder(deliveryDetailW.Body).Decode(&deliveryDetailResp); err != nil {
+		t.Fatalf("decode publication delivery detail response: %v", err)
+	}
+	if deliveryDetailResp.Delivery.ID != deliveryResp.Delivery.ID ||
+		deliveryDetailResp.Artifact.ID != artifactResp.Artifact.ID ||
+		deliveryDetailResp.Artifact.Body == "" ||
+		deliveryDetailResp.Story.ID != "story-supply-resilience" ||
+		deliveryDetailResp.SourceItem == nil ||
+		len(deliveryDetailResp.Delivery.CitationRefs) < 5 ||
+		len(deliveryDetailResp.Delivery.RollbackRefs) < 5 {
+		t.Fatalf("publication delivery detail missing provenance: %+v", deliveryDetailResp)
+	}
 
 	publicationListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
 	if publicationListW.Code != http.StatusOK {

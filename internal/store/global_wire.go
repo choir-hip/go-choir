@@ -2350,6 +2350,21 @@ func (s *Store) ListGlobalWirePublicationDeliveries(ctx context.Context, ownerID
 	return out, nil
 }
 
+// GetGlobalWirePublicationDelivery returns one owner-scoped delivery record.
+func (s *Store) GetGlobalWirePublicationDelivery(ctx context.Context, ownerID, deliveryID string) (types.GlobalWirePublicationDelivery, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, delivery_id, artifact_id, story_id, channel,
+		        status, delivery_ref, citation_count, rollback_count,
+		        citation_refs_json, rollback_refs_json, created_at,
+		        updated_at
+		   FROM global_wire_publication_deliveries
+		  WHERE owner_id = ? AND delivery_id = ?`,
+		ownerID,
+		deliveryID,
+	)
+	return scanGlobalWirePublicationDelivery(row)
+}
+
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
 func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.GlobalWireStoryProjection) error {
 	now := rec.UpdatedAt

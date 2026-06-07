@@ -183,6 +183,7 @@
   let publicationDeliveries = [];
   let publicationFeedItems = [];
   let publicationFeedStatus = '';
+  let publicationDeliveryDetail = null;
   let projectionReviews = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
@@ -232,6 +233,7 @@
       publicationDeliveries = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
+      publicationDeliveryDetail = null;
       projectionReviews = [];
       sourceSearchResults = [];
       sourceSearchStatus = '';
@@ -308,6 +310,7 @@
       publicationDeliveries = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
+      publicationDeliveryDetail = null;
       projectionReviews = [];
     }
   }
@@ -1117,6 +1120,22 @@
     }
   }
 
+  async function openPublicationDeliveryDetail(delivery) {
+    if (!authenticated || !delivery?.id) return;
+    reconciliationBusyId = `${delivery.id}:publication-delivery-detail`;
+    try {
+      const response = await fetch(`/api/global-wire/publication-deliveries/${encodeURIComponent(delivery.id)}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error(`Publication delivery detail failed: ${response.status}`);
+      publicationDeliveryDetail = await response.json();
+    } catch (error) {
+      contributionStatus = error?.message || 'Publication delivery detail failed';
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
   async function createProjectionDraft(review) {
     if (!authenticated || !review?.id) return;
     reconciliationBusyId = `${review.id}:draft`;
@@ -1641,6 +1660,16 @@
                   <small data-global-wire-publication-delivery-provenance>
                     delivery citations: {delivery.citation_count} · rollback refs: {delivery.rollback_count}
                   </small>
+                  <div class="publication-feed-actions">
+                    <button
+                      type="button"
+                      on:click={() => openPublicationDeliveryDetail(delivery)}
+                      disabled={reconciliationBusyId === `${delivery.id}:publication-delivery-detail`}
+                      data-global-wire-open-publication-delivery
+                    >
+                      Inspect
+                    </button>
+                  </div>
                 {:else if authenticated && item.status === 'publication-approved'}
                   <div class="publication-feed-actions">
                     <button
@@ -1674,6 +1703,28 @@
                 {/if}
               </article>
             {/each}
+          </div>
+        {/if}
+        {#if publicationDeliveryDetail}
+          <div class="publication-delivery-detail" data-global-wire-publication-delivery-detail>
+            <div class="section-title">
+              <h4>{publicationDeliveryDetail.artifact.title}</h4>
+              <span>{publicationDeliveryDetail.delivery.status} · {publicationDeliveryDetail.delivery.channel}</span>
+            </div>
+            <small data-global-wire-publication-delivery-detail-ref>
+              {publicationDeliveryDetail.delivery.delivery_ref}
+            </small>
+            <strong>{publicationDeliveryDetail.story.headline}</strong>
+            <p>{publicationDeliveryDetail.artifact.body}</p>
+            <small data-global-wire-publication-delivery-detail-source>
+              source {publicationDeliveryDetail.source_item?.title || publicationDeliveryDetail.artifact.source_content_id || 'story manifest'}
+            </small>
+            <small data-global-wire-publication-delivery-detail-citations>
+              citations: {(publicationDeliveryDetail.delivery.citation_refs || []).slice(0, 4).join(' · ')}
+            </small>
+            <small data-global-wire-publication-delivery-detail-rollback>
+              rollback refs: {(publicationDeliveryDetail.delivery.rollback_refs || []).slice(0, 4).join(' · ')}
+            </small>
           </div>
         {/if}
         <label>
@@ -2460,6 +2511,32 @@
     font-size: 0.72rem;
     font-weight: 720;
     cursor: pointer;
+  }
+
+  .publication-delivery-detail {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.55rem;
+    border: 1px solid var(--choir-border);
+    border-left: 3px solid var(--choir-border-strong);
+    border-radius: 8px;
+    background: var(--choir-surface-pane);
+    font-size: 0.82rem;
+    line-height: 1.32;
+  }
+
+  .publication-delivery-detail p {
+    display: -webkit-box;
+    -webkit-line-clamp: 7;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.35;
+  }
+
+  .publication-delivery-detail strong,
+  .publication-delivery-detail p,
+  .publication-delivery-detail small {
+    overflow-wrap: anywhere;
   }
 
   .contribution-list {

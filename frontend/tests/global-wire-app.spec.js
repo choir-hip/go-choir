@@ -462,6 +462,19 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(deliveryPayload.delivery.citation_count).toBeGreaterThanOrEqual(5);
     await expect(app.locator('[data-global-wire-publication-delivery]').first()).toContainText('delivery-ready');
     await expect(app.locator('[data-global-wire-publication-delivery-provenance]').first()).toContainText('delivery citations:');
+    const deliveryDetailResponsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === `/api/global-wire/publication-deliveries/${deliveryPayload.delivery.id}` && response.request().method() === 'GET'
+    );
+    await app.locator('[data-global-wire-open-publication-delivery]').first().click();
+    const deliveryDetailResponse = await deliveryDetailResponsePromise;
+    expect(deliveryDetailResponse.status()).toBe(200);
+    const deliveryDetail = await deliveryDetailResponse.json();
+    expect(deliveryDetail.delivery.id).toBe(deliveryPayload.delivery.id);
+    expect(deliveryDetail.artifact.id).toBe(publicationArtifact.body.artifact.id);
+    expect(deliveryDetail.source_item?.content_id).toBeTruthy();
+    await expect(app.locator('[data-global-wire-publication-delivery-detail]')).toContainText('delivery-ready');
+    await expect(app.locator('[data-global-wire-publication-delivery-detail-citations]')).toContainText('citations:');
+    await expect(app.locator('[data-global-wire-publication-delivery-detail-rollback]')).toContainText('rollback refs:');
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');
