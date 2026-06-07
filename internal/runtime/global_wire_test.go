@@ -500,6 +500,41 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("completed research evidence missing from reconciliation list: %+v", taskListResp)
 	}
 
+	handoffBody := fmt.Sprintf(`{"evidence_id":%q,"decision":"accept","note":"Accept completed research evidence into platform review without mutating the story."}`, taskResp.Evidence.ID)
+	handoffW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/research-evidence", handoffBody, "user-alpha")
+	if handoffW.Code != http.StatusCreated {
+		t.Fatalf("research evidence handoff status = %d body=%s", handoffW.Code, handoffW.Body.String())
+	}
+	var handoffResp globalWireResearchEvidenceDecisionResponse
+	if err := json.NewDecoder(handoffW.Body).Decode(&handoffResp); err != nil {
+		t.Fatalf("decode research evidence handoff response: %v", err)
+	}
+	if handoffResp.Decision.EvidenceID != taskResp.Evidence.ID ||
+		handoffResp.Decision.TaskID != resp.ResearchTask.ID ||
+		handoffResp.Decision.CandidateID != resp.Candidate.ID ||
+		handoffResp.Decision.Decision != "accepted-for-review" ||
+		handoffResp.Decision.ResultState != "ready-for-platform-review" ||
+		handoffResp.Candidate == nil ||
+		handoffResp.Candidate.Status != "research-evidence-accepted" {
+		t.Fatalf("research evidence handoff missing candidate review state: %+v", handoffResp)
+	}
+
+	handoffListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
+	if handoffListW.Code != http.StatusOK {
+		t.Fatalf("list reconciliation after handoff status = %d body=%s", handoffListW.Code, handoffListW.Body.String())
+	}
+	var handoffListResp globalWireReconciliationResponse
+	if err := json.NewDecoder(handoffListW.Body).Decode(&handoffListResp); err != nil {
+		t.Fatalf("decode reconciliation list after handoff: %v", err)
+	}
+	if len(handoffListResp.ResearchDecisions) != 1 ||
+		handoffListResp.ResearchDecisions[0].EvidenceID != taskResp.Evidence.ID ||
+		handoffListResp.ResearchDecisions[0].ResultState != "ready-for-platform-review" ||
+		len(handoffListResp.Candidates) != 1 ||
+		handoffListResp.Candidates[0].Status != "research-evidence-accepted" {
+		t.Fatalf("research evidence handoff missing from reconciliation list: %+v", handoffListResp)
+	}
+
 	storiesTaskAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
 	if storiesTaskAfterW.Code != http.StatusOK {
 		t.Fatalf("stories after task status = %d body=%s", storiesTaskAfterW.Code, storiesTaskAfterW.Body.String())

@@ -325,6 +325,35 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(completedQueue.task.status).toBe('completed');
     expect(completedQueue.evidence.length).toBeGreaterThanOrEqual(1);
     expect(completedQueue.evidence[0].summary).toContain('without mutating');
+    const researchEvidenceHandoff = await page.evaluate(async (evidenceId) => {
+      const res = await fetch('/api/global-wire/research-evidence', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          evidence_id: evidenceId,
+          decision: 'accept',
+          note: 'playwright-auth-proof accepted completed evidence for review',
+        }),
+      });
+      const body = await res.json();
+      return { statusCode: res.status, body };
+    }, completedQueue.evidence[0].id);
+    expect(researchEvidenceHandoff.statusCode).toBe(201);
+    expect(researchEvidenceHandoff.body.decision.decision).toBe('accepted-for-review');
+    expect(researchEvidenceHandoff.body.decision.result_state).toBe('ready-for-platform-review');
+    expect(researchEvidenceHandoff.body.candidate.status).toBe('research-evidence-accepted');
+    const handoffQueue = await page.evaluate(async (evidenceId) => {
+      const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
+      if (!res.ok) throw new Error(`load research handoff queue failed: ${res.status}`);
+      const list = await res.json();
+      return {
+        decision: (list.research_decisions || []).find((item) => item.evidence_id === evidenceId),
+        candidate: (list.candidates || []).find((item) => item.id),
+      };
+    }, completedQueue.evidence[0].id);
+    expect(handoffQueue.decision.result_state).toBe('ready-for-platform-review');
+    expect(handoffQueue.candidate.status).toBeTruthy();
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

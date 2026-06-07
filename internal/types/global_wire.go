@@ -220,6 +220,24 @@ type GlobalWireResearchTaskEvidence struct {
 	CreatedAt       time.Time `json:"created_at,omitempty"`
 }
 
+// GlobalWireResearchEvidenceDecision records a reviewer handoff decision over
+// completed research evidence. It may update candidate review state, but it
+// does not mutate platform StoryGraph stories.
+type GlobalWireResearchEvidenceDecision struct {
+	ID              string    `json:"id"`
+	OwnerID         string    `json:"owner_id,omitempty"`
+	EvidenceID      string    `json:"evidence_id"`
+	TaskID          string    `json:"task_id"`
+	StoryID         string    `json:"story_id"`
+	ClaimID         string    `json:"claim_id,omitempty"`
+	CandidateID     string    `json:"candidate_id,omitempty"`
+	SourceContentID string    `json:"source_content_id,omitempty"`
+	Decision        string    `json:"decision"`
+	Note            string    `json:"note,omitempty"`
+	ResultState     string    `json:"result_state"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+}
+
 // GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
 // fetch cycle should use for one StoryGraph neighborhood.
 type GlobalWireSourceRegistryEntry struct {

@@ -1333,6 +1333,21 @@ func (s *Store) CreateGlobalWireResearchTaskEvidence(ctx context.Context, rec ty
 	return rec, nil
 }
 
+// GetGlobalWireResearchTaskEvidence returns one owner-scoped research evidence
+// packet.
+func (s *Store) GetGlobalWireResearchTaskEvidence(ctx context.Context, ownerID, evidenceID string) (types.GlobalWireResearchTaskEvidence, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, evidence_id, task_id, story_id, claim_id,
+		        source_content_id, status, evidence_level, summary,
+		        reviewer_note, created_at
+		   FROM global_wire_research_task_evidence
+		  WHERE owner_id = ? AND evidence_id = ?`,
+		ownerID,
+		evidenceID,
+	)
+	return scanGlobalWireResearchTaskEvidence(row)
+}
+
 // ListGlobalWireResearchTaskEvidence lists recent task evidence packets,
 // optionally narrowed to one StoryGraph node.
 func (s *Store) ListGlobalWireResearchTaskEvidence(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireResearchTaskEvidence, error) {
@@ -1367,6 +1382,75 @@ func (s *Store) ListGlobalWireResearchTaskEvidence(ctx context.Context, ownerID,
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate global wire research task evidence: %w", err)
+	}
+	return out, nil
+}
+
+// CreateGlobalWireResearchEvidenceDecision stores a reviewer handoff decision
+// over completed research evidence.
+func (s *Store) CreateGlobalWireResearchEvidenceDecision(ctx context.Context, rec types.GlobalWireResearchEvidenceDecision) (types.GlobalWireResearchEvidenceDecision, error) {
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = time.Now().UTC()
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_research_evidence_decisions (
+			owner_id, decision_id, evidence_id, task_id, story_id, claim_id,
+			candidate_id, source_content_id, decision, note, result_state,
+			created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.EvidenceID,
+		rec.TaskID,
+		rec.StoryID,
+		rec.ClaimID,
+		rec.CandidateID,
+		rec.SourceContentID,
+		rec.Decision,
+		sanitizeStoreText(rec.Note),
+		rec.ResultState,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireResearchEvidenceDecision{}, fmt.Errorf("create global wire research evidence decision: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireResearchEvidenceDecisions lists recent handoff decisions,
+// optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWireResearchEvidenceDecisions(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireResearchEvidenceDecision, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, decision_id, evidence_id, task_id, story_id,
+	                claim_id, candidate_id, source_content_id, decision, note,
+	                result_state, created_at
+	           FROM global_wire_research_evidence_decisions
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY created_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire research evidence decisions: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireResearchEvidenceDecision
+	for rows.Next() {
+		rec, err := scanGlobalWireResearchEvidenceDecision(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire research evidence decisions: %w", err)
 	}
 	return out, nil
 }
@@ -2134,6 +2218,37 @@ func scanGlobalWireResearchTaskEvidence(row interface{ Scan(...any) error }) (ty
 	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
 	if err != nil {
 		return types.GlobalWireResearchTaskEvidence{}, fmt.Errorf("parse global wire research task evidence created_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireResearchEvidenceDecision(row interface{ Scan(...any) error }) (types.GlobalWireResearchEvidenceDecision, error) {
+	var rec types.GlobalWireResearchEvidenceDecision
+	var createdAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.EvidenceID,
+		&rec.TaskID,
+		&rec.StoryID,
+		&rec.ClaimID,
+		&rec.CandidateID,
+		&rec.SourceContentID,
+		&rec.Decision,
+		&rec.Note,
+		&rec.ResultState,
+		&createdAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireResearchEvidenceDecision{}, ErrNotFound
+		}
+		return types.GlobalWireResearchEvidenceDecision{}, fmt.Errorf("scan global wire research evidence decision: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireResearchEvidenceDecision{}, fmt.Errorf("parse global wire research evidence decision created_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	return rec, nil

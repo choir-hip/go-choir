@@ -91,16 +91,17 @@ type globalWireFetchCycleResponse struct {
 }
 
 type globalWireReconciliationResponse struct {
-	Contributions     []types.GlobalWireContribution           `json:"contributions"`
-	SourceItems       map[string]types.ContentItem             `json:"source_items,omitempty"`
-	Decisions         []types.GlobalWireReconciliationDecision `json:"decisions"`
-	Candidates        []types.GlobalWireGraphUpdateCandidate   `json:"candidates"`
-	Promotions        []types.GlobalWireGraphPromotionDecision `json:"promotions"`
-	Refreshes         []types.GlobalWireSourceRefreshRun       `json:"refreshes"`
-	ClaimRecords      []types.GlobalWireClaimRecord            `json:"claim_records"`
-	ResearchTasks     []types.GlobalWireResearchTask           `json:"research_tasks"`
-	ResearchEvidence  []types.GlobalWireResearchTaskEvidence   `json:"research_evidence"`
-	ProjectionReviews []types.GlobalWireProjectionReview       `json:"projection_reviews"`
+	Contributions     []types.GlobalWireContribution             `json:"contributions"`
+	SourceItems       map[string]types.ContentItem               `json:"source_items,omitempty"`
+	Decisions         []types.GlobalWireReconciliationDecision   `json:"decisions"`
+	Candidates        []types.GlobalWireGraphUpdateCandidate     `json:"candidates"`
+	Promotions        []types.GlobalWireGraphPromotionDecision   `json:"promotions"`
+	Refreshes         []types.GlobalWireSourceRefreshRun         `json:"refreshes"`
+	ClaimRecords      []types.GlobalWireClaimRecord              `json:"claim_records"`
+	ResearchTasks     []types.GlobalWireResearchTask             `json:"research_tasks"`
+	ResearchEvidence  []types.GlobalWireResearchTaskEvidence     `json:"research_evidence"`
+	ResearchDecisions []types.GlobalWireResearchEvidenceDecision `json:"research_decisions"`
+	ProjectionReviews []types.GlobalWireProjectionReview         `json:"projection_reviews"`
 }
 
 type globalWireResearchTaskLifecycleRequest struct {
@@ -115,6 +116,19 @@ type globalWireResearchTaskLifecycleRequest struct {
 type globalWireResearchTaskLifecycleResponse struct {
 	Task     types.GlobalWireResearchTask         `json:"task"`
 	Evidence types.GlobalWireResearchTaskEvidence `json:"evidence"`
+}
+
+type globalWireResearchEvidenceDecisionRequest struct {
+	EvidenceID string `json:"evidence_id"`
+	Decision   string `json:"decision"`
+	Note       string `json:"note,omitempty"`
+}
+
+type globalWireResearchEvidenceDecisionResponse struct {
+	Decision  types.GlobalWireResearchEvidenceDecision `json:"decision"`
+	Task      types.GlobalWireResearchTask             `json:"task"`
+	Evidence  types.GlobalWireResearchTaskEvidence     `json:"evidence"`
+	Candidate *types.GlobalWireGraphUpdateCandidate    `json:"candidate,omitempty"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -693,6 +707,11 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list research task evidence"})
 			return
 		}
+		researchDecisions, err := h.rt.Store().ListGlobalWireResearchEvidenceDecisions(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list research evidence decisions"})
+			return
+		}
 		projectionReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
@@ -708,6 +727,7 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			ClaimRecords:      claimRecords,
 			ResearchTasks:     researchTasks,
 			ResearchEvidence:  researchEvidence,
+			ResearchDecisions: researchDecisions,
 			ProjectionReviews: projectionReviews,
 		})
 	case http.MethodPost:
@@ -907,6 +927,115 @@ func globalWireResearchTaskDefaultSummary(action string, task types.GlobalWireRe
 	default:
 		return strings.TrimSpace(task.Prompt)
 	}
+}
+
+// HandleGlobalWireResearchEvidence records reviewer handoff decisions over
+// research evidence without applying platform StoryGraph mutations.
+func (h *APIHandler) HandleGlobalWireResearchEvidence(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req globalWireResearchEvidenceDecisionRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid research evidence request"})
+		return
+	}
+	req.EvidenceID = strings.TrimSpace(req.EvidenceID)
+	req.Decision = normalizeGlobalWireResearchEvidenceDecision(req.Decision)
+	req.Note = strings.TrimSpace(req.Note)
+	if req.EvidenceID == "" || req.Decision == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "evidence_id and decision are required"})
+		return
+	}
+	evidence, err := h.rt.Store().GetGlobalWireResearchTaskEvidence(r.Context(), ownerID, req.EvidenceID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "research evidence not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load research evidence"})
+		return
+	}
+	task, err := h.rt.Store().GetGlobalWireResearchTask(r.Context(), ownerID, evidence.TaskID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "research task not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load research task"})
+		return
+	}
+	if req.Decision == "accepted-for-review" && evidence.Status != "completed" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "only completed research evidence can be accepted for review"})
+		return
+	}
+	resultState := globalWireResearchEvidenceResultState(req.Decision)
+	var candidate *types.GlobalWireGraphUpdateCandidate
+	if strings.TrimSpace(task.CandidateID) != "" {
+		status := "research-evidence-accepted"
+		if req.Decision == "blocked" {
+			status = "research-evidence-blocked"
+		}
+		updatedCandidate, err := h.rt.Store().UpdateGlobalWireGraphUpdateCandidateStatus(r.Context(), ownerID, task.CandidateID, status)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "graph candidate not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to update graph candidate review state"})
+			return
+		}
+		candidate = &updatedCandidate
+	}
+	decision, err := h.rt.Store().CreateGlobalWireResearchEvidenceDecision(r.Context(), types.GlobalWireResearchEvidenceDecision{
+		ID:              "global-wire-research-decision-" + uuid.NewString(),
+		OwnerID:         ownerID,
+		EvidenceID:      evidence.ID,
+		TaskID:          task.ID,
+		StoryID:         task.StoryID,
+		ClaimID:         task.ClaimID,
+		CandidateID:     task.CandidateID,
+		SourceContentID: evidence.SourceContentID,
+		Decision:        req.Decision,
+		Note:            req.Note,
+		ResultState:     resultState,
+	})
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create research evidence decision"})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, globalWireResearchEvidenceDecisionResponse{
+		Decision:  decision,
+		Task:      task,
+		Evidence:  evidence,
+		Candidate: candidate,
+	})
+}
+
+func normalizeGlobalWireResearchEvidenceDecision(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "accept", "accepted", "accepted-for-review":
+		return "accepted-for-review"
+	case "block", "blocked":
+		return "blocked"
+	default:
+		return ""
+	}
+}
+
+func globalWireResearchEvidenceResultState(decision string) string {
+	if decision == "blocked" {
+		return "research-evidence-blocked"
+	}
+	return "ready-for-platform-review"
 }
 
 func normalizeGlobalWireReconciliationDecision(value string) string {

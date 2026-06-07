@@ -175,6 +175,7 @@
   let claimRecords = [];
   let researchTasks = [];
   let researchEvidence = [];
+  let researchDecisions = [];
   let projectionReviews = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
@@ -266,6 +267,7 @@
       claimRecords = Array.isArray(payload.claim_records) ? payload.claim_records : [];
       researchTasks = Array.isArray(payload.research_tasks) ? payload.research_tasks : [];
       researchEvidence = Array.isArray(payload.research_evidence) ? payload.research_evidence : [];
+      researchDecisions = Array.isArray(payload.research_decisions) ? payload.research_decisions : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
       await loadFetchCycles(storyId);
     } catch {
@@ -280,6 +282,7 @@
       claimRecords = [];
       researchTasks = [];
       researchEvidence = [];
+      researchDecisions = [];
       projectionReviews = [];
     }
   }
@@ -787,6 +790,11 @@
     return researchEvidence.filter((evidence) => evidence.task_id === id);
   }
 
+  function evidenceDecision(evidence) {
+    const id = evidence?.id || '';
+    return researchDecisions.find((decision) => decision.evidence_id === id);
+  }
+
   function researchTaskEvidenceSummary(task, action) {
     if (action === 'assign') {
       return `Research task assigned for ${task.task_kind || 'claim review'}; no platform story mutation applied.`;
@@ -826,6 +834,40 @@
       await loadContributions(selectedStory.id);
     } catch (error) {
       contributionStatus = error?.message || `Research task ${action} failed`;
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
+  async function reviewResearchEvidence(evidence, decision) {
+    if (!authenticated || !evidence?.id) return;
+    reconciliationBusyId = `${evidence.id}:${decision}`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/research-evidence', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          evidence_id: evidence.id,
+          decision,
+          note: `global-wire-app:${decision}`,
+        }),
+      });
+      if (!response.ok) throw new Error(`Research evidence ${decision} failed: ${response.status}`);
+      const payload = await response.json();
+      researchDecisions = [payload.decision, ...researchDecisions]
+        .filter(Boolean)
+        .slice(0, 50);
+      if (payload.candidate?.id) {
+        graphUpdateCandidates = [payload.candidate, ...graphUpdateCandidates.filter((item) => item.id !== payload.candidate.id)]
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+      contributionStatus = `Research evidence ${payload.decision?.decision || decision}`;
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || `Research evidence ${decision} failed`;
     } finally {
       reconciliationBusyId = '';
     }
@@ -1396,12 +1438,37 @@
                                     </button>
                                   </div>
                                   {#each evidencePackets.slice(0, 2) as evidence}
+                                    {@const handoff = evidenceDecision(evidence)}
                                     <small
                                       data-global-wire-research-task-evidence
                                       data-global-wire-research-evidence-id={evidence.id}
                                     >
                                       {evidence.status}: {evidence.summary}
                                     </small>
+                                    {#if handoff}
+                                      <small data-global-wire-research-evidence-decision>
+                                        {handoff.decision}: {handoff.result_state}
+                                      </small>
+                                    {:else}
+                                      <div class="research-task-actions">
+                                        <button
+                                          type="button"
+                                          on:click={() => reviewResearchEvidence(evidence, 'accept')}
+                                          disabled={reconciliationBusyId === `${evidence.id}:accept`}
+                                          data-global-wire-accept-research-evidence
+                                        >
+                                          Accept
+                                        </button>
+                                        <button
+                                          type="button"
+                                          on:click={() => reviewResearchEvidence(evidence, 'block')}
+                                          disabled={reconciliationBusyId === `${evidence.id}:block`}
+                                          data-global-wire-block-research-evidence
+                                        >
+                                          Block
+                                        </button>
+                                      </div>
+                                    {/if}
                                   {/each}
                                 </div>
                               {/each}
