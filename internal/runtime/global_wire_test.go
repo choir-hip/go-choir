@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -457,8 +458,60 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	if len(listResp.ResearchTasks) != 1 || listResp.ResearchTasks[0].ClaimID != resp.ClaimRecord.ID {
 		t.Fatalf("research task missing from reconciliation list: %+v", listResp.ResearchTasks)
 	}
+	if len(listResp.ResearchEvidence) != 0 {
+		t.Fatalf("research evidence should not exist before task lifecycle transition: %+v", listResp.ResearchEvidence)
+	}
 	if listResp.Refreshes[0].UpdateClassification != "claim-changed" {
 		t.Fatalf("refresh classification missing from reconciliation list: %+v", listResp.Refreshes[0])
+	}
+
+	taskBody := fmt.Sprintf(`{"task_id":%q,"action":"complete","evidence_summary":"Research completed against source-service item; reconciliation can consider the evidence, but the platform StoryGraph remains unchanged.","evidence_level":"reconciliation-level"}`, resp.ResearchTask.ID)
+	taskW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/research-tasks", taskBody, "user-alpha")
+	if taskW.Code != http.StatusCreated {
+		t.Fatalf("complete research task status = %d body=%s", taskW.Code, taskW.Body.String())
+	}
+	var taskResp globalWireResearchTaskLifecycleResponse
+	if err := json.NewDecoder(taskW.Body).Decode(&taskResp); err != nil {
+		t.Fatalf("decode research task lifecycle response: %v", err)
+	}
+	if taskResp.Task.ID != resp.ResearchTask.ID ||
+		taskResp.Task.Status != "completed" ||
+		taskResp.Evidence.TaskID != resp.ResearchTask.ID ||
+		taskResp.Evidence.ClaimID != resp.ClaimRecord.ID ||
+		taskResp.Evidence.SourceContentID != resp.ContentItem.ContentID ||
+		taskResp.Evidence.Status != "completed" ||
+		taskResp.Evidence.EvidenceLevel != "reconciliation-level" ||
+		!strings.Contains(taskResp.Evidence.Summary, "platform StoryGraph remains unchanged") {
+		t.Fatalf("research task lifecycle response missing reconciliation evidence: %+v", taskResp)
+	}
+
+	taskListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
+	if taskListW.Code != http.StatusOK {
+		t.Fatalf("list reconciliation after research status = %d body=%s", taskListW.Code, taskListW.Body.String())
+	}
+	var taskListResp globalWireReconciliationResponse
+	if err := json.NewDecoder(taskListW.Body).Decode(&taskListResp); err != nil {
+		t.Fatalf("decode reconciliation list after research: %v", err)
+	}
+	if len(taskListResp.ResearchTasks) != 1 ||
+		taskListResp.ResearchTasks[0].Status != "completed" ||
+		len(taskListResp.ResearchEvidence) != 1 ||
+		taskListResp.ResearchEvidence[0].TaskID != resp.ResearchTask.ID {
+		t.Fatalf("completed research evidence missing from reconciliation list: %+v", taskListResp)
+	}
+
+	storiesTaskAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
+	if storiesTaskAfterW.Code != http.StatusOK {
+		t.Fatalf("stories after task status = %d body=%s", storiesTaskAfterW.Code, storiesTaskAfterW.Body.String())
+	}
+	var storiesTaskAfter globalWireStoriesResponse
+	if err := json.NewDecoder(storiesTaskAfterW.Body).Decode(&storiesTaskAfter); err != nil {
+		t.Fatalf("decode stories after task: %v", err)
+	}
+	taskAfterManifest := storiesTaskAfter.Stories[0].Manifest
+	if len(taskAfterManifest.Lead) != len(beforeManifest.Lead) || len(taskAfterManifest.Supporting) != len(beforeManifest.Supporting) ||
+		len(taskAfterManifest.Contrary) != len(beforeManifest.Contrary) || len(taskAfterManifest.Context) != len(beforeManifest.Context) {
+		t.Fatalf("StoryGraph manifest mutated during research task lifecycle: before=%+v after=%+v", beforeManifest, taskAfterManifest)
 	}
 }
 

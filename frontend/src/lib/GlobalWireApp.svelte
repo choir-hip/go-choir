@@ -174,6 +174,7 @@
   let sourceRefreshes = [];
   let claimRecords = [];
   let researchTasks = [];
+  let researchEvidence = [];
   let projectionReviews = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
@@ -264,6 +265,7 @@
       sourceRefreshes = Array.isArray(payload.refreshes) ? payload.refreshes : [];
       claimRecords = Array.isArray(payload.claim_records) ? payload.claim_records : [];
       researchTasks = Array.isArray(payload.research_tasks) ? payload.research_tasks : [];
+      researchEvidence = Array.isArray(payload.research_evidence) ? payload.research_evidence : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
       await loadFetchCycles(storyId);
     } catch {
@@ -277,6 +279,7 @@
       sourceRegistryEntries = [];
       claimRecords = [];
       researchTasks = [];
+      researchEvidence = [];
       projectionReviews = [];
     }
   }
@@ -777,6 +780,55 @@
   function claimResearchTasks(claim) {
     const id = claim?.id || '';
     return researchTasks.filter((task) => task.claim_id === id);
+  }
+
+  function taskEvidence(task) {
+    const id = task?.id || '';
+    return researchEvidence.filter((evidence) => evidence.task_id === id);
+  }
+
+  function researchTaskEvidenceSummary(task, action) {
+    if (action === 'assign') {
+      return `Research task assigned for ${task.task_kind || 'claim review'}; no platform story mutation applied.`;
+    }
+    if (action === 'block') {
+      return `Research task blocked pending additional source evidence for ${task.claim_id || task.story_id}.`;
+    }
+    return `Research task completed for ${task.claim_id || task.story_id}; evidence is ready for reconciliation without mutating the platform StoryGraph.`;
+  }
+
+  async function updateResearchTask(task, action) {
+    if (!authenticated || !task?.id) return;
+    reconciliationBusyId = `${task.id}:${action}`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/research-tasks', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task_id: task.id,
+          action,
+          evidence_level: 'reconciliation-level',
+          evidence_summary: researchTaskEvidenceSummary(task, action),
+          reviewer_note: `global-wire-app:${action}`,
+        }),
+      });
+      if (!response.ok) throw new Error(`Research task ${action} failed: ${response.status}`);
+      const payload = await response.json();
+      researchTasks = [payload.task, ...researchTasks.filter((item) => item.id !== task.id)]
+        .filter(Boolean)
+        .slice(0, 30);
+      researchEvidence = [payload.evidence, ...researchEvidence]
+        .filter(Boolean)
+        .slice(0, 50);
+      contributionStatus = `Research task ${payload.task?.status || action}`;
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || `Research task ${action} failed`;
+    } finally {
+      reconciliationBusyId = '';
+    }
   }
 
   async function createProjectionDraft(review) {
@@ -1310,9 +1362,48 @@
                               <span>{claim.claim_text}</span>
                               <em>{claim.evidence_gap}</em>
                               {#each tasks.slice(0, 2) as task}
-                                <small data-global-wire-research-task>
-                                  {task.task_kind}: {task.status} · {task.priority}
-                                </small>
+                                {@const evidencePackets = taskEvidence(task)}
+                                <div
+                                  class="research-task"
+                                  data-global-wire-research-task
+                                  data-global-wire-research-task-id={task.id}
+                                >
+                                  <small>{task.task_kind}: {task.status} · {task.priority}</small>
+                                  <div class="research-task-actions">
+                                    <button
+                                      type="button"
+                                      on:click={() => updateResearchTask(task, 'assign')}
+                                      disabled={reconciliationBusyId === `${task.id}:assign`}
+                                      data-global-wire-assign-research-task
+                                    >
+                                      Assign
+                                    </button>
+                                    <button
+                                      type="button"
+                                      on:click={() => updateResearchTask(task, 'complete')}
+                                      disabled={reconciliationBusyId === `${task.id}:complete`}
+                                      data-global-wire-complete-research-task
+                                    >
+                                      Complete
+                                    </button>
+                                    <button
+                                      type="button"
+                                      on:click={() => updateResearchTask(task, 'block')}
+                                      disabled={reconciliationBusyId === `${task.id}:block`}
+                                      data-global-wire-block-research-task
+                                    >
+                                      Block
+                                    </button>
+                                  </div>
+                                  {#each evidencePackets.slice(0, 2) as evidence}
+                                    <small
+                                      data-global-wire-research-task-evidence
+                                      data-global-wire-research-evidence-id={evidence.id}
+                                    >
+                                      {evidence.status}: {evidence.summary}
+                                    </small>
+                                  {/each}
+                                </div>
                               {/each}
                             </article>
                           {/each}
@@ -1933,6 +2024,25 @@
     color: var(--choir-text-muted);
     font-style: normal;
     overflow-wrap: anywhere;
+  }
+
+  .research-task {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+
+  .research-task-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .research-task-actions button {
+    flex: 1 1 4.75rem;
+    min-height: 2rem;
+    padding: 0.32rem 0.5rem;
+    font-size: 0.72rem;
   }
 
   .reconciliation-actions {

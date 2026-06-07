@@ -1268,6 +1268,109 @@ func (s *Store) ListGlobalWireResearchTasks(ctx context.Context, ownerID, storyI
 	return out, nil
 }
 
+// GetGlobalWireResearchTask returns one owner-scoped research task.
+func (s *Store) GetGlobalWireResearchTask(ctx context.Context, ownerID, taskID string) (types.GlobalWireResearchTask, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, task_id, story_id, claim_id, refresh_id,
+		        source_content_id, contribution_id, candidate_id, task_kind,
+		        prompt, status, priority, update_classification, created_at, updated_at
+		   FROM global_wire_research_tasks
+		  WHERE owner_id = ? AND task_id = ?`,
+		ownerID,
+		taskID,
+	)
+	return scanGlobalWireResearchTask(row)
+}
+
+// UpdateGlobalWireResearchTaskStatus advances the owner-scoped research queue
+// lifecycle without mutating StoryGraph records.
+func (s *Store) UpdateGlobalWireResearchTaskStatus(ctx context.Context, ownerID, taskID, status string) (types.GlobalWireResearchTask, error) {
+	now := time.Now().UTC()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE global_wire_research_tasks
+		    SET status = ?, updated_at = ?
+		  WHERE owner_id = ? AND task_id = ?`,
+		strings.TrimSpace(status),
+		now.UTC().Format(time.RFC3339Nano),
+		ownerID,
+		taskID,
+	)
+	if err != nil {
+		return types.GlobalWireResearchTask{}, fmt.Errorf("update global wire research task status: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return types.GlobalWireResearchTask{}, ErrNotFound
+	}
+	return s.GetGlobalWireResearchTask(ctx, ownerID, taskID)
+}
+
+// CreateGlobalWireResearchTaskEvidence stores a reconciliation-visible packet
+// for a research-task lifecycle transition.
+func (s *Store) CreateGlobalWireResearchTaskEvidence(ctx context.Context, rec types.GlobalWireResearchTaskEvidence) (types.GlobalWireResearchTaskEvidence, error) {
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = time.Now().UTC()
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_research_task_evidence (
+			owner_id, evidence_id, task_id, story_id, claim_id, source_content_id,
+			status, evidence_level, summary, reviewer_note, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.TaskID,
+		rec.StoryID,
+		rec.ClaimID,
+		rec.SourceContentID,
+		rec.Status,
+		rec.EvidenceLevel,
+		sanitizeStoreText(rec.Summary),
+		sanitizeStoreText(rec.ReviewerNote),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireResearchTaskEvidence{}, fmt.Errorf("create global wire research task evidence: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireResearchTaskEvidence lists recent task evidence packets,
+// optionally narrowed to one StoryGraph node.
+func (s *Store) ListGlobalWireResearchTaskEvidence(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireResearchTaskEvidence, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, evidence_id, task_id, story_id, claim_id,
+	                source_content_id, status, evidence_level, summary,
+	                reviewer_note, created_at
+	           FROM global_wire_research_task_evidence
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY created_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire research task evidence: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireResearchTaskEvidence
+	for rows.Next() {
+		rec, err := scanGlobalWireResearchTaskEvidence(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire research task evidence: %w", err)
+	}
+	return out, nil
+}
+
 // UpsertGlobalWireSourceRegistryEntry stores the source/query basis for a
 // StoryGraph neighborhood fetch cycle.
 func (s *Store) UpsertGlobalWireSourceRegistryEntry(ctx context.Context, rec types.GlobalWireSourceRegistryEntry) (types.GlobalWireSourceRegistryEntry, error) {
@@ -2003,6 +2106,36 @@ func scanGlobalWireResearchTask(row interface{ Scan(...any) error }) (types.Glob
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireResearchTaskEvidence(row interface{ Scan(...any) error }) (types.GlobalWireResearchTaskEvidence, error) {
+	var rec types.GlobalWireResearchTaskEvidence
+	var createdAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.TaskID,
+		&rec.StoryID,
+		&rec.ClaimID,
+		&rec.SourceContentID,
+		&rec.Status,
+		&rec.EvidenceLevel,
+		&rec.Summary,
+		&rec.ReviewerNote,
+		&createdAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireResearchTaskEvidence{}, ErrNotFound
+		}
+		return types.GlobalWireResearchTaskEvidence{}, fmt.Errorf("scan global wire research task evidence: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireResearchTaskEvidence{}, fmt.Errorf("parse global wire research task evidence created_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
 	return rec, nil
 }
 

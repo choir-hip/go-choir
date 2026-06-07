@@ -292,6 +292,23 @@ CREATE TABLE IF NOT EXISTS global_wire_research_tasks (
 	KEY idx_global_wire_research_tasks_claim (owner_id, claim_id)
 );
 
+CREATE TABLE IF NOT EXISTS global_wire_research_task_evidence (
+	owner_id          VARCHAR(255) NOT NULL,
+	evidence_id       VARCHAR(255) NOT NULL,
+	task_id           VARCHAR(255) NOT NULL,
+	story_id          VARCHAR(255) NOT NULL,
+	claim_id          VARCHAR(255) NOT NULL DEFAULT '',
+	source_content_id VARCHAR(255) NOT NULL DEFAULT '',
+	status            VARCHAR(255) NOT NULL DEFAULT '',
+	evidence_level    VARCHAR(255) NOT NULL DEFAULT '',
+	summary           LONGTEXT NOT NULL DEFAULT '',
+	reviewer_note     LONGTEXT NOT NULL DEFAULT '',
+	created_at        DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, evidence_id),
+	KEY idx_global_wire_research_task_evidence_task (owner_id, task_id, created_at),
+	KEY idx_global_wire_research_task_evidence_story (owner_id, story_id, created_at)
+);
+
 CREATE TABLE IF NOT EXISTS global_wire_source_registry (
 	owner_id          VARCHAR(255) NOT NULL,
 	registry_id       VARCHAR(255) NOT NULL,

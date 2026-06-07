@@ -203,6 +203,23 @@ type GlobalWireResearchTask struct {
 	UpdatedAt            time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWireResearchTaskEvidence is the researcher-produced packet attached to
+// a task lifecycle transition. It is reconciliation evidence, not a StoryGraph
+// mutation.
+type GlobalWireResearchTaskEvidence struct {
+	ID              string    `json:"id"`
+	OwnerID         string    `json:"owner_id,omitempty"`
+	TaskID          string    `json:"task_id"`
+	StoryID         string    `json:"story_id"`
+	ClaimID         string    `json:"claim_id,omitempty"`
+	SourceContentID string    `json:"source_content_id,omitempty"`
+	Status          string    `json:"status"`
+	EvidenceLevel   string    `json:"evidence_level"`
+	Summary         string    `json:"summary"`
+	ReviewerNote    string    `json:"reviewer_note,omitempty"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+}
+
 // GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
 // fetch cycle should use for one StoryGraph neighborhood.
 type GlobalWireSourceRegistryEntry struct {

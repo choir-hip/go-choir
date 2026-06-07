@@ -293,6 +293,38 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     expect(refreshQueue.claimRecords[0].status).toBe('research-review-required');
     expect(refreshQueue.researchTasks.length).toBeGreaterThanOrEqual(1);
     expect(refreshQueue.researchTasks[0].status).toBe('open');
+    const researchTaskLifecycle = await page.evaluate(async (taskId) => {
+      const res = await fetch('/api/global-wire/research-tasks', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task_id: taskId,
+          action: 'complete',
+          evidence_level: 'reconciliation-level',
+          evidence_summary: 'Playwright completed source-review evidence; reconciliation can use it without mutating the platform StoryGraph.',
+          reviewer_note: 'playwright-auth-proof',
+        }),
+      });
+      const body = await res.json();
+      return { statusCode: res.status, body };
+    }, refreshQueue.researchTasks[0].id);
+    expect(researchTaskLifecycle.statusCode).toBe(201);
+    expect(researchTaskLifecycle.body.task.status).toBe('completed');
+    expect(researchTaskLifecycle.body.evidence.task_id).toBe(refreshQueue.researchTasks[0].id);
+    expect(researchTaskLifecycle.body.evidence.status).toBe('completed');
+    const completedQueue = await page.evaluate(async (taskId) => {
+      const res = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', { credentials: 'include' });
+      if (!res.ok) throw new Error(`load completed research queue failed: ${res.status}`);
+      const list = await res.json();
+      return {
+        task: (list.research_tasks || []).find((item) => item.id === taskId),
+        evidence: (list.research_evidence || []).filter((item) => item.task_id === taskId),
+      };
+    }, refreshQueue.researchTasks[0].id);
+    expect(completedQueue.task.status).toBe('completed');
+    expect(completedQueue.evidence.length).toBeGreaterThanOrEqual(1);
+    expect(completedQueue.evidence[0].summary).toContain('without mutating');
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

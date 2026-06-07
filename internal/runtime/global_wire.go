@@ -99,7 +99,22 @@ type globalWireReconciliationResponse struct {
 	Refreshes         []types.GlobalWireSourceRefreshRun       `json:"refreshes"`
 	ClaimRecords      []types.GlobalWireClaimRecord            `json:"claim_records"`
 	ResearchTasks     []types.GlobalWireResearchTask           `json:"research_tasks"`
+	ResearchEvidence  []types.GlobalWireResearchTaskEvidence   `json:"research_evidence"`
 	ProjectionReviews []types.GlobalWireProjectionReview       `json:"projection_reviews"`
+}
+
+type globalWireResearchTaskLifecycleRequest struct {
+	TaskID          string `json:"task_id"`
+	Action          string `json:"action"`
+	EvidenceSummary string `json:"evidence_summary,omitempty"`
+	ReviewerNote    string `json:"reviewer_note,omitempty"`
+	SourceContentID string `json:"source_content_id,omitempty"`
+	EvidenceLevel   string `json:"evidence_level,omitempty"`
+}
+
+type globalWireResearchTaskLifecycleResponse struct {
+	Task     types.GlobalWireResearchTask         `json:"task"`
+	Evidence types.GlobalWireResearchTaskEvidence `json:"evidence"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -673,6 +688,11 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list research tasks"})
 			return
 		}
+		researchEvidence, err := h.rt.Store().ListGlobalWireResearchTaskEvidence(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list research task evidence"})
+			return
+		}
 		projectionReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
@@ -687,6 +707,7 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			Refreshes:         refreshes,
 			ClaimRecords:      claimRecords,
 			ResearchTasks:     researchTasks,
+			ResearchEvidence:  researchEvidence,
 			ProjectionReviews: projectionReviews,
 		})
 	case http.MethodPost:
@@ -765,6 +786,126 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 		})
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
+// HandleGlobalWireResearchTasks records researcher lifecycle transitions and
+// reconciliation-visible evidence packets without mutating platform stories.
+func (h *APIHandler) HandleGlobalWireResearchTasks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req globalWireResearchTaskLifecycleRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid research task request"})
+		return
+	}
+	req.TaskID = strings.TrimSpace(req.TaskID)
+	action := normalizeGlobalWireResearchTaskAction(req.Action)
+	req.EvidenceSummary = strings.TrimSpace(req.EvidenceSummary)
+	req.ReviewerNote = strings.TrimSpace(req.ReviewerNote)
+	req.SourceContentID = strings.TrimSpace(req.SourceContentID)
+	req.EvidenceLevel = normalizeGlobalWireResearchEvidenceLevel(req.EvidenceLevel)
+	if req.TaskID == "" || action == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "task_id and action are required"})
+		return
+	}
+	task, err := h.rt.Store().GetGlobalWireResearchTask(r.Context(), ownerID, req.TaskID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "research task not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load research task"})
+		return
+	}
+	status := globalWireResearchTaskStatusForAction(action)
+	if req.SourceContentID == "" {
+		req.SourceContentID = task.SourceContentID
+	}
+	if req.EvidenceSummary == "" {
+		req.EvidenceSummary = globalWireResearchTaskDefaultSummary(action, task)
+	}
+	updatedTask, err := h.rt.Store().UpdateGlobalWireResearchTaskStatus(r.Context(), ownerID, task.ID, status)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to update research task"})
+		return
+	}
+	evidence, err := h.rt.Store().CreateGlobalWireResearchTaskEvidence(r.Context(), types.GlobalWireResearchTaskEvidence{
+		ID:              "global-wire-research-evidence-" + uuid.NewString(),
+		OwnerID:         ownerID,
+		TaskID:          task.ID,
+		StoryID:         task.StoryID,
+		ClaimID:         task.ClaimID,
+		SourceContentID: req.SourceContentID,
+		Status:          status,
+		EvidenceLevel:   req.EvidenceLevel,
+		Summary:         req.EvidenceSummary,
+		ReviewerNote:    req.ReviewerNote,
+	})
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create research task evidence"})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, globalWireResearchTaskLifecycleResponse{
+		Task:     updatedTask,
+		Evidence: evidence,
+	})
+}
+
+func normalizeGlobalWireResearchTaskAction(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "assign", "assigned":
+		return "assign"
+	case "complete", "completed":
+		return "complete"
+	case "block", "blocked":
+		return "block"
+	default:
+		return ""
+	}
+}
+
+func globalWireResearchTaskStatusForAction(action string) string {
+	switch action {
+	case "assign":
+		return "assigned"
+	case "complete":
+		return "completed"
+	case "block":
+		return "blocked"
+	default:
+		return "open"
+	}
+}
+
+func normalizeGlobalWireResearchEvidenceLevel(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "source-level", "claim-level", "reconciliation-level":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "reconciliation-level"
+	}
+}
+
+func globalWireResearchTaskDefaultSummary(action string, task types.GlobalWireResearchTask) string {
+	switch action {
+	case "assign":
+		return "Research task assigned for owner-scoped review; no platform StoryGraph mutation was applied."
+	case "complete":
+		return "Research task completed with reconciliation evidence; platform StoryGraph stories remain unchanged pending explicit review."
+	case "block":
+		return "Research task blocked; reconciliation should treat the claim as unresolved until more source evidence is available."
+	default:
+		return strings.TrimSpace(task.Prompt)
 	}
 }
 
