@@ -1967,3 +1967,51 @@ Next executable probe:
   ProjectionStory VText and Style.vtext source, approve/reject it, and on
   approval create the next normal ProjectionStory VText revision or update-feed
   candidate without mutating user-owned forks.
+
+## Problem Checkpoint - Projection Drafts Do Not Update Projection Relation - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- The proven projection-draft path creates an ordinary editable VText and links
+  it to a projection review, but the durable
+  `global_wire_story_projections` relation still points at the original
+  ProjectionStory VText and projection text.
+- As a result, the system has reviewable projection drafts but no product path
+  for a reviewer to approve/reject a draft and make the platform projection
+  relation advance to a new normal Story VText revision.
+
+Evidence:
+
+- `GlobalWireProjectionReview` has `draft_story_doc_id` but no approved
+  revision/doc fields or publication/update-feed state.
+- `/api/global-wire/projection-reviews` currently handles only draft creation.
+- `global_wire_story_projections` stores `story_vtext_doc_id` and
+  `projection_text`, but there is no transition from a `draft-created` review
+  into a new projection revision or relation update.
+
+Belief-state update:
+
+- The next topology-preserving improvement is not public publishing and not
+  automatic story mutation.
+- The next real state transition should be reviewer-controlled approval over a
+  projection review: approve creates a new revision on the existing
+  ProjectionStory VText, updates the projection relation text/doc ref, and
+  marks the review `approved`; reject records review state without changing the
+  projection relation.
+
+Remaining error field:
+
+- No projection-review approval endpoint exists.
+- Projection reviews cannot record the approved projection Story VText doc or
+  revision.
+- No app control or staging proof demonstrates a draft advancing the durable
+  StoryGraph + Style.vtext projection relation.
+
+Next executable probe:
+
+- Add projection-review approval/rejection as an owner-scoped product-path API
+  and UI control. Approval should create a normal VText revision with citations
+  and provenance, update the existing `GlobalWireStoryProjection`, and preserve
+  user-owned fork/edit invariants.
