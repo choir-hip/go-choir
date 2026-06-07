@@ -2129,3 +2129,100 @@ acceptance:
   useful for automation, but the visible UI must not read like an internal
   publication/proposal record;
 - frontend build passes and staging proof exercises the proposal-result UI.
+
+local implementation/evidence:
+
+```text
+change:
+  VTextPublicationResult now renders published-reader proposal completion as
+  "Proposal sent to author" with the reader-facing explanation "Your private
+  version is ready for review." It no longer shows delivery_state or proposal
+  revision hash as visible copy. Proposal id/state/delivery_state remain
+  available only as data attributes for automation and diagnostics.
+
+local proof:
+  npm --prefix frontend run build
+  result: passed.
+
+commit/deploy proof:
+  commit d24409bc67aa285b0b54d505bedf895069b23117
+  GitHub Actions CI 27077922137 passed.
+  FlakeHub publish 27077922135 passed.
+  Node B deploy job 79918426601 passed.
+  /health reported proxy and sandbox deployed_commit
+  d24409bc67aa285b0b54d505bedf895069b23117, deployed_at
+  2026-06-07T00:24:32Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000
+  npm --prefix frontend run e2e --
+  tests/vtext-proposal-result-staging.tmp.spec.js
+  result: 1 passed; temporary spec and Playwright .last-run.json were deleted
+  after the run.
+
+  The proof created a VText document/revision through deployed product APIs,
+  published it, opened a desktop VText window in published-reader proposal
+  mode, submitted a proposal, and verified the visible result panel contained
+  "Proposal sent to author" and "Your private version is ready for review."
+  It also verified that internal values such as "recorded_for_author" and
+  revision-hash-looking text were absent from visible panel copy.
+```
+
+## Loop 8 VText Diagnosis Boundary Extraction Target
+
+Status: `implemented_local`.
+
+Next runtime simplification target: move VText diagnosis DTOs and pure
+diagnosis/structure summary helpers out of `internal/runtime/vtext.go` into a
+same-package module. After structure-preservation helpers were extracted,
+`vtext.go` still owned diagnosis response shapes, revision-structure summaries,
+table-signature summaries, diagnosis content/query parsing, run ownership
+filtering, and duplicate run merging. These are diagnosis-boundary concerns,
+not core document/revision handler flow.
+
+This is a behavior-preserving extraction. It must not change document CRUD,
+revision writes, diagnosis endpoint semantics, blame endpoint semantics,
+source/publication contracts, table detection behavior, run/evidence loading,
+or any source/publication security boundary. The value is reducing the runtime
+monolith while keeping the structure-evidence surface close to the diagnosis
+endpoint that consumes it.
+
+acceptance:
+
+- `internal/runtime/vtext_diagnosis.go` owns diagnosis DTOs and pure
+  diagnosis/structure summary helpers;
+- `internal/runtime/vtext.go` keeps HTTP handlers, store calls, revision
+  response shaping, and write-ordering behavior;
+- focused diagnosis/blame/structure tests pass;
+- runtime shard tests pass;
+- no frontend, source contract, publication export, or SSRF policy files
+  change.
+
+local implementation/evidence:
+
+```text
+change:
+  Extracted vtextDiagnosisResponse, vtextRevisionStructureSummary,
+  vtextTableStructureSummary, vtextBlameResponse,
+  revisionStructureSummaryFromRecord, vtextTableStructureSummaries,
+  diagnosisIncludeContent, diagnosisOwnerRunScanLimit,
+  runRecordBelongsToVTextDoc, and appendUniqueRunRecords into
+  internal/runtime/vtext_diagnosis.go.
+
+line-count effect:
+  internal/runtime/vtext.go             1999 lines
+  internal/runtime/vtext_diagnosis.go    188 lines
+
+local proof:
+  gofmt -w internal/runtime/vtext.go internal/runtime/vtext_diagnosis.go
+  git diff --check
+  result: passed
+
+  nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextDiagnosisReportsCurrentRevisionVersion|TestVTextDiagnosisCanOmitRevisionContentForStructureEvidence|TestVTextDiagnosisIncludesDocumentChannelRuns|TestVTextAPISnapshotDoesNotMutateHead|TestVTextAPIGetBlame'
+  -count=1 -v
+  result: passed.
+
+  nix develop -c scripts/go-test-runtime-shards
+  result: passed.
+```
