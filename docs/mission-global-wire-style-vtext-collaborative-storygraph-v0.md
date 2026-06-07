@@ -4942,6 +4942,10 @@ Observed evidence:
   steps tried to focus the Global Wire desktop window. The test had proven the
   reader route, but it had not restored the authenticated desktop app route
   before continuing the rest of the product-path flow.
+- After route restoration was added in the local working tree, the proof
+  resumed the desktop but opened a second Global Wire window when the original
+  window had already been restored. Strict locators then saw duplicate
+  `data-global-wire-source-standing-policy` elements.
 
 Why this matters:
 
@@ -4961,9 +4965,12 @@ Remaining error field:
 - The test must return to the signed-in desktop app after public reader
   assertions, because the reader route is intentionally outside the desktop
   shell.
+- The restoration step must focus an existing Global Wire window when present
+  and only open a new one when no active/restored app instance exists.
 
 Next executable probe:
 
 - Patch `frontend/tests/global-wire-app.spec.js` to navigate to the public link
   route on the current deployed origin, restore the authenticated Global Wire
-  app route after reader assertions, then rerun the authenticated staging proof.
+  app route after reader assertions without duplicating windows, then rerun the
+  authenticated staging proof.
