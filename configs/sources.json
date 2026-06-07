@@ -4632,6 +4632,1087 @@
       "auth_policy": "none",
       "store_body_policy": "bounded_text",
       "retention_days": 30
+    },
+    {
+      "id": "rss:hn_best",
+      "type": "rss",
+      "name": "Hacker News Best",
+      "url": "https://hnrss.org/best",
+      "verticals": [
+        "technology",
+        "ai",
+        "startups",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:hn_ask",
+      "type": "rss",
+      "name": "Hacker News Ask HN",
+      "url": "https://hnrss.org/ask",
+      "verticals": [
+        "technology",
+        "startups",
+        "internet_culture",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:phoronix",
+      "type": "rss",
+      "name": "Phoronix",
+      "url": "https://www.phoronix.com/rss.php",
+      "verticals": [
+        "technology",
+        "semiconductors",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:lwn",
+      "type": "rss",
+      "name": "LWN Headlines",
+      "url": "https://lwn.net/headlines/rss",
+      "verticals": [
+        "technology",
+        "security",
+        "open_source"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:xda",
+      "type": "rss",
+      "name": "XDA Developers",
+      "url": "https://www.xda-developers.com/feed/",
+      "verticals": [
+        "technology",
+        "consumer_tech",
+        "open_source"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:netzpolitik",
+      "type": "rss",
+      "name": "Netzpolitik",
+      "url": "https://netzpolitik.org/feed/",
+      "verticals": [
+        "technology",
+        "policy",
+        "internet_culture"
+      ],
+      "languages": [
+        "de"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:linuxfr",
+      "type": "rss",
+      "name": "LinuxFr News",
+      "url": "https://linuxfr.org/news.atom",
+      "verticals": [
+        "technology",
+        "open_source",
+        "internet_culture"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:openai_news",
+      "type": "rss",
+      "name": "OpenAI News",
+      "url": "https://openai.com/news/rss.xml",
+      "verticals": [
+        "technology",
+        "ai",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:insideclimatenews",
+      "type": "rss",
+      "name": "Inside Climate News",
+      "url": "https://insideclimatenews.org/feed/",
+      "verticals": [
+        "climate",
+        "energy",
+        "policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:carbonbrief",
+      "type": "rss",
+      "name": "Carbon Brief",
+      "url": "https://www.carbonbrief.org/feed/",
+      "verticals": [
+        "climate",
+        "energy",
+        "policy",
+        "science"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:wolfstreet",
+      "type": "rss",
+      "name": "Wolf Street",
+      "url": "https://wolfstreet.com/feed/",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics",
+        "housing"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:seekingalpha_market_currents",
+      "type": "rss",
+      "name": "Seeking Alpha Market Currents",
+      "url": "https://seekingalpha.com/market_currents.xml",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:finextra",
+      "type": "rss",
+      "name": "Finextra Headlines",
+      "url": "https://www.finextra.com/rss/headlines.aspx",
+      "verticals": [
+        "finance",
+        "technology",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:bankunderground",
+      "type": "rss",
+      "name": "Bank Underground",
+      "url": "https://bankunderground.co.uk/feed/",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics",
+        "macro_policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:nber",
+      "type": "rss",
+      "name": "NBER New Working Papers",
+      "url": "https://www.nber.org/rss/new.xml",
+      "verticals": [
+        "economics",
+        "research",
+        "macro_policy",
+        "finance"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:sciencealert",
+      "type": "rss",
+      "name": "ScienceAlert",
+      "url": "https://www.sciencealert.com/feed",
+      "verticals": [
+        "science",
+        "health",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:futurism",
+      "type": "rss",
+      "name": "Futurism",
+      "url": "https://futurism.com/feed",
+      "verticals": [
+        "science",
+        "technology",
+        "ai",
+        "space"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:space_com",
+      "type": "rss",
+      "name": "Space.com",
+      "url": "https://www.space.com/feeds/all",
+      "verticals": [
+        "science",
+        "space",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:spectrum_ieee",
+      "type": "rss",
+      "name": "IEEE Spectrum",
+      "url": "https://spectrum.ieee.org/feeds/feed.rss",
+      "verticals": [
+        "technology",
+        "ai",
+        "industry",
+        "semiconductors"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:restofworld",
+      "type": "rss",
+      "name": "Rest of World",
+      "url": "https://restofworld.org/feed/",
+      "verticals": [
+        "technology",
+        "policy",
+        "regional_sentiment",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:semiconductor_digest",
+      "type": "rss",
+      "name": "Semiconductor Digest",
+      "url": "https://www.semiconductor-digest.com/feed/",
+      "verticals": [
+        "semiconductors",
+        "technology",
+        "supply_chain",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:datacenterdynamics",
+      "type": "rss",
+      "name": "Data Center Dynamics",
+      "url": "https://www.datacenterdynamics.com/en/rss/",
+      "verticals": [
+        "technology",
+        "ai",
+        "energy",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:the_loadstar",
+      "type": "rss",
+      "name": "The Loadstar",
+      "url": "https://theloadstar.com/feed/",
+      "verticals": [
+        "supply_chain",
+        "logistics",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:agriculture_dive",
+      "type": "rss",
+      "name": "Agriculture Dive",
+      "url": "https://www.agriculturedive.com/feeds/news/",
+      "verticals": [
+        "agriculture",
+        "commodities",
+        "climate",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:utility_dive",
+      "type": "rss",
+      "name": "Utility Dive",
+      "url": "https://www.utilitydive.com/feeds/news/",
+      "verticals": [
+        "energy",
+        "climate",
+        "industry",
+        "policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:pv_tech",
+      "type": "rss",
+      "name": "PV Tech",
+      "url": "https://www.pv-tech.org/feed/",
+      "verticals": [
+        "energy",
+        "climate",
+        "industry",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "rss:energy_storage_news",
+      "type": "rss",
+      "name": "Energy Storage News",
+      "url": "https://www.energy-storage.news/feed/",
+      "verticals": [
+        "energy",
+        "climate",
+        "industry",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "feed_allowed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:sputnik_africa",
+      "type": "telegram",
+      "name": "Sputnik Africa Telegram",
+      "url": "https://t.me/s/sputnik_africa",
+      "verticals": [
+        "news",
+        "regional_sentiment",
+        "politics",
+        "conflict"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "africa"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:androidpolice",
+      "type": "telegram",
+      "name": "Android Police Telegram",
+      "url": "https://t.me/s/androidpolice",
+      "verticals": [
+        "technology",
+        "consumer_tech"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:crypto_news",
+      "type": "telegram",
+      "name": "Crypto News Telegram",
+      "url": "https://t.me/s/Crypto_News",
+      "verticals": [
+        "finance",
+        "markets",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:cryptonews_official",
+      "type": "telegram",
+      "name": "CryptoNews Telegram",
+      "url": "https://t.me/s/cryptonews_official",
+      "verticals": [
+        "finance",
+        "markets",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:energynews",
+      "type": "telegram",
+      "name": "Energy News Telegram",
+      "url": "https://t.me/s/energynews",
+      "verticals": [
+        "energy",
+        "climate",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:linuxgram",
+      "type": "telegram",
+      "name": "LinuxGram Telegram",
+      "url": "https://t.me/s/linuxgram",
+      "verticals": [
+        "technology",
+        "open_source",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:omgubuntu",
+      "type": "telegram",
+      "name": "OMG Ubuntu Telegram",
+      "url": "https://t.me/s/omgubuntu",
+      "verticals": [
+        "technology",
+        "open_source",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:sciencealert",
+      "type": "telegram",
+      "name": "ScienceAlert Telegram",
+      "url": "https://t.me/s/sciencealert",
+      "verticals": [
+        "science",
+        "health",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:techguide",
+      "type": "telegram",
+      "name": "Tech Guide Telegram",
+      "url": "https://t.me/s/techguide",
+      "verticals": [
+        "technology",
+        "consumer_tech",
+        "internet_culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:ddgeopolitics",
+      "type": "telegram",
+      "name": "DD Geopolitics Telegram",
+      "url": "https://t.me/s/DDGeopolitics",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:science",
+      "type": "telegram",
+      "name": "Science Telegram",
+      "url": "https://t.me/s/science",
+      "verticals": [
+        "science",
+        "health",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:slavyangrad",
+      "type": "telegram",
+      "name": "Slavyangrad Telegram",
+      "url": "https://t.me/s/Slavyangrad",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:watcher_guru",
+      "type": "telegram",
+      "name": "Watcher Guru Telegram",
+      "url": "https://t.me/s/WatcherGuru",
+      "verticals": [
+        "finance",
+        "markets",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
+    },
+    {
+      "id": "telegram:pravdagerashchenko_en",
+      "type": "telegram",
+      "name": "Pravda Gerashchenko English Telegram",
+      "url": "https://t.me/s/pravdagerashchenko_en",
+      "verticals": [
+        "conflict",
+        "security",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_web_preview",
+      "robots_policy": "public_preview_only",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_text",
+      "retention_days": 30
     }
   ]
 }

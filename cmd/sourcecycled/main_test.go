@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,84 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
+
+func TestGlobalWireSourceRegistryConfigKeepsBroadUntieredCoverage(t *testing.T) {
+	path := filepath.Join("..", "..", "configs", "sources.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read source registry config: %v", err)
+	}
+	var raw struct {
+		Sources []map[string]any `json:"sources"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("decode raw source registry config: %v", err)
+	}
+	var registry sources.Registry
+	if err := json.Unmarshal(data, &registry); err != nil {
+		t.Fatalf("decode source registry config: %v", err)
+	}
+	if len(registry.Sources) < 200 {
+		t.Fatalf("source registry has %d sources, want broad coverage >= 200", len(registry.Sources))
+	}
+
+	seen := map[string]bool{}
+	byType := map[sources.SourceType]int{}
+	verticals := map[string]int{}
+	languages := map[string]int{}
+	regions := map[string]int{}
+	for i, source := range registry.Sources {
+		if strings.TrimSpace(source.ID) == "" {
+			t.Fatalf("source %d has empty id", i)
+		}
+		if seen[source.ID] {
+			t.Fatalf("duplicate source id %q", source.ID)
+		}
+		seen[source.ID] = true
+		byType[source.Type]++
+		for _, vertical := range source.Verticals {
+			verticals[vertical]++
+		}
+		for _, language := range source.Languages {
+			languages[language]++
+		}
+		for _, region := range source.Regions {
+			regions[region]++
+		}
+		if strings.TrimSpace(source.Tier) != "" || strings.TrimSpace(source.SourceStanding) != "" {
+			t.Fatalf("source %s hardcodes source trust tier/standing: tier=%q standing=%q", source.ID, source.Tier, source.SourceStanding)
+		}
+		if _, ok := raw.Sources[i]["tier"]; ok {
+			t.Fatalf("source %s contains forbidden static tier field", source.ID)
+		}
+		if _, ok := raw.Sources[i]["source_standing"]; ok {
+			t.Fatalf("source %s contains forbidden static source_standing field", source.ID)
+		}
+	}
+	if byType[sources.SourceTypeGDELT] < 1 || byType[sources.SourceTypeRSS] < 130 || byType[sources.SourceTypeTelegram] < 65 {
+		t.Fatalf("source type coverage too narrow: %+v", byType)
+	}
+	for _, required := range []string{"technology", "science", "finance", "industry", "regional_sentiment", "supply_chain", "energy", "agriculture", "open_source"} {
+		if verticals[required] == 0 {
+			t.Fatalf("missing required source vertical %q; verticals=%+v", required, verticals)
+		}
+	}
+	for _, required := range []string{"en", "de", "fr", "es", "ru", "uk", "zh", "ja"} {
+		if languages[required] == 0 {
+			t.Fatalf("missing required source language %q; languages=%+v", required, languages)
+		}
+	}
+	for _, required := range []string{"global", "us", "europe", "asia", "africa", "latin_america", "middle_east"} {
+		if regions[required] == 0 {
+			t.Fatalf("missing required source region %q; regions=%+v", required, regions)
+		}
+	}
+	for _, required := range []string{"rss:hn_best", "rss:hn_ask", "telegram:androidpolice", "telegram:sciencealert", "rss:semiconductor_digest"} {
+		if !seen[required] {
+			t.Fatalf("missing required newly validated source %q", required)
+		}
+	}
+}
 
 func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
