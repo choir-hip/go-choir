@@ -750,10 +750,10 @@ func sourceMaxxArticleParagraphs(content string) []string {
 	return out
 }
 
-func sourceMaxxArticleClaims(content, styleTitle string, meta map[string]any) []string {
+func sourceMaxxArticleClaims(content, _ string, meta map[string]any) []string {
 	claims := []string{
 		"Current head is a normal VText article revision owned by the Global Wire platform agent.",
-		"Style source: " + firstNonEmptyString(styleTitle, "Style.vtext"),
+		"Source and style provenance are carried by the VText revision metadata and citations.",
 	}
 	if cycleID := metadataString(meta, "source_maxx_cycle_id"); cycleID != "" {
 		claims = append(claims, "Source network cycle: "+cycleID)
@@ -3426,43 +3426,115 @@ func globalWireRuntimeSourceEntities(story types.GlobalWireStory) []vtextSourceE
 	all = append(all, story.Manifest.Context...)
 	entities := make([]vtextSourceEntity, 0, len(all))
 	for _, item := range all {
-		contentID := strings.TrimSpace(item.ContentID)
-		if contentID == "" {
-			continue
+		if entity, ok := globalWireRuntimeSourceEntity(item); ok {
+			entities = append(entities, entity)
 		}
-		entityID := globalWireRuntimeSourceEntityID(item)
-		if entityID == "" {
-			continue
-		}
-		entities = append(entities, vtextSourceEntity{
-			EntityID: entityID,
-			Kind:     "content_item",
-			Label:    strings.TrimSpace(item.Title),
-			Target: vtextSourceEntityTarget{
-				TargetKind:   "content_item",
-				ContentID:    contentID,
-				CanonicalURL: strings.TrimSpace(item.CanonicalURL),
-			},
-			Selectors: []vtextSourceEntitySelector{{SelectorKind: "whole_resource"}},
-			Display: vtextSourceEntityDisplay{
-				InlineMode:       "collapsed_citation",
-				ExpandedMode:     "source_card",
-				OpenSurface:      "source",
-				DefaultCollapsed: true,
-			},
-			Evidence: vtextSourceEntityEvidence{
-				State:         "available",
-				ResearchState: "represented",
-				Relation:      firstNonEmptyString(item.Role, "context"),
-			},
-			Provenance: vtextSourceEntityProvenance{
-				CreatedBy:           "global_wire",
-				RightsScope:         "private_user_source",
-				UntrustedSourceText: true,
-			},
-		})
 	}
 	return entities
+}
+
+func globalWireRuntimeSourceEntitiesWithPromotedItem(story types.GlobalWireStory, review types.GlobalWireProjectionReview, sourceItem *types.ContentItem) []vtextSourceEntity {
+	entities := globalWireRuntimeSourceEntities(story)
+	if sourceItem == nil || strings.TrimSpace(sourceItem.ContentID) == "" {
+		return entities
+	}
+	promoted := globalWireSourceItemFromProjectionReview(review, *sourceItem)
+	for _, entity := range entities {
+		if entity.Target.ContentID == promoted.ContentID {
+			return entities
+		}
+	}
+	if entity, ok := globalWireRuntimeSourceEntity(promoted); ok {
+		entities = append(entities, entity)
+	}
+	return entities
+}
+
+func globalWireRuntimeSourceEntity(item types.GlobalWireSourceItem) (vtextSourceEntity, bool) {
+	contentID := strings.TrimSpace(item.ContentID)
+	if contentID == "" {
+		return vtextSourceEntity{}, false
+	}
+	entityID := globalWireRuntimeSourceEntityID(item)
+	if entityID == "" {
+		return vtextSourceEntity{}, false
+	}
+	return vtextSourceEntity{
+		EntityID: entityID,
+		Kind:     "content_item",
+		Label:    strings.TrimSpace(item.Title),
+		Target: vtextSourceEntityTarget{
+			TargetKind:   "content_item",
+			ContentID:    contentID,
+			CanonicalURL: strings.TrimSpace(item.CanonicalURL),
+		},
+		Selectors: []vtextSourceEntitySelector{{SelectorKind: "whole_resource"}},
+		Display: vtextSourceEntityDisplay{
+			InlineMode:       "collapsed_citation",
+			ExpandedMode:     "source_card",
+			OpenSurface:      "source",
+			DefaultCollapsed: true,
+		},
+		Evidence: vtextSourceEntityEvidence{
+			State:         "available",
+			ResearchState: "represented",
+			Relation:      firstNonEmptyString(item.Role, "context"),
+		},
+		Provenance: vtextSourceEntityProvenance{
+			CreatedBy:           "global_wire",
+			RightsScope:         "private_user_source",
+			UntrustedSourceText: true,
+		},
+	}, true
+}
+
+func globalWireSourceItemFromProjectionReview(review types.GlobalWireProjectionReview, item types.ContentItem) types.GlobalWireSourceItem {
+	title := strings.TrimSpace(item.Title)
+	if title == "" {
+		title = "Promoted Global Wire source"
+	}
+	return types.GlobalWireSourceItem{
+		ID:           "source-" + item.ContentID,
+		ContentID:    item.ContentID,
+		Title:        title,
+		Standing:     firstNonEmptyString(item.SourceType, "reviewed source artifact"),
+		Role:         "supporting",
+		CanonicalURL: firstNonEmptyString(item.CanonicalURL, item.SourceURL),
+	}
+}
+
+func globalWireLeadSourceRef(story types.GlobalWireStory) string {
+	sourceGroups := [][]types.GlobalWireSourceItem{
+		story.Manifest.Lead,
+		story.Manifest.Supporting,
+		story.Manifest.Contrary,
+		story.Manifest.Context,
+	}
+	for _, group := range sourceGroups {
+		for _, item := range group {
+			if strings.TrimSpace(item.ContentID) != "" || strings.TrimSpace(item.ID) != "" {
+				return globalWireRuntimeSourceRef(item, 1)
+			}
+		}
+	}
+	return "the current source neighborhood"
+}
+
+func globalWireClaimSentence(story types.GlobalWireStory) string {
+	claims := []string{}
+	for _, claim := range story.Claims {
+		claim = strings.TrimSpace(claim)
+		if claim != "" {
+			claims = append(claims, claim)
+		}
+		if len(claims) >= 2 {
+			break
+		}
+	}
+	if len(claims) == 0 {
+		return ""
+	}
+	return "The article's working account is that " + strings.Join(claims, "; ") + "."
 }
 
 func globalWireRuntimeSourceRef(item types.GlobalWireSourceItem, fallback int) string {
@@ -3938,7 +4010,7 @@ func globalWireClaimRecordFromRefresh(ownerID string, story types.GlobalWireStor
 		claimKind = "claim-change"
 		uncertainty = "material-change-unverified"
 		dispute = "needs-comparison"
-		evidenceGap = "Compare the imported evidence against existing lead/supporting/contrary source tiers and decide whether the claim should narrow, broaden, or stay unchanged."
+		evidenceGap = "Compare the imported evidence against the existing source neighborhood and decide whether the claim should narrow, broaden, or stay unchanged."
 	case "contradiction-added":
 		claimKind = "contradiction"
 		uncertainty = "contrary-evidence-unreviewed"
@@ -5163,7 +5235,7 @@ func (h *APIHandler) ensureGlobalWireProjectionReviewDraft(r *http.Request, owne
 	doc := types.Document{
 		DocID:     uuid.NewString(),
 		OwnerID:   ownerID,
-		Title:     "Draft projection: " + story.Headline + " - " + firstNonEmptyString(review.StyleTitle, review.StyleID),
+		Title:     story.Headline,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -5176,6 +5248,8 @@ func (h *APIHandler) ensureGlobalWireProjectionReviewDraft(r *http.Request, owne
 	}
 	metadata, err := json.Marshal(map[string]any{
 		"created_from":      "global_wire_projection_review_draft",
+		"artifact_kind":     "article_revision_draft",
+		"article_version":   true,
 		"storygraph_id":     story.ID,
 		"projection_review": review.ID,
 		"candidate_id":      review.CandidateID,
@@ -5184,6 +5258,7 @@ func (h *APIHandler) ensureGlobalWireProjectionReviewDraft(r *http.Request, owne
 		"style_id":          review.StyleID,
 		"style_doc_id":      review.StyleDocID,
 		"draft_state":       "review-draft-not-published",
+		"source_entities":   globalWireRuntimeSourceEntitiesWithPromotedItem(story, review, sourceItem),
 	})
 	if err != nil {
 		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
@@ -5240,6 +5315,10 @@ func (h *APIHandler) approveGlobalWireProjectionReview(r *http.Request, ownerID 
 	if strings.TrimSpace(review.DraftStoryDocID) == "" {
 		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, store.ErrNotFound
 	}
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, review.StoryID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
 	draftDoc, err := h.rt.Store().GetDocument(r.Context(), review.DraftStoryDocID, ownerID)
 	if err != nil {
 		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
@@ -5259,6 +5338,8 @@ func (h *APIHandler) approveGlobalWireProjectionReview(r *http.Request, ownerID 
 	now := time.Now().UTC()
 	metadata, err := json.Marshal(map[string]any{
 		"created_from":       "global_wire_projection_review_approval",
+		"artifact_kind":      "article_revision",
+		"article_version":    true,
 		"storygraph_id":      review.StoryID,
 		"projection_review":  review.ID,
 		"draft_story_doc_id": review.DraftStoryDocID,
@@ -5269,6 +5350,7 @@ func (h *APIHandler) approveGlobalWireProjectionReview(r *http.Request, ownerID 
 		"style_id":           review.StyleID,
 		"style_doc_id":       review.StyleDocID,
 		"approval_state":     "approved_projection_revision",
+		"source_entities":    globalWireRuntimeSourceEntities(story),
 	})
 	if err != nil {
 		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
@@ -5334,21 +5416,12 @@ func globalWireProjectionDraftCitations(review types.GlobalWireProjectionReview,
 	return citations
 }
 
-func globalWireApprovedProjectionVTextContent(review types.GlobalWireProjectionReview, draftContent string) string {
+func globalWireApprovedProjectionVTextContent(_ types.GlobalWireProjectionReview, draftContent string) string {
 	content := strings.TrimSpace(draftContent)
 	if content == "" {
-		content = "Projection draft content was empty at approval time."
+		content = "The approved article revision was empty at approval time."
 	}
-	return strings.Join([]string{
-		content,
-		"",
-		"## Projection Review Approval",
-		"",
-		"Review status: approved",
-		"Projection review id: " + review.ID,
-		"Approved state: this normal Story VText revision advances the StoryGraph + Style.vtext projection relation.",
-		"Publication guardrail: user-owned forks remain separate and are not mutated by this platform projection review.",
-	}, "\n")
+	return content
 }
 
 func globalWireProjectionDraftVTextContent(review types.GlobalWireProjectionReview, story types.GlobalWireStory, sourceItem *types.ContentItem) string {
@@ -5356,52 +5429,34 @@ func globalWireProjectionDraftVTextContent(review types.GlobalWireProjectionRevi
 	if projection == "" {
 		projection = strings.TrimSpace(story.Projections["wire-style"])
 	}
-	sourceTitle := "No promoted source content item was linked."
-	sourceBody := ""
+	if projection == "" {
+		projection = strings.TrimSpace(story.Dek)
+	}
+	sourceRef := globalWireLeadSourceRef(story)
+	sourceBody := strings.TrimSpace(review.Rationale)
 	if sourceItem != nil {
-		sourceTitle = sourceItem.Title
-		sourceBody = strings.TrimSpace(sourceItem.TextContent)
+		sourceRef = globalWireRuntimeSourceRef(globalWireSourceItemFromProjectionReview(review, *sourceItem), 1)
+		sourceBody = firstNonEmptyString(strings.TrimSpace(sourceItem.TextContent), sourceBody)
 	}
-	sourceContentID := strings.TrimSpace(review.SourceContentID)
-	if sourceContentID == "" && sourceItem != nil {
-		sourceContentID = sourceItem.ContentID
+	if sourceBody == "" {
+		sourceBody = "The latest reviewed source changes the article's source neighborhood without resolving every open question."
 	}
+	if len(sourceBody) > 420 {
+		sourceBody = strings.TrimSpace(sourceBody[:420]) + "..."
+	}
+	claimSentence := globalWireClaimSentence(story)
 	lines := []string{
-		"# Draft projection: " + story.Headline,
+		"# " + story.Headline,
 		"",
-		"StoryGraph id: " + story.ID,
-		"Style.vtext source: " + firstNonEmptyString(review.StyleTitle, review.StyleID),
-		"Projection review id: " + review.ID,
-		"Graph candidate id: " + review.CandidateID,
-		"Promotion decision id: " + review.PromotionID,
-		"Draft state: review draft, not platform publication",
-		"",
-		"## Current Projection Baseline",
+		story.Dek,
 		"",
 		projection,
 		"",
-		"## Newly Promoted Evidence",
-		"",
-		"Promoted source content id: " + firstNonEmptyString(sourceContentID, "none"),
-		"",
-		"- " + sourceTitle,
+		"The newest revision is grounded in " + sourceRef + ". " + sourceBody,
 	}
-	if sourceBody != "" {
-		lines = append(lines, "", sourceBody)
+	if claimSentence != "" {
+		lines = append(lines, "", claimSentence)
 	}
-	lines = append(lines,
-		"",
-		"## Review Rationale",
-		"",
-		review.Rationale,
-		"",
-		"## Draft Revision Notes",
-		"",
-		"- Re-check salience, uncertainty, and source ordering for this Style.vtext projection.",
-		"- Preserve lead, supporting, contrary, and context tiers.",
-		"- Do not invent evidence or hide contrary evidence.",
-		"- This draft does not mutate the platform StoryGraph or publish a revised platform story.",
-	)
 	return strings.Join(lines, "\n")
 }
 
@@ -5700,7 +5755,7 @@ func globalWireComposedStyleVTextContent(action, title, summary string, story ty
 		summary,
 		"",
 		"Style transition: " + action,
-		"StoryGraph id: " + story.ID,
+		"Applies to: " + story.Headline,
 		"",
 		"## Parent Style.vtext Sources",
 		"",
@@ -5720,21 +5775,22 @@ func globalWireComposedStyleVTextContent(action, title, summary string, story ty
 	return strings.Join(lines, "\n")
 }
 
-func globalWireComposedStyleProjectionText(story types.GlobalWireStory, style types.GlobalWireStyleSource, baseStyles []types.GlobalWireStyleSource) string {
-	return strings.Join([]string{
-		"Composed Style.vtext projection for " + story.Headline + ".",
-		"Style source: " + style.Title + ".",
-		"Parent styles: " + strings.Join(globalWireStyleIDs(baseStyles), ", ") + ".",
-		"Evidence manifest unchanged: lead, supporting, contrary, and context tiers remain attached to the StoryGraph.",
-		"Projection emphasis: " + style.Summary,
-	}, " ")
+func globalWireComposedStyleProjectionText(story types.GlobalWireStory, style types.GlobalWireStyleSource, _ []types.GlobalWireStyleSource) string {
+	projection := strings.TrimSpace(story.Projections["wire-style"])
+	if projection == "" {
+		projection = strings.TrimSpace(story.Dek)
+	}
+	if strings.TrimSpace(style.Summary) == "" {
+		return projection
+	}
+	return projection + " " + style.Summary
 }
 
 func (h *APIHandler) createGlobalWireComposedProjectionVText(r *http.Request, ownerID string, story types.GlobalWireStory, style types.GlobalWireStyleSource, baseStyles []types.GlobalWireStyleSource, projectionText string, now time.Time) (types.Document, types.Revision, error) {
 	doc := types.Document{
 		DocID:     uuid.NewString(),
 		OwnerID:   ownerID,
-		Title:     story.Headline + " - " + style.Label + " projection",
+		Title:     story.Headline,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -5748,11 +5804,14 @@ func (h *APIHandler) createGlobalWireComposedProjectionVText(r *http.Request, ow
 		return types.Document{}, types.Revision{}, err
 	}
 	metadata, err := json.Marshal(map[string]any{
-		"created_from":  "global_wire_composed_style_projection",
-		"storygraph_id": story.ID,
-		"style_id":      style.ID,
-		"style_doc_id":  style.DocID,
-		"base_styles":   globalWireStyleIDs(baseStyles),
+		"created_from":    "global_wire_composed_style_projection",
+		"artifact_kind":   "article_revision",
+		"article_version": true,
+		"storygraph_id":   story.ID,
+		"style_id":        style.ID,
+		"style_doc_id":    style.DocID,
+		"base_styles":     globalWireStyleIDs(baseStyles),
+		"source_entities": globalWireRuntimeSourceEntities(story),
 	})
 	if err != nil {
 		return types.Document{}, types.Revision{}, err
@@ -5804,23 +5863,20 @@ func globalWireRuntimeSourceCitations(story types.GlobalWireStory) []types.Citat
 	return citations
 }
 
-func globalWireComposedProjectionVTextContent(story types.GlobalWireStory, style types.GlobalWireStyleSource, projectionText string) string {
+func globalWireComposedProjectionVTextContent(story types.GlobalWireStory, _ types.GlobalWireStyleSource, projectionText string) string {
+	sourceRef := globalWireLeadSourceRef(story)
+	claimSentence := globalWireClaimSentence(story)
 	lines := []string{
 		"# " + story.Headline,
 		"",
 		story.Dek,
 		"",
-		"Style source: " + style.Title,
-		"StoryGraph id: " + story.ID,
-		"Projection relation: StoryGraph + composed Style.vtext + audience/task context -> Story VText",
-		"",
-		"## Projection",
-		"",
 		projectionText,
 		"",
-		"## Evidence Invariant",
-		"",
-		"This projection cites a composed/replacement Style.vtext source. It changes framing and salience without changing the StoryGraph evidence manifest or mutating user-owned forks.",
+		"The article keeps its lead evidence anchored to " + sourceRef + " while the editorial voice changes.",
+	}
+	if claimSentence != "" {
+		lines = append(lines, "", claimSentence)
 	}
 	return strings.Join(lines, "\n")
 }

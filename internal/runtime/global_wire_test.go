@@ -162,8 +162,27 @@ func TestHandleGlobalWireStyleSourcesComposeAndReplace(t *testing.T) {
 		t.Fatalf("compose response missing style/projection lineage: %+v", composeResp)
 	}
 	if !strings.Contains(composeResp.Revision.Content, "Parent Style.vtext Sources") ||
-		!strings.Contains(composeResp.Projection.Text, "composed/replacement Style.vtext source") {
+		!strings.Contains(composeResp.Projection.Text, "source:gw-src-") ||
+		strings.Contains(composeResp.Projection.Text, "StoryGraph id:") ||
+		strings.Contains(composeResp.Projection.Text, "Projection relation:") ||
+		strings.Contains(composeResp.Projection.Text, "## Projection") ||
+		strings.Contains(composeResp.Projection.Text, "## Evidence Invariant") {
 		t.Fatalf("compose VText/projection content missing provenance: rev=%q projection=%q", composeResp.Revision.Content, composeResp.Projection.Text)
+	}
+	projectionDoc, err := handler.rt.Store().GetDocument(context.Background(), composeResp.Projection.StoryDocID, "user-style")
+	if err != nil {
+		t.Fatalf("get compose projection doc: %v", err)
+	}
+	projectionRev, err := handler.rt.Store().GetRevision(context.Background(), projectionDoc.CurrentRevisionID, "user-style")
+	if err != nil {
+		t.Fatalf("get compose projection revision: %v", err)
+	}
+	projectionMeta := decodeRevisionMetadata(projectionRev.Metadata)
+	if projectionMeta["artifact_kind"] != "article_revision" || projectionMeta["article_version"] != true {
+		t.Fatalf("compose projection metadata did not mark article revision: %#v", projectionMeta)
+	}
+	if len(decodeVTextSourceEntities(projectionMeta["source_entities"])) == 0 {
+		t.Fatalf("compose projection metadata missing source entities: %#v", projectionMeta)
 	}
 	var citations []types.Citation
 	if err := json.Unmarshal(composeResp.Revision.Citations, &citations); err != nil {
@@ -184,7 +203,8 @@ func TestHandleGlobalWireStyleSourcesComposeAndReplace(t *testing.T) {
 	composedStory := storiesResp.Stories[0]
 	if findGlobalWireStyleSource(composedStory.StyleSources, composeResp.Style.ID).ID == "" ||
 		composedStory.ProjectionVTextDocs[composeResp.Style.ID] == "" ||
-		!strings.Contains(composedStory.Projections[composeResp.Style.ID], "composed/replacement Style.vtext source") {
+		strings.Contains(composedStory.Projections[composeResp.Style.ID], "Composed Style.vtext projection") ||
+		strings.Contains(composedStory.Projections[composeResp.Style.ID], "Evidence manifest unchanged") {
 		t.Fatalf("composed style not visible in StoryGraph response: %+v", composedStory)
 	}
 
@@ -1833,9 +1853,20 @@ func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(
 		t.Fatalf("projection draft response missing lineage: %+v", draftResp)
 	}
 	if draftResp.Revision.AuthorKind != types.AuthorAppAgent ||
-		!strings.Contains(draftResp.Revision.Content, "Draft state: review draft, not platform publication") ||
-		!strings.Contains(draftResp.Revision.Content, contribution.SourceContentID) {
+		!strings.Contains(draftResp.Revision.Content, "source:gw-src-") ||
+		strings.Contains(draftResp.Revision.Content, "Draft state:") ||
+		strings.Contains(draftResp.Revision.Content, "StoryGraph id:") ||
+		strings.Contains(draftResp.Revision.Content, "Projection review id:") ||
+		strings.Contains(draftResp.Revision.Content, "Promoted source content id:") ||
+		strings.Contains(draftResp.Revision.Content, "## Draft Revision Notes") {
 		t.Fatalf("projection draft VText content/authorship invalid: %+v", draftResp.Revision)
+	}
+	draftMeta := decodeRevisionMetadata(draftResp.Revision.Metadata)
+	if draftMeta["artifact_kind"] != "article_revision_draft" || draftMeta["article_version"] != true {
+		t.Fatalf("projection draft metadata did not mark article draft: %#v", draftMeta)
+	}
+	if len(decodeVTextSourceEntities(draftMeta["source_entities"])) == 0 {
+		t.Fatalf("projection draft metadata missing source entities: %#v", draftMeta)
 	}
 	var draftCitations []types.Citation
 	if err := json.Unmarshal(draftResp.Revision.Citations, &draftCitations); err != nil {
@@ -1882,9 +1913,17 @@ func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(
 	}
 	if approveResp.Revision.AuthorKind != types.AuthorAppAgent ||
 		approveResp.Revision.ParentRevisionID == "" ||
-		!strings.Contains(approveResp.Revision.Content, "Review status: approved") ||
-		!strings.Contains(approveResp.Revision.Content, "user-owned forks remain separate") {
+		strings.Contains(approveResp.Revision.Content, "Review status: approved") ||
+		strings.Contains(approveResp.Revision.Content, "Projection Review Approval") ||
+		strings.Contains(approveResp.Revision.Content, "user-owned forks remain separate") {
 		t.Fatalf("projection approval revision invalid: %+v", approveResp.Revision)
+	}
+	approveMeta := decodeRevisionMetadata(approveResp.Revision.Metadata)
+	if approveMeta["artifact_kind"] != "article_revision" || approveMeta["article_version"] != true {
+		t.Fatalf("projection approval metadata did not mark article revision: %#v", approveMeta)
+	}
+	if len(decodeVTextSourceEntities(approveMeta["source_entities"])) == 0 {
+		t.Fatalf("projection approval metadata missing source entities: %#v", approveMeta)
 	}
 	approvedDocW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/vtext/documents/"+approveResp.Document.DocID, "", "user-alpha")
 	if approvedDocW.Code != http.StatusOK {
@@ -1900,7 +1939,8 @@ func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(
 	}
 	approvedStory := approvedStories.Stories[0]
 	if approvedStory.ProjectionVTextDocs[draftResp.Review.StyleID] != approveResp.Document.DocID ||
-		!strings.Contains(approvedStory.Projections[draftResp.Review.StyleID], "Review status: approved") {
+		strings.Contains(approvedStory.Projections[draftResp.Review.StyleID], "Review status: approved") ||
+		strings.Contains(approvedStory.Projections[draftResp.Review.StyleID], "Projection Review Approval") {
 		t.Fatalf("approved projection relation not visible in StoryGraph response: docs=%+v projection=%q", approvedStory.ProjectionVTextDocs, approvedStory.Projections[draftResp.Review.StyleID])
 	}
 }

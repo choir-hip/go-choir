@@ -355,10 +355,6 @@
       story.projections[style.id] || story.projections['wire-style'],
       '',
       sourceSentence ? `The current version keeps ${sourceSentence} in view.` : '',
-      '',
-      ...story.claims.map((claim) => String(claim || '').trim()).filter(Boolean),
-      '',
-      `Editorial style source: ${style.title}.`,
     ].join('\n');
   }
 
@@ -376,7 +372,7 @@
       '',
       '## Guardrails',
       '',
-      '- Preserve source tiers and contrary evidence.',
+      '- Preserve source-neighborhood evidence and contrary accounts.',
       '- Change framing and salience without inventing evidence.',
       '- Keep uncertainty and corrections visible.',
       '- Cite this Style.vtext when it materially shapes a projection.',
@@ -624,7 +620,7 @@
     <section class="wire-edition" data-global-wire-front-page aria-label="Front page">
       <div class="edition-head">
         <span>Front Page</span>
-        <span>{fetchCycles[0]?.status || 'source ledger standing by'}</span>
+        <span>{fetchCycles[0]?.status || 'source ledger ready'}</span>
       </div>
 
       <div class="article-columns">

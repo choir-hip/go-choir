@@ -384,11 +384,9 @@ func (s *Store) ensureGlobalWireSourceTier(ctx context.Context, ownerID string, 
 		content := strings.Join([]string{
 			"# " + item.Title,
 			"",
-			"StoryGraph id: " + story.ID,
-			"Source id: " + item.ID,
-			"Evidence relation: " + tier,
+			"This source backs a Global Wire source-neighborhood entry for " + story.Headline + ".",
 			"",
-			"This normalized SourceItem backs a Global Wire source-neighborhood manifest entry. It is seed evidence until replaced by live Source Service ingestion.",
+			"It is seed evidence until replaced by live Source Service ingestion.",
 		}, "\n")
 		metadata, err := json.Marshal(map[string]any{
 			"schema":        "choir.global_wire_source_item.v1",
@@ -607,10 +605,6 @@ func (s *Store) createGlobalWireSeedVText(ctx context.Context, ownerID, title, c
 }
 
 func globalWireStoryVTextContent(story types.GlobalWireStory) string {
-	styleTitle := "Style.vtext: Global Wire"
-	if len(story.StyleSources) > 0 {
-		styleTitle = story.StyleSources[0].Title
-	}
 	lead := ""
 	if len(story.Manifest.Lead) > 0 {
 		lead = globalWireSourceRefLabel(story.Manifest.Lead[0], 1)
@@ -657,15 +651,6 @@ func globalWireStoryVTextContent(story types.GlobalWireStory) string {
 	if sentence := sourceSentence(); sentence != "" {
 		lines = append(lines, sentence, "")
 	}
-	for _, claim := range story.Claims {
-		claim = strings.TrimSpace(claim)
-		if claim != "" {
-			lines = append(lines, claim)
-		}
-	}
-	if styleTitle != "" {
-		lines = append(lines, "", "Editorial style source: "+styleTitle+".")
-	}
 	return strings.Join(lines, "\n")
 }
 
@@ -677,13 +662,13 @@ func globalWireStyleVTextContent(style types.GlobalWireStyleSource) string {
 		"",
 		"## Applies To",
 		"",
-		"- StoryGraph projections",
-		"- Story VText revision prompts",
+		"- Global Wire article revisions",
+		"- VText revision prompts",
 		"- News reader and Autoradio traversal",
 		"",
 		"## Guardrails",
 		"",
-		"- Preserve lead, supporting, contrary, and ambient source tiers.",
+		"- Preserve the article's source neighborhood and open uncertainty.",
 		"- Change framing and salience without inventing evidence.",
 		"- Keep uncertainty and corrections visible.",
 		"- Cite this Style.vtext when it materially shapes a projection.",
@@ -702,7 +687,6 @@ func globalWireProjectionVTextContent(story types.GlobalWireStory, style types.G
 	if len(story.Manifest.Lead) > 0 {
 		lines = append(lines, "The lead source for this version is "+globalWireSourceRefLabel(story.Manifest.Lead[0], 1)+".")
 	}
-	lines = append(lines, "", "Editorial style source: "+style.Title+".")
 	return strings.Join(lines, "\n")
 }
 
