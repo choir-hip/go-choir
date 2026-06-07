@@ -904,7 +904,8 @@
 
   function sourceDossierMissingFields(dossier) {
     const storyId = dossier?.story_id || selectedStoryId;
-    const hasNewsletterIssue = newsletterIssues.some((issue) => issue.story_id === storyId);
+    const hasNewsletterIssue = (dossier?.publication_refs?.newsletter_issue_ids || []).length > 0
+      || newsletterIssues.some((issue) => issue.story_id === storyId);
     return (dossier?.missing_fields || []).filter((field) => field !== 'newsletter_issues' || !hasNewsletterIssue);
   }
 
