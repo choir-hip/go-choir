@@ -4216,3 +4216,92 @@ Next executable probe:
   action/status in the News app, and prove on staging that delivery records
   carry artifact/story/source/citation/rollback provenance without mutating
   platform stories.
+
+## Checkpoint - Delivery Records For Approved Publication Artifacts - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What changed:
+
+- Added `GlobalWirePublicationDelivery` as a durable owner-scoped availability
+  record over an approved publication artifact.
+- Added `global_wire_publication_deliveries` with artifact/story/channel/
+  status/delivery-ref/citation/rollback provenance fields.
+- Added authenticated
+  `GET/POST /api/global-wire/publication-deliveries`.
+- Delivery creation requires a `publication-approved` artifact and does not
+  mutate StoryGraph, platform Story VTexts, or user-owned forks.
+- Reconciliation now returns `publication_deliveries`.
+- The News app publication feed now lets an owner deliver an approved artifact
+  and displays `delivery-ready` status, channel, delivery ref, citation count,
+  and rollback count.
+
+Evidence:
+
+- Problem-first checkpoint commit:
+  `52130da4` (`docs: record global wire publication delivery gap`).
+- Behavior commit:
+  `c48ada21caa3eb4ef78f6eca323bd81ea28d1586`
+  (`feat: deliver approved global wire artifacts`).
+- Local proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`.
+- Local frontend proof passed:
+  `npm run build` in `frontend/`.
+- Diff hygiene passed:
+  `git diff --check`.
+- CI run `27086940920`: success. Go vet/build, runtime shards,
+  non-runtime tests, integration smoke, frontend build, aggregate gate, and
+  Deploy to Staging all passed.
+- FlakeHub publish run `27086940909`: success.
+- Staging health at `2026-06-07T08:09:29Z` reported proxy and upstream
+  deployed commit `c48ada21caa3eb4ef78f6eca323bd81ea28d1586`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in"`
+  with 1 passed. The proof creates the artifact trajectory, approves the
+  artifact, creates a publication delivery through the visible News app
+  control, verifies `/api/global-wire/publication-deliveries` returns
+  `delivery-ready`, and observes delivery provenance in the feed.
+
+Invariants preserved:
+
+- Delivery records are owner-scoped availability evidence, not automatic
+  public publication, email delivery, or syndication.
+- Delivery records do not mutate platform StoryGraph records, platform Story
+  VTexts, or user-owned forks.
+- Delivery records carry citation/rollback provenance from the approved
+  artifact.
+- Feed, Autoradio, Ask Choir, and the three theme views continue to pass on
+  staging.
+
+Belief-state update:
+
+- The proven product trajectory now reaches:
+  SourceItem -> source refresh/fetch/scheduler evidence -> StoryGraph headline
+  candidate -> extraction/research artifacts -> research handoff ->
+  projection review -> publication update package -> publication artifact ->
+  owner-scoped publication feed item -> Autoradio artifact traversal prompt ->
+  owner artifact approval -> owner-scoped delivery-ready publication record.
+- This is the lowest honest resolution of newsletter/publication delivery:
+  durable availability exists, but public routes/subscriptions/email do not.
+
+Remaining error field:
+
+- `delivery-ready` is not yet a public permalink route, newsletter issue,
+  email delivery, subscription event, or syndication feed.
+- Autoradio traversal still submits a prompt and does not persist script/audio
+  artifacts.
+- No durable `RunAcceptanceRecord` exists for this mission.
+- Source standing policy, extraction normalization, full Style.vtext revision
+  workflows, and public delivery remain below the full spec target.
+
+Next executable probe:
+
+- Apply cognitive transforms to choose between:
+  public read-only delivery permalink over `GlobalWirePublicationDelivery`,
+  persisted Autoradio script artifact, or `RunAcceptanceRecord` synthesis.
+  The next topology-preserving route is likely a read-only delivery detail
+  endpoint/view over owner-scoped delivery records, because it raises
+  publication realism while preserving auth and non-oracle provenance.
