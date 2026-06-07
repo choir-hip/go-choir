@@ -4917,3 +4917,45 @@ Next executable probe:
   renders title/body/status/route/citation/rollback provenance, includes a
   sign-in/edit-private-version affordance, and prove on staging that the public
   route renders without auth while the owner app path still creates the link.
+
+## Problem Checkpoint - Public Reader Proof Uses Localhost Route - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Observed evidence:
+
+- Public reader behavior commit
+  `fc7bf659a644c6b8a08149e242ceed1c0cb81b05`
+  (`feat: render global wire public reader`) built, pushed, passed GitHub CI,
+  passed FlakeHub, and deployed to staging.
+- Staging health reported proxy and upstream deployed commit
+  `fc7bf659a644c6b8a08149e242ceed1c0cb81b05`.
+- Public unauthenticated deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed proof failed after creating a public link because the
+  test navigated `public_link.route_path` as a relative path and Playwright
+  resolved it to `http://localhost:4173/global-wire/publications/{token}`
+  instead of `https://choir.news/global-wire/publications/{token}`.
+
+Why this matters:
+
+- The failure blocks honest deployed proof of the owner-created public link ->
+  human reader page transition.
+- It is a test harness origin bug, not evidence that the staging reader route is
+  unavailable. The test had already created the public link through staging and
+  fetched the unauthenticated token API successfully.
+- Product-path proof must use the staging origin when
+  `PLAYWRIGHT_BASE_URL=https://choir.news` is set.
+
+Remaining error field:
+
+- The signed-in proof does not yet prove the public reader route on staging.
+- The test must construct the public route URL from the active page origin or
+  configured staging base URL before navigating.
+
+Next executable probe:
+
+- Patch `frontend/tests/global-wire-app.spec.js` to navigate to the public link
+  route on the current deployed origin, then rerun the authenticated staging
+  proof.
