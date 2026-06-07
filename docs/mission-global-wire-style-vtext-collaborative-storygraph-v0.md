@@ -1082,3 +1082,79 @@ Next executable probe:
   source contributions with their attached source artifact, allow accept/reject,
   and reflect decision state without changing the StoryGraph manifest. Then use
   Browser/Playwright proof across the three themes.
+
+## Overnight Checkpoint - Visible Reconciliation Controls - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+deployed product commit: `37caf9b55296e898ed1cab31b77583ea11ae1189`
+(`feat: show global wire reconciliation controls`)
+
+latest proof commit on `origin/main`: `35bd0827`
+(`test: pass reconciliation ids as object`)
+
+What changed:
+
+- Global Wire now loads the reconciliation endpoint for authenticated owners
+  instead of showing only the raw contribution list.
+- Queued contributions display attached source artifacts from
+  `/api/global-wire/reconciliation`.
+- The contribution rail exposes visible `Accept` and `Reject` controls.
+- Accept/reject calls `POST /api/global-wire/reconciliation`, records a durable
+  decision, updates contribution state, and refreshes the queue.
+- The UI reflects accepted decisions without mutating the StoryGraph manifest.
+- Deployed proof now verifies the visible reconciliation source card and Accept
+  control before validating the durable decision through product APIs.
+
+What was proven locally:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed before the UI commit.
+- `npm run build` passed in `frontend/` before the UI commit and again after
+  the proof-path adjustments.
+
+What was proven on staging:
+
+- Pushed `37caf9b55296e898ed1cab31b77583ea11ae1189` to `origin/main`.
+- GitHub Actions CI run `27082226685` completed successfully, including
+  runtime shards, non-runtime tests, frontend build, Go vet/build, and staging
+  deploy.
+- FlakeHub publish run `27082226640` completed successfully.
+- `https://choir.news/health` reported both proxy and sandbox deployed at
+  `37caf9b55296e898ed1cab31b77583ea11ae1189`, deployed at
+  `2026-06-07T04:07:04Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded auth proof skipped when run from
+  `frontend/`.
+- After proof-path fixes, `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed against the deployed `37caf9b55296e898ed1cab31b77583ea11ae1189`
+  staging build when run from `frontend/`.
+- Latest test-only CI run `27082348661` completed successfully and skipped
+  staging deploy by impact classification; FlakeHub run `27082348655`
+  completed successfully.
+
+Belief-state changes:
+
+- The product slice is now owner-usable through the app surface: source-backed
+  contributions can be created, inspected with their source artifact, and
+  accepted/rejected for graph review.
+- This is the first deployed end-to-end collaborative StoryGraph loop with a
+  visible review action:
+  source evidence -> contribution artifact -> source artifact -> reconciliation
+  decision artifact -> queue state update.
+- The system still correctly avoids platform story mutation during review.
+
+Remaining error field:
+
+- Accepted decisions do not yet generate graph update candidates or edge
+  classification proposals.
+- There is no autonomous feed-to-cluster-to-update loop.
+- Source Service search is API/proof-backed, not yet visible as a search/picker
+  in the app.
+- Autoradio/Ask hooks remain outside this slice.
+
+Next executable probe:
+
+- Add a graph-update-candidate layer fed by accepted reconciliation decisions:
+  create a non-mutating candidate edge/source-neighborhood proposal that can be
+  reviewed before any platform StoryGraph change.
