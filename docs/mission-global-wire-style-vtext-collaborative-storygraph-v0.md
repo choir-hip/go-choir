@@ -2256,3 +2256,55 @@ Next executable probe:
   add bounded prominence/related-edge application on graph promotion, add
   Style.vtext composition/replacement as citeable VText artifacts, or add a
   richer claim extraction/research-task record tied to refresh classifications.
+
+## Problem Checkpoint - Classified Promotion Does Not Revise Story Semantics - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem:
+
+- Source refresh can now classify a SourceItem as a claim change,
+  contradiction, related-story edge, prominence change, source-manifest update,
+  or no visible change.
+- However, graph-candidate promotion still applies nearly every promoted
+  candidate as a source-manifest append. It does not yet apply bounded changes
+  to the StoryGraph's claim state, tension/change state, prominence, related
+  Story VText refs, or PlatformStory VText revision.
+- This leaves the ingestion loop partially real: classification exists, but
+  platform review does not yet turn those classifications into the corresponding
+  StoryGraph semantics required by the spec.
+
+Evidence:
+
+- `classifyGlobalWireSourceRefresh` produces classification-specific
+  `candidate_kind`, `source_tier`, `edge_kind`, `storygraph_action`, and
+  `projection_action`.
+- `applyGlobalWireGraphCandidate` currently chooses the manifest tier, appends
+  the source if missing, sets a generic source state, and writes the StoryGraph.
+- Promotion does not create a new normal PlatformStory VText revision for the
+  accepted StoryGraph update.
+
+Belief-state update:
+
+- The next topology-preserving improvement is not automatic ingestion
+  publication. It is bounded platform-review application: once a reviewer
+  promotes a classified candidate, that explicit platform process may revise
+  the StoryGraph fields and PlatformStory VText that correspond to the
+  classification.
+
+Remaining error field:
+
+- Promoted `claim-changed` candidates do not update claims/change state.
+- Promoted `contradiction-added` candidates do not update tension/claim state
+  beyond source tier.
+- Promoted `front-page-prominence-changed` candidates do not revise prominence.
+- Promoted `related-story-edge-added` candidates do not add a related Story
+  VText edge.
+- Promoted candidates do not create PlatformStory VText revisions.
+
+Next executable probe:
+
+- Make graph-candidate promotion classification-aware. Keep mutation bounded
+  and reviewer-controlled, update the StoryGraph semantics, create a normal
+  PlatformStory VText revision with provenance/citations, and preserve
+  projection-review obligations for downstream Style.vtext projections.
