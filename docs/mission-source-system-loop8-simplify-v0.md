@@ -2528,3 +2528,48 @@ staging proof:
   structured edit evidence, and bounded revision structure summaries through
   the helper-backed VTextEditor source panel path.
 ```
+
+### Problem 49: Mobile Inline Source Transclusion Expands The Reading Surface Horizontally
+
+status: `documented_before_fix`.
+
+problem: on a phone-width published VText reader, opening an inline source
+transclusion can widen the document/read surface beyond the visual viewport.
+After the transclusion opens, the user can horizontally pan into a mostly blank
+area, and normal body text becomes clipped off the left edge. This makes the
+published reader unreliable on mobile and violates the content-forward
+publication UI target.
+
+evidence:
+
+```text
+user mobile screenshots:
+  /tmp/codex-remote-attachments/019e9c8e-42f6-78f2-b722-e0e6e3ec9f9b/D4E71880-912D-4D4A-9B96-DFB54AF4CF9F/1-Photo-1.jpg
+  /tmp/codex-remote-attachments/019e9c8e-42f6-78f2-b722-e0e6e3ec9f9b/D4E71880-912D-4D4A-9B96-DFB54AF4CF9F/2-Photo-2.jpg
+  /tmp/codex-remote-attachments/019e9c8e-42f6-78f2-b722-e0e6e3ec9f9b/D4E71880-912D-4D4A-9B96-DFB54AF4CF9F/3-Photo-3.jpg
+
+observed:
+  The inline source card for "NixOS reproducible configuration and rollback"
+  appears inside the published VText reader. After opening it, the mobile page
+  can pan horizontally. In the panned state, the heading/body text is clipped
+  on the left, the transclusion content occupies an over-wide line, and a long
+  body sentence is visible across a mostly empty horizontal strip. The toolbar
+  remains fixed at the top while the reading surface has drifted sideways.
+```
+
+classification: `mobile layout stability` / `published reader behavior`.
+
+acceptance:
+
+- opening and closing inline source transclusions on mobile must not increase
+  document-level horizontal scroll width beyond the viewport;
+- source-card titles, snapshot text, actions, URLs, selectors, and long words
+  must wrap or clip inside their own component bounds instead of widening the
+  reader;
+- the published-reader body must remain aligned with the viewport after source
+  transclusion open/close interactions;
+- desktop source transclusion layout and Source Viewer/Web Lens open behavior
+  must remain unchanged;
+- staging proof should include a mobile viewport Playwright check that opens a
+  source transclusion and asserts bounded `scrollWidth`, no left-edge clipping,
+  and a screenshot artifact.
