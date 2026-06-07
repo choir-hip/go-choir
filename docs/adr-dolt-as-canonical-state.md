@@ -128,4 +128,4 @@ areas, but they should be scoped and verified.
 - [runtime-invariants.md](runtime-invariants.md)
 - [current-architecture.md](current-architecture.md)
 - [computer-ontology.md](computer-ontology.md)
-- [research-dolt.md](research-dolt.md)
+- [old-docs-review-2026-06-06.md](old-docs-review-2026-06-06.md)

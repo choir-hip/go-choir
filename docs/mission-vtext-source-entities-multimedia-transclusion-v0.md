@@ -5,9 +5,9 @@
 **Method:** MissionGradient with Cognitive Transform Portfolio
 **Related docs:**
 [mission-youtube-review-studio-v0.md](mission-youtube-review-studio-v0.md),
-[podcast-radio-brief-proof-2026-05-13.md](podcast-radio-brief-proof-2026-05-13.md),
-[publication-reader-retrieval-pretext-research-2026-05-16.md](publication-reader-retrieval-pretext-research-2026-05-16.md),
-[platform-dolt-publication-retrieval-citation-research-2026-05-16.md](platform-dolt-publication-retrieval-citation-research-2026-05-16.md),
+[source-external-data-publication.md](source-external-data-publication.md),
+[source-publication-consolidation-2026-06-06.md](source-publication-consolidation-2026-06-06.md),
+[old-docs-review-2026-06-06.md](old-docs-review-2026-06-06.md),
 [mission-standalone-sourcecycled-data-platform-v0.md](mission-standalone-sourcecycled-data-platform-v0.md)
 
 ## One-Line Goal String

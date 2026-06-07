@@ -4,7 +4,8 @@
 **Date:** 2026-05-30
 **Related docs:** [project-goals.md](project-goals.md),
 [current-architecture.md](current-architecture.md),
-[publication-reader-retrieval-pretext-research-2026-05-16.md](publication-reader-retrieval-pretext-research-2026-05-16.md),
+[source-external-data-publication.md](source-external-data-publication.md),
+[old-docs-review-2026-06-06.md](old-docs-review-2026-06-06.md),
 [platform-os-app-state.md](platform-os-app-state.md)
 
 ## One-Line Goal String

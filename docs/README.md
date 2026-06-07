@@ -1,6 +1,6 @@
 # Choir Documentation Index
 
-Last reviewed: 2026-05-29
+Last reviewed: 2026-06-06
 
 This directory contains canonical architecture docs, active MissionGradient
 missions, proof artifacts, and a small number of historical pointers. Do not
@@ -39,18 +39,34 @@ Use these buckets when reading or editing docs:
 - `docs/project-goals.md` - current goal continuum and extracted live signal from older project/mission docs.
 - `docs/glossary.md` - canonical vocabulary for current product/runtime terms.
 - `docs/adr-dolt-as-canonical-state.md` - Dolt/SQLite state-boundary decision.
-- `docs/platform-dolt-publication-retrieval-citation-research-2026-05-16.md`
-  - research/design input for platform Dolt, publication, retrieval, citations,
-  provenance, and the future citation economy.
+- `docs/source-publication-consolidation-2026-06-06.md` - cleanup ledger for
+  the deleted platform Dolt/publication/retrieval/citation research report.
 - `docs/public-identity-and-custom-domains.md` - public handle, route, and
   custom domain roadmap.
-- `docs/current-architecture.md` - current product/runtime architecture.
+- `docs/current-architecture.md` - current product/runtime architecture,
+  including the surviving service-topology signal from deleted older sketches.
+- `docs/code-docs-reconciliation-2026-06-06.md` - code-to-core-docs review
+  notes from the 2026-06-06 full-codebase reconciliation pass.
+- `docs/intended-architecture-next-2026-06-06.md` - target architecture for
+  the next week-plus of work; not current-state proof.
 - `docs/frontend-app-building-api.md` - current frontend app registry, preview,
   theme, and shell contract.
 - `docs/runtime-invariants.md` - implementation invariants and authority boundaries.
 - `docs/source-external-data-publication.md` - canonical contract for external
   data ingestion, source cleaning, VText source metadata, transclusion,
   publication policy, and export.
+- `docs/news-system-current-state-and-improvements-2026-06-06.md` - current
+  source/news code-state and code-review note. Use it for sourcecycled,
+  source_search, VText source-service refs, News app gaps, and rough future
+  directions; do not treat its improvement list as accepted mission scope.
+- `docs/vtext-styleguide-system-research-2026-06-06.md` - research synthesis
+  for VText-native `Style.vtext` support, client corpus ingestion, learned style
+  memory, edit feedback, style review, and optional future fine-tuning.
+- `docs/vtext-styleguide-sources-review-2026-06-06.md` - full source-by-source
+  review of the styleguide/voice corpus with concise signal summaries for each URL.
+- `docs/vtext-styleguide-source-theme-synthesis-2026-06-06.md` - theme synthesis
+  across all styleguide and anti-slop sources with consensus, controversy, and
+  outlier breakdown.
 - `docs/implementation-scope.md` - near-term implementation scope.
 - `docs/north-star.md` - long-range product direction.
 - `docs/mission-campaign-compiler-selfdev-v0.md` - current next
@@ -59,6 +75,12 @@ Use these buckets when reading or editing docs:
   transform invocations, candidate computers, promotion, and reentry.
 - `docs/legacy-promotion-experiments-learnings.md` - consolidated lessons from
   pruned patchset-promotion experiments.
+- `docs/old-docs-review-2026-06-06.md` - cleanup ledger for old docs reviewed
+  on 2026-06-06, including mined insights from deleted proof/checklist files.
+- `docs/mid-age-docs-review-2026-06-06.md` - cleanup ledger for existing docs
+  last committed from 2026-05-24 through 2026-06-02.
+- `docs/architecture-consolidation-2026-06-06.md` - cleanup ledger for mining
+  older architecture sketches into `docs/current-architecture.md`.
 - `docs/mission-apps-and-changes-store-sweep-v0.md` - retained state for the
   Apps & Changes product path; historical portfolio inputs were pruned.
 
@@ -89,10 +111,14 @@ When proof docs contradict `README.md`, `AGENTS.md`, `current-architecture.md`, 
 
 ## Historical Or Stale Docs
 
-- `docs/PROJECT-STATE.md` is now a short historical pointer. The old snapshot was removed because it contained stale operational/provider/credential and continuation instructions.
+- `docs/PROJECT-STATE.md` was deleted during the 2026-06-06 cleanup because it
+  had become only a pointer to newer docs.
 - Old Mission 1/2/3/5/6/7 milestone docs were deleted after live signal was folded into `docs/project-goals.md`, `docs/glossary.md`, `docs/adr-dolt-as-canonical-state.md`, and the canonical architecture docs. Use git history for the removed originals.
 - Top-level `TODOS.md`, `PROJECT-GOALS.md`, and `PROJECT-GLOSSARY.md` were removed after extraction.
-- `docs/api-vtext-hard-cutover-checklist-2026-05-01.md` and `docs/api-surface-and-vtext-workflow-review-2026-05-01.md` are useful audits from an earlier API cutover.
+- The old API/VText hard-cutover checklist was deleted during the 2026-06-06
+  mid-age cleanup. Its durable review lessons were folded into
+  `docs/old-docs-review-2026-06-06.md` and
+  `docs/mid-age-docs-review-2026-06-06.md`.
 
 Do not delete historical docs during ordinary feature work. Label, index, or update them. Delete only when a cleanup mission explicitly proves they are junk or duplicated.
 
@@ -103,6 +129,15 @@ old-mission cleanup. Remaining cleanup work is intentionally narrower:
 
 - gradually fold durable lessons from dated proof/evidence files into canonical
   architecture/invariant docs when they become current;
+- use `docs/old-docs-review-2026-06-06.md` for the 2026-06-06 extraction of
+  lessons from deleted proof/checklist/research snapshots;
+- use `docs/mid-age-docs-review-2026-06-06.md` for the 2026-06-06 extraction
+  of lessons from deleted 2026-05-24 through 2026-06-02 snapshots;
+- use `docs/architecture-consolidation-2026-06-06.md` for the 2026-06-06
+  extraction of service-topology lessons from deleted architecture sketches;
+- use `docs/source-publication-consolidation-2026-06-06.md` for the 2026-06-06
+  extraction of platform Dolt/publication/citation lessons from deleted
+  research;
 - old backend-browser proof shards were consolidated into
   `docs/backend-browser-substrate-learnings.md`;
 - keep `docs/deferred-reliability-migrations-2026-05-14.md` as historical

@@ -56,9 +56,10 @@ Primary current source paths:
 
 Historical docs and checkpoint artifacts:
 
-- `docs/api-surface-and-vtext-workflow-review-2026-05-01.md`
-- `docs/api-vtext-hard-cutover-checklist-2026-05-01.md`
-- `docs/vtext-next-planning-checklist-2026-05-09.md`
+- `docs/old-docs-review-2026-06-06.md`, which preserves the durable lessons
+  from the deleted API-surface and VText planning checklist snapshots
+- `docs/mid-age-docs-review-2026-06-06.md`, which preserves the durable lessons
+  from the deleted API/VText hard-cutover checklist
 - `docs/mission-vtext-live-cadence-repair-v3.md`
 - historical, pruned docs read from git: `mission-vtext-durable-draft-version-graph-v0.md` and `review-search-vtext-context-2026-05-26.md`
 

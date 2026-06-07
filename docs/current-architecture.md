@@ -1,6 +1,6 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-05-30
+**Last updated:** 2026-06-06
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `vtext`, conductor routing, workers, Trace, Dolt,
@@ -9,6 +9,28 @@ document read before changing `vtext`, conductor routing, workers, Trace, Dolt,
 [project-goals.md](project-goals.md). For the current common platform/default
 computer OS, desktop shell, and app catalog state, read
 [platform-os-app-state.md](platform-os-app-state.md).
+
+## Document Contract
+
+This document tracks the architecture that the current repo and staging system
+actually implement, plus explicitly labeled active hardening where the code
+already has a partial substrate. It should not be used as a speculative product
+roadmap. Sections labeled target-only are not current-state claims.
+
+Use [intended-architecture-next-2026-06-06.md](intended-architecture-next-2026-06-06.md)
+for the intended architecture after the next week-plus of source, Base,
+desktop, news, voice, and Automatic Radio work is written, deployed, and proven
+stable.
+
+When this document says "current," it should be backed by one of:
+
+- code in this repository;
+- current canonical docs that reflect landed code;
+- staging evidence on `https://choir.news`;
+- a precise note that the behavior is code-present but not yet staging-proven.
+
+If code, staging, and this document disagree, code/staging evidence wins and
+this document should be fixed.
 
 ## Current Reality
 
@@ -40,10 +62,12 @@ and focused unit shaping, but local proof does not establish product readiness.
 
 This staging-first rule applies to platform behavior and shared runtime claims.
 It does not mean every user-local computer change must wait for global CI/deploy.
-Users should eventually be able to fork a candidate from their own active
-computer, change apps inside that candidate, build a new Go/Svelte runtime,
-install packages, and promote the verified candidate back into their own active
-computer with local verifier and rollback evidence.
+The intended personal-computer path is that users can fork a candidate from
+their own active computer, change apps inside that candidate, build a new
+Go/Svelte runtime, install packages, and promote the verified candidate back
+into their own active computer with local verifier and rollback evidence. Treat
+that as target architecture until the product path is fully code-backed and
+proven.
 
 The current promotion architecture is stable platform, divergent computers.
 Read
@@ -59,6 +83,61 @@ new-user default image     -> official platform computer fork
 public surface changes     -> platform computer candidate unless substrate changes
 private public surface     -> selected route projection, not whole-computer exposure
 ```
+
+## Service Topology
+
+The current codebase/deployable topology is one product split across a small
+number of host services and per-computer runtimes:
+
+```text
+browser
+  -> Caddy edge
+    -> auth service for WebAuthn/session lifecycle
+    -> proxy service for authenticated product API routing
+      -> user's resolved computer runtime
+    -> platform publication read routes where safe
+
+host services
+  -> vmctl owns computer lifecycle, warmness, hibernation, and reclaim policy
+  -> gateway owns provider credentials and provider request mediation
+  -> platformd owns platform/public publication ledger writes
+  -> maild owns email ingress/drafts/notifications where configured
+  -> sourcecycled owns the current experimental source-service daemon
+
+per-user computer runtime
+  -> conductor routes owner intent
+  -> app surfaces project durable state
+  -> appagents own canonical semantic artifacts when needed
+  -> researcher/super/vsuper/co-super workers create evidence and candidates
+  -> embedded Dolt owns private computer product state
+  -> zot can run as a Super Console subprocess when configured
+```
+
+Important boundary rules:
+
+- Caddy is edge/static routing infrastructure, not semantic authority.
+- The browser talks to product APIs, not raw agent, prompt, event, vmctl, Dolt,
+  provider, or platform-internal mutation endpoints.
+- `auth`, `proxy`, `gateway`, `vmctl`, `platformd`, `maild`, and `sourcecycled`
+  are host/platform or sidecar services in the current codebase. They should
+  stay narrow and should not become private document, appagent, or user-computer
+  semantic owners.
+- The per-user computer runtime is where private conductor, VText, appagent,
+  Trace, run memory, app state, source metadata, and candidate-control product
+  state live.
+- Provider secrets stay in the gateway/platform boundary. Per-computer model
+  policy chooses among platform-declared capabilities without copying secrets
+  into user state.
+- VM/computer lifecycle state is product-facing only through redacted,
+  authenticated product APIs. Browser-public raw `vmctl` is not a product
+  surface.
+- Platform publication receives selected public/private projections. It never
+  gains write authority over the live private source document.
+
+This topology supersedes older architecture sketches that described a generic
+local-first multiagent runtime, shared scheduler, or broad sandbox-owned "OS
+layer" as the product ontology. The product object is the persistent computer;
+`sandbox` remains an implementation/service name.
 
 Run acceptance is a first-class artifact. A `RunAcceptanceRecord` should be
 synthesized from existing product/control evidence: runs, Trace moments, worker
@@ -105,32 +184,69 @@ For the current contract covering external source ingestion, source cleaning,
 VText source metadata, transclusion, publication policy, and export, read
 [source-external-data-publication.md](source-external-data-publication.md).
 
-## Priority Order
+## Implemented Foundations And Active Hardening
 
-1. Make the public desktop and auth-on-mutation access model work: signed-out
-   users can see the real desktop, while mutable moves ask for identity at the
-   boundary and then continue through an owned active/candidate computer.
-2. Make `vtext`, researcher, super, and user edits work well and become
-   machine-verifiable.
-3. Add ingestion and real reader/media capabilities: URL to extracted
-   text/content, YouTube transcripts, text/Markdown/PDF/EPUB upload, real PDF
-   and EPUB readers, and app-grade image/audio/video surfaces so uploaded,
-   linked, or agent-retrieved media can open in the desktop and become available
-   for typed `vtext` snippets. Current app state is tracked in
+This section separates code-present foundations from remaining hardening. It is
+not a backlog of things that do not exist.
+
+Code-present/current foundations:
+
+1. Public and signed-out desktop surfaces exist, and mutable paths are expected
+   to cross an auth boundary before continuing through an owned computer. Treat
+   individual public/auth-on-mutation journeys as staging-proof-sensitive.
+2. Prompt bar, conductor routing, VText documents/revisions/history/export,
+   worker updates, Trace projections, run acceptances, AppChangePackages,
+   adoptions, continuations, and computer source-lineage APIs exist in the
+   runtime product surface.
+3. VText already has deterministic backend coverage for document creation,
+   revisions, user edits, worker update integration, stale-result protection,
+   source entities, source repairs, attachments, diagnosis, import, export,
+   blame, diff, and history.
+4. URL/content ingestion, content items, podcast routes, browser sessions, PDF,
+   EPUB, image, audio, video, and ContentViewer-style source surfaces exist at
+   varying quality levels. Current app state is tracked in
    [platform-os-app-state.md](platform-os-app-state.md).
+5. Platform publication has `platformd`, proxy publish/read APIs, public
+   `/pub/vtext/...` routes, sanitized publication bundles, export, retrieval
+   search, proposal delivery state, and private-derivative/proposal flows.
+6. The source/news substrate has current code in `cmd/sourcecycled`,
+   `internal/cycle`, `internal/sourcefetch`, `internal/sourcecontract`,
+   `internal/sources`, runtime content/source entity handling, and frontend
+   source panels/viewers. `source_search` can query Source Service for
+   researcher turns when configured, and VText can preserve
+   `source_service_item:<id>` refs, but there is not yet a user-facing
+   News/Newspaper app, subscription/event stream, newsletter pipeline, or
+   durable per-source scheduling proof.
+
+Active hardening:
+
+1. Keep public desktop and auth-on-mutation verified on staging as the source
+   system changes land.
+2. Make VText/researcher/super/user edit flows smoother, more observable, and
+   less dependent on timing luck, while preserving the existing single-writer
+   and machine-verifiable revision contract.
+3. Turn source/news from substrate into a prominent News/Newspaper product
+   surface with real front-page, issue, newsletter, and radio-queue projections.
 4. Harden publication UX and review: retraction, supersession, route
-   management, richer review evidence, and proposal inbox/acceptance flows.
+   management, richer review evidence, export polish, and proposal
+   inbox/acceptance flows.
 5. Deepen Pretext-based responsive rendering and transclusion for published
    `vtext`, computational essays, evidence reports, and web content.
 6. Add richer citation mechanics.
-7. Add CHIPS and citation/compute economics.
 
-Later layers should shape today's data model, but they should not be built
-before the vtext loop is reliable.
+Target-only direction:
+
+1. CHIPS and citation/compute economics.
+2. Choir Base/File Provider sync and native desktop surfaces.
+3. Automatic Radio, voice input/output, watch-first screenless control, and
+   native mobile radio/control apps.
+
+Later layers should shape today's data model, but they should not be built in a
+way that weakens the existing VText/source/publication contract.
 
 ## Product Loop
 
-The core loop is:
+The current intended core loop is:
 
 ```text
 prompt -> conductor -> vtext -> researcher/persistent super -> cosuper -> vtext versions

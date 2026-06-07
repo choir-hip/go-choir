@@ -216,13 +216,12 @@ Classify discoveries:
 
 ## Dogfood Evidence
 
-- 2026-05-13 product-pressure slice: `docs/choir-grand-deformation-product-slice-2026-05-13.md`
+- 2026-05-13 product-pressure, context-limit, and podcast/radio proof snapshots
+  were mined into `docs/old-docs-review-2026-06-06.md`.
 - Legacy patchset-promotion proof files were pruned. Their durable lessons are
   preserved in `docs/legacy-promotion-experiments-learnings.md`.
-- 2026-05-13 context limit recovery proof: `docs/context-limit-recovery-proof-2026-05-13.md`
 - Old Trace promotion-candidate artifact proof was pruned with the legacy
   patchset queue.
-- 2026-05-13 podcast radio brief proof: `docs/podcast-radio-brief-proof-2026-05-13.md`
 - Backend browser proof shards were pruned. Their durable lessons are preserved
   in `docs/backend-browser-substrate-learnings.md`.
 

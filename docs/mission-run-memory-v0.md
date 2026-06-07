@@ -5,8 +5,10 @@ Date: 2026-05-13
 
 Completion notes:
 
-- Proof transcript: `docs/run-memory-v0-dogfood-2026-05-13.md`
-- Next frontier: `docs/run-memory-next-frontier-2026-05-13.md`
+- Proof transcript lessons were mined into
+  `docs/old-docs-review-2026-06-06.md`.
+- Next-frontier lessons were mined into
+  `docs/mid-age-docs-review-2026-06-06.md`.
 - Later promotion work replaced the old patchset candidate direction with
   AppChangePackage/adoption; see `docs/legacy-promotion-experiments-learnings.md`.
 
