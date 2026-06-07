@@ -4937,6 +4937,11 @@ Observed evidence:
   test navigated `public_link.route_path` as a relative path and Playwright
   resolved it to `http://localhost:4173/global-wire/publications/{token}`
   instead of `https://choir.news/global-wire/publications/{token}`.
+- After the origin was corrected in the local working tree, the same
+  authenticated proof reached the public reader page but timed out when later
+  steps tried to focus the Global Wire desktop window. The test had proven the
+  reader route, but it had not restored the authenticated desktop app route
+  before continuing the rest of the product-path flow.
 
 Why this matters:
 
@@ -4953,9 +4958,12 @@ Remaining error field:
 - The signed-in proof does not yet prove the public reader route on staging.
 - The test must construct the public route URL from the active page origin or
   configured staging base URL before navigating.
+- The test must return to the signed-in desktop app after public reader
+  assertions, because the reader route is intentionally outside the desktop
+  shell.
 
 Next executable probe:
 
 - Patch `frontend/tests/global-wire-app.spec.js` to navigate to the public link
-  route on the current deployed origin, then rerun the authenticated staging
-  proof.
+  route on the current deployed origin, restore the authenticated Global Wire
+  app route after reader assertions, then rerun the authenticated staging proof.
