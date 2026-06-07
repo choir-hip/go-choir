@@ -476,6 +476,18 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 	return tx.Commit()
 }
 
+func (s *Storage) UpdateProcessorRequestStatus(ctx context.Context, requestID, status string) error {
+	if strings.TrimSpace(requestID) == "" || strings.TrimSpace(status) == "" {
+		return fmt.Errorf("processor request id and status are required")
+	}
+	_, err := s.DB.ExecContext(ctx, `UPDATE processor_requests SET status = ?, updated_at = ? WHERE request_id = ?`,
+		strings.TrimSpace(status), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
+	if err != nil {
+		return fmt.Errorf("update processor request status: %w", err)
+	}
+	return nil
+}
+
 func (s *Storage) SaveReconcilerRequests(ctx context.Context, requests []ReconcilerRequest) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -513,6 +525,18 @@ func (s *Storage) SaveReconcilerRequests(ctx context.Context, requests []Reconci
 		}
 	}
 	return tx.Commit()
+}
+
+func (s *Storage) UpdateReconcilerRequestStatus(ctx context.Context, requestID, status string) error {
+	if strings.TrimSpace(requestID) == "" || strings.TrimSpace(status) == "" {
+		return fmt.Errorf("reconciler request id and status are required")
+	}
+	_, err := s.DB.ExecContext(ctx, `UPDATE reconciler_requests SET status = ?, updated_at = ? WHERE request_id = ?`,
+		strings.TrimSpace(status), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
+	if err != nil {
+		return fmt.Errorf("update reconciler request status: %w", err)
+	}
+	return nil
 }
 
 func (s *Storage) ListProcessorRequests(ctx context.Context, cycleID string, limit int) ([]ProcessorRequest, error) {

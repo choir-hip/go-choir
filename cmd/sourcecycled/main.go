@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +19,40 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
+
+const defaultSourceMaxxProcessorDispatchLimit = 7
+
+type runtimeRunSubmitRequest struct {
+	OwnerID  string         `json:"owner_id"`
+	Prompt   string         `json:"prompt"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+type runtimeRunStatusResponse struct {
+	RunID        string `json:"loop_id"`
+	AgentID      string `json:"agent_id"`
+	ChannelID    string `json:"channel_id,omitempty"`
+	AgentProfile string `json:"agent_profile,omitempty"`
+	AgentRole    string `json:"agent_role,omitempty"`
+	State        string `json:"state,omitempty"`
+}
+
+type sourceMaxxRuntimeDispatcher struct {
+	baseURL              string
+	ownerID              string
+	maxProcessorRequests int
+	client               *http.Client
+}
+
+type sourceMaxxDispatchResult struct {
+	ProcessorSubmitted  int
+	ProcessorFailed     int
+	ProcessorSkipped    int
+	ReconcilerSubmitted int
+	ReconcilerFailed    int
+	RunIDs              []string
+	Errors              []string
+}
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -113,6 +149,33 @@ func sourceServiceConfigPath() string {
 		return strings.TrimSpace(configPath)
 	}
 	return filepath.Join("configs", "sources.json")
+}
+
+func sourceMaxxRuntimeDispatcherFromEnv() *sourceMaxxRuntimeDispatcher {
+	baseURL := strings.TrimRight(strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_BASE_URL", "SOURCECYCLED_RUNTIME_BASE_URL")), "/")
+	if baseURL == "" {
+		return nil
+	}
+	ownerID := strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID"))
+	if ownerID == "" {
+		ownerID = "global-wire-platform"
+	}
+	limit := parsePositiveInt(firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS", "SOURCECYCLED_AGENT_DISPATCH_MAX_PROCESSORS"), defaultSourceMaxxProcessorDispatchLimit)
+	return &sourceMaxxRuntimeDispatcher{
+		baseURL:              baseURL,
+		ownerID:              ownerID,
+		maxProcessorRequests: limit,
+		client:               &http.Client{Timeout: 20 * time.Second},
+	}
+}
+
+func firstEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func startSourceServiceAPI(ctx context.Context, store *cycle.Storage) *http.Server {
@@ -323,6 +386,138 @@ func writeSourceServiceJSON(w http.ResponseWriter, status int, value any) {
 	}
 }
 
+func (d *sourceMaxxRuntimeDispatcher) dispatch(ctx context.Context, store *cycle.Storage, handoff cycle.SourceMaxxHandoff) sourceMaxxDispatchResult {
+	var result sourceMaxxDispatchResult
+	if d == nil || strings.TrimSpace(d.baseURL) == "" {
+		result.ProcessorSkipped = len(handoff.ProcessorRequests)
+		return result
+	}
+	processorLimit := d.maxProcessorRequests
+	if processorLimit <= 0 {
+		processorLimit = defaultSourceMaxxProcessorDispatchLimit
+	}
+	for idx, req := range handoff.ProcessorRequests {
+		if idx >= processorLimit {
+			result.ProcessorSkipped++
+			continue
+		}
+		run, err := d.submitProcessor(ctx, req)
+		if err != nil {
+			result.ProcessorFailed++
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", req.RequestID, err))
+			_ = store.UpdateProcessorRequestStatus(ctx, req.RequestID, "dispatch_failed")
+			continue
+		}
+		result.ProcessorSubmitted++
+		result.RunIDs = append(result.RunIDs, run.RunID)
+		_ = store.UpdateProcessorRequestStatus(ctx, req.RequestID, "submitted")
+	}
+	for _, req := range handoff.ReconcilerRequests {
+		run, err := d.submitReconciler(ctx, req)
+		if err != nil {
+			result.ReconcilerFailed++
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", req.RequestID, err))
+			_ = store.UpdateReconcilerRequestStatus(ctx, req.RequestID, "dispatch_failed")
+			continue
+		}
+		result.ReconcilerSubmitted++
+		result.RunIDs = append(result.RunIDs, run.RunID)
+		_ = store.UpdateReconcilerRequestStatus(ctx, req.RequestID, "submitted")
+	}
+	return result
+}
+
+func (d *sourceMaxxRuntimeDispatcher) submitProcessor(ctx context.Context, req cycle.ProcessorRequest) (runtimeRunStatusResponse, error) {
+	prompt := req.Prompt + "\n\nSourceMaxx processor request: " + req.RequestID +
+		"\nCycle: " + req.CycleID +
+		"\nProcessor key: " + req.ProcessorKey +
+		"\nContinuity ref: " + req.ContinuityRef +
+		"\nSource item handles: " + strings.Join(req.SourceItemIDs, ", ") +
+		"\nDo not paste source bodies into the checkpoint. Use source_search/fetch_url by handle or URL when needed, preserve source handles, and delegate to existing researcher or VText agents when the brief needs evidence or publication."
+	return d.submit(ctx, runtimeRunSubmitRequest{
+		OwnerID: d.ownerID,
+		Prompt:  prompt,
+		Metadata: map[string]any{
+			"agent_profile":            "processor",
+			"agent_role":               "processor",
+			"request_source":           "sourcecycled",
+			"source_maxx_request_kind": "processor",
+			"source_maxx_request_id":   req.RequestID,
+			"source_maxx_cycle_id":     req.CycleID,
+			"processor_key":            req.ProcessorKey,
+			"source_item_ids":          req.SourceItemIDs,
+			"source_count":             req.SourceCount,
+			"source_types":             req.SourceTypes,
+			"verticals":                req.Verticals,
+			"regions":                  req.Regions,
+			"continuity_ref":           req.ContinuityRef,
+		},
+	})
+}
+
+func (d *sourceMaxxRuntimeDispatcher) submitReconciler(ctx context.Context, req cycle.ReconcilerRequest) (runtimeRunStatusResponse, error) {
+	prompt := req.Prompt + "\n\nSourceMaxx reconciler request: " + req.RequestID +
+		"\nCycle: " + req.CycleID +
+		"\nScope: " + req.Scope +
+		"\nProcessor request handles: " + strings.Join(req.ProcessorRequestIDs, ", ") +
+		"\nSource item handles: " + strings.Join(req.SourceItemIDs, ", ") +
+		"\nReview the story corpus and source/processor state. Note consensus, contradictions, drift, research needs, and candidate VText updates without mutating platform stories."
+	return d.submit(ctx, runtimeRunSubmitRequest{
+		OwnerID: d.ownerID,
+		Prompt:  prompt,
+		Metadata: map[string]any{
+			"agent_profile":            "reconciler",
+			"agent_role":               "reconciler",
+			"request_source":           "sourcecycled",
+			"source_maxx_request_kind": "reconciler",
+			"source_maxx_request_id":   req.RequestID,
+			"source_maxx_cycle_id":     req.CycleID,
+			"reconciler_scope":         req.Scope,
+			"source_item_ids":          req.SourceItemIDs,
+			"processor_request_ids":    req.ProcessorRequestIDs,
+		},
+	})
+}
+
+func (d *sourceMaxxRuntimeDispatcher) submit(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {
+	if d == nil || d.client == nil {
+		return runtimeRunStatusResponse{}, fmt.Errorf("runtime dispatcher is not configured")
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return runtimeRunStatusResponse{}, fmt.Errorf("marshal runtime run request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, d.baseURL+"/internal/runtime/runs", bytes.NewReader(body))
+	if err != nil {
+		return runtimeRunStatusResponse{}, fmt.Errorf("create runtime run request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Internal-Caller", "true")
+	resp, err := d.client.Do(httpReq)
+	if err != nil {
+		return runtimeRunStatusResponse{}, fmt.Errorf("submit runtime run: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		var apiErr struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&apiErr)
+		if strings.TrimSpace(apiErr.Error) == "" {
+			apiErr.Error = resp.Status
+		}
+		return runtimeRunStatusResponse{}, fmt.Errorf("runtime returned %s: %s", resp.Status, apiErr.Error)
+	}
+	var out runtimeRunStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return runtimeRunStatusResponse{}, fmt.Errorf("decode runtime run response: %w", err)
+	}
+	if strings.TrimSpace(out.RunID) == "" {
+		return runtimeRunStatusResponse{}, fmt.Errorf("runtime accepted run without loop_id")
+	}
+	return out, nil
+}
+
 func parsePositiveInt(raw string, fallback int) int {
 	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || parsed <= 0 {
@@ -397,6 +592,18 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 		"reconciler_request_count": len(handoff.ReconcilerRequests),
 		"source_item_count":        len(items),
 	})
+	dispatchResult := sourceMaxxRuntimeDispatcherFromEnv().dispatch(ctx, store, handoff)
+	if dispatchResult.ProcessorSubmitted > 0 || dispatchResult.ReconcilerSubmitted > 0 || dispatchResult.ProcessorFailed > 0 || dispatchResult.ReconcilerFailed > 0 {
+		_ = store.RecordCycleEvent(ctx, cycleID, "", "sourcemaxx_agent_runs_dispatched", "source handoffs submitted to processor/reconciler agent profiles", map[string]any{
+			"processor_submitted":  dispatchResult.ProcessorSubmitted,
+			"processor_failed":     dispatchResult.ProcessorFailed,
+			"processor_skipped":    dispatchResult.ProcessorSkipped,
+			"reconciler_submitted": dispatchResult.ReconcilerSubmitted,
+			"reconciler_failed":    dispatchResult.ReconcilerFailed,
+			"runtime_run_ids":      dispatchResult.RunIDs,
+			"errors":               dispatchResult.Errors,
+		})
+	}
 
 	cycleDuration := time.Since(cycleStartTime)
 	_ = store.RecordCycleEvent(ctx, cycleID, "", "cycle_completed", "source cycle completed", map[string]any{"duration_ms": cycleDuration.Milliseconds(), "item_count": len(items), "fetch_count": len(pollResult.Fetches)})

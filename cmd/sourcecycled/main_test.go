@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -181,5 +182,105 @@ func TestSourceServiceAPISourceMaxxLatestReportsAgentHandoffs(t *testing.T) {
 	}
 	if resp.Metadata.AuthorityRule == "" {
 		t.Fatalf("missing authority metadata: %+v", resp.Metadata)
+	}
+}
+
+func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *testing.T) {
+	ctx := context.Background()
+	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	defer store.Close()
+
+	cycleID, err := store.StartCycle(ctx)
+	if err != nil {
+		t.Fatalf("start cycle: %v", err)
+	}
+	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	items := []sources.Item{
+		{ID: "srcitem_gdelt_1", SourceID: "gdelt:15min", SourceType: sources.SourceTypeGDELT, Title: "GDELT 1", Region: "global"},
+		{ID: "srcitem_rss_1", SourceID: "rss:bbc_world", SourceType: sources.SourceTypeRSS, Title: "BBC 1", Verticals: []string{"conflict"}, Region: "global"},
+	}
+	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, now)
+	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
+		t.Fatalf("save processors: %v", err)
+	}
+	if err := store.SaveReconcilerRequests(ctx, handoff.ReconcilerRequests); err != nil {
+		t.Fatalf("save reconcilers: %v", err)
+	}
+
+	var submissions []runtimeRunSubmitRequest
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/internal/runtime/runs" {
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("missing internal caller header")
+		}
+		var req runtimeRunSubmitRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode runtime request: %v", err)
+		}
+		submissions = append(submissions, req)
+		profile, _ := req.Metadata["agent_profile"].(string)
+		writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{
+			RunID:        "run-" + profile + "-" + strings.TrimSpace(req.Metadata["source_maxx_request_id"].(string)),
+			AgentID:      profile + ":agent",
+			AgentProfile: profile,
+			AgentRole:    profile,
+			State:        "pending",
+		})
+	}))
+	defer runtimeServer.Close()
+
+	dispatcher := &sourceMaxxRuntimeDispatcher{
+		baseURL:              runtimeServer.URL,
+		ownerID:              "owner-global-wire",
+		maxProcessorRequests: 1,
+		client:               runtimeServer.Client(),
+	}
+	result := dispatcher.dispatch(ctx, store, handoff)
+	if result.ProcessorSubmitted != 1 || result.ProcessorSkipped != len(handoff.ProcessorRequests)-1 || result.ReconcilerSubmitted != 1 {
+		t.Fatalf("unexpected dispatch result: %+v", result)
+	}
+	if result.ProcessorFailed != 0 || result.ReconcilerFailed != 0 || len(result.Errors) != 0 {
+		t.Fatalf("unexpected dispatch failures: %+v", result)
+	}
+	if len(submissions) != 2 {
+		t.Fatalf("runtime submissions = %d, want processor + reconciler", len(submissions))
+	}
+	if submissions[0].OwnerID != "owner-global-wire" || submissions[0].Metadata["agent_profile"] != "processor" || submissions[0].Metadata["processor_key"] == "" {
+		t.Fatalf("unexpected processor submission: %+v", submissions[0])
+	}
+	if !strings.Contains(submissions[0].Prompt, "Source item handles:") || !strings.Contains(submissions[0].Prompt, "Do not paste source bodies") {
+		t.Fatalf("processor prompt missing source handle contract:\n%s", submissions[0].Prompt)
+	}
+	if submissions[1].Metadata["agent_profile"] != "reconciler" || submissions[1].Metadata["reconciler_scope"] != "story-corpus" {
+		t.Fatalf("unexpected reconciler submission: %+v", submissions[1])
+	}
+
+	processors, err := store.ListProcessorRequests(ctx, cycleID, 10)
+	if err != nil {
+		t.Fatalf("list processors: %v", err)
+	}
+	var submitted, queued int
+	for _, req := range processors {
+		switch req.Status {
+		case "submitted":
+			submitted++
+		case "queued":
+			queued++
+		}
+	}
+	if submitted != 1 || queued != len(handoff.ProcessorRequests)-1 {
+		t.Fatalf("processor statuses submitted=%d queued=%d processors=%+v", submitted, queued, processors)
+	}
+	reconcilers, err := store.ListReconcilerRequests(ctx, cycleID, 10)
+	if err != nil {
+		t.Fatalf("list reconcilers: %v", err)
+	}
+	if len(reconcilers) != 1 || reconcilers[0].Status != "submitted" {
+		t.Fatalf("reconciler status = %+v", reconcilers)
 	}
 }
