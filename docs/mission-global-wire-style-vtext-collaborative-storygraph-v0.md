@@ -3255,3 +3255,54 @@ Next executable probe:
   SourceItems, claim records, and StoryGraph overlays, so publication packages
   can cite more than headline-level claim summaries without making the graph
   object itself a source/entity graph.
+
+## Problem - Source/Claim Richness Is Still Headline-Level - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Observed gap:
+
+- Source refresh creates SourceItems, claim records, research tasks, handoff
+  decisions, and publication update packages.
+- The structured claim state is still mostly headline/source-title level. It
+  does not persist a separate entity/event/timeline extraction artifact tied to
+  the SourceItem and claim record.
+- Publication update packages can cite source, claim, candidate, review, and
+  rollback refs, but they cannot yet cite an explicit structured extraction
+  overlay.
+
+Why this matters:
+
+- The spec asks for claim/event/entity extraction in the ingestion loop, while
+  also preserving graph nodes as Story VText headlines. The right low-resolution
+  move is an overlay artifact, not changing the StoryGraph node model.
+- Non-oracle news needs visible uncertainty and provenance around extracted
+  entities/events/timeline points. If extraction only lives in generated prose,
+  review and publication packages cannot inspect or cite it directly.
+- Publication packages need richer review material than a headline-level claim
+  summary before the system can plausibly support newsletters, researchers, and
+  Autoradio.
+
+Belief-state update:
+
+- The next topology-preserving improvement is a low-resolution
+  `GlobalWireExtractionArtifact`: owner-scoped, SourceItem-linked,
+  claim-linked, candidate-linked, provisional, and visible in reconciliation and
+  News.
+- The artifact should contain entities, events, timeline points, uncertainty,
+  and extraction rationale as review data. It must not mutate StoryGraph nodes
+  or replace Story VText headline neighborhoods.
+
+Remaining error field:
+
+- No durable extraction artifact table exists.
+- Source refresh does not persist structured entity/event/timeline overlays.
+- Reconciliation and News cannot display extraction overlays.
+- Publication update packages cannot cite extraction artifact ids.
+
+Next executable probe:
+
+- Add `GlobalWireExtractionArtifact` records created by source refresh when a
+  claim/research artifact is created; expose them from reconciliation and News;
+  add extraction ids to publication update packages; and prove locally/staging
+  that extraction overlays are review artifacts only, not graph-node mutation.
