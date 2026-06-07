@@ -5793,3 +5793,68 @@ Next executable probe:
 - Increase realism along one of three axes: real newsletter provider delivery,
   playable autoradio/audio, or deeper source normalization with cross-source
   contradiction/overlap review inside the dossier.
+
+## Problem Checkpoint - Autoradio Playback Proof Stub - 2026-06-07
+
+Objective state:
+
+- The next homotopy axis selected was Autoradio consumption realism: turn the
+  existing approved publication artifact and durable Autoradio script into a
+  durable playback package without claiming an external TTS/audio-file provider.
+- Behavior commit `7f59a45ad035d4e9f040c13899b6a49a8496192c`
+  (`feat: add global wire autoradio playback episodes`) added
+  owner-scoped `global_wire_autoradio_episodes`, the
+  `/api/global-wire/autoradio-episodes` product API, source-dossier publication
+  refs for episode ids, browser-speech playback controls in Global Wire, and
+  Go/Playwright coverage.
+
+Local proof before push:
+
+- `nix develop -c go test ./internal/runtime -run TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire' -count=1`
+  passed.
+- `npm run build` passed.
+- `git diff --check` passed.
+
+Deployment proof:
+
+- CI run `27089745118` succeeded, including staging deploy.
+- FlakeHub run `27089745128` succeeded.
+- Staging `/health` reported proxy and upstream deployed commit
+  `7f59a45ad035d4e9f040c13899b6a49a8496192c`, deployed at
+  `2026-06-07T10:22:00Z`.
+- Public deployed proof
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  returned 4 passed and 1 auth-gated skip.
+
+Observed staging problem:
+
+- Authenticated deployed proof
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --grep "signed in" --timeout 180000`
+  failed on the new playback assertion.
+- The episode creation path reached the Play button, but after the test injected
+  a browser speech stub and clicked `[data-global-wire-play-autoradio-episode]`,
+  `window.__globalWireSpoken[0]` was `undefined`.
+- The current evidence does not show a backend episode creation failure. It
+  shows that the deployed acceptance proof's browser-speech stub did not observe
+  the playback call. The likely root cause is that `speechSynthesis` or
+  `SpeechSynthesisUtterance` is not safely replaced by direct assignment in the
+  deployed Chromium page, so the test is not a reliable product-path observer
+  for the playback click.
+
+Belief update:
+
+- The durable episode object is locally covered and deployed, but the staging
+  proof for playable browser-speech control is not yet accepted.
+- The fix should improve the product/test boundary by making the playback path
+  observable through a DOM/product state transition, not only through a test-only
+  monkeypatch of browser speech globals.
+
+Remaining error field:
+
+- Autoradio has a durable playback package, but deployed playable proof remains
+  failing until the Play action records observable product state.
+- Newsletter remains a ledger, not real provider send telemetry.
+- Source normalization remains low-resolution and deterministic.
+- The mission is still not `promotion-level` or `continuation-level`.
