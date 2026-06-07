@@ -162,6 +162,7 @@
   let reconciliationSourceItems = {};
   let reconciliationDecisions = [];
   let graphUpdateCandidates = [];
+  let graphPromotionDecisions = [];
   let reconciliationBusyId = '';
   let dataSource = 'preview-storygraph';
   let loadError = '';
@@ -198,6 +199,7 @@
       reconciliationSourceItems = {};
       reconciliationDecisions = [];
       graphUpdateCandidates = [];
+      graphPromotionDecisions = [];
       sourceSearchResults = [];
       sourceSearchStatus = '';
       sourceSearchMessage = '';
@@ -237,11 +239,13 @@
       reconciliationSourceItems = payload.source_items || {};
       reconciliationDecisions = Array.isArray(payload.decisions) ? payload.decisions : [];
       graphUpdateCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+      graphPromotionDecisions = Array.isArray(payload.promotions) ? payload.promotions : [];
     } catch {
       contributions = [];
       reconciliationSourceItems = {};
       reconciliationDecisions = [];
       graphUpdateCandidates = [];
+      graphPromotionDecisions = [];
     }
   }
 
@@ -565,6 +569,11 @@
     return graphUpdateCandidates.find((candidate) => candidate.contribution_id === id);
   }
 
+  function candidatePromotion(candidate) {
+    const id = candidate?.id || '';
+    return graphPromotionDecisions.find((promotion) => promotion.candidate_id === id);
+  }
+
   async function reconcileContribution(item, decision) {
     if (!authenticated || !item?.id) return;
     reconciliationBusyId = `${item.id}:${decision}`;
@@ -607,6 +616,45 @@
       await loadContributions(selectedStory.id);
     } catch (error) {
       contributionStatus = error?.message || 'Reconciliation decision failed';
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
+  async function reviewGraphCandidate(candidate, decision) {
+    if (!authenticated || !candidate?.id) return;
+    reconciliationBusyId = `${candidate.id}:${decision}`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/graph-candidates', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidate_id: candidate.id,
+          decision,
+          note: decision === 'promoted'
+            ? 'Platform review promoted this candidate as a bounded StoryGraph source-manifest update.'
+            : 'Platform review rejected this candidate for the current StoryGraph.',
+        }),
+      });
+      if (!response.ok) throw new Error(`Graph candidate review failed: ${response.status}`);
+      const payload = await response.json();
+      graphUpdateCandidates = graphUpdateCandidates.map((item) => (
+        item.id === candidate.id ? payload.candidate : item
+      ));
+      graphPromotionDecisions = [payload.promotion, ...graphPromotionDecisions]
+        .filter(Boolean)
+        .slice(0, 20);
+      if (payload.story?.id) {
+        stories = stories.map((story) => (story.id === payload.story.id ? payload.story : story));
+      }
+      contributionStatus = decision === 'promoted'
+        ? 'Graph candidate promoted through platform review'
+        : 'Graph candidate rejected by platform review';
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || 'Graph candidate review failed';
     } finally {
       reconciliationBusyId = '';
     }
@@ -832,6 +880,7 @@
               {@const source = contributionSource(item)}
               {@const decision = contributionDecision(item)}
               {@const candidate = contributionCandidate(item)}
+              {@const promotion = candidatePromotion(candidate)}
               <article class="contribution-card" data-global-wire-reconciliation-item>
                 <p><strong>{item.kind.replaceAll('-', ' ')}</strong> · {item.text}</p>
                 <small>{item.research_state || 'pending-researcher-review'}</small>
@@ -848,6 +897,30 @@
                       <strong>{candidate.candidate_kind}</strong>
                       <small>{candidate.source_tier} · {candidate.edge_kind} · {candidate.status}</small>
                       <span>{candidate.projection_action}</span>
+                      {#if promotion}
+                        <small data-global-wire-graph-promotion>
+                          {promotion.decision}: {promotion.applied_change}
+                        </small>
+                      {:else if authenticated && candidate.status === 'candidate-review'}
+                        <div class="reconciliation-actions">
+                          <button
+                            type="button"
+                            on:click={() => reviewGraphCandidate(candidate, 'promoted')}
+                            disabled={reconciliationBusyId !== ''}
+                            data-global-wire-promote-candidate
+                          >
+                            Promote
+                          </button>
+                          <button
+                            type="button"
+                            on:click={() => reviewGraphCandidate(candidate, 'rejected')}
+                            disabled={reconciliationBusyId !== ''}
+                            data-global-wire-reject-candidate
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      {/if}
                     </div>
                   {/if}
                 {:else if authenticated}

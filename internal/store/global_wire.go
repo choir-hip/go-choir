@@ -881,6 +881,42 @@ func (s *Store) UpsertGlobalWireGraphUpdateCandidate(ctx context.Context, rec ty
 	return rec, nil
 }
 
+// GetGlobalWireGraphUpdateCandidate returns one owner-scoped graph proposal.
+func (s *Store) GetGlobalWireGraphUpdateCandidate(ctx context.Context, ownerID, candidateID string) (types.GlobalWireGraphUpdateCandidate, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, candidate_id, story_id, contribution_id, decision_id,
+		        source_content_id, candidate_kind, title, summary, source_tier,
+		        edge_kind, projection_action, status, rationale, created_at, updated_at
+		   FROM global_wire_graph_update_candidates
+		  WHERE owner_id = ? AND candidate_id = ?`,
+		ownerID,
+		candidateID,
+	)
+	return scanGlobalWireGraphUpdateCandidate(row)
+}
+
+// UpdateGlobalWireGraphUpdateCandidateStatus updates review state without
+// applying a StoryGraph mutation by itself.
+func (s *Store) UpdateGlobalWireGraphUpdateCandidateStatus(ctx context.Context, ownerID, candidateID, status string) (types.GlobalWireGraphUpdateCandidate, error) {
+	now := time.Now().UTC()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE global_wire_graph_update_candidates
+		    SET status = ?, updated_at = ?
+		  WHERE owner_id = ? AND candidate_id = ?`,
+		strings.TrimSpace(status),
+		now.UTC().Format(time.RFC3339Nano),
+		ownerID,
+		candidateID,
+	)
+	if err != nil {
+		return types.GlobalWireGraphUpdateCandidate{}, fmt.Errorf("update global wire graph candidate status: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return types.GlobalWireGraphUpdateCandidate{}, ErrNotFound
+	}
+	return s.GetGlobalWireGraphUpdateCandidate(ctx, ownerID, candidateID)
+}
+
 // ListGlobalWireGraphUpdateCandidates lists owner-scoped non-mutating graph
 // proposals, optionally narrowed to one story.
 func (s *Store) ListGlobalWireGraphUpdateCandidates(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireGraphUpdateCandidate, error) {
@@ -915,6 +951,71 @@ func (s *Store) ListGlobalWireGraphUpdateCandidates(ctx context.Context, ownerID
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate global wire graph update candidates: %w", err)
+	}
+	return out, nil
+}
+
+// CreateGlobalWireGraphPromotionDecision records an explicit platform review
+// decision over a graph-update candidate.
+func (s *Store) CreateGlobalWireGraphPromotionDecision(ctx context.Context, rec types.GlobalWireGraphPromotionDecision) (types.GlobalWireGraphPromotionDecision, error) {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_graph_promotion_decisions (
+			owner_id, promotion_id, candidate_id, story_id, decision, note,
+			applied_change, source_content_id, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.CandidateID,
+		rec.StoryID,
+		rec.Decision,
+		sanitizeStoreText(rec.Note),
+		sanitizeStoreText(rec.AppliedChange),
+		rec.SourceContentID,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWireGraphPromotionDecision{}, fmt.Errorf("create global wire graph promotion decision: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWireGraphPromotionDecisions lists platform review decisions,
+// optionally narrowed to one story.
+func (s *Store) ListGlobalWireGraphPromotionDecisions(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWireGraphPromotionDecision, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, promotion_id, candidate_id, story_id, decision, note,
+	                applied_change, source_content_id, created_at
+	           FROM global_wire_graph_promotion_decisions
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY created_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire graph promotion decisions: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWireGraphPromotionDecision
+	for rows.Next() {
+		rec, err := scanGlobalWireGraphPromotionDecision(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire graph promotion decisions: %w", err)
 	}
 	return out, nil
 }
@@ -1157,5 +1258,33 @@ func scanGlobalWireGraphUpdateCandidate(row interface{ Scan(...any) error }) (ty
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireGraphPromotionDecision(row interface{ Scan(...any) error }) (types.GlobalWireGraphPromotionDecision, error) {
+	var rec types.GlobalWireGraphPromotionDecision
+	var createdAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.CandidateID,
+		&rec.StoryID,
+		&rec.Decision,
+		&rec.Note,
+		&rec.AppliedChange,
+		&rec.SourceContentID,
+		&createdAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireGraphPromotionDecision{}, ErrNotFound
+		}
+		return types.GlobalWireGraphPromotionDecision{}, fmt.Errorf("scan global wire graph promotion decision: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireGraphPromotionDecision{}, fmt.Errorf("parse global wire graph promotion created_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
 	return rec, nil
 }

@@ -357,4 +357,38 @@ func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(
 		len(afterManifest.Contrary) != len(beforeManifest.Contrary) || len(afterManifest.Context) != len(beforeManifest.Context) {
 		t.Fatalf("StoryGraph manifest mutated: before=%+v after=%+v", beforeManifest, afterManifest)
 	}
+
+	promoteBody := `{"candidate_id":"` + decisionResp.Candidate.ID + `","decision":"promoted","note":"Platform review accepts bounded source-manifest update."}`
+	promoteW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/graph-candidates", promoteBody, "user-alpha")
+	if promoteW.Code != http.StatusCreated {
+		t.Fatalf("promote graph candidate status = %d body=%s", promoteW.Code, promoteW.Body.String())
+	}
+	var promoteResp globalWireGraphCandidateReviewResponse
+	if err := json.NewDecoder(promoteW.Body).Decode(&promoteResp); err != nil {
+		t.Fatalf("decode graph promotion: %v", err)
+	}
+	if promoteResp.Candidate.Status != "promoted-to-storygraph" ||
+		promoteResp.Promotion.Decision != "promoted" ||
+		promoteResp.Promotion.SourceContentID != contribution.SourceContentID {
+		t.Fatalf("unexpected graph promotion response: %+v", promoteResp)
+	}
+	if len(promoteResp.Story.Manifest.Supporting) != len(beforeManifest.Supporting)+1 {
+		t.Fatalf("promoted story supporting count = %d, want %d", len(promoteResp.Story.Manifest.Supporting), len(beforeManifest.Supporting)+1)
+	}
+	promotedSource := promoteResp.Story.Manifest.Supporting[len(promoteResp.Story.Manifest.Supporting)-1]
+	if promotedSource.ContentID != contribution.SourceContentID || promotedSource.Role != "supporting" {
+		t.Fatalf("promoted source lineage missing: %+v", promotedSource)
+	}
+
+	promotedListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
+	if promotedListW.Code != http.StatusOK {
+		t.Fatalf("list promoted reconciliation status = %d body=%s", promotedListW.Code, promotedListW.Body.String())
+	}
+	var promotedList globalWireReconciliationResponse
+	if err := json.NewDecoder(promotedListW.Body).Decode(&promotedList); err != nil {
+		t.Fatalf("decode promoted list: %v", err)
+	}
+	if len(promotedList.Promotions) != 1 || promotedList.Promotions[0].CandidateID != decisionResp.Candidate.ID {
+		t.Fatalf("promotion decision missing from reconciliation list: %+v", promotedList.Promotions)
+	}
 }

@@ -53,6 +53,7 @@ type globalWireReconciliationResponse struct {
 	SourceItems   map[string]types.ContentItem             `json:"source_items,omitempty"`
 	Decisions     []types.GlobalWireReconciliationDecision `json:"decisions"`
 	Candidates    []types.GlobalWireGraphUpdateCandidate   `json:"candidates"`
+	Promotions    []types.GlobalWireGraphPromotionDecision `json:"promotions"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -66,6 +67,18 @@ type globalWireReconciliationCreateResponse struct {
 	Contribution types.GlobalWireContribution           `json:"contribution"`
 	SourceItem   *types.ContentItem                     `json:"source_item,omitempty"`
 	Candidate    *types.GlobalWireGraphUpdateCandidate  `json:"candidate,omitempty"`
+}
+
+type globalWireGraphCandidateReviewRequest struct {
+	CandidateID string `json:"candidate_id"`
+	Decision    string `json:"decision"`
+	Note        string `json:"note,omitempty"`
+}
+
+type globalWireGraphCandidateReviewResponse struct {
+	Candidate types.GlobalWireGraphUpdateCandidate   `json:"candidate"`
+	Promotion types.GlobalWireGraphPromotionDecision `json:"promotion"`
+	Story     types.GlobalWireStory                  `json:"story,omitempty"`
 }
 
 // HandleGlobalWireStories returns the authenticated owner's durable StoryGraph.
@@ -283,11 +296,17 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list graph update candidates"})
 			return
 		}
+		promotions, err := h.rt.Store().ListGlobalWireGraphPromotionDecisions(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list graph promotion decisions"})
+			return
+		}
 		writeAPIJSON(w, http.StatusOK, globalWireReconciliationResponse{
 			Contributions: contributions,
 			SourceItems:   h.globalWireContributionSourceItems(r, ownerID, contributions),
 			Decisions:     decisions,
 			Candidates:    candidates,
+			Promotions:    promotions,
 		})
 	case http.MethodPost:
 		var req globalWireReconciliationCreateRequest
@@ -377,6 +396,156 @@ func normalizeGlobalWireReconciliationDecision(value string) string {
 	default:
 		return ""
 	}
+}
+
+// HandleGlobalWireGraphCandidates records explicit platform review over graph
+// update candidates. Promotion may apply a bounded source-manifest update;
+// rejection records review state without changing the StoryGraph.
+func (h *APIHandler) HandleGlobalWireGraphCandidates(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req globalWireGraphCandidateReviewRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid graph candidate review request"})
+		return
+	}
+	req.CandidateID = strings.TrimSpace(req.CandidateID)
+	req.Decision = normalizeGlobalWirePromotionDecision(req.Decision)
+	req.Note = strings.TrimSpace(req.Note)
+	if req.CandidateID == "" || req.Decision == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "candidate_id and decision are required"})
+		return
+	}
+	candidate, err := h.rt.Store().GetGlobalWireGraphUpdateCandidate(r.Context(), ownerID, req.CandidateID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "graph candidate not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load graph candidate"})
+		return
+	}
+	status := "promotion-rejected"
+	appliedChange := "no StoryGraph mutation; candidate rejected by platform review"
+	var story types.GlobalWireStory
+	if req.Decision == "promoted" {
+		story, appliedChange, err = h.applyGlobalWireGraphCandidate(r, ownerID, candidate)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate source or story not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to apply graph candidate"})
+			return
+		}
+		status = "promoted-to-storygraph"
+	}
+	updatedCandidate, err := h.rt.Store().UpdateGlobalWireGraphUpdateCandidateStatus(r.Context(), ownerID, candidate.ID, status)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to update graph candidate status"})
+		return
+	}
+	promotion, err := h.rt.Store().CreateGlobalWireGraphPromotionDecision(r.Context(), types.GlobalWireGraphPromotionDecision{
+		ID:              "global-wire-graph-promotion-" + uuid.NewString(),
+		OwnerID:         ownerID,
+		CandidateID:     candidate.ID,
+		StoryID:         candidate.StoryID,
+		Decision:        req.Decision,
+		Note:            req.Note,
+		AppliedChange:   appliedChange,
+		SourceContentID: candidate.SourceContentID,
+	})
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create graph promotion decision"})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, globalWireGraphCandidateReviewResponse{
+		Candidate: updatedCandidate,
+		Promotion: promotion,
+		Story:     story,
+	})
+}
+
+func normalizeGlobalWirePromotionDecision(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "promote", "promoted":
+		return "promoted"
+	case "reject", "rejected":
+		return "rejected"
+	default:
+		return ""
+	}
+}
+
+func (h *APIHandler) applyGlobalWireGraphCandidate(r *http.Request, ownerID string, candidate types.GlobalWireGraphUpdateCandidate) (types.GlobalWireStory, string, error) {
+	if strings.TrimSpace(candidate.SourceContentID) == "" {
+		return types.GlobalWireStory{}, "", store.ErrNotFound
+	}
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, candidate.StoryID)
+	if err != nil {
+		return types.GlobalWireStory{}, "", err
+	}
+	item, err := h.rt.Store().GetContentItem(r.Context(), ownerID, candidate.SourceContentID)
+	if err != nil {
+		return types.GlobalWireStory{}, "", err
+	}
+	source := globalWireSourceItemFromContentItem(candidate, item)
+	tier := strings.TrimSpace(candidate.SourceTier)
+	added := false
+	switch tier {
+	case "lead":
+		story.Manifest.Lead, added = appendGlobalWireSourceIfMissing(story.Manifest.Lead, source)
+	case "supporting":
+		story.Manifest.Supporting, added = appendGlobalWireSourceIfMissing(story.Manifest.Supporting, source)
+	case "contrary":
+		story.Manifest.Contrary, added = appendGlobalWireSourceIfMissing(story.Manifest.Contrary, source)
+	default:
+		tier = "context"
+		story.Manifest.Context, added = appendGlobalWireSourceIfMissing(story.Manifest.Context, source)
+	}
+	story.SourceState = "platform-review-promoted-source"
+	story.ChangeState = firstNonEmptyString(story.ChangeState, "source manifest updated")
+	story.UpdatedAt = time.Now().UTC()
+	if err := h.rt.Store().UpsertGlobalWireStory(r.Context(), story); err != nil {
+		return types.GlobalWireStory{}, "", err
+	}
+	if !added {
+		return story, "source already present in " + tier + " manifest tier; promotion recorded without duplicate source", nil
+	}
+	return story, "appended source_content_id " + item.ContentID + " to " + tier + " manifest tier", nil
+}
+
+func globalWireSourceItemFromContentItem(candidate types.GlobalWireGraphUpdateCandidate, item types.ContentItem) types.GlobalWireSourceItem {
+	title := strings.TrimSpace(item.Title)
+	if title == "" {
+		title = firstNonEmptyString(candidate.Title, "Promoted Global Wire source")
+	}
+	return types.GlobalWireSourceItem{
+		ID:           "source-" + item.ContentID,
+		ContentID:    item.ContentID,
+		Title:        title,
+		Standing:     firstNonEmptyString(item.SourceType, "reviewed source artifact"),
+		Role:         firstNonEmptyString(candidate.SourceTier, "context"),
+		CanonicalURL: firstNonEmptyString(item.CanonicalURL, item.SourceURL),
+	}
+}
+
+func appendGlobalWireSourceIfMissing(items []types.GlobalWireSourceItem, source types.GlobalWireSourceItem) ([]types.GlobalWireSourceItem, bool) {
+	for _, item := range items {
+		if strings.TrimSpace(item.ContentID) == source.ContentID && source.ContentID != "" {
+			return items, false
+		}
+	}
+	return append(items, source), true
 }
 
 func (h *APIHandler) globalWireGraphUpdateCandidate(ownerID string, story types.GlobalWireStory, contribution types.GlobalWireContribution, decision types.GlobalWireReconciliationDecision) types.GlobalWireGraphUpdateCandidate {

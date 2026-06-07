@@ -121,3 +121,18 @@ type GlobalWireGraphUpdateCandidate struct {
 	CreatedAt        time.Time `json:"created_at,omitempty"`
 	UpdatedAt        time.Time `json:"updated_at,omitempty"`
 }
+
+// GlobalWireGraphPromotionDecision records the explicit platform review step
+// over a graph-update candidate. Promotion may apply a bounded StoryGraph
+// manifest change; rejection records review state only.
+type GlobalWireGraphPromotionDecision struct {
+	ID              string    `json:"id"`
+	OwnerID         string    `json:"owner_id,omitempty"`
+	CandidateID     string    `json:"candidate_id"`
+	StoryID         string    `json:"story_id"`
+	Decision        string    `json:"decision"`
+	Note            string    `json:"note"`
+	AppliedChange   string    `json:"applied_change"`
+	SourceContentID string    `json:"source_content_id,omitempty"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+}
