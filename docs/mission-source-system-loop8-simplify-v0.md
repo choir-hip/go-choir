@@ -2018,3 +2018,63 @@ staging proof:
   DOCX/PDF exports return binary signatures, and all rich exports expose the
   expected export metadata/source manifest through the moved export spine.
 ```
+
+## Loop 8 Publication Export Unreachable HTML Fallback Prune
+
+Status: `documented_before_code`.
+
+Next dead-path prune: remove the unreachable `html` branch inside
+`formatPublicationExportContent`. `normalizeExportFormat` can return `html`,
+but `buildPublicationExportBytes` handles the `html` case before dispatching to
+`formatPublicationExportContent`; the helper is reached only for text-like
+formats after DOCX, PDF, and rich HTML have already been selected.
+
+This is a behavior-preserving deletion. It must not change rich HTML rendering,
+export metadata, Markdown table normalization, text export, media types, or
+export policy enforcement. The value is small but direct: remove a misleading
+fallback that suggests HTML may be rendered through a generic text helper
+instead of the canonical `PublicationDocument`/profile path.
+
+evidence:
+
+```text
+rg evidence:
+  internal/platform/export_formats.go handles case "html" in
+  buildPublicationExportBytes before defaulting to formatPublicationExportContent.
+
+  formatPublicationExportContent is only called from that default branch.
+
+classification:
+  dead branch / shortcut residue inside the rich export spine.
+```
+
+acceptance:
+
+- `formatPublicationExportContent` handles only `md` and default text content;
+- `buildPublicationExportBytes` remains the single HTML dispatch point;
+- platform publication/export tests pass.
+
+local implementation/evidence:
+
+```text
+change:
+  Removed the unreachable html case from formatPublicationExportContent.
+  Rich HTML export remains handled by buildPublicationExportBytes before the
+  helper is called.
+
+line-count effect:
+  internal/platform/export_formats.go  87 lines
+
+local proof:
+  gofmt -w internal/platform/export_formats.go
+  git diff --check
+  result: passed
+
+  nix develop -c go test ./internal/platform -run
+  'TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestPublicationMarkdownExportNormalizesMalformedTableTailRows|TestPublishVTextCreatesImmutablePublicRecords|TestPublicationPublicSurfacesEnforceVisibilityPolicy'
+  -count=1 -v
+  result: passed
+
+  nix develop -c go test ./internal/platform ./internal/sourcecontract
+  result: passed
+```

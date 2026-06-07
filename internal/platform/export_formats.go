@@ -49,8 +49,6 @@ func formatPublicationExportContent(bundle *PublicationBundle, format string) st
 	case "md":
 		normalized, _ := markdownstructure.NormalizeTableShapedRows(content)
 		return normalized
-	case "html":
-		return renderPublicationHTML(buildPublicationDocument(bundle), defaultPublicationExportProfile())
 	default:
 		return content
 	}
