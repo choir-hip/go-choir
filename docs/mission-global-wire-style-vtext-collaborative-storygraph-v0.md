@@ -1874,3 +1874,96 @@ Next executable probe:
 - Fix the Global Wire contribution layout or button stacking so projection
   draft controls are normally clickable. Then rerun local build and deployed
   authenticated proof without force-clicking or direct DOM handler invocation.
+
+## Checkpoint - Projection Draft VText Slice Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+What shipped:
+
+- A promoted Global Wire graph candidate now creates durable
+  `GlobalWireProjectionReview` obligations for the story's Style.vtext
+  projections.
+- A reviewer can click `Draft VText` on a projection-review obligation to
+  create an ordinary editable VText draft. The review moves to `draft-created`
+  and records `draft_story_doc_id`.
+- The draft is appagent-authored, citation-rich, linked through
+  `global-wire/projection-drafts/<review-id>.vtext`, and explicitly says it is
+  a review draft rather than platform publication.
+- The News app now exposes candidate and projection-review provenance
+  attributes for exact product-path proof, and the contribution list no longer
+  nests an internal scroll region that blocked normal clicks.
+- The authenticated proof returns to Global Wire through the owner-visible
+  window tray after opening the draft VText, then submits the Ask Choir handoff.
+
+Evidence:
+
+- Behavior commit:
+  `73af4264daa838c47baab5560364b98ba2dca51a`.
+- Required predecessor implementation commit:
+  `9333ce595f465baa89f6fbfe497e1f9b8ac8f052`.
+- CI run `27083667554`: success, including frontend build, runtime shards,
+  Go vet/build, non-runtime tests, integration smoke, and staging deploy.
+- FlakeHub run `27083667576`: success.
+- Staging health at `2026-06-07T05:23:20Z` reported proxy and sandbox
+  `deployed_commit` =
+  `73af4264daa838c47baab5560364b98ba2dca51a`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  with 1 passed.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  and `npm run build` in `frontend/`.
+
+Invariants preserved:
+
+- Every story/projection artifact created here is a normal editable VText.
+- User edits and user contributions remain owner-scoped artifacts and do not
+  mutate platform stories.
+- Platform StoryGraph mutation still happens only through explicit graph
+  candidate promotion.
+- Style.vtext remains a citeable source artifact on projection-review
+  obligations; it is not hidden app configuration.
+- News remains non-oracle and provenance-rich: the proof traverses source
+  content, contribution, reconciliation decision, graph candidate, promotion,
+  projection review, draft VText, and Ask Choir prompt context.
+- Graph nodes remain story headlines with source-neighborhood semantics.
+- The app renders the core Global Wire views in Future Noir, Carbon Kintsugi,
+  and London Salmon.
+
+Belief-state update:
+
+- The current ship-worthy slice covers this low-resolution but real product
+  loop:
+  source evidence -> user-owned contribution -> research/reconciliation queue
+  -> graph candidate -> promotion -> projection-review obligation -> ordinary
+  ProjectionStory draft VText -> return to News app -> Ask Choir handoff.
+- The draft path is intentionally not automatic publication. It proves the
+  editable artifact and provenance topology needed before publication/update
+  semantics can be made honest.
+- Dirty staging data made ordering assumptions invalid; future proofs should
+  target exact ids from product responses instead of first visible records.
+
+Remaining error field:
+
+- Projection drafts do not yet revise or publish the platform ProjectionStory
+  relation.
+- There is no reviewer approval/publish/update-feed flow for a draft
+  projection.
+- Source refresh is still request-triggered and low-resolution, not a
+  scheduled ingestion worker.
+- No claim extraction, contradiction classifier, story clustering, front-page
+  prominence revision, or research reconciliation workbench exists yet.
+- Autoradio remains a prompt-bar/VText handoff rather than a dedicated audio
+  playback or scheduling subsystem.
+
+Next executable probe:
+
+- Add a reviewer-controlled projection draft review/publish path: open a
+  `draft-created` projection review, compare it against the current
+  ProjectionStory VText and Style.vtext source, approve/reject it, and on
+  approval create the next normal ProjectionStory VText revision or update-feed
+  candidate without mutating user-owned forks.
