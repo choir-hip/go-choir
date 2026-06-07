@@ -995,11 +995,43 @@ updates and delegated researcher/VText children produce publication-quality
 VTexts with appropriate Style.vtext sources, and how to surface that output in
 the clean newspaper UI without reviving the old busy panel/card design.
 
+2026-06-07 VText normalization finding:
+
+- Staging lifecycle evidence for SourceMaxx cycle
+  `cycle_620122d38e3a67282f74b420` proves source volume and shared-harness
+  processor/reconciler execution, but it does not prove canonical article
+  ownership by VText.
+- Direct Node B runtime evidence for reconciler run
+  `e04814e0-c8ce-458b-9a81-0254808ec53a` shows `spawn_agent role=vtext`
+  returned generic child runs such as
+  `e347b4ea-3fe7-48fe-8939-c9d328cf2cb9`,
+  `ff329968-122a-4457-97be-439ffc595d2a`, and
+  `a6e65d64-7feb-4700-9116-87fb4c7c3504` on channel
+  `reconciler:story-corpus`, with agent ids that are UUIDs rather than
+  `vtext:<doc_id>` handles.
+- One child run explicitly reported the root symptom: it produced a complete
+  article but could not create the canonical document revision because
+  `edit_vtext` requires a `vtext_agent_revision` run. This confirms that
+  current processor/reconciler usage treats VText like a generic writer tool
+  instead of the durable owner of the article.
+- The normalized workflow must match prompt-bar VText topology: processors and
+  reconcilers may decide that a story or update is needed, but the runtime must
+  create/select a normal VText document, persist a source/brief seed revision,
+  start an existing VText agent revision run with `agent_id=vtext:<doc_id>`,
+  `channel_id=<doc_id>`, and `type=vtext_agent_revision`, and require the VText
+  agent to call `edit_vtext`. Article text in generic run results is not a
+  shipped story artifact.
+- The next code fix should add a first-class processor/reconciler affordance
+  for normal VText article/revision creation while preserving shared harness
+  mechanics and existing researcher/VText agents. It should not create a
+  parallel story table, a second writer role, or a special SourceMaxx-only
+  document owner.
+
 next executable delivery loop:
 
-1. Inspect the VText child outputs from the proven SourceMaxx cycle and identify
-   the concrete gap between current generated VTexts and publication-quality
-   story VTexts with citeable Style.vtext source selection/composition.
+1. Normalize processor/reconciler article requests into existing VText document
+   creation/revision flow so SourceMaxx articles become canonical VText
+   revisions, not generic child-run text.
 2. Keep processors and reconcilers on the shared runtime harness with
    profile-specific prompts/toolsets only. Do not create a separate processor
    service loop to mask lineage gaps.
