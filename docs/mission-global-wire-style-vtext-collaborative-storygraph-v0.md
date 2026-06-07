@@ -2586,3 +2586,95 @@ Next executable probe:
   standing review, or projection-revision follow-up. The News app should show
   these records in the research/reconciliation surface with citations and
   non-oracle status labels.
+
+## Checkpoint - Structured Claim/Research State Proven - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Artifact advanced:
+
+- Global Wire now has durable `GlobalWireClaimRecord` and
+  `GlobalWireResearchTask` records.
+- Candidate-producing source refreshes create provisional claim/research
+  artifacts linked to SourceItem, refresh run, contribution, reconciliation
+  decision, graph candidate, and StoryGraph headline node.
+- Claim records preserve non-oracle state: claim kind, uncertainty state,
+  dispute state, evidence gap, source standing, update classification, and
+  review status.
+- Research tasks preserve follow-up reviewer prompts and open/high-priority
+  task state without mutating platform stories.
+- `/api/global-wire/reconciliation` now returns `claim_records` and
+  `research_tasks`, and the News app reconciliation surface renders them under
+  the graph candidate that caused them.
+
+Evidence:
+
+- Problem-first documentation commit:
+  `2b0c5f0217b8cb16dc94a1430e2e138042a4749a`.
+- Behavior commit:
+  `77b44450bb98847197cc4740220bb3582adb6938`.
+- Local shaping proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  and `npm run build` in `frontend/`.
+- CI run `27084632043`: success, including runtime shards, Go vet/build,
+  non-runtime tests, integration smoke, frontend build, and staging deploy.
+- FlakeHub run `27084632040`: success.
+- Staging health at `2026-06-07T06:13:49Z` reported proxy and sandbox
+  `deployed_commit` =
+  `77b44450bb98847197cc4740220bb3582adb6938`.
+- Public deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium`
+  with 4 passed and 1 auth-gated skip.
+- Authenticated deployed owner proof passed:
+  `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js --project=chromium --grep "owner-scoped"`
+  with 1 passed. The proof exercises source refresh and, when a candidate is
+  produced, checks `claim_record`, `research_task`, and reconciliation-list
+  visibility.
+
+Invariants preserved:
+
+- Source refresh remains non-mutating: it creates review artifacts and graph
+  candidates, not platform story rewrites.
+- Claim records are provisional and explicitly carry uncertainty/dispute/evidence
+  gap state.
+- User-owned contributions still do not mutate platform stories.
+- Projection review remains separate from graph-candidate promotion.
+- News remains provenance-rich and non-oracle: the new records cite SourceItem,
+  refresh, contribution, decision, candidate, and StoryGraph context.
+- Graph nodes remain Story VText headlines; claims and tasks are overlays and
+  reconciliation artifacts, not replacement graph nodes.
+- The required theme views continue to pass on staging.
+
+Belief-state update:
+
+- The product slice now supports structured claim/research state tied to the
+  source-refresh classification path:
+  Source Service evidence -> SourceItem -> refresh classification ->
+  contribution/decision/candidate -> provisional claim record -> research task
+  -> reconciliation surface.
+- This closes the narrow gap where claim and research state were only strings or
+  implicit candidate labels.
+- It is still low-resolution: extraction is heuristic, records are generated
+  from classification and source metadata rather than a full claim parser, and
+  research tasks do not yet have a dedicated worker/reviewer lifecycle.
+
+Remaining error field:
+
+- There is still no scheduled 24/7 source registry/fetch-cycle worker.
+- Claim/event/entity extraction is durable enough to queue review, but not yet
+  a rich structured claim model with entity/event/timeline normalization.
+- Style.vtext composition/replacement is proven, but not yet a full style
+  revision workflow with forks, merge conflict handling, permissions, or
+  publication review.
+- Research tasks exist, but there is not yet a dedicated researcher work queue
+  with assignment, worker evidence packets, completion, or reconciliation merge.
+- There is no dedicated publication/update-feed/newsletter queue.
+- Autoradio remains a prompt-bar/VText handoff rather than a dedicated audio
+  playback or scheduling subsystem.
+
+Next executable probe:
+
+- Highest-value next realism axis is scheduled/source-registry ingestion:
+  create a low-resolution source registry and bounded fetch-cycle record that
+  can run over story neighborhoods, produce SourceItems/source-refresh runs, and
+  leave durable scheduler/fetch evidence without claiming a full 24/7 newsroom.
