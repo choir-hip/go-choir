@@ -2331,7 +2331,7 @@ staging proof:
 
 ## Loop 8 Frontend Publication Context Helper Extraction Target
 
-Status: `documented_before_code`.
+Status: `implemented_staging_proven`.
 
 Next frontend simplification target: move pure published-context and
 published-derivative helper logic out of `frontend/src/lib/VTextEditor.svelte`
@@ -2395,4 +2395,30 @@ local proof:
   corrected result: 1 passed. The proof exercised publish-menu visibility,
   hidden policy copy, explicit publish payload forwarding, and publish-result
   display against the locally changed VText bundle.
+```
+
+deployment/evidence:
+
+```text
+source commit:
+  f32d7ff3c04d2a835fb5bd03cb979554c553f0c0
+  frontend: extract vtext publication context helpers
+
+CI/deploy:
+  GitHub Actions CI 27078647486 passed.
+  FlakeHub publish 27078647472 passed.
+  Node B deploy job 79920470864 passed.
+  /health reported deployed_commit
+  f32d7ff3c04d2a835fb5bd03cb979554c553f0c0, deployed_at
+  2026-06-07T01:02:10Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000
+  npm --prefix frontend run e2e --
+  tests/vtext-authoring-history.spec.js -g "publish keeps policy"
+
+  result: 1 passed. The deployed proof exercised the publish menu/result path
+  now using helpers from frontend/src/lib/vtext-publication-context.ts: menu
+  visibility, hidden low-value policy text, explicit access/export policy
+  payload forwarding, publish-result display, and public route handling.
 ```
