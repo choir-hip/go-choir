@@ -401,3 +401,51 @@ Remaining error field: decide whether the first code slice should introduce a
 dedicated backend StoryGraph API immediately, or first ship a frontend
 product-surface slice that uses existing VText APIs for owner-owned artifacts
 and records the missing durable StoryGraph API as residual risk.
+
+## Spec Coverage Audit - 2026-06-07 Overnight Resume
+
+Current authoritative state at resume: commit `82e80dd1` contains the deployed
+Global Wire frontend slice and this overnight delivery mission rewrite. The
+worktree is clean.
+
+Coverage map against
+`docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md`:
+
+- **SourceItem:** partially present in Source Service/sourcecycled
+  (`cmd/sourcecycled`, `internal/sources`, `internal/cycle`) and VText source
+  refs, but Global Wire does not yet consume Source Service items as product
+  data. Undelivered: browser-public/global-wire SourceItem contract and story
+  source normalization in the News app path.
+- **StoryGraph:** only represented as seeded frontend records in
+  `frontend/src/lib/GlobalWireApp.svelte`. Undelivered: durable backend
+  StoryGraph object with source manifest, claims, related Story VText refs,
+  edges, timeline, prominence/freshness, and contribution queue refs.
+- **Story VText:** normal VText launch/fork behavior is proven through existing
+  VText APIs and staging ownership proof. Undelivered: platform Story VTexts
+  linked to durable StoryGraph records and source/style citations as backend
+  state.
+- **Style.vtext:** style sources open as ordinary VTexts from frontend-seeded
+  content. Undelivered: citeable style source refs on projections,
+  replacement/composition records, and durable relation from projection to
+  `Style.vtext`.
+- **Story Projection:** seeded projection strings exist. Undelivered: backend
+  projection relation `StoryGraph + Style.vtext + context -> Story VText`
+  preserving evidence while changing salience/framing.
+- **Collaboration/contribution:** signed-in contribution creates owner-scoped
+  VTexts. Undelivered: durable contribution/research queue linked to the
+  StoryGraph and reconciliation-ready records.
+- **News app views:** frontend has front page, story reader, evidence, graph,
+  style switcher, and contribution controls. Undelivered: durable data backing,
+  explicit Autoradio/Ask hooks, source/claim/timeline overlays, and richer
+  required view semantics.
+- **Graph semantics:** current graph uses headline nodes, recency-ish tone, and
+  prominence sizing from seeded data. Undelivered: durable edge semantics,
+  source-neighborhood computation, overlays, and tension/source-quality badges.
+- **Themes:** public deployed proof covers all three themes for the current
+  surface. Must be repeated after backend/data changes.
+
+Route choice: the next implementation should introduce a small durable Global
+Wire backend contract rather than adding more UI-only detail. Seeded frontend
+records may remain only as logged-out/public-preview fallback; signed-in and
+runtime product paths should load StoryGraph-shaped records from the backend
+and write contribution records through that contract.
