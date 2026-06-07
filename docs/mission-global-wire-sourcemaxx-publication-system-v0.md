@@ -919,6 +919,34 @@ belief-state changes:
   request-serving VM sandbox. The product route can therefore fetch SourceMaxx
   cycle summaries while still lacking the remote runtime resolver it needs to
   walk submitted agent run IDs.
+- Commit `79a57893c59d8dc5c59e0a8054f5573cc4a5a3c7` passed local focused
+  VM/runtime tests, CI run `27097492636`, FlakeHub run `27097492643`, and Node
+  B deploy. Staging `/health` reported proxy and sandbox commit
+  `79a57893c59d8dc5c59e0a8054f5573cc4a5a3c7`, `status: ok`, and
+  `vmctl_status: ok` at deployed_at `2026-06-07T15:59:18Z`.
+- Product-path authenticated public API proof still reported unresolved runtime
+  lifecycle counts for the fresh post-deploy cycle
+  `cycle_620122d38e3a67282f74b420`: 500 SourceItems, 14 fetches, 10 processor
+  requests, 1 reconciler request, 7 processor runtime IDs, 1 reconciler runtime
+  ID, and all 8 runtime IDs unresolved. A fresh synthetic owner
+  `sourcemaxx-probe-1780848559` received the same unresolved counts, proving
+  this was not only stale pre-deploy VM state.
+- Node B vmctl evidence for that fresh owner showed a current VM
+  `vm-bbc9d650d34598678cfa7f72ed8ac8aa` at sandbox URL
+  `http://10.202.142.2:8085`, running commit `79a57893`. Its Firecracker boot
+  args included `choir.source_service_runtime_url=http://10.202.142.1:8085`
+  and `choir.source_service_runtime_owner_id=global-wire-platform`. Direct Node
+  B runtime lookup of one submitted processor run
+  `56affd8b-d443-4897-a1ee-166945bcf360` returned HTTP 200 with
+  `agent_profile: processor`, `state: running`, and
+  `request_source: sourcecycled`.
+- Root cause is now identified: VM guests receive the right runtime lifecycle
+  URL, but `tapReachableHostServicePorts()` admits/DNATs only host ports 8083,
+  8084, 8087, and 8787. It does not include 8085, so guest sandboxes can reach
+  the source-service summary on 8787 but cannot reach the host sandbox runtime
+  lifecycle endpoint on 8085. The next code fix should add 8085 as a
+  tap-reachable host service only for this internal runtime lifecycle evidence
+  path, with tests documenting that this is not browser-public exposure.
 
 remaining error field:
 
@@ -929,9 +957,9 @@ remaining error field:
   post-fix shared-harness tool loops; clean-cycle internal evidence shows
   processor `submit_coagent_update` and researcher/VText-capable delegation
   calls, but browser-visible product status still cannot resolve detailed
-  lifecycle events from request-serving VM sandboxes because runtime lifecycle
-  URL wiring appears incomplete; publication-quality VText production remains
-  incomplete;
+  lifecycle events from request-serving VM sandboxes because host tap networking
+  does not yet admit the runtime lifecycle port 8085; publication-quality VText
+  production remains incomplete;
 - deploys can interrupt active SourceMaxx runs because gateway/sandbox restart
   while processor/reconciler loops are mid-inference; provider 429 pressure was
   also observed under the current dispatch volume;
@@ -942,11 +970,11 @@ remaining error field:
   newsletter, and Autoradio endpoints that should be audited before further
   product exposure.
 
-highest-impact remaining uncertainty: whether the request-serving product
-sandbox receives a VM-reachable runtime lifecycle URL/owner for the same runtime
-endpoint that accepted SourceMaxx processor/reconciler submissions, then whether
-the produced processor/reconciler updates and delegated researcher/VText
-children are good enough to create publication-quality VTexts with appropriate
+highest-impact remaining uncertainty: whether adding host sandbox runtime port
+8085 to the tap-reachable service allowlist lets request-serving VM sandboxes
+resolve SourceMaxx processor/reconciler lifecycle evidence, then whether the
+produced processor/reconciler updates and delegated researcher/VText children
+are good enough to create publication-quality VTexts with appropriate
 Style.vtext sources.
 
 next executable delivery loop:
