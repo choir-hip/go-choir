@@ -183,6 +183,7 @@
   let publicationDeliveries = [];
   let autoradioScripts = [];
   let deliveryExports = [];
+  let publicLinks = [];
   let publicationFeedItems = [];
   let publicationFeedStatus = '';
   let publicationDeliveryDetail = null;
@@ -235,6 +236,7 @@
       publicationDeliveries = [];
       autoradioScripts = [];
       deliveryExports = [];
+      publicLinks = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
@@ -293,6 +295,7 @@
       publicationDeliveries = Array.isArray(payload.publication_deliveries) ? payload.publication_deliveries : [];
       autoradioScripts = Array.isArray(payload.autoradio_scripts) ? payload.autoradio_scripts : [];
       deliveryExports = Array.isArray(payload.delivery_exports) ? payload.delivery_exports : [];
+      publicLinks = Array.isArray(payload.public_links) ? payload.public_links : [];
       projectionReviews = Array.isArray(payload.projection_reviews) ? payload.projection_reviews : [];
       await loadPublicationFeed(storyId);
       await loadFetchCycles(storyId);
@@ -316,6 +319,7 @@
       publicationDeliveries = [];
       autoradioScripts = [];
       deliveryExports = [];
+      publicLinks = [];
       publicationFeedItems = [];
       publicationFeedStatus = '';
       publicationDeliveryDetail = null;
@@ -934,6 +938,11 @@
     return deliveryExports.find((item) => item.delivery_id === id);
   }
 
+  function publicLinkForExport(deliveryExport) {
+    const id = deliveryExport?.id || '';
+    return publicLinks.find((item) => item.export_id === id);
+  }
+
   function selectedPublicationFeedItem() {
     return publicationFeedItems.find((item) => item.story?.id === selectedStory.id || item.artifact?.story_id === selectedStory.id);
   }
@@ -1205,6 +1214,33 @@
       await loadContributions(selectedStory.id);
     } catch (error) {
       contributionStatus = error?.message || 'Delivery export failed';
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
+  async function createPublicLink(deliveryExport) {
+    if (!authenticated || !deliveryExport?.id) return;
+    reconciliationBusyId = `${deliveryExport.id}:public-link`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/publication-public-links', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          export_id: deliveryExport.id,
+        }),
+      });
+      if (!response.ok) throw new Error(`Public link failed: ${response.status}`);
+      const payload = await response.json();
+      publicLinks = [payload.public_link, ...publicLinks.filter((item) => item.id !== payload.public_link?.id)]
+        .filter(Boolean)
+        .slice(0, 30);
+      contributionStatus = `Public link ${payload.public_link?.status || 'created'}`;
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || 'Public link failed';
     } finally {
       reconciliationBusyId = '';
     }
@@ -1716,6 +1752,7 @@
               {@const delivery = publicationDeliveryForArtifact(item.artifact)}
               {@const autoradioScript = autoradioScriptForArtifact(item.artifact)}
               {@const deliveryExport = deliveryExportForDelivery(delivery)}
+              {@const publicLink = publicLinkForExport(deliveryExport)}
               <article
                 data-global-wire-publication-feed-item
                 data-global-wire-publication-feed-artifact-id={item.artifact.id}
@@ -1761,6 +1798,14 @@
                         export format: {deliveryExport.format} · citations: {deliveryExport.citation_count} · rollback refs: {deliveryExport.rollback_count}
                       </small>
                     </div>
+                    {#if publicLink}
+                      <small
+                        data-global-wire-public-link
+                        data-global-wire-public-link-id={publicLink.id}
+                      >
+                        {publicLink.status}: {publicLink.route_path}
+                      </small>
+                    {/if}
                   {/if}
                   <div class="publication-feed-actions">
                     <button
@@ -1789,6 +1834,16 @@
                         data-global-wire-create-delivery-export
                       >
                         Export
+                      </button>
+                    {/if}
+                    {#if deliveryExport && !publicLink}
+                      <button
+                        type="button"
+                        on:click={() => createPublicLink(deliveryExport)}
+                        disabled={reconciliationBusyId === `${deliveryExport.id}:public-link`}
+                        data-global-wire-create-public-link
+                      >
+                        Publish
                       </button>
                     {/if}
                   </div>

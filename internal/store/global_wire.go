@@ -2576,6 +2576,111 @@ func (s *Store) GetGlobalWirePublicationDeliveryExport(ctx context.Context, owne
 	return scanGlobalWirePublicationDeliveryExport(row)
 }
 
+// CreateGlobalWirePublicationPublicLink stores an owner-created unlisted public
+// link for a single delivery export.
+func (s *Store) CreateGlobalWirePublicationPublicLink(ctx context.Context, rec types.GlobalWirePublicationPublicLink) (types.GlobalWirePublicationPublicLink, error) {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
+	rec.CreatedAt = now
+	if strings.TrimSpace(rec.Status) == "" {
+		rec.Status = "public-unlisted"
+	}
+	citationRefsJSON, err := json.Marshal(rec.CitationRefs)
+	if err != nil {
+		return types.GlobalWirePublicationPublicLink{}, fmt.Errorf("marshal global wire publication public link citation refs: %w", err)
+	}
+	rollbackRefsJSON, err := json.Marshal(rec.RollbackRefs)
+	if err != nil {
+		return types.GlobalWirePublicationPublicLink{}, fmt.Errorf("marshal global wire publication public link rollback refs: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO global_wire_publication_public_links (
+			owner_id, link_id, token, export_id, delivery_id, artifact_id,
+			story_id, status, route_path, title, export_body, citation_count,
+			rollback_count, citation_refs_json, rollback_refs_json, created_at,
+			updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.OwnerID,
+		rec.ID,
+		rec.Token,
+		rec.ExportID,
+		rec.DeliveryID,
+		rec.ArtifactID,
+		rec.StoryID,
+		rec.Status,
+		rec.RoutePath,
+		rec.Title,
+		rec.ExportBody,
+		rec.CitationCount,
+		rec.RollbackCount,
+		string(citationRefsJSON),
+		string(rollbackRefsJSON),
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.GlobalWirePublicationPublicLink{}, fmt.Errorf("create global wire publication public link: %w", err)
+	}
+	return rec, nil
+}
+
+// ListGlobalWirePublicationPublicLinks lists owner-created public links.
+func (s *Store) ListGlobalWirePublicationPublicLinks(ctx context.Context, ownerID, storyID string, limit int) ([]types.GlobalWirePublicationPublicLink, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := `SELECT owner_id, link_id, token, export_id, delivery_id,
+	                artifact_id, story_id, status, route_path, title,
+	                export_body, citation_count, rollback_count,
+	                citation_refs_json, rollback_refs_json, created_at,
+	                updated_at
+	           FROM global_wire_publication_public_links
+	          WHERE owner_id = ?`
+	args := []any{ownerID}
+	if strings.TrimSpace(storyID) != "" {
+		query += ` AND story_id = ?`
+		args = append(args, storyID)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.readDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list global wire publication public links: %w", err)
+	}
+	defer rows.Close()
+	var out []types.GlobalWirePublicationPublicLink
+	for rows.Next() {
+		rec, err := scanGlobalWirePublicationPublicLink(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate global wire publication public links: %w", err)
+	}
+	return out, nil
+}
+
+// GetGlobalWirePublicationPublicLinkByToken returns one unlisted public link.
+func (s *Store) GetGlobalWirePublicationPublicLinkByToken(ctx context.Context, token string) (types.GlobalWirePublicationPublicLink, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, link_id, token, export_id, delivery_id,
+		        artifact_id, story_id, status, route_path, title,
+		        export_body, citation_count, rollback_count, citation_refs_json,
+		        rollback_refs_json, created_at, updated_at
+		   FROM global_wire_publication_public_links
+		  WHERE token = ?`,
+		token,
+	)
+	return scanGlobalWirePublicationPublicLink(row)
+}
+
 // UpsertGlobalWireStoryProjection persists the durable projection relation.
 func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.GlobalWireStoryProjection) error {
 	now := rec.UpdatedAt
@@ -3520,6 +3625,54 @@ func scanGlobalWirePublicationDeliveryExport(row interface{ Scan(...any) error }
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWirePublicationDeliveryExport{}, fmt.Errorf("parse global wire publication delivery export updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWirePublicationPublicLink(row interface{ Scan(...any) error }) (types.GlobalWirePublicationPublicLink, error) {
+	var rec types.GlobalWirePublicationPublicLink
+	var citationRefsJSON, rollbackRefsJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.Token,
+		&rec.ExportID,
+		&rec.DeliveryID,
+		&rec.ArtifactID,
+		&rec.StoryID,
+		&rec.Status,
+		&rec.RoutePath,
+		&rec.Title,
+		&rec.ExportBody,
+		&rec.CitationCount,
+		&rec.RollbackCount,
+		&citationRefsJSON,
+		&rollbackRefsJSON,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWirePublicationPublicLink{}, ErrNotFound
+		}
+		return types.GlobalWirePublicationPublicLink{}, fmt.Errorf("scan global wire publication public link: %w", err)
+	}
+	if err := json.Unmarshal([]byte(citationRefsJSON), &rec.CitationRefs); err != nil {
+		return types.GlobalWirePublicationPublicLink{}, fmt.Errorf("unmarshal global wire publication public link citation refs: %w", err)
+	}
+	if err := json.Unmarshal([]byte(rollbackRefsJSON), &rec.RollbackRefs); err != nil {
+		return types.GlobalWirePublicationPublicLink{}, fmt.Errorf("unmarshal global wire publication public link rollback refs: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWirePublicationPublicLink{}, fmt.Errorf("parse global wire publication public link created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWirePublicationPublicLink{}, fmt.Errorf("parse global wire publication public link updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()

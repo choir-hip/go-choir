@@ -523,6 +523,26 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     }, deliveryExportPayload.export.id);
     expect(deliveryExportQueue.delivery_id).toBe(deliveryPayload.delivery.id);
     expect(deliveryExportQueue.rollback_refs).toContain(`publication_delivery:${deliveryPayload.delivery.id}`);
+    const publicLinkResponsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/global-wire/publication-public-links' && response.request().method() === 'POST'
+    );
+    await app.locator('[data-global-wire-create-public-link]').first().click();
+    const publicLinkResponse = await publicLinkResponsePromise;
+    expect(publicLinkResponse.status()).toBe(201);
+    const publicLinkPayload = await publicLinkResponse.json();
+    expect(publicLinkPayload.public_link.export_id).toBe(deliveryExportPayload.export.id);
+    expect(publicLinkPayload.public_link.status).toBe('public-unlisted');
+    expect(publicLinkPayload.public_link.route_path).toContain('/global-wire/publications/');
+    await expect(app.locator('[data-global-wire-public-link]').first()).toContainText('public-unlisted');
+    const publicRead = await page.evaluate(async (token) => {
+      const res = await fetch(`/api/global-wire/publication-public-links/${encodeURIComponent(token)}`);
+      const body = await res.json();
+      return { statusCode: res.status, body };
+    }, publicLinkPayload.public_link.token);
+    expect(publicRead.statusCode).toBe(200);
+    expect(publicRead.body.public_link.owner_id || '').toBe('');
+    expect(publicRead.body.public_link.export_id).toBe(deliveryExportPayload.export.id);
+    expect(publicRead.body.public_link.export_body).toContain(publicationArtifact.body.artifact.body);
   } else if (sourceRefresh.body.status === 'no-visible-change') {
     expect(sourceRefresh.body.content_item?.source_type).toBe('source_service_item');
     expect(sourceRefresh.body.refresh_run?.update_classification).toBe('no-visible-change');

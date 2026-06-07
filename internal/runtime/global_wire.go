@@ -115,6 +115,7 @@ type globalWireReconciliationResponse struct {
 	PublicationDeliveries []types.GlobalWirePublicationDelivery       `json:"publication_deliveries"`
 	AutoradioScripts      []types.GlobalWireAutoradioScript           `json:"autoradio_scripts"`
 	DeliveryExports       []types.GlobalWirePublicationDeliveryExport `json:"delivery_exports"`
+	PublicLinks           []types.GlobalWirePublicationPublicLink     `json:"public_links"`
 	ProjectionReviews     []types.GlobalWireProjectionReview          `json:"projection_reviews"`
 }
 
@@ -240,6 +241,15 @@ type globalWirePublicationDeliveryExportResponse struct {
 	Story      types.GlobalWireStory                     `json:"story"`
 	Script     *types.GlobalWireAutoradioScript          `json:"script,omitempty"`
 	SourceItem *types.ContentItem                        `json:"source_item,omitempty"`
+}
+
+type globalWirePublicationPublicLinkRequest struct {
+	ExportID string `json:"export_id"`
+}
+
+type globalWirePublicationPublicLinkResponse struct {
+	PublicLink types.GlobalWirePublicationPublicLink     `json:"public_link"`
+	Export     types.GlobalWirePublicationDeliveryExport `json:"export,omitempty"`
 }
 
 type globalWireReconciliationCreateRequest struct {
@@ -874,6 +884,11 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list delivery exports"})
 			return
 		}
+		publicLinks, err := h.rt.Store().ListGlobalWirePublicationPublicLinks(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list public links"})
+			return
+		}
 		projectionReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, storyID, 100)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list projection reviews"})
@@ -896,6 +911,7 @@ func (h *APIHandler) HandleGlobalWireReconciliation(w http.ResponseWriter, r *ht
 			PublicationDeliveries: publicationDeliveries,
 			AutoradioScripts:      autoradioScripts,
 			DeliveryExports:       deliveryExports,
+			PublicLinks:           publicLinks,
 			ProjectionReviews:     projectionReviews,
 		})
 	case http.MethodPost:
@@ -1604,6 +1620,85 @@ func (h *APIHandler) HandleGlobalWirePublicationDeliveryExports(w http.ResponseW
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
+}
+
+// HandleGlobalWirePublicationPublicLinks lets an owner create/list unlisted
+// read-only public links for delivery exports.
+func (h *APIHandler) HandleGlobalWirePublicationPublicLinks(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		storyID := strings.TrimSpace(r.URL.Query().Get("story_id"))
+		links, err := h.rt.Store().ListGlobalWirePublicationPublicLinks(r.Context(), ownerID, storyID, 100)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list public links"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, map[string]any{
+			"public_links": links,
+		})
+	case http.MethodPost:
+		var req globalWirePublicationPublicLinkRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid public link request"})
+			return
+		}
+		req.ExportID = strings.TrimSpace(req.ExportID)
+		if req.ExportID == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "export_id is required"})
+			return
+		}
+		link, export, err := h.createGlobalWirePublicationPublicLink(r, ownerID, req)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "delivery export not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create public link"})
+			return
+		}
+		writeAPIJSON(w, http.StatusCreated, globalWirePublicationPublicLinkResponse{
+			PublicLink: link,
+			Export:     export,
+		})
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
+// HandleGlobalWirePublicationPublicLinkDetail returns a single unlisted public
+// publication export by token. It intentionally does not expose owner queues.
+func (h *APIHandler) HandleGlobalWirePublicationPublicLinkDetail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	token := strings.TrimPrefix(r.URL.Path, "/api/global-wire/publication-public-links/")
+	token = strings.Trim(strings.TrimSpace(token), "/")
+	if token == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "public link not found"})
+		return
+	}
+	link, err := h.rt.Store().GetGlobalWirePublicationPublicLinkByToken(r.Context(), token)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "public link not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load public link"})
+		return
+	}
+	link.OwnerID = ""
+	link.Token = token
+	writeAPIJSON(w, http.StatusOK, globalWirePublicationPublicLinkResponse{
+		PublicLink: link,
+	})
 }
 
 func normalizeGlobalWireReconciliationDecision(value string) string {
@@ -3292,6 +3387,38 @@ func (h *APIHandler) createGlobalWirePublicationDeliveryExport(r *http.Request, 
 		return types.GlobalWirePublicationDeliveryExport{}, types.GlobalWirePublicationDelivery{}, types.GlobalWirePublicationArtifact{}, types.GlobalWireStory{}, nil, nil, err
 	}
 	return export, delivery, artifact, story, script, sourceItem, nil
+}
+
+func (h *APIHandler) createGlobalWirePublicationPublicLink(r *http.Request, ownerID string, req globalWirePublicationPublicLinkRequest) (types.GlobalWirePublicationPublicLink, types.GlobalWirePublicationDeliveryExport, error) {
+	export, err := h.rt.Store().GetGlobalWirePublicationDeliveryExport(r.Context(), ownerID, req.ExportID)
+	if err != nil {
+		return types.GlobalWirePublicationPublicLink{}, types.GlobalWirePublicationDeliveryExport{}, err
+	}
+	token := strings.ReplaceAll(uuid.NewString(), "-", "")
+	linkID := "global-wire-public-link-" + uuid.NewString()
+	routePath := "/global-wire/publications/" + token
+	rollbackRefs := appendStringIfMissing(export.RollbackRefs, "delivery_export:"+export.ID)
+	link, err := h.rt.Store().CreateGlobalWirePublicationPublicLink(r.Context(), types.GlobalWirePublicationPublicLink{
+		ID:            linkID,
+		OwnerID:       ownerID,
+		Token:         token,
+		ExportID:      export.ID,
+		DeliveryID:    export.DeliveryID,
+		ArtifactID:    export.ArtifactID,
+		StoryID:       export.StoryID,
+		Status:        "public-unlisted",
+		RoutePath:     routePath,
+		Title:         export.Title,
+		ExportBody:    export.ExportBody,
+		CitationCount: export.CitationCount,
+		RollbackCount: len(rollbackRefs),
+		CitationRefs:  export.CitationRefs,
+		RollbackRefs:  rollbackRefs,
+	})
+	if err != nil {
+		return types.GlobalWirePublicationPublicLink{}, types.GlobalWirePublicationDeliveryExport{}, err
+	}
+	return link, export, nil
 }
 
 func (h *APIHandler) globalWirePublicationArtifactProjectionReviews(r *http.Request, ownerID string, update types.GlobalWirePublicationUpdate) ([]types.GlobalWireProjectionReview, error) {

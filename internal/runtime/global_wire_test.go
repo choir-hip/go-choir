@@ -772,6 +772,38 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("delivery export missing from list: %+v", exportListResp)
 	}
 
+	linkBody := fmt.Sprintf(`{"export_id":%q}`, exportResp.Export.ID)
+	linkW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-public-links", linkBody, "user-alpha")
+	if linkW.Code != http.StatusCreated {
+		t.Fatalf("public link status = %d body=%s", linkW.Code, linkW.Body.String())
+	}
+	var linkResp globalWirePublicationPublicLinkResponse
+	if err := json.NewDecoder(linkW.Body).Decode(&linkResp); err != nil {
+		t.Fatalf("decode public link response: %v", err)
+	}
+	if linkResp.PublicLink.ExportID != exportResp.Export.ID ||
+		linkResp.PublicLink.Status != "public-unlisted" ||
+		linkResp.PublicLink.RoutePath == "" ||
+		linkResp.PublicLink.Token == "" ||
+		!strings.Contains(linkResp.PublicLink.ExportBody, artifactResp.Artifact.Body) ||
+		!slices.Contains(linkResp.PublicLink.RollbackRefs, "delivery_export:"+exportResp.Export.ID) {
+		t.Fatalf("public link missing export provenance: %+v", linkResp)
+	}
+	publicLinkW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/publication-public-links/"+linkResp.PublicLink.Token, "", "")
+	if publicLinkW.Code != http.StatusOK {
+		t.Fatalf("public link detail status = %d body=%s", publicLinkW.Code, publicLinkW.Body.String())
+	}
+	var publicLinkResp globalWirePublicationPublicLinkResponse
+	if err := json.NewDecoder(publicLinkW.Body).Decode(&publicLinkResp); err != nil {
+		t.Fatalf("decode public link detail response: %v", err)
+	}
+	if publicLinkResp.PublicLink.ID != linkResp.PublicLink.ID ||
+		publicLinkResp.PublicLink.OwnerID != "" ||
+		publicLinkResp.PublicLink.ExportID != exportResp.Export.ID ||
+		!strings.Contains(publicLinkResp.PublicLink.ExportBody, artifactResp.Artifact.Body) {
+		t.Fatalf("public link detail leaked or lost fields: %+v", publicLinkResp)
+	}
+
 	publicationListW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/reconciliation?story_id=story-supply-resilience", "", "user-alpha")
 	if publicationListW.Code != http.StatusOK {
 		t.Fatalf("list reconciliation after publication package status = %d body=%s", publicationListW.Code, publicationListW.Body.String())
@@ -792,8 +824,10 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		len(publicationListResp.AutoradioScripts) != 1 ||
 		publicationListResp.AutoradioScripts[0].ArtifactID != artifactResp.Artifact.ID ||
 		len(publicationListResp.DeliveryExports) != 1 ||
-		publicationListResp.DeliveryExports[0].DeliveryID != deliveryResp.Delivery.ID {
-		t.Fatalf("publication artifacts missing from reconciliation list: updates=%+v artifacts=%+v deliveries=%+v scripts=%+v exports=%+v", publicationListResp.PublicationUpdates, publicationListResp.PublicationArtifacts, publicationListResp.PublicationDeliveries, publicationListResp.AutoradioScripts, publicationListResp.DeliveryExports)
+		publicationListResp.DeliveryExports[0].DeliveryID != deliveryResp.Delivery.ID ||
+		len(publicationListResp.PublicLinks) != 1 ||
+		publicationListResp.PublicLinks[0].ExportID != exportResp.Export.ID {
+		t.Fatalf("publication artifacts missing from reconciliation list: updates=%+v artifacts=%+v deliveries=%+v scripts=%+v exports=%+v links=%+v", publicationListResp.PublicationUpdates, publicationListResp.PublicationArtifacts, publicationListResp.PublicationDeliveries, publicationListResp.AutoradioScripts, publicationListResp.DeliveryExports, publicationListResp.PublicLinks)
 	}
 
 	storiesTaskAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")

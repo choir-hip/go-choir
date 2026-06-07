@@ -366,6 +366,28 @@ type GlobalWirePublicationDeliveryExport struct {
 	UpdatedAt       time.Time `json:"updated_at,omitempty"`
 }
 
+// GlobalWirePublicationPublicLink is an owner-created unlisted read-only public
+// reference to one delivery export.
+type GlobalWirePublicationPublicLink struct {
+	ID            string    `json:"id"`
+	OwnerID       string    `json:"owner_id,omitempty"`
+	Token         string    `json:"token,omitempty"`
+	ExportID      string    `json:"export_id"`
+	DeliveryID    string    `json:"delivery_id"`
+	ArtifactID    string    `json:"artifact_id"`
+	StoryID       string    `json:"story_id"`
+	Status        string    `json:"status"`
+	RoutePath     string    `json:"route_path"`
+	Title         string    `json:"title"`
+	ExportBody    string    `json:"export_body"`
+	CitationCount int       `json:"citation_count"`
+	RollbackCount int       `json:"rollback_count"`
+	CitationRefs  []string  `json:"citation_refs"`
+	RollbackRefs  []string  `json:"rollback_refs"`
+	CreatedAt     time.Time `json:"created_at,omitempty"`
+	UpdatedAt     time.Time `json:"updated_at,omitempty"`
+}
+
 // GlobalWireSourceRegistryEntry records the owner-scoped source/query basis a
 // fetch cycle should use for one StoryGraph neighborhood.
 type GlobalWireSourceRegistryEntry struct {
