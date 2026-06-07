@@ -279,6 +279,20 @@ claim prose. Staging deploy was skipped because the aggregate Go gate failed.
 Next fix: update the test to assert the new provenance separation contract
 rather than restoring visible style-source claims.
 
+Deploy failure checkpoint 2026-06-07T21:23Z: pushed fix commit
+`573e45361a09ebc83b515ad49e31aa32531b7ebe` passed push CI run
+`27105097845`, but deploy was skipped because the head commit was test-only.
+Manual forced deploy run `27105154984` reran CI successfully and then failed
+the Node B staging deploy job `79992994427` while building the host NixOS
+closure. The failing derivation was `sourcecycled-0.1.0`; build output:
+`internal/sources/rss.go:14:2: cannot find module providing package
+golang.org/x/net/html/charset: import lookup disabled by -mod=vendor`.
+Root cause: the earlier RSS charset parser fix added an import that is present
+in `go.mod`/`go.sum` but missing from `vendor/`, while the Nix package build
+uses vendored modules. Next fix: regenerate/update `vendor/` for
+`golang.org/x/net` and verify the sourcecycled/Nix build path, then push and
+rerun CI/deploy.
+
 last checkpoint: 2026-06-07 user visual/product review confirmed the current
 Global Wire/VText output is wrong-object work: poor desktop typography,
 normal-width layout failure, mobile issues, article stubs, visible metadata,
