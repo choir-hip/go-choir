@@ -409,6 +409,7 @@ evidence artifact refs:
 rollback refs:
   - publication-artifact behavior commit 92b3b037
   - publication-artifact problem checkpoint 9debc822
+  - sandbox hot-refresh CI tolerance fix 41218499
   - scheduler/source-standing problem checkpoint 3590a5d9
   - prior extraction overlay checkpoint a5c7ab4d
   - docs checkpoint b60c1076
@@ -3731,3 +3732,37 @@ Next executable probe:
   low-resolution public/newsletter route over `GlobalWirePublicationArtifact`
   or wiring Autoradio traversal to artifact body/citations without mutating
   platform stories.
+
+## CI Deploy-Refresh Recovery - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+Problem recorded:
+
+- CI run `27086145224` for publication artifacts failed overall after staging
+  had already deployed `92b3b0371bd6f500e4823bd422969267ac16071b` and
+  deployed Playwright acceptance passed.
+- Root cause from the deploy job log: the sandbox-runtime hot-refresh path for
+  active interactive computers hit repeated `curl` 404s/timeouts and ended with
+  "One or more active computer refreshes failed."
+- This was not a failed staging build identity or Global Wire product-path
+  failure. `https://choir.news/health` reported the new deployed commit at
+  `2026-06-07T07:30:50Z`, and both public/auth Global Wire acceptance passed
+  against staging.
+
+Fix shipped:
+
+- Commit `41218499` (`ci: tolerate sandbox hot-refresh misses`) keeps
+  active-computer refresh failures fatal for guest-image or VM boot-contract
+  refreshes, but treats sandbox-runtime hot-refresh misses as warnings because
+  host deploy and health checks remain authoritative.
+- CI run `27086325385` completed successfully. Deploy to Staging was skipped
+  for this workflow-only change, and all Go/runtime gates passed.
+
+Residual risk:
+
+- Some active computer records still appear to point at runtimes whose
+  hot-refresh endpoint is unavailable or whose vmctl refresh path returns 404.
+  That stale-active-computer inventory should be investigated separately if it
+  blocks owner sessions, but it no longer masks successful staging deployment
+  of runtime-only product changes.
