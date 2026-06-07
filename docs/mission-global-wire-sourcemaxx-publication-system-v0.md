@@ -1,5 +1,13 @@
 # Mission: Global Wire SourceMaxx Newsroom Runtime
 
+> **Superseded active target:** Do not use this as the current execution
+> mission. User review on 2026-06-07 rejected "SourceMaxx" as a product name
+> and clarified that the real priority is broad source ingestion in many
+> languages plus VText-native article ownership/transclusion. Use
+> `docs/mission-global-wire-broad-source-vtext-newsroom-v0.md` and
+> `docs/choir-global-wire-broad-source-vtext-newsroom-spec-2026-06-07.md`
+> for the active mission/spec. This file remains historical evidence.
+
 **Status:** ambitious MissionGradient delivery mission after architecture and
 design-language correction.
 **Requirements contract:** `docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md`  

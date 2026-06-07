@@ -1,5 +1,13 @@
 # Choir Global Wire / Style.vtext Newsroom Runtime Spec - 2026-06-07
 
+> **Superseded active target:** This spec is retained as historical context.
+> The active architecture after the 2026-06-07 user review is
+> `docs/choir-global-wire-broad-source-vtext-newsroom-spec-2026-06-07.md`.
+> The correction removes "SourceMaxx" as a product name, makes broad
+> multilingual source ingestion priority #1, clarifies that VText agents own
+> articles, rejects article stubs as finished articles, and requires
+> source/related-VText transclusion rather than flat lists.
+
 **Status:** product/architecture spec for SourceMaxx Global Wire and
 publication-quality `Style.vtext`.
 **Scope:** high-volume source ingestion, long-running processors,
