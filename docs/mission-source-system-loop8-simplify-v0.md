@@ -2328,3 +2328,71 @@ staging proof:
   projected by frontend/src/lib/vtext-source-diagnosis.ts through the deployed
   VTextEditor.svelte source panel path.
 ```
+
+## Loop 8 Frontend Publication Context Helper Extraction Target
+
+Status: `documented_before_code`.
+
+Next frontend simplification target: move pure published-context and
+published-derivative helper logic out of `frontend/src/lib/VTextEditor.svelte`
+into a focused TypeScript helper module. After publication result and source
+diagnosis extractions, `VTextEditor.svelte` still owns deterministic
+publication shaping that is not UI orchestration: publication title fallback,
+public URL derivation, current route selection, published transclusion
+reference construction, private derivative starter content, and citation
+payload construction for proposals against a published source.
+
+This is a behavior-preserving extraction. It must not change publish API
+payloads, publish menu/result UI, proposal submission, public URL behavior,
+published-reader mode, source transclusion metadata, export/download calls, or
+Source Viewer/Web Lens launch behavior. The editor should keep side effects,
+auth dispatch, save status, API calls, and document state mutation; the helper
+module should own only pure projection from publication bundle/result/context
+objects to VText-ready data.
+
+acceptance:
+
+- `frontend/src/lib/vtext-publication-context.ts` owns pure publication title,
+  public URL, route, transclusion reference, derivative content, and citation
+  payload helpers;
+- `VTextEditor.svelte` imports those helpers and no longer defines the local
+  pure publication-context helpers;
+- frontend build passes;
+- focused publication UI/proposal or source publication tests pass locally;
+- no backend, export renderer, source contract, SSRF policy, or publication
+  access-policy behavior changes.
+
+local implementation/evidence:
+
+```text
+change:
+  Extracted titleForPublishedBundle, publicURLForPublishResult,
+  currentPublicationRoute, buildPublishedTransclusionRef,
+  derivativeContentForPublished, and publishedCitationPayload into
+  frontend/src/lib/vtext-publication-context.ts. VTextEditor.svelte still owns
+  publish/proposal side effects, auth dispatch, API calls, document mutation,
+  save status, and UI event wiring.
+
+line-count effect:
+  frontend/src/lib/VTextEditor.svelte              2672 lines
+  frontend/src/lib/vtext-publication-context.ts      70 lines
+
+local proof:
+  git diff --check
+  result: passed.
+
+  npm --prefix frontend run build
+  result: passed.
+
+  npm --prefix frontend run e2e --
+  tests/vtext-authoring-history.spec.js -g "publish keeps policy"
+  result: first attempt failed because no local service listened on
+  localhost:4173. The local service stack needed to stay alive in foreground
+  under this execution environment:
+
+  CHOIR_SERVICES_FOREGROUND=1 nix develop -c ./start-services.sh
+
+  corrected result: 1 passed. The proof exercised publish-menu visibility,
+  hidden policy copy, explicit publish payload forwarding, and publish-result
+  display against the locally changed VText bundle.
+```

@@ -65,13 +65,19 @@
     explicitPublishExportPolicy,
     markdownTableBlockCount,
     nextVersionNumber as computeNextVersionNumber,
-    publicURLForPublishResult as derivePublicURLForPublishResult,
     revisionVersionNumber,
     shortHash,
     sortRevisionsChronologically,
-    truncateText,
     versionLabelForRevision,
   } from './vtext-editor-state';
+  import {
+    buildPublishedTransclusionRef as buildPublishedTransclusionRefFromContext,
+    currentPublicationRoute as deriveCurrentPublicationRoute,
+    derivativeContentForPublished,
+    publicURLForPublishResult as derivePublicationPublicURL,
+    publishedCitationPayload as publishedCitationPayloadFromContext,
+    titleForPublishedBundle,
+  } from './vtext-publication-context';
   import './vtext-source-flow.css';
 
   export let currentUser = null;
@@ -437,12 +443,8 @@
     return metadata;
   }
 
-  function titleForPublishedBundle(bundle = publishedBundle) {
-    return bundle?.publication?.title || 'Published VText';
-  }
-
   function publicURLForPublishResult(result = publishResult) {
-    return derivePublicURLForPublishResult(result, typeof window === 'undefined' ? '' : window.location?.origin || '');
+    return derivePublicationPublicURL(result, typeof window === 'undefined' ? '' : window.location?.origin || '');
   }
 
   function buildExplicitPublishAccessPolicy() {
@@ -507,45 +509,11 @@
   }
 
   function buildPublishedTransclusionRef(bundle = publishedBundle) {
-    if (!bundle?.publication?.id || !bundle?.version?.id) return null;
-    const firstSpan = bundle.retrieval?.spans?.[0] || null;
-    const firstBlock = bundle.artifact?.render_model?.[0] || null;
-    const selector = firstSpan?.selector || {
-      kind: 'document',
-      route_path: bundle.route?.path || publishedRoutePath || appContext.publishedRoutePath || '',
-    };
-    return {
-      source_kind: firstSpan?.id ? 'published_vtext_span' : 'publication_version',
-      publication_id: bundle.publication.id,
-      publication_version_id: bundle.version.id,
-      span_id: firstSpan?.id || firstBlock?.span_id || '',
-      content_hash: bundle.version?.content_hash || '',
-      selector,
-      snapshot_text: truncateText(firstSpan?.snippet || firstBlock?.text || bundle.artifact?.content || '', 720),
-    };
-  }
-
-  function derivativeContentForPublished(bundle = publishedBundle) {
-    const title = titleForPublishedBundle(bundle);
-    const source = String(bundle?.artifact?.content || '').trim();
-    const quoted = (source || 'Blank published VText.')
-      .split(/\r?\n/)
-      .map((line) => `> ${line}`)
-      .join('\n');
-    return `# My version of ${title}\n\n${quoted}\n\n## Notes\n\n`;
+    return buildPublishedTransclusionRefFromContext(bundle, { publishedRoutePath, appContext });
   }
 
   function publishedCitationPayload(ref) {
-    if (!ref) return [];
-    return [{
-      kind: 'published_vtext_span',
-      title: titleForPublishedBundle(),
-      publication_id: ref.publication_id,
-      publication_version_id: ref.publication_version_id,
-      span_id: ref.span_id,
-      content_hash: ref.content_hash,
-      selector: ref.selector,
-    }];
+    return publishedCitationPayloadFromContext(ref, publishedBundle);
   }
 
   function requestPublishedEditAuth() {
@@ -1598,7 +1566,7 @@
   }
 
   function currentPublicationRoute() {
-    return publishResult?.route_path || publishedBundle?.route?.path || publishedRoutePath || appContext?.publishedRoutePath || '';
+    return deriveCurrentPublicationRoute({ publishResult, publishedBundle, publishedRoutePath, appContext });
   }
 
   async function handleCopyPublishedText() {
