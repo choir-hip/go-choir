@@ -604,3 +604,26 @@ remaining proof: commit, push, monitor CI/deploy, verify Node B deployed
 identity, then use Comet to confirm the left desktop icon includes Global Wire
 and the authenticated app header reports the source-service count rather than
 `16 sources`.
+
+## Checkpoint 2026-06-07T22:30Z: live source status deployed, minor copy defect observed
+
+objective: verify the desktop-icon/live-source-status slice on staging.
+
+what shipped: commit `13b0f6bf709b6f40fb765ccf0a1a706c9504769e` was pushed
+to `origin/main`. CI run `27106447613` passed Go vet/build,
+integration-tagged smoke, non-runtime tests, all four runtime shards, frontend
+build, aggregate gate, and Node B deploy job `79996448462`. Node B health
+checks confirmed proxy, sandbox, and platformd deployed commit
+`13b0f6bf709b6f40fb765ccf0a1a706c9504769e`.
+
+product-path evidence: authenticated Comet reload of `https://choir.news/`
+showed Global Wire in the left desktop icon column between VText and Podcast.
+The Global Wire header now shows `170 live sources` and
+`532 source items · 23 processors · 1 reconcilers`; source chronology count
+shows `532`, and the latest source cycle id is visible. This proves the app is
+reading live source-service status instead of only the seeded 16-source story
+neighborhood.
+
+remaining error field: the visible copy says `1 reconcilers`. Next tiny fix:
+pluralize processor/reconciler labels and simplify the source-cycle line so
+the product surface reads cleanly before continuing deeper source/article work.
