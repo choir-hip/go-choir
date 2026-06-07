@@ -1338,3 +1338,74 @@ Next executable probe:
 - Add non-oracle Ask/Autoradio hooks that hand the selected story/projection,
   source manifest, and related story neighborhood to existing app routes or
   product events without inventing answers or mutating the StoryGraph.
+
+## Overnight Checkpoint - Ask And Autoradio Hooks - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+deployed product commit: `a0b12df9e3fd0cfb26ce3d0e2cc9ff51d53aeb68`
+(`feat: add global wire ask hooks`)
+
+What changed:
+
+- Added `Ask Choir` and `Autoradio` actions to the Global Wire story reader.
+- Both actions build a grounded prompt from the selected StoryGraph id,
+  headline, change/tension state, selected `Style.vtext`, projection text,
+  claims, full source manifest tiers, related Story VTexts, and a guardrail
+  against mutation or invented facts.
+- The actions submit through the browser-public `/api/prompt-bar` product path
+  and display the returned submission handle.
+- The News app does not synthesize an answer inline and does not mutate the
+  StoryGraph; synthesis remains downstream in the ordinary Choir/VText route.
+
+What was proven locally:
+
+- `npm run build` passed in `frontend/`.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire|TestHandlePromptBar'`
+  passed.
+
+What was proven on staging:
+
+- Pushed `a0b12df9e3fd0cfb26ce3d0e2cc9ff51d53aeb68` to `origin/main`.
+- GitHub Actions CI run `27082694589` completed successfully, including
+  runtime shards, non-runtime tests, frontend build, Go vet/build, and staging
+  deploy.
+- FlakeHub publish run `27082694588` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `a0b12df9e3fd0cfb26ce3d0e2cc9ff51d53aeb68`, deployed at
+  `2026-06-07T04:32:15Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public/theme tests with the guarded auth proof skipped.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed against staging and verified the `Ask Choir` prompt-bar handoff
+  included StoryGraph id, source manifest, and `Style.vtext` context.
+
+Belief-state changes:
+
+- The app now has real hooks for asking about a story and requesting a radio
+  brief without treating Global Wire itself as an answer oracle.
+- The deployed product trajectory now covers:
+  live/source-service evidence import -> durable StoryGraph -> Story VTexts ->
+  Style.vtext projections -> News app views -> user-owned forks/contributions
+  -> reconciliation decisions -> graph-update candidates -> Ask/Autoradio
+  handoff.
+
+Remaining error field:
+
+- Candidate review does not yet promote to a platform StoryGraph process.
+- There is still no autonomous feed-to-cluster-to-update loop.
+- The current Ask/Autoradio hook is a prompt-bar/VText handoff, not a dedicated
+  audio playback or radio scheduling subsystem.
+
+Highest-impact remaining uncertainty:
+
+- Whether the next correct realism step is a low-resolution platform
+  reconciliation process that can safely promote graph-update candidates, or an
+  autonomous ingestion/classification worker that creates candidates from live
+  SourceItems before human review.
+
+Next executable probe:
+
+- Design and implement the smallest platform-process-shaped candidate promotion
+  or autonomous classification step that preserves the invariant that arbitrary
+  user edits never silently mutate platform stories.
