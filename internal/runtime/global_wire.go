@@ -97,12 +97,14 @@ type globalWireGraphCandidateReviewRequest struct {
 
 type globalWireProjectionReviewDraftRequest struct {
 	ReviewID string `json:"review_id"`
+	Action   string `json:"action,omitempty"`
 }
 
 type globalWireProjectionReviewDraftResponse struct {
-	Review   types.GlobalWireProjectionReview `json:"review"`
-	Document types.Document                   `json:"document"`
-	Revision types.Revision                   `json:"revision"`
+	Review     types.GlobalWireProjectionReview `json:"review"`
+	Document   types.Document                   `json:"document"`
+	Revision   types.Revision                   `json:"revision"`
+	Projection types.GlobalWireStoryProjection  `json:"projection,omitempty"`
 }
 
 type globalWireGraphCandidateReviewResponse struct {
@@ -715,8 +717,16 @@ func (h *APIHandler) HandleGlobalWireProjectionReviews(w http.ResponseWriter, r 
 		return
 	}
 	req.ReviewID = strings.TrimSpace(req.ReviewID)
+	req.Action = strings.TrimSpace(strings.ToLower(req.Action))
+	if req.Action == "" {
+		req.Action = "draft"
+	}
 	if req.ReviewID == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "review_id is required"})
+		return
+	}
+	if req.Action != "draft" && req.Action != "approve" && req.Action != "reject" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "action must be draft, approve, or reject"})
 		return
 	}
 	review, err := h.rt.Store().GetGlobalWireProjectionReview(r.Context(), ownerID, req.ReviewID)
@@ -726,6 +736,33 @@ func (h *APIHandler) HandleGlobalWireProjectionReviews(w http.ResponseWriter, r 
 			return
 		}
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load projection review"})
+		return
+	}
+	if req.Action == "reject" {
+		review, err = h.rt.Store().MarkGlobalWireProjectionReviewRejected(r.Context(), ownerID, review.ID)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to reject projection review"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, globalWireProjectionReviewDraftResponse{Review: review})
+		return
+	}
+	if req.Action == "approve" {
+		doc, rev, projection, review, err := h.approveGlobalWireProjectionReview(r, ownerID, review)
+		if err != nil {
+			if err == store.ErrNotFound {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "projection review, draft, story, or projection not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to approve projection review"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, globalWireProjectionReviewDraftResponse{
+			Review:     review,
+			Document:   doc,
+			Revision:   rev,
+			Projection: projection,
+		})
 		return
 	}
 	doc, rev, review, err := h.ensureGlobalWireProjectionReviewDraft(r, ownerID, review)
@@ -1016,6 +1053,101 @@ func (h *APIHandler) ensureGlobalWireProjectionReviewDraft(r *http.Request, owne
 	return doc, rev, updatedReview, nil
 }
 
+func (h *APIHandler) approveGlobalWireProjectionReview(r *http.Request, ownerID string, review types.GlobalWireProjectionReview) (types.Document, types.Revision, types.GlobalWireStoryProjection, types.GlobalWireProjectionReview, error) {
+	if strings.TrimSpace(review.ApprovedStoryDocID) != "" && strings.TrimSpace(review.ApprovedRevisionID) != "" {
+		doc, err := h.rt.Store().GetDocument(r.Context(), review.ApprovedStoryDocID, ownerID)
+		if err != nil {
+			return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+		}
+		rev, err := h.rt.Store().GetRevision(r.Context(), review.ApprovedRevisionID, ownerID)
+		if err != nil {
+			return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+		}
+		projection, err := h.rt.Store().GetGlobalWireStoryProjection(r.Context(), ownerID, review.StoryID, review.StyleID)
+		if err != nil {
+			return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+		}
+		return doc, rev, projection, review, nil
+	}
+	if strings.TrimSpace(review.DraftStoryDocID) == "" {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, store.ErrNotFound
+	}
+	draftDoc, err := h.rt.Store().GetDocument(r.Context(), review.DraftStoryDocID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	draftRev, err := h.rt.Store().GetRevision(r.Context(), draftDoc.CurrentRevisionID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	projection, err := h.rt.Store().GetGlobalWireStoryProjection(r.Context(), ownerID, review.StoryID, review.StyleID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	projectionDoc, err := h.rt.Store().GetDocument(r.Context(), projection.StoryDocID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	now := time.Now().UTC()
+	metadata, err := json.Marshal(map[string]any{
+		"created_from":       "global_wire_projection_review_approval",
+		"storygraph_id":      review.StoryID,
+		"projection_review":  review.ID,
+		"draft_story_doc_id": review.DraftStoryDocID,
+		"draft_revision_id":  draftRev.RevisionID,
+		"candidate_id":       review.CandidateID,
+		"promotion_id":       review.PromotionID,
+		"source_content_id":  review.SourceContentID,
+		"style_id":           review.StyleID,
+		"style_doc_id":       review.StyleDocID,
+		"approval_state":     "approved_projection_revision",
+	})
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	rev := types.Revision{
+		RevisionID:       uuid.NewString(),
+		DocID:            projectionDoc.DocID,
+		OwnerID:          ownerID,
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "Global Wire",
+		Content:          globalWireApprovedProjectionVTextContent(review, draftRev.Content),
+		Citations:        draftRev.Citations,
+		Metadata:         metadata,
+		CreatedAt:        now,
+		ParentRevisionID: projectionDoc.CurrentRevisionID,
+	}
+	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	storedRev, err := h.rt.Store().GetRevision(r.Context(), rev.RevisionID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, storedRev)
+	projection.StoryDocID = projectionDoc.DocID
+	projection.Text = storedRev.Content
+	projection.StyleDocID = firstNonEmptyString(review.StyleDocID, projection.StyleDocID)
+	projection.ContextJSON = firstNonEmptyString(projection.ContextJSON, `{"audience":"global-wire","task":"news_projection"}`)
+	projection.UpdatedAt = now
+	if err := h.rt.Store().UpsertGlobalWireStoryProjection(r.Context(), projection); err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	updatedReview, err := h.rt.Store().MarkGlobalWireProjectionReviewApproved(r.Context(), ownerID, review.ID, projectionDoc.DocID, storedRev.RevisionID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	projection, err = h.rt.Store().GetGlobalWireStoryProjection(r.Context(), ownerID, review.StoryID, review.StyleID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	doc, err := h.rt.Store().GetDocument(r.Context(), projectionDoc.DocID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	return doc, storedRev, projection, updatedReview, nil
+}
+
 func globalWireProjectionDraftCitations(review types.GlobalWireProjectionReview, story types.GlobalWireStory, sourceItem *types.ContentItem) []types.Citation {
 	citations := []types.Citation{
 		{ID: "projection-review", Type: "global_wire_projection_review", Value: review.ID, Label: "Projection review"},
@@ -1032,6 +1164,23 @@ func globalWireProjectionDraftCitations(review types.GlobalWireProjectionReview,
 		citations = append(citations, types.Citation{ID: "promoted-source", Type: "content_item", Value: sourceItem.ContentID, Label: sourceItem.Title})
 	}
 	return citations
+}
+
+func globalWireApprovedProjectionVTextContent(review types.GlobalWireProjectionReview, draftContent string) string {
+	content := strings.TrimSpace(draftContent)
+	if content == "" {
+		content = "Projection draft content was empty at approval time."
+	}
+	return strings.Join([]string{
+		content,
+		"",
+		"## Projection Review Approval",
+		"",
+		"Review status: approved",
+		"Projection review id: " + review.ID,
+		"Approved state: this normal Story VText revision advances the StoryGraph + Style.vtext projection relation.",
+		"Publication guardrail: user-owned forks remain separate and are not mutated by this platform projection review.",
+	}, "\n")
 }
 
 func globalWireProjectionDraftVTextContent(review types.GlobalWireProjectionReview, story types.GlobalWireStory, sourceItem *types.ContentItem) string {

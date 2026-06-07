@@ -547,4 +547,44 @@ func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(
 	if draftedReview.Status != "draft-created" || draftedReview.DraftStoryDocID == "" {
 		t.Fatalf("drafted projection review missing from reconciliation list: %+v", draftedList.ProjectionReviews)
 	}
+
+	approveBody := `{"review_id":"` + draftResp.Review.ID + `","action":"approve"}`
+	approveW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/projection-reviews", approveBody, "user-alpha")
+	if approveW.Code != http.StatusOK {
+		t.Fatalf("approve projection draft status = %d body=%s", approveW.Code, approveW.Body.String())
+	}
+	var approveResp globalWireProjectionReviewDraftResponse
+	if err := json.NewDecoder(approveW.Body).Decode(&approveResp); err != nil {
+		t.Fatalf("decode projection approval: %v", err)
+	}
+	if approveResp.Review.Status != "approved" ||
+		approveResp.Review.ApprovedStoryDocID != approveResp.Document.DocID ||
+		approveResp.Review.ApprovedRevisionID != approveResp.Revision.RevisionID ||
+		approveResp.Projection.StoryDocID != approveResp.Document.DocID ||
+		approveResp.Projection.Text != approveResp.Revision.Content {
+		t.Fatalf("projection approval response missing lineage: %+v", approveResp)
+	}
+	if approveResp.Revision.AuthorKind != types.AuthorAppAgent ||
+		approveResp.Revision.ParentRevisionID == "" ||
+		!strings.Contains(approveResp.Revision.Content, "Review status: approved") ||
+		!strings.Contains(approveResp.Revision.Content, "user-owned forks remain separate") {
+		t.Fatalf("projection approval revision invalid: %+v", approveResp.Revision)
+	}
+	approvedDocW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/vtext/documents/"+approveResp.Document.DocID, "", "user-alpha")
+	if approvedDocW.Code != http.StatusOK {
+		t.Fatalf("get approved projection VText status = %d body=%s", approvedDocW.Code, approvedDocW.Body.String())
+	}
+	approvedStoriesW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
+	if approvedStoriesW.Code != http.StatusOK {
+		t.Fatalf("stories after projection approval status = %d body=%s", approvedStoriesW.Code, approvedStoriesW.Body.String())
+	}
+	var approvedStories globalWireStoriesResponse
+	if err := json.NewDecoder(approvedStoriesW.Body).Decode(&approvedStories); err != nil {
+		t.Fatalf("decode approved stories: %v", err)
+	}
+	approvedStory := approvedStories.Stories[0]
+	if approvedStory.ProjectionVTextDocs[draftResp.Review.StyleID] != approveResp.Document.DocID ||
+		!strings.Contains(approvedStory.Projections[draftResp.Review.StyleID], "Review status: approved") {
+		t.Fatalf("approved projection relation not visible in StoryGraph response: docs=%+v projection=%q", approvedStory.ProjectionVTextDocs, approvedStory.Projections[draftResp.Review.StyleID])
+	}
 }

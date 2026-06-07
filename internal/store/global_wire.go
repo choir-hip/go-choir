@@ -225,7 +225,7 @@ func (s *Store) GetGlobalWireStory(ctx context.Context, ownerID, storyID string)
 func (s *Store) attachGlobalWireProjectionRefs(ctx context.Context, ownerID string, stories []types.GlobalWireStory) error {
 	for i := range stories {
 		rows, err := s.readDB.QueryContext(ctx,
-			`SELECT style_id, story_vtext_doc_id
+			`SELECT style_id, story_vtext_doc_id, projection_text
 			   FROM global_wire_story_projections
 			  WHERE owner_id = ? AND story_id = ?`,
 			ownerID,
@@ -236,12 +236,18 @@ func (s *Store) attachGlobalWireProjectionRefs(ctx context.Context, ownerID stri
 		}
 		refs := map[string]string{}
 		for rows.Next() {
-			var styleID, docID string
-			if err := rows.Scan(&styleID, &docID); err != nil {
+			var styleID, docID, projectionText string
+			if err := rows.Scan(&styleID, &docID, &projectionText); err != nil {
 				_ = rows.Close()
 				return fmt.Errorf("scan global wire projection ref: %w", err)
 			}
 			refs[styleID] = docID
+			if strings.TrimSpace(styleID) != "" && strings.TrimSpace(projectionText) != "" {
+				if stories[i].Projections == nil {
+					stories[i].Projections = map[string]string{}
+				}
+				stories[i].Projections[styleID] = projectionText
+			}
 		}
 		if err := rows.Close(); err != nil {
 			return fmt.Errorf("close global wire projection refs: %w", err)
@@ -1112,8 +1118,8 @@ func (s *Store) CreateGlobalWireProjectionReview(ctx context.Context, rec types.
 			owner_id, review_id, story_id, candidate_id, promotion_id,
 			source_content_id, style_id, style_doc_id, style_title,
 			projection_action, status, rationale, draft_story_doc_id,
-			created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			approved_story_doc_id, approved_revision_id, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.OwnerID,
 		rec.ID,
 		rec.StoryID,
@@ -1127,6 +1133,8 @@ func (s *Store) CreateGlobalWireProjectionReview(ctx context.Context, rec types.
 		rec.Status,
 		sanitizeStoreText(rec.Rationale),
 		rec.DraftStoryDocID,
+		rec.ApprovedStoryDocID,
+		rec.ApprovedRevisionID,
 		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	)
@@ -1145,7 +1153,7 @@ func (s *Store) ListGlobalWireProjectionReviews(ctx context.Context, ownerID, st
 	query := `SELECT owner_id, review_id, story_id, candidate_id, promotion_id,
 	                source_content_id, style_id, style_doc_id, style_title,
 	                projection_action, status, rationale, draft_story_doc_id,
-	                created_at, updated_at
+	                approved_story_doc_id, approved_revision_id, created_at, updated_at
 	           FROM global_wire_projection_reviews
 	          WHERE owner_id = ?`
 	args := []any{ownerID}
@@ -1181,7 +1189,7 @@ func (s *Store) GetGlobalWireProjectionReview(ctx context.Context, ownerID, revi
 		`SELECT owner_id, review_id, story_id, candidate_id, promotion_id,
 		        source_content_id, style_id, style_doc_id, style_title,
 		        projection_action, status, rationale, draft_story_doc_id,
-		        created_at, updated_at
+		        approved_story_doc_id, approved_revision_id, created_at, updated_at
 		   FROM global_wire_projection_reviews
 		  WHERE owner_id = ? AND review_id = ?`,
 		ownerID,
@@ -1207,6 +1215,54 @@ func (s *Store) MarkGlobalWireProjectionReviewDraftCreated(ctx context.Context, 
 	)
 	if err != nil {
 		return types.GlobalWireProjectionReview{}, fmt.Errorf("mark global wire projection review draft created: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return types.GlobalWireProjectionReview{}, ErrNotFound
+	}
+	return s.GetGlobalWireProjectionReview(ctx, ownerID, reviewID)
+}
+
+// MarkGlobalWireProjectionReviewApproved links a projection review to the
+// approved ProjectionStory VText revision and records review state.
+func (s *Store) MarkGlobalWireProjectionReviewApproved(ctx context.Context, ownerID, reviewID, approvedDocID, approvedRevisionID string) (types.GlobalWireProjectionReview, error) {
+	now := time.Now().UTC()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE global_wire_projection_reviews
+		    SET status = 'approved',
+		        approved_story_doc_id = ?,
+		        approved_revision_id = ?,
+		        updated_at = ?
+		  WHERE owner_id = ? AND review_id = ?`,
+		strings.TrimSpace(approvedDocID),
+		strings.TrimSpace(approvedRevisionID),
+		now.UTC().Format(time.RFC3339Nano),
+		ownerID,
+		reviewID,
+	)
+	if err != nil {
+		return types.GlobalWireProjectionReview{}, fmt.Errorf("mark global wire projection review approved: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return types.GlobalWireProjectionReview{}, ErrNotFound
+	}
+	return s.GetGlobalWireProjectionReview(ctx, ownerID, reviewID)
+}
+
+// MarkGlobalWireProjectionReviewRejected records reviewer rejection without
+// changing the projection relation.
+func (s *Store) MarkGlobalWireProjectionReviewRejected(ctx context.Context, ownerID, reviewID string) (types.GlobalWireProjectionReview, error) {
+	now := time.Now().UTC()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE global_wire_projection_reviews
+		    SET status = 'rejected',
+		        updated_at = ?
+		  WHERE owner_id = ? AND review_id = ?`,
+		now.UTC().Format(time.RFC3339Nano),
+		ownerID,
+		reviewID,
+	)
+	if err != nil {
+		return types.GlobalWireProjectionReview{}, fmt.Errorf("mark global wire projection review rejected: %w", err)
 	}
 	if n, err := res.RowsAffected(); err == nil && n == 0 {
 		return types.GlobalWireProjectionReview{}, ErrNotFound
@@ -1253,6 +1309,23 @@ func (s *Store) UpsertGlobalWireStoryProjection(ctx context.Context, rec types.G
 		return fmt.Errorf("upsert global wire story projection: %w", err)
 	}
 	return nil
+}
+
+// GetGlobalWireStoryProjection returns one owner-scoped durable projection
+// relation for a StoryGraph node and Style.vtext source.
+func (s *Store) GetGlobalWireStoryProjection(ctx context.Context, ownerID, storyID, styleID string) (types.GlobalWireStoryProjection, error) {
+	row := s.readDB.QueryRowContext(ctx,
+		`SELECT owner_id, projection_id, story_id, style_id, style_doc_id,
+		        story_vtext_doc_id, context_json, projection_text, created_at, updated_at
+		   FROM global_wire_story_projections
+		  WHERE owner_id = ? AND story_id = ? AND style_id = ?
+		  ORDER BY updated_at DESC
+		  LIMIT 1`,
+		ownerID,
+		storyID,
+		styleID,
+	)
+	return scanGlobalWireStoryProjection(row)
 }
 
 // ListGlobalWireContributions lists recent owner-owned contributions, optionally
@@ -1537,6 +1610,8 @@ func scanGlobalWireProjectionReview(row interface{ Scan(...any) error }) (types.
 		&rec.Status,
 		&rec.Rationale,
 		&rec.DraftStoryDocID,
+		&rec.ApprovedStoryDocID,
+		&rec.ApprovedRevisionID,
 		&createdAt,
 		&updatedAt,
 	)
@@ -1553,6 +1628,40 @@ func scanGlobalWireProjectionReview(row interface{ Scan(...any) error }) (types.
 	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
 		return types.GlobalWireProjectionReview{}, fmt.Errorf("parse global wire projection review updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreated.UTC()
+	rec.UpdatedAt = parsedUpdated.UTC()
+	return rec, nil
+}
+
+func scanGlobalWireStoryProjection(row interface{ Scan(...any) error }) (types.GlobalWireStoryProjection, error) {
+	var rec types.GlobalWireStoryProjection
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.ID,
+		&rec.StoryID,
+		&rec.StyleID,
+		&rec.StyleDocID,
+		&rec.StoryDocID,
+		&rec.ContextJSON,
+		&rec.Text,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return types.GlobalWireStoryProjection{}, ErrNotFound
+		}
+		return types.GlobalWireStoryProjection{}, fmt.Errorf("scan global wire story projection: %w", err)
+	}
+	parsedCreated, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.GlobalWireStoryProjection{}, fmt.Errorf("parse global wire story projection created_at: %w", err)
+	}
+	parsedUpdated, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.GlobalWireStoryProjection{}, fmt.Errorf("parse global wire story projection updated_at: %w", err)
 	}
 	rec.CreatedAt = parsedCreated.UTC()
 	rec.UpdatedAt = parsedUpdated.UTC()

@@ -159,19 +159,21 @@ type GlobalWireSourceRefreshRun struct {
 // GlobalWireProjectionReview records that a StoryGraph change may require a
 // Style.vtext projection to be reviewed or revised.
 type GlobalWireProjectionReview struct {
-	ID               string    `json:"id"`
-	OwnerID          string    `json:"owner_id,omitempty"`
-	StoryID          string    `json:"story_id"`
-	CandidateID      string    `json:"candidate_id"`
-	PromotionID      string    `json:"promotion_id"`
-	SourceContentID  string    `json:"source_content_id,omitempty"`
-	StyleID          string    `json:"style_id"`
-	StyleDocID       string    `json:"style_doc_id,omitempty"`
-	StyleTitle       string    `json:"style_title"`
-	ProjectionAction string    `json:"projection_action"`
-	Status           string    `json:"status"`
-	Rationale        string    `json:"rationale"`
-	DraftStoryDocID  string    `json:"draft_story_doc_id,omitempty"`
-	CreatedAt        time.Time `json:"created_at,omitempty"`
-	UpdatedAt        time.Time `json:"updated_at,omitempty"`
+	ID                 string    `json:"id"`
+	OwnerID            string    `json:"owner_id,omitempty"`
+	StoryID            string    `json:"story_id"`
+	CandidateID        string    `json:"candidate_id"`
+	PromotionID        string    `json:"promotion_id"`
+	SourceContentID    string    `json:"source_content_id,omitempty"`
+	StyleID            string    `json:"style_id"`
+	StyleDocID         string    `json:"style_doc_id,omitempty"`
+	StyleTitle         string    `json:"style_title"`
+	ProjectionAction   string    `json:"projection_action"`
+	Status             string    `json:"status"`
+	Rationale          string    `json:"rationale"`
+	DraftStoryDocID    string    `json:"draft_story_doc_id,omitempty"`
+	ApprovedStoryDocID string    `json:"approved_story_doc_id,omitempty"`
+	ApprovedRevisionID string    `json:"approved_revision_id,omitempty"`
+	CreatedAt          time.Time `json:"created_at,omitempty"`
+	UpdatedAt          time.Time `json:"updated_at,omitempty"`
 }

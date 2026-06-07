@@ -286,6 +286,27 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     'Draft state: review draft, not platform publication'
   );
 
+  await focusDeskApp(page, 'global-wire', 'Global Wire');
+  const approvalResponsePromise = page.waitForResponse((response) => {
+    if (new URL(response.url()).pathname !== '/api/global-wire/projection-reviews' || response.request().method() !== 'POST') {
+      return false;
+    }
+    return response.request().postDataJSON()?.action === 'approve';
+  });
+  const approveButton = candidateCard.locator(
+    `[data-global-wire-approve-projection-draft][data-global-wire-projection-review-id="${draftPayload.review.id}"]`
+  );
+  await expect(approveButton).toBeVisible();
+  await approveButton.click();
+  const approvalResponse = await approvalResponsePromise;
+  expect(approvalResponse.status()).toBe(200);
+  const approvalPayload = await approvalResponse.json();
+  expect(approvalPayload.review.status).toBe('approved');
+  expect(approvalPayload.review.approved_revision_id).toBe(approvalPayload.revision.revision_id);
+  await expect(page.locator(`[data-vtext-doc-id="${approvalPayload.document.doc_id}"]`)).toContainText(
+    'Review status: approved'
+  );
+
   const promoted = await page.evaluate(async ({ candidateId, sourceContentId }) => {
     const listRes = await fetch('/api/global-wire/reconciliation?story_id=story-supply-resilience', {
       credentials: 'include',
@@ -300,13 +321,16 @@ test('Global Wire fork and contribution create owner-scoped VTexts when signed i
     const storyGraphAfter = await storyRes.json();
     const story = (storyGraphAfter.stories || []).find((item) => item.id === 'story-supply-resilience');
     const source = (story?.manifest?.supporting || []).find((item) => item.content_id === sourceContentId);
-    return { candidate, promotion, projectionReviews, source };
+    const approvedProjection = story?.projections?.[projectionReviews.find((item) => item.status === 'approved')?.style_id || ''];
+    return { candidate, promotion, projectionReviews, source, approvedProjection };
   }, { candidateId: reconciliation.candidate.id, sourceContentId: queuedContribution.source_content_id });
   expect(promoted.candidate.status).toBe('promoted-to-storygraph');
   expect(promoted.promotion.decision).toBe('promoted');
   expect(promoted.projectionReviews.length).toBeGreaterThanOrEqual(1);
-  const draftedReview = promoted.projectionReviews.find((item) => item.status === 'draft-created');
-  expect(draftedReview?.draft_story_doc_id).toBeTruthy();
+  const approvedReview = promoted.projectionReviews.find((item) => item.status === 'approved');
+  expect(approvedReview?.draft_story_doc_id).toBeTruthy();
+  expect(approvedReview?.approved_revision_id).toBeTruthy();
+  expect(promoted.approvedProjection).toContain('Review status: approved');
   expect(promoted.source.content_id).toBe(queuedContribution.source_content_id);
 
   await focusDeskApp(page, 'global-wire', 'Global Wire');

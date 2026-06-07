@@ -683,6 +683,44 @@
     }
   }
 
+  async function reviewProjectionDraft(review, action) {
+    if (!authenticated || !review?.id) return;
+    reconciliationBusyId = `${review.id}:${action}`;
+    contributionStatus = '';
+    try {
+      const response = await fetch('/api/global-wire/projection-reviews', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ review_id: review.id, action }),
+      });
+      if (!response.ok) throw new Error(`Projection review ${action} failed: ${response.status}`);
+      const payload = await response.json();
+      projectionReviews = projectionReviews.map((item) => (
+        item.id === review.id ? payload.review : item
+      ));
+      contributionStatus = action === 'approve'
+        ? 'Projection draft approved into Story VText revision'
+        : 'Projection draft rejected';
+      if (action === 'approve' && payload.document?.doc_id) {
+        launchVText({
+          title: payload.document.title || `Projection: ${selectedStory.headline}`,
+          content: payload.revision?.content || '',
+          createdFrom: 'global_wire_projection_review_approval',
+          sourcePath: `global-wire/${selectedStory.id}.${review.style_id}.story.vtext`,
+          docId: payload.document.doc_id,
+          createInitialVersion: false,
+        });
+        await loadStories();
+      }
+      await loadContributions(selectedStory.id);
+    } catch (error) {
+      contributionStatus = error?.message || `Projection review ${action} failed`;
+    } finally {
+      reconciliationBusyId = '';
+    }
+  }
+
   async function reconcileContribution(item, decision) {
     if (!authenticated || !item?.id) return;
     reconciliationBusyId = `${item.id}:${decision}`;
@@ -1066,6 +1104,26 @@
                                 >
                                   Open draft
                                 </button>
+                                {#if authenticated && review.status === 'draft-created'}
+                                  <button
+                                    type="button"
+                                    on:click={() => reviewProjectionDraft(review, 'approve')}
+                                    disabled={reconciliationBusyId !== ''}
+                                    data-global-wire-approve-projection-draft
+                                    data-global-wire-projection-review-id={review.id}
+                                  >
+                                    Approve draft
+                                  </button>
+                                  <button
+                                    type="button"
+                                    on:click={() => reviewProjectionDraft(review, 'reject')}
+                                    disabled={reconciliationBusyId !== ''}
+                                    data-global-wire-reject-projection-draft
+                                    data-global-wire-projection-review-id={review.id}
+                                  >
+                                    Reject draft
+                                  </button>
+                                {/if}
                               {:else if authenticated}
                                 <button
                                   type="button"
