@@ -449,3 +449,104 @@ Wire backend contract rather than adding more UI-only detail. Seeded frontend
 records may remain only as logged-out/public-preview fallback; signed-in and
 runtime product paths should load StoryGraph-shaped records from the backend
 and write contribution records through that contract.
+
+## Overnight Checkpoint - Durable StoryGraph Slice - 2026-06-07
+
+mission status: `checkpoint_incomplete`
+
+commit delivered: `d9d9e670251c4965e148b64bbadb696486793412`
+(`feat: add durable global wire storygraph`)
+
+What changed:
+
+- Added a typed Global Wire domain object in `internal/types/global_wire.go`:
+  `GlobalWireStory`, `GlobalWireSourceManifest`, `GlobalWireStyleSource`,
+  `GlobalWireContribution`, and source-neighborhood source items.
+- Added Dolt-backed runtime tables:
+  `global_wire_story_graphs` and `global_wire_contributions`.
+- Added store logic that seeds an authenticated owner's durable StoryGraph on
+  first open, including normal VText documents for each platform story and each
+  citeable `Style.vtext` source. Seeded story revisions are appagent-authored
+  and carry metadata saying user edits must fork rather than mutate the
+  platform story.
+- Added public product API routes:
+  - `GET /api/global-wire/stories`
+  - `GET /api/global-wire/contributions`
+  - `POST /api/global-wire/contributions`
+- Updated the Global Wire app so signed-in users load `durable-storygraph`
+  records and contribution queues through those API routes; logged-out users
+  still see the seeded public preview fallback.
+- Updated the app so platform Story VTexts and Style.vtext sources open by
+  existing VText document IDs, while forks and contribution drafts still create
+  separate user-owned VText documents.
+- Extended deployed Playwright proof to assert authenticated durable
+  StoryGraph provenance and durable contribution queue state.
+
+What was proven locally:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  passed.
+- `npm run build` passed in `frontend/`.
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public tests with the guarded authenticated proof skipped.
+
+What was proven on staging:
+
+- Pushed `d9d9e670251c4965e148b64bbadb696486793412` to `origin/main`.
+- GitHub Actions CI run `27081439928` completed successfully, including
+  runtime shards, non-runtime Go tests, frontend build, and staging deploy.
+- FlakeHub publish run `27081439921` completed successfully.
+- `https://choir.news/health` reported both proxy and sandbox deployed at
+  `d9d9e670251c4965e148b64bbadb696486793412`, deployed at
+  `2026-06-07T03:25:35Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js`
+  passed 4 public tests with the guarded authenticated proof skipped.
+- `GLOBAL_WIRE_AUTH_PROOF=1 PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/global-wire-app.spec.js -g "owner-scoped"`
+  passed, proving signed-in durable StoryGraph provenance, owner-scoped fork
+  VText creation, contribution VText creation, and durable
+  `pending-researcher-review` queue records through public product APIs.
+
+Belief-state changes:
+
+- The backend boundary is now real enough to support product-path proof:
+  signed-in News app views are no longer UI-only seeded data.
+- Normal VText identity is now present for platform Story VTexts and citeable
+  Style.vtext artifacts, not just for user-created forks.
+- The next highest-value realism axis is not more graph UI. It is replacing
+  seeded source neighborhoods with Source Service-backed `SourceItem` evidence
+  and making the projection relation explicit enough for reconciliation.
+
+Remaining error field:
+
+- Source evidence is still seeded by Global Wire store bootstrap, not live or
+  Source Service-backed.
+- StoryGraph edges and source-neighborhood computation are persisted as related
+  story IDs and manifests, but not yet computed from SourceItems or exposed as
+  first-class edge records.
+- Projection records still live inside the story JSON instead of a separate
+  `StoryGraph + Style.vtext + context -> Story VText` relation.
+- Contribution records are research/reconciliation-ready queue entries, but no
+  researcher reconciliation workflow consumes them yet.
+- Autoradio and Ask hooks remain outside this slice.
+
+Next route choice after cognitive transform:
+
+- Apply the **source-substrate inversion** lens: instead of asking how to make
+  the seeded graph look more real, ask what minimal Source Service-backed
+  `SourceItem` record must exist so the graph can be regenerated without
+  changing the app contract.
+- Implement a small `global_wire_source_items`/Source Service adapter or reuse
+  existing `ContentItem`/source records if their ownership and provenance shape
+  matches the spec.
+- Preserve the current `/api/global-wire/stories` contract as the app-facing
+  boundary while moving seed evidence behind a SourceItem normalization layer.
+
+Rollback refs:
+
+- pre-mission base: `d5bc2193`
+- docs/problem checkpoint: `b60c1076`
+- frontend slice: `f3e6a59d`
+- ownership proof checkpoint: `60ef7179`
+- overnight mission rewrite: `82e80dd1`
+- backend coverage audit: `bc5e4a8d`
+- durable StoryGraph slice: `d9d9e670`
