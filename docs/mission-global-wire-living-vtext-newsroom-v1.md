@@ -1153,3 +1153,48 @@ next executable probe: update the dek/scaffold parser to normalize markdown
 label syntax and update source-ref extraction to ignore source/style inventory
 sections. Keep duplicate-story reconciliation as a later, separately
 documented product problem unless the parser fix exposes a direct cause.
+
+## Checkpoint 2026-06-08T01:10Z: inventory-ref fix deployed; full-cycle fallback remains too broad
+
+status: checkpoint_incomplete
+
+objective: deploy the second article hygiene correction and verify whether
+Global Wire source manifests now reflect article-specific native source
+transclusions rather than source inventory text or full-cycle firehose state.
+
+what shipped: commit `8a9e8f74a67e1c6952fc70bfda31d9eab1d658fc`
+normalizes markdown-bolded scaffold labels for dek extraction and limits
+inline `source:` manifest scanning to article prose before source/style
+inventory sections such as `Source Handles`, `Source Manifest`, `Sources`,
+`Style.vtext Source`, or `Style Source`.
+
+staging proof: CI run `27110321662` passed non-runtime tests, integration
+smoke, Go vet/build, all four runtime shards, aggregate gate, and Node B
+deploy job `80006981930`. FlakeHub run `27110321663` succeeded.
+`https://choir.news/health`, Node B `/health`, and Node B `/opt/go-choir`
+all report deployed commit `8a9e8f74a67e1c6952fc70bfda31d9eab1d658fc`,
+deployed_at `2026-06-08T01:04:27Z`.
+
+API proof: authenticated `GET /api/global-wire/stories` on sandbox port `8085`
+returned `15` stories from `durable-storygraph+source-network-vtexts`. Several
+live VText-owned articles now project small manifests (`3` lead and `2` or `3`
+context items), including the original Iran and Colorado River articles.
+
+new residual problem documented before fix: some newer article VTexts still
+project `context: 498`, including the newer Pentagon/Israel article and the
+Peru runoff article. The remaining root cause is not merely source refs inside
+inventory sections. The Global Wire index currently falls back from
+article-visible native source entities to the revision's inherited
+`source_item_ids`; for broad live cycles that field can represent the whole
+ingestion firehose rather than article-specific evidence. That fallback makes
+the collection surface falsely imply hundreds of sources directly support a
+single article. The correct behavior is to prefer visible native source
+transclusions, then fall back to a bounded source-network cycle provenance item
+or a small article-local evidence packet, never the full cycle as a visible
+article manifest.
+
+next executable probe: replace the full-cycle `source_item_ids` visible
+manifest fallback for VText-owned Global Wire articles with a bounded
+cycle-provenance fallback. Keep full-cycle IDs in revision metadata for
+auditing and future graph walking, but do not render them as the article's
+source neighborhood unless the VText revision actually transcludes them.
