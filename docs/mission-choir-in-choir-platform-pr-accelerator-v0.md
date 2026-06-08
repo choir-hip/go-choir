@@ -1236,3 +1236,75 @@ next executable probe:
   reconcilers only submit when their active processor request IDs have real
   runtime run IDs.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T08:04Z processor supersession landed and proved on
+  staging.
+current artifact state:
+  Commit 37c914e2448d747fa0bf4f91387c07b5df2e70c7 is on origin/main and
+  deployed to staging. It follows documentation checkpoint
+  b9a92997988420cd9d0280177330287b56dc0bdb, which recorded the repeated
+  continuity backlog problem before the fix.
+what shipped:
+  - Queued processor requests now supersede older queued requests with the same
+    continuity ref before dispatch.
+  - Queued reconcilers whose dependent processor requests were superseded are
+    also marked `superseded`.
+  - Submitted processor requests are preserved; supersession only removes stale
+    queued snapshots from active dispatch pressure.
+  - Source handoff events now record `processor_continuity_refresh`,
+    `superseded_processor_count`, and `superseded_reconciler_count`.
+what was proven:
+  - Local `gofmt`, `git diff --check`, `nix develop -c go test ./internal/cycle`,
+    and `nix develop -c go test ./cmd/sourcecycled` passed before push.
+  - CI run 27123778280 passed for commit
+    37c914e2448d747fa0bf4f91387c07b5df2e70c7, including Go gates and staging
+    deploy.
+  - FlakeHub run 27123778183 passed for the same commit.
+  - Public staging `/health` reported proxy and sandbox deployed commit
+    37c914e2448d747fa0bf4f91387c07b5df2e70c7 with
+    `deployed_at=2026-06-08T07:58:16Z`.
+  - Node B sourcecycled env reported
+    `SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=32`,
+    `SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS=60`, and
+    `SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085`.
+  - Source Service health reported `status=ok`, `item_count=69664`, and
+    `fetch_count=13180` at 2026-06-08T08:00:31Z.
+  - The first post-deploy source cycle fetched 5,026 deduped new items and
+    queued 125 processor requests plus 1 reconciler request.
+  - The handoff event for that cycle recorded
+    `superseded_processor_count=1711` and
+    `superseded_reconciler_count=4`.
+  - A read-only deployed DB copy after two drain ticks showed processor status
+    counts of 7 `dispatch_failed`, 32 `queued`, 1,094 `submitted`, and
+    1,711 `superseded`; reconciler status counts of 1 `dispatch_failed`,
+    1 `queued`, 80 `submitted`, and 4 `superseded`.
+  - Drain logs after deploy showed `processor_skipped` collapse from the old
+    backlog range of roughly 1,700 queued requests to 64 and then 32 active
+    queued requests, while still submitting 32 processors per minute.
+belief-state changes:
+  Processor dispatch is no longer a stale FIFO backlog. It now behaves closer
+  to long-running processor continuity: newest queued context for a processor
+  continuity ref is active, older unsubmitted snapshots become historical
+  evidence, and submitted historical work remains intact.
+retrieval note:
+  The user wants the old Global Wire Sources Chronology/search/source-ledger
+  surface deleted, not cautiously retained behind "maybe" language. The same is
+  true of bespoke Style.vtext controls such as radio buttons, `S`, Compose,
+  Replace, and Ask. Styles are VTexts/sources and should be visible through
+  article-quality examples and transclusion, not a separate control panel. Do
+  not restore those detritus surfaces while claiming source exploration or style
+  handling has improved.
+remaining error field:
+  This does not make Global Wire ship-worthy. The source system is ingesting
+  large volumes, but product quality still needs real full-article source
+  bodies where available, front-page ranking by prominence/importance/novelty,
+  VText-agent-owned publication-quality articles with native source
+  transclusion, and a cleaner product status surface that explains processor
+  and reconciler work without exposing detritus.
+rollback refs:
+  Revert 37c914e2 to remove supersession behavior while keeping the prior
+  queue-drain behavior from e1b177d6. Revert e1b177d6 as well to return to the
+  original dispatch-only-during-cycle behavior.
+```
