@@ -1184,3 +1184,55 @@ rollback refs:
   during source cycles, tracked staging cap of 7, and transient runtime failures
   marked as dispatch failures.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T07:53Z queue drain works, but the backlog is
+  repeated continuity work rather than a clean FIFO truth object.
+current artifact state:
+  Commit e8383a98ad8fb47233e315d97c8ac04f16819e756 is on origin/main as the
+  latest mission checkpoint. Staging behavior code remains
+  e1b177d6796e52474810488e42ede347c247211f.
+new evidence:
+  Sourcecycled logs after the previous landing continued to show one-minute
+  drains: 32 processor submissions at 07:48:23Z, 32 at 07:49:22Z with one
+  reconciler submitted, and 32 at 07:50:22Z. A current read-only Node B DB copy
+  still showed processor counts of 7 `dispatch_failed`, 763 `submitted`, and
+  1,949 `queued`; reconciler counts were 1 `dispatch_failed`, 80 `submitted`,
+  and 4 `queued`.
+
+  The queued processors are heavily concentrated by continuity:
+
+  - `processor:global_firehose:global:gdelt`: 543 queued
+  - `processor:technology:global:rss`: 139 queued
+  - `processor:conflict:europe:telegram`: 97 queued
+  - `processor:finance:global:rss`: 72 queued
+  - `processor:conflict:europe:rss`: 68 queued
+  - `processor:technology:europe:rss`: 67 queued
+
+  The latest-cycle endpoint still reports only latest-cycle status
+  (`cycle_c49482d8c6899c36eb7d4b55` has 125 queued processors and 1 queued
+  reconciler), while global storage shows the active drain is processing older
+  cycles first. That endpoint is not a sufficient operations truth surface.
+belief-state changes:
+  The queue is not merely "large." It is preserving stale snapshots for the
+  same long-running processor continuity refs. That is misaligned with the
+  intended processor topology: processors should update a durable
+  representation of their world slice and compact as context moves forward,
+  not process every old burst in exact FIFO order after newer source cycles
+  have arrived.
+remaining error field:
+  Add explicit supersession semantics before more dispatch tuning. New queued
+  processor work for a continuity ref should mark older queued processor work
+  for that same continuity as `superseded`, preserving the historical record
+  but preventing stale chunks from consuming drain capacity. Reconciler
+  requests that depend on superseded processor request IDs should also become
+  superseded rather than sitting queued forever or summarizing incomplete old
+  cycles.
+next executable probe:
+  Implement and test storage-level supersession before dispatch. Then deploy
+  and prove on staging that queued counts drop by superseding older same-
+  continuity work, latest cycles can still dispatch current processors, and
+  reconcilers only submit when their active processor request IDs have real
+  runtime run IDs.
+```
