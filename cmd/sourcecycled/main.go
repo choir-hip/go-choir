@@ -329,7 +329,7 @@ func sourceAPISourceHealth(summary cycle.CycleSummary) sourceapi.SourceHealth {
 		ConfiguredSourceCount: summary.FetchCount,
 	}
 	for _, fetch := range summary.Fetches {
-		if fetch.Status == "ok" {
+		if sourceFetchStatusCountsAsSuccess(fetch.Status) {
 			health.SuccessFetchCount++
 		} else {
 			health.FailedFetchCount++
@@ -365,6 +365,15 @@ func sourceAPISourceHealth(summary cycle.CycleSummary) sourceapi.SourceHealth {
 		})
 	}
 	return health
+}
+
+func sourceFetchStatusCountsAsSuccess(status string) bool {
+	switch strings.TrimSpace(strings.ToLower(status)) {
+	case "ok", "not_modified":
+		return true
+	default:
+		return false
+	}
 }
 
 func sourceAPIProcessorRequests(requests []cycle.ProcessorRequest) []sourceapi.ProcessorRequest {

@@ -278,6 +278,83 @@ func TestSourceServiceAPISourceMaxxLatestReportsAgentHandoffs(t *testing.T) {
 	}
 }
 
+func TestSourceServiceAPISourceMaxxLatestTreatsNotModifiedAsSuccessfulFetch(t *testing.T) {
+	ctx := context.Background()
+	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	defer store.Close()
+
+	cycleID, err := store.StartCycle(ctx)
+	if err != nil {
+		t.Fatalf("start cycle: %v", err)
+	}
+	now := time.Date(2026, 6, 8, 0, 26, 0, 0, time.UTC)
+	if err := store.SaveCycleFetches(cycleID, []sources.FetchRecord{
+		{
+			FetchID:    "fetch-ok",
+			SourceID:   "rss:active",
+			SourceType: sources.SourceTypeRSS,
+			RequestURL: "https://example.test/active.xml",
+			Status:     "ok",
+			StatusCode: http.StatusOK,
+			StartedAt:  now,
+			EndedAt:    now.Add(time.Second),
+			ItemCount:  3,
+		},
+		{
+			FetchID:    "fetch-not-modified",
+			SourceID:   "rss:cached",
+			SourceType: sources.SourceTypeRSS,
+			RequestURL: "https://example.test/cached.xml",
+			Status:     "not_modified",
+			StatusCode: http.StatusNotModified,
+			StartedAt:  now,
+			EndedAt:    now.Add(time.Second),
+		},
+		{
+			FetchID:    "fetch-error",
+			SourceID:   "rss:blocked",
+			SourceType: sources.SourceTypeRSS,
+			RequestURL: "https://example.test/blocked.xml",
+			Status:     "http_error",
+			StatusCode: http.StatusForbidden,
+			ErrorClass: "http_error",
+			Error:      "unexpected status code: 403",
+			StartedAt:  now,
+			EndedAt:    now.Add(time.Second),
+		},
+	}); err != nil {
+		t.Fatalf("save fetches: %v", err)
+	}
+	if err := store.FinishCycle(ctx, cycleID, "completed", 3, 3, nil); err != nil {
+		t.Fatalf("finish cycle: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/source-service/global-wire/latest", nil)
+	rec := httptest.NewRecorder()
+	handleSourceServiceSourceMaxxLatest(store).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("latest status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp sourceapi.SourceMaxxResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode latest: %v", err)
+	}
+	if resp.SourceHealth.ConfiguredSourceCount != 3 ||
+		resp.SourceHealth.SuccessFetchCount != 2 ||
+		resp.SourceHealth.FailedFetchCount != 1 {
+		t.Fatalf("unexpected source health counts: %+v", resp.SourceHealth)
+	}
+	if len(resp.SourceHealth.Failures) != 1 || resp.SourceHealth.Failures[0].SourceID != "rss:blocked" {
+		t.Fatalf("not_modified fetch should not appear as failure: %+v", resp.SourceHealth.Failures)
+	}
+	if resp.SourceHealth.ItemProducingSourceCount != 1 || resp.SourceHealth.ItemCount != 3 {
+		t.Fatalf("unexpected source item counts: %+v", resp.SourceHealth)
+	}
+}
+
 func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *testing.T) {
 	ctx := context.Background()
 	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
