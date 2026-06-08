@@ -1839,3 +1839,55 @@ rollback refs:
   load behavior. Revert 32601389 only if the problem checkpoint should be
   removed from mission history.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T10:08Z Choir-in-Choir continuation reached Super
+  but failed before worker delegation or package/blocker publication.
+current artifact state:
+  Staging behavior commit is 24c589ca88fb3ab715b6a616bf5092e357868a29. The
+  owner-routed desktop is active at VM vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19
+  with sandbox URL http://10.202.180.2:8085. No new Global Wire
+  AppChangePackage is visible in that routed desktop; the only listed package
+  is the old unrelated RBO package 84c12250-2d0b-43f3-b5ed-90f8e051634e.
+new evidence:
+  The product-path continuation is trajectory
+  cff02946-bcc0-46e0-bacf-f3641750a250. It is stored in the owner-routed
+  sandbox, not the active platform sandbox. Its agents were conductor
+  completed, vtext completed, and super failed. The VText agent for document
+  296c079b-ac0d-4781-8d8c-d905a3e0f50b created a mission revision, invoked
+  `request_super_execution`, emitted a channel message to
+  `super:5b`, and received `request_super_execution returned`.
+
+  Super then started its loop and performed many repo/file search operations
+  (`glob`, `read_file`, `bash`, `grep`). It compacted context from 177,714
+  tokens to 31,200 tokens, then continued reading/searching. The terminal trace
+  event is `loop.failed` with summary
+  `tool loop: model stopped at max_tokens (iteration 30)`.
+belief-state changes:
+  This is not a VText-to-Super routing failure and not an AppChangePackage
+  review failure. The handoff to persistent Super succeeded, but Super never
+  turned the mission into a worker-medium/vsuper delegation or a precise
+  owner-readable blocker before hitting the tool-loop model/iteration limit.
+  This is a supervision-handoff discipline/runtime substrate problem: long
+  Super investigations can consume their whole loop budget reading context and
+  then fail silently from the product point of view, leaving no reviewable
+  package and no mission VText blocker.
+remaining error field:
+  The Choir-in-Choir accelerator still cannot be called reliable for platform
+  work. A product-path mission continuation can reach Super, but Super needs a
+  deterministic obligation to checkpoint, delegate, or publish a precise
+  blocker before loop exhaustion. The next code/design probe should find where
+  max-token/iteration-stop failures are handled and ensure this failure mode
+  creates durable owner-readable state rather than only a failed Trace.
+next executable probe:
+  Inspect the agent loop termination path for `model stopped at max_tokens`
+  and the Super profile/tool policy around MissionGradient work. Prefer a
+  bounded fix that forces mission Super runs to emit a checkpoint/blocker VText
+  or deterministic delegation request before terminal budget exhaustion. Add
+  regression coverage for loop exhaustion preserving a durable checkpoint or
+  explicit blocker, then rerun a product-path mission continuation.
+rollback refs:
+  No behavior change in this checkpoint. Staging rollback remains
+  24c589ca88fb3ab715b6a616bf5092e357868a29.
+```
