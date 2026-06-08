@@ -599,3 +599,56 @@ rollback refs:
   platform rollback is current deployed main before any accepted fix lands; no
   mission payload code changed during the failed product-path attempts.
 ```
+
+```text
+status: review_failed_requeue
+last checkpoint: 2026-06-08T05:30Z product-path worker produced a deletion
+  AppChangePackage, but Codex review rejected it before landing.
+current artifact state:
+  The required-next-tool substrate blocker was fixed in commit c9b02be2 and
+  deployed to staging. The rerun product trajectory
+  f2330486-99e4-4a7b-a283-a9eaf1625dbc successfully reached worker-medium,
+  started worker/vsuper loop 1ee7a2a7-107f-46b9-b4a2-763911d21592, spawned an
+  implementation co-super loop 592f9bce-b4ed-4190-bb5d-2b10a3ddcc11, and
+  produced unlisted AppChangePackage 5365bcb7-a51c-4f49-9a06-d10c465c8a7b.
+what the worker did well:
+  The worker passed the deletion-bias eval at the intent level. It did not
+  merely recommend deletion; it removed the Sources Chronology/search surface,
+  removed the bespoke Style.vtext control panel, updated Global Wire tests to
+  assert their absence, committed candidate SHA
+  e9b8ff8e0cc216c9d6d478c72ab4671339e50470, and published an AppChangePackage.
+review failure:
+  Codex rejected the package before landing. The package patch appears to
+  change the first line of `frontend/src/lib/GlobalWireApp.svelte` from
+  `<script>` to `\<script\>`, which would break Svelte parsing if applied as
+  source. The worker also claimed "build passed", but trace event 66 for the
+  implementation co-super shows `go build ./...` timed out after two minutes.
+  No frontend `npm run build` or Playwright acceptance proof was present in
+  the package evidence at review time.
+belief-state changes:
+  Choir-in-Choir can now start a delegated worker after a lease, read the
+  mission docs, make candidate code edits, commit them, and publish an
+  AppChangePackage through the product path. The source-transfer/review loop is
+  real but not yet trustworthy: package generation can carry malformed source,
+  and the mission VText can overstate verification when a worker reports
+  success after a timed-out command.
+remaining error field:
+  The candidate must be corrected or requeued with explicit review findings:
+  preserve the deletion intent, repair malformed Svelte markup, run the real
+  frontend build/test path, and provide browser or Playwright evidence for
+  Global Wire after the deletion. Do not land package 5365bcb7 as-is.
+next executable probe:
+  Feed the Codex review failure back into the mission VText/Super loop or have
+  Codex salvage the intended deletion in a normal branch. Any accepted fix must
+  include frontend build proof and staging/browser proof after deployment.
+evidence artifact refs:
+  deployed substrate fix c9b02be2200764ad809935472c8073fa4694eb05; product
+  trajectory f2330486-99e4-4a7b-a283-a9eaf1625dbc; mission VText
+  861848eb-3310-46d1-b4c0-777a38e46686; worker run
+  1ee7a2a7-107f-46b9-b4a2-763911d21592; implementation co-super run
+  592f9bce-b4ed-4190-bb5d-2b10a3ddcc11; rejected package
+  5365bcb7-a51c-4f49-9a06-d10c465c8a7b; rejected candidate commit e9b8ff8.
+rollback refs:
+  no rejected package has been adopted or deployed. Staging remains at
+  c9b02be2.
+```
