@@ -390,6 +390,82 @@ Rollback refs to record during execution:
 
 ```text
 status: checkpoint_incomplete
+last checkpoint: 2026-06-08T14:20Z provider conformance mission widened before patching
+  checkpoint updated after root-causing the first VText failure far enough to
+  show that a one-off serialization patch would be premature.
+current artifact state:
+  Direct gateway calls prove small non-agent requests for DeepSeek and Xiaomi,
+  but the real VText appagent loop failed on DeepSeek when exact
+  `tool_choice=function:edit_vtext` was combined with thinking mode. A small
+  live DeepSeek probe reproduced the core rule: thinking mode rejects the exact
+  forced function tool choice with `Thinking mode does not support this
+  tool_choice`; disabling thinking lets exact function and `required` tool
+  choices return tool calls.
+what shipped:
+  No new code after the deployed provider cutover. A documentation checkpoint
+  was committed first as `b73fe1be` to preserve the problem before any fix.
+what was proven:
+  DeepSeek OpenAI-format non-thinking tool calls work for a toy function with
+  exact function tool choice and with `required`. DeepSeek OpenAI-format
+  thinking plus exact tool choice does not work. Official docs say DeepSeek's
+  Anthropic endpoint is `https://api.deepseek.com/anthropic`, supports tools
+  and `tool_choice` variants `none`, `auto`, `any`, and `tool`, but does not
+  support image/document message blocks. Official DeepSeek thinking docs say
+  tool-call turns in thinking mode require returning `reasoning_content` in
+  subsequent requests. Xiaomi docs say both `mimo-v2.5-pro` and `mimo-v2.5`
+  have 1M context, function calling, deep thinking, and similar
+  `reasoning_content` passback requirements for agent products; `mimo-v2.5`
+  is the full-modal model.
+unproven or partial claims:
+  We have not yet proven all Choir tool-call modes across DeepSeek OpenAI,
+  DeepSeek Anthropic, Xiaomi OpenAI, and Xiaomi Anthropic. We have not proven
+  provider-backed agent loops survive compaction or recall source material
+  after compaction. We have not proven Xiaomi tool calls beyond small text and
+  image completion.
+belief-state changes:
+  Provider adoption should be treated as a conformance matrix, not a single
+  adapter toggle. The right next run is to make provider/tool/reasoning
+  semantics explicit and tested, then select OpenAI-vs-Anthropic protocol per
+  provider/model based on evidence. DeepSeek may want Anthropic protocol for
+  agent loops even if OpenAI protocol remains useful for simple text calls.
+remaining error field:
+  Build an exhaustive provider conformance suite before resuming Global Wire
+  article work. The suite must cover text completion, image input where
+  supported, tool choice `auto`/`required`/exact/none, multi-turn tool result
+  continuation, reasoning-content passback, missing-reasoning negative cases,
+  context pressure, compaction, and post-compaction recall. It must distinguish
+  protocol limitations from model limitations and must not silently fall back to
+  Fireworks or ChatGPT when testing DeepSeek/Xiaomi.
+highest-impact remaining uncertainty:
+  Whether Anthropic-compatible routes reduce impedance with Choir's native
+  Anthropic-shaped tool loop enough to justify provider-specific protocol
+  selection, and whether reasoning-content state can be preserved through
+  Choir compaction without leaking hidden reasoning into user-visible VText.
+next executable probe:
+  Implement a provider conformance harness with env-gated live tests and a
+  product-path agent-loop proof. Use small deterministic tools first, then a
+  long-context open-PDF recall probe that forces compaction: have the agent read
+  one or more openly available PDFs, compact, then answer specific recall
+  questions and cite file/source handles after compaction. Only after this
+  passes should the mission return to Global Wire processors, reconcilers, and
+  VText article generation.
+evidence artifact refs:
+  DeepSeek docs consulted:
+  `https://api-docs.deepseek.com/`,
+  `https://api-docs.deepseek.com/guides/anthropic_api`,
+  `https://api-docs.deepseek.com/guides/thinking_mode`, and
+  `https://api-docs.deepseek.com/guides/tool_calls`.
+  Xiaomi docs consulted:
+  `https://platform.xiaomimimo.com/docs/en-US/api/chat/anthropic-api`,
+  `https://platform.xiaomimimo.com/docs/en-US/quick-start/model`,
+  `https://platform.xiaomimimo.com/docs/en-US/usage-guide/passing-back-reasoning_content`,
+  and `https://platform.xiaomimimo.com/docs/en-US/pricing`.
+rollback refs:
+  Keep the direct provider cutover deployed for small calls unless it breaks
+  production behavior, but do not route VText article generation through a
+  provider/protocol combination until conformance passes or the model policy is
+  explicitly set to a known-good fallback.
+
 last checkpoint: 2026-06-08T14:08Z deployed DeepSeek/Xiaomi cutover exposes VText tool-choice blocker
   checkpoint updated after staging deploy, credential lift, direct gateway
   proof, and a product-path VText run that reached the new DeepSeek policy but
