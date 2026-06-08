@@ -876,10 +876,11 @@ func (s *Storage) SearchItems(ctx context.Context, query string, limit int) ([]s
 		return s.searchItemsByID(ctx, itemIDs, limit)
 	}
 	terms := sourceSearchTerms(query)
-	selectFields := `id, source_id, source_type, fetch_id, original_id, title, body, url,
-		canonical_url, published, fetched_at, verticals, language, region, content_hash,
-		body_kind, body_length, reader_snapshot, raw_json, evidence_level, vintage_policy,
-		lookahead_status, release_date`
+	selectFields := `i.id, i.source_id, i.source_type, i.fetch_id, i.original_id, i.title, i.body, i.url,
+		i.canonical_url, i.published, i.fetched_at, i.verticals, i.language, i.region, i.content_hash,
+		i.body_kind, i.body_length, i.reader_snapshot, COALESCE(s.tos_class, ''), COALESCE(s.robots_policy, ''),
+		COALESCE(s.auth_policy, ''), COALESCE(s.store_body_policy, ''), i.raw_json, i.evidence_level,
+		i.vintage_policy, i.lookahead_status, i.release_date`
 	sqlQuery := `SELECT ` + selectFields
 	args := []any{}
 	if len(terms) > 0 {
@@ -889,24 +890,24 @@ func (s *Storage) SearchItems(ctx context.Context, query string, limit int) ([]s
 		whereArgs := make([]any, 0, len(terms)*3)
 		for _, term := range terms {
 			needle := "%" + term + "%"
-			clause := `lower(title) LIKE ? OR lower(body) LIKE ? OR lower(source_id) LIKE ?`
+			clause := `lower(i.title) LIKE ? OR lower(i.body) LIKE ? OR lower(i.source_id) LIKE ?`
 			scoreParts = append(scoreParts, `CASE WHEN `+clause+` THEN 1 ELSE 0 END`)
 			whereParts = append(whereParts, `(`+clause+`)`)
 			scoreArgs = append(scoreArgs, needle, needle, needle)
 			whereArgs = append(whereArgs, needle, needle, needle)
 		}
 		sqlQuery += `, (` + strings.Join(scoreParts, " + ") + `) AS search_score`
-		sqlQuery += ` FROM items`
+		sqlQuery += ` FROM items i LEFT JOIN sources s ON s.id = i.source_id`
 		sqlQuery += ` WHERE ` + strings.Join(whereParts, ` OR `)
 		args = append(args, scoreArgs...)
 		args = append(args, whereArgs...)
 	} else {
-		sqlQuery += ` FROM items`
+		sqlQuery += ` FROM items i LEFT JOIN sources s ON s.id = i.source_id`
 	}
 	if len(terms) > 0 {
-		sqlQuery += ` ORDER BY search_score DESC, published DESC, fetched_at DESC LIMIT ?`
+		sqlQuery += ` ORDER BY search_score DESC, i.published DESC, i.fetched_at DESC LIMIT ?`
 	} else {
-		sqlQuery += ` ORDER BY published DESC, fetched_at DESC LIMIT ?`
+		sqlQuery += ` ORDER BY i.published DESC, i.fetched_at DESC LIMIT ?`
 	}
 	args = append(args, limit)
 	rows, err := s.DB.QueryContext(ctx, sqlQuery, args...)
@@ -924,16 +925,18 @@ func (s *Storage) SearchItems(ctx context.Context, query string, limit int) ([]s
 			if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
 				&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
 				&verticals, &item.Language, &item.Region, &item.ContentHash, &item.BodyKind,
-				&item.BodyLength, &readerSnapshot, &item.RawJSON, &item.EvidenceLevel, &item.VintagePolicy,
-				&item.LookaheadStatus, &item.ReleaseDate, &score); err != nil {
+				&item.BodyLength, &readerSnapshot, &item.SourceTOSClass, &item.SourceRobotsPolicy,
+				&item.SourceAuthPolicy, &item.StoreBodyPolicy, &item.RawJSON, &item.EvidenceLevel,
+				&item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate, &score); err != nil {
 				return nil, err
 			}
 		} else {
 			if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
 				&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
 				&verticals, &item.Language, &item.Region, &item.ContentHash, &item.BodyKind,
-				&item.BodyLength, &readerSnapshot, &item.RawJSON, &item.EvidenceLevel, &item.VintagePolicy,
-				&item.LookaheadStatus, &item.ReleaseDate); err != nil {
+				&item.BodyLength, &readerSnapshot, &item.SourceTOSClass, &item.SourceRobotsPolicy,
+				&item.SourceAuthPolicy, &item.StoreBodyPolicy, &item.RawJSON, &item.EvidenceLevel,
+				&item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
 				return nil, err
 			}
 		}
@@ -964,10 +967,13 @@ func (s *Storage) searchItemsByID(ctx context.Context, itemIDs []string, limit i
 		args = append(args, itemID)
 	}
 	args = append(args, limit)
-	rows, err := s.DB.QueryContext(ctx, `SELECT id, source_id, source_type, fetch_id, original_id, title, body, url,
-		canonical_url, published, fetched_at, verticals, language, region, content_hash,
-		body_kind, body_length, reader_snapshot, raw_json, evidence_level, vintage_policy, lookahead_status, release_date
-		FROM items WHERE id IN (`+strings.Join(placeholders, ",")+`) ORDER BY published DESC, fetched_at DESC LIMIT ?`, args...)
+	rows, err := s.DB.QueryContext(ctx, `SELECT i.id, i.source_id, i.source_type, i.fetch_id, i.original_id, i.title, i.body, i.url,
+		i.canonical_url, i.published, i.fetched_at, i.verticals, i.language, i.region, i.content_hash,
+		i.body_kind, i.body_length, i.reader_snapshot, COALESCE(s.tos_class, ''), COALESCE(s.robots_policy, ''),
+		COALESCE(s.auth_policy, ''), COALESCE(s.store_body_policy, ''), i.raw_json, i.evidence_level,
+		i.vintage_policy, i.lookahead_status, i.release_date
+		FROM items i LEFT JOIN sources s ON s.id = i.source_id
+		WHERE i.id IN (`+strings.Join(placeholders, ",")+`) ORDER BY i.published DESC, i.fetched_at DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -980,8 +986,9 @@ func (s *Storage) searchItemsByID(ctx context.Context, itemIDs []string, limit i
 		if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
 			&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
 			&verticals, &item.Language, &item.Region, &item.ContentHash, &item.BodyKind,
-			&item.BodyLength, &readerSnapshot, &item.RawJSON, &item.EvidenceLevel, &item.VintagePolicy,
-			&item.LookaheadStatus, &item.ReleaseDate); err != nil {
+			&item.BodyLength, &readerSnapshot, &item.SourceTOSClass, &item.SourceRobotsPolicy,
+			&item.SourceAuthPolicy, &item.StoreBodyPolicy, &item.RawJSON, &item.EvidenceLevel,
+			&item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
 			return nil, err
 		}
 		item.Published = parseStoredTime(published)
@@ -1039,18 +1046,21 @@ func (s *Storage) GetItem(ctx context.Context, itemID string) (sources.Item, err
 	if itemID == "" {
 		return sources.Item{}, fmt.Errorf("item id is required")
 	}
-	row := s.DB.QueryRowContext(ctx, `SELECT id, source_id, source_type, fetch_id, original_id, title, body, url,
-		canonical_url, published, fetched_at, verticals, language, region, content_hash,
-		body_kind, body_length, reader_snapshot, raw_json, evidence_level, vintage_policy, lookahead_status, release_date
-		FROM items WHERE id = ?`, itemID)
+	row := s.DB.QueryRowContext(ctx, `SELECT i.id, i.source_id, i.source_type, i.fetch_id, i.original_id, i.title, i.body, i.url,
+		i.canonical_url, i.published, i.fetched_at, i.verticals, i.language, i.region, i.content_hash,
+		i.body_kind, i.body_length, i.reader_snapshot, COALESCE(s.tos_class, ''), COALESCE(s.robots_policy, ''),
+		COALESCE(s.auth_policy, ''), COALESCE(s.store_body_policy, ''), i.raw_json, i.evidence_level,
+		i.vintage_policy, i.lookahead_status, i.release_date
+		FROM items i LEFT JOIN sources s ON s.id = i.source_id WHERE i.id = ?`, itemID)
 	var item sources.Item
 	var published, fetchedAt, verticals string
 	var readerSnapshot int
 	if err := row.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
 		&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
 		&verticals, &item.Language, &item.Region, &item.ContentHash, &item.BodyKind,
-		&item.BodyLength, &readerSnapshot, &item.RawJSON, &item.EvidenceLevel, &item.VintagePolicy,
-		&item.LookaheadStatus, &item.ReleaseDate); err != nil {
+		&item.BodyLength, &readerSnapshot, &item.SourceTOSClass, &item.SourceRobotsPolicy,
+		&item.SourceAuthPolicy, &item.StoreBodyPolicy, &item.RawJSON, &item.EvidenceLevel,
+		&item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
 		return sources.Item{}, err
 	}
 	item.Published = parseStoredTime(published)

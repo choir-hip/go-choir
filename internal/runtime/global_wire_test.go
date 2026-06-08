@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -477,18 +478,22 @@ func TestHandleGlobalWireSourceSearchImportsAndQueuesSourceServiceEvidence(t *te
 			Provider: sourceapi.ProviderName,
 			Metadata: sourceapi.Metadata{TargetKind: sourceapi.TargetKind},
 			Results: []sourceapi.ItemResult{{
-				Rank:          1,
-				TargetKind:    sourceapi.TargetKind,
-				ItemID:        "srcitem_port_congestion",
-				SourceID:      "rss:ports",
-				SourceType:    "rss",
-				FetchID:       "fetch-port-1",
-				Title:         "Port congestion eases",
-				Body:          "Terminal dwell times fell after additional rail slots opened.",
-				URL:           "https://example.test/ports",
-				CanonicalURL:  "https://example.test/ports",
-				ContentHash:   "hash-port-congestion",
-				EvidenceLevel: "source-service-ledger",
+				Rank:            1,
+				TargetKind:      sourceapi.TargetKind,
+				ItemID:          "srcitem_port_congestion",
+				SourceID:        "rss:ports",
+				SourceType:      "rss",
+				FetchID:         "fetch-port-1",
+				Title:           "Port congestion eases",
+				Body:            "Terminal dwell times fell after additional rail slots opened.",
+				URL:             "https://example.test/ports",
+				CanonicalURL:    "https://example.test/ports",
+				ContentHash:     "hash-port-congestion",
+				BodyKind:        "feed_summary",
+				BodyLength:      len("Terminal dwell times fell after additional rail slots opened."),
+				ReaderSnapshot:  false,
+				StoreBodyPolicy: "excerpt_only",
+				EvidenceLevel:   "source-service-ledger",
 			}},
 		})
 	}))
@@ -534,6 +539,83 @@ func TestHandleGlobalWireSourceSearchImportsAndQueuesSourceServiceEvidence(t *te
 	}
 	if metadata["schema"] != "choir.global_wire_source_service_item.v1" || metadata["source_item_id"] != "srcitem_port_congestion" {
 		t.Fatalf("unexpected source-service metadata: %+v", metadata)
+	}
+	if metadata["reader_snapshot_status"] != "skipped_store_body_policy" {
+		t.Fatalf("reader snapshot status = %v, want skipped_store_body_policy; metadata=%+v", metadata["reader_snapshot_status"], metadata)
+	}
+}
+
+func TestHandleGlobalWireSourceSearchImportsAllowedReaderSnapshot(t *testing.T) {
+	previous := sourcefetch.SetAllowPrivateNetworkForTests(true)
+	t.Cleanup(func() { sourcefetch.SetAllowPrivateNetworkForTests(previous) })
+
+	articleText := strings.Repeat("Reader snapshot paragraph with concrete source reporting and enough extracted article body for Global Wire to cite. ", 8)
+	articleServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprintf(w, `<html><head><title>Port congestion full article</title></head><body><main><h1>Port congestion full article</h1><p>%s</p></main></body></html>`, articleText)
+	}))
+	defer articleServer.Close()
+
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/source-service/search" {
+			t.Fatalf("unexpected source service path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(sourceapi.SearchResponse{
+			Query:    "port congestion",
+			Provider: sourceapi.ProviderName,
+			Metadata: sourceapi.Metadata{TargetKind: sourceapi.TargetKind},
+			Results: []sourceapi.ItemResult{{
+				Rank:            1,
+				TargetKind:      sourceapi.TargetKind,
+				ItemID:          "srcitem_allowed_reader_snapshot",
+				SourceID:        "rss:ports",
+				SourceType:      "rss",
+				FetchID:         "fetch-port-2",
+				Title:           "Port congestion eases",
+				Body:            "Short feed summary.",
+				URL:             articleServer.URL + "/ports",
+				CanonicalURL:    articleServer.URL + "/ports",
+				ContentHash:     "hash-feed-summary",
+				BodyKind:        "feed_summary",
+				BodyLength:      len("Short feed summary."),
+				ReaderSnapshot:  false,
+				StoreBodyPolicy: "bounded_text",
+				EvidenceLevel:   "source-service-ledger",
+			}},
+		})
+	}))
+	defer sourceServer.Close()
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+
+	_, handler := testAPISetup(t)
+	body := `{"query":"port congestion","max_results":1,"story_id":"story-supply-resilience","queue_top_result":true}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/source-search", body, "user-alpha")
+	if w.Code != http.StatusOK {
+		t.Fatalf("source search status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp globalWireSourceSearchResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode source search: %v", err)
+	}
+	if len(resp.ContentItems) != 1 {
+		t.Fatalf("content items = %d, want 1", len(resp.ContentItems))
+	}
+	item := resp.ContentItems[0]
+	if !strings.Contains(item.TextContent, "Reader snapshot paragraph") {
+		t.Fatalf("stored text did not use reader snapshot: %q", item.TextContent)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(item.Metadata, &metadata); err != nil {
+		t.Fatalf("decode metadata: %v", err)
+	}
+	if metadata["reader_snapshot"] != true || metadata["reader_snapshot_status"] != "imported" || metadata["body_kind"] != "reader_snapshot" {
+		t.Fatalf("unexpected reader snapshot metadata: %+v", metadata)
+	}
+	if metadata["reader_snapshot_content_id"] == "" {
+		t.Fatalf("reader snapshot import content id missing: %+v", metadata)
 	}
 }
 

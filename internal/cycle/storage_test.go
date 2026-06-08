@@ -112,6 +112,9 @@ func TestStoragePersistsFetchItemsAndDedupsAcrossRestart(t *testing.T) {
 	if results[0].BodyKind != sources.BodyKindSourceBody || results[0].BodyLength != len("Rates held steady.") || results[0].ReaderSnapshot {
 		t.Fatalf("body classification did not persist: %+v", results[0])
 	}
+	if results[0].StoreBodyPolicy != "bounded_release_text" || results[0].SourceAuthPolicy != "none" {
+		t.Fatalf("source policy fields did not resolve: %+v", results[0])
+	}
 }
 
 func TestStorageDerivesBodyClassificationForLegacyRows(t *testing.T) {

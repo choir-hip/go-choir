@@ -193,30 +193,34 @@ func (c *httpSourceSearchClient) ResolveSourceItem(ctx context.Context, itemID s
 
 func sourceAPIItemMap(item sourceapi.ItemResult) map[string]any {
 	return map[string]any{
-		"rank":             item.Rank,
-		"target_kind":      firstNonEmptyString(item.TargetKind, sourceapi.TargetKind),
-		"item_id":          item.ItemID,
-		"source_id":        item.SourceID,
-		"source_type":      item.SourceType,
-		"fetch_id":         item.FetchID,
-		"original_id":      item.OriginalID,
-		"title":            item.Title,
-		"body":             item.Body,
-		"url":              item.URL,
-		"canonical_url":    item.CanonicalURL,
-		"published_at":     item.PublishedAt,
-		"fetched_at":       item.FetchedAt,
-		"verticals":        item.Verticals,
-		"language":         item.Language,
-		"region":           item.Region,
-		"content_hash":     item.ContentHash,
-		"body_kind":        item.BodyKind,
-		"body_length":      item.BodyLength,
-		"reader_snapshot":  item.ReaderSnapshot,
-		"evidence_level":   item.EvidenceLevel,
-		"vintage_policy":   item.VintagePolicy,
-		"lookahead_status": item.LookaheadStatus,
-		"release_date":     item.ReleaseDate,
+		"rank":                 item.Rank,
+		"target_kind":          firstNonEmptyString(item.TargetKind, sourceapi.TargetKind),
+		"item_id":              item.ItemID,
+		"source_id":            item.SourceID,
+		"source_type":          item.SourceType,
+		"fetch_id":             item.FetchID,
+		"original_id":          item.OriginalID,
+		"title":                item.Title,
+		"body":                 item.Body,
+		"url":                  item.URL,
+		"canonical_url":        item.CanonicalURL,
+		"published_at":         item.PublishedAt,
+		"fetched_at":           item.FetchedAt,
+		"verticals":            item.Verticals,
+		"language":             item.Language,
+		"region":               item.Region,
+		"content_hash":         item.ContentHash,
+		"body_kind":            item.BodyKind,
+		"body_length":          item.BodyLength,
+		"reader_snapshot":      item.ReaderSnapshot,
+		"source_tos_class":     item.SourceTOSClass,
+		"source_robots_policy": item.SourceRobotsPolicy,
+		"source_auth_policy":   item.SourceAuthPolicy,
+		"store_body_policy":    item.StoreBodyPolicy,
+		"evidence_level":       item.EvidenceLevel,
+		"vintage_policy":       item.VintagePolicy,
+		"lookahead_status":     item.LookaheadStatus,
+		"release_date":         item.ReleaseDate,
 	}
 }
 
@@ -774,10 +778,23 @@ func compactFetchURLProjection(full map[string]any, content string, requireFindi
 
 func stringValue(value any) string {
 	switch v := value.(type) {
+	case nil:
+		return ""
 	case string:
 		return v
 	default:
 		return strings.TrimSpace(fmt.Sprint(v))
+	}
+}
+
+func boolValue(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true")
+	default:
+		return false
 	}
 }
 

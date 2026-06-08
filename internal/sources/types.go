@@ -58,29 +58,33 @@ func (s Source) EffectiveMaxItemsPerPoll(fallback int) int {
 }
 
 type Item struct {
-	ID              string     `json:"id"`
-	SourceID        string     `json:"source_id"`
-	SourceType      SourceType `json:"source_type,omitempty"`
-	FetchID         string     `json:"fetch_id,omitempty"`
-	OriginalID      string     `json:"original_id"`
-	Title           string     `json:"title"`
-	Body            string     `json:"body"`
-	URL             string     `json:"url"`
-	CanonicalURL    string     `json:"canonical_url,omitempty"`
-	Published       time.Time  `json:"published"`
-	FetchedAt       time.Time  `json:"fetched_at"`
-	Verticals       []string   `json:"verticals"`
-	Language        string     `json:"language,omitempty"`
-	Region          string     `json:"region,omitempty"`
-	ContentHash     string     `json:"content_hash,omitempty"`
-	BodyKind        string     `json:"body_kind,omitempty"`
-	BodyLength      int        `json:"body_length,omitempty"`
-	ReaderSnapshot  bool       `json:"reader_snapshot,omitempty"`
-	RawJSON         string     `json:"raw_json,omitempty"`
-	EvidenceLevel   string     `json:"evidence_level,omitempty"`
-	VintagePolicy   string     `json:"vintage_policy,omitempty"`
-	LookaheadStatus string     `json:"lookahead_status,omitempty"`
-	ReleaseDate     string     `json:"release_date,omitempty"`
+	ID                 string     `json:"id"`
+	SourceID           string     `json:"source_id"`
+	SourceType         SourceType `json:"source_type,omitempty"`
+	FetchID            string     `json:"fetch_id,omitempty"`
+	OriginalID         string     `json:"original_id"`
+	Title              string     `json:"title"`
+	Body               string     `json:"body"`
+	URL                string     `json:"url"`
+	CanonicalURL       string     `json:"canonical_url,omitempty"`
+	Published          time.Time  `json:"published"`
+	FetchedAt          time.Time  `json:"fetched_at"`
+	Verticals          []string   `json:"verticals"`
+	Language           string     `json:"language,omitempty"`
+	Region             string     `json:"region,omitempty"`
+	ContentHash        string     `json:"content_hash,omitempty"`
+	BodyKind           string     `json:"body_kind,omitempty"`
+	BodyLength         int        `json:"body_length,omitempty"`
+	ReaderSnapshot     bool       `json:"reader_snapshot,omitempty"`
+	SourceTOSClass     string     `json:"source_tos_class,omitempty"`
+	SourceRobotsPolicy string     `json:"source_robots_policy,omitempty"`
+	SourceAuthPolicy   string     `json:"source_auth_policy,omitempty"`
+	StoreBodyPolicy    string     `json:"store_body_policy,omitempty"`
+	RawJSON            string     `json:"raw_json,omitempty"`
+	EvidenceLevel      string     `json:"evidence_level,omitempty"`
+	VintagePolicy      string     `json:"vintage_policy,omitempty"`
+	LookaheadStatus    string     `json:"lookahead_status,omitempty"`
+	ReleaseDate        string     `json:"release_date,omitempty"`
 }
 
 const (

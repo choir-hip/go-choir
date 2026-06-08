@@ -102,6 +102,17 @@ func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 	defer store.Close()
 
 	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+	if err := store.SaveSources(&sources.Registry{Sources: []sources.Source{{
+		ID:                  "official-fed",
+		Type:                sources.SourceTypeRSS,
+		Name:                "Federal Reserve",
+		URL:                 "https://example.test/feed.xml",
+		PollIntervalSeconds: 3600,
+		AuthPolicy:          "none",
+		StoreBodyPolicy:     "bounded_release_text",
+	}}}); err != nil {
+		t.Fatalf("save source: %v", err)
+	}
 	item := sources.Item{
 		ID:              "srcitem_test_rates",
 		SourceID:        "official-fed",
@@ -155,6 +166,9 @@ func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 	if got.BodyKind != item.BodyKind || got.BodyLength != item.BodyLength || got.ReaderSnapshot {
 		t.Fatalf("unexpected search body classification: %+v", got)
 	}
+	if got.StoreBodyPolicy != "bounded_release_text" || got.SourceAuthPolicy != "none" {
+		t.Fatalf("unexpected search source policy fields: %+v", got)
+	}
 
 	handleReq := httptest.NewRequest(http.MethodGet, "/internal/source-service/search?q=source_service_item:"+item.ID+"&max_results=5", nil)
 	handleRec := httptest.NewRecorder()
@@ -185,6 +199,9 @@ func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 	}
 	if resolved.Item.BodyKind != item.BodyKind || resolved.Item.BodyLength != item.BodyLength || resolved.Item.ReaderSnapshot {
 		t.Fatalf("unexpected resolved body classification: %+v", resolved.Item)
+	}
+	if resolved.Item.StoreBodyPolicy != "bounded_release_text" || resolved.Item.SourceAuthPolicy != "none" {
+		t.Fatalf("unexpected resolved source policy fields: %+v", resolved.Item)
 	}
 }
 

@@ -6584,27 +6584,41 @@ func (h *APIHandler) ensureGlobalWireSourceServiceContentItem(r *http.Request, o
 	}
 	now := time.Now().UTC()
 	body := strings.TrimSpace(stringValue(result["body"]))
-	metadata, err := json.Marshal(map[string]any{
-		"schema":           "choir.global_wire_source_service_item.v1",
-		"target_kind":      firstNonEmptyString(stringValue(result["target_kind"]), sourceapi.TargetKind),
-		"source_item_id":   itemID,
-		"source_id":        stringValue(result["source_id"]),
-		"fetch_id":         stringValue(result["fetch_id"]),
-		"original_id":      stringValue(result["original_id"]),
-		"published_at":     stringValue(result["published_at"]),
-		"fetched_at":       stringValue(result["fetched_at"]),
-		"verticals":        result["verticals"],
-		"language":         stringValue(result["language"]),
-		"region":           stringValue(result["region"]),
-		"body_kind":        stringValue(result["body_kind"]),
-		"body_length":      result["body_length"],
-		"reader_snapshot":  result["reader_snapshot"],
-		"evidence_level":   stringValue(result["evidence_level"]),
-		"vintage_policy":   stringValue(result["vintage_policy"]),
-		"lookahead_status": stringValue(result["lookahead_status"]),
-		"release_date":     stringValue(result["release_date"]),
-		"research_use":     "pending-reconciliation-review",
-	})
+	metadataFields := map[string]any{
+		"schema":               "choir.global_wire_source_service_item.v1",
+		"target_kind":          firstNonEmptyString(stringValue(result["target_kind"]), sourceapi.TargetKind),
+		"source_item_id":       itemID,
+		"source_id":            stringValue(result["source_id"]),
+		"source_type":          stringValue(result["source_type"]),
+		"fetch_id":             stringValue(result["fetch_id"]),
+		"original_id":          stringValue(result["original_id"]),
+		"published_at":         stringValue(result["published_at"]),
+		"fetched_at":           stringValue(result["fetched_at"]),
+		"verticals":            result["verticals"],
+		"language":             stringValue(result["language"]),
+		"region":               stringValue(result["region"]),
+		"body_kind":            stringValue(result["body_kind"]),
+		"body_length":          result["body_length"],
+		"reader_snapshot":      result["reader_snapshot"],
+		"source_tos_class":     stringValue(result["source_tos_class"]),
+		"source_robots_policy": stringValue(result["source_robots_policy"]),
+		"source_auth_policy":   stringValue(result["source_auth_policy"]),
+		"store_body_policy":    stringValue(result["store_body_policy"]),
+		"evidence_level":       stringValue(result["evidence_level"]),
+		"vintage_policy":       stringValue(result["vintage_policy"]),
+		"lookahead_status":     stringValue(result["lookahead_status"]),
+		"release_date":         stringValue(result["release_date"]),
+		"research_use":         "pending-reconciliation-review",
+	}
+	readerSnapshot := boolValue(result["reader_snapshot"])
+	sourceURL := firstNonEmptyString(stringValue(result["canonical_url"]), stringValue(result["url"]))
+	if !readerSnapshot {
+		enrichedBody, enrichedHash := body, firstNonEmptyString(stringValue(result["content_hash"]), contentHash(body))
+		h.enrichGlobalWireSourceServiceReaderSnapshot(r, ownerID, sourceURL, body, result, metadataFields, &enrichedBody, &enrichedHash)
+		body = enrichedBody
+		result["content_hash"] = enrichedHash
+	}
+	metadata, err := json.Marshal(metadataFields)
 	if err != nil {
 		return types.ContentItem{}, err
 	}
@@ -6641,4 +6655,75 @@ func (h *APIHandler) ensureGlobalWireSourceServiceContentItem(r *http.Request, o
 	}
 	_, _ = h.rt.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventContentItemCreated, contentItemEventPayload(item))
 	return item, nil
+}
+
+func (h *APIHandler) enrichGlobalWireSourceServiceReaderSnapshot(r *http.Request, ownerID, sourceURL, currentBody string, result map[string]any, metadata map[string]any, bodyOut *string, hashOut *string) {
+	bodyKind := strings.TrimSpace(stringValue(result["body_kind"]))
+	policy := strings.TrimSpace(stringValue(result["store_body_policy"]))
+	if !globalWireShouldAttemptReaderSnapshot(bodyKind, policy, sourceURL) {
+		metadata["reader_snapshot_status"] = globalWireReaderSnapshotSkipReason(bodyKind, policy, sourceURL)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+	defer cancel()
+	imported, err := h.rt.ImportURLContent(ctx, ownerID, sourceURL, "")
+	if err != nil {
+		metadata["reader_snapshot_status"] = "fetch_failed"
+		metadata["reader_snapshot_error"] = truncateString(err.Error(), 240)
+		return
+	}
+	importedText := strings.TrimSpace(imported.TextContent)
+	if len(importedText) < 400 || len(importedText) <= len(strings.TrimSpace(currentBody))*2 {
+		metadata["reader_snapshot_status"] = "low_content"
+		metadata["reader_snapshot_content_id"] = imported.ContentID
+		metadata["reader_snapshot_content_chars"] = len(importedText)
+		return
+	}
+	*bodyOut = importedText
+	*hashOut = firstNonEmptyString(imported.ContentHash, contentHash(importedText))
+	result["body_kind"] = "reader_snapshot"
+	result["body_length"] = len([]rune(importedText))
+	result["reader_snapshot"] = true
+	metadata["body_kind"] = "reader_snapshot"
+	metadata["body_length"] = len([]rune(importedText))
+	metadata["reader_snapshot"] = true
+	metadata["reader_snapshot_status"] = "imported"
+	metadata["reader_snapshot_content_id"] = imported.ContentID
+	metadata["reader_snapshot_content_hash"] = imported.ContentHash
+	metadata["reader_snapshot_source_type"] = imported.SourceType
+	metadata["reader_snapshot_media_type"] = imported.MediaType
+}
+
+func globalWireShouldAttemptReaderSnapshot(bodyKind, policy, sourceURL string) bool {
+	if strings.TrimSpace(sourceURL) == "" {
+		return false
+	}
+	switch strings.TrimSpace(policy) {
+	case "bounded_text", "bounded_release_text":
+	default:
+		return false
+	}
+	switch strings.TrimSpace(bodyKind) {
+	case "", "empty", "feed_summary":
+		return true
+	default:
+		return false
+	}
+}
+
+func globalWireReaderSnapshotSkipReason(bodyKind, policy, sourceURL string) string {
+	if strings.TrimSpace(sourceURL) == "" {
+		return "skipped_no_url"
+	}
+	switch strings.TrimSpace(policy) {
+	case "bounded_text", "bounded_release_text":
+	default:
+		return "skipped_store_body_policy"
+	}
+	switch strings.TrimSpace(bodyKind) {
+	case "", "empty", "feed_summary":
+		return "eligible"
+	default:
+		return "skipped_body_kind"
+	}
 }
