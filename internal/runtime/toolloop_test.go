@@ -1154,11 +1154,13 @@ func (p *rateLimitThenSuccessProvider) CallWithTools(ctx context.Context, req To
 
 type exactToolChoicePreconditionThenToolProvider struct {
 	Provider
-	calls   int32
-	choices []string
+	calls    int32
+	choices  []string
+	requests []ToolLoopRequest
 }
 
 func (p *exactToolChoicePreconditionThenToolProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.requests = append(p.requests, req)
 	p.choices = append(p.choices, req.ToolChoice)
 	call := atomic.AddInt32(&p.calls, 1)
 	if call == 1 {
@@ -1188,6 +1190,16 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 		},
 	}); err != nil {
 		t.Fatalf("register edit_vtext: %v", err)
+	}
+	if err := registry.Register(Tool{
+		Name:        "request_super_execution",
+		Description: "Ask Super to execute follow-on platform work.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"requested"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register request_super_execution: %v", err)
 	}
 	var retrySeen bool
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
@@ -1229,6 +1241,14 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 	}
 	if len(provider.choices) != 2 || provider.choices[0] != "function:edit_vtext" || provider.choices[1] != "required" {
 		t.Fatalf("tool choices = %#v, want exact then required", provider.choices)
+	}
+	if len(provider.requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(provider.requests))
+	}
+	for i, req := range provider.requests {
+		if len(req.ToolDefinitions) != 1 || req.ToolDefinitions[0].Name != "edit_vtext" {
+			t.Fatalf("request %d tool definitions = %+v, want only edit_vtext", i, req.ToolDefinitions)
+		}
 	}
 	if !retrySeen {
 		t.Fatal("missing provider_tool_choice retry event")

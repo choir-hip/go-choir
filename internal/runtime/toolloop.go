@@ -293,6 +293,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			ToolDefinitions: toolDefs,
 			MaxTokens:       maxTokens,
 		}
+		initialToolChoiceApplied := false
 		if len(toolDefs) > 0 && requiredNextTool != nil {
 			req.ToolChoice = exactRequiredToolChoice(requiredNextTool.Name)
 			if req.MaxTokens <= 0 {
@@ -303,9 +304,15 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				req.MaxTokens = requiredNextToolDefaultMaxTokens
 			}
 		} else if len(toolDefs) > 0 && options.initialToolChoice != "" && (i == 0 || forceInitialToolChoiceRetry) {
+			initialToolChoiceApplied = true
 			req.ToolChoice = options.initialToolChoice
 			if relaxInitialExactToolChoice && isExactRequiredToolChoice(req.ToolChoice) {
 				req.ToolChoice = "required"
+			}
+		}
+		if initialToolChoiceApplied {
+			if name, ok := exactRequiredToolChoiceName(options.initialToolChoice); ok {
+				req.ToolDefinitions = toolDefinitionsMatchingName(toolDefs, name)
 			}
 		}
 		forceInitialToolChoiceRetry = false
@@ -316,8 +323,8 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				"iteration":            i + 1,
 				"phase":                "provider_call_started",
 				"messages":             len(messages),
-				"tools":                len(toolDefs),
-				"tool_names":           toolDefinitionNames(toolDefs),
+				"tools":                len(req.ToolDefinitions),
+				"tool_names":           toolDefinitionNames(req.ToolDefinitions),
 				"system_chars":         len(systemPrompt),
 				"system_sha256":        toolOutputSHA256Hex(systemPrompt),
 				"system_preview":       truncatePromptSnippet(systemPrompt, 2000),
@@ -654,7 +661,17 @@ func exactRequiredToolChoice(name string) string {
 }
 
 func isExactRequiredToolChoice(choice string) bool {
-	return strings.HasPrefix(strings.TrimSpace(choice), "function:")
+	_, ok := exactRequiredToolChoiceName(choice)
+	return ok
+}
+
+func exactRequiredToolChoiceName(choice string) (string, bool) {
+	name, ok := strings.CutPrefix(strings.TrimSpace(choice), "function:")
+	if !ok {
+		return "", false
+	}
+	name = strings.TrimSpace(name)
+	return name, name != ""
 }
 
 func isExactInitialToolChoicePreconditionError(choice string, err error) bool {
@@ -664,6 +681,19 @@ func isExactInitialToolChoicePreconditionError(choice string, err error) bool {
 	text := strings.ToLower(err.Error())
 	return strings.Contains(text, "412") ||
 		strings.Contains(text, "precondition failed")
+}
+
+func toolDefinitionsMatchingName(defs []ToolDefinition, name string) []ToolDefinition {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return defs
+	}
+	for _, def := range defs {
+		if def.Name == name {
+			return []ToolDefinition{def}
+		}
+	}
+	return defs
 }
 
 func extractRequiredNextTool(results []types.ToolResult) (pendingRequiredTool, bool) {
