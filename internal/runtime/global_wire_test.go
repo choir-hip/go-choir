@@ -134,8 +134,10 @@ func TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads(t *testing.T) {
 	if story.Headline != "Madrid dispatch" || !strings.Contains(story.Projections["wire-style"], "MADRID -- Pope Leo XIV") {
 		t.Fatalf("indexed source-network story did not expose article head: %+v", story)
 	}
-	if len(story.Manifest.Lead) != 2 || story.Manifest.Lead[0].ID != "srcitem_live_1" {
-		t.Fatalf("indexed source-network story missing source handles: %+v", story.Manifest)
+	if len(story.Manifest.Lead) != 0 || len(story.Manifest.Context) != 1 ||
+		story.Manifest.Context[0].ID != "source-network-cycle:cycle-live" ||
+		!strings.Contains(story.Manifest.Context[0].Standing, "2 source handles retained in revision provenance") {
+		t.Fatalf("indexed source-network story should expose bounded cycle provenance, got %+v", story.Manifest)
 	}
 	claimText := strings.Join(story.Claims, "\n")
 	if strings.Contains(claimText, "Style.vtext: Global Wire") ||

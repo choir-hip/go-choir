@@ -576,7 +576,10 @@ func sourceMaxxVTextStoryFromCurrentRevision(doc types.Document, rev types.Revis
 	dek := sourceMaxxArticleDek(content)
 	projection := sourceMaxxArticleProjection(content)
 	manifest := sourceMaxxManifestFromRevision(meta, content, headline)
-	if len(manifest.Lead) == 0 {
+	if len(manifest.Lead) == 0 &&
+		len(manifest.Supporting) == 0 &&
+		len(manifest.Contrary) == 0 &&
+		len(manifest.Context) == 0 {
 		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
 			ID:       "source-network-cycle:" + metadataString(meta, "source_maxx_cycle_id"),
 			Title:    "Source network cycle " + metadataString(meta, "source_maxx_cycle_id"),
@@ -660,8 +663,7 @@ func sourceMaxxManifestFromRevision(meta map[string]any, content, headline strin
 	if len(entities) > 0 {
 		return sourceMaxxManifestFromSourceEntities(entities)
 	}
-	sourceIDs := sourceMaxxMetadataStringSlice(meta["source_item_ids"])
-	return sourceMaxxManifestFromHandles(sourceIDs, headline)
+	return sourceMaxxManifestFromCycleProvenance(meta, headline)
 }
 
 func sourceMaxxVisibleSourceEntities(meta map[string]any, content string) []vtextSourceEntity {
@@ -765,23 +767,23 @@ func sourceMaxxSourceEntityManifestStanding(entity vtextSourceEntity) string {
 	}
 }
 
-func sourceMaxxManifestFromHandles(sourceIDs []string, headline string) types.GlobalWireSourceManifest {
+func sourceMaxxManifestFromCycleProvenance(meta map[string]any, headline string) types.GlobalWireSourceManifest {
 	manifest := types.GlobalWireSourceManifest{}
-	for i, id := range sourceIDs {
-		item := types.GlobalWireSourceItem{
-			ID:       id,
-			Title:    "Source network source item " + id,
-			Standing: "source-service handle",
-			Role:     "lead",
+	cycleID := metadataString(meta, "source_maxx_cycle_id")
+	sourceIDs := sourceMaxxMetadataStringSlice(meta["source_item_ids"])
+	switch {
+	case cycleID != "":
+		standing := "source firehose cycle"
+		if len(sourceIDs) > 0 {
+			standing = fmt.Sprintf("source firehose cycle; %d source handles retained in revision provenance", len(sourceIDs))
 		}
-		if i >= 3 {
-			item.Role = "context"
-			manifest.Context = append(manifest.Context, item)
-			continue
-		}
-		manifest.Lead = append(manifest.Lead, item)
-	}
-	if len(manifest.Lead) == 0 && strings.TrimSpace(headline) != "" {
+		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
+			ID:       "source-network-cycle:" + cycleID,
+			Title:    "Source network cycle " + cycleID,
+			Standing: standing,
+			Role:     "context",
+		})
+	case strings.TrimSpace(headline) != "":
 		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
 			ID:       "source-network-vtext:" + headline,
 			Title:    "Global Wire VText article head",
