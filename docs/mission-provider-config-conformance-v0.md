@@ -640,21 +640,27 @@ what was proven:
   source-resolved/base64 image payloads or known-accessible URLs rather than
   arbitrary third-party image URLs that may block provider fetchers.
 
-  A low-cost continuation-selection compaction probe was attempted through the
-  authenticated product API after the verifier trajectory. `POST
-  /api/continuations` with `source_loop_id`
-  `737c5434-21f8-4aba-b19b-1f2ba67a187d` returned `400 {"error":"record not
-  found"}`; retrying with concrete completed super loop
-  `861b6dd4-870f-417b-998b-bef49b4c2915` returned the same error. Trace and
-  diagnosis APIs can see the trajectory and loop ids, but the continuation
-  endpoint did not resolve them from the current product route. This did not
-  produce compaction evidence.
+  A low-cost continuation-selection compaction probe was initially attempted
+  after the verifier trajectory by replaying old ids:
+  `737c5434-21f8-4aba-b19b-1f2ba67a187d` and
+  `861b6dd4-870f-417b-998b-bef49b4c2915`. Those calls returned `record not
+  found`/`source run not found`. A follow-up same-session probe showed the root
+  cause was owner scoping, not a continuation route defect: the shared
+  Playwright auth state had been replaced by a newer WebAuthn test user, so the
+  old verifier ids were no longer visible to the authenticated owner. Under the
+  current authenticated product session, prompt-bar submission
+  `aa27605d-dc1a-41cd-a083-d3d7b5f1a682` completed, and `POST
+  /api/continuations` for that source run returned continuation
+  `36310c20-f0c7-4016-88ab-bdea09b0f5b6` with
+  `compaction_status:"completed"` and no runtime patch. This proves the
+  continuation-selection compaction route can work on staging for a same-owner
+  product run. It still does not prove long-context post-compaction recall.
 unproven or partial claims:
   Full auto/required/none tool-mode matrix, non-tool reasoning-content passback
-  for DeepSeek Anthropic, streaming behavior for the new routes, compaction and
-  post-compaction recall safety, continuation endpoint resolution for
-  trace-visible run ids, reliable arbitrary-image-URL verifier behavior, and the
-  final Global Wire provider readiness report remain unproven.
+  for DeepSeek Anthropic, streaming behavior for the new routes, long-context
+  compaction and post-compaction recall safety, reliable arbitrary-image-URL
+  verifier behavior, and the final Global Wire provider readiness report remain
+  unproven.
 belief-state changes:
   The selected DeepSeek OpenAI-compatible path is now viable for VText exact
   edit/tool loops when tool-bearing calls disable thinking. Anthropic-compatible
@@ -664,15 +670,17 @@ belief-state changes:
   direct-DeepSeek researcher loop and a no-token-cap Xiaomi multimodal verifier
   loop have now been proven through product paths. Xiaomi multimodal is viable
   for base64/fixture and at least one accessible public URL, but arbitrary
-  image URL fetch behavior remains unreliable. Provider readiness is still not
-  complete enough for Global Wire hard cutover until compaction behavior is
-  proven or precisely bounded and the final provider readiness report is
-  written.
+  image URL fetch behavior remains unreliable. The continuation-selection
+  compaction route works for same-owner product runs, but this only proves the
+  control path and a compacted checkpoint, not recall under real long-context
+  pressure. Provider readiness is still not complete enough for Global Wire hard
+  cutover until long-context compaction behavior is proven or precisely bounded
+  and the final provider readiness report is written.
 remaining error field:
   Complete the provider/protocol conformance matrix beyond the repaired
-  OpenAI-compatible tool loop, prove or bound compaction/recall continuity, and
-  then select safe model-policy defaults for processors, reconcilers,
-  researchers, VText article agents, and multimodal verifiers.
+  OpenAI-compatible tool loop, prove or bound long-context compaction/recall
+  continuity, and then select safe model-policy defaults for processors,
+  reconcilers, researchers, VText article agents, and multimodal verifiers.
 highest-impact remaining uncertainty:
   Whether hidden reasoning/compaction continuity remains correct under
   long-context pressure, and whether the Anthropic-compatible routes provide
@@ -680,10 +688,10 @@ highest-impact remaining uncertainty:
 next executable probe:
   Run one long-context compaction proof with post-compaction recall and at least
   one post-compaction tool call, using normal model policy and no arbitrary token
-  caps. If using `/api/continuations` as the control path, first root-cause why
-  it returns `record not found` for trace-visible product-loop ids. Then extend
-  the provider/protocol tool-mode matrix to auto/required/none and write the
-  Global Wire provider readiness report.
+  caps. Use a fresh same-owner product-path run or preserve the auth state for
+  any source run ids being replayed; old Playwright-auth ids are not durable
+  cross-user evidence. Then extend the provider/protocol tool-mode matrix to
+  auto/required/none and write the Global Wire provider readiness report.
 suggested resume goal string:
   /goal Run docs/mission-provider-config-conformance-v0.md as MissionGradient and make DeepSeek/Xiaomi production-ready for Choir agents.
 evidence artifact refs:
