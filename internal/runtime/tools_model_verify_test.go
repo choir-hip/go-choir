@@ -117,7 +117,7 @@ func TestVerifyModelCapabilityUsesPolicyForTextOnlyVerifier(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify_model_capability: %v", err)
 	}
-	if provider.req.Provider != "fireworks" || provider.req.Model != "accounts/fireworks/models/deepseek-v4-pro" {
+	if provider.req.Provider != "deepseek" || provider.req.Model != "deepseek-v4-pro" {
 		t.Fatalf("request provider/model = %s/%s", provider.req.Provider, provider.req.Model)
 	}
 	if strings.Contains(string(provider.req.Messages[0]), `"type":"image"`) {
@@ -128,7 +128,7 @@ func TestVerifyModelCapabilityUsesPolicyForTextOnlyVerifier(t *testing.T) {
 	}
 }
 
-func TestVerifyModelCapabilityUsesPolicyForKimiImage(t *testing.T) {
+func TestVerifyModelCapabilityUsesPolicyForMiMoImage(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
 	dir := t.TempDir()
 	rt := New(Config{
@@ -137,7 +137,7 @@ func TestVerifyModelCapabilityUsesPolicyForKimiImage(t *testing.T) {
 	}, nil, nil, provider)
 	tool := newVerifyModelCapabilityTool(rt)
 	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
-		RunID:        "run-verify-kimi",
+		RunID:        "run-verify-mimo",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
 	})
@@ -150,7 +150,7 @@ func TestVerifyModelCapabilityUsesPolicyForKimiImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify_model_capability: %v", err)
 	}
-	if provider.req.Provider != "fireworks" || provider.req.Model != "accounts/fireworks/models/kimi-k2p6" {
+	if provider.req.Provider != "xiaomi" || provider.req.Model != "mimo-v2.5" {
 		t.Fatalf("request provider/model = %s/%s", provider.req.Provider, provider.req.Model)
 	}
 	if len(provider.req.Messages) != 1 {
