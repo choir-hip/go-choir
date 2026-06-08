@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -382,6 +383,15 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 		return types.Revision{}, fmt.Errorf("ensure canonical vtext projection path: %w", err)
 	}
 	revMeta := addVTextEditRevisionMetadata(rt.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation), materialized, rec)
+	if normalizedContent, normalizedCount := normalizeGlobalWireArticleBareSourceRefs(materialized.Content, revMeta, rec); normalizedCount > 0 {
+		materialized.Content = normalizedContent
+		revMeta = mergeVTextRevisionMetadata(revMeta, map[string]any{
+			"source_ref_normalization": map[string]any{
+				"normalized_bare_source_refs": normalizedCount,
+				"syntax":                      "[label](source:ENTITY_ID)",
+			},
+		})
+	}
 	if canonicalPath != "" {
 		revMeta = mergeVTextRevisionMetadata(revMeta, map[string]any{
 			"canonical_vtext_source_path": canonicalPath,
@@ -433,6 +443,49 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 	rt.emitVTextAgentEvent(ctx, rec, types.EventVTextAgentRevisionCompleted,
 		events.CauseToolExecution, completedPayload)
 	return storedRev, nil
+}
+
+var bareVTextSourceRefRE = regexp.MustCompile(`\[source:([A-Za-z0-9_.:-]{1,160})\]`)
+
+func normalizeGlobalWireArticleBareSourceRefs(content string, metadata json.RawMessage, rec *types.RunRecord) (string, int) {
+	if !isGlobalWireArticleRevisionRun(rec) {
+		return content, 0
+	}
+	meta := decodeRevisionMetadata(metadata)
+	entities := decodeVTextSourceEntities(meta["source_entities"])
+	if len(entities) == 0 || !strings.Contains(content, "[source:") {
+		return content, 0
+	}
+	labels := map[string]string{}
+	for _, entity := range entities {
+		id := strings.TrimSpace(entity.EntityID)
+		if id == "" {
+			continue
+		}
+		label := strings.TrimSpace(firstNonEmpty(entity.Label, entity.Kind, "source"))
+		if label == "" {
+			label = "source"
+		}
+		labels[id] = label
+	}
+	if len(labels) == 0 {
+		return content, 0
+	}
+	count := 0
+	normalized := bareVTextSourceRefRE.ReplaceAllStringFunc(content, func(match string) string {
+		parts := bareVTextSourceRefRE.FindStringSubmatch(match)
+		if len(parts) != 2 {
+			return match
+		}
+		id := strings.TrimSpace(parts[1])
+		label := labels[id]
+		if label == "" {
+			return match
+		}
+		count++
+		return "[" + label + "](source:" + id + ")"
+	})
+	return normalized, count
 }
 
 func materializeVTextToolEdit(edit editVTextArgs, current types.Revision) (materializedVTextEdit, error) {

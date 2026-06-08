@@ -201,7 +201,7 @@ func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifes
 			"",
 			"PARIS -- Emergency crews reopened the rail corridor after overnight flooding, with regional authorities saying inspections will continue through the afternoon [wire](source:src_cited_one).",
 			"",
-			"Local notices still warn commuters to expect rolling delays while crews clear debris from the lowest platforms [notice](source:src_cited_two).",
+			"Local notices still warn commuters to expect rolling delays while crews clear debris from the lowest platforms [source:src_cited_two].",
 			"",
 			"## Source Handles",
 			"",

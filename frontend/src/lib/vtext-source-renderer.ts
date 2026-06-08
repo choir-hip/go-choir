@@ -409,11 +409,20 @@ export function renderInlineVTextRef(label: string, docID: string, relatedVTexts
   </span>`;
 }
 
+function sourceEntityInlineLabel(entity: any, fallback = 'source'): string {
+  const title = entity ? sourceEntityTitle(entity) : '';
+  return String(entity?.label || title || fallback || 'source').trim();
+}
+
 export function renderInlineMarkdown(value: unknown, sourceEntities: any[] = [], relatedVTexts: any[] = []): string {
   let html = escapeHTML(value);
   html = html.replace(/\[([^\]]+)\]\(source:([^)]+)\)/g, (_match, label, entityID) =>
     renderInlineSourceRef(label, entityID, sourceEntities)
   );
+  html = html.replace(/\[source:([A-Za-z0-9_.:-]{1,160})\]/g, (_match, entityID) => {
+    const entity = findSourceEntity(sourceEntities, entityID);
+    return renderInlineSourceRef(sourceEntityInlineLabel(entity), entityID, sourceEntities);
+  });
   html = html.replace(/\[([^\]]+)\]\(vtext:([^)]+)\)/g, (_match, label, docID) =>
     renderInlineVTextRef(label, docID, relatedVTexts)
   );

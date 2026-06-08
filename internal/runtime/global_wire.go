@@ -720,6 +720,23 @@ func sourceMaxxInlineSourceRefs(content string) map[string]bool {
 		}
 		rest = rest[end+1:]
 	}
+	rest = content
+	for {
+		idx := strings.Index(rest, "[source:")
+		if idx < 0 {
+			break
+		}
+		rest = rest[idx+len("[source:"):]
+		end := strings.Index(rest, "]")
+		if end < 0 {
+			break
+		}
+		id := strings.TrimSpace(rest[:end])
+		if id != "" {
+			out[id] = true
+		}
+		rest = rest[end+1:]
+	}
 	return out
 }
 

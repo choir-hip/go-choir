@@ -2206,7 +2206,7 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 		!strings.Contains(vtextRun.Prompt, "By Choir News") {
 		t.Fatalf("processor vtext run missing article-head completion contract: %q", vtextRun.Prompt)
 	}
-	articleContent := "# Fed rate cut expectations cool as inflation prints remain uneven\n\nMarkets repriced the near-term rate path after the latest inflation batch, but the stronger claim is not that a cut is off the table. The useful reading is narrower: officials have less room to declare victory while price pressure remains uneven across services and shelter measures [inflation batch](source:" + sourceEntities[0].EntityID + ").\n\nThe result is a market-moving macro update with a narrower evidentiary claim: officials can still cut later, but the latest batch gives them less room to declare inflation contained.\n"
+	articleContent := "# Fed rate cut expectations cool as inflation prints remain uneven\n\nMarkets repriced the near-term rate path after the latest inflation batch, but the stronger claim is not that a cut is off the table. The useful reading is narrower: officials have less room to declare victory while price pressure remains uneven across services and shelter measures [source:" + sourceEntities[0].EntityID + "].\n\nThe result is a market-moving macro update with a narrower evidentiary claim: officials can still cut later, but the latest batch gives them less room to declare inflation contained.\n"
 	editArgs, err := json.Marshal(map[string]any{
 		"doc_id":           vtextSpawn.DocID,
 		"base_revision_id": vtextSpawn.SeedRevisionID,
@@ -2232,7 +2232,9 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	if err != nil {
 		t.Fatalf("get article revision: %v", err)
 	}
-	if articleRev.ParentRevisionID != vtextSpawn.SeedRevisionID || !strings.Contains(articleRev.Content, "(source:"+sourceEntities[0].EntityID+")") {
+	if articleRev.ParentRevisionID != vtextSpawn.SeedRevisionID ||
+		!strings.Contains(articleRev.Content, "](source:"+sourceEntities[0].EntityID+")") ||
+		strings.Contains(articleRev.Content, "[source:"+sourceEntities[0].EntityID+"]") {
 		t.Fatalf("article revision content/lineage invalid: %+v", articleRev)
 	}
 	articleMeta := decodeRevisionMetadata(articleRev.Metadata)
@@ -2244,6 +2246,9 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 		metadataString(articleMeta, "processor_key") != "processor:global_firehose:global:gdelt" ||
 		metadataString(articleMeta, "selected_style_rationale") == "" {
 		t.Fatalf("vtext-owned article revision lost durable source/style metadata: %#v", articleMeta)
+	}
+	if normalization, ok := articleMeta["source_ref_normalization"].(map[string]any); !ok || metadataIntValue(normalization, "normalized_bare_source_refs") != 1 {
+		t.Fatalf("vtext-owned article revision did not record bare source ref normalization: %#v", articleMeta)
 	}
 	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"mutate code",
