@@ -150,6 +150,36 @@ func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifes
 	_, handler := testAPISetup(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		itemID := strings.TrimPrefix(r.URL.Path, "/internal/source-service/items/")
+		switch itemID {
+		case "srcitem_cited_one":
+			_ = json.NewEncoder(w).Encode(sourceapi.ResolveItemResponse{
+				Provider: sourceapi.ProviderName,
+				Item: sourceapi.ItemResult{
+					TargetKind:   sourceapi.TargetKind,
+					ItemID:       itemID,
+					SourceID:     "rss:regional-wire",
+					FetchID:      "fetch-regional-wire",
+					Title:        "Regional wire confirms rail corridor reopening",
+					URL:          "https://example.test/regional-wire",
+					CanonicalURL: "https://example.test/regional-wire",
+					ContentHash:  "hash-regional-wire",
+				},
+			})
+		case "srcitem_uncited":
+			_ = json.NewEncoder(w).Encode(sourceapi.ResolveItemResponse{
+				Provider: sourceapi.ProviderName,
+				Item:     sourceapi.ItemResult{TargetKind: sourceapi.TargetKind, ItemID: itemID, Title: "Uncited cycle context"},
+			})
+		default:
+			t.Fatalf("unexpected source service item path %s", r.URL.Path)
+		}
+	}))
+	defer sourceServer.Close()
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
 	doc := types.Document{
 		DocID:     "doc-source-network-scoped-sources",
 		OwnerID:   "global-wire-platform",
@@ -171,7 +201,7 @@ func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifes
 			{
 				"entity_id": "src_cited_one",
 				"kind":      "source_service_item",
-				"label":     "Regional wire bulletin",
+				"label":     "Source Service item srcitem_cited_one",
 				"target":    map[string]any{"target_kind": "source_service_item", "item_id": "srcitem_cited_one"},
 			},
 			{
@@ -239,6 +269,11 @@ func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifes
 	}
 	if story.Manifest.Lead[0].ID != "srcitem_cited_one" || story.Manifest.Lead[1].ID != "content-cited-two" {
 		t.Fatalf("manifest did not expose cited source entity ids: %+v", story.Manifest.Lead)
+	}
+	if story.Manifest.Lead[0].Title != "Regional wire confirms rail corridor reopening" ||
+		story.Manifest.Lead[0].SourceID != "rss:regional-wire" ||
+		story.Manifest.Lead[0].CanonicalURL != "https://example.test/regional-wire" {
+		t.Fatalf("manifest did not resolve source-service item metadata: %+v", story.Manifest.Lead[0])
 	}
 }
 

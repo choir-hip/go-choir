@@ -20,6 +20,8 @@ type GlobalWireSourceItem struct {
 	Title        string `json:"title"`
 	Standing     string `json:"standing"`
 	Role         string `json:"role"`
+	SourceID     string `json:"source_id,omitempty"`
+	FetchID      string `json:"fetch_id,omitempty"`
 	CanonicalURL string `json:"canonical_url,omitempty"`
 }
 

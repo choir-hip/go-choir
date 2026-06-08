@@ -1,9 +1,14 @@
 package runtime
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -330,6 +335,51 @@ func TestVTextPromptDerivesSourceServiceEntitiesFromResearcherUpdates(t *testing
 		if !strings.Contains(request, want) {
 			t.Fatalf("source-service prompt missing %q:\n%s", want, request)
 		}
+	}
+}
+
+func TestVTextSourceServiceEntitiesResolveItemTitles(t *testing.T) {
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/source-service/items/srcitem_current_economy" {
+			t.Fatalf("unexpected source service path %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(sourceapi.ResolveItemResponse{
+			Provider: sourceapi.ProviderName,
+			Item: sourceapi.ItemResult{
+				TargetKind:   sourceapi.TargetKind,
+				ItemID:       "srcitem_current_economy",
+				SourceID:     "rss:market-wire",
+				SourceType:   "rss",
+				FetchID:      "fetch-market-wire",
+				Title:        "Markets reprice rate-cut odds after inflation print",
+				URL:          "https://example.test/markets/rates",
+				CanonicalURL: "https://example.test/markets/rates",
+				ContentHash:  "hash-rate-cut-odds",
+			},
+		})
+	}))
+	defer sourceServer.Close()
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+
+	recent := []ChannelMessage{{
+		Role:    AgentProfileResearcher,
+		From:    "researcher:source",
+		Content: "Refs:\n- source_service_item:srcitem_current_economy",
+	}}
+	entities := (&Runtime{}).sourceEntitiesFromWorkerMessages(context.Background(), "user-source", recent)
+	if len(entities) != 1 {
+		t.Fatalf("source entities len = %d: %#v", len(entities), entities)
+	}
+	entity := entities[0]
+	if entity.Label != "Markets reprice rate-cut odds after inflation print" ||
+		entity.Target.SourceID != "rss:market-wire" ||
+		entity.Target.FetchID != "fetch-market-wire" ||
+		entity.Target.CanonicalURL != "https://example.test/markets/rates" ||
+		len(entity.Selectors) != 1 ||
+		entity.Selectors[0].ContentHash != "hash-rate-cut-odds" {
+		t.Fatalf("source-service entity was not enriched from resolved item: %#v", entity)
 	}
 }
 

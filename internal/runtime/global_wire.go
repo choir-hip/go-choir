@@ -546,7 +546,7 @@ func (h *APIHandler) sourceMaxxVTextStories(ctx context.Context, styleSources []
 			}
 			return nil, err
 		}
-		story, ok := sourceMaxxVTextStoryFromCurrentRevision(doc, rev, styleSources)
+		story, ok := sourceMaxxVTextStoryFromCurrentRevision(ctx, doc, rev, styleSources)
 		if ok {
 			out = append(out, story)
 		}
@@ -562,7 +562,7 @@ func sourceMaxxPlatformOwnerID() string {
 	return ownerID
 }
 
-func sourceMaxxVTextStoryFromCurrentRevision(doc types.Document, rev types.Revision, styleSources []types.GlobalWireStyleSource) (types.GlobalWireStory, bool) {
+func sourceMaxxVTextStoryFromCurrentRevision(ctx context.Context, doc types.Document, rev types.Revision, styleSources []types.GlobalWireStyleSource) (types.GlobalWireStory, bool) {
 	meta := decodeRevisionMetadata(rev.Metadata)
 	if metadataString(meta, "source") != "edit_vtext" || metadataString(meta, "source_maxx_cycle_id") == "" {
 		return types.GlobalWireStory{}, false
@@ -575,7 +575,7 @@ func sourceMaxxVTextStoryFromCurrentRevision(doc types.Document, rev types.Revis
 	headline := sourceMaxxArticleHeadline(doc.Title, content)
 	dek := sourceMaxxArticleDek(content)
 	projection := sourceMaxxArticleProjection(content)
-	manifest := sourceMaxxManifestFromRevision(meta, content, headline)
+	manifest := sourceMaxxManifestFromRevision(ctx, meta, content, headline)
 	if len(manifest.Lead) == 0 &&
 		len(manifest.Supporting) == 0 &&
 		len(manifest.Contrary) == 0 &&
@@ -658,15 +658,15 @@ func sourceMaxxMetadataStringSlice(value any) []string {
 	return out
 }
 
-func sourceMaxxManifestFromRevision(meta map[string]any, content, headline string) types.GlobalWireSourceManifest {
-	entities := sourceMaxxVisibleSourceEntities(meta, content)
+func sourceMaxxManifestFromRevision(ctx context.Context, meta map[string]any, content, headline string) types.GlobalWireSourceManifest {
+	entities := sourceMaxxVisibleSourceEntities(ctx, meta, content)
 	if len(entities) > 0 {
 		return sourceMaxxManifestFromSourceEntities(entities)
 	}
 	return sourceMaxxManifestFromCycleProvenance(meta, headline)
 }
 
-func sourceMaxxVisibleSourceEntities(meta map[string]any, content string) []vtextSourceEntity {
+func sourceMaxxVisibleSourceEntities(ctx context.Context, meta map[string]any, content string) []vtextSourceEntity {
 	entities := decodeVTextSourceEntities(meta["source_entities"])
 	if len(entities) == 0 {
 		return nil
@@ -685,6 +685,7 @@ func sourceMaxxVisibleSourceEntities(meta map[string]any, content string) []vtex
 		seen[id] = true
 		out = append(out, entity)
 	}
+	enrichSourceServiceEntities(ctx, out)
 	return out
 }
 
@@ -748,10 +749,13 @@ func sourceMaxxManifestFromSourceEntities(entities []vtextSourceEntity) types.Gl
 			continue
 		}
 		item := types.GlobalWireSourceItem{
-			ID:       id,
-			Title:    sourceMaxxSourceEntityManifestTitle(entity),
-			Standing: sourceMaxxSourceEntityManifestStanding(entity),
-			Role:     "lead",
+			ID:           id,
+			Title:        sourceMaxxSourceEntityManifestTitle(entity),
+			Standing:     sourceMaxxSourceEntityManifestStanding(entity),
+			Role:         "lead",
+			SourceID:     strings.TrimSpace(entity.Target.SourceID),
+			FetchID:      strings.TrimSpace(entity.Target.FetchID),
+			CanonicalURL: firstNonEmpty(entity.Target.CanonicalURL, entity.Target.URL),
 		}
 		if i >= 3 {
 			item.Role = "context"

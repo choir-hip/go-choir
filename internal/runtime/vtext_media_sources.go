@@ -9,7 +9,9 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -310,6 +312,7 @@ func sourceServiceEntitiesFromWorkerMessages(messages []ChannelMessage) []vtextS
 
 func (rt *Runtime) sourceEntitiesFromWorkerMessages(ctx context.Context, ownerID string, messages []ChannelMessage) []vtextSourceEntity {
 	entities := sourceServiceEntitiesFromWorkerMessages(messages)
+	enrichSourceServiceEntities(ctx, entities)
 	seen := map[string]bool{}
 	for _, entity := range entities {
 		if key := sourceEntityKey(entity); key != "" {
@@ -335,6 +338,65 @@ func (rt *Runtime) sourceEntitiesFromWorkerMessages(ctx context.Context, ownerID
 		}
 	}
 	return entities
+}
+
+func enrichSourceServiceEntities(ctx context.Context, entities []vtextSourceEntity) {
+	if len(entities) == 0 {
+		return
+	}
+	sourceClient, ok := newSourceSearchClientFromEnv().(sourceItemResolveClient)
+	if !ok || sourceClient == nil {
+		return
+	}
+	resolveCtx, cancel := context.WithTimeout(ctx, 750*time.Millisecond)
+	defer cancel()
+	for i := range entities {
+		itemID := strings.TrimSpace(entities[i].Target.ItemID)
+		if !strings.EqualFold(strings.TrimSpace(entities[i].Target.TargetKind), "source_service_item") || itemID == "" {
+			continue
+		}
+		item, err := sourceClient.ResolveSourceItem(resolveCtx, itemID)
+		if err != nil || item == nil {
+			continue
+		}
+		enrichSourceServiceEntityFromItem(&entities[i], *item)
+	}
+}
+
+func enrichSourceServiceEntityFromItem(entity *vtextSourceEntity, item sourceapi.ItemResult) {
+	if entity == nil {
+		return
+	}
+	title := strings.TrimSpace(item.Title)
+	if title != "" && sourceServiceEntityLabelShouldUseResolvedTitle(entity.Label, item.ItemID) {
+		entity.Label = title
+	}
+	if strings.TrimSpace(entity.Target.SourceID) == "" {
+		entity.Target.SourceID = strings.TrimSpace(item.SourceID)
+	}
+	if strings.TrimSpace(entity.Target.FetchID) == "" {
+		entity.Target.FetchID = strings.TrimSpace(item.FetchID)
+	}
+	if strings.TrimSpace(entity.Target.URL) == "" {
+		entity.Target.URL = strings.TrimSpace(item.URL)
+	}
+	if strings.TrimSpace(entity.Target.CanonicalURL) == "" {
+		entity.Target.CanonicalURL = strings.TrimSpace(item.CanonicalURL)
+	}
+	if item.ContentHash != "" && len(entity.Selectors) > 0 && entity.Selectors[0].ContentHash == "" {
+		entity.Selectors[0].ContentHash = item.ContentHash
+	}
+}
+
+func sourceServiceEntityLabelShouldUseResolvedTitle(label, itemID string) bool {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return true
+	}
+	if strings.EqualFold(label, "Source Service item "+strings.TrimSpace(itemID)) {
+		return true
+	}
+	return strings.Contains(label, strings.TrimSpace(itemID))
 }
 
 func sourceServiceItemIDsFromText(text string) []string {
