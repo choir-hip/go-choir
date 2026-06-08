@@ -119,6 +119,10 @@ processors/reconcilers/researchers/VText article agents.
   product-path agent loops. If response length matters, prompt for the desired
   length. A hard token cap is allowed only as a narrow diagnostic and must not be
   counted as production-readiness evidence.
+- Explicit `max_tokens` remains valid only when it is owner/platform model
+  policy, not when an agent or test is inventing a cap to make a probe cheaper.
+  The tool-loop's finite required-next-tool recovery budget is a bounded retry
+  guard for a missed required tool, not a provider configuration default.
 - Staging is the acceptance environment for platform behavior.
 - Problem documentation precedes behavior-changing fixes.
 
@@ -670,6 +674,18 @@ what was proven:
   `CHOIR_PROVIDER_LIVE_TESTS=1 nix develop -c go test ./internal/provider -run
   'TestIntegrationDeepSeekDirectLive|TestIntegrationXiaomiTextAndImageLive'
   -count=1 -v`.
+
+  Follow-up architecture inspection confirmed that long-context recall should
+  use the existing shared harness rather than a provider-specific branch.
+  Run-memory compaction summaries include raw `entry_id` handles for compacted
+  messages; `get_run_memory_entry` is registered through the evidence toolset;
+  and the evidence toolset is available to the roles that need it for this
+  mission, including VText, researcher, processor, reconciler, super, vsuper,
+  and co-super. Therefore the next proof should force a realistic provider
+  turn through compaction, then require the model to retrieve exact pre-
+  compaction content by `get_run_memory_entry`. Do not lower context thresholds
+  or add token caps for product-readiness evidence; if a lower threshold is used
+  at all, it is a local diagnostic and must be labeled as such.
 unproven or partial claims:
   Product-path coverage for the full auto/required/none tool-mode matrix,
   non-tool reasoning-content passback for DeepSeek Anthropic, streaming behavior
