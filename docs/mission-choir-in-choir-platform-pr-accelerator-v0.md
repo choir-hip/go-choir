@@ -1308,3 +1308,62 @@ rollback refs:
   queue-drain behavior from e1b177d6. Revert e1b177d6 as well to return to the
   original dispatch-only-during-cycle behavior.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T08:12Z source-body integrity problem documented
+  before the next behavior change.
+current artifact state:
+  Staging still serves behavior commit 37c914e2448d747fa0bf4f91387c07b5df2e70c7.
+  The latest docs checkpoint on origin/main is
+  ec8e0cd4458cff3aa13f2a97feb56ec23d60becf.
+new evidence:
+  A current read-only copy of Node B
+  `/var/lib/go-choir/source-service/sourcecycled.db` showed 69,664 Source
+  Service items. The `items` schema has one `body` column but no separate
+  reader snapshot, extraction state, body kind, body length, or source-body
+  availability field.
+
+  Current body-length distribution by source type:
+
+  - `gdelt`: 61,578 items, average body length 798.1, 3,735 bodies at least
+    2,000 chars, 15,406 bodies under 280 chars, 0 empty.
+  - `rss`: 5,979 items, average body length 743.2, 203 bodies at least
+    2,000 chars, 2,829 bodies under 280 chars, 343 empty.
+  - `telegram`: 2,107 items, average body length 356.8, 31 bodies at least
+    2,000 chars, 1,329 bodies under 280 chars, 0 empty.
+
+  Code inspection matched the DB evidence:
+
+  - `internal/sources/rss.go` sets `Item.Body` from RSS description or Atom
+    summary/content. It does not fetch the article URL and does not create a
+    readability/full-article snapshot.
+  - `internal/sources/gdelt.go` sets `Item.Body` to GDELT metadata strings
+    such as themes, organizations, and locations. That is useful signal, but
+    it is not the source article body at `DOCUMENTIDENTIFIER`.
+  - `internal/sources/telegram.go` sets `Item.Body` to Telegram post text,
+    which can be the whole source for a post but is not equivalent to an
+    article body.
+  - `cmd/sourcecycled/main.go` maps Source Service items to API results with
+    only `body` and `evidence_level`; every live poller currently uses the
+    generic `source_feed` evidence level.
+belief-state changes:
+  The product is now ingesting many sources, but the source-body object is too
+  coarse. Downstream VText/source-reader code cannot tell whether a SourceItem
+  is a full article snapshot, a feed summary, a GDELT metadata packet, a
+  Telegram post, or an empty body. That explains why source readers can look
+  vacant or overclaim evidence even after source volume increased.
+remaining error field:
+  The next behavior change should make source-body availability explicit at
+  the Source Service boundary. A small honest fix is to classify each SourceItem
+  body and expose fields such as body kind, body length, and whether the body is
+  a reader/full snapshot. This will not fetch full article bodies yet, but it
+  prevents the system from Goodharting "many sources" while hiding that most RSS
+  records are feed summaries and GDELT records are metadata packets.
+next executable probe:
+  Add source-body classification to `sources.Item`, persisted storage, Source
+  Service API results, and source-item resolution metadata. Classify RSS as
+  feed summary/content, GDELT as metadata packet, and Telegram as post text;
+  include tests and staging proof that API-resolved source items expose the
+  classification.
+```
