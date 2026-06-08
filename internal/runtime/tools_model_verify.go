@@ -20,7 +20,6 @@ type verifyModelCapabilityArgs struct {
 	ImageBase64     string `json:"image_base64,omitempty"`
 	ImageMIMEType   string `json:"image_mime_type,omitempty"`
 	ImageFixture    string `json:"image_fixture,omitempty"`
-	MaxTokens       int    `json:"max_tokens,omitempty"`
 }
 
 const verifierRedPixelPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP8z8AARQAHAQH/kX7rAAAAAElFTkSuQmCC"
@@ -39,7 +38,6 @@ func newVerifyModelCapabilityTool(rt *Runtime) Tool {
 			"image_base64":     map[string]any{"type": "string", "description": "Optional valid base64 image data for multimodal verification."},
 			"image_mime_type":  map[string]any{"type": "string", "description": "MIME type for image_base64, default image/png."},
 			"image_fixture":    map[string]any{"type": "string", "description": "Optional deterministic image fixture for capability probes. Use \"red_pixel_png\" when the caller needs a known valid tiny PNG without supplying image_base64."},
-			"max_tokens":       map[string]any{"type": "integer", "description": "Optional explicit output budget. Omit for provider defaults."},
 		}, []string{"role", "prompt"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var in verifyModelCapabilityArgs
@@ -78,10 +76,7 @@ func (rt *Runtime) verifyModelCapability(ctx context.Context, in verifyModelCapa
 		return "", fmt.Errorf("model %q is text-only in Choir model catalog; image input requires a multimodal model policy", selection.Model)
 	}
 	messages := []json.RawMessage{buildVerificationUserMessage(prompt, normalized)}
-	maxTokens := in.MaxTokens
-	if maxTokens <= 0 {
-		maxTokens = MaxInteractiveOutputTokensForSelection(selection, role)
-	}
+	maxTokens := MaxInteractiveOutputTokensForSelection(selection, role)
 	resp, err := asToolLoopProvider(rt.provider).CallWithTools(ctx, ToolLoopRequest{
 		Provider:        selection.Provider,
 		Model:           selection.Model,
@@ -178,9 +173,6 @@ func (rt *Runtime) resolveToolModelSelection(ctx context.Context, ownerID, role 
 	}
 	if strings.TrimSpace(in.ReasoningEffort) != "" {
 		selection.ReasoningEffort = strings.TrimSpace(in.ReasoningEffort)
-	}
-	if in.MaxTokens > 0 {
-		selection.MaxTokens = in.MaxTokens
 	}
 	return selection, policySource, nil
 }
