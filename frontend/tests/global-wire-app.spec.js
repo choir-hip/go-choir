@@ -51,6 +51,11 @@ test('Global Wire renders as a living newspaper surface with every article opena
   await expect(vtext).not.toContainText('Source Manifest');
   await expect(vtext).not.toContainText('User edits create user-owned versions');
   await expect(vtext).not.toContainText('The current version keeps');
+
+  await vtext.locator('[data-vtext-related-ref]').first().click();
+  const relatedVText = page.locator('[data-vtext-editor]').last();
+  await expect(relatedVText).toContainText('Grid operators add reserve alerts as heat forecast shifts north');
+  await expect(relatedVText).toContainText('Forecast changes moved stress');
 });
 
 test('Global Wire keeps Style.vtext routing compact and source provenance visible', async ({ page }) => {

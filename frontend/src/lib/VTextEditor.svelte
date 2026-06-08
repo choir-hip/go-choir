@@ -162,6 +162,8 @@
   let sourceArtifactError = '';
   let sourceOpenPointerHandledAt = 0;
   let sourceOpenPointerHandledEntityID = '';
+  let relatedOpenPointerHandledAt = 0;
+  let relatedOpenPointerHandledDocID = '';
   let removeLiveListener = () => {};
 
   const AUTOSAVE_DELAY_MS = 900;
@@ -187,6 +189,16 @@
     if (Array.isArray(metadata.related_vtexts)) return metadata.related_vtexts;
     if (Array.isArray(appContext.relatedVTexts)) return appContext.relatedVTexts;
     return [];
+  }
+
+  function relatedVTextDocID(entity) {
+    return String(entity?.target?.doc_id || entity?.doc_id || entity?.document_id || '').trim();
+  }
+
+  function relatedVTextForDocID(docID) {
+    const normalized = String(docID || '').trim();
+    if (!normalized) return null;
+    return revisionRelatedVTexts().find((entity) => relatedVTextDocID(entity) === normalized) || null;
   }
 
   function currentSourceRepairCandidates(content = editorValue, gaps = revisionSourceGaps(currentRevision)) {
@@ -1710,6 +1722,30 @@
     return entityID;
   }
 
+  function handleRelatedVTextOpen(relatedRef) {
+    const docID = String(relatedRef?.getAttribute?.('data-vtext-doc-id') || '').trim();
+    if (!docID) return '';
+    const entity = relatedVTextForDocID(docID);
+    const title = String(entity?.title || entity?.label || relatedRef?.getAttribute?.('data-vtext-label') || 'Related VText').trim();
+    const snapshot = String(entity?.transclusion?.snapshot_text || entity?.snapshot_text || '').trim();
+    dispatch('launchapp', {
+      appId: 'vtext',
+      appName: 'VText',
+      icon: '📝',
+      appContext: {
+        windowTitle: title,
+        docId: authenticated ? docID : '',
+        initialContent: snapshot ? `# ${title}\n\n${snapshot}` : '',
+        createInitialVersion: false,
+        createdFrom: 'vtext_related_transclusion',
+        sourcePath: '',
+        appHint: appContext.appHint || 'vtext',
+        allowMultiple: true,
+      },
+    });
+    return docID;
+  }
+
   function handleEditorClick(event) {
     const collapse = event.target?.closest?.('[data-vtext-source-flow-collapse]');
     if (collapse) {
@@ -1733,11 +1769,28 @@
       return;
     }
     const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
-    if (!sourceRef) return;
+    if (sourceRef) {
+      event.preventDefault();
+      return;
+    }
+    const relatedRef = event.target?.closest?.('[data-vtext-related-ref]');
+    if (!relatedRef) return;
     event.preventDefault();
+    const docID = relatedRef.getAttribute('data-vtext-doc-id') || '';
+    if (docID && docID === relatedOpenPointerHandledDocID && Date.now() - relatedOpenPointerHandledAt < 800) {
+      return;
+    }
+    handleRelatedVTextOpen(relatedRef);
   }
 
   function handleEditorKeydown(event) {
+    const relatedRef = event.target?.closest?.('[data-vtext-related-ref]');
+    if (relatedRef && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      event.stopPropagation();
+      handleRelatedVTextOpen(relatedRef);
+      return;
+    }
     const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
     if (sourceRef && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();
@@ -1823,9 +1876,17 @@
       return;
     }
     const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
-    if (!sourceRef) return;
+    if (sourceRef) {
+      event.preventDefault();
+      toggleInlineSourceRef(sourceRef);
+      return;
+    }
+    const relatedRef = event.target?.closest?.('[data-vtext-related-ref]');
+    if (!relatedRef) return;
     event.preventDefault();
-    toggleInlineSourceRef(sourceRef);
+    event.stopPropagation();
+    relatedOpenPointerHandledDocID = handleRelatedVTextOpen(relatedRef);
+    relatedOpenPointerHandledAt = Date.now();
   }
 
   function handleDocumentScroll(event) {
