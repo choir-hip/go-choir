@@ -210,9 +210,10 @@ Increase resolution along these axes without changing the object:
 4. **Modality pressure:** text only -> image input for `mimo-v2.5` -> modality
    rejection for unsupported models -> product-path multimodal verifier.
 5. **Context pressure:** short prompt -> long source packet -> open PDF corpus ->
-   automatic compaction at the current 160k threshold -> post-compaction recall
-   and tool use -> model-aware automatic compaction at 85% of the selected
-   model's declared context window.
+   LLM-generated run-memory checkpoint -> post-compaction recall and tool use ->
+   model-aware automatic compaction at 70% of the selected model's declared
+   context window. The detailed compaction work is now delegated to
+   `docs/mission-llm-run-memory-compaction-v0.md`.
 6. **Policy pressure:** fallback generated model policy -> editable
    per-computer model policy -> role/capability-specific selection ->
    owner-visible policy change path.
@@ -293,19 +294,14 @@ Use only product/control APIs and visible app paths:
 
 ### Compaction and Long-Context Proof
 
-Current sequencing is deliberate:
-
-1. First make DeepSeek/Xiaomi agent loops reliable with Choir's existing
-   automatic run-memory compaction threshold of 160k estimated context tokens.
-2. Only after that proof is stable, move the default production compaction
-   policy to model-aware thresholding at `x = 0.85` of the selected model's
-   declared context window.
-
-DeepSeek and Xiaomi's current target models are treated as 1M-token context
-models for this mission, so the intended model-aware threshold is about 850k
-estimated context tokens. Do not jump straight to 850k proof before the 160k
-conformance path works; that would burn provider budget while basic agent-loop
-and retrieval semantics are still being validated.
+This mission previously targeted the existing deterministic 160k compaction path
+first. That route is superseded. The current compaction dependency is
+`docs/mission-llm-run-memory-compaction-v0.md`: implement real LLM-generated
+typed checkpoints, then default automatic compaction to
+`context_window_tokens * 0.7`. DeepSeek/Xiaomi target models are treated as
+1M-token context models for that mission, so the intended threshold is about
+700k estimated input-context tokens. The 160k threshold may be used only as a
+clearly labeled rollout diagnostic, not as readiness evidence.
 
 Compaction is runtime-owned, not an agent-invoked action. The agent should not
 call a "compact memory" tool. The runtime watches context pressure and compacts
@@ -752,10 +748,10 @@ unproven or partial claims:
   Product-path coverage for the full auto/required/none tool-mode matrix,
   non-tool reasoning-content passback for DeepSeek Anthropic, Anthropic-compatible
   streaming behavior if those routes are ever selected for default policy,
-  live provider long-context compaction and post-compaction recall safety at the
-  current 160k automatic threshold, the later model-aware 85%-of-context-window
-  threshold policy, reliable arbitrary-image-URL verifier behavior, and the
-  final Global Wire provider readiness report remain unproven.
+  real LLM run-memory compaction and post-compaction recall safety,
+  model-aware 70%-of-context-window threshold policy, reliable
+  arbitrary-image-URL verifier behavior, and the final Global Wire provider
+  readiness report remain unproven.
 belief-state changes:
   The selected DeepSeek OpenAI-compatible path is now viable for VText exact
   edit/tool loops when tool-bearing calls disable thinking. Anthropic-compatible
@@ -777,35 +773,27 @@ belief-state changes:
   mechanism is now covered locally under simulated context overflow, but the
   mission still needs live/provider or product-path evidence that a real model
   will follow those handles correctly after context pressure. Provider readiness
-  is still not complete enough for Global Wire hard cutover until live
-  long-context compaction behavior is proven or precisely bounded at the current
-  160k threshold, model-aware 85% thresholding is designed for the 1M-token
-  DeepSeek/Xiaomi context windows, and the final provider readiness report is
+  is still not complete enough for Global Wire hard cutover until the superseding
+  LLM compaction mission proves or precisely bounds real checkpoint generation,
+  model-aware 70% thresholding for the 1M-token DeepSeek/Xiaomi context windows,
+  post-compaction exact retrieval, and the final provider readiness report is
   written.
 remaining error field:
   Carry the provider/protocol conformance matrix into product-path evidence
-  where it matters, prove or bound long-context compaction/recall continuity at
-  the current 160k threshold before moving to 85% of the declared context
-  window, and then select safe model-policy defaults for processors,
-  reconcilers, researchers, VText article agents, and multimodal verifiers.
+  where it matters, complete `docs/mission-llm-run-memory-compaction-v0.md`,
+  and then select safe model-policy defaults for processors, reconcilers,
+  researchers, VText article agents, and multimodal verifiers.
 highest-impact remaining uncertainty:
-  Whether hidden reasoning/compaction continuity remains correct under realistic
-  160k-threshold context pressure, whether the later 85%-of-1M policy can be
-  implemented without destabilizing automatic compaction timing, and whether the
-  Anthropic-compatible routes provide enough additional value to justify
+  Whether DeepSeek/Xiaomi reliably generate usable typed LLM compaction
+  checkpoints and follow retrieval handles after context pressure, and whether
+  the Anthropic-compatible routes provide enough additional value to justify
   selecting them for any default agent role.
 next executable probe:
-  First run one long-context compaction proof against the existing 160k automatic
-  threshold with post-compaction recall and at least one post-compaction tool
-  call, using normal model policy and no arbitrary output token caps. Use a
-  fresh same-owner product-path run or preserve the auth state for any source
-  run ids being replayed; old Playwright-auth ids are not durable cross-user
-  evidence. After 160k conformance is stable, implement/prove model-aware
-  automatic compaction at `x = 0.85` of the selected model's declared context
-  window; for DeepSeek/Xiaomi target models in this mission, treat that context
-  window as 1M tokens. Then write the Global Wire provider readiness report,
-  explicitly distinguishing env-gated provider-loop proof from product-path
-  VText/researcher/verifier proof.
+  Run `docs/mission-llm-run-memory-compaction-v0.md` first. After Node B proves
+  LLM-generated checkpoints, 70%-of-context-window thresholding, and
+  post-compaction exact retrieval, return here to write the Global Wire provider
+  readiness report, explicitly distinguishing env-gated provider-loop proof from
+  product-path VText/researcher/verifier/compaction proof.
 suggested resume goal string:
   /goal Run docs/mission-provider-config-conformance-v0.md as MissionGradient and make DeepSeek/Xiaomi production-ready for Choir agents.
 evidence artifact refs:
