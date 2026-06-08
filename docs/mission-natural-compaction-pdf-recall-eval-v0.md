@@ -334,12 +334,14 @@ Likely first goal:
 
 ## Run Checkpoint & Resumption State
 
-status: substrate_implementation_in_progress
+status: substrate_deployed_pre_eval
 
 last checkpoint: mission upgraded so the sandbox/document substrate preamble is
 an explicit prerequisite before any compaction recall eval. Slides remain
 strictly parked as a future mission; this mission only extracts PPTX/HTML slide
-artifacts as sources.
+artifacts as sources. The substrate behavior change has now been pushed,
+passed CI, and deployed to staging; the frozen-corpus compaction eval has not
+started.
 
 current artifact state:
 
@@ -347,13 +349,18 @@ current artifact state:
 - Provider conformance has been closed at readiness level for current
   DeepSeek/Xiaomi paths.
 - Natural recall matrix has not started.
-- Sandbox document tooling has been drafted in Nix image config and structurally
-  evaluated, but not yet deployed to staging/user computers.
-- Shared ContentItem extraction and researcher selector tools are being
-  implemented for PDF/DOCX/EPUB/PPTX/HTML before model runs.
+- Sandbox document tooling is declared in Nix image config and structurally
+  evaluated for normal and Playwright worker images.
+- Shared ContentItem extraction and researcher selector tools are implemented
+  for PDF/DOCX/EPUB/PPTX/HTML before model runs.
 
-what shipped: docs-only checkpoint `58b918af` records the problem and mission
-before code changes, satisfying the problem-documentation-first invariant.
+what shipped:
+
+- docs-only checkpoint `58b918af` records the problem and mission before code
+  changes, satisfying the problem-documentation-first invariant.
+- behavior commit `487b7515` adds the sandbox document tooling, shared
+  extraction substrate, researcher document import/selector tools, VText import
+  reuse, and focused tests.
 
 what was proven so far:
 
@@ -363,7 +370,10 @@ what was proven so far:
   selector tools, and VText file import reuse for DOCX/PDF/PPTX fixtures.
 - URL document imports now get a larger document-only byte cap so public PDFs
   and decks are not forced through the ordinary 2 MiB web snippet limit.
-- Staging/product-path proof has not yet happened.
+- GitHub CI run `27169883438` completed successfully.
+- FlakeHub publish run `27169883384` completed successfully.
+- `https://choir.news/health` reports proxy and sandbox deployed at
+  `487b75154dd835ddfd9a037d57b43b5a985fe876`.
 
 unproven or partial claims:
 
@@ -398,11 +408,17 @@ latest local proof:
 - `nix develop -c go test ./internal/runtime -run 'TestExtract|TestSystemPromptForResearcher|TestContent'`
 - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact|TestAgentToolProfiles|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot'`
 
+latest staging proof:
+
+- `gh run watch 27169883438 --exit-status`
+- `gh run view 27169883384 --json status,conclusion,workflowName,url,headSha`
+- `curl -fsS https://choir.news/health`
+
 next executable probe:
 
-- commit the substrate behavior change; then refresh/deploy the sandbox runtime
-  path and run staging/user-computer proof before starting frozen-corpus
-  compaction runs.
+- run a product-path document import proof on staging/user-computer path, then
+  start frozen-corpus compaction runs only after that proof confirms real
+  ContentItems with hashes, cleaned text, selectors, and extraction warnings.
 
 suggested resume goal string:
 
