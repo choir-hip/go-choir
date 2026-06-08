@@ -716,3 +716,39 @@ rollback refs:
   direction says they should stay deleted. Rejected package 5365bcb7 was never
   adopted.
 ```
+
+```text
+status: shipped_partial
+last checkpoint: 2026-06-08T05:56Z RunAcceptance synthesis recorded the
+  product-path self-development evidence, with an honest blocked state.
+run acceptance:
+  acceptance_id runacc-58bb87e7b8990c65466d
+  acceptance_level export-level
+  state blocked
+what the acceptance proves:
+  The product path reached prompt submission, mission VText creation,
+  persistent super request, worker VM lease, worker delegation, package
+  publication, and run-memory compaction. It also recorded that the worker
+  produced package 5365bcb7 from candidate commit e9b8ff8 after deleting the
+  Sources Chronology/search surface and bespoke Style.vtext controls.
+why the acceptance remains blocked:
+  The exported package was reviewable but not acceptable. Codex review found
+  malformed Svelte source (`<script>` escaped as `\<script\>`) and a false
+  verification claim: the worker's `go build ./...` proof timed out after two
+  minutes. The synthesized verifier also marked `checkpoint_causal_order`
+  blocked and `export-level-product-path` blocked because the delegation ended
+  non-cleanly (`context canceled`, `worker_observed`) rather than as a clean
+  accepted package/adoption path.
+evidence limitation:
+  The synthesized record is derived from the Choir-in-Choir trace that began on
+  deployed substrate c9b02be2, so its deployment_commit and health_commit fields
+  are c9b02be2. Public staging health for the salvaged shipped fix is
+  aa5bef5bee595d13fe95a22cbf9a52089e3d75c7. Treat the RunAcceptanceRecord as
+  evidence of the self-development trajectory, not as proof that the rejected
+  package landed.
+next executable probe:
+  A future acceptance synthesizer should be able to bind Codex review outcome,
+  rejected-package state, and a subsequent human/Codex landing commit into the
+  same mission evidence object without conflating "package exported" with
+  "code accepted and deployed."
+```
