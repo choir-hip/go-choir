@@ -1,13 +1,17 @@
 // Package provider implements real LLM provider bridges for the go-choir
 // sandbox runtime. It supports Bedrock (Anthropic Messages API over AWS
-// Bedrock invoke endpoint), Z.AI (Anthropic-compatible API), and Fireworks AI
+// Bedrock invoke endpoint), Z.AI (Anthropic-compatible API), DeepSeek
+// (OpenAI-compatible Chat Completions API), Xiaomi MiMo
+// (OpenAI-compatible Chat Completions API), and Fireworks AI
 // (OpenAI-compatible Chat Completions API) as required deployed-provider paths for
 // deployed agent/runtime work.
 //
 // Supported models (matching Droid settings.json customModels):
 //   - GLM-5.1 (Z.AI, provider "zai") — Z.AI model
 //   - GLM-5-Turbo (Z.AI, provider "zai") — faster Z.AI variant, same provider
-//   - DeepSeek V4 Pro/Flash and Kimi K2.6 (Fireworks AI, provider "fireworks")
+//   - DeepSeek V4 Pro/Flash (DeepSeek, provider "deepseek")
+//   - MiMo V2.5/Pro (Xiaomi, provider "xiaomi")
+//   - Kimi K2.6 (Fireworks AI, provider "fireworks")
 //   - Claude Sonnet 4.5 (Bedrock, provider "bedrock") — Bedrock model
 //
 // Design decisions:
@@ -22,6 +26,10 @@
 //     matching the pattern established in choiros-rs.
 //   - Z.AI uses an Anthropic-compatible API at https://api.z.ai/api/anthropic
 //     with bearer auth via ZAI_API_KEY.
+//   - DeepSeek uses OpenAI-compatible Chat Completions at
+//     https://api.deepseek.com/chat/completions with bearer auth via DEEPSEEK_API_KEY.
+//   - Xiaomi uses OpenAI-compatible Chat Completions at
+//     https://api.xiaomimimo.com/v1/chat/completions with bearer auth via XIAOMI_API_KEY.
 //   - Fireworks AI uses OpenAI-compatible Chat Completions at
 //     https://api.fireworks.ai/inference/v1/chat/completions with bearer auth via FIREWORKS_API_KEY.
 //     Keep this path distinct from Anthropic-compatible adapters; Fireworks
@@ -289,6 +297,28 @@ type ProviderConfig struct {
 	// the provider instance; request.Model still controls per-call selection.
 	// If empty, Fireworks is not initialized even if FIREWORKS_API_KEY is set.
 	FireworksModels []string
+
+	// DeepSeekModels lists direct DeepSeek model IDs (e.g.,
+	// "deepseek-v4-flash"). The first entry seeds the provider instance;
+	// request.Model still controls per-call selection. If empty, DeepSeek is
+	// not initialized even if DEEPSEEK_API_KEY is set.
+	DeepSeekModels []string
+
+	// DeepSeekReasoningEffort seeds DeepSeek reasoning effort for requests
+	// that do not carry a per-request value. Leave empty until the adapter
+	// explicitly proves a DeepSeek reasoning parameter.
+	DeepSeekReasoningEffort string
+
+	// XiaomiModels lists Xiaomi MiMo model IDs (e.g., "mimo-v2.5",
+	// "mimo-v2.5-pro"). The first entry seeds the provider instance; request.Model
+	// still controls per-call selection. If empty, Xiaomi is not initialized even
+	// if XIAOMI_API_KEY is set.
+	XiaomiModels []string
+
+	// XiaomiReasoningEffort seeds MiMo thinking effort for requests that do not
+	// carry a per-request value. "none" disables thinking; other values enable
+	// the documented thinking object.
+	XiaomiReasoningEffort string
 
 	// FireworksReasoningEffort seeds Fireworks reasoning effort for requests
 	// that do not carry a per-request value.
@@ -776,6 +806,330 @@ func (p *FireworksProvider) buildChatCompletionsRequestBody(req LLMRequest, mode
 	return body
 }
 
+// DeepSeekProvider implements the Provider interface for direct DeepSeek API
+// calls using its OpenAI-compatible Chat Completions endpoint.
+type DeepSeekProvider struct {
+	apiKey     string // loaded at init time, never logged
+	modelID    string
+	reasoning  string
+	httpClient *http.Client
+	baseURL    string
+}
+
+// DeepSeekConfig holds configuration for creating a DeepSeekProvider.
+type DeepSeekConfig struct {
+	APIKey          string
+	ModelID         string
+	ReasoningEffort string
+	BaseURL         string // defaults to https://api.deepseek.com
+}
+
+// NewDeepSeekProvider creates a direct DeepSeek provider from the given config.
+func NewDeepSeekProvider(cfg DeepSeekConfig) (*DeepSeekProvider, error) {
+	if strings.TrimSpace(cfg.APIKey) == "" {
+		return nil, fmt.Errorf("deepseek provider requires api key")
+	}
+	if strings.TrimSpace(cfg.ModelID) == "" {
+		return nil, fmt.Errorf("deepseek provider requires model_id")
+	}
+	baseURL := strings.TrimSpace(cfg.BaseURL)
+	if baseURL == "" {
+		baseURL = "https://api.deepseek.com"
+	}
+	return &DeepSeekProvider{
+		apiKey:     strings.TrimSpace(cfg.APIKey),
+		modelID:    strings.TrimSpace(cfg.ModelID),
+		reasoning:  strings.TrimSpace(cfg.ReasoningEffort),
+		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
+		baseURL:    strings.TrimRight(baseURL, "/"),
+	}, nil
+}
+
+// NewDeepSeekProviderFromEnv creates a DeepSeek provider using DEEPSEEK_API_KEY.
+func NewDeepSeekProviderFromEnv(modelID string) (*DeepSeekProvider, error) {
+	p, err := NewDeepSeekProvider(DeepSeekConfig{
+		APIKey:  os.Getenv("DEEPSEEK_API_KEY"),
+		ModelID: modelID,
+		BaseURL: os.Getenv("DEEPSEEK_BASE_URL"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("deepseek from env: %w", err)
+	}
+	return p, nil
+}
+
+func (p *DeepSeekProvider) Name() string { return "deepseek" }
+func (p *DeepSeekProvider) IsReal() bool { return true }
+
+func (p *DeepSeekProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
+	endpoint := p.deepSeekChatCompletionsEndpoint()
+	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("deepseek: %w", err)
+	}
+
+	body := p.buildChatCompletionsRequestBody(req, modelID)
+
+	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
+	if err != nil {
+		return nil, fmt.Errorf("deepseek: build request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+
+	log.Printf("provider: deepseek call model=%s", modelID)
+
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("deepseek: http call: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	return parseOpenAIChatCompletionsResponse(resp, modelID, "deepseek")
+}
+
+func (p *DeepSeekProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	endpoint := p.deepSeekChatCompletionsEndpoint()
+	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("deepseek: %w", err)
+	}
+
+	req.Stream = true
+	body := p.buildChatCompletionsRequestBody(req, modelID)
+	body.Stream = true
+
+	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
+	if err != nil {
+		return nil, fmt.Errorf("deepseek: build stream request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+
+	log.Printf("provider: deepseek stream model=%s", modelID)
+
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("deepseek: stream http call: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("deepseek: status %s (sanitized)", resp.Status)
+	}
+
+	return parseOpenAIChatCompletionsStream(resp.Body, modelID, "deepseek", onChunk)
+}
+
+func (p *DeepSeekProvider) deepSeekChatCompletionsEndpoint() string {
+	base := strings.TrimRight(p.baseURL, "/")
+	switch {
+	case strings.HasSuffix(base, "/chat/completions"):
+		return base
+	case strings.HasSuffix(base, "/v1"):
+		return base + "/chat/completions"
+	default:
+		return base + "/chat/completions"
+	}
+}
+
+func (p *DeepSeekProvider) buildChatCompletionsRequestBody(req LLMRequest, modelID string) openAIChatCompletionRequest {
+	tools := convertOpenAIChatTools(req.Tools)
+	reasoning := effectiveReasoning(req.ReasoningEffort, p.reasoning)
+	body := openAIChatCompletionRequest{
+		Model:      modelID,
+		Messages:   convertOpenAIChatMessages(req.System, req.Messages),
+		Tools:      tools,
+		ToolChoice: openAIChatToolChoice(req.ToolChoice),
+		Stream:     false,
+	}
+	switch strings.ToLower(strings.TrimSpace(reasoning)) {
+	case "":
+		// Omit DeepSeek thinking by default until runtime policy asks for it.
+	case "none", "disabled", "off":
+		body.Thinking = &providerThinking{Type: "disabled"}
+	default:
+		body.Thinking = &providerThinking{Type: "enabled", ReasoningEffort: reasoning}
+	}
+	if req.MaxTokens > 0 {
+		maxTokens := req.MaxTokens
+		body.MaxTokens = &maxTokens
+	}
+	if len(tools) > 0 {
+		temperature := 0.1
+		body.Temperature = &temperature
+	}
+	return body
+}
+
+// XiaomiProvider implements the Provider interface for Xiaomi MiMo using its
+// OpenAI-compatible Chat Completions endpoint.
+type XiaomiProvider struct {
+	apiKey     string // loaded at init time, never logged
+	modelID    string
+	reasoning  string
+	httpClient *http.Client
+	baseURL    string
+}
+
+// XiaomiConfig holds configuration for creating a XiaomiProvider.
+type XiaomiConfig struct {
+	APIKey          string
+	ModelID         string
+	ReasoningEffort string
+	BaseURL         string // defaults to https://api.xiaomimimo.com/v1
+}
+
+// NewXiaomiProvider creates a Xiaomi provider from the given config.
+func NewXiaomiProvider(cfg XiaomiConfig) (*XiaomiProvider, error) {
+	if strings.TrimSpace(cfg.APIKey) == "" {
+		return nil, fmt.Errorf("xiaomi provider requires api key")
+	}
+	if strings.TrimSpace(cfg.ModelID) == "" {
+		return nil, fmt.Errorf("xiaomi provider requires model_id")
+	}
+	baseURL := strings.TrimSpace(cfg.BaseURL)
+	if baseURL == "" {
+		baseURL = "https://api.xiaomimimo.com/v1"
+	}
+	return &XiaomiProvider{
+		apiKey:     strings.TrimSpace(cfg.APIKey),
+		modelID:    strings.TrimSpace(cfg.ModelID),
+		reasoning:  strings.TrimSpace(cfg.ReasoningEffort),
+		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
+		baseURL:    strings.TrimRight(baseURL, "/"),
+	}, nil
+}
+
+// NewXiaomiProviderFromEnv creates a Xiaomi provider using XIAOMI_API_KEY.
+// The lowercase xiaomi_api_key spelling is accepted for local .env compatibility.
+func NewXiaomiProviderFromEnv(modelID, reasoningEffort string) (*XiaomiProvider, error) {
+	apiKey := os.Getenv("XIAOMI_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("xiaomi_api_key")
+	}
+	p, err := NewXiaomiProvider(XiaomiConfig{
+		APIKey:          apiKey,
+		ModelID:         modelID,
+		BaseURL:         os.Getenv("XIAOMI_BASE_URL"),
+		ReasoningEffort: reasoningEffort,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("xiaomi from env: %w", err)
+	}
+	return p, nil
+}
+
+func (p *XiaomiProvider) Name() string { return "xiaomi" }
+func (p *XiaomiProvider) IsReal() bool { return true }
+
+func (p *XiaomiProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
+	endpoint := p.xiaomiChatCompletionsEndpoint()
+	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("xiaomi: %w", err)
+	}
+
+	body := p.buildChatCompletionsRequestBody(req, modelID)
+
+	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
+	if err != nil {
+		return nil, fmt.Errorf("xiaomi: build request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+
+	log.Printf("provider: xiaomi call model=%s", modelID)
+
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("xiaomi: http call: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	return parseOpenAIChatCompletionsResponse(resp, modelID, "xiaomi")
+}
+
+func (p *XiaomiProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	endpoint := p.xiaomiChatCompletionsEndpoint()
+	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("xiaomi: %w", err)
+	}
+
+	req.Stream = true
+	body := p.buildChatCompletionsRequestBody(req, modelID)
+	body.Stream = true
+
+	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
+	if err != nil {
+		return nil, fmt.Errorf("xiaomi: build stream request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+
+	log.Printf("provider: xiaomi stream model=%s", modelID)
+
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("xiaomi: stream http call: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("xiaomi: status %s (sanitized)", resp.Status)
+	}
+
+	return parseOpenAIChatCompletionsStream(resp.Body, modelID, "xiaomi", onChunk)
+}
+
+func (p *XiaomiProvider) xiaomiChatCompletionsEndpoint() string {
+	base := strings.TrimRight(p.baseURL, "/")
+	switch {
+	case strings.HasSuffix(base, "/chat/completions"):
+		return base
+	case strings.HasSuffix(base, "/v1"):
+		return base + "/chat/completions"
+	default:
+		return base + "/v1/chat/completions"
+	}
+}
+
+func (p *XiaomiProvider) buildChatCompletionsRequestBody(req LLMRequest, modelID string) openAIChatCompletionRequest {
+	tools := convertOpenAIChatTools(req.Tools)
+	reasoning := effectiveReasoning(req.ReasoningEffort, p.reasoning)
+	body := openAIChatCompletionRequest{
+		Model:      modelID,
+		Messages:   convertOpenAIChatMessages(req.System, req.Messages),
+		Tools:      tools,
+		ToolChoice: openAIChatToolChoice(req.ToolChoice),
+		Stream:     false,
+	}
+	switch strings.ToLower(strings.TrimSpace(reasoning)) {
+	case "":
+		// Omit thinking by default; model policy can opt in per call.
+	case "none", "disabled", "off":
+		body.Thinking = &providerThinking{Type: "disabled"}
+	default:
+		body.Thinking = &providerThinking{Type: "enabled", ReasoningEffort: reasoning}
+	}
+	if req.MaxTokens > 0 {
+		maxTokens := req.MaxTokens
+		body.MaxCompletionTokens = &maxTokens
+	}
+	if len(tools) > 0 {
+		temperature := 0.1
+		body.Temperature = &temperature
+	}
+	return body
+}
+
 // ChatGPTProvider implements the Provider interface for ChatGPT subscription
 // billing through Codex OAuth, using the OpenAI Responses-compatible endpoint
 // exposed by ChatGPT.
@@ -1036,14 +1390,21 @@ type openAITool struct {
 }
 
 type openAIChatCompletionRequest struct {
-	Model           string              `json:"model"`
-	Messages        []openAIChatMessage `json:"messages"`
-	Tools           []openAIChatTool    `json:"tools,omitempty"`
-	ToolChoice      any                 `json:"tool_choice,omitempty"`
-	MaxTokens       *int                `json:"max_tokens,omitempty"`
-	Stream          bool                `json:"stream,omitempty"`
-	ReasoningEffort string              `json:"reasoning_effort,omitempty"`
-	Temperature     *float64            `json:"temperature,omitempty"`
+	Model               string              `json:"model"`
+	Messages            []openAIChatMessage `json:"messages"`
+	Tools               []openAIChatTool    `json:"tools,omitempty"`
+	ToolChoice          any                 `json:"tool_choice,omitempty"`
+	MaxTokens           *int                `json:"max_tokens,omitempty"`
+	MaxCompletionTokens *int                `json:"max_completion_tokens,omitempty"`
+	Stream              bool                `json:"stream,omitempty"`
+	ReasoningEffort     string              `json:"reasoning_effort,omitempty"`
+	Temperature         *float64            `json:"temperature,omitempty"`
+	Thinking            *providerThinking   `json:"thinking,omitempty"`
+}
+
+type providerThinking struct {
+	Type            string `json:"type"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 }
 
 type openAIChatMessage struct {
@@ -2690,6 +3051,36 @@ func ResolveAll(cfg ProviderConfig) *MultiProvider {
 		if p, err := NewZAIProviderFromEnv(cfg.ZAIModels[0]); err == nil {
 			mp.Register("zai", p)
 			log.Printf("provider: resolved zai (seed_model=%s)", p.modelID)
+		}
+	}
+
+	// Try DeepSeek direct. Register one provider; req.Model selects the model.
+	if os.Getenv("DEEPSEEK_API_KEY") != "" && len(cfg.DeepSeekModels) > 0 {
+		if p, err := NewDeepSeekProvider(DeepSeekConfig{
+			APIKey:          os.Getenv("DEEPSEEK_API_KEY"),
+			ModelID:         cfg.DeepSeekModels[0],
+			BaseURL:         os.Getenv("DEEPSEEK_BASE_URL"),
+			ReasoningEffort: cfg.DeepSeekReasoningEffort,
+		}); err == nil {
+			mp.Register("deepseek", p)
+			log.Printf("provider: resolved deepseek (seed_model=%s)", p.modelID)
+		}
+	}
+
+	// Try Xiaomi MiMo. Register one provider; req.Model selects the model.
+	xiaomiAPIKey := os.Getenv("XIAOMI_API_KEY")
+	if xiaomiAPIKey == "" {
+		xiaomiAPIKey = os.Getenv("xiaomi_api_key")
+	}
+	if xiaomiAPIKey != "" && len(cfg.XiaomiModels) > 0 {
+		if p, err := NewXiaomiProvider(XiaomiConfig{
+			APIKey:          xiaomiAPIKey,
+			ModelID:         cfg.XiaomiModels[0],
+			BaseURL:         os.Getenv("XIAOMI_BASE_URL"),
+			ReasoningEffort: cfg.XiaomiReasoningEffort,
+		}); err == nil {
+			mp.Register("xiaomi", p)
+			log.Printf("provider: resolved xiaomi (seed_model=%s)", p.modelID)
 		}
 	}
 

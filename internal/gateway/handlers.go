@@ -33,8 +33,9 @@ type gatewayHealthResponse struct {
 // the gateway, which injects host-side credentials before forwarding
 // to the upstream provider (VAL-GATEWAY-004).
 type ProviderRequest struct {
-	// Provider is the requested provider ("chatgpt", "bedrock", "zai", or
-	// "fireworks"). If empty, the gateway requires model-based routing.
+	// Provider is the requested provider ("chatgpt", "bedrock", "zai",
+	// "deepseek", "xiaomi", or "fireworks"). If empty, the gateway requires
+	// model-based routing.
 	Provider string `json:"provider,omitempty"`
 
 	// Model is an optional model override.
@@ -417,6 +418,16 @@ func (h *Handler) resolveFromMultiProvider(req ProviderRequest) (provider.Provid
 		// Fallback: heuristic model routing for known patterns.
 		if strings.Contains(req.Model, "fireworks") {
 			if p := h.providers.Get("fireworks"); p != nil {
+				return p, nil
+			}
+		}
+		if strings.HasPrefix(req.Model, "deepseek-") {
+			if p := h.providers.Get("deepseek"); p != nil {
+				return p, nil
+			}
+		}
+		if strings.HasPrefix(req.Model, "mimo-") {
+			if p := h.providers.Get("xiaomi"); p != nil {
 				return p, nil
 			}
 		}

@@ -2652,6 +2652,20 @@ func TestProviderRouting_SupportedModelsTable(t *testing.T) {
 				ProviderName: "chatgpt", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
 			},
 		},
+		"deepseek": {
+			name: "deepseek", real: true,
+			response: &provider.LLMResponse{
+				Text: "ds", Model: "deepseek-v4-flash", StopReason: "end_turn",
+				ProviderName: "deepseek", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
+			},
+		},
+		"xiaomi": {
+			name: "xiaomi", real: true,
+			response: &provider.LLMResponse{
+				Text: "xm", Model: "mimo-v2.5", StopReason: "end_turn",
+				ProviderName: "xiaomi", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
+			},
+		},
 	}
 
 	mp := provider.NewMultiProvider()

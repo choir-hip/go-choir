@@ -23,13 +23,18 @@ const (
 
 	// Keep generated foreground defaults on broadly available gateway providers.
 	// Per-computer policy files may still override these roles through product state.
+	defaultDeepSeekProvider         = "deepseek"
 	defaultFireworksProvider        = "fireworks"
-	defaultConductorModel           = "accounts/fireworks/models/deepseek-v4-flash"
-	defaultSuperModel               = "accounts/fireworks/models/deepseek-v4-pro"
-	defaultResearcherVTextModel     = "accounts/fireworks/models/deepseek-v4-flash"
+	defaultXiaomiProvider           = "xiaomi"
+	defaultConductorModel           = "deepseek-v4-flash"
+	defaultSuperModel               = "deepseek-v4-pro"
+	defaultResearcherVTextModel     = "deepseek-v4-flash"
 	defaultFlashForegroundReasoning = "medium"
-	defaultVerifierModel            = "accounts/fireworks/models/deepseek-v4-pro"
-	defaultMultimodalVerifierModel  = "accounts/fireworks/models/kimi-k2p6"
+	defaultVerifierModel            = "deepseek-v4-pro"
+	defaultMultimodalVerifierModel  = "mimo-v2.5"
+	legacyFireworksFlashModel       = "accounts/fireworks/models/deepseek-v4-flash"
+	legacyFireworksProModel         = "accounts/fireworks/models/deepseek-v4-pro"
+	legacyFireworksKimiModel        = "accounts/fireworks/models/kimi-k2p6"
 	modelPolicyRoleVerifier         = "verifier"
 	modelPolicyRoleVerifierMulti    = "verifier_multimodal"
 )
@@ -51,10 +56,10 @@ func MaxOutputTokensForSelection(sel LLMSelection) int {
 // MaxInteractiveOutputTokensForSelection returns the per-call generation budget
 // requested by foreground agent loops. This is intentionally separate from the
 // model catalog maximum: catalog limits describe capability, while request
-// budgets are provider protocol choices. Fireworks' OpenAI-compatible chat
-// completions path behaves best when ordinary agent loops omit max_tokens; the
-// ChatGPT Codex Responses endpoint rejects max_output_tokens, so ChatGPT loops
-// also omit explicit output budgets.
+// budgets are provider protocol choices. OpenAI-compatible chat completions
+// paths behave best when ordinary agent loops omit explicit generation budgets;
+// the ChatGPT Codex Responses endpoint rejects max_output_tokens, so ChatGPT
+// loops also omit explicit output budgets.
 func MaxInteractiveOutputTokensForSelection(sel LLMSelection, role string) int {
 	provider := strings.ToLower(strings.TrimSpace(sel.Provider))
 	if provider == "chatgpt" {
@@ -63,7 +68,7 @@ func MaxInteractiveOutputTokensForSelection(sel LLMSelection, role string) int {
 	if sel.MaxTokens > 0 {
 		return sel.MaxTokens
 	}
-	if provider == defaultFireworksProvider {
+	if provider == defaultFireworksProvider || provider == defaultDeepSeekProvider || provider == defaultXiaomiProvider {
 		return 0
 	}
 	return MaxOutputTokensForSelection(sel)
@@ -88,7 +93,7 @@ func defaultModelPolicyText(_ Config) string {
 # This computer-owned file maps agent roles to provider/model choices.
 # Provider secrets stay server-owned; this file names models only.
 # Optional max_tokens requests an explicit per-call budget. Omit it for provider
-# defaults, especially Fireworks chat completions.
+# defaults, especially OpenAI-compatible chat completions.
 
 [defaults]
 fallback_provider = %q
@@ -96,43 +101,43 @@ fallback_model = %q
 reasoning = "medium"
 
 [roles.conductor]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
+provider = "deepseek"
+model = "deepseek-v4-flash"
 reasoning = "medium"
 
 [roles.super]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
+provider = "deepseek"
+model = "deepseek-v4-pro"
 reasoning = "medium"
 
 [roles.vsuper]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
+provider = "deepseek"
+model = "deepseek-v4-pro"
 
 [roles.co-super]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
+provider = "deepseek"
+model = "deepseek-v4-pro"
 
 [roles.researcher]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
+provider = "deepseek"
+model = "deepseek-v4-flash"
 reasoning = "medium"
 
 [roles.vtext]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
+provider = "deepseek"
+model = "deepseek-v4-flash"
 reasoning = "medium"
 
 [roles.verifier]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
+provider = "deepseek"
+model = "deepseek-v4-pro"
 requires = ["text", "tool_use"]
 
 [roles.verifier_multimodal]
-provider = "fireworks"
-model = "accounts/fireworks/models/kimi-k2p6"
+provider = "xiaomi"
+model = "mimo-v2.5"
 requires = ["image", "tool_use"]
-`, defaultFireworksProvider, defaultResearcherVTextModel)
+`, defaultDeepSeekProvider, defaultResearcherVTextModel)
 }
 
 func legacyGeneratedModelPolicyText(cfg Config) string {
@@ -193,7 +198,7 @@ requires = ["image", "tool_use"]
 
 func fallbackModelPolicy(_ Config) ModelPolicy {
 	defaults := LLMSelection{
-		Provider:        defaultFireworksProvider,
+		Provider:        defaultDeepSeekProvider,
 		Model:           defaultResearcherVTextModel,
 		ReasoningEffort: defaultFlashForegroundReasoning,
 		Source:          "platform_fallback",
@@ -201,14 +206,14 @@ func fallbackModelPolicy(_ Config) ModelPolicy {
 	return ModelPolicy{
 		Defaults: defaults,
 		Roles: map[string]LLMSelection{
-			AgentProfileConductor:        {Provider: defaultFireworksProvider, Model: defaultConductorModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			AgentProfileSuper:            {Provider: defaultFireworksProvider, Model: defaultSuperModel, ReasoningEffort: "medium", Source: "platform_fallback"},
-			AgentProfileVSuper:           {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
-			AgentProfileCoSuper:          {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
-			AgentProfileResearcher:       {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			AgentProfileVText:            {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			modelPolicyRoleVerifier:      {Provider: defaultFireworksProvider, Model: defaultVerifierModel, Source: "platform_fallback"},
-			modelPolicyRoleVerifierMulti: {Provider: defaultFireworksProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
+			AgentProfileConductor:        {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
+			AgentProfileSuper:            {Provider: defaultDeepSeekProvider, Model: defaultSuperModel, ReasoningEffort: "medium", Source: "platform_fallback"},
+			AgentProfileVSuper:           {Provider: defaultDeepSeekProvider, Model: defaultSuperModel, Source: "platform_fallback"},
+			AgentProfileCoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultSuperModel, Source: "platform_fallback"},
+			AgentProfileResearcher:       {Provider: defaultDeepSeekProvider, Model: defaultResearcherVTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
+			AgentProfileVText:            {Provider: defaultDeepSeekProvider, Model: defaultResearcherVTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
+			modelPolicyRoleVerifier:      {Provider: defaultDeepSeekProvider, Model: defaultVerifierModel, Source: "platform_fallback"},
+			modelPolicyRoleVerifierMulti: {Provider: defaultXiaomiProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
 		},
 		Source: "platform_fallback",
 	}
@@ -363,11 +368,11 @@ func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
 		return hasLegacyChatGPTForegroundPin(policy)
 	}
 	researcher, ok := policy.Roles[AgentProfileResearcher]
-	if !ok || !isModelPolicySelection(researcher, defaultFireworksProvider, defaultResearcherVTextModel, "") {
+	if !ok || !isModelPolicySelection(researcher, defaultFireworksProvider, legacyFireworksFlashModel, "") {
 		return false
 	}
 	vtext, ok := policy.Roles[AgentProfileVText]
-	if !ok || !isModelPolicySelection(vtext, defaultFireworksProvider, defaultResearcherVTextModel, "") {
+	if !ok || !isModelPolicySelection(vtext, defaultFireworksProvider, legacyFireworksFlashModel, "") {
 		return false
 	}
 	return true
@@ -377,18 +382,18 @@ func hasGeneratedFlashNoneForegroundPolicy(policy ModelPolicy) bool {
 	if len(policy.Roles) != 8 {
 		return false
 	}
-	if !isModelPolicySelection(policy.Defaults, defaultFireworksProvider, defaultResearcherVTextModel, "") {
+	if !isModelPolicySelection(policy.Defaults, defaultFireworksProvider, legacyFireworksFlashModel, "") {
 		return false
 	}
 	expected := map[string]LLMSelection{
-		AgentProfileConductor:        {Provider: defaultFireworksProvider, Model: defaultConductorModel, ReasoningEffort: "none"},
-		AgentProfileSuper:            {Provider: defaultFireworksProvider, Model: defaultSuperModel, ReasoningEffort: "medium"},
-		AgentProfileVSuper:           {Provider: defaultFireworksProvider, Model: defaultSuperModel},
-		AgentProfileCoSuper:          {Provider: defaultFireworksProvider, Model: defaultSuperModel},
-		AgentProfileResearcher:       {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none"},
-		AgentProfileVText:            {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none"},
-		modelPolicyRoleVerifier:      {Provider: defaultFireworksProvider, Model: defaultVerifierModel},
-		modelPolicyRoleVerifierMulti: {Provider: defaultFireworksProvider, Model: defaultMultimodalVerifierModel},
+		AgentProfileConductor:        {Provider: defaultFireworksProvider, Model: legacyFireworksFlashModel, ReasoningEffort: "none"},
+		AgentProfileSuper:            {Provider: defaultFireworksProvider, Model: legacyFireworksProModel, ReasoningEffort: "medium"},
+		AgentProfileVSuper:           {Provider: defaultFireworksProvider, Model: legacyFireworksProModel},
+		AgentProfileCoSuper:          {Provider: defaultFireworksProvider, Model: legacyFireworksProModel},
+		AgentProfileResearcher:       {Provider: defaultFireworksProvider, Model: legacyFireworksFlashModel, ReasoningEffort: "none"},
+		AgentProfileVText:            {Provider: defaultFireworksProvider, Model: legacyFireworksFlashModel, ReasoningEffort: "none"},
+		modelPolicyRoleVerifier:      {Provider: defaultFireworksProvider, Model: legacyFireworksProModel},
+		modelPolicyRoleVerifierMulti: {Provider: defaultFireworksProvider, Model: legacyFireworksKimiModel},
 	}
 	for role, want := range expected {
 		got, ok := policy.Roles[role]
@@ -540,20 +545,34 @@ func ResolvedLLMConfigFromMetadata(metadata map[string]any) LLMSelection {
 func providerPreconditionFallbackSelections(sel, platformFallback LLMSelection) []LLMSelection {
 	provider := strings.ToLower(strings.TrimSpace(sel.Provider))
 	model := strings.TrimSpace(sel.Model)
-	if provider != defaultFireworksProvider || model == "" {
+	if model == "" {
 		return nil
 	}
 	fallbacks := make([]LLMSelection, 0, 2)
-	if model == defaultSuperModel {
+	switch {
+	case provider == defaultDeepSeekProvider && model == defaultSuperModel:
 		fallbacks = appendProviderPreconditionPlatformFallback(fallbacks, sel, platformFallback)
 		return fallbacks
+	case provider == defaultDeepSeekProvider && model == defaultConductorModel:
+		fallbacks = append(fallbacks, LLMSelection{
+			Provider:        defaultDeepSeekProvider,
+			Model:           defaultSuperModel,
+			ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
+			Source:          "provider_precondition_fallback",
+		})
+	case provider == defaultFireworksProvider && model == "accounts/fireworks/models/deepseek-v4-flash":
+		fallbacks = append(fallbacks, LLMSelection{
+			Provider:        defaultFireworksProvider,
+			Model:           "accounts/fireworks/models/deepseek-v4-pro",
+			ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
+			Source:          "provider_precondition_fallback",
+		})
+	case provider == defaultFireworksProvider && model == "accounts/fireworks/models/deepseek-v4-pro":
+		fallbacks = appendProviderPreconditionPlatformFallback(fallbacks, sel, platformFallback)
+		return fallbacks
+	default:
+		return nil
 	}
-	fallbacks = append(fallbacks, LLMSelection{
-		Provider:        defaultFireworksProvider,
-		Model:           defaultSuperModel,
-		ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
-		Source:          "provider_precondition_fallback",
-	})
 	fallbacks = appendProviderPreconditionPlatformFallback(fallbacks, sel, platformFallback)
 	return fallbacks
 }

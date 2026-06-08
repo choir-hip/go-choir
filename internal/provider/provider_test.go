@@ -375,11 +375,14 @@ func TestResolveProviderSelectsZAI(t *testing.T) {
 func TestResolveProviderReturnsNilWhenNoCredentials(t *testing.T) {
 	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "")
 	t.Setenv("ZAI_API_KEY", "")
+	t.Setenv("DEEPSEEK_API_KEY", "")
 	t.Setenv("FIREWORKS_API_KEY", "")
 
 	p, err := ResolveProvider(ProviderConfig{
 		BedrockModels:   []string{"us.anthropic.claude-sonnet-4-6"},
 		ZAIModels:       []string{"glm-5.1"},
+		DeepSeekModels:  []string{"deepseek-v4-flash"},
+		XiaomiModels:    []string{"mimo-v2.5"},
 		FireworksModels: []string{"accounts/fireworks/models/deepseek-v4-flash"},
 	})
 	if err != nil {
@@ -387,6 +390,87 @@ func TestResolveProviderReturnsNilWhenNoCredentials(t *testing.T) {
 	}
 	if p != nil {
 		t.Errorf("expected nil provider when no credentials, got: %s", p.Name())
+	}
+}
+
+func TestResolveProviderSelectsDeepSeek(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "sk-test-key")
+
+	p, err := ResolveProvider(ProviderConfig{
+		DeepSeekModels:   []string{"deepseek-v4-flash"},
+		SelectedProvider: "deepseek",
+	})
+	if err != nil {
+		t.Fatalf("resolve provider: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected non-nil provider")
+	}
+	if p.Name() != "deepseek" {
+		t.Errorf("expected deepseek, got: %s", p.Name())
+	}
+}
+
+func TestDeepSeekProviderFromEnvMissingKey(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+
+	_, err := NewDeepSeekProviderFromEnv("deepseek-v4-flash")
+	if err == nil || !strings.Contains(err.Error(), "api key") {
+		t.Errorf("expected api key error, got: %v", err)
+	}
+}
+
+func TestDeepSeekProviderFromEnvPassesModelAndBaseURL(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "sk-test-key")
+	t.Setenv("DEEPSEEK_BASE_URL", "https://custom.deepseek.example/v1")
+
+	p, err := NewDeepSeekProviderFromEnv("deepseek-v4-pro")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.modelID != "deepseek-v4-pro" {
+		t.Errorf("modelID = %q, want deepseek-v4-pro", p.modelID)
+	}
+	if p.baseURL != "https://custom.deepseek.example/v1" {
+		t.Errorf("baseURL = %q", p.baseURL)
+	}
+}
+
+func TestResolveProviderSelectsXiaomi(t *testing.T) {
+	t.Setenv("XIAOMI_API_KEY", "xm-test-key")
+
+	p, err := ResolveProvider(ProviderConfig{
+		XiaomiModels:     []string{"mimo-v2.5"},
+		SelectedProvider: "xiaomi",
+	})
+	if err != nil {
+		t.Fatalf("resolve provider: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected non-nil provider")
+	}
+	if p.Name() != "xiaomi" {
+		t.Errorf("expected xiaomi, got: %s", p.Name())
+	}
+}
+
+func TestXiaomiProviderFromEnvAcceptsLowercaseKeyAndBaseURL(t *testing.T) {
+	t.Setenv("XIAOMI_API_KEY", "")
+	t.Setenv("xiaomi_api_key", "xm-test-key")
+	t.Setenv("XIAOMI_BASE_URL", "https://custom.xiaomi.example/v1")
+
+	p, err := NewXiaomiProviderFromEnv("mimo-v2.5-pro", "medium")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.modelID != "mimo-v2.5-pro" {
+		t.Errorf("modelID = %q, want mimo-v2.5-pro", p.modelID)
+	}
+	if p.baseURL != "https://custom.xiaomi.example/v1" {
+		t.Errorf("baseURL = %q", p.baseURL)
+	}
+	if p.reasoning != "medium" {
+		t.Errorf("reasoning = %q, want medium", p.reasoning)
 	}
 }
 
@@ -2060,6 +2144,371 @@ func TestFireworksProviderCallUsesOpenAIChatCompletions(t *testing.T) {
 	}
 	if args["status"] != "ok" {
 		t.Fatalf("status arg = %q", args["status"])
+	}
+}
+
+func TestDeepSeekProviderCallUsesDocumentedThinkingObjectAndPreservesReasoningContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Errorf("path = %q, want /chat/completions", r.URL.Path)
+		}
+		if v := r.Header.Get("Authorization"); v != "Bearer sk-test-key" {
+			t.Errorf("Authorization = %q", v)
+		}
+		var raw map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode raw request: %v", err)
+		}
+		if _, ok := raw["reasoning_effort"]; ok {
+			t.Fatalf("DeepSeek request must not use Fireworks top-level reasoning_effort: %#v", raw["reasoning_effort"])
+		}
+		thinking, ok := raw["thinking"].(map[string]any)
+		if !ok {
+			t.Fatalf("thinking = %#v, want object", raw["thinking"])
+		}
+		if thinking["type"] != "enabled" || thinking["reasoning_effort"] != "medium" {
+			t.Fatalf("thinking = %#v, want enabled medium", thinking)
+		}
+
+		var body openAIChatCompletionRequest
+		data, _ := json.Marshal(raw)
+		if err := json.Unmarshal(data, &body); err != nil {
+			t.Fatalf("decode typed request: %v", err)
+		}
+		if body.Model != "deepseek-v4-pro" {
+			t.Errorf("model = %q, want deepseek-v4-pro", body.Model)
+		}
+		if len(body.Messages) != 3 {
+			t.Fatalf("messages = %#v", body.Messages)
+		}
+		if body.Messages[2].Role != "assistant" || body.Messages[2].ReasoningContent != "previous hidden reasoning" {
+			t.Fatalf("assistant reasoning_content = %#v", body.Messages[2])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"id":"chatcmpl_deepseek_reasoning",
+			"model":"deepseek-v4-pro",
+			"choices":[{
+				"finish_reason":"stop",
+				"message":{
+					"role":"assistant",
+					"reasoning_content":"new hidden reasoning",
+					"content":"visible answer"
+				}
+			}],
+			"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
+		}`)
+	}))
+	defer server.Close()
+
+	p := &DeepSeekProvider{
+		apiKey:     "sk-test-key",
+		modelID:    "deepseek-v4-flash",
+		reasoning:  "medium",
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+	}
+
+	resp, err := p.Call(context.Background(), LLMRequest{
+		Model:  "deepseek-v4-pro",
+		System: "system",
+		Messages: []Message{
+			{Role: "user", Content: []Block{{Type: "text", Text: "continue"}}},
+			{Role: "assistant", ReasoningContent: "previous hidden reasoning", Content: []Block{{Type: "text", Text: "previous answer"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("deepseek call: %v", err)
+	}
+	if resp.ProviderName != "deepseek" {
+		t.Fatalf("ProviderName = %q", resp.ProviderName)
+	}
+	if resp.Text != "visible answer" {
+		t.Fatalf("text = %q", resp.Text)
+	}
+	if resp.ReasoningContent != "new hidden reasoning" {
+		t.Fatalf("reasoning_content = %q", resp.ReasoningContent)
+	}
+}
+
+func TestDeepSeekProviderDisablesThinkingForNoneAndSerializesToolChoice(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		thinking, ok := raw["thinking"].(map[string]any)
+		if !ok || thinking["type"] != "disabled" {
+			t.Fatalf("thinking = %#v, want disabled object", raw["thinking"])
+		}
+		if _, ok := thinking["reasoning_effort"]; ok {
+			t.Fatalf("disabled thinking must omit reasoning_effort: %#v", thinking)
+		}
+		toolChoice, ok := raw["tool_choice"].(map[string]any)
+		if !ok {
+			t.Fatalf("tool_choice = %#v, want exact function object", raw["tool_choice"])
+		}
+		if toolChoice["type"] != "function" {
+			t.Fatalf("tool_choice.type = %#v", toolChoice["type"])
+		}
+		fn, ok := toolChoice["function"].(map[string]any)
+		if !ok || fn["name"] != "record_status" {
+			t.Fatalf("tool_choice.function = %#v", toolChoice["function"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"id":"chatcmpl_deepseek_tool",
+			"model":"deepseek-v4-flash",
+			"choices":[{
+				"finish_reason":"tool_calls",
+				"message":{
+					"role":"assistant",
+					"content":"",
+					"tool_calls":[{
+						"id":"call_1",
+						"type":"function",
+						"function":{"name":"record_status","arguments":"{\"status\":\"ok\"}"}
+					}]
+				}
+			}],
+			"usage":{"prompt_tokens":12,"completion_tokens":7,"total_tokens":19}
+		}`)
+	}))
+	defer server.Close()
+
+	p := &DeepSeekProvider{
+		apiKey:     "sk-test-key",
+		modelID:    "deepseek-v4-flash",
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+	}
+	resp, err := p.Call(context.Background(), LLMRequest{
+		Messages:        []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Record ok."}}}},
+		ReasoningEffort: "none",
+		Tools: []ToolDef{{
+			Name:        "record_status",
+			Description: "Record status.",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+		ToolChoice: "function:record_status",
+	})
+	if err != nil {
+		t.Fatalf("deepseek call: %v", err)
+	}
+	if resp.StopReason != "tool_use" {
+		t.Fatalf("StopReason = %q", resp.StopReason)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "record_status" {
+		t.Fatalf("ToolCalls = %#v", resp.ToolCalls)
+	}
+}
+
+func TestXiaomiProviderCallUsesMiMoChatSchemaAndPreservesReasoningContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("path = %q, want /v1/chat/completions", r.URL.Path)
+		}
+		if v := r.Header.Get("Authorization"); v != "Bearer xm-test-key" {
+			t.Errorf("Authorization = %q", v)
+		}
+		var raw map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if _, ok := raw["max_tokens"]; ok {
+			t.Fatalf("Xiaomi request must not use max_tokens: %#v", raw["max_tokens"])
+		}
+		if raw["max_completion_tokens"] != float64(123) {
+			t.Fatalf("max_completion_tokens = %#v, want 123", raw["max_completion_tokens"])
+		}
+		thinking, ok := raw["thinking"].(map[string]any)
+		if !ok || thinking["type"] != "enabled" || thinking["reasoning_effort"] != "medium" {
+			t.Fatalf("thinking = %#v, want enabled medium", raw["thinking"])
+		}
+
+		var body openAIChatCompletionRequest
+		data, _ := json.Marshal(raw)
+		if err := json.Unmarshal(data, &body); err != nil {
+			t.Fatalf("decode typed request: %v", err)
+		}
+		if body.Model != "mimo-v2.5" {
+			t.Errorf("model = %q, want mimo-v2.5", body.Model)
+		}
+		if body.MaxCompletionTokens == nil || *body.MaxCompletionTokens != 123 {
+			t.Fatalf("MaxCompletionTokens = %#v", body.MaxCompletionTokens)
+		}
+		if len(body.Messages) != 3 {
+			t.Fatalf("messages = %#v", body.Messages)
+		}
+		userContent, ok := body.Messages[1].Content.([]any)
+		if !ok {
+			t.Fatalf("user multimodal content = %#v", body.Messages[1].Content)
+		}
+		hasImage := false
+		for _, part := range userContent {
+			m, ok := part.(map[string]any)
+			if !ok {
+				continue
+			}
+			if m["type"] == "image_url" {
+				imageURL, ok := m["image_url"].(map[string]any)
+				if !ok || !strings.HasPrefix(fmt.Sprint(imageURL["url"]), "data:image/png;base64,") {
+					t.Fatalf("image_url = %#v", m["image_url"])
+				}
+				hasImage = true
+			}
+		}
+		if !hasImage {
+			t.Fatalf("missing image_url content: %#v", userContent)
+		}
+		if body.Messages[2].Role != "assistant" || body.Messages[2].ReasoningContent != "previous mimo reasoning" {
+			t.Fatalf("assistant reasoning_content = %#v", body.Messages[2])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"id":"chatcmpl_mimo",
+			"model":"mimo-v2.5",
+			"choices":[{
+				"finish_reason":"stop",
+				"message":{
+					"role":"assistant",
+					"reasoning_content":"next mimo reasoning",
+					"content":"image says red dot"
+				}
+			}],
+			"usage":{"prompt_tokens":20,"completion_tokens":6,"total_tokens":26}
+		}`)
+	}))
+	defer server.Close()
+
+	p := &XiaomiProvider{
+		apiKey:     "xm-test-key",
+		modelID:    "mimo-v2.5-pro",
+		reasoning:  "medium",
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+	}
+
+	resp, err := p.Call(context.Background(), LLMRequest{
+		Model:  "mimo-v2.5",
+		System: "inspect",
+		Messages: []Message{
+			{Role: "user", Content: []Block{
+				{Type: "text", Text: "What is in this image?"},
+				{Type: "image", Source: &MediaSource{
+					Kind:     "base64",
+					MIMEType: "image/png",
+					Data:     base64.StdEncoding.EncodeToString([]byte("png-bytes")),
+				}},
+			}},
+			{Role: "assistant", ReasoningContent: "previous mimo reasoning", Content: []Block{{Type: "text", Text: "previous answer"}}},
+		},
+		MaxTokens: 123,
+	})
+	if err != nil {
+		t.Fatalf("xiaomi call: %v", err)
+	}
+	if resp.ProviderName != "xiaomi" {
+		t.Fatalf("ProviderName = %q", resp.ProviderName)
+	}
+	if resp.Text != "image says red dot" {
+		t.Fatalf("text = %q", resp.Text)
+	}
+	if resp.ReasoningContent != "next mimo reasoning" {
+		t.Fatalf("reasoning_content = %q", resp.ReasoningContent)
+	}
+}
+
+func TestIntegrationDeepSeekDirectLive(t *testing.T) {
+	if os.Getenv("CHOIR_PROVIDER_LIVE_TESTS") != "1" {
+		t.Skip("set CHOIR_PROVIDER_LIVE_TESTS=1 to spend provider credits")
+	}
+	apiKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
+	if apiKey == "" {
+		t.Skip("DEEPSEEK_API_KEY is not set")
+	}
+	p, err := NewDeepSeekProvider(DeepSeekConfig{
+		APIKey:  apiKey,
+		ModelID: "deepseek-v4-flash",
+	})
+	if err != nil {
+		t.Fatalf("new deepseek provider: %v", err)
+	}
+	resp, err := p.Call(context.Background(), LLMRequest{
+		Model:           "deepseek-v4-flash",
+		ReasoningEffort: "none",
+		Messages: []Message{{
+			Role:    "user",
+			Content: []Block{{Type: "text", Text: "Reply exactly: deepseek-ok"}},
+		}},
+		MaxTokens: 64,
+	})
+	if err != nil {
+		t.Fatalf("deepseek live call: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(resp.Text), "deepseek-ok") {
+		t.Fatalf("deepseek live text = %q", resp.Text)
+	}
+}
+
+func TestIntegrationXiaomiTextAndImageLive(t *testing.T) {
+	if os.Getenv("CHOIR_PROVIDER_LIVE_TESTS") != "1" {
+		t.Skip("set CHOIR_PROVIDER_LIVE_TESTS=1 to spend provider credits")
+	}
+	apiKey := strings.TrimSpace(os.Getenv("XIAOMI_API_KEY"))
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("xiaomi_api_key"))
+	}
+	if apiKey == "" {
+		t.Skip("XIAOMI_API_KEY is not set")
+	}
+	p, err := NewXiaomiProvider(XiaomiConfig{
+		APIKey:  apiKey,
+		ModelID: "mimo-v2.5-pro",
+	})
+	if err != nil {
+		t.Fatalf("new xiaomi provider: %v", err)
+	}
+	textResp, err := p.Call(context.Background(), LLMRequest{
+		Model:           "mimo-v2.5-pro",
+		ReasoningEffort: "none",
+		Messages: []Message{{
+			Role:    "user",
+			Content: []Block{{Type: "text", Text: "Reply with the token xiaomi-ok somewhere in the first sentence."}},
+		}},
+		MaxTokens: 64,
+	})
+	if err != nil {
+		t.Fatalf("xiaomi text live call: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(textResp.Text), "xiaomi-ok") {
+		t.Fatalf("xiaomi text = %q", textResp.Text)
+	}
+
+	imageResp, err := p.Call(context.Background(), LLMRequest{
+		Model:           "mimo-v2.5",
+		ReasoningEffort: "none",
+		Messages: []Message{{
+			Role: "user",
+			Content: []Block{
+				{Type: "text", Text: "Answer in two words: what color is the image?"},
+				{Type: "image", Source: &MediaSource{
+					Kind:     "base64",
+					MIMEType: "image/png",
+					Data:     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP8z8AARQAHAQH/kX7rAAAAAElFTkSuQmCC",
+				}},
+			},
+		}},
+		MaxTokens: 64,
+	})
+	if err != nil {
+		t.Fatalf("xiaomi image live call: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(imageResp.Text), "red") {
+		t.Fatalf("xiaomi image text = %q", imageResp.Text)
 	}
 }
 

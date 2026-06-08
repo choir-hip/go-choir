@@ -390,8 +390,8 @@ Rollback refs to record during execution:
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: 2026-06-08T12:53Z DeepSeek direct provider cutover
-  checkpoint recorded before code/config changes.
+last checkpoint: 2026-06-08T13:31Z direct DeepSeek plus Xiaomi MiMo provider proof
+  checkpoint updated after local live provider probes and before deployment.
 current artifact state:
   Current staging can still show three seeded Global Wire records from the old
   durable StoryGraph path. Prior cleanup/deletion and source-service
@@ -415,8 +415,9 @@ what was proven:
 unproven or partial claims:
   Real article throughput, source-body completeness, front-page ranking, and
   VText-agent-owned publication-quality article generation remain unproven.
-  Direct DeepSeek gateway calls are not yet proven on Node B. Xiaomi MiMo
-  direct calls are not yet implemented or proven.
+  Direct DeepSeek gateway calls are not yet proven on Node B. Xiaomi MiMo is
+  implemented locally and proven against the live upstream API for text and
+  image input, but not yet proven through the deployed gateway/runtime path.
 belief-state changes:
   Compatibility with old seeded StoryGraph behavior is now classified as a
   product bug, not a helpful fallback. Fireworks-hosted DeepSeek should no
@@ -428,16 +429,20 @@ remaining error field:
   capacity by adding DeepSeek as a first-class gateway provider, lifting
   `DEEPSEEK_API_KEY` to Node B through the existing provider credential script,
   and replacing Fireworks DeepSeek V4 Flash/Pro role defaults with direct
-  DeepSeek model ids.
+  DeepSeek model ids. Replace lost Fireworks Kimi multimodal capacity with
+  Xiaomi MiMo `mimo-v2.5` for image turns and `mimo-v2.5-pro` for text fallback.
 highest-impact remaining uncertainty:
   Whether direct DeepSeek accepts Choir's current OpenAI-compatible chat/tool
   request shape, including tool-choice modes and reasoning/thinking parameters,
-  without the Fireworks 412 failure mode.
+  without the Fireworks 412 failure mode. Local live probes show small
+  DeepSeek requests can spend the full visible budget on hidden reasoning unless
+  `thinking.type = disabled`, so the adapter must preserve explicit reasoning
+  disablement and avoid brittle Fireworks-style top-level reasoning fields.
 next executable probe:
-  Implement direct DeepSeek provider registration and model policy defaults,
-  deploy the DeepSeek key to Node B with `nix/deploy-provider-creds.sh`,
-  restart gateway/sandbox as needed, and prove a deployed gateway/runtime call
-  uses `deepseek/deepseek-v4-flash` or `deepseek/deepseek-v4-pro`.
+  Commit and push direct DeepSeek/Xiaomi provider registration, deploy keys to
+  Node B with `nix/deploy-provider-creds.sh`, restart gateway/sandbox as needed,
+  and prove deployed gateway/runtime calls use `deepseek/deepseek-v4-flash`,
+  `deepseek/deepseek-v4-pro`, `xiaomi/mimo-v2.5-pro`, and `xiaomi/mimo-v2.5`.
 suggested resume goal string:
   /goal Run docs/mission-global-wire-hard-cutover-real-newsroom-v0.md and ship the real Global Wire newsroom cutover.
 evidence artifact refs:
@@ -446,6 +451,11 @@ evidence artifact refs:
   DeepSeek docs consulted: `https://api-docs.deepseek.com/`,
   `https://api-docs.deepseek.com/quick_start/pricing/`, and
   `https://api-docs.deepseek.com/api/create-chat-completion`.
+  Local live probes on 2026-06-08:
+  `deepseek-v4-flash` returned HTTP 200; visible text required disabled
+  thinking for a small 64-token probe. `mimo-v2.5-pro` returned HTTP 200 with
+  bearer auth. `mimo-v2.5` returned HTTP 200 on a data-URL PNG probe and
+  reported image-token usage.
   Xiaomi MiMo docs consulted: `https://platform.xiaomimimo.com/docs/en-US/welcome`,
   `https://platform.xiaomimimo.com/docs/en-US/quick-start/first-api-call`,
   `https://platform.xiaomimimo.com/docs/en-US/quick-start/model`,

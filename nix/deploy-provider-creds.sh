@@ -24,8 +24,10 @@ SETTINGS="${CHOIR_PROVIDER_SETTINGS:-${HOME}/.config/go-choir/provider-settings.
 CODEX_AUTH="${CODEX_AUTH_PATH:-${HOME}/.codex/auth.json}"
 REMOTE_ENV_FILE="/var/lib/go-choir/gateway-provider.env"
 REMOTE_CODEX_AUTH="/var/lib/go-choir/codex-auth.json"
-DEFAULT_GATEWAY_FIREWORKS_MODELS="accounts/fireworks/models/deepseek-v4-flash,accounts/fireworks/models/deepseek-v4-pro,accounts/fireworks/models/kimi-k2p6"
+DEFAULT_GATEWAY_FIREWORKS_MODELS="accounts/fireworks/models/kimi-k2p6"
 DEFAULT_GATEWAY_FIREWORKS_REASONING_EFFORT="medium"
+DEFAULT_GATEWAY_DEEPSEEK_MODELS="deepseek-v4-flash,deepseek-v4-pro"
+DEFAULT_GATEWAY_XIAOMI_MODELS="mimo-v2.5,mimo-v2.5-pro"
 
 # Load local deployment credentials when present. This keeps the common
 # operator path safe: running this script from the repo should deploy the
@@ -37,6 +39,10 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 else
   echo "warning: $ENV_FILE not found; relying on exported environment variables" >&2
+fi
+
+if [ -n "${xiaomi_api_key:-}" ] && [ -z "${XIAOMI_API_KEY:-}" ]; then
+  XIAOMI_API_KEY="${xiaomi_api_key}"
 fi
 
 # Build the env file content from customModels entries.
@@ -52,6 +58,11 @@ add_env_once() {
   if [ ${#ENVS[@]} -eq 0 ] || ! printf '%s\n' "${ENVS[@]}" | grep -q "^${key}="; then
     ENVS+=("${key}=${value}")
   fi
+}
+
+has_env_key() {
+  local key="$1"
+  [ ${#ENVS[@]} -gt 0 ] && printf '%s\n' "${ENVS[@]}" | grep -q "^${key}="
 }
 
 if [ -f "$SETTINGS" ]; then
@@ -87,6 +98,27 @@ if [ -f "$SETTINGS" ]; then
       continue
     fi
 
+    # Detect DeepSeek keys (apiKey starts with sk- or baseUrl contains deepseek).
+    # Provider settings can distinguish generic sk-* keys through baseUrl/provider.
+    if echo "$BASE_URL" | grep -q "deepseek" || echo "$PROVIDER" | grep -qi "deepseek"; then
+      if ! printf '%s\n' "${ENVS[@]}" | grep -q "^DEEPSEEK_API_KEY="; then
+        ENVS+=("DEEPSEEK_API_KEY=${API_KEY}")
+        [ -n "$MODEL" ] && ENVS+=("RUNTIME_DEEPSEEK_MODEL=${MODEL}")
+        [ -n "$BASE_URL" ] && ENVS+=("DEEPSEEK_BASE_URL=${BASE_URL}")
+      fi
+      continue
+    fi
+
+    # Detect Xiaomi MiMo keys (baseUrl contains xiaomimimo or provider mentions xiaomi/mimo).
+    if echo "$BASE_URL" | grep -q "xiaomimimo" || echo "$PROVIDER" | grep -Eqi "xiaomi|mimo"; then
+      if ! printf '%s\n' "${ENVS[@]}" | grep -q "^XIAOMI_API_KEY="; then
+        ENVS+=("XIAOMI_API_KEY=${API_KEY}")
+        [ -n "$MODEL" ] && ENVS+=("RUNTIME_XIAOMI_MODEL=${MODEL}")
+        [ -n "$BASE_URL" ] && ENVS+=("XIAOMI_BASE_URL=${BASE_URL}")
+      fi
+      continue
+    fi
+
     # Detect Bedrock keys (baseUrl contains bedrock or provider mentions bedrock)
     if echo "$BASE_URL" | grep -q "bedrock" || echo "$PROVIDER" | grep -qi "bedrock"; then
       if ! printf '%s\n' "${ENVS[@]}" | grep -q "^AWS_BEARER_TOKEN_BEDROCK="; then
@@ -105,9 +137,23 @@ if [ ${#ENVS[@]} -eq 0 ]; then
   echo "warning: no API-key provider credentials found in $SETTINGS" >&2
 fi
 
-for key in AWS_BEARER_TOKEN_BEDROCK AWS_REGION ZAI_API_KEY ZAI_BASE_URL FIREWORKS_API_KEY FIREWORKS_BASE_URL; do
+for key in AWS_BEARER_TOKEN_BEDROCK AWS_REGION ZAI_API_KEY ZAI_BASE_URL DEEPSEEK_API_KEY DEEPSEEK_BASE_URL XIAOMI_API_KEY XIAOMI_BASE_URL FIREWORKS_API_KEY FIREWORKS_BASE_URL; do
   add_env_once "$key"
 done
+
+if [ -n "${DEEPSEEK_API_KEY:-}" ] || has_env_key "DEEPSEEK_API_KEY"; then
+  ENVS+=("GATEWAY_DEEPSEEK_MODELS=${GATEWAY_DEEPSEEK_MODELS:-$DEFAULT_GATEWAY_DEEPSEEK_MODELS}")
+  if [ -n "${GATEWAY_DEEPSEEK_REASONING_EFFORT:-}" ]; then
+    ENVS+=("GATEWAY_DEEPSEEK_REASONING_EFFORT=${GATEWAY_DEEPSEEK_REASONING_EFFORT}")
+  fi
+fi
+
+if [ -n "${XIAOMI_API_KEY:-}" ] || has_env_key "XIAOMI_API_KEY"; then
+  ENVS+=("GATEWAY_XIAOMI_MODELS=${GATEWAY_XIAOMI_MODELS:-$DEFAULT_GATEWAY_XIAOMI_MODELS}")
+  if [ -n "${GATEWAY_XIAOMI_REASONING_EFFORT:-}" ]; then
+    ENVS+=("GATEWAY_XIAOMI_REASONING_EFFORT=${GATEWAY_XIAOMI_REASONING_EFFORT}")
+  fi
+fi
 
 if [ -n "${FIREWORKS_API_KEY:-}" ]; then
   ENVS+=("GATEWAY_FIREWORKS_MODELS=${GATEWAY_FIREWORKS_MODELS:-$DEFAULT_GATEWAY_FIREWORKS_MODELS}")

@@ -71,11 +71,19 @@ func loadProviderConfig() provider.ProviderConfig {
 			"us.anthropic.claude-opus-4-6-v1",
 		},
 		ZAIModels: []string{"glm-5.1", "glm-5-turbo"},
+		DeepSeekModels: []string{
+			"deepseek-v4-flash",
+			"deepseek-v4-pro",
+		},
+		XiaomiModels: []string{
+			"mimo-v2.5",
+			"mimo-v2.5-pro",
+		},
 		FireworksModels: []string{
-			"accounts/fireworks/models/deepseek-v4-flash",
-			"accounts/fireworks/models/deepseek-v4-pro",
 			"accounts/fireworks/models/kimi-k2p6",
 		},
+		DeepSeekReasoningEffort:  "",
+		XiaomiReasoningEffort:    "",
 		FireworksReasoningEffort: "medium",
 		ChatGPTModels:            []string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini"},
 		ChatGPTReasoningEffort:   "low",
@@ -87,6 +95,18 @@ func loadProviderConfig() provider.ProviderConfig {
 	}
 	if v := os.Getenv("GATEWAY_ZAI_MODELS"); v != "" {
 		cfg.ZAIModels = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GATEWAY_DEEPSEEK_MODELS"); v != "" {
+		cfg.DeepSeekModels = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GATEWAY_DEEPSEEK_REASONING_EFFORT"); v != "" {
+		cfg.DeepSeekReasoningEffort = v
+	}
+	if v := os.Getenv("GATEWAY_XIAOMI_MODELS"); v != "" {
+		cfg.XiaomiModels = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GATEWAY_XIAOMI_REASONING_EFFORT"); v != "" {
+		cfg.XiaomiReasoningEffort = v
 	}
 	if v := os.Getenv("GATEWAY_FIREWORKS_MODELS"); v != "" {
 		cfg.FireworksModels = strings.Split(v, ",")

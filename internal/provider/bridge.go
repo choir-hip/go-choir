@@ -73,6 +73,18 @@ func (b *BridgeProvider) RuntimeProviderPolicy() runtime.ProviderPolicy {
 			"Direct sandbox mode using Fireworks credentials in the sandbox process.",
 			"Fireworks is selected only when runtime config explicitly selects it.",
 		}
+	case *DeepSeekProvider:
+		policy.DefaultModel = inner.modelID
+		policy.Notes = []string{
+			"Direct sandbox mode using DeepSeek credentials in the sandbox process.",
+			"DeepSeek is selected only when runtime config explicitly selects it.",
+		}
+	case *XiaomiProvider:
+		policy.DefaultModel = inner.modelID
+		policy.Notes = []string{
+			"Direct sandbox mode using Xiaomi MiMo credentials in the sandbox process.",
+			"Xiaomi is selected only when runtime config explicitly selects it.",
+		}
 	case *ChatGPTProvider:
 		policy.DefaultModel = inner.modelID
 		policy.Notes = []string{

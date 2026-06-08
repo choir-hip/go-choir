@@ -76,6 +76,9 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "chatgpt", Model: "gpt-5.5", MaxTokens: 32768}, AgentProfileSuper); got != 0 {
 		t.Fatalf("explicit ChatGPT interactive tokens = %d, want 0 to omit unsupported max_output_tokens", got)
 	}
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "xiaomi", Model: "mimo-v2.5-pro"}, AgentProfileSuper); got != 0 {
+		t.Fatalf("Xiaomi interactive tokens = %d, want 0 to omit OpenAI-compatible chat budget", got)
+	}
 	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", MaxTokens: 32768}, AgentProfileSuper); got != 32768 {
 		t.Fatalf("explicit Fireworks interactive tokens = %d, want 32768", got)
 	}
@@ -84,26 +87,26 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	}
 }
 
-func TestFallbackModelPolicyUsesGeneratedFireworksDefaults(t *testing.T) {
+func TestFallbackModelPolicyUsesGeneratedDeepSeekDefaults(t *testing.T) {
 	policy := fallbackModelPolicy(Config{})
 	conductor := policy.Resolve(AgentProfileConductor)
-	if conductor.Provider != "fireworks" || conductor.Model != "accounts/fireworks/models/deepseek-v4-flash" || conductor.ReasoningEffort != "medium" {
+	if conductor.Provider != "deepseek" || conductor.Model != "deepseek-v4-flash" || conductor.ReasoningEffort != "medium" {
 		t.Fatalf("conductor selection = %+v", conductor)
 	}
 	super := policy.Resolve(AgentProfileSuper)
-	if super.Provider != "fireworks" || super.Model != "accounts/fireworks/models/deepseek-v4-pro" || super.ReasoningEffort != "medium" {
+	if super.Provider != "deepseek" || super.Model != "deepseek-v4-pro" || super.ReasoningEffort != "medium" {
 		t.Fatalf("super selection = %+v", super)
 	}
 	vtext := policy.Resolve(AgentProfileVText)
-	if vtext.Provider != "fireworks" || vtext.Model != "accounts/fireworks/models/deepseek-v4-flash" || vtext.ReasoningEffort != "medium" {
+	if vtext.Provider != "deepseek" || vtext.Model != "deepseek-v4-flash" || vtext.ReasoningEffort != "medium" {
 		t.Fatalf("vtext selection = %+v", vtext)
 	}
 	verifier := policy.Resolve("verifier")
-	if verifier.Provider != "fireworks" || verifier.Model != "accounts/fireworks/models/deepseek-v4-pro" {
+	if verifier.Provider != "deepseek" || verifier.Model != "deepseek-v4-pro" {
 		t.Fatalf("verifier selection = %+v", verifier)
 	}
 	multimodal := policy.Resolve("verifier_multimodal")
-	if multimodal.Provider != "fireworks" || multimodal.Model != "accounts/fireworks/models/kimi-k2p6" {
+	if multimodal.Provider != "xiaomi" || multimodal.Model != "mimo-v2.5" {
 		t.Fatalf("multimodal verifier selection = %+v", multimodal)
 	}
 	if verifier.Model == multimodal.Model {
@@ -144,7 +147,7 @@ func TestEnsureDefaultModelPolicyMigratesLegacyGeneratedPolicy(t *testing.T) {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
 	conductor := policy.Resolve(AgentProfileConductor)
-	if conductor.Provider != "fireworks" || conductor.Model != "accounts/fireworks/models/deepseek-v4-flash" {
+	if conductor.Provider != "deepseek" || conductor.Model != "deepseek-v4-flash" {
 		t.Fatalf("migrated conductor selection = %+v", conductor)
 	}
 }
@@ -155,10 +158,10 @@ func TestDefaultModelPolicyIgnoresChatGPTProcessFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse generated policy: %v", err)
 	}
-	if got := policy.Resolve("unknown-role"); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" {
+	if got := policy.Resolve("unknown-role"); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
 		t.Fatalf("generated fallback selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("generated conductor selection = %+v", got)
 	}
 }
@@ -232,7 +235,7 @@ requires = ["image", "tool_use"]
 	}
 	for _, role := range []string{AgentProfileConductor, AgentProfileResearcher, AgentProfileVText} {
 		got := policy.Resolve(role)
-		if got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "medium" {
+		if got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 			t.Fatalf("migrated %s selection = %+v", role, got)
 		}
 	}
@@ -283,7 +286,7 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileSuper); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-pro" {
+	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-pro" {
 		t.Fatalf("migrated super selection = %+v", got)
 	}
 }
@@ -329,10 +332,10 @@ reasoning = "none"
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("migrated conductor selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileSuper); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-pro" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-pro" || got.ReasoningEffort != "medium" {
 		t.Fatalf("migrated super selection = %+v", got)
 	}
 }
@@ -370,10 +373,10 @@ reasoning = "none"
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("migrated conductor selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("migrated researcher selection = %+v", got)
 	}
 }
@@ -532,10 +535,10 @@ reasoning = "medium"
 	}
 }
 
-func TestProviderPreconditionFallbackSelectionsUseFireworksProForFlash(t *testing.T) {
+func TestProviderPreconditionFallbackSelectionsUseDeepSeekProForFlash(t *testing.T) {
 	fallbacks := providerPreconditionFallbackSelections(LLMSelection{
-		Provider:        "fireworks",
-		Model:           "accounts/fireworks/models/deepseek-v4-flash",
+		Provider:        "deepseek",
+		Model:           "deepseek-v4-flash",
 		ReasoningEffort: "medium",
 	}, LLMSelection{
 		Provider:        "chatgpt",
@@ -543,10 +546,10 @@ func TestProviderPreconditionFallbackSelectionsUseFireworksProForFlash(t *testin
 		ReasoningEffort: "low",
 	})
 	if len(fallbacks) != 2 {
-		t.Fatalf("fallbacks = %+v, want Fireworks Pro plus platform fallback", fallbacks)
+		t.Fatalf("fallbacks = %+v, want DeepSeek Pro plus platform fallback", fallbacks)
 	}
-	if got := fallbacks[0]; got.Provider != "fireworks" ||
-		got.Model != "accounts/fireworks/models/deepseek-v4-pro" ||
+	if got := fallbacks[0]; got.Provider != "deepseek" ||
+		got.Model != "deepseek-v4-pro" ||
 		got.ReasoningEffort != "medium" ||
 		got.Source != "provider_precondition_fallback" {
 		t.Fatalf("fallback = %+v", got)
@@ -559,8 +562,8 @@ func TestProviderPreconditionFallbackSelectionsUseFireworksProForFlash(t *testin
 	}
 
 	if got := providerPreconditionFallbackSelections(LLMSelection{
-		Provider: "fireworks",
-		Model:    "accounts/fireworks/models/deepseek-v4-pro",
+		Provider: "deepseek",
+		Model:    "deepseek-v4-pro",
 	}, LLMSelection{
 		Provider: "chatgpt",
 		Model:    "gpt-5.5",
@@ -569,12 +572,12 @@ func TestProviderPreconditionFallbackSelectionsUseFireworksProForFlash(t *testin
 	}
 
 	if got := providerPreconditionFallbackSelections(LLMSelection{
-		Provider: "fireworks",
-		Model:    "accounts/fireworks/models/deepseek-v4-flash",
+		Provider: "deepseek",
+		Model:    "deepseek-v4-flash",
 	}, LLMSelection{
-		Provider: "fireworks",
-		Model:    "accounts/fireworks/models/deepseek-v4-pro",
+		Provider: "deepseek",
+		Model:    "deepseek-v4-pro",
 	}); len(got) != 1 {
-		t.Fatalf("deduped fallbacks = %+v, want one Fireworks Pro fallback", got)
+		t.Fatalf("deduped fallbacks = %+v, want one DeepSeek Pro fallback", got)
 	}
 }
