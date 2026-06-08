@@ -53,6 +53,10 @@ type contentImportURLRequest struct {
 	Query string `json:"query,omitempty"`
 }
 
+type contentImportFileRequest struct {
+	FilePath string `json:"file_path"`
+}
+
 type extractionRung struct {
 	Name        string `json:"name"`
 	Status      string `json:"status"`
@@ -130,6 +134,10 @@ func (h *APIHandler) HandleContentItemsRoot(w http.ResponseWriter, r *http.Reque
 func (h *APIHandler) HandleContentRouter(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/api/content/import-url" {
 		h.HandleContentImportURL(w, r)
+		return
+	}
+	if r.URL.Path == "/api/content/import-file" {
+		h.HandleContentImportFile(w, r)
 		return
 	}
 	const prefix = "/api/content/items/"
@@ -231,6 +239,31 @@ func (h *APIHandler) HandleContentImportURL(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	item, err := h.rt.ImportURLContent(r.Context(), ownerID, strings.TrimSpace(req.URL), strings.TrimSpace(req.Query))
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, item)
+}
+
+func (h *APIHandler) HandleContentImportFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req contentImportFileRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid file import request"})
+		return
+	}
+	item, err := h.rt.ImportFileContent(r.Context(), ownerID, strings.TrimSpace(req.FilePath))
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
 		return

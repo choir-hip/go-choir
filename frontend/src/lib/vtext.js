@@ -20,6 +20,7 @@
  *   POST   /api/vtext/documents/{id}/source-attachments — attach readable source artifacts
  *   POST   /api/content/items                      — create owner-scoped content item
  *   POST   /api/content/import-url                 — import readable URL content
+ *   POST   /api/content/import-file                — import an existing user-computer file
  *   POST   /api/platform/vtext/publications        — publish selected VText revision
  *   GET    /api/platform/publications/resolve      — resolve public publication bundle
  *   GET    /api/platform/publications/export       — export canonical publication artifact
@@ -359,6 +360,20 @@ export async function importContentURL(url, query = '') {
 
   if (!res.ok) {
     await decodeError(res, `Import source URL failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function importContentFile(filePath) {
+  const res = await fetchWithRenewal(contentPath('/import-file'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file_path: filePath }),
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Import source file failed (${res.status})`);
   }
 
   return res.json();

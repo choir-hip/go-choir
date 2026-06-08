@@ -8,6 +8,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -363,6 +365,70 @@ func TestContentCreateSupportsDurableMediaReferences(t *testing.T) {
 	}
 	if reader.AppHint != "content" {
 		t.Fatalf("manual reader app_hint = %q, want content", reader.AppHint)
+	}
+}
+
+func TestContentImportFileCreatesExtractedPPTXContentItem(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	filesRoot := t.TempDir()
+	t.Setenv("SANDBOX_FILES_ROOT", filesRoot)
+	importsDir := filepath.Join(filesRoot, "imports")
+	if err := os.MkdirAll(importsDir, 0o755); err != nil {
+		t.Fatalf("create imports dir: %v", err)
+	}
+	pptxBytes := buildMinimalPPTX(t, []string{
+		"Frozen corpus slide one",
+		"Second slide contains exact recall marker ALPHA-42",
+	})
+	if err := os.WriteFile(filepath.Join(importsDir, "deck.pptx"), pptxBytes, 0o644); err != nil {
+		t.Fatalf("write pptx: %v", err)
+	}
+
+	req := authenticatedRequest(http.MethodPost, "/api/content/import-file", `{"file_path":"imports/deck.pptx"}`, "user-content")
+	w := httptest.NewRecorder()
+	handler.HandleContentImportFile(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var item types.ContentItem
+	if err := json.Unmarshal(w.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if item.SourceType != "file" || item.FilePath != "imports/deck.pptx" {
+		t.Fatalf("file identity = %s %s", item.SourceType, item.FilePath)
+	}
+	if item.MediaType != "application/vnd.openxmlformats-officedocument.presentationml.presentation" || item.AppHint != "slides" {
+		t.Fatalf("presentation identity = %s/%s", item.MediaType, item.AppHint)
+	}
+	if item.ContentHash != contentHashBytes(pptxBytes) {
+		t.Fatalf("content_hash = %q, want raw hash", item.ContentHash)
+	}
+	if !strings.Contains(item.TextContent, "Frozen corpus slide one") || !strings.Contains(item.TextContent, "ALPHA-42") {
+		t.Fatalf("text_content missing slide text: %q", item.TextContent)
+	}
+	metadata := map[string]any{}
+	if err := json.Unmarshal(item.Metadata, &metadata); err != nil {
+		t.Fatalf("decode metadata: %v", err)
+	}
+	if metadata["extraction_adapter"] != "pptx_ooxml_slide_text_projection" {
+		t.Fatalf("extraction_adapter = %#v", metadata["extraction_adapter"])
+	}
+	if metadata["raw_content_hash"] != "sha256:"+contentHashBytes(pptxBytes) {
+		t.Fatalf("raw_content_hash = %#v", metadata["raw_content_hash"])
+	}
+	if metadata["extracted_text_hash"] == "" {
+		t.Fatalf("extracted_text_hash missing: %#v", metadata)
+	}
+	selectors := selectorsFromContentMetadata(item.Metadata)
+	if len(selectors) != 2 || selectors[0].ID != "slide-1" || selectors[1].ID != "slide-2" {
+		t.Fatalf("selectors = %#v", selectors)
+	}
+	stored, err := rt.Store().GetContentItem(context.Background(), "user-content", item.ContentID)
+	if err != nil {
+		t.Fatalf("load stored content item: %v", err)
+	}
+	if stored.ContentID != item.ContentID || !strings.Contains(stored.TextContent, "ALPHA-42") {
+		t.Fatalf("stored item = %#v", stored)
 	}
 }
 
