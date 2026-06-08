@@ -519,50 +519,83 @@ Likely route:
 ## Run Checkpoint & Resumption State
 
 ```text
-status: ready
-last checkpoint: mission revised after theme boot-cache and VText toolbar
-  responsive fixes landed in commit 0610a87a, and staging health confirmed
-  that commit deployed at 2026-06-08T04:13:21Z.
+status: blocked_incomplete
+last checkpoint: 2026-06-08T04:58Z product-path run reached Super
+  worker-medium lease twice, then failed before start_worker_delegation.
 current artifact state:
-  Choir-in-Choir has prior package/adoption substrate but no recent readiness
-  proof for platform PR acceleration. The staging-facing pre-mission UI fixes
-  are now on origin/main.
+  The staging-facing pre-mission UI fixes are on origin/main and deployed at
+  commit 0610a87a. The Choir-in-Choir mission created owner-readable VText
+  mission narratives and proved that Super can request worker-medium leases,
+  but the delegated worker run never started. No AppChangePackage, branch, PR,
+  candidate tests, worker proof, or Global Wire source-truthfulness fix exists.
 what shipped:
   Pre-mission fixes in 0610a87a: local theme boot cache, VText toolbar
   right-aligned Revise action, no R/S/P narrow fallback, responsive toolbar
-  regression tests.
+  regression tests. No mission payload fix has shipped.
 what was proven:
-  Local focused Playwright tests and frontend build passed before commit
-  0610a87a. Staging `/health` reports deployed commit
-  0610a87aa5a3e05ccedee4c0d34c4c6250625513. This mission itself has not yet
-  proven the Choir-in-Choir loop.
+  - Staging `/health` reports deployed commit
+    0610a87aa5a3e05ccedee4c0d34c4c6250625513.
+  - Product-path prompt-bar trajectory
+    da92802e-00e3-4644-9138-321dc3fcf43d created mission VText
+    a354b950-fea1-41a9-a399-ea9bfd0c18da and Super run
+    b1a434e3-6f18-41fb-90d3-56240a743c71.
+  - That Super run inspected repo context, corrected the false assumption that
+    the repo was private `choir-ai/go-choir`, identified the public repo
+    `https://github.com/choir-hip/go-choir.git`, read the mission doc, found
+    relevant Global Wire code paths, and requested worker-medium
+    worker-438463b747b3d37e / vm-5a3a26451d862c67cd2c228ae3373555.
+  - A second product-path prompt-bar trajectory
+    8243f21a-d37b-4b9f-a580-b71a55b001ca created concise mission VText
+    17756e4e-8746-483f-84b7-0cd949fdb029 and reproduced the same failure
+    after intentionally avoiding full mission-doc loading before delegation.
+  - In both attempts, `request_worker_vm` returned
+    `delegation_required=true`, `next_tool=start_worker_delegation`, and
+    `start_args`, but the runtime/provider loop timed out twice before the
+    forced `start_worker_delegation` tool call.
 unproven or partial claims:
-  worker-medium availability, worker-playwright availability, PR/package
-  source transfer for platform work, VText narrative quality, Codex review loop
-  integration, Global Wire source-body integrity, front-page ranking
-  truthfulness, mobile source-open behavior, source chronology/search deletion,
-  Style.vtext panel deletion, and processor/reconciler failure root-cause.
+  worker-medium leasing is proven, but worker delegation start is not.
+  worker-playwright availability, PR/package source transfer for platform work,
+  Codex review loop integration, Global Wire source-body integrity, front-page
+  ranking truthfulness, mobile source-open behavior, source chronology/search
+  deletion, Style.vtext panel deletion, and processor/reconciler failure
+  root-cause remain unproven.
 belief-state changes:
-  Theme switching and toolbar layout should no longer block the overnight
-  run unless staging deploy evidence contradicts commit 0610a87a behavior.
+  The first assumed root cause, "Super read too much mission context before the
+  forced start tool," is probably incomplete or wrong. The repeated failure on
+  the smaller route points to the required-next-tool/provider interaction. Trace
+  events for the forced calls show `tool_choice=function:start_worker_delegation`
+  and `max_tokens=0` before provider timeouts, making the required-tool retry
+  path the highest-value substrate suspect.
 remaining error field:
   The platform can currently be changed reliably by Codex through git/CI/deploy,
-  but Choir-in-Choir has not recently proven it can produce reviewable platform
-  candidates that reduce Codex work. Global Wire may still be presenting seed
-  placeholders and stale ordering as live news.
+  but Choir-in-Choir cannot yet start the delegated worker after a successful
+  worker lease through the product path. Global Wire may still be presenting
+  seed placeholders and stale ordering as live news. The owner preference to
+  delete the Sources Chronology/search surface is recorded separately in
+  docs/choir-in-choir-deletion-bias-eval-note-2026-06-08.md.
 highest-impact remaining uncertainty:
-  Can a worker produce a reviewable source artifact for Global Wire source
-  truthfulness without direct main/deploy authority?
+  Why does the required-next-tool path fail to produce
+  `start_worker_delegation` after `request_worker_vm` returns start_args? Is
+  the provider receiving an impossible zero-token request, mishandling forced
+  tool choice, or blocked by another adapter/runtime constraint?
 next executable probe:
-  Start a product-path run that leases worker-medium for Global Wire
-  source-body/ranking/source-open investigation and asks for a PR/package or
-  precise blocker.
+  Document this substrate failure first, then inspect and patch the
+  required-next-tool retry path so the forced `start_worker_delegation` call has
+  a valid provider request or a deterministic non-LLM handoff. Add a regression
+  test that fails if a required tool retry is sent with an impossible token
+  budget or silently times out before the tool call. After deploy, rerun the
+  same product-path mission and verify that a worker run actually starts.
 suggested resume goal string:
   /goal Run docs/mission-choir-in-choir-platform-pr-accelerator-v0.md
 evidence artifact refs:
   commit 0610a87a on origin/main for pre-mission theme/toolbar fixes; staging
   health confirmed deployed commit
-  0610a87aa5a3e05ccedee4c0d34c4c6250625513 at 2026-06-08T04:13:21Z.
+  0610a87aa5a3e05ccedee4c0d34c4c6250625513 at 2026-06-08T04:13:21Z;
+  failed trajectory da92802e-00e3-4644-9138-321dc3fcf43d;
+  failed Super run b1a434e3-6f18-41fb-90d3-56240a743c71;
+  retry trajectory 8243f21a-d37b-4b9f-a580-b71a55b001ca;
+  retry VText doc 17756e4e-8746-483f-84b7-0cd949fdb029.
 rollback refs:
-  platform rollback is current deployed main before any accepted fix lands.
+  platform rollback is current deployed main before any accepted fix lands; no
+  mission payload code changed during the failed product-path attempts.
 ```

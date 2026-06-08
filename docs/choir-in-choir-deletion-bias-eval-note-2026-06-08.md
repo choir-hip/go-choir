@@ -23,6 +23,13 @@ bad surfaces and wants to see whether the Choir multi-agent system also becomes
 demure, or whether it actually deletes the surface when the product judgment is
 clear.
 
+This note exists specifically because the mission language may still contain
+softer phrases such as "deletion candidate" or "make a deletion
+recommendation." Those phrases should not be mistaken for the owner's product
+preference. The owner wants the current surface deleted; the eval is whether the
+multi-agent system honors that preference or converges on the same reluctance to
+delete.
+
 ## Retrieval Signal
 
 When reviewing the mission outcome, check whether Choir-in-Choir:
