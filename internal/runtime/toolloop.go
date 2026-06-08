@@ -119,10 +119,11 @@ type ToolLoopMemoryHooks struct {
 }
 
 type toolLoopOptions struct {
-	memoryHooks       ToolLoopMemoryHooks
-	llmConfig         LLMSelection
-	initialToolChoice string
-	terminalTools     map[string]bool
+	memoryHooks                   ToolLoopMemoryHooks
+	llmConfig                     LLMSelection
+	providerPreconditionFallbacks []LLMSelection
+	initialToolChoice             string
+	terminalTools                 map[string]bool
 }
 
 type pendingRequiredTool struct {
@@ -153,6 +154,15 @@ func WithToolLoopMemoryHooks(hooks ToolLoopMemoryHooks) ToolLoopOption {
 func WithToolLoopLLMConfig(config LLMSelection) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.llmConfig = config
+	}
+}
+
+// WithProviderPreconditionFallbacks configures alternate model selections for
+// provider request-shape precondition failures. The tool loop only uses these
+// after preserving the same tool obligation on the original selection first.
+func WithProviderPreconditionFallbacks(fallbacks ...LLMSelection) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.providerPreconditionFallbacks = append([]LLMSelection(nil), fallbacks...)
 	}
 }
 
@@ -230,6 +240,8 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	}
 	forceInitialToolChoiceRetry := false
 	relaxInitialExactToolChoice := false
+	activeLLMConfig := options.llmConfig
+	preconditionFallbackIndex := 0
 	var requiredNextTool *pendingRequiredTool
 
 	appendMessage := func(role string, msg json.RawMessage) error {
@@ -285,9 +297,9 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		}
 
 		req := ToolLoopRequest{
-			Provider:        options.llmConfig.Provider,
-			Model:           options.llmConfig.Model,
-			ReasoningEffort: options.llmConfig.ReasoningEffort,
+			Provider:        activeLLMConfig.Provider,
+			Model:           activeLLMConfig.Model,
+			ReasoningEffort: activeLLMConfig.ReasoningEffort,
 			System:          systemPrompt,
 			Messages:        messages,
 			ToolDefinitions: toolDefs,
@@ -334,9 +346,9 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				"message_roles":        toolLoopMessageRoles(messages),
 				"max_tokens":           req.MaxTokens,
 				"max_tokens_requested": req.MaxTokens > 0,
-				"llm_provider":         options.llmConfig.Provider,
-				"llm_model":            options.llmConfig.Model,
-				"llm_reasoning_effort": options.llmConfig.ReasoningEffort,
+				"llm_provider":         activeLLMConfig.Provider,
+				"llm_model":            activeLLMConfig.Model,
+				"llm_reasoning_effort": activeLLMConfig.ReasoningEffort,
 				"tool_choice":          req.ToolChoice,
 				"model_policy":         "run_metadata",
 			})
@@ -405,6 +417,29 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				}
 				continue
 			}
+			if isInitialToolChoicePreconditionError(req.ToolChoice, err) && i == 1 && preconditionFallbackIndex < len(options.providerPreconditionFallbacks) {
+				next := options.providerPreconditionFallbacks[preconditionFallbackIndex]
+				preconditionFallbackIndex++
+				if !sameLLMSelection(activeLLMConfig, next) && strings.TrimSpace(next.Provider) != "" && strings.TrimSpace(next.Model) != "" {
+					activeLLMConfig = next
+					forceInitialToolChoiceRetry = true
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"reason":          "provider_precondition_fallback",
+							"tool_choice":     req.ToolChoice,
+							"from_provider":   req.Provider,
+							"from_model":      req.Model,
+							"to_provider":     next.Provider,
+							"to_model":        next.Model,
+							"to_reasoning":    next.ReasoningEffort,
+							"provider_error":  err.Error(),
+							"fallback_source": next.Source,
+						})
+						emit(types.EventRunRetry, "provider_model_fallback", payload)
+					}
+					continue
+				}
+			}
 			return "", totalUsage, fmt.Errorf("tool loop iteration %d: %w", i, err)
 		}
 
@@ -421,9 +456,9 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			"response_text_chars":  len(resp.Text),
 			"response_text":        truncatePromptSnippet(resp.Text, 2000),
 			"model":                resp.Model,
-			"llm_provider":         options.llmConfig.Provider,
-			"llm_model":            options.llmConfig.Model,
-			"llm_reasoning_effort": options.llmConfig.ReasoningEffort,
+			"llm_provider":         activeLLMConfig.Provider,
+			"llm_model":            activeLLMConfig.Model,
+			"llm_reasoning_effort": activeLLMConfig.ReasoningEffort,
 			"model_policy":         "run_metadata",
 		})
 		emit(types.EventRunProgress, "tool_loop", progressPayload)
@@ -678,9 +713,30 @@ func isExactInitialToolChoicePreconditionError(choice string, err error) bool {
 	if !isExactRequiredToolChoice(choice) || err == nil {
 		return false
 	}
+	return isProviderPreconditionError(err)
+}
+
+func isInitialToolChoicePreconditionError(choice string, err error) bool {
+	if strings.TrimSpace(choice) == "" || err == nil {
+		return false
+	}
+	return isProviderPreconditionError(err)
+}
+
+func isProviderPreconditionError(err error) bool {
+	if err == nil {
+		return false
+	}
 	text := strings.ToLower(err.Error())
 	return strings.Contains(text, "412") ||
 		strings.Contains(text, "precondition failed")
+}
+
+func sameLLMSelection(a, b LLMSelection) bool {
+	return strings.TrimSpace(a.Provider) == strings.TrimSpace(b.Provider) &&
+		strings.TrimSpace(a.Model) == strings.TrimSpace(b.Model) &&
+		strings.TrimSpace(a.ReasoningEffort) == strings.TrimSpace(b.ReasoningEffort) &&
+		a.MaxTokens == b.MaxTokens
 }
 
 func toolDefinitionsMatchingName(defs []ToolDefinition, name string) []ToolDefinition {

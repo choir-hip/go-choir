@@ -1178,6 +1178,30 @@ func (p *exactToolChoicePreconditionThenToolProvider) CallWithTools(ctx context.
 	}, nil
 }
 
+type providerPreconditionTwiceThenToolProvider struct {
+	Provider
+	calls    int32
+	requests []ToolLoopRequest
+}
+
+func (p *providerPreconditionTwiceThenToolProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.requests = append(p.requests, req)
+	call := atomic.AddInt32(&p.calls, 1)
+	if call <= 2 {
+		return nil, fmt.Errorf("gateway call failed: fireworks: status 412 Precondition Failed (sanitized)")
+	}
+	return &ToolLoopResponse{
+		StopReason: "tool_use",
+		ToolCalls: []types.ToolCall{{
+			ID:        "call-edit",
+			Name:      "edit_vtext",
+			Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"mission checkpoint"}`),
+		}},
+		Usage: TokenUsage{InputTokens: 9, OutputTokens: 3},
+		Model: req.Model,
+	}, nil
+}
+
 func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *testing.T) {
 	provider := &exactToolChoicePreconditionThenToolProvider{}
 	registry := NewToolRegistry()
@@ -1252,6 +1276,101 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 	}
 	if !retrySeen {
 		t.Fatal("missing provider_tool_choice retry event")
+	}
+}
+
+func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *testing.T) {
+	provider := &providerPreconditionTwiceThenToolProvider{}
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "edit_vtext",
+		Description: "Edit the VText document.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"ok","revision_id":"rev-1"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register edit_vtext: %v", err)
+	}
+	if err := registry.Register(Tool{
+		Name:        "request_super_execution",
+		Description: "Ask Super to execute follow-on platform work.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"requested"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register request_super_execution: %v", err)
+	}
+	var modelFallbackSeen bool
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunRetry && phase == "provider_model_fallback" {
+			modelFallbackSeen = true
+			var decoded map[string]any
+			if err := json.Unmarshal(payload, &decoded); err != nil {
+				t.Fatalf("decode fallback payload: %v", err)
+			}
+			if decoded["from_model"] != "accounts/fireworks/models/deepseek-v4-flash" ||
+				decoded["to_model"] != "accounts/fireworks/models/deepseek-v4-pro" {
+				t.Fatalf("fallback payload = %+v", decoded)
+			}
+		}
+	}
+
+	text, usage, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
+		"You are a VText appagent.",
+		0,
+		emit,
+		nil,
+		WithToolLoopLLMConfig(LLMSelection{
+			Provider:        "fireworks",
+			Model:           "accounts/fireworks/models/deepseek-v4-flash",
+			ReasoningEffort: "medium",
+		}),
+		WithProviderPreconditionFallbacks(LLMSelection{
+			Provider:        "fireworks",
+			Model:           "accounts/fireworks/models/deepseek-v4-pro",
+			ReasoningEffort: "medium",
+			Source:          "test_fallback",
+		}),
+		WithInitialToolChoice("function:edit_vtext"),
+		WithTerminalToolSuccesses("edit_vtext"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "" {
+		t.Fatalf("text = %q, want empty terminal tool result", text)
+	}
+	if usage.InputTokens != 9 || usage.OutputTokens != 3 {
+		t.Fatalf("usage = %+v", usage)
+	}
+	if got := atomic.LoadInt32(&provider.calls); got != 3 {
+		t.Fatalf("provider calls = %d, want 3", got)
+	}
+	if !modelFallbackSeen {
+		t.Fatal("missing provider_model_fallback retry event")
+	}
+	if len(provider.requests) != 3 {
+		t.Fatalf("requests = %d, want 3", len(provider.requests))
+	}
+	wantChoices := []string{"function:edit_vtext", "required", "required"}
+	wantModels := []string{
+		"accounts/fireworks/models/deepseek-v4-flash",
+		"accounts/fireworks/models/deepseek-v4-flash",
+		"accounts/fireworks/models/deepseek-v4-pro",
+	}
+	for i, req := range provider.requests {
+		if req.ToolChoice != wantChoices[i] || req.Model != wantModels[i] {
+			t.Fatalf("request %d choice/model = %q/%q, want %q/%q", i, req.ToolChoice, req.Model, wantChoices[i], wantModels[i])
+		}
+		if len(req.ToolDefinitions) != 1 || req.ToolDefinitions[0].Name != "edit_vtext" {
+			t.Fatalf("request %d tool definitions = %+v, want only edit_vtext", i, req.ToolDefinitions)
+		}
 	}
 }
 

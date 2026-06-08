@@ -531,3 +531,27 @@ reasoning = "medium"
 		t.Fatalf("cached super policy = %+v", super)
 	}
 }
+
+func TestProviderPreconditionFallbackSelectionsUseFireworksProForFlash(t *testing.T) {
+	fallbacks := providerPreconditionFallbackSelections(LLMSelection{
+		Provider:        "fireworks",
+		Model:           "accounts/fireworks/models/deepseek-v4-flash",
+		ReasoningEffort: "medium",
+	})
+	if len(fallbacks) != 1 {
+		t.Fatalf("fallbacks = %+v, want one Fireworks Pro fallback", fallbacks)
+	}
+	if got := fallbacks[0]; got.Provider != "fireworks" ||
+		got.Model != "accounts/fireworks/models/deepseek-v4-pro" ||
+		got.ReasoningEffort != "medium" ||
+		got.Source != "provider_precondition_fallback" {
+		t.Fatalf("fallback = %+v", got)
+	}
+
+	if got := providerPreconditionFallbackSelections(LLMSelection{
+		Provider: "fireworks",
+		Model:    "accounts/fireworks/models/deepseek-v4-pro",
+	}); len(got) != 0 {
+		t.Fatalf("pro fallbacks = %+v, want none", got)
+	}
+}

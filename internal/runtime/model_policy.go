@@ -536,3 +536,20 @@ func ResolvedLLMConfigFromMetadata(metadata map[string]any) LLMSelection {
 		Source:          strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMPolicySource)),
 	}
 }
+
+func providerPreconditionFallbackSelections(sel LLMSelection) []LLMSelection {
+	provider := strings.ToLower(strings.TrimSpace(sel.Provider))
+	model := strings.TrimSpace(sel.Model)
+	if provider != defaultFireworksProvider || model == "" {
+		return nil
+	}
+	if model == defaultSuperModel {
+		return nil
+	}
+	return []LLMSelection{{
+		Provider:        defaultFireworksProvider,
+		Model:           defaultSuperModel,
+		ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
+		Source:          "provider_precondition_fallback",
+	}}
+}

@@ -1053,6 +1053,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	toolLoopOptions := []ToolLoopOption{
 		WithToolLoopMemoryHooks(memory.hooks()),
 		WithToolLoopLLMConfig(llmConfig),
+		WithProviderPreconditionFallbacks(providerPreconditionFallbackSelections(llmConfig)...),
 	}
 	if metadataString(rec.Metadata, "type") == "vtext_agent_revision" {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialVTextToolChoice(rec)))
