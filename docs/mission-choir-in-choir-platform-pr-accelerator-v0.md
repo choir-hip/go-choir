@@ -936,3 +936,62 @@ next executable probe:
   original link. Then run the focused source-entity frontend test and deployed
   proof after landing.
 ```
+
+```text
+status: shipped_partial
+last checkpoint: 2026-06-08T07:11Z app-only source URLs no longer render as
+  browser-openable original links in the Source Viewer.
+current artifact state:
+  Commit 436ef202a385273bec5924d179b8e452c215562b is on origin/main and
+  deployed to staging. The Source Viewer still opens from native VText source
+  transclusions, but it only renders the "Open original" / "Open source"
+  browser anchor for `http:` and `https:` URLs.
+what shipped:
+  - `frontend/src/lib/source-url.ts`: added a small browser URL classifier that
+    accepts only `http:` and `https:` source URLs for external browser opening.
+  - `frontend/src/lib/ContentViewer.svelte`: uses the classifier before
+    rendering `.source-link`, so app-only URLs such as
+    `choir://global-wire/source/<id>` are not exposed to Safari as deep links.
+  - `frontend/tests/vtext-source-entities.spec.js`: regression coverage proves
+    `https://` and `http://` remain browser-openable while `choir://`,
+    `source_service_item:*`, and relative internal paths are not.
+what was proven:
+  - Local `npm run build` passed.
+  - Local focused Playwright pure regression passed:
+    `npm run e2e -- tests/vtext-source-entities.spec.js -g "source reader exposes only web-safe original links"`.
+  - The broader local browser-backed source-entity file could not run without
+    the local service stack; the failure was `ERR_CONNECTION_REFUSED` at
+    `http://localhost:4173/`, after the pure source-url regressions had passed.
+  - CI run 27121344802 passed for commit
+    436ef202a385273bec5924d179b8e452c215562b, including frontend build, Go
+    gates, and staging deploy.
+  - FlakeHub run 27121344783 passed.
+  - Public staging `/health` reports proxy and sandbox deployed commit
+    436ef202a385273bec5924d179b8e452c215562b with
+    `deployed_at=2026-06-08T07:04:12Z`.
+  - A live staging Playwright probe created a VText with a
+    `choir://global-wire/source/source-port-authority` source entity, opened it
+    through the normal VText source button, verified Source Viewer reader mode,
+    and verified `.source-link` count was zero.
+  - Deployed focused Playwright passed:
+    `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- tests/vtext-source-entities.spec.js -g "VText source URL opens Source Viewer unless browser is explicitly requested"`,
+    proving normal `https://` source URLs still open Source Viewer by default
+    and explicit Web Lens routing still opens the browser app.
+unproven or partial claims:
+  This fixes the web app deep-link prompt class for Source Viewer browser
+  anchors. It does not make old seed source bodies real full article sources,
+  and it does not solve front-page ranking, processor/reconciler backlog, or
+  article body extraction quality.
+belief-state changes:
+  Source opening now has a cleaner boundary: VText source transclusion opens
+  the internal Source Viewer; only web URLs become browser/open-original
+  anchors. App-only source identifiers remain internal product references.
+remaining error field:
+  Continue the Global Wire source-truth mission on ranking freshness,
+  processor/reconciler queue pressure, source body extraction quality, and
+  eventual removal of remaining seed/demo source records from reader-facing
+  news flows.
+rollback refs:
+  Revert 436ef202 to restore prior behavior where any source URL, including
+  `choir://`, rendered as a browser anchor.
+```
