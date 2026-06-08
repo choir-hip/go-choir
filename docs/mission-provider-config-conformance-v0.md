@@ -432,28 +432,42 @@ problem.
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: 2026-06-08T15:48Z OpenAI-compatible tool-loop path fixed,
-  deployed, and proven through staging gateway plus product VText appagent
+last checkpoint: 2026-06-08T16:20Z Anthropic-compatible provider routes
+  implemented, deployed, and proven for exact tool choice plus continuation
 current artifact state:
   Direct DeepSeek and Xiaomi provider support is implemented and deployed at
-  commit `3dc9b05c221af8fc48a784f5ff937b62ae8fdbd0`. The first product-path
-  VText failure was root-caused to DeepSeek OpenAI chat-completions rejecting
-  thinking mode when tools are present, including exact tool choice and
-  post-tool continuation turns. The deployed adapter now disables thinking for
-  DeepSeek calls whenever tools are present while preserving reasoning settings
-  for free-form non-tool turns.
+  commit `58881c172c51e3a862129eea7fab6feaf1deec53`. OpenAI-compatible
+  DeepSeek/Xiaomi routes remain the default model-policy surface. New
+  protocol-qualified providers `deepseek-anthropic` and `xiaomi-anthropic`
+  expose their Anthropic-compatible Messages API routes without duplicating the
+  model catalog's default provider mapping.
+
+  The first product-path VText failure was root-caused to DeepSeek rejecting
+  thinking mode when tools are present. That rule also applies on DeepSeek's
+  Anthropic-compatible route. DeepSeek tool-bearing calls now force thinking
+  disabled on both OpenAI-compatible and Anthropic-compatible routes. Xiaomi's
+  Anthropic-compatible route can return signed `thinking` content blocks; the
+  adapter stores them as hidden `reasoning_content` and replays them as
+  Anthropic `thinking` blocks on continuation turns.
 what shipped:
   `3dc9b05c221af8fc48a784f5ff937b62ae8fdbd0` hardens DeepSeek tool-loop
   conformance, adds focused provider/runtime tests, adds env-gated live
   DeepSeek/Xiaomi runtime tool-loop tests, and classifies the DeepSeek thinking
   plus tool-choice 400 as a provider precondition error.
+
+  `58881c172c51e3a862129eea7fab6feaf1deec53` adds generic Anthropic-compatible
+  provider support for DeepSeek and Xiaomi, registers `deepseek-anthropic` and
+  `xiaomi-anthropic` in the gateway, serializes Anthropic `tool_choice` and
+  `thinking`, preserves hidden thinking blocks, and adds unit plus env-gated
+  live runtime exact-tool tests for both routes.
 what was proven:
   Local focused unit/runtime/provider tests passed. Env-gated live local
-  runtime tool-loop tests passed for DeepSeek and Xiaomi with real provider
-  keys. GitHub Actions run `27148918526` passed, including runtime shards and
-  deploy to staging. Staging `/health` reports proxy and sandbox build
-  `3dc9b05c221af8fc48a784f5ff937b62ae8fdbd0`. Node B gateway advertises
-  `chatgpt,zai,deepseek,xiaomi,fireworks`.
+  runtime exact-tool tests passed for DeepSeek, Xiaomi, DeepSeek Anthropic, and
+  Xiaomi Anthropic with real provider keys. GitHub Actions runs `27148918526`
+  and `27150954107` passed, including runtime shards and deploy to staging.
+  Staging `/health` reports proxy and sandbox build
+  `58881c172c51e3a862129eea7fab6feaf1deec53`. Node B gateway advertises
+  `deepseek,deepseek-anthropic,xiaomi,xiaomi-anthropic,fireworks,chatgpt,zai`.
 
   Deployed gateway proof passed for DeepSeek `deepseek-v4-flash`: medium
   reasoning plus exact `function:record_status` returned `tool_use`, and the
@@ -471,30 +485,45 @@ what was proven:
   received an appagent revision. Gateway logs for the run show DeepSeek
   `deepseek-v4-flash` handled a `tool_use` turn and an `end_turn` continuation
   for VM sandbox `vm-e978ade762857ddce16dd08a09ca5ce1` without a 400.
+
+  Deployed gateway proof passed for `deepseek-anthropic` using
+  `deepseek-v4-flash`: exact `function:record_status` returned `tool_use`, and
+  the continuation turn returned `GATEWAY_DEEPSEEK_ANTHROPIC_TOOL_LOOP_OK`.
+  Reasoning content was absent because the adapter intentionally disables
+  thinking for DeepSeek tool-bearing calls.
+
+  Deployed gateway proof passed for `xiaomi-anthropic` using `mimo-v2.5-pro`:
+  exact `function:record_status` returned `tool_use`, hidden
+  `reasoning_content` was present, and the continuation turn returned
+  `GATEWAY_XIAOMI_ANTHROPIC_TOOL_LOOP_OK` with hidden reasoning content
+  preserved.
 unproven or partial claims:
-  DeepSeek Anthropic conformance, Xiaomi Anthropic conformance, full
-  auto/required/none tool-mode matrix, reasoning-content passback,
+  Full auto/required/none tool-mode matrix, non-tool reasoning-content passback
+  for DeepSeek Anthropic, streaming behavior for the new routes,
   product-path researcher/verifier runs, product-path multimodal verification,
   compaction/recall safety, and the final Global Wire provider readiness report
   remain unproven.
 belief-state changes:
   The selected DeepSeek OpenAI-compatible path is now viable for VText exact
-  edit/tool loops when tool-bearing calls disable thinking. Provider readiness
-  is still not complete enough for Global Wire hard cutover until researcher,
-  multimodal verifier, and compaction behavior are proven or precisely bounded.
+  edit/tool loops when tool-bearing calls disable thinking. Anthropic-compatible
+  routes are viable conformance/alternative routes for exact tool loops, but
+  they are not yet selected as default policy. Provider readiness is still not
+  complete enough for Global Wire hard cutover until researcher, multimodal
+  verifier, and compaction behavior are proven or precisely bounded.
 remaining error field:
   Complete the provider/protocol conformance matrix beyond the repaired
   OpenAI-compatible tool loop, then select safe model-policy defaults for
   processors, reconcilers, researchers, VText article agents, and multimodal
   verifiers.
 highest-impact remaining uncertainty:
-  Whether Anthropic-compatible APIs are the better route for DeepSeek/Xiaomi
-  agent loops and whether reasoning-content can be preserved correctly through
-  compaction.
+  Whether the repaired OpenAI-compatible default path or the new
+  Anthropic-compatible route should run long-horizon agent loops, and whether
+  hidden reasoning/compaction continuity remains correct under long-context
+  pressure.
 next executable probe:
-  Evaluate DeepSeek and Xiaomi Anthropic-compatible routes, then run one
-  product-path researcher/verifier-style loop and one long-context compaction
-  proof with post-compaction recall and tool use.
+  Run one product-path researcher/verifier-style loop, then one long-context
+  compaction proof with post-compaction recall and tool use. Extend the
+  tool-mode matrix to auto/required/none after the product-path probes.
 suggested resume goal string:
   /goal Run docs/mission-provider-config-conformance-v0.md as MissionGradient and make DeepSeek/Xiaomi production-ready for Choir agents.
 evidence artifact refs:
