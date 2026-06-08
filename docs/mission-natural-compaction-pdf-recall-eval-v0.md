@@ -39,6 +39,51 @@ documents.
 /goal Run docs/mission-natural-compaction-pdf-recall-eval-v0.md as MissionGradient; first upgrade sandbox document extraction for PDF/DOCX/EPUB/PPTX/HTML sources, then run a frozen-corpus natural compaction recall matrix across DeepSeek, Xiaomi, and gpt-5.4-mini without live search, proving approximate recall, exact retrieval, and automatic post-compaction continuation through normal Choir researcher/VText runs.
 ```
 
+## Mission Phase Order
+
+This mission is deliberately ordered. Do not start the compaction matrix until
+the substrate has been proven in the environment where Choir agents actually
+run.
+
+Phase 0: sandbox setup preamble.
+
+- Inspect the normal user/candidate computer NixOS image config.
+- Add or verify document extraction tools there, not only in local dev shell.
+- Prove the refreshed image or deployed product path can import representative
+  PDF, DOCX, EPUB, PPTX, and HTML/HTML-slide sources.
+- Prove extracted ContentItems expose hashes, adapter metadata, selectors, and
+  selector reads through researcher/VText-compatible tooling.
+
+Phase 1: frozen corpus setup.
+
+- Import the frozen corpus once through product routes or normal researcher
+  tools.
+- Record owner, ContentItem ids, hashes, adapters, selector counts, warnings,
+  and exact held-out markers.
+- Do not spend live search quota during scored eval work.
+
+Phase 2: model-policy control.
+
+- Use scoped owner-visible model-policy overlays for each model arm.
+- Do not rewrite broad base model policy as a substitute for scoped eval
+  control.
+- Do not pass hidden provider/model overrides through prompt text or prompt-bar
+  metadata.
+
+Phase 3: natural compaction matrix.
+
+- Run normal Choir researcher or VText-adjacent researcher loops.
+- Let runtime-owned automatic compaction fire at the configured context
+  threshold.
+- Score approximate recall, exact recall, natural retrieval/selector use, and
+  post-compaction continuation.
+
+Phase 4: evidence and resumption.
+
+- Record run ids, trace refs, model policy resolution, compaction metadata,
+  ContentItem refs, failures, and residual risks.
+- Update this mission doc before stopping.
+
 ## Execution Gate 0: Sandbox/User-Computer Setup Before Compaction
 
 This mission has a hard preamble. Before any model arm is run, the worker must
@@ -62,6 +107,9 @@ The preamble is satisfied only when all of these are true:
   loading the whole artifact into context;
 - VText import reuses the same extraction substrate instead of maintaining
   separate format hacks;
+- the refreshed normal user/candidate computer path is verified, or the mission
+  explicitly records why current staging product-path proof is the accepted
+  proxy for that environment;
 - at least one deployed product-path import proof confirms the behavior on
   staging or an authorized Node B user/candidate computer path;
 - no Slides app files, routes, icons, or UI scaffolding are added by this
@@ -145,8 +193,9 @@ PPTX and HTML slide decks are legitimate source documents for research and
 recall. A full Slides app is a different product surface.
 
 Operational consequence: support PPTX/HTML slide extraction now; defer deck
-playback/presentation UI to a separate mission. Do not let this mission drift
-into building, designing, or partially scaffolding the Slides app.
+playback/presentation UI to a separate mission. Do not let this mission create
+slides routes, desktop icons, deck playback UI, presentation controls, or any
+other partial Slides app scaffolding.
 
 ## Hard Invariants
 
@@ -395,7 +444,7 @@ Likely first goal:
 
 ## Run Checkpoint & Resumption State
 
-status: substrate_policy_and_file_import_proven_pre_eval
+status: frozen_corpus_imported_pre_matrix
 
 last checkpoint: mission upgraded so the sandbox/user-computer document
 substrate preamble is an explicit prerequisite before any compaction recall
@@ -404,7 +453,13 @@ extracts PPTX/HTML slide artifacts as sources. The substrate and scoped
 model-policy control-plane behavior changes have been pushed, passed CI,
 deployed to staging, and proven through authenticated product routes. A narrow
 uploaded-file ContentItem import route has also shipped and been proven with an
-uploaded PPTX fixture. The frozen-corpus compaction eval has not started.
+uploaded PPTX fixture. HTML URL imports now include selector and adapter
+metadata. A seven-item frozen corpus has been imported under one staging owner.
+Before the scored compaction matrix starts, the resumed run should perform a
+short pre-matrix sandbox conformance check against the refreshed user/candidate
+computer path or explicitly record why the deployed staging product-path proof
+is accepted as the environment proxy. The scored compaction matrix has not
+started.
 
 current artifact state:
 
@@ -440,6 +495,11 @@ what shipped:
 - behavior commit `d3b4cb98` adds authenticated
   `POST /api/content/import-file`, plus a frontend helper and a comprehensive
   PPTX file-import regression test.
+- docs-only checkpoint `a3de9530` records the HTML corpus selector gap before
+  code changes.
+- behavior commit `97cdd6d7` routes HTML URL imports through the shared
+  extraction substrate so cleaned HTML reader ContentItems now preserve
+  selector metadata, extraction adapter identity, and extracted text hash.
 
 what was proven so far:
 
@@ -520,13 +580,63 @@ what was proven so far:
     extracted text hash
     `657b946e7f715876f9ae1b3e92c28307596364e3c7fa49bd6b0e59cee1f372b0`,
     and slide selectors `slide-1`, `slide-2`.
+- Focused local proof for HTML selectors:
+  - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLCreatesProvenanceRecord|TestContentImportURLCleansReaderChrome|TestContentImportFileCreatesExtractedPPTXContentItem'`;
+  - `nix develop -c go test ./internal/runtime -run 'TestRegisteredPromptBarRouteAcceptsIntentOnly|TestRuntimeRejectsExpiredModelPolicyOverlay|TestRunToolLoop'`.
+- GitHub CI run `27173572286` completed successfully for `97cdd6d7`,
+  including staging deploy.
+- FlakeHub publish run `27173572312` completed successfully for `97cdd6d7`.
+- `https://choir.news/health` reports proxy and sandbox deployed at
+  `97cdd6d768d464f0888b28cf27b6581a6542f174`.
+- A deployed product-path HTML selector proof succeeded through an authenticated
+  `https://choir.news` passkey session:
+  - owner/user id `ea8881a6-e15c-42dd-b0af-840e220b8bc8`;
+  - owner email `codex-html-selector-proof-1780961567082@example.test`;
+  - imported `https://www.rfc-editor.org/rfc/rfc9110.html`;
+  - created ContentItem `a46fd4e4-fa98-40f4-83ed-8eb1efd6a89d`;
+  - stored `source_type: extracted_url`, `media_type: text/markdown`,
+    `app_hint: content`, `extraction_adapter: html_readability_lite`,
+    `selector_count: 26`, raw content hash
+    `d431760660ea44e130f6e919dab216df2d0b3a490567a98089267523368fe1e5`,
+    and extracted text hash
+    `5468b2e39789c8fdb53391ec23818b1507560b4b1fee5172ef50dae2a15fcbb2`.
+- Frozen corpus import succeeded under one staging owner:
+  - owner/user id `49bc8b74-2158-46e2-b387-a7a9a40fb6ad`;
+  - owner email `codex-frozen-corpus-1780961642721@example.test`;
+  - `long_pdf`: RFC 9000 QUIC transport PDF,
+    ContentItem `6b8c0aba-ed20-4c39-abd6-b20f5089ae83`,
+    adapter `pdf_poppler_pdftotext`, selectors `151`, raw hash
+    `24f411581702fea968f554264a629a80aa5a03a2a959733063391575256edcc7`;
+  - `technical_pdf`: Attention Is All You Need PDF,
+    ContentItem `6c90d9cb-9206-4e35-bb74-3a0d9d5226cf`,
+    adapter `pdf_poppler_pdftotext`, selectors `15`, raw hash
+    `bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697`;
+  - `technical_html`: RFC 9110 HTTP Semantics HTML,
+    ContentItem `1b660621-2ca6-467d-85a9-0230b5c624fb`,
+    adapter `html_readability_lite`, selectors `26`, raw hash
+    `d431760660ea44e130f6e919dab216df2d0b3a490567a98089267523368fe1e5`;
+  - `docx`: Calibre demo DOCX,
+    ContentItem `91ab2952-fa7e-46d7-a51d-cca4b8248fa6`,
+    adapter `docx_pandoc_markdown`, selectors `16`, raw hash
+    `269329fc7ae54b3f289b3ac52efde387edc2e566ef9a48d637e841022c7e0eab`;
+  - `epub`: Calibre demo EPUB,
+    ContentItem `a5244a41-cd9e-452f-a8af-2730336ce81c`,
+    adapter `epub_pandoc_markdown`, selectors `5`, raw hash
+    `c516c9d535d6a840255b77ade39a2352a022015be2d7cf8726c75671f314e970`;
+  - `html_slides`: reveal.js HTML demo,
+    ContentItem `339088bd-5b3d-40a0-ba23-acc3a40c51f4`,
+    adapter `html_readability_lite`, selectors `1`, raw hash
+    `a41c6e23b54eea4719087d2248cfdcc252dd0429d17be7498f415611e8f291b9`;
+  - `pptx_uploaded`: uploaded frozen corpus deck at
+    `frozen-corpus/eval-deck-1780961652728.pptx`,
+    ContentItem `89cb6993-6d40-440c-9700-0f5d3c24a468`,
+    adapter `pptx_ooxml_slide_text_projection`, selectors `3`, raw hash
+    `5e69f62447cc5b88c42d0ac39719e10328933e6364bb829af159500140508acb`.
 
 unproven or partial claims:
 
 - document extraction tool availability in refreshed user/candidate computers
   beyond the deployed product API proof;
-- high-quality long PDF/DOCX/EPUB/PPTX/HTML extraction through normal product
-  tools;
 - frozen-corpus matrix execution without live search;
 - natural post-compaction recall across target models.
 
@@ -536,22 +646,21 @@ belief-state changes:
 - document parsing is a prerequisite product capability;
 - PPTX/HTML slide extraction belongs in source tooling now, while Slides app UI
   belongs in a future mission.
+- the next run should treat sandbox setup proof as a blocking preamble, even
+  though several product-path import proofs have already shipped.
 
 remaining error field:
 
 - image/package size impact of adding document tools;
 - extraction quality variance across file formats;
-- frozen corpus selection and import quality;
-- HTML URL imports currently preserve cleaned reader markdown but do not expose
-  selectors or explicit extraction-adapter metadata, which means HTML corpus
-  items are weaker than PDF/DOCX/EPUB/PPTX items for exact recall and selector
-  citation;
 - whether all target providers remain available during the run.
 
 highest-impact remaining uncertainty:
 
-- can the sandbox image and ContentItem tools support real multi-format document
-  import without creating brittle one-off VText import hacks?
+- does the refreshed user/candidate computer environment actually carry the
+  same document extraction capability proven through staging product APIs, or
+  is there an image/deploy gap that would make the compaction eval measure the
+  wrong substrate?
 
 latest local proof:
 
@@ -562,6 +671,7 @@ latest local proof:
 - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestHandleModelPolicyResolveUsesOverlayFile'`
 - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportFileCreatesExtractedPPTXContentItem|TestContentImportURLCreatesProvenanceRecord|TestContentCreateSupportsDurableMediaReferences'`
 - `nix develop -c go test ./internal/runtime -run 'TestRegisteredPromptBarRouteAcceptsIntentOnly|TestRuntimeRejectsExpiredModelPolicyOverlay|TestRunToolLoop'`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLCreatesProvenanceRecord|TestContentImportURLCleansReaderChrome|TestContentImportFileCreatesExtractedPPTXContentItem'`
 - `nix develop -c go test ./internal/runtime -run 'TestExtract|TestSystemPromptForResearcher|TestContent'`
 - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact|TestAgentToolProfiles|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot'`
 
@@ -573,6 +683,8 @@ latest staging proof:
 - `gh run view 27171676075 --json status,conclusion,workflowName,url,headSha`
 - `gh run view 27173112280 --json status,conclusion,workflowName,url,headSha`
 - `gh run view 27173112299 --json status,conclusion,workflowName,url,headSha`
+- `gh run view 27173572286 --json status,conclusion,workflowName,url,headSha`
+- `gh run view 27173572312 --json status,conclusion,workflowName,url,headSha`
 - `curl -fsS https://choir.news/health`
 - authenticated staging product-path import of public PDF ContentItem
   `4222d5fc-aea5-43bd-93eb-077f9c3540a7` with Poppler extraction and page
@@ -583,14 +695,25 @@ latest staging proof:
 - authenticated staging product-path uploaded-PPTX proof for ContentItem
   `fcda1409-8740-49b1-b35b-bd27de323e2c`, preserving raw hash, extracted text
   hash, adapter metadata, and slide selectors.
+- authenticated staging product-path HTML selector proof for ContentItem
+  `a46fd4e4-fa98-40f4-83ed-8eb1efd6a89d`, preserving raw hash, extracted text
+  hash, adapter metadata, and 26 selectors.
+- authenticated staging frozen corpus import for owner
+  `49bc8b74-2158-46e2-b387-a7a9a40fb6ad`, creating seven ContentItems across
+  PDF, HTML, DOCX, EPUB, HTML slides, and uploaded PPTX.
 
 next executable probe:
 
-- add selector and adapter metadata for cleaned HTML URL imports, prove it on
-  staging, then build the frozen multi-format corpus using URL imports for
-  public documents and file imports for uploaded fixtures, record ContentItem
-  ids/hashes/selectors/adapters, and start the model matrix using scoped
-  model-policy overlays.
+- run the pre-matrix sandbox conformance check: verify the refreshed
+  user/candidate computer path has the declared document tools and can expose
+  representative frozen-corpus ContentItems/selectors through normal
+  researcher/VText-compatible tooling. If that passes or is explicitly accepted
+  as covered by deployed product-path proof, start the model matrix using scoped
+  model-policy overlays for frozen corpus owner
+  `49bc8b74-2158-46e2-b387-a7a9a40fb6ad`; verify each target model reads the
+  same ContentItem handles, triggers automatic compaction under realistic
+  context pressure, and answers approximate and exact recall prompts without
+  live search.
 
 suggested resume goal string:
 
