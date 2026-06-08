@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestParseModelPolicyResolvesRoles(t *testing.T) {
@@ -452,6 +453,111 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	}
 }
 
+func TestRuntimeResolvesModelPolicyOverlayIntoRunMetadata(t *testing.T) {
+	rt := testPromptRuntime(t)
+	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	overlayDir := filepath.Join(filepath.Dir(policyPath), "model-policy-overlays")
+	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(policyPath, []byte(`
+[defaults]
+fallback_provider = "deepseek"
+fallback_model = "deepseek-v4-flash"
+reasoning = "medium"
+
+[roles.researcher]
+provider = "deepseek"
+model = "deepseek-v4-flash"
+reasoning = "medium"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	if err := os.WriteFile(filepath.Join(overlayDir, "mimo-arm.toml"), []byte(`
+[overlay]
+expires_at = "`+future+`"
+
+[roles.researcher]
+provider = "xiaomi"
+model = "mimo-v2.5-pro"
+reasoning = "medium"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rt.cfg.ModelPolicyPath = policyPath
+
+	metadata := rt.ensureResolvedLLMMetadata(context.Background(), "user-alice", map[string]any{
+		runMetadataAgentProfile:       AgentProfileResearcher,
+		runMetadataAgentRole:          AgentProfileResearcher,
+		runMetadataLLMPolicyOverlayID: "mimo-arm",
+	})
+
+	if got := metadataStringValue(metadata, runMetadataLLMProvider); got != "xiaomi" {
+		t.Fatalf("llm_provider = %q, want xiaomi; metadata=%+v", got, metadata)
+	}
+	if got := metadataStringValue(metadata, runMetadataLLMModel); got != "mimo-v2.5-pro" {
+		t.Fatalf("llm_model = %q", got)
+	}
+	if got := metadataStringValue(metadata, runMetadataLLMReasoningEffort); got != "medium" {
+		t.Fatalf("llm_reasoning_effort = %q", got)
+	}
+	if got := metadataStringValue(metadata, runMetadataLLMPolicySource); got != filepath.Join(overlayDir, "mimo-arm.toml") {
+		t.Fatalf("llm_policy_source = %q", got)
+	}
+	if metadataStringValue(metadata, runMetadataLLMPolicyError) != "" {
+		t.Fatalf("unexpected policy error: %+v", metadata)
+	}
+}
+
+func TestRuntimeRejectsExpiredModelPolicyOverlay(t *testing.T) {
+	rt := testPromptRuntime(t)
+	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	overlayDir := filepath.Join(filepath.Dir(policyPath), "model-policy-overlays")
+	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(policyPath, []byte(`
+[defaults]
+fallback_provider = "deepseek"
+fallback_model = "deepseek-v4-flash"
+
+[roles.researcher]
+provider = "deepseek"
+model = "deepseek-v4-flash"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	if err := os.WriteFile(filepath.Join(overlayDir, "expired.toml"), []byte(`
+[overlay]
+expires_at = "`+past+`"
+
+[roles.researcher]
+provider = "xiaomi"
+model = "mimo-v2.5-pro"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rt.cfg.ModelPolicyPath = policyPath
+
+	metadata := rt.ensureResolvedLLMMetadata(context.Background(), "user-alice", map[string]any{
+		runMetadataAgentProfile:       AgentProfileResearcher,
+		runMetadataAgentRole:          AgentProfileResearcher,
+		runMetadataLLMPolicyOverlayID: "expired",
+	})
+
+	if got := metadataStringValue(metadata, runMetadataLLMProvider); got != "deepseek" {
+		t.Fatalf("llm_provider = %q, want base fallback deepseek; metadata=%+v", got, metadata)
+	}
+	if got := metadataStringValue(metadata, runMetadataLLMModel); got != "deepseek-v4-flash" {
+		t.Fatalf("llm_model = %q", got)
+	}
+	if errText := metadataStringValue(metadata, runMetadataLLMPolicyError); errText == "" {
+		t.Fatalf("expected expired overlay policy error")
+	}
+}
+
 func TestStartChildRunResolvesModelPolicyIntoRunMetadata(t *testing.T) {
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
@@ -496,6 +602,70 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	}
 	if got := metadataStringValue(child.Metadata, runMetadataLLMPolicySource); got != policyPath {
 		t.Fatalf("child llm_policy_source = %q, want %q", got, policyPath)
+	}
+}
+
+func TestStartChildRunResolvesModelPolicyOverlayIntoRunMetadata(t *testing.T) {
+	rt, _ := testRuntime(t)
+	ctx := context.Background()
+	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	overlayDir := filepath.Join(filepath.Dir(policyPath), "model-policy-overlays")
+	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(policyPath, []byte(`
+[defaults]
+fallback_provider = "deepseek"
+fallback_model = "deepseek-v4-flash"
+
+[roles.researcher]
+provider = "deepseek"
+model = "deepseek-v4-flash"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	if err := os.WriteFile(filepath.Join(overlayDir, "gpt-mini-arm.toml"), []byte(`
+[overlay]
+expires_at = "`+future+`"
+
+[roles.researcher]
+provider = "chatgpt"
+model = "gpt-5.4-mini"
+reasoning = "low"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rt.cfg.ModelPolicyPath = policyPath
+
+	parent, err := rt.createRunWithMetadata(ctx, "parent", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+
+	child, err := rt.StartChildRun(ctx, parent.RunID, "research under gpt mini", "user-alice", map[string]any{
+		runMetadataAgentProfile:       AgentProfileResearcher,
+		runMetadataAgentRole:          AgentProfileResearcher,
+		runMetadataLLMPolicyOverlayID: "gpt-mini-arm",
+	})
+	if err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+
+	if got := metadataStringValue(child.Metadata, runMetadataLLMProvider); got != "chatgpt" {
+		t.Fatalf("child llm_provider = %q, want chatgpt; metadata=%+v", got, child.Metadata)
+	}
+	if got := metadataStringValue(child.Metadata, runMetadataLLMModel); got != "gpt-5.4-mini" {
+		t.Fatalf("child llm_model = %q", got)
+	}
+	if got := metadataStringValue(child.Metadata, runMetadataLLMReasoningEffort); got != "low" {
+		t.Fatalf("child reasoning = %q", got)
+	}
+	if got := metadataStringValue(child.Metadata, runMetadataLLMPolicyOverlayID); got != "gpt-mini-arm" {
+		t.Fatalf("overlay id = %q", got)
 	}
 }
 

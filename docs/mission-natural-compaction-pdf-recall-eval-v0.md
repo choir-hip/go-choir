@@ -419,6 +419,11 @@ what shipped:
 - behavior commit `487b7515` adds the sandbox document tooling, shared
   extraction substrate, researcher document import/selector tools, VText import
   reuse, and focused tests.
+- docs-only checkpoint `baa22ca2` records the model-policy control-plane
+  problem: the base policy file is too broad for safe per-arm eval selection.
+- pending behavior work adds scoped model-policy overlays at
+  `System/model-policy-overlays/<overlay_id>.toml`, with per-run overlay ids
+  recorded in metadata.
 
 what was proven so far:
 
@@ -447,6 +452,13 @@ what was proven so far:
     `3df79d34abbca99308e79cb94461c1893582604d68329a41fd4bec1885e6adb4`
     and extracted text hash
     `41417fb420a737c8064205cf4b7fac3fc7ce6bad26417be5b4f6f6012d92c951`.
+- Focused local overlay tests prove:
+  - a run with `llm_policy_overlay_id` resolves provider/model/reasoning from
+    `System/model-policy-overlays/<id>.toml`;
+  - expired overlays fall back to base policy and record a policy error;
+  - child researcher runs inherit overlay ids into resolved `llm_provider` and
+    `llm_model` metadata;
+  - `spawn_agent` can pass a trace-visible `model_policy_overlay_id`.
 
 unproven or partial claims:
 
@@ -456,6 +468,7 @@ unproven or partial claims:
   tools;
 - frozen-corpus matrix execution without live search;
 - natural post-compaction recall across target models.
+- deployed proof of scoped model-policy overlay selection on staging.
 
 belief-state changes:
 
@@ -480,6 +493,8 @@ latest local proof:
 
 - `nix eval .#nixosConfigurations.go-choir-sandbox-vm.config.system.build.toplevel.drvPath`
 - `nix eval .#nixosConfigurations.go-choir-sandbox-vm-playwright.config.system.build.toplevel.drvPath`
+- `nix develop -c go test ./internal/runtime -run 'TestRuntime.*ModelPolicy|TestStartChildRunResolvesModelPolicy|TestParseModelPolicy|TestEnsureDefaultModelPolicy'`
+- `nix develop -c go test ./internal/runtime -run 'TestAgentToolProfiles|TestStartChildRunResolvesModelPolicy|TestRuntimeResolvesModelPolicy|TestRuntimeRejectsExpiredModelPolicyOverlay|TestProviderPreconditionFallbackSelections|TestRunToolLoop'`
 - `nix develop -c go test ./internal/runtime -run 'TestExtract|TestSystemPromptForResearcher|TestContent'`
 - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact|TestAgentToolProfiles|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot'`
 
@@ -494,10 +509,10 @@ latest staging proof:
 
 next executable probe:
 
-- inspect the model-policy/eval control path for scoped model selection, then
-  build a frozen multi-format corpus and start compaction runs only after the
-  matrix can select DeepSeek, Xiaomi, and `gpt-5.4-mini` through normal runtime
-  policy rather than prompt trickery.
+- commit, push, and deploy the scoped model-policy overlay path; verify staging
+  identity and run a deployed product-path proof that an overlay file under
+  `System/model-policy-overlays/` controls a researcher run's resolved
+  provider/model. Then build the frozen multi-format corpus.
 
 suggested resume goal string:
 

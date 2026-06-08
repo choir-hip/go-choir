@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 )
@@ -18,8 +19,10 @@ const (
 	runMetadataLLMMaxTokens       = "llm_max_tokens"
 	runMetadataLLMPolicySource    = "llm_policy_source"
 	runMetadataLLMPolicyError     = "llm_policy_error"
+	runMetadataLLMPolicyOverlayID = "llm_policy_overlay_id"
 
 	defaultModelPolicyRelativePath = "System/model-policy.toml"
+	modelPolicyOverlayRelativeDir  = "System/model-policy-overlays"
 
 	// Keep generated foreground defaults on broadly available gateway providers.
 	// Per-computer policy files may still override these roles through product state.
@@ -78,6 +81,14 @@ type ModelPolicy struct {
 	Defaults LLMSelection
 	Roles    map[string]LLMSelection
 	Source   string
+}
+
+type modelPolicyOverlay struct {
+	ID        string
+	ExpiresAt time.Time
+	Defaults  LLMSelection
+	Roles     map[string]LLMSelection
+	Source    string
 }
 
 func DefaultModelPolicyPath(filesRoot string) string {
@@ -235,7 +246,7 @@ func (rt *Runtime) ensureResolvedLLMMetadata(ctx context.Context, ownerID string
 		role = AgentProfileConductor
 	}
 
-	policy, err := rt.loadModelPolicy(ctx, ownerID)
+	policy, err := rt.loadModelPolicyForMetadata(ctx, ownerID, metadata)
 	if err != nil {
 		metadata[runMetadataLLMPolicyError] = err.Error()
 	}
@@ -257,6 +268,26 @@ func (rt *Runtime) ensureResolvedLLMMetadata(ctx context.Context, ownerID string
 		metadata[runMetadataLLMPolicySource] = selection.Source
 	}
 	return metadata
+}
+
+func (rt *Runtime) loadModelPolicyForMetadata(ctx context.Context, ownerID string, metadata map[string]any) (ModelPolicy, error) {
+	policy, err := rt.loadModelPolicy(ctx, ownerID)
+	overlayID := strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMPolicyOverlayID))
+	if overlayID == "" {
+		return policy, err
+	}
+	overlay, overlayErr := rt.loadModelPolicyOverlay(ctx, ownerID, overlayID)
+	if overlayErr != nil {
+		if err != nil {
+			return policy, fmt.Errorf("%v; model policy overlay %q ignored: %w", err, overlayID, overlayErr)
+		}
+		return policy, fmt.Errorf("model policy overlay %q ignored: %w", overlayID, overlayErr)
+	}
+	merged := applyModelPolicyOverlay(policy, overlay)
+	if err != nil {
+		return merged, err
+	}
+	return merged, nil
 }
 
 func (p ModelPolicy) Resolve(role string) LLMSelection {
@@ -322,6 +353,49 @@ func (rt *Runtime) loadModelPolicy(_ context.Context, ownerID string) (ModelPoli
 	return policy, nil
 }
 
+func (rt *Runtime) loadModelPolicyOverlay(_ context.Context, _ string, overlayID string) (modelPolicyOverlay, error) {
+	overlayID = strings.TrimSpace(overlayID)
+	if overlayID == "" {
+		return modelPolicyOverlay{}, fmt.Errorf("overlay id is required")
+	}
+	if !isSafeModelPolicyOverlayID(overlayID) {
+		return modelPolicyOverlay{}, fmt.Errorf("overlay id %q is not allowed", overlayID)
+	}
+	basePath := strings.TrimSpace(rt.cfg.ModelPolicyPath)
+	if basePath == "" {
+		return modelPolicyOverlay{}, fmt.Errorf("model policy path is not configured")
+	}
+	path := filepath.Join(filepath.Dir(basePath), filepath.Base(modelPolicyOverlayRelativeDir), overlayID+".toml")
+	if filepath.Base(filepath.Dir(path)) != "model-policy-overlays" {
+		return modelPolicyOverlay{}, fmt.Errorf("resolved overlay path is invalid")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return modelPolicyOverlay{}, fmt.Errorf("read overlay: %w", err)
+	}
+	overlay, err := parseModelPolicyOverlay(overlayID, string(raw), path)
+	if err != nil {
+		return modelPolicyOverlay{}, err
+	}
+	if !overlay.ExpiresAt.IsZero() && time.Now().UTC().After(overlay.ExpiresAt) {
+		return modelPolicyOverlay{}, fmt.Errorf("overlay expired at %s", overlay.ExpiresAt.Format(time.RFC3339))
+	}
+	return overlay, nil
+}
+
+func isSafeModelPolicyOverlayID(id string) bool {
+	if id == "" || len(id) > 96 {
+		return false
+	}
+	for _, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func ensureDefaultModelPolicyFile(path string, cfg Config) error {
 	if _, err := os.Stat(path); err == nil {
 		raw, readErr := os.ReadFile(path)
@@ -339,6 +413,115 @@ func ensureDefaultModelPolicyFile(path string, cfg Config) error {
 		return err
 	}
 	return os.WriteFile(path, []byte(defaultModelPolicyText(cfg)), 0o644)
+}
+
+func parseModelPolicyOverlay(id, raw, source string) (modelPolicyOverlay, error) {
+	overlay := modelPolicyOverlay{
+		ID:     strings.TrimSpace(id),
+		Roles:  map[string]LLMSelection{},
+		Source: source,
+	}
+
+	section := ""
+	scanner := bufio.NewScanner(strings.NewReader(raw))
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
+			continue
+		}
+		key, value, ok := parseModelPolicyAssignment(line)
+		if !ok {
+			return modelPolicyOverlay{}, fmt.Errorf("line %d: expected key = value", lineNo)
+		}
+		switch {
+		case section == "overlay":
+			switch strings.TrimSpace(key) {
+			case "expires_at":
+				if strings.TrimSpace(value) == "" {
+					continue
+				}
+				parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(value))
+				if err != nil {
+					return modelPolicyOverlay{}, fmt.Errorf("line %d: invalid expires_at: %w", lineNo, err)
+				}
+				overlay.ExpiresAt = parsed.UTC()
+			default:
+				return modelPolicyOverlay{}, fmt.Errorf("line %d: unknown overlay key %q", lineNo, key)
+			}
+		case section == "defaults":
+			applyModelPolicyValue(&overlay.Defaults, key, value)
+			overlay.Defaults.Source = source
+		case strings.HasPrefix(section, "roles."):
+			role := normalizeModelPolicyRole(strings.TrimPrefix(section, "roles."))
+			sel := overlay.Roles[role]
+			applyModelPolicyValue(&sel, key, value)
+			sel.Source = source
+			overlay.Roles[role] = sel
+		default:
+			return modelPolicyOverlay{}, fmt.Errorf("line %d: unknown section %q", lineNo, section)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return modelPolicyOverlay{}, err
+	}
+	if strings.TrimSpace(overlay.Defaults.Provider) == "" && strings.TrimSpace(overlay.Defaults.Model) != "" {
+		return modelPolicyOverlay{}, fmt.Errorf("overlay defaults require provider when model is set")
+	}
+	if strings.TrimSpace(overlay.Defaults.Model) == "" && strings.TrimSpace(overlay.Defaults.Provider) != "" {
+		return modelPolicyOverlay{}, fmt.Errorf("overlay defaults require model when provider is set")
+	}
+	for role, sel := range overlay.Roles {
+		if strings.TrimSpace(sel.Provider) == "" || strings.TrimSpace(sel.Model) == "" {
+			return modelPolicyOverlay{}, fmt.Errorf("overlay role %q requires provider and model", role)
+		}
+	}
+	if isEmptySelection(overlay.Defaults) && len(overlay.Roles) == 0 {
+		return modelPolicyOverlay{}, fmt.Errorf("overlay must define defaults or at least one role")
+	}
+	return overlay, nil
+}
+
+func applyModelPolicyOverlay(base ModelPolicy, overlay modelPolicyOverlay) ModelPolicy {
+	merged := ModelPolicy{
+		Defaults: base.Defaults,
+		Roles:    make(map[string]LLMSelection, len(base.Roles)+len(overlay.Roles)),
+		Source:   base.Source,
+	}
+	for role, sel := range base.Roles {
+		merged.Roles[role] = sel
+	}
+	overlaySource := strings.TrimSpace(overlay.Source)
+	if overlaySource == "" {
+		overlaySource = "model_policy_overlay:" + overlay.ID
+	}
+	if !isEmptySelection(overlay.Defaults) {
+		merged.Defaults = fillSelection(overlay.Defaults, base.Defaults)
+		merged.Defaults.Source = overlaySource
+		merged.Source = overlaySource
+	}
+	for role, overlaySel := range overlay.Roles {
+		baseSel := base.Resolve(role)
+		mergedSel := fillSelection(overlaySel, baseSel)
+		mergedSel.Source = overlaySource
+		merged.Roles[role] = mergedSel
+	}
+	if len(overlay.Roles) > 0 {
+		merged.Source = overlaySource
+	}
+	return merged
+}
+
+func isEmptySelection(sel LLMSelection) bool {
+	return strings.TrimSpace(sel.Provider) == "" &&
+		strings.TrimSpace(sel.Model) == "" &&
+		strings.TrimSpace(sel.ReasoningEffort) == "" &&
+		sel.MaxTokens <= 0
 }
 
 func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {

@@ -35,14 +35,15 @@ func RegisterCoAgentTools(registry *ToolRegistry, rt *Runtime, spec AgentRoleSpe
 
 func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 	type args struct {
-		Objective      string `json:"objective"`
-		Role           string `json:"role"`
-		Profile        string `json:"profile,omitempty"`
-		ChannelID      string `json:"channel_id,omitempty"`
-		Slot           string `json:"slot,omitempty"`
-		Model          string `json:"model,omitempty"`
-		Title          string `json:"title,omitempty"`
-		InitialContent string `json:"initial_content,omitempty"`
+		Objective            string `json:"objective"`
+		Role                 string `json:"role"`
+		Profile              string `json:"profile,omitempty"`
+		ChannelID            string `json:"channel_id,omitempty"`
+		Slot                 string `json:"slot,omitempty"`
+		Model                string `json:"model,omitempty"`
+		ModelPolicyOverlayID string `json:"model_policy_overlay_id,omitempty"`
+		Title                string `json:"title,omitempty"`
+		InitialContent       string `json:"initial_content,omitempty"`
 	}
 	allowedTargets := canonicalAllowedDelegateTargets(spec.AllowedDelegateTargets)
 	roleDescription := "Canonical role/profile name. Allowed target roles for this caller: " + strings.Join(allowedTargets, ", ") + "."
@@ -54,13 +55,14 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 		Name:        "spawn_agent",
 		Description: description,
 		Parameters: jsonSchemaObject(map[string]any{
-			"objective":  map[string]any{"type": "string"},
-			"role":       map[string]any{"type": "string", "enum": allowedTargets, "description": roleDescription},
-			"profile":    map[string]any{"type": "string", "enum": allowedTargets, "description": "Optional canonical profile override. Usually omit; if set, it must be one of the allowed target roles for this caller."},
-			"channel_id": map[string]any{"type": "string"},
-			"slot":       map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For vsuper spawning co-super children: use implementation for the candidate writer first; use verifier only after implementation commit/package/blocker evidence exists. Reusing a live slot returns the existing child instead of launching a duplicate."},
-			"model":      map[string]any{"type": "string"},
-			"title":      map[string]any{"type": "string", "description": "For role=vtext from processor or reconciler: optional VText document title for a new article."},
+			"objective":               map[string]any{"type": "string"},
+			"role":                    map[string]any{"type": "string", "enum": allowedTargets, "description": roleDescription},
+			"profile":                 map[string]any{"type": "string", "enum": allowedTargets, "description": "Optional canonical profile override. Usually omit; if set, it must be one of the allowed target roles for this caller."},
+			"channel_id":              map[string]any{"type": "string"},
+			"slot":                    map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For vsuper spawning co-super children: use implementation for the candidate writer first; use verifier only after implementation commit/package/blocker evidence exists. Reusing a live slot returns the existing child instead of launching a duplicate."},
+			"model":                   map[string]any{"type": "string"},
+			"model_policy_overlay_id": map[string]any{"type": "string", "description": "Optional owner-visible model policy overlay id from System/model-policy-overlays/<id>.toml. Use this for eval/model arms instead of passing provider metadata directly."},
+			"title":                   map[string]any{"type": "string", "description": "For role=vtext from processor or reconciler: optional VText document title for a new article."},
 			"initial_content": map[string]any{
 				"type":        "string",
 				"description": "For role=vtext from processor or reconciler: optional source/brief seed revision for the VText before the VText agent writes the article.",
@@ -107,6 +109,9 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			}
 			if model := strings.TrimSpace(in.Model); model != "" {
 				constraints[runMetadataModel] = model
+			}
+			if overlayID := strings.TrimSpace(in.ModelPolicyOverlayID); overlayID != "" {
+				constraints[runMetadataLLMPolicyOverlayID] = overlayID
 			}
 			if callerProfile == AgentProfileConductor && profile == AgentProfileVText {
 				parentRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
