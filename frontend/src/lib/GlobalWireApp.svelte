@@ -122,29 +122,66 @@
   let selectedStoryId = stories[0].id;
   let dataSource = 'preview-source-network';
   let loadError = '';
-  let lastLoadKey = '';
+  let lastSuccessfulLoadKey = '';
+  let loadInFlight = false;
+  let retryTimer = null;
+  let refreshTimer = null;
 
   $: selectedStory = stories.find((story) => story.id === selectedStoryId) || stories[0];
   $: ownerLabel = authenticated ? (currentUser?.email || 'owner computer') : 'public preview';
 
   onMount(() => {
-    loadGlobalWireVTexts();
+    loadGlobalWireVTexts({ force: true });
+    refreshTimer = setInterval(() => {
+      if (authenticated) loadGlobalWireVTexts({ force: true, silent: true });
+    }, 30000);
+    const handleFocus = () => {
+      if (authenticated) loadGlobalWireVTexts({ force: true, silent: true });
+    };
+    const handleVisibility = () => {
+      if (!document.hidden && authenticated) loadGlobalWireVTexts({ force: true, silent: true });
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearTimeout(retryTimer);
+      clearInterval(refreshTimer);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   });
 
   $: if (authenticated) {
     loadGlobalWireVTexts();
+  } else if (lastSuccessfulLoadKey !== 'preview') {
+    showPreviewStories();
   }
 
-  async function loadGlobalWireVTexts() {
+  function showPreviewStories() {
+    clearTimeout(retryTimer);
+    stories = previewStories;
+    dataSource = 'preview-source-network';
+    lastSuccessfulLoadKey = 'preview';
+  }
+
+  function scheduleAuthenticatedRetry() {
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => {
+      if (authenticated) loadGlobalWireVTexts({ force: true, silent: true });
+    }, 3000);
+  }
+
+  async function loadGlobalWireVTexts({ force = false, silent = false } = {}) {
     const loadKey = authenticated ? 'authenticated' : 'preview';
-    if (lastLoadKey === loadKey) return;
-    lastLoadKey = loadKey;
-    loadError = '';
+    if (loadInFlight) return;
+    if (!force && lastSuccessfulLoadKey === loadKey) return;
     if (!authenticated) {
-      stories = previewStories;
-      dataSource = 'preview-source-network';
+      loadError = '';
+      showPreviewStories();
       return;
     }
+    loadInFlight = true;
+    if (!silent) loadError = '';
     try {
       const response = await fetch('/api/global-wire/stories', { credentials: 'include' });
       if (!response.ok) throw new Error(`Global Wire load failed: ${response.status}`);
@@ -154,10 +191,14 @@
         dataSource = (payload.source || 'durable-source-network').replaceAll('source-maxx', 'source-network').replaceAll('sourcemaxx', 'source-network');
         if (!stories.some((story) => story.id === selectedStoryId)) selectedStoryId = stories[0].id;
       }
+      clearTimeout(retryTimer);
+      loadError = '';
+      lastSuccessfulLoadKey = loadKey;
     } catch (error) {
-      loadError = error?.message || 'Global Wire load failed';
-      stories = previewStories;
-      dataSource = 'preview-source-network';
+      if (!silent) loadError = error?.message || 'Global Wire load failed';
+      scheduleAuthenticatedRetry();
+    } finally {
+      loadInFlight = false;
     }
   }
 

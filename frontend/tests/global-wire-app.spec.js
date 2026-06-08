@@ -56,6 +56,59 @@ test('Global Wire renders as a living newspaper surface with every article opena
   await expect(relatedVText).toContainText('Forecast changes moved stress');
 });
 
+test('Global Wire retries authenticated story loads after transient route failure', async ({ browser, authenticatedState }) => {
+  const context = await browser.newContext({
+    storageState: authenticatedState.storageStatePath,
+  });
+  const page = await context.newPage();
+  let storyFetches = 0;
+  const liveStories = Array.from({ length: 4 }, (_, index) => ({
+    id: `source-network-vtext-${index + 1}`,
+    headline: `Live source-network article ${index + 1}`,
+    dek: 'A real source-network VText article reached the Global Wire front page.',
+    freshness: 'updated 2 min ago',
+    prominence: 90 - index,
+    tension: 'source-network update',
+    changeState: 'live article',
+    nodeTone: 'live',
+    related: [],
+    manifest: { lead: [], supporting: [], contrary: [], context: [] },
+    claims: ['The live source network has more than preview seed stories.'],
+    projections: {
+      'wire-style': 'The live article body is rendered from the authenticated Global Wire story API after retry.',
+    },
+  }));
+  try {
+    await page.route('**/api/global-wire/stories', async (route) => {
+      storyFetches += 1;
+      if (storyFetches === 1) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'route not ready' }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ source: 'durable-storygraph+source-network-vtexts', stories: liveStories }),
+      });
+    });
+
+    await page.goto(authenticatedState.baseURL);
+    await openDeskApp(page, 'global-wire');
+    const app = page.locator('[data-global-wire-app]');
+    await expect(app).toBeVisible();
+    await expect(app.locator('[data-global-wire-story]')).toHaveCount(4, { timeout: 7000 });
+    await expect(app.locator('[data-global-wire-story]').first()).toContainText('Live source-network article 1');
+    await expect(app.locator('text=Port backlog recedes')).toHaveCount(0);
+    expect(storyFetches).toBeGreaterThanOrEqual(2);
+  } finally {
+    await context.close();
+  }
+});
+
 test('Global Wire deletes detritus source chronology and bespoke style controls', async ({ page }) => {
   await page.goto(BASE_URL);
   await openDeskApp(page, 'global-wire');
