@@ -700,12 +700,26 @@ what was proven:
   because tests pass: their request schema expects an explicit `max_tokens`
   field, which is exactly the kind of silent cap surface this mission is trying
   to avoid for ordinary agent loops.
+
+  Streaming behavior for the normal no-cap OpenAI-compatible routes is now
+  covered by an env-gated live provider test. `TestIntegrationDeepSeekXiaomiOpenAIStreamingLive`
+  streams a short health-check code through `deepseek/deepseek-v4-flash` and
+  `xiaomi/mimo-v2.5-pro` with `MaxTokens` unset, asserts streamed text deltas,
+  and rejects `max_tokens` stop reasons. The first Xiaomi attempt revealed a
+  prompt-shape quirk: asking it to "reply exactly with this marker" triggered
+  conversational persona text instead of the marker. Framing the request as a
+  harmless API health-check code plus a system instruction produced the desired
+  short response without changing provider config. Live command:
+  `set -a; source .env; set +a; CHOIR_PROVIDER_LIVE_TESTS=1 nix develop -c go
+  test ./internal/provider -run 'TestIntegrationDeepSeekXiaomiOpenAIStreamingLive'
+  -count=1 -v` passed in 5.616s.
 unproven or partial claims:
   Product-path coverage for the full auto/required/none tool-mode matrix,
-  non-tool reasoning-content passback for DeepSeek Anthropic, streaming behavior
-  for the new routes, long-context compaction and post-compaction recall safety,
-  reliable arbitrary-image-URL verifier behavior, and the final Global Wire
-  provider readiness report remain unproven.
+  non-tool reasoning-content passback for DeepSeek Anthropic, Anthropic-compatible
+  streaming behavior if those routes are ever selected for default policy,
+  long-context compaction and post-compaction recall safety, reliable
+  arbitrary-image-URL verifier behavior, and the final Global Wire provider
+  readiness report remain unproven.
 belief-state changes:
   The selected DeepSeek OpenAI-compatible path is now viable for VText exact
   edit/tool loops when tool-bearing calls disable thinking. Anthropic-compatible
@@ -720,10 +734,13 @@ belief-state changes:
   control path and a compacted checkpoint, not recall under real long-context
   pressure. Env-gated live provider evidence now covers the local
   provider/protocol tool-choice matrix without artificial token caps; product
-  path still has only narrower VText/researcher/verifier proofs. Provider
-  readiness is still not complete enough for Global Wire hard cutover until
-  long-context compaction behavior is proven or precisely bounded and the final
-  provider readiness report is written.
+  path still has only narrower VText/researcher/verifier proofs. OpenAI-
+  compatible DeepSeek and Xiaomi streaming now has live no-cap evidence, and
+  Xiaomi short-code verifier prompts should use explicit health-check framing
+  instead of brittle "exact marker" phrasing. Provider readiness is still not
+  complete enough for Global Wire hard cutover until long-context compaction
+  behavior is proven or precisely bounded and the final provider readiness
+  report is written.
 remaining error field:
   Carry the provider/protocol conformance matrix into product-path evidence
   where it matters, prove or bound long-context compaction/recall continuity,

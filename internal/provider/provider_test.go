@@ -2814,6 +2814,87 @@ func TestIntegrationXiaomiTextAndImageLive(t *testing.T) {
 	}
 }
 
+func TestIntegrationDeepSeekXiaomiOpenAIStreamingLive(t *testing.T) {
+	if os.Getenv("CHOIR_PROVIDER_LIVE_TESTS") != "1" {
+		t.Skip("set CHOIR_PROVIDER_LIVE_TESTS=1 to spend provider credits")
+	}
+	type streamingCase struct {
+		name      string
+		provider  Provider
+		model     string
+		reasoning string
+		marker    string
+	}
+	cases := []streamingCase{}
+	if apiKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")); apiKey != "" {
+		p, err := NewDeepSeekProvider(DeepSeekConfig{APIKey: apiKey, ModelID: "deepseek-v4-flash"})
+		if err != nil {
+			t.Fatalf("new deepseek provider: %v", err)
+		}
+		cases = append(cases, streamingCase{
+			name:      "deepseek-openai-stream",
+			provider:  p,
+			model:     "deepseek-v4-flash",
+			reasoning: "none",
+			marker:    "DEEPSEEK_OPENAI_STREAM_OK",
+		})
+	}
+	if apiKey := firstNonEmpty(strings.TrimSpace(os.Getenv("XIAOMI_API_KEY")), strings.TrimSpace(os.Getenv("xiaomi_api_key"))); apiKey != "" {
+		p, err := NewXiaomiProvider(XiaomiConfig{APIKey: apiKey, ModelID: "mimo-v2.5-pro"})
+		if err != nil {
+			t.Fatalf("new xiaomi provider: %v", err)
+		}
+		cases = append(cases, streamingCase{
+			name:      "xiaomi-openai-stream",
+			provider:  p,
+			model:     "mimo-v2.5-pro",
+			reasoning: "none",
+			marker:    "XIAOMI_OPENAI_STREAM_OK",
+		})
+	}
+	if len(cases) == 0 {
+		t.Skip("DEEPSEEK_API_KEY and XIAOMI_API_KEY are not set")
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+			defer cancel()
+			var chunks []StreamChunk
+			resp, err := tc.provider.Stream(ctx, LLMRequest{
+				Model:           tc.model,
+				ReasoningEffort: tc.reasoning,
+				System:          "You are running a harmless API conformance check. Output only the requested health-check code.",
+				Messages: []Message{{
+					Role:    "user",
+					Content: []Block{{Type: "text", Text: "Health-check code: " + tc.marker + "\nReturn only that code."}},
+				}},
+				Stream: true,
+			}, func(chunk StreamChunk) {
+				chunks = append(chunks, chunk)
+			})
+			if err != nil {
+				t.Fatalf("stream call: %v", err)
+			}
+			if !strings.Contains(resp.Text, tc.marker) {
+				t.Fatalf("stream text = %q, want marker %q", resp.Text, tc.marker)
+			}
+			textDeltaCount := 0
+			for _, chunk := range chunks {
+				if chunk.Delta != "" {
+					textDeltaCount++
+				}
+			}
+			if textDeltaCount == 0 {
+				t.Fatalf("expected at least one streamed text delta, chunks=%+v", chunks)
+			}
+			if resp.StopReason == "max_tokens" {
+				t.Fatalf("stream stopped at max_tokens without an explicit policy budget")
+			}
+		})
+	}
+}
+
 func TestIntegrationDeepSeekRuntimeExactToolChoiceLive(t *testing.T) {
 	if os.Getenv("CHOIR_PROVIDER_LIVE_TESTS") != "1" {
 		t.Skip("set CHOIR_PROVIDER_LIVE_TESTS=1 to spend provider credits")
