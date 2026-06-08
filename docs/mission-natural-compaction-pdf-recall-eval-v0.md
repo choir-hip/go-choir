@@ -39,13 +39,14 @@ documents.
 /goal Run docs/mission-natural-compaction-pdf-recall-eval-v0.md as MissionGradient; first upgrade sandbox document extraction for PDF/DOCX/EPUB/PPTX/HTML sources, then run a frozen-corpus natural compaction recall matrix across DeepSeek, Xiaomi, and gpt-5.4-mini without live search, proving approximate recall, exact retrieval, and automatic post-compaction continuation through normal Choir researcher/VText runs.
 ```
 
-## Execution Gate 0: Sandbox Setup Before Compaction
+## Execution Gate 0: Sandbox/User-Computer Setup Before Compaction
 
 This mission has a hard preamble. Before any model arm is run, the worker must
 prove that normal Choir user/candidate computers can ingest and expose real
-documents. The compaction matrix is downstream of this proof; it is not allowed
-to treat PDF/DOCX/EPUB/PPTX/HTML support as a side quest or local-only
-precondition.
+documents through the same product substrate that researchers and VText use.
+The compaction matrix is downstream of this proof; it is not allowed to treat
+PDF/DOCX/EPUB/PPTX/HTML support as a side quest, a local-only precondition, or
+an eval harness special case.
 
 The preamble is satisfied only when all of these are true:
 
@@ -62,7 +63,9 @@ The preamble is satisfied only when all of these are true:
 - VText import reuses the same extraction substrate instead of maintaining
   separate format hacks;
 - at least one deployed product-path import proof confirms the behavior on
-  staging or an authorized Node B user/candidate computer path.
+  staging or an authorized Node B user/candidate computer path;
+- no Slides app files, routes, icons, or UI scaffolding are added by this
+  mission.
 
 Only after this gate is passed should the run move to frozen-corpus import,
 model-policy control, automatic compaction, and recall scoring.
@@ -89,12 +92,12 @@ document acquisition and extraction. Current facts:
 - VText DOCX import has a basic OOXML text/table projection, but not a shared
   researcher-grade document extraction substrate;
 - PPTX/HTML slide files matter as source documents, but the Slides app itself
-  should be a separate mission.
+  is a separate mission and must not be started here.
 
 Therefore the correct mission is not "run a PDF eval now." The correct mission
 is to first give user computers real document tools, route researchers and VText
-through the same ContentItem extraction substrate, then run the compaction
-matrix on a frozen corpus.
+through the same ContentItem extraction substrate, prove that substrate through
+the product path, then run the compaction matrix on a frozen corpus.
 
 ## Cognitive Transforms Applied
 
@@ -392,14 +395,14 @@ Likely first goal:
 
 ## Run Checkpoint & Resumption State
 
-status: substrate_deployed_pre_eval
+status: substrate_and_policy_control_deployed_pre_eval
 
-last checkpoint: mission upgraded so the sandbox/document substrate preamble is
-an explicit prerequisite before any compaction recall eval. Slides remain
-strictly parked as a future mission; this mission only extracts PPTX/HTML slide
-artifacts as sources. The substrate behavior change has now been pushed,
-passed CI, and deployed to staging; the frozen-corpus compaction eval has not
-started.
+last checkpoint: mission upgraded so the sandbox/user-computer document
+substrate preamble is an explicit prerequisite before any compaction recall
+eval. Slides remain strictly parked as a future mission; this mission only
+extracts PPTX/HTML slide artifacts as sources. The substrate and scoped
+model-policy control-plane behavior changes have been pushed, passed CI, and
+deployed to staging; the frozen-corpus compaction eval has not started.
 
 current artifact state:
 
@@ -411,6 +414,8 @@ current artifact state:
   evaluated for normal and Playwright worker images.
 - Shared ContentItem extraction and researcher selector tools are implemented
   for PDF/DOCX/EPUB/PPTX/HTML before model runs.
+- Scoped model-policy overlays are implemented for per-run eval arm selection
+  without rewriting the base `System/model-policy.toml`.
 
 what shipped:
 
@@ -421,10 +426,10 @@ what shipped:
   reuse, and focused tests.
 - docs-only checkpoint `baa22ca2` records the model-policy control-plane
   problem: the base policy file is too broad for safe per-arm eval selection.
-- pending behavior work adds scoped model-policy overlays at
+- behavior commit `5b4371ec` adds scoped model-policy overlays at
   `System/model-policy-overlays/<overlay_id>.toml`, with per-run overlay ids
   recorded in metadata.
-- pending behavior work also adds authenticated read-only
+- behavior commit `46f1b764` adds authenticated read-only
   `/api/model-policy/resolve` so staging can prove overlay resolution through a
   browser-public product route without using forbidden `/api/agent/*` routes.
 
@@ -464,6 +469,10 @@ what was proven so far:
   - `spawn_agent` can pass a trace-visible `model_policy_overlay_id`.
 - Focused comprehensive API test proves `/api/model-policy/resolve` resolves a
   researcher role through an owner-visible overlay file.
+- GitHub CI run `27171676079` completed successfully for `46f1b764`.
+- FlakeHub publish run `27171676075` completed successfully for `46f1b764`.
+- `https://choir.news/health` reports proxy and sandbox deployed at
+  `46f1b764d15adaf30314d14cc5a1b7b61f7d728d`.
 
 unproven or partial claims:
 
@@ -472,7 +481,7 @@ unproven or partial claims:
 - high-quality long PDF/DOCX/EPUB/PPTX/HTML extraction through normal product
   tools;
 - frozen-corpus matrix execution without live search;
-- natural post-compaction recall across target models.
+- natural post-compaction recall across target models;
 - deployed proof of scoped model-policy overlay selection on staging.
 
 belief-state changes:
@@ -486,7 +495,7 @@ remaining error field:
 
 - image/package size impact of adding document tools;
 - extraction quality variance across file formats;
-- model-policy overlay implementation status;
+- model-policy overlay deployed behavior through product-path API proof;
 - whether all target providers remain available during the run.
 
 highest-impact remaining uncertainty:
@@ -508,6 +517,8 @@ latest staging proof:
 
 - `gh run watch 27169883438 --exit-status`
 - `gh run view 27169883384 --json status,conclusion,workflowName,url,headSha`
+- `gh run view 27171676079 --json status,conclusion,workflowName,url,headSha`
+- `gh run view 27171676075 --json status,conclusion,workflowName,url,headSha`
 - `curl -fsS https://choir.news/health`
 - authenticated staging product-path import of public PDF ContentItem
   `4222d5fc-aea5-43bd-93eb-077f9c3540a7` with Poppler extraction and page
@@ -515,10 +526,10 @@ latest staging proof:
 
 next executable probe:
 
-- commit, push, and deploy the scoped model-policy overlay path; verify staging
-  identity and run a deployed product-path proof that an overlay file under
-  `System/model-policy-overlays/` controls a researcher run's resolved
-  provider/model. Then build the frozen multi-format corpus.
+- run a deployed product-path proof that an overlay file under
+  `System/model-policy-overlays/` controls `/api/model-policy/resolve` for a
+  researcher role, then build the frozen multi-format corpus and start the
+  model matrix.
 
 suggested resume goal string:
 
