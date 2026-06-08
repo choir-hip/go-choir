@@ -210,7 +210,9 @@ Increase resolution along these axes without changing the object:
 4. **Modality pressure:** text only -> image input for `mimo-v2.5` -> modality
    rejection for unsupported models -> product-path multimodal verifier.
 5. **Context pressure:** short prompt -> long source packet -> open PDF corpus ->
-   forced compaction -> post-compaction recall and tool use.
+   automatic compaction at the current 160k threshold -> post-compaction recall
+   and tool use -> model-aware automatic compaction at 85% of the selected
+   model's declared context window.
 6. **Policy pressure:** fallback generated model policy -> editable
    per-computer model policy -> role/capability-specific selection ->
    owner-visible policy change path.
@@ -291,13 +293,33 @@ Use only product/control APIs and visible app paths:
 
 ### Compaction and Long-Context Proof
 
-Create a provider-backed long-context mission that forces compaction:
+Current sequencing is deliberate:
+
+1. First make DeepSeek/Xiaomi agent loops reliable with Choir's existing
+   automatic run-memory compaction threshold of 160k estimated context tokens.
+2. Only after that proof is stable, move the default production compaction
+   policy to model-aware thresholding at `x = 0.85` of the selected model's
+   declared context window.
+
+DeepSeek and Xiaomi's current target models are treated as 1M-token context
+models for this mission, so the intended model-aware threshold is about 850k
+estimated context tokens. Do not jump straight to 850k proof before the 160k
+conformance path works; that would burn provider budget while basic agent-loop
+and retrieval semantics are still being validated.
+
+Compaction is runtime-owned, not an agent-invoked action. The agent should not
+call a "compact memory" tool. The runtime watches context pressure and compacts
+before the next provider call. After compaction, the agent may use
+`get_run_memory_entry` to recover exact raw content by `entry_id` when the
+summary is not enough; retrieval is the tool-call surface, compaction is not.
+
+Create a provider-backed long-context mission that forces automatic compaction:
 
 - fetch one or more free/open PDFs from the web or another stable source;
 - store full content handles in the user/candidate computer;
-- have the agent read enough material to exceed the configured compaction
-  threshold;
-- force or wait for compaction;
+- have the agent read enough material to exceed the current configured automatic
+  compaction threshold;
+- wait for the runtime to compact automatically before the next provider call;
 - after compaction, ask recall questions whose answers require earlier PDF
   content;
 - require citations/handles back to the source material;
@@ -730,9 +752,10 @@ unproven or partial claims:
   Product-path coverage for the full auto/required/none tool-mode matrix,
   non-tool reasoning-content passback for DeepSeek Anthropic, Anthropic-compatible
   streaming behavior if those routes are ever selected for default policy,
-  live provider long-context compaction and post-compaction recall safety,
-  reliable arbitrary-image-URL verifier behavior, and the final Global Wire
-  provider readiness report remain unproven.
+  live provider long-context compaction and post-compaction recall safety at the
+  current 160k automatic threshold, the later model-aware 85%-of-context-window
+  threshold policy, reliable arbitrary-image-URL verifier behavior, and the
+  final Global Wire provider readiness report remain unproven.
 belief-state changes:
   The selected DeepSeek OpenAI-compatible path is now viable for VText exact
   edit/tool loops when tool-bearing calls disable thinking. Anthropic-compatible
@@ -755,23 +778,32 @@ belief-state changes:
   mission still needs live/provider or product-path evidence that a real model
   will follow those handles correctly after context pressure. Provider readiness
   is still not complete enough for Global Wire hard cutover until live
-  long-context compaction behavior is proven or precisely bounded and the final
-  provider readiness report is written.
+  long-context compaction behavior is proven or precisely bounded at the current
+  160k threshold, model-aware 85% thresholding is designed for the 1M-token
+  DeepSeek/Xiaomi context windows, and the final provider readiness report is
+  written.
 remaining error field:
   Carry the provider/protocol conformance matrix into product-path evidence
-  where it matters, prove or bound long-context compaction/recall continuity,
-  and then select safe model-policy defaults for processors, reconcilers,
-  researchers, VText article agents, and multimodal verifiers.
+  where it matters, prove or bound long-context compaction/recall continuity at
+  the current 160k threshold before moving to 85% of the declared context
+  window, and then select safe model-policy defaults for processors,
+  reconcilers, researchers, VText article agents, and multimodal verifiers.
 highest-impact remaining uncertainty:
-  Whether hidden reasoning/compaction continuity remains correct under
-  long-context pressure, and whether the Anthropic-compatible routes provide
-  enough additional value to justify selecting them for any default agent role.
+  Whether hidden reasoning/compaction continuity remains correct under realistic
+  160k-threshold context pressure, whether the later 85%-of-1M policy can be
+  implemented without destabilizing automatic compaction timing, and whether the
+  Anthropic-compatible routes provide enough additional value to justify
+  selecting them for any default agent role.
 next executable probe:
-  Run one long-context compaction proof with post-compaction recall and at least
-  one post-compaction tool call, using normal model policy and no arbitrary token
-  caps. Use a fresh same-owner product-path run or preserve the auth state for
-  any source run ids being replayed; old Playwright-auth ids are not durable
-  cross-user evidence. Then write the Global Wire provider readiness report,
+  First run one long-context compaction proof against the existing 160k automatic
+  threshold with post-compaction recall and at least one post-compaction tool
+  call, using normal model policy and no arbitrary output token caps. Use a
+  fresh same-owner product-path run or preserve the auth state for any source
+  run ids being replayed; old Playwright-auth ids are not durable cross-user
+  evidence. After 160k conformance is stable, implement/prove model-aware
+  automatic compaction at `x = 0.85` of the selected model's declared context
+  window; for DeepSeek/Xiaomi target models in this mission, treat that context
+  window as 1M tokens. Then write the Global Wire provider readiness report,
   explicitly distinguishing env-gated provider-loop proof from product-path
   VText/researcher/verifier proof.
 suggested resume goal string:
