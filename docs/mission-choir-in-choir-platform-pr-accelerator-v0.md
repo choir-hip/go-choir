@@ -2293,3 +2293,78 @@ rollback refs:
   definition scoping. Revert 3c3521c02a08dfec3df15b29b6a4a34f15faf3a7 to
   remove exact-choice precondition retry.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T11:43Z provider-precondition model fallback
+  shipped, but VText still failed before Super delegation.
+current artifact state:
+  Documentation checkpoint 9c9811d4635db3dba28284af20108e662491d2ec and
+  behavior commit ef6121c7d7225de67045a67b0ba1a9fc92b44444 are on origin/main.
+  CI run 27134954662 passed, including runtime shards, non-runtime tests, Go
+  vet/build, integration-tagged smoke, and staging deploy. FlakeHub run
+  27134954653 passed. Public `https://choir.news/health` and owner-routed
+  `http://10.202.180.2:8085/health` both reported deployed commit
+  ef6121c7d7225de67045a67b0ba1a9fc92b44444 with
+  `deployed_at=2026-06-08T11:38:46Z`.
+what shipped:
+  Initial tool-call provider precondition failures now preserve the same VText
+  tool obligation, first relaxing exact `function:edit_vtext` to `required`,
+  then falling back from the active Fireworks Flash selection to the configured
+  Fireworks Pro selection. The fallback uses normal LLM selection fields and
+  the shared tool loop; it does not add a VText-only harness branch.
+what was proven:
+  - Local `git diff --check` passed.
+  - Local focused tests passed:
+    `nix develop -c go test ./internal/runtime -run
+    'TestRunToolLoop(RelaxesExactInitialToolChoiceAfterProviderPrecondition|FallsBackModelAfterRelaxedInitialToolChoicePrecondition|RetriesProviderRateLimit|TerminalToolSuccessStopsWithoutExtraProviderTurn)$|TestProviderPreconditionFallbackSelectionsUseFireworksProForFlash'`.
+  - Local broader focused runtime tests passed:
+    `nix develop -c go test ./internal/runtime -run
+    'TestRunToolLoop|Test.*ModelPolicy|TestProviderPreconditionFallbackSelections'`.
+  - Product-path rerun trajectory d1d91874-778f-4152-8c17-bf167d6954e5
+    created VText document 7b4ffe0f-1859-4943-8684-b57b299c7d68 and VText run
+    5f485219-7609-45ed-b26e-323b5a82b8a1.
+  - The deployed trace showed the exact intended sequence:
+    Fireworks Flash exact initial tool call, retry after
+    `exact_initial_tool_choice_precondition`, Fireworks Flash `required`, retry
+    after `provider_precondition_fallback`, then Fireworks Pro `required`.
+new failure evidence:
+  The Fireworks Pro fallback also failed with
+  `tool loop iteration 2: gateway call failed: gateway client: fireworks:
+  status 412 Precondition Failed (sanitized)`. VText therefore still failed
+  before creating an owner-readable mission narrative or requesting Super
+  execution. The failure now rules out three narrower causes as sufficient
+  explanations: exact tool choice, full provider-visible VText tool catalog,
+  and Fireworks Flash specifically.
+belief-state changes:
+  This is now a Fireworks/provider-family incompatibility for the deployed
+  VText initial tool-call request shape, or a provider-adapter bug shared
+  across Fireworks Flash and Pro for tool calls. Continuing to adjust the same
+  Fireworks request risks another shallow retry. The mission needs either an
+  alternate provider/model family for the VText initial tool-mediated turn, or
+  a product-path blocker synthesis that writes the failure into the VText
+  narrative without requiring a failing Fireworks tool-call turn.
+remaining error field:
+  The next fix must not claim success by adding another Fireworks retry. It
+  should use an existing policy-respecting non-Fireworks configured model path
+  for initial VText tool calls, if available, or add an owner-visible
+  terminal-blocker path that updates the VText through runtime-owned failure
+  handling when the appagent cannot make its first provider turn. The desired
+  continuation proof remains: VText mission narrative exists, Super delegation
+  is requested, and the worker either deletes the Global Wire Sources
+  Chronology/search/source-ledger surface or reports the exact product-path
+  blocker and code path.
+next executable probe:
+  Inspect the deployed model catalog/policy for a non-Fireworks model already
+  authorized for text/tool use. If one exists, extend provider-precondition
+  fallback selection to that model and prove it through the owner prompt-bar
+  path. If no such model exists, implement a narrowly scoped VText failure
+  continuation that creates a normal VText revision recording the precise
+  provider blocker and then requests Super only if the product authority model
+  permits bypassing VText appagent authorship for the mission narrative.
+rollback refs:
+  Revert ef6121c7d7225de67045a67b0ba1a9fc92b44444 to remove model fallback.
+  Revert cce5dd840abe06418bee93ed7753589a84a28d91 to remove initial tool
+  definition scoping. Revert 3c3521c02a08dfec3df15b29b6a4a34f15faf3a7 to
+  remove exact-choice precondition retry.
+```
