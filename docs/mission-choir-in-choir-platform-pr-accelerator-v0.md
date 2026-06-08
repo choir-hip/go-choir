@@ -2221,3 +2221,75 @@ rollback refs:
   relaxation if it causes regressions. Revert 28f17aee only if the prior
   problem checkpoint should be removed from mission history.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T11:30Z scoped initial tool definitions shipped,
+  but VText still failed before Super delegation.
+current artifact state:
+  Behavior commit cce5dd840abe06418bee93ed7753589a84a28d91 is on origin/main,
+  passed CI run 27134314374, passed FlakeHub run 27134314437, and is deployed
+  to public staging plus the owner-routed sandbox. Public `/health` and
+  http://10.202.180.2:8085/health both reported deployed commit
+  cce5dd840abe06418bee93ed7753589a84a28d91 with
+  `deployed_at=2026-06-08T11:25:39Z`.
+what shipped:
+  Exact initial tool-choice turns now send only the exact requested tool
+  definition in the provider request. For VText's first turn this scopes the
+  initial provider-visible `tools` array to `edit_vtext`, while preserving the
+  full runtime registry for executing the tool and later turns.
+what was proven:
+  - Local `git diff --check` passed.
+  - Local focused tests passed:
+    `nix develop -c go test ./internal/runtime -run
+    'TestRunToolLoop(RelaxesExactInitialToolChoiceAfterProviderPrecondition|RetriesProviderRateLimit|TerminalToolSuccessStopsWithoutExtraProviderTurn)$'`.
+  - Local broader tool-loop tests passed:
+    `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop'`.
+  - CI run 27134314374 passed for commit
+    cce5dd840abe06418bee93ed7753589a84a28d91, including runtime shards,
+    non-runtime tests, Go vet/build, integration-tagged smoke, and staging
+    deploy.
+  - FlakeHub run 27134314437 passed for the same commit.
+new failure evidence:
+  Deployed product-path rerun trajectory
+  e2710f4c-d0fe-46f3-8b06-441f681f24ed created VText document
+  55cddb8f-ea65-4629-9e9f-ea344338a848 and VText run
+  0afb950d-35c2-4b78-8667-941fb06177be. The VText trace again emitted a retry
+  after `exact_initial_tool_choice_precondition`, then failed on the second
+  provider call:
+  `tool loop iteration 1: gateway call failed: gateway client: fireworks:
+  status 412 Precondition Failed (sanitized)`.
+
+  Because cce5dd84 scoped the provider-visible tool definitions for that
+  initial exact tool turn, this rules out the full VText tool catalog in the
+  API `tools` array as the sole cause. The public trace detail route still
+  returned `detail:null` for moments marked `has_detail=true`, so the exact
+  tool-count payload was not inspectable through the deployed trace API.
+belief-state changes:
+  The root cause now appears broader than exact tool choice or tool-array
+  breadth. The likely remaining axes are Fireworks DeepSeek V4 Flash rejecting
+  the VText initial request shape even with a single tool, reasoning effort
+  `medium` with tool calls, long VText system/prompt context, or the provider
+  model itself for this appagent turn.
+remaining error field:
+  The next behavior route should stop retrying Fireworks Flash with minor
+  request-shape changes and instead use a policy-respecting alternate
+  configured model/provider for VText initial tool-call precondition failures,
+  or a direct model policy change if owner-controlled policy is the intended
+  product path. The fallback must preserve the same tool loop and role
+  semantics; it should not hard-code VText as a special harness branch beyond
+  using normal role/model selection and provider capability/error handling.
+next executable probe:
+  Add a provider-precondition fallback for initial tool-call turns that switches
+  from the current Fireworks Flash selection to a configured alternate such as
+  the role/fallback policy model or Fireworks Pro when available, then rerun
+  the product path. If the alternate model writes the mission VText and reaches
+  Super delegation, record the provider-specific failure as a model-policy
+  tuning issue and continue the mission. If alternate model fallback also fails,
+  synthesize a VText-visible blocker instead of stranding the owner on a failed
+  trace.
+rollback refs:
+  Revert cce5dd840abe06418bee93ed7753589a84a28d91 to remove initial tool
+  definition scoping. Revert 3c3521c02a08dfec3df15b29b6a4a34f15faf3a7 to
+  remove exact-choice precondition retry.
+```
