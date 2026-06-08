@@ -509,6 +509,10 @@ remaining error field:
 - image/package size impact of adding document tools;
 - extraction quality variance across file formats;
 - frozen corpus selection and import quality;
+- uploaded-file corpus setup currently lacks a browser-public authenticated
+  ContentItem import route; `ImportFileContent` exists for researcher tools, but
+  repeatable corpus preparation should not require spending an LLM turn just to
+  convert an already-uploaded file into a ContentItem;
 - whether all target providers remain available during the run.
 
 highest-impact remaining uncertainty:
@@ -542,9 +546,11 @@ latest staging proof:
 
 next executable probe:
 
-- build the frozen multi-format corpus through product-path document imports,
-  record ContentItem ids/hashes/selectors/adapters, then start the model matrix
-  using scoped model-policy overlays.
+- add a narrow authenticated product route for importing an existing
+  user-computer file path into a ContentItem through the same `ImportFileContent`
+  substrate, prove it with an uploaded PPTX fixture, then build the frozen
+  multi-format corpus and start the model matrix using scoped model-policy
+  overlays.
 
 suggested resume goal string:
 
