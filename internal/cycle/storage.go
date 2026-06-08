@@ -105,6 +105,9 @@ func createTables(db *sql.DB) error {
 			language         TEXT NOT NULL DEFAULT '',
 			region           TEXT NOT NULL DEFAULT '',
 			content_hash      TEXT NOT NULL DEFAULT '',
+			body_kind         TEXT NOT NULL DEFAULT '',
+			body_length       INTEGER NOT NULL DEFAULT 0,
+			reader_snapshot   INTEGER NOT NULL DEFAULT 0,
 			raw_json          TEXT NOT NULL DEFAULT '',
 			evidence_level    TEXT NOT NULL DEFAULT '',
 			vintage_policy    TEXT NOT NULL DEFAULT '',
@@ -206,6 +209,9 @@ func migrateTables(db *sql.DB) error {
 		`ALTER TABLE items ADD COLUMN language TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE items ADD COLUMN region TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE items ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN body_kind TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN body_length INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE items ADD COLUMN reader_snapshot INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE items ADD COLUMN evidence_level TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE items ADD COLUMN vintage_policy TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE items ADD COLUMN lookahead_status TEXT NOT NULL DEFAULT ''`,
@@ -372,9 +378,9 @@ func (s *Storage) SaveItems(items []sources.Item) error {
 	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO items (
 		id, source_id, source_type, fetch_id, original_id, title, body, url,
 		canonical_url, published, fetched_at, verticals, language, region,
-		content_hash, raw_json, evidence_level, vintage_policy,
+		content_hash, body_kind, body_length, reader_snapshot, raw_json, evidence_level, vintage_policy,
 		lookahead_status, release_date, created_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -384,6 +390,7 @@ func (s *Storage) SaveItems(items []sources.Item) error {
 		if item.ID == "" {
 			return fmt.Errorf("item id is required")
 		}
+		item = sources.NormalizeItemBodyClassification(item)
 		createdAt := item.FetchedAt
 		if createdAt.IsZero() {
 			createdAt = time.Now().UTC()
@@ -391,7 +398,8 @@ func (s *Storage) SaveItems(items []sources.Item) error {
 		_, err := stmt.Exec(item.ID, item.SourceID, item.SourceType, item.FetchID, item.OriginalID,
 			item.Title, item.Body, item.URL, item.CanonicalURL, formatTime(item.Published),
 			formatTime(item.FetchedAt), mustJSON(item.Verticals), item.Language, item.Region,
-			item.ContentHash, item.RawJSON, item.EvidenceLevel, item.VintagePolicy,
+			item.ContentHash, item.BodyKind, item.BodyLength, boolInt(item.ReaderSnapshot),
+			item.RawJSON, item.EvidenceLevel, item.VintagePolicy,
 			item.LookaheadStatus, item.ReleaseDate, formatTime(createdAt))
 		if err != nil {
 			return err
@@ -870,7 +878,8 @@ func (s *Storage) SearchItems(ctx context.Context, query string, limit int) ([]s
 	terms := sourceSearchTerms(query)
 	selectFields := `id, source_id, source_type, fetch_id, original_id, title, body, url,
 		canonical_url, published, fetched_at, verticals, language, region, content_hash,
-		raw_json, evidence_level, vintage_policy, lookahead_status, release_date`
+		body_kind, body_length, reader_snapshot, raw_json, evidence_level, vintage_policy,
+		lookahead_status, release_date`
 	sqlQuery := `SELECT ` + selectFields
 	args := []any{}
 	if len(terms) > 0 {
@@ -909,25 +918,30 @@ func (s *Storage) SearchItems(ctx context.Context, query string, limit int) ([]s
 	for rows.Next() {
 		var item sources.Item
 		var published, fetchedAt, verticals string
+		var readerSnapshot int
 		if len(terms) > 0 {
 			var score int
 			if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
 				&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
-				&verticals, &item.Language, &item.Region, &item.ContentHash, &item.RawJSON,
-				&item.EvidenceLevel, &item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate, &score); err != nil {
+				&verticals, &item.Language, &item.Region, &item.ContentHash, &item.BodyKind,
+				&item.BodyLength, &readerSnapshot, &item.RawJSON, &item.EvidenceLevel, &item.VintagePolicy,
+				&item.LookaheadStatus, &item.ReleaseDate, &score); err != nil {
 				return nil, err
 			}
 		} else {
 			if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
 				&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
-				&verticals, &item.Language, &item.Region, &item.ContentHash, &item.RawJSON,
-				&item.EvidenceLevel, &item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
+				&verticals, &item.Language, &item.Region, &item.ContentHash, &item.BodyKind,
+				&item.BodyLength, &readerSnapshot, &item.RawJSON, &item.EvidenceLevel, &item.VintagePolicy,
+				&item.LookaheadStatus, &item.ReleaseDate); err != nil {
 				return nil, err
 			}
 		}
 		item.Published = parseStoredTime(published)
 		item.FetchedAt = parseStoredTime(fetchedAt)
+		item.ReaderSnapshot = readerSnapshot != 0
 		_ = json.Unmarshal([]byte(verticals), &item.Verticals)
+		item = sources.NormalizeItemBodyClassification(item)
 		out = append(out, item)
 	}
 	return out, rows.Err()
@@ -952,7 +966,7 @@ func (s *Storage) searchItemsByID(ctx context.Context, itemIDs []string, limit i
 	args = append(args, limit)
 	rows, err := s.DB.QueryContext(ctx, `SELECT id, source_id, source_type, fetch_id, original_id, title, body, url,
 		canonical_url, published, fetched_at, verticals, language, region, content_hash,
-		raw_json, evidence_level, vintage_policy, lookahead_status, release_date
+		body_kind, body_length, reader_snapshot, raw_json, evidence_level, vintage_policy, lookahead_status, release_date
 		FROM items WHERE id IN (`+strings.Join(placeholders, ",")+`) ORDER BY published DESC, fetched_at DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
@@ -962,15 +976,19 @@ func (s *Storage) searchItemsByID(ctx context.Context, itemIDs []string, limit i
 	for rows.Next() {
 		var item sources.Item
 		var published, fetchedAt, verticals string
+		var readerSnapshot int
 		if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
 			&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
-			&verticals, &item.Language, &item.Region, &item.ContentHash, &item.RawJSON,
-			&item.EvidenceLevel, &item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
+			&verticals, &item.Language, &item.Region, &item.ContentHash, &item.BodyKind,
+			&item.BodyLength, &readerSnapshot, &item.RawJSON, &item.EvidenceLevel, &item.VintagePolicy,
+			&item.LookaheadStatus, &item.ReleaseDate); err != nil {
 			return nil, err
 		}
 		item.Published = parseStoredTime(published)
 		item.FetchedAt = parseStoredTime(fetchedAt)
+		item.ReaderSnapshot = readerSnapshot != 0
 		_ = json.Unmarshal([]byte(verticals), &item.Verticals)
+		item = sources.NormalizeItemBodyClassification(item)
 		out = append(out, item)
 	}
 	return out, rows.Err()
@@ -1023,20 +1041,23 @@ func (s *Storage) GetItem(ctx context.Context, itemID string) (sources.Item, err
 	}
 	row := s.DB.QueryRowContext(ctx, `SELECT id, source_id, source_type, fetch_id, original_id, title, body, url,
 		canonical_url, published, fetched_at, verticals, language, region, content_hash,
-		raw_json, evidence_level, vintage_policy, lookahead_status, release_date
+		body_kind, body_length, reader_snapshot, raw_json, evidence_level, vintage_policy, lookahead_status, release_date
 		FROM items WHERE id = ?`, itemID)
 	var item sources.Item
 	var published, fetchedAt, verticals string
+	var readerSnapshot int
 	if err := row.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
 		&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
-		&verticals, &item.Language, &item.Region, &item.ContentHash, &item.RawJSON,
-		&item.EvidenceLevel, &item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
+		&verticals, &item.Language, &item.Region, &item.ContentHash, &item.BodyKind,
+		&item.BodyLength, &readerSnapshot, &item.RawJSON, &item.EvidenceLevel, &item.VintagePolicy,
+		&item.LookaheadStatus, &item.ReleaseDate); err != nil {
 		return sources.Item{}, err
 	}
 	item.Published = parseStoredTime(published)
 	item.FetchedAt = parseStoredTime(fetchedAt)
+	item.ReaderSnapshot = readerSnapshot != 0
 	_ = json.Unmarshal([]byte(verticals), &item.Verticals)
-	return item, nil
+	return sources.NormalizeItemBodyClassification(item), nil
 }
 
 func scanProcessorRequest(rows interface{ Scan(...any) error }) (ProcessorRequest, error) {

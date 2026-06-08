@@ -734,6 +734,9 @@ func TestResearcherSourceSearchCallsSourceServiceAPI(t *testing.T) {
 				Title           string   `json:"title"`
 				URL             string   `json:"url"`
 				ContentHash     string   `json:"content_hash"`
+				BodyKind        string   `json:"body_kind"`
+				BodyLength      int      `json:"body_length"`
+				ReaderSnapshot  bool     `json:"reader_snapshot"`
 				EvidenceLevel   string   `json:"evidence_level"`
 				VintagePolicy   string   `json:"vintage_policy"`
 				LookaheadStatus string   `json:"lookahead_status"`
@@ -765,6 +768,9 @@ func TestResearcherSourceSearchCallsSourceServiceAPI(t *testing.T) {
 	}
 	if got.ContentHash != item.ContentHash || got.EvidenceLevel != "official_release" || got.VintagePolicy != "release_snapshot" || got.LookaheadStatus != "no_lookahead" {
 		t.Fatalf("source caveats/hash = %+v, want official caveats", got)
+	}
+	if got.BodyKind != item.BodyKind || got.BodyLength != item.BodyLength || got.ReaderSnapshot != item.ReaderSnapshot {
+		t.Fatalf("source body classification = %+v, want %+v", got, item)
 	}
 	if got.Title != item.Title || got.URL != item.URL || len(got.Verticals) != 1 || got.Verticals[0] != "macro_policy" {
 		t.Fatalf("source result projection = %+v", got)
@@ -817,6 +823,9 @@ func testSourceAPIItem() sourceapi.ItemResult {
 		Language:        "en",
 		Region:          "us",
 		ContentHash:     "sha256-test-rates",
+		BodyKind:        "reader_snapshot",
+		BodyLength:      len("Rates held steady."),
+		ReaderSnapshot:  true,
 		EvidenceLevel:   "official_release",
 		VintagePolicy:   "release_snapshot",
 		LookaheadStatus: "no_lookahead",

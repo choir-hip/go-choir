@@ -113,6 +113,8 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 			Verticals:     source.Verticals,
 			Language:      firstString(source.Languages),
 			Region:        firstString(source.Regions),
+			BodyKind:      BodyKindForSourceType(source.Type, bodyText),
+			BodyLength:    len([]rune(strings.TrimSpace(bodyText))),
 			EvidenceLevel: "source_feed",
 		}
 		item.ContentHash = ContentHash(item.Title, item.Body, item.CanonicalURL)

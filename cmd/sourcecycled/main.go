@@ -435,6 +435,7 @@ func sourceAPIReconcilerRequests(requests []cycle.ReconcilerRequest) []sourceapi
 }
 
 func sourceAPIItemResult(rank int, item sources.Item) sourceapi.ItemResult {
+	item = sources.NormalizeItemBodyClassification(item)
 	return sourceapi.ItemResult{
 		Rank:            rank,
 		TargetKind:      sourceapi.TargetKind,
@@ -453,6 +454,9 @@ func sourceAPIItemResult(rank int, item sources.Item) sourceapi.ItemResult {
 		Language:        item.Language,
 		Region:          item.Region,
 		ContentHash:     item.ContentHash,
+		BodyKind:        item.BodyKind,
+		BodyLength:      item.BodyLength,
+		ReaderSnapshot:  item.ReaderSnapshot,
 		EvidenceLevel:   item.EvidenceLevel,
 		VintagePolicy:   item.VintagePolicy,
 		LookaheadStatus: item.LookaheadStatus,

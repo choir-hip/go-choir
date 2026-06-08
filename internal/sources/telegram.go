@@ -158,6 +158,8 @@ func (s *TelegramScraper) parseMessage(n *html.Node, source *Source, fetchID str
 		Verticals:     source.Verticals,
 		Language:      firstString(source.Languages),
 		Region:        firstString(source.Regions),
+		BodyKind:      BodyKindSocialPost,
+		BodyLength:    len([]rune(strings.TrimSpace(text))),
 		EvidenceLevel: "source_feed",
 	}
 	item.ContentHash = ContentHash(item.Title, item.Body, item.CanonicalURL)

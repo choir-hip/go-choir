@@ -118,6 +118,8 @@ func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 		Language:        "en",
 		Region:          "US",
 		ContentHash:     "hash-rates",
+		BodyKind:        sources.BodyKindSourceBody,
+		BodyLength:      len("The committee held rates steady."),
 		EvidenceLevel:   "official-source",
 		VintagePolicy:   "point-in-time",
 		LookaheadStatus: "safe",
@@ -147,6 +149,9 @@ func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 	if got.ItemID != item.ID || got.TargetKind != sourceapi.TargetKind || got.ContentHash != item.ContentHash {
 		t.Fatalf("unexpected search result: %+v", got)
 	}
+	if got.BodyKind != item.BodyKind || got.BodyLength != item.BodyLength || got.ReaderSnapshot {
+		t.Fatalf("unexpected search body classification: %+v", got)
+	}
 
 	handleReq := httptest.NewRequest(http.MethodGet, "/internal/source-service/search?q=source_service_item:"+item.ID+"&max_results=5", nil)
 	handleRec := httptest.NewRecorder()
@@ -174,6 +179,9 @@ func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 	}
 	if resolved.Provider != sourceapi.ProviderName || resolved.Item.ItemID != item.ID {
 		t.Fatalf("unexpected resolved item: %+v", resolved)
+	}
+	if resolved.Item.BodyKind != item.BodyKind || resolved.Item.BodyLength != item.BodyLength || resolved.Item.ReaderSnapshot {
+		t.Fatalf("unexpected resolved body classification: %+v", resolved.Item)
 	}
 }
 

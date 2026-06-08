@@ -73,6 +73,9 @@ func TestRSSPollerReturnsFetchRecordAndStableItem(t *testing.T) {
 	if first.Items[0].SourceID != source.ID || first.Items[0].EvidenceLevel != "source_feed" {
 		t.Fatalf("item provenance incomplete: %+v", first.Items[0])
 	}
+	if first.Items[0].BodyKind != BodyKindFeedSummary || first.Items[0].BodyLength != len("Rates were held steady.") || first.Items[0].ReaderSnapshot {
+		t.Fatalf("item body classification incomplete: %+v", first.Items[0])
+	}
 }
 
 func TestRSSPollerCleansHTMLDescriptionsForSourceBody(t *testing.T) {

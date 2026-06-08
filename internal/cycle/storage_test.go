@@ -46,6 +46,8 @@ func TestStoragePersistsFetchItemsAndDedupsAcrossRestart(t *testing.T) {
 		Language:        "en",
 		Region:          "us",
 		ContentHash:     sources.ContentHash("Rate decision", "Rates held steady."),
+		BodyKind:        sources.BodyKindSourceBody,
+		BodyLength:      len("Rates held steady."),
 		EvidenceLevel:   "official_release",
 		VintagePolicy:   "release_snapshot",
 		LookaheadStatus: "no_lookahead",
@@ -106,6 +108,43 @@ func TestStoragePersistsFetchItemsAndDedupsAcrossRestart(t *testing.T) {
 	}
 	if results[0].VintagePolicy != "release_snapshot" || results[0].LookaheadStatus != "no_lookahead" {
 		t.Fatalf("official caveats did not persist: %+v", results[0])
+	}
+	if results[0].BodyKind != sources.BodyKindSourceBody || results[0].BodyLength != len("Rates held steady.") || results[0].ReaderSnapshot {
+		t.Fatalf("body classification did not persist: %+v", results[0])
+	}
+}
+
+func TestStorageDerivesBodyClassificationForLegacyRows(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("open storage: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Date(2026, 6, 8, 8, 0, 0, 0, time.UTC)
+	item := sources.Item{
+		ID:         "srcitem_legacy_rss",
+		SourceID:   "rss:legacy",
+		SourceType: sources.SourceTypeRSS,
+		Title:      "Legacy feed item",
+		Body:       "A feed summary survived from before body classification columns were populated.",
+		Published:  now,
+		FetchedAt:  now,
+	}
+	if err := store.SaveItems([]sources.Item{item}); err != nil {
+		t.Fatalf("save items: %v", err)
+	}
+	if _, err := store.DB.ExecContext(ctx, `UPDATE items SET body_kind = '', body_length = 0, reader_snapshot = 0 WHERE id = ?`, item.ID); err != nil {
+		t.Fatalf("simulate legacy row: %v", err)
+	}
+
+	got, err := store.GetItem(ctx, item.ID)
+	if err != nil {
+		t.Fatalf("get item: %v", err)
+	}
+	if got.BodyKind != sources.BodyKindFeedSummary || got.BodyLength != len([]rune(item.Body)) || got.ReaderSnapshot {
+		t.Fatalf("derived classification = %+v", got)
 	}
 }
 

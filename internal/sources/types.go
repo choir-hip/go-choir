@@ -73,11 +73,50 @@ type Item struct {
 	Language        string     `json:"language,omitempty"`
 	Region          string     `json:"region,omitempty"`
 	ContentHash     string     `json:"content_hash,omitempty"`
+	BodyKind        string     `json:"body_kind,omitempty"`
+	BodyLength      int        `json:"body_length,omitempty"`
+	ReaderSnapshot  bool       `json:"reader_snapshot,omitempty"`
 	RawJSON         string     `json:"raw_json,omitempty"`
 	EvidenceLevel   string     `json:"evidence_level,omitempty"`
 	VintagePolicy   string     `json:"vintage_policy,omitempty"`
 	LookaheadStatus string     `json:"lookahead_status,omitempty"`
 	ReleaseDate     string     `json:"release_date,omitempty"`
+}
+
+const (
+	BodyKindEmpty          = "empty"
+	BodyKindFeedSummary    = "feed_summary"
+	BodyKindMetadataPacket = "metadata_packet"
+	BodyKindSocialPost     = "social_post"
+	BodyKindSourceBody     = "source_body"
+	BodyKindReaderSnapshot = "reader_snapshot"
+)
+
+func NormalizeItemBodyClassification(item Item) Item {
+	body := strings.TrimSpace(item.Body)
+	item.BodyLength = len([]rune(body))
+	item.BodyKind = strings.TrimSpace(item.BodyKind)
+	if item.BodyKind == "" {
+		item.BodyKind = BodyKindForSourceType(item.SourceType, body)
+	}
+	item.ReaderSnapshot = item.ReaderSnapshot || item.BodyKind == BodyKindReaderSnapshot
+	return item
+}
+
+func BodyKindForSourceType(sourceType SourceType, body string) string {
+	if strings.TrimSpace(body) == "" {
+		return BodyKindEmpty
+	}
+	switch sourceType {
+	case SourceTypeRSS:
+		return BodyKindFeedSummary
+	case SourceTypeGDELT:
+		return BodyKindMetadataPacket
+	case SourceTypeTelegram:
+		return BodyKindSocialPost
+	default:
+		return BodyKindSourceBody
+	}
 }
 
 type Registry struct {

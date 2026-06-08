@@ -161,6 +161,7 @@ func (f *GDELTFetcher) fetchGKG(ctx context.Context, url string, source *Source,
 
 				published, _ := time.Parse("20060102150405", record[1])
 
+				body := fmt.Sprintf("Themes: %s\nOrganizations: %s\nLocations: %s", record[7], record[13], record[9])
 				item := Item{
 					ID:            StableItemID(*source, record[0], record[4], record[3], record[7]),
 					SourceID:      source.ID,
@@ -168,7 +169,7 @@ func (f *GDELTFetcher) fetchGKG(ctx context.Context, url string, source *Source,
 					FetchID:       fetchID,
 					OriginalID:    record[0],
 					Title:         fmt.Sprintf("GDELT Event: %s", record[3]),
-					Body:          fmt.Sprintf("Themes: %s\nOrganizations: %s\nLocations: %s", record[7], record[13], record[9]),
+					Body:          body,
 					URL:           record[4],
 					CanonicalURL:  NormalizeURL(record[4]),
 					Published:     published.UTC(),
@@ -176,6 +177,8 @@ func (f *GDELTFetcher) fetchGKG(ctx context.Context, url string, source *Source,
 					Verticals:     source.Verticals,
 					Language:      firstString(source.Languages),
 					Region:        firstString(source.Regions),
+					BodyKind:      BodyKindMetadataPacket,
+					BodyLength:    len([]rune(strings.TrimSpace(body))),
 					EvidenceLevel: "source_feed",
 				}
 				item.ContentHash = ContentHash(item.Title, item.Body, item.CanonicalURL)

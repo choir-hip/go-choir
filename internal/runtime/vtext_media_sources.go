@@ -76,6 +76,9 @@ type vtextSourceEntityEvidence struct {
 	State                  string `json:"state"`
 	ResearchState          string `json:"research_state,omitempty"`
 	Relation               string `json:"relation,omitempty"`
+	BodyKind               string `json:"body_kind,omitempty"`
+	BodyLength             int    `json:"body_length,omitempty"`
+	ReaderSnapshot         bool   `json:"reader_snapshot,omitempty"`
 	TranscriptContentID    string `json:"transcript_content_id,omitempty"`
 	TranscriptAvailability string `json:"transcript_availability,omitempty"`
 	SourceRepresentationID string `json:"source_representation_id,omitempty"`
@@ -385,6 +388,21 @@ func enrichSourceServiceEntityFromItem(entity *vtextSourceEntity, item sourceapi
 	}
 	if item.ContentHash != "" && len(entity.Selectors) > 0 && entity.Selectors[0].ContentHash == "" {
 		entity.Selectors[0].ContentHash = item.ContentHash
+	}
+	entity.Evidence.BodyKind = strings.TrimSpace(item.BodyKind)
+	entity.Evidence.BodyLength = item.BodyLength
+	entity.Evidence.ReaderSnapshot = item.ReaderSnapshot
+	if entity.Evidence.Uncertainty == "" && entity.Evidence.BodyKind != "" && !entity.Evidence.ReaderSnapshot {
+		switch entity.Evidence.BodyKind {
+		case "feed_summary":
+			entity.Evidence.Uncertainty = "source item body is a feed summary, not a fetched full-article reader snapshot"
+		case "metadata_packet":
+			entity.Evidence.Uncertainty = "source item body is a metadata packet, not article prose"
+		case "social_post":
+			entity.Evidence.Uncertainty = "source item body is a social post capture"
+		case "empty":
+			entity.Evidence.Uncertainty = "source item has no readable body snapshot yet"
+		}
 	}
 }
 
