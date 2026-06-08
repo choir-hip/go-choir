@@ -542,6 +542,10 @@ remaining error field:
 - image/package size impact of adding document tools;
 - extraction quality variance across file formats;
 - frozen corpus selection and import quality;
+- HTML URL imports currently preserve cleaned reader markdown but do not expose
+  selectors or explicit extraction-adapter metadata, which means HTML corpus
+  items are weaker than PDF/DOCX/EPUB/PPTX items for exact recall and selector
+  citation;
 - whether all target providers remain available during the run.
 
 highest-impact remaining uncertainty:
@@ -582,9 +586,10 @@ latest staging proof:
 
 next executable probe:
 
-- build the frozen multi-format corpus using URL imports for public documents
-  and file imports for uploaded fixtures, record ContentItem
-  ids/hashes/selectors/adapters, then start the model matrix using scoped
+- add selector and adapter metadata for cleaned HTML URL imports, prove it on
+  staging, then build the frozen multi-format corpus using URL imports for
+  public documents and file imports for uploaded fixtures, record ContentItem
+  ids/hashes/selectors/adapters, and start the model matrix using scoped
   model-policy overlays.
 
 suggested resume goal string:
