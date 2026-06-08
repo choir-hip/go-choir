@@ -1152,6 +1152,89 @@ func (p *rateLimitThenSuccessProvider) CallWithTools(ctx context.Context, req To
 	}, nil
 }
 
+type exactToolChoicePreconditionThenToolProvider struct {
+	Provider
+	calls   int32
+	choices []string
+}
+
+func (p *exactToolChoicePreconditionThenToolProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.choices = append(p.choices, req.ToolChoice)
+	call := atomic.AddInt32(&p.calls, 1)
+	if call == 1 {
+		return nil, fmt.Errorf("gateway call failed: fireworks: status 412 Precondition Failed (sanitized)")
+	}
+	return &ToolLoopResponse{
+		StopReason: "tool_use",
+		ToolCalls: []types.ToolCall{{
+			ID:        "call-edit",
+			Name:      "edit_vtext",
+			Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"mission checkpoint"}`),
+		}},
+		Usage: TokenUsage{InputTokens: 8, OutputTokens: 2},
+		Model: "accounts/fireworks/models/deepseek-v4-flash",
+	}, nil
+}
+
+func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *testing.T) {
+	provider := &exactToolChoicePreconditionThenToolProvider{}
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "edit_vtext",
+		Description: "Edit the VText document.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"ok","revision_id":"rev-1"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register edit_vtext: %v", err)
+	}
+	var retrySeen bool
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunRetry && phase == "provider_tool_choice" {
+			retrySeen = true
+			var decoded map[string]any
+			if err := json.Unmarshal(payload, &decoded); err != nil {
+				t.Fatalf("decode retry payload: %v", err)
+			}
+			if decoded["tool_choice"] != "function:edit_vtext" || decoded["retry_tool_choice"] != "required" {
+				t.Fatalf("retry payload = %+v", decoded)
+			}
+		}
+	}
+
+	text, usage, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
+		"You are a VText appagent.",
+		0,
+		emit,
+		nil,
+		WithInitialToolChoice("function:edit_vtext"),
+		WithTerminalToolSuccesses("edit_vtext"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "" {
+		t.Fatalf("text = %q, want empty terminal tool result", text)
+	}
+	if usage.InputTokens != 8 || usage.OutputTokens != 2 {
+		t.Fatalf("usage = %+v", usage)
+	}
+	if got := atomic.LoadInt32(&provider.calls); got != 2 {
+		t.Fatalf("provider calls = %d, want 2", got)
+	}
+	if len(provider.choices) != 2 || provider.choices[0] != "function:edit_vtext" || provider.choices[1] != "required" {
+		t.Fatalf("tool choices = %#v, want exact then required", provider.choices)
+	}
+	if !retrySeen {
+		t.Fatal("missing provider_tool_choice retry event")
+	}
+}
+
 func TestRunToolLoopRetriesProviderRateLimit(t *testing.T) {
 	originalDelays := providerRateLimitRetryDelays
 	providerRateLimitRetryDelays = []time.Duration{0}

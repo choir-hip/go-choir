@@ -229,6 +229,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		systemPrompt = buildSystemPromptWithTools(systemPrompt, registry)
 	}
 	forceInitialToolChoiceRetry := false
+	relaxInitialExactToolChoice := false
 	var requiredNextTool *pendingRequiredTool
 
 	appendMessage := func(role string, msg json.RawMessage) error {
@@ -303,6 +304,9 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			}
 		} else if len(toolDefs) > 0 && options.initialToolChoice != "" && (i == 0 || forceInitialToolChoiceRetry) {
 			req.ToolChoice = options.initialToolChoice
+			if relaxInitialExactToolChoice && isExactRequiredToolChoice(req.ToolChoice) {
+				req.ToolChoice = "required"
+			}
 		}
 		forceInitialToolChoiceRetry = false
 
@@ -378,6 +382,21 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					messages = rebuilt
 					continue
 				}
+			}
+			if isExactInitialToolChoicePreconditionError(req.ToolChoice, err) && !relaxInitialExactToolChoice && i == 0 {
+				relaxInitialExactToolChoice = true
+				forceInitialToolChoiceRetry = true
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{
+						"reason":              "exact_initial_tool_choice_precondition",
+						"tool_choice":         req.ToolChoice,
+						"retry_tool_choice":   "required",
+						"provider_error":      err.Error(),
+						"provider_error_kind": "precondition_failed",
+					})
+					emit(types.EventRunRetry, "provider_tool_choice", payload)
+				}
+				continue
 			}
 			return "", totalUsage, fmt.Errorf("tool loop iteration %d: %w", i, err)
 		}
@@ -632,6 +651,19 @@ func exactRequiredToolChoice(name string) string {
 		return "required"
 	}
 	return "function:" + name
+}
+
+func isExactRequiredToolChoice(choice string) bool {
+	return strings.HasPrefix(strings.TrimSpace(choice), "function:")
+}
+
+func isExactInitialToolChoicePreconditionError(choice string, err error) bool {
+	if !isExactRequiredToolChoice(choice) || err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "412") ||
+		strings.Contains(text, "precondition failed")
 }
 
 func extractRequiredNextTool(results []types.ToolResult) (pendingRequiredTool, bool) {
