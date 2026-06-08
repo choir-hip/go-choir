@@ -1363,3 +1363,88 @@ fix should preserve the good prose/source breadth while normalizing or
 validating bare `[source:ENTITY_ID]` tokens into canonical source refs before
 the revision becomes the article head, and it should keep the story index from
 falling back to cycle-only evidence when recoverable source refs are present.
+
+## Checkpoint 2026-06-08T01:58Z: source-ref recovery deployed and proven
+
+status: ship-worthy slice with residual risks
+
+objective: preserve the live VText-agent article prose now being produced
+from broad source cycles while making article source refs transclusion-ready
+and recoverable in the Global Wire collection surface.
+
+what shipped: problem checkpoint commit
+`3a528aac67af9a1df65f7d51657a70e9e45c3387` recorded the fresh live source
+syntax gap before any fix. Behavior commit
+`7dc516014d501e067733a0afe76b6fba6a054aee` then added a narrow Global
+Wire-only source-ref normalizer at VText `edit_vtext` commit time: known bare
+`[source:ENTITY_ID]` tokens are rewritten to canonical
+`[label](source:ENTITY_ID)` refs using the revision's `source_entities`.
+The Global Wire VText index and VText renderer also recover older/bare-token
+article heads so previously generated live prose can project article-local
+source neighborhoods instead of falling back to cycle-only provenance.
+
+local proof: focused comprehensive runtime tests passed for the shared
+processor/reconciler/VText handoff, source-network manifest extraction, and
+source-network VText indexing paths. The full local runtime shard script
+passed. `npm run build` in `frontend` passed.
+
+staging proof: CI run `27111583136` passed for
+`7dc516014d501e067733a0afe76b6fba6a054aee`, including integration smoke,
+Go vet/build, non-runtime tests, all four runtime shards, frontend build,
+aggregate gate, and Node B deploy job `80010567810`. FlakeHub run
+`27111583134` succeeded. `https://choir.news/health`, Node B `/health`, and
+Node B `/opt/go-choir` all reported deployed commit
+`7dc516014d501e067733a0afe76b6fba6a054aee`, deployed_at
+`2026-06-08T01:52:25Z`.
+
+API proof: authenticated `GET /api/global-wire/stories` on sandbox port
+`8085` returned `15` stories from the live source-network VText index. The
+previously documented bare-token article
+`2d58b31c-d87c-4222-a08d-3fe833e20ff7`, `BREAKING: Israeli Navy launches
+cruise missiles at Iran; explosions reported in Tehran, Beirut, Baghdad`,
+now projects `3` lead and `3` context article-local source entries with
+`has_cycle_context=false`, even though its stored body still contains older
+bare source tokens. A newer post-deploy article,
+`b78a7021-04bc-43b2-982b-7383749c1819`, `UK, France and Germany back
+Zelenskyy's call for direct ceasefire talks with Russia as Putin rejects
+meeting`, updated `2026-06-08T01:53:01Z` after the deploy and contains
+`2` canonical native source refs, `0` bare source tokens, `2` lead sources,
+and `0` cycle-fallback context items. Its excerpt includes canonical source
+markup such as `[The Guardian](source:src_12ede5dccf6756d9)`.
+
+browser proof: a deployed Playwright probe against `https://choir.news/`
+opened the Global Wire desktop icon, observed `3` story rows and `3` compact
+article VText affordances, opened the first article in the normal VText app,
+and observed `5` native source refs plus `1` related-VText ref. The opened
+article contained none of the old visible scaffold strings `Source Manifest`,
+`My Edit`, `Style.vtext Source`, or `Source Handles`; there were no browser
+console errors and no horizontal overflow. Screenshot evidence was saved
+outside the repo at `/tmp/global-wire-7dc51601-staging-proof.png`.
+
+belief-state change: the mission has crossed the main architecture boundary
+for this slice. Global Wire is no longer only deterministic fallback stories:
+the live source system ingests hundreds of items from `211` configured
+sources, processors/reconcilers run through the shared harness, VText agents
+own article revisions, fresh articles can contain canonical native source
+transclusions, older bare-token articles are recoverable, and the collection
+surface opens normal editable VTexts with native source and related-VText
+refs.
+
+remaining error field: this is a ship-worthy product slice, not the finished
+newsroom. Latest source-status for cycle
+`cycle_9b6ac02be672bd397a398ded` reported `211` fetches, `477` items,
+`3` completed processors, `4` failed processors, and `1` failed reconciler.
+Some older live article bodies still store bare source tokens, although the
+index and renderer recover them. Some article prose still contains
+traditional-news datelines or style/claim rationale leakage in places. The
+next realism axis is durable processor/reconciler failure handling plus
+stronger VText article quality/reconciliation: fewer duplicate story heads,
+more consistent canonical source refs in fresh revisions, cleaner deks, and
+living correction/update requests over existing published article VTexts.
+
+resumption target: continue from deployed commit
+`7dc516014d501e067733a0afe76b6fba6a054aee`. First document the
+processor/reconciler failures from the latest source cycle if fixing them,
+then root-cause whether they are provider/search/runtime/tool-contract
+failures before changing code. Keep broad-source ingestion and VText-owned
+article lifecycle as the mission invariants.
