@@ -1620,3 +1620,59 @@ next executable probe:
   derive relative freshness from `UpdatedAt`. Update frontend fallback copy and
   focused tests.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T09:18Z honest seed freshness landed and was proved
+  on staging.
+current artifact state:
+  Commit fca07803a56606fa00500a76c36dffaa78d27fbb is on origin/main and
+  deployed to staging. It follows documentation checkpoint
+  9fef8eb163835927b3e8d6f1a32708a6b525cd7, which recorded the stale/fake
+  freshness problem before the behavior change.
+what shipped:
+  - Seed Global Wire stories no longer store hardcoded freshness strings like
+    `updated 18 min ago`, `updated 41 min ago`, or `updated 1 hr ago`.
+  - Frontend fallback story data no longer repeats those fake minute labels.
+  - `/api/global-wire/stories` now normalizes story presentation before
+    response: seeded source neighborhoods with auto/update-like freshness show
+    `seed source neighborhood`, while non-seeded stories with update-like
+    freshness derive relative freshness from actual `UpdatedAt`.
+what was proven:
+  - Local `git diff --check` passed.
+  - Local `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWireStories'`
+    passed.
+  - Local `nix develop -c go test ./internal/store -run 'TestGlobalWire'`
+    passed.
+  - Local `cd frontend && npm run build` passed.
+  - CI run 27127523355 passed for commit
+    fca07803a56606fa00500a76c36dffaa78d27fbb, including Go gates, frontend
+    build, and staging deploy.
+  - FlakeHub run 27127523420 passed for the same commit.
+  - Public staging `/health` reported proxy and sandbox deployed commit
+    fca07803a56606fa00500a76c36dffaa78d27fbb with
+    `deployed_at=2026-06-08T09:13:29Z`.
+  - Authenticated deployed product-path call to
+    `GET https://choir.news/api/global-wire/stories` returned status 200 and
+    the three seeded stories with `freshness=seed source neighborhood`,
+    `source_state=seeded-source-neighborhood`, and prominence values 82, 74,
+    and 63. No `updated 18 min ago`, `updated 41 min ago`, or `updated 1 hr
+    ago` labels remained in the API response.
+belief-state changes:
+  Global Wire no longer falsely claims that seeded placeholder stories were
+  updated minutes ago. The front page is still not a real editorial ranking
+  engine, but its freshness signal is now honest about seed state versus live
+  update state.
+unproven or partial claims:
+  - This does not solve ordering by prominence, importance, novelty, source
+    volume, or source diversity.
+  - It does not replace seeded story copy with current top world news.
+remaining error field:
+  The next major product axis is ranking and article ownership: current source
+  cycles/processors should produce VText-agent-owned articles whose front-page
+  order is based on actual source-network prominence, novelty, freshness,
+  contradiction, and update pressure rather than static seed prominence.
+rollback refs:
+  Revert fca07803 to restore the previous hardcoded seed freshness behavior.
+  Revert 9fef8eb only if the problem checkpoint should be removed.
+```
