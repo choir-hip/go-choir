@@ -2139,3 +2139,85 @@ rollback refs:
   evidence is superseded by a more precise provider-root-cause document before
   any behavior fix lands.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T11:18Z deployed exact-tool-choice relaxation was
+  proved, but VText still failed before Super delegation.
+current artifact state:
+  Documentation commit 28f17aee3a7f0e2dcfcbf8f3db2c2a30e5cda4ba records the
+  initial VText Fireworks 412 failure. Behavior commit
+  3c3521c02a08dfec3df15b29b6a4a34f15faf3a7 is on origin/main, passed CI run
+  27133734082, passed FlakeHub run 27133734079, and is deployed to public
+  staging plus the owner-routed sandbox. Public `/health` and
+  http://10.202.180.2:8085/health both reported deployed commit
+  3c3521c02a08dfec3df15b29b6a4a34f15faf3a7 with
+  `deployed_at=2026-06-08T11:13:52Z`.
+what shipped:
+  The runtime tool loop now retries one initial exact tool-choice provider
+  precondition failure by relaxing `tool_choice=function:<name>` to
+  `tool_choice=required`. This keeps the tool-call requirement but avoids the
+  exact OpenAI-compatible function-choice object when a provider rejects it.
+what was proven:
+  - Local `git diff --check` passed.
+  - Local focused tests passed:
+    `nix develop -c go test ./internal/runtime -run
+    'TestRunToolLoop(RelaxesExactInitialToolChoiceAfterProviderPrecondition|RetriesProviderRateLimit|TerminalToolSuccessStopsWithoutExtraProviderTurn)$'`.
+  - Local broader tool-loop tests passed:
+    `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop'`.
+  - CI run 27133734082 passed for commit
+    3c3521c02a08dfec3df15b29b6a4a34f15faf3a7, including runtime shards,
+    non-runtime tests, Go vet/build, integration-tagged smoke, and staging
+    deploy.
+  - FlakeHub run 27133734079 passed for the same commit.
+  - Deployed product-path rerun trajectory
+    fb765cc1-a72a-4ca8-9436-02d3e03f20f6 created VText document
+    544b8868-a0ab-49cc-a17c-b73f2aa4998a and VText run
+    1f2f4442-f2f0-4fda-ac8a-5eb07f1d1dec.
+  - The deployed VText trace emitted `loop.retry` moment
+    08567a2d-9b0e-463a-806a-fbaa5deea6e3 with summary
+    `retry after exact_initial_tool_choice_precondition`, proving the new
+    relaxation path fired on staging for the same failure class.
+new failure evidence:
+  After the retry, the VText run made a second provider call and failed again:
+  `tool loop iteration 1: gateway call failed: gateway client: fireworks:
+  status 412 Precondition Failed (sanitized)`. The second failure occurred
+  after the exact-choice relaxation, so the root cause is not limited to the
+  exact `function:edit_vtext` tool-choice object.
+
+  The trace moment detail route returned `detail:null` for moments whose
+  summaries reported `has_detail=true`, so the public trace API did not expose
+  the full provider-call payload for this run. The available summaries still
+  prove the sequence: first provider call, exact-choice retry, second provider
+  call, second Fireworks 412.
+belief-state changes:
+  The deployed retry improved diagnosis and ruled out one narrow hypothesis,
+  but it did not unblock the overnight mission. The failure now points toward a
+  broader Fireworks/DeepSeek V4 Flash request-shape incompatibility for VText
+  initial tool-calling turns, possibly involving the VText tool catalog size,
+  prompt/system size, reasoning setting, or Fireworks handling of tool calls
+  under this model path. It may also justify routing VText initial tool turns
+  to a different configured model/provider when Fireworks returns this
+  precondition class.
+remaining error field:
+  Continue root-cause investigation from the new evidence. The next fix should
+  not merely retry the same Fireworks request again. Either reduce/alter the
+  VText initial tool-call request shape in a principled way, or introduce a
+  policy-respecting alternate model/provider fallback for this provider
+  precondition class. A successful fix must be proved by a product-path rerun
+  that reaches at least VText mission narrative creation and Super delegation,
+  or by a VText-visible blocker if provider execution remains impossible.
+next executable probe:
+  Reproduce or narrow the 412 with a live provider-shaped request: compare
+  Fireworks VText initial call with full VText tool catalog versus only
+  `edit_vtext`, `request_super_execution`, and the terminal handoff tools; also
+  compare DeepSeek V4 Flash to the configured Super/Pro model if policy allows.
+  If the provider only fails with the full catalog, add a VText initial-turn
+  tool-scope reduction that preserves needed tools while reducing provider
+  request complexity. If it fails even with the small catalog, use a model
+  fallback rather than repeated same-request retries.
+rollback refs:
+  Revert 3c3521c02a08dfec3df15b29b6a4a34f15faf3a7 to remove the exact-choice
+  relaxation if it causes regressions. Revert 28f17aee only if the prior
+  problem checkpoint should be removed from mission history.
+```
