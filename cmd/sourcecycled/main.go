@@ -800,10 +800,25 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
 		return
 	}
+	supersededProcessors, err := store.SupersedeQueuedProcessorRequests(ctx, handoff.ProcessorRequests)
+	if err != nil {
+		log.Printf("Failed to supersede stale processor requests: %v", err)
+		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
+		return
+	}
+	supersededReconcilers, err := store.SupersedeQueuedReconcilersWithSupersededProcessors(ctx)
+	if err != nil {
+		log.Printf("Failed to supersede stale reconciler requests: %v", err)
+		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
+		return
+	}
 	_ = store.RecordCycleEvent(ctx, cycleID, "", "sourcemaxx_handoffs_queued", "source items routed to processor and reconciler handoffs", map[string]any{
-		"processor_request_count":  len(handoff.ProcessorRequests),
-		"reconciler_request_count": len(handoff.ReconcilerRequests),
-		"source_item_count":        len(items),
+		"processor_request_count":      len(handoff.ProcessorRequests),
+		"reconciler_request_count":     len(handoff.ReconcilerRequests),
+		"source_item_count":            len(items),
+		"superseded_processor_count":   supersededProcessors,
+		"superseded_reconciler_count":  supersededReconcilers,
+		"processor_continuity_refresh": supersededProcessors > 0,
 	})
 	dispatchResult := sourceMaxxRuntimeDispatcherFromEnv().dispatch(ctx, store, handoff)
 	if sourceMaxxDispatchResultHasActivity(dispatchResult) {

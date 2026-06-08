@@ -224,6 +224,128 @@ func TestStorageRecordsCycleEvents(t *testing.T) {
 	}
 }
 
+func TestStorageSupersedesQueuedProcessorContinuityAndDependentReconcilers(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("open storage: %v", err)
+	}
+	defer store.Close()
+
+	oldCycle, err := store.StartCycle(ctx)
+	if err != nil {
+		t.Fatalf("start old cycle: %v", err)
+	}
+	newCycle, err := store.StartCycle(ctx)
+	if err != nil {
+		t.Fatalf("start new cycle: %v", err)
+	}
+	oldTime := time.Date(2026, 6, 8, 7, 0, 0, 0, time.UTC)
+	newTime := oldTime.Add(15 * time.Minute)
+	continuityRef := "sourcecycled://processor/processor:technology:global:rss/latest"
+	oldQueued := ProcessorRequest{
+		RequestID:     "processor_old_queued",
+		CycleID:       oldCycle,
+		ProcessorKey:  "processor:technology:global:rss",
+		Status:        "queued",
+		SourceItemIDs: []string{"srcitem_old"},
+		ContinuityRef: continuityRef,
+		Prompt:        "old queued",
+		CreatedAt:     oldTime,
+		UpdatedAt:     oldTime,
+	}
+	oldSubmitted := ProcessorRequest{
+		RequestID:     "processor_old_submitted",
+		CycleID:       oldCycle,
+		ProcessorKey:  "processor:technology:global:rss",
+		Status:        "submitted",
+		RuntimeRunID:  "run-old-submitted",
+		SourceItemIDs: []string{"srcitem_old_submitted"},
+		ContinuityRef: continuityRef,
+		Prompt:        "old submitted",
+		CreatedAt:     oldTime,
+		UpdatedAt:     oldTime,
+	}
+	otherQueued := ProcessorRequest{
+		RequestID:     "processor_other_queued",
+		CycleID:       oldCycle,
+		ProcessorKey:  "processor:finance:global:rss",
+		Status:        "queued",
+		SourceItemIDs: []string{"srcitem_other"},
+		ContinuityRef: "sourcecycled://processor/processor:finance:global:rss/latest",
+		Prompt:        "other queued",
+		CreatedAt:     oldTime,
+		UpdatedAt:     oldTime,
+	}
+	newQueued := ProcessorRequest{
+		RequestID:     "processor_new_queued",
+		CycleID:       newCycle,
+		ProcessorKey:  "processor:technology:global:rss",
+		Status:        "queued",
+		SourceItemIDs: []string{"srcitem_new"},
+		ContinuityRef: continuityRef,
+		Prompt:        "new queued",
+		CreatedAt:     newTime,
+		UpdatedAt:     newTime,
+	}
+	if err := store.SaveProcessorRequests(ctx, []ProcessorRequest{oldQueued, oldSubmitted, otherQueued, newQueued}); err != nil {
+		t.Fatalf("save processors: %v", err)
+	}
+	reconciler := ReconcilerRequest{
+		RequestID:           "reconciler_old",
+		CycleID:             oldCycle,
+		Status:              "queued",
+		Scope:               "story-corpus",
+		ProcessorRequestIDs: []string{oldQueued.RequestID, otherQueued.RequestID},
+		Prompt:              "old reconciler",
+		CreatedAt:           oldTime,
+		UpdatedAt:           oldTime,
+	}
+	if err := store.SaveReconcilerRequests(ctx, []ReconcilerRequest{reconciler}); err != nil {
+		t.Fatalf("save reconciler: %v", err)
+	}
+
+	supersededProcessors, err := store.SupersedeQueuedProcessorRequests(ctx, []ProcessorRequest{newQueued})
+	if err != nil {
+		t.Fatalf("supersede processors: %v", err)
+	}
+	if supersededProcessors != 1 {
+		t.Fatalf("superseded processors = %d, want 1", supersededProcessors)
+	}
+	supersededReconcilers, err := store.SupersedeQueuedReconcilersWithSupersededProcessors(ctx)
+	if err != nil {
+		t.Fatalf("supersede reconcilers: %v", err)
+	}
+	if supersededReconcilers != 1 {
+		t.Fatalf("superseded reconcilers = %d, want 1", supersededReconcilers)
+	}
+
+	processors, err := store.ListProcessorRequests(ctx, "", 20)
+	if err != nil {
+		t.Fatalf("list processors: %v", err)
+	}
+	statusByID := map[string]string{}
+	for _, req := range processors {
+		statusByID[req.RequestID] = req.Status
+	}
+	if statusByID[oldQueued.RequestID] != "superseded" {
+		t.Fatalf("old queued status = %q, want superseded; all=%+v", statusByID[oldQueued.RequestID], statusByID)
+	}
+	if statusByID[oldSubmitted.RequestID] != "submitted" {
+		t.Fatalf("old submitted status = %q, want submitted; all=%+v", statusByID[oldSubmitted.RequestID], statusByID)
+	}
+	if statusByID[otherQueued.RequestID] != "queued" || statusByID[newQueued.RequestID] != "queued" {
+		t.Fatalf("unrelated/new queued statuses wrong: %+v", statusByID)
+	}
+	reconcilers, err := store.ListReconcilerRequests(ctx, oldCycle, 10)
+	if err != nil {
+		t.Fatalf("list reconcilers: %v", err)
+	}
+	if len(reconcilers) != 1 || reconcilers[0].Status != "superseded" {
+		t.Fatalf("dependent reconciler should be superseded: %+v", reconcilers)
+	}
+}
+
 func TestBuildSourceMaxxHandoffRoutesSourceItemsToProcessorsAndReconciler(t *testing.T) {
 	now := time.Date(2026, 6, 7, 10, 30, 0, 0, time.UTC)
 	items := []sources.Item{

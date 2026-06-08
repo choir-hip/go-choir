@@ -513,6 +513,37 @@ func (s *Storage) UpdateProcessorRequestRuntimeRun(ctx context.Context, requestI
 	return nil
 }
 
+func (s *Storage) SupersedeQueuedProcessorRequests(ctx context.Context, replacements []ProcessorRequest) (int, error) {
+	now := formatTime(time.Now().UTC())
+	total := 0
+	for _, replacement := range replacements {
+		continuityRef := strings.TrimSpace(replacement.ContinuityRef)
+		if continuityRef == "" {
+			continue
+		}
+		createdAt := replacement.CreatedAt
+		if createdAt.IsZero() {
+			createdAt = time.Now().UTC()
+		}
+		result, err := s.DB.ExecContext(ctx, `UPDATE processor_requests
+			SET status = 'superseded', updated_at = ?
+			WHERE status = 'queued'
+			  AND continuity_ref = ?
+			  AND request_id != ?
+			  AND created_at < ?`,
+			now, continuityRef, strings.TrimSpace(replacement.RequestID), formatTime(createdAt))
+		if err != nil {
+			return total, fmt.Errorf("supersede queued processor requests: %w", err)
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return total, fmt.Errorf("count superseded processor requests: %w", err)
+		}
+		total += int(affected)
+	}
+	return total, nil
+}
+
 func (s *Storage) SaveReconcilerRequests(ctx context.Context, requests []ReconcilerRequest) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -574,6 +605,31 @@ func (s *Storage) UpdateReconcilerRequestRuntimeRun(ctx context.Context, request
 		return fmt.Errorf("update reconciler request status: %w", err)
 	}
 	return nil
+}
+
+func (s *Storage) SupersedeQueuedReconcilersWithSupersededProcessors(ctx context.Context) (int, error) {
+	reconcilers, err := s.ListQueuedReconcilerRequests(ctx, 500)
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, reconciler := range reconcilers {
+		if len(reconciler.ProcessorRequestIDs) == 0 {
+			continue
+		}
+		hasSuperseded, err := s.anyProcessorRequestHasStatus(ctx, reconciler.ProcessorRequestIDs, "superseded")
+		if err != nil {
+			return total, err
+		}
+		if !hasSuperseded {
+			continue
+		}
+		if err := s.UpdateReconcilerRequestStatus(ctx, reconciler.RequestID, "superseded"); err != nil {
+			return total, err
+		}
+		total++
+	}
+	return total, nil
 }
 
 func (s *Storage) ListProcessorRequests(ctx context.Context, cycleID string, limit int) ([]ProcessorRequest, error) {
@@ -663,7 +719,7 @@ func (s *Storage) ListReconcilerRequests(ctx context.Context, cycleID string, li
 }
 
 func (s *Storage) ListQueuedReconcilerRequests(ctx context.Context, limit int) ([]ReconcilerRequest, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, status, runtime_run_id, scope, source_item_ids,
@@ -709,6 +765,33 @@ func (s *Storage) ProcessorRequestsSubmitted(ctx context.Context, requestIDs []s
 		return false, err
 	}
 	return total == len(ids) && int(submitted.Int64) == len(ids), nil
+}
+
+func (s *Storage) anyProcessorRequestHasStatus(ctx context.Context, requestIDs []string, status string) (bool, error) {
+	ids := make([]string, 0, len(requestIDs))
+	for _, requestID := range requestIDs {
+		requestID = strings.TrimSpace(requestID)
+		if requestID != "" {
+			ids = append(ids, requestID)
+		}
+	}
+	status = strings.TrimSpace(status)
+	if len(ids) == 0 || status == "" {
+		return false, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, status)
+	for idx, id := range ids {
+		placeholders[idx] = "?"
+		args = append(args, id)
+	}
+	query := `SELECT COUNT(*) FROM processor_requests WHERE status = ? AND request_id IN (` + strings.Join(placeholders, ",") + `)`
+	var count int
+	if err := s.DB.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (s *Storage) LatestCycleSummary(ctx context.Context) (CycleSummary, error) {
