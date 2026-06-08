@@ -28,6 +28,7 @@ import (
 )
 
 const maxImportedContentBytes = 2 * 1024 * 1024
+const maxImportedDocumentBytes = 25 * 1024 * 1024
 const maxStoredExtractedText = 300 * 1024
 
 type contentItemListResponse struct {
@@ -83,6 +84,7 @@ type fetchedURLContent struct {
 	RawBytes    int
 	Rungs       []extractionRung
 	Warnings    []string
+	Extraction  *contentExtraction
 }
 
 type youtubeTranscriptSegment struct {
@@ -362,13 +364,20 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 		"retrieval_strategy": retrievalStrategy(rungs),
 		"raw_content_hash":   selected.RawHash,
 	}
+	if selected.Extraction != nil {
+		for key, value := range selected.Extraction.Metadata {
+			metadataFields[key] = value
+		}
+		metadataFields["source_media_type"] = selected.MediaType
+		metadataFields["extracted_text_hash"] = contentHash(selected.Text)
+	}
 	if originalMediaType != "" {
 		metadataFields["original_media_type"] = originalMediaType
 		metadataFields["reader_artifact_kind"] = "cleaned_reader_markdown"
 	}
 	metadata, _ := json.Marshal(metadataFields)
 	sourceType := "extracted_url"
-	if !isHTMLMedia(selected.MediaType) && !isTextMedia(selected.MediaType) {
+	if strings.TrimSpace(selected.Text) == "" && !isHTMLMedia(selected.MediaType) && !isTextMedia(selected.MediaType) {
 		sourceType = "url"
 	}
 	itemReq := contentCreateRequest{
@@ -386,7 +395,9 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 	if err != nil {
 		return types.ContentItem{}, err
 	}
-	if item.ContentHash == "" {
+	if selected.Extraction != nil {
+		item.ContentHash = selected.RawHash
+	} else if item.ContentHash == "" {
 		item.ContentHash = selected.RawHash
 	}
 	if err := rt.Store().CreateContentItem(ctx, item); err != nil {
@@ -394,6 +405,76 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 	}
 	_, _ = rt.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(item))
 	return item, nil
+}
+
+func (rt *Runtime) ImportFileContent(ctx context.Context, ownerID, filePath string) (types.ContentItem, error) {
+	filePath = normalizeVTextSourcePath(filePath)
+	if filePath == "" || isVTextShortcutPath(filePath) {
+		return types.ContentItem{}, fmt.Errorf("file_path is required")
+	}
+	if existing, ok := rt.findExistingFileContentItem(ctx, ownerID, filePath); ok {
+		return existing, nil
+	}
+	raw, ok := readVTextSourceFileBytes(filePath)
+	if !ok {
+		return types.ContentItem{}, fmt.Errorf("file content unavailable for %s", filePath)
+	}
+	now := time.Now().UTC()
+	mediaType := detectMediaType("", filePath, "")
+	extracted := extractContentDocument(ctx, filePath, mediaType, raw)
+	provenance, _ := json.Marshal(map[string]any{
+		"source_path":           filePath,
+		"imported_at":           now.Format(time.RFC3339Nano),
+		"raw_content_hash":      contentHashBytes(raw),
+		"hash_algorithm":        "sha256",
+		"untrusted_source_text": true,
+	})
+	metadataFields := map[string]any{
+		"source_path":         filePath,
+		"source_media_type":   mediaType,
+		"raw_content_hash":    "sha256:" + contentHashBytes(raw),
+		"extracted_text_hash": contentHash(extracted.Text),
+	}
+	for key, value := range extracted.Metadata {
+		metadataFields[key] = value
+	}
+	metadata, _ := json.Marshal(metadataFields)
+	itemReq := contentCreateRequest{
+		SourceType:  "file",
+		MediaType:   mediaType,
+		AppHint:     extracted.AppHint,
+		Title:       firstNonEmptyString(extracted.Title, path.Base(filePath)),
+		FilePath:    filePath,
+		TextContent: extracted.Text,
+		Metadata:    metadata,
+		Provenance:  provenance,
+	}
+	item, err := buildContentItem(ownerID, itemReq)
+	if err != nil {
+		return types.ContentItem{}, err
+	}
+	item.ContentHash = contentHashBytes(raw)
+	if err := rt.Store().CreateContentItem(ctx, item); err != nil {
+		return types.ContentItem{}, err
+	}
+	_, _ = rt.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(item))
+	return item, nil
+}
+
+func (rt *Runtime) findExistingFileContentItem(ctx context.Context, ownerID, filePath string) (types.ContentItem, bool) {
+	if rt == nil || rt.Store() == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(filePath) == "" {
+		return types.ContentItem{}, false
+	}
+	items, err := rt.Store().ListContentItems(ctx, ownerID, 1000)
+	if err != nil {
+		return types.ContentItem{}, false
+	}
+	for _, item := range items {
+		if item.SourceType == "file" && normalizeVTextSourcePath(item.FilePath) == filePath {
+			return item, true
+		}
+	}
+	return types.ContentItem{}, false
 }
 
 func contentItemEventPayload(item types.ContentItem) map[string]any {
@@ -431,15 +512,20 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, maxImportedContentBytes+1))
+	contentType := normalizeMediaType(resp.Header.Get("Content-Type"))
+	mediaType := detectMediaType(targetURL, "", contentType)
+	readLimit := maxImportedContentBytes
+	if isDocumentMedia(mediaType) {
+		readLimit = maxImportedDocumentBytes
+	}
+	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, int64(readLimit)+1))
 	if readErr != nil {
 		return result, fmt.Errorf("read URL response: %w", readErr)
 	}
-	if len(raw) > maxImportedContentBytes {
-		raw = raw[:maxImportedContentBytes]
-		result.Warnings = append(result.Warnings, "response truncated at 2MiB")
+	if len(raw) > readLimit {
+		raw = raw[:readLimit]
+		result.Warnings = append(result.Warnings, fmt.Sprintf("response truncated at %dMiB", readLimit/(1024*1024)))
 	}
-	contentType := normalizeMediaType(resp.Header.Get("Content-Type"))
 	result.StatusCode = resp.StatusCode
 	result.ContentType = contentType
 	result.RawHash = contentHashBytes(raw)
@@ -456,7 +542,7 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 		return result, fmt.Errorf("%s returned status %s", fetchRungName, resp.Status)
 	}
 
-	result.MediaType = detectMediaType(targetURL, "", contentType)
+	result.MediaType = mediaType
 	if isHTMLMedia(result.MediaType) {
 		result.Title, result.Text = extractReadableHTML(raw)
 		result.Rungs = append(result.Rungs, extractionRung{Name: htmlRungName, Status: statusForText(result.Text), TextChars: len(result.Text)})
@@ -466,6 +552,17 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 			result.Title = extractRSSFeedTitle(raw)
 		}
 		result.Rungs = append(result.Rungs, extractionRung{Name: textRungName, Status: statusForText(result.Text), TextChars: len(result.Text)})
+	} else if isDocumentMedia(result.MediaType) {
+		extracted := extractContentDocument(ctx, targetURL, result.MediaType, raw)
+		result.Text = extracted.Text
+		result.Title = extracted.Title
+		result.Extraction = &extracted
+		result.Warnings = append(result.Warnings, extracted.Warnings...)
+		result.Rungs = append(result.Rungs, extractionRung{
+			Name:      extracted.Adapter,
+			Status:    statusForText(extracted.Text),
+			TextChars: len(extracted.Text),
+		})
 	}
 	if len(result.Text) > maxStoredExtractedText {
 		result.Text = result.Text[:maxStoredExtractedText]
@@ -1604,6 +1701,8 @@ func detectMediaType(sourceURL, filePath, contentType string) string {
 		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 	case ".epub":
 		return "application/epub+zip"
+	case ".pptx":
+		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 	case ".png":
 		return "image/png"
 	case ".jpg", ".jpeg":
@@ -1643,6 +1742,8 @@ func appHintForMedia(mediaType, sourceURL, filePath string) string {
 		return "vtext"
 	case mediaType == "application/epub+zip":
 		return "epub"
+	case mediaType == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+		return "slides"
 	case mediaType == "application/rss+xml" || strings.Contains(strings.ToLower(sourceURL+filePath), "podcast"):
 		return "podcast"
 	case mediaType == "text/markdown" || mediaType == "text/plain":
@@ -1656,7 +1757,7 @@ func appHintForMedia(mediaType, sourceURL, filePath string) string {
 
 func normalizeAppHint(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "vtext", "browser", "content", "files", "pdf", "epub", "image", "video", "audio", "podcast":
+	case "vtext", "browser", "content", "files", "pdf", "epub", "slides", "image", "video", "audio", "podcast":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "files"
@@ -1675,6 +1776,18 @@ func isHTMLMedia(mediaType string) bool {
 func isTextMedia(mediaType string) bool {
 	mediaType = normalizeMediaType(mediaType)
 	return strings.HasPrefix(mediaType, "text/") || mediaType == "application/json" || mediaType == "application/xml" || mediaType == "application/rss+xml"
+}
+
+func isDocumentMedia(mediaType string) bool {
+	switch normalizeMediaType(mediaType) {
+	case "application/pdf",
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		"application/epub+zip",
+		"application/vnd.openxmlformats-officedocument.presentationml.presentation":
+		return true
+	default:
+		return false
+	}
 }
 
 func isYouTubeURL(raw string) bool {

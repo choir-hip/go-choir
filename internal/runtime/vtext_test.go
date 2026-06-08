@@ -5220,11 +5220,17 @@ func TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("docx original item: %v", err)
 	}
-	if docxItem.ContentHash != contentHashBytes(docxBytes) || docxItem.TextContent != "" {
+	if docxItem.ContentHash != contentHashBytes(docxBytes) || !strings.Contains(docxItem.TextContent, "Proposal Title") {
 		t.Fatalf("docx original item hash/text = %#v", docxItem)
 	}
+	if selectors := selectorsFromContentMetadata(docxItem.Metadata); len(selectors) == 0 {
+		t.Fatalf("docx original item missing selectors: %s", string(docxItem.Metadata))
+	}
 	docxManifest := decodeRevisionMetadata(docxRevs[0].Metadata)["import_manifest"].(map[string]any)
-	if docxManifest["import_adapter"] != "docx_ooxml_text_table_projection" || docxManifest["original_content_hash_state"] != "available_from_original_bytes" {
+	if adapter, _ := docxManifest["import_adapter"].(string); adapter != "docx_ooxml_text_table_projection" && adapter != "docx_pandoc_markdown" {
+		t.Fatalf("docx manifest adapter = %#v", docxManifest)
+	}
+	if docxManifest["original_content_hash_state"] != "available_from_original_bytes" {
 		t.Fatalf("docx manifest = %#v", docxManifest)
 	}
 	if docxManifest["original_content_hash"] != "sha256:"+contentHashBytes(docxBytes) {
@@ -5245,11 +5251,17 @@ func TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pdf original item: %v", err)
 	}
-	if pdfItem.ContentHash != contentHashBytes(pdfBytes) || pdfItem.TextContent != "" {
+	if pdfItem.ContentHash != contentHashBytes(pdfBytes) || !strings.Contains(pdfItem.TextContent, "Imported PDF sentence") {
 		t.Fatalf("pdf original item hash/text = %#v", pdfItem)
 	}
+	if selectors := selectorsFromContentMetadata(pdfItem.Metadata); len(selectors) == 0 {
+		t.Fatalf("pdf original item missing selectors: %s", string(pdfItem.Metadata))
+	}
 	pdfManifest := decodeRevisionMetadata(pdfRevs[0].Metadata)["import_manifest"].(map[string]any)
-	if pdfManifest["import_adapter"] != "pdf_literal_text_projection" || pdfManifest["original_content_hash_state"] != "available_from_original_bytes" {
+	if adapter, _ := pdfManifest["import_adapter"].(string); adapter != "pdf_poppler_pdftotext" && adapter != "pdf_literal_text_projection_fallback" {
+		t.Fatalf("pdf manifest adapter = %#v", pdfManifest)
+	}
+	if pdfManifest["original_content_hash_state"] != "available_from_original_bytes" {
 		t.Fatalf("pdf manifest = %#v", pdfManifest)
 	}
 	if pdfManifest["original_content_hash"] != "sha256:"+contentHashBytes(pdfBytes) {

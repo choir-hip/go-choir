@@ -150,7 +150,7 @@ Add durable sandbox availability for:
 - `python3` with document extraction packages;
 - `nodejs` already exists and should remain available;
 - `pandoc` for Markdown/HTML/DOCX/EPUB conversion and fallback extraction;
-- `poppler_utils` for `pdftotext`, `pdfinfo`, and `pdftoppm`;
+- `poppler-utils` for `pdftotext`, `pdfinfo`, and `pdftoppm`;
 - `libreoffice` for PPTX/DOCX render/convert fallback where feasible.
 
 Prefer a Nix-declared Python package set including:
@@ -334,11 +334,12 @@ Likely first goal:
 
 ## Run Checkpoint & Resumption State
 
-status: checkpoint_incomplete
+status: substrate_implementation_in_progress
 
-last checkpoint: mission authored from provider/compaction learning and owner
-feedback that search quota should not be spent on evals and document extraction
-must be real before recall testing.
+last checkpoint: mission upgraded so the sandbox/document substrate preamble is
+an explicit prerequisite before any compaction recall eval. Slides remain
+strictly parked as a future mission; this mission only extracts PPTX/HTML slide
+artifacts as sources.
 
 current artifact state:
 
@@ -346,11 +347,23 @@ current artifact state:
 - Provider conformance has been closed at readiness level for current
   DeepSeek/Xiaomi paths.
 - Natural recall matrix has not started.
-- Sandbox document tooling is not yet upgraded.
+- Sandbox document tooling has been drafted in Nix image config and structurally
+  evaluated, but not yet deployed to staging/user computers.
+- Shared ContentItem extraction and researcher selector tools are being
+  implemented for PDF/DOCX/EPUB/PPTX/HTML before model runs.
 
-what shipped: nothing yet for this mission.
+what shipped: docs-only checkpoint `58b918af` records the problem and mission
+before code changes, satisfying the problem-documentation-first invariant.
 
-what was proven: not yet proven in this mission.
+what was proven so far:
+
+- Nix evaluation succeeds for the normal sandbox VM and the Playwright worker
+  VM with the document tool packages declared.
+- Focused local tests prove shared extraction/selectors, researcher document
+  selector tools, and VText file import reuse for DOCX/PDF/PPTX fixtures.
+- URL document imports now get a larger document-only byte cap so public PDFs
+  and decks are not forced through the ordinary 2 MiB web snippet limit.
+- Staging/product-path proof has not yet happened.
 
 unproven or partial claims:
 
@@ -378,12 +391,18 @@ highest-impact remaining uncertainty:
 - can the sandbox image and ContentItem tools support real multi-format document
   import without creating brittle one-off VText import hacks?
 
+latest local proof:
+
+- `nix eval .#nixosConfigurations.go-choir-sandbox-vm.config.system.build.toplevel.drvPath`
+- `nix eval .#nixosConfigurations.go-choir-sandbox-vm-playwright.config.system.build.toplevel.drvPath`
+- `nix develop -c go test ./internal/runtime -run 'TestExtract|TestSystemPromptForResearcher|TestContent'`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact|TestAgentToolProfiles|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot'`
+
 next executable probe:
 
-- inspect `nix/sandbox-vm.nix`, `internal/runtime/content.go`,
-  `internal/runtime/tools_research.go`, and `internal/runtime/vtext_import.go`;
-  document the current document extraction problem; then add sandbox packages
-  and shared ContentItem extraction adapters.
+- commit the substrate behavior change; then refresh/deploy the sandbox runtime
+  path and run staging/user-computer proof before starting frozen-corpus
+  compaction runs.
 
 suggested resume goal string:
 

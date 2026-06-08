@@ -57,6 +57,15 @@ let
     ];
   };
 
+  documentPython = pkgs.python3.withPackages (ps: with ps; [
+    beautifulsoup4
+    ebooklib
+    lxml
+    pdfplumber
+    pypdf
+    python-docx
+  ]);
+
   sandboxRuntimeInstall = pkgs.writeShellScript "go-choir-install-sandbox-runtime" ''
     set -euo pipefail
 
@@ -346,7 +355,10 @@ EOF
         systemd
         procps
         iproute2
-        python3
+        documentPython
+        libreoffice
+        pandoc
+        poppler-utils
         goChoirPackages.obscura
         goChoirPackages.zot
       ]) ++ lib.optionals includePlaywright (with pkgs; [
@@ -454,7 +466,10 @@ EOF
     pkg-config
     procps
     iproute2
-    python3
+    documentPython
+    libreoffice
+    pandoc
+    poppler-utils
     bash
   ]) ++ lib.optionals includePlaywright (with pkgs; [
     playwrightTools

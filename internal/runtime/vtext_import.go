@@ -37,6 +37,7 @@ type vtextFileImportProjection struct {
 	ImportAdapterVersion     int
 	LossinessScore           int
 	Warnings                 []string
+	ExtractionMetadata       map[string]any
 }
 type vtextShortcutFile struct {
 	Kind       string `json:"kind"`
@@ -176,6 +177,15 @@ func buildFileOpenVTextMetadata(projection vtextFileImportProjection, original *
 			"warnings":                warnings,
 		},
 	}
+	if len(projection.ExtractionMetadata) > 0 {
+		for key, value := range projection.ExtractionMetadata {
+			if key == "selectors" || key == "selector_count" || key == "extraction_adapter" || key == "extraction_adapter_version" || key == "extraction_warnings" || key == "text_chars" {
+				if manifest, ok := metadata["import_manifest"].(map[string]any); ok {
+					manifest[key] = value
+				}
+			}
+		}
+	}
 	if original != nil && original.ContentID != "" {
 		metadata["original_content_item"] = map[string]any{
 			"content_id":   original.ContentID,
@@ -272,7 +282,7 @@ func (h *APIHandler) ensureVTextOriginalContentItem(ctx context.Context, ownerID
 		log.Printf("vtext api: list content items for original file %s: %v", sourcePath, err)
 	}
 	projectionText := projection.ProjectionContent
-	if !vtextFileTypeCanStoreTextProjection(mediaType) {
+	if !vtextFileTypeCanStoreTextProjection(mediaType) && !isDocumentMedia(mediaType) {
 		projectionText = ""
 	}
 	item := types.ContentItem{
@@ -325,7 +335,7 @@ func buildVTextFileImportProjection(sourcePath, initialContent string) vtextFile
 		projection.OriginalContentHashState = "available_from_original_bytes"
 		switch mediaType {
 		case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-			docxProjection := extractVTextProjectionFromDOCX(bytes)
+			docxProjection := extractVTextProjectionFromDocument(context.Background(), sourcePath, mediaType, bytes)
 			docxProjection.SourcePath = sourcePath
 			docxProjection.MediaType = mediaType
 			docxProjection.OriginalBytes = bytes
@@ -333,13 +343,21 @@ func buildVTextFileImportProjection(sourcePath, initialContent string) vtextFile
 			docxProjection.OriginalContentHashState = projection.OriginalContentHashState
 			return docxProjection.withProjectionFallback(initialContent)
 		case "application/pdf":
-			pdfProjection := extractVTextProjectionFromPDF(bytes)
+			pdfProjection := extractVTextProjectionFromDocument(context.Background(), sourcePath, mediaType, bytes)
 			pdfProjection.SourcePath = sourcePath
 			pdfProjection.MediaType = mediaType
 			pdfProjection.OriginalBytes = bytes
 			pdfProjection.OriginalContentHash = projection.OriginalContentHash
 			pdfProjection.OriginalContentHashState = projection.OriginalContentHashState
 			return pdfProjection.withProjectionFallback(initialContent)
+		case "application/epub+zip", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "text/html":
+			documentProjection := extractVTextProjectionFromDocument(context.Background(), sourcePath, mediaType, bytes)
+			documentProjection.SourcePath = sourcePath
+			documentProjection.MediaType = mediaType
+			documentProjection.OriginalBytes = bytes
+			documentProjection.OriginalContentHash = projection.OriginalContentHash
+			documentProjection.OriginalContentHashState = projection.OriginalContentHashState
+			return documentProjection.withProjectionFallback(initialContent)
 		default:
 			if vtextFileTypeCanStoreTextProjection(mediaType) {
 				projection.ProjectionContent = string(bytes)
@@ -379,6 +397,25 @@ func buildVTextFileImportProjection(sourcePath, initialContent string) vtextFile
 		}
 	}
 	return projection
+}
+
+func extractVTextProjectionFromDocument(ctx context.Context, sourcePath, mediaType string, data []byte) vtextFileImportProjection {
+	extracted := extractContentDocument(ctx, sourcePath, mediaType, data)
+	lossiness := 20
+	if strings.TrimSpace(extracted.Text) == "" {
+		lossiness = 95
+	}
+	return vtextFileImportProjection{
+		SourcePath:            sourcePath,
+		MediaType:             extracted.MediaType,
+		ProjectionContent:     extracted.Text,
+		ProjectionContentHash: contentHash(extracted.Text),
+		ImportAdapter:         extracted.Adapter,
+		ImportAdapterVersion:  contentExtractionAdapterVersion,
+		LossinessScore:        lossiness,
+		Warnings:              extracted.Warnings,
+		ExtractionMetadata:    extracted.Metadata,
+	}
 }
 
 func (p vtextFileImportProjection) withProjectionFallback(initialContent string) vtextFileImportProjection {
@@ -671,6 +708,9 @@ func buildOriginalFileContentMetadata(projection vtextFileImportProjection) json
 		"lossiness_score":         projection.LossinessScore,
 		"warnings":                projection.Warnings,
 		"preservation":            "original_file_path_preserved_in_user_filesystem",
+	}
+	for key, value := range projection.ExtractionMetadata {
+		metadata[key] = value
 	}
 	if originalHash == "" {
 		metadata["original_content_hash"] = ""

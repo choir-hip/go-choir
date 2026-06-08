@@ -489,6 +489,9 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	if !strings.Contains(prompt, "Use web_search and fetch_url with the parallelism appropriate") {
 		t.Fatalf("researcher system prompt should make tool parallelism contextual, got %q", prompt)
 	}
+	if !strings.Contains(prompt, "prefer import_document_content, list_content_item_selectors, and read_content_item_selector") {
+		t.Fatalf("researcher system prompt should prefer document import/selector tools, got %q", prompt)
+	}
 	if !strings.Contains(prompt, "call submit_coagent_update as a durable checkpoint") {
 		t.Fatalf("researcher system prompt should require early findings handoff, got %q", prompt)
 	}

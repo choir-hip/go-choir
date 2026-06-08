@@ -143,7 +143,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("researcher should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"read_file", "web_search", "source_search", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
+	for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
 		if _, ok := researcher.Lookup(name); !ok {
 			t.Fatalf("researcher missing tool %q", name)
 		}
@@ -155,7 +155,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 		AgentProfileProcessor:  processor,
 		AgentProfileReconciler: reconciler,
 	} {
-		for _, name := range []string{"read_file", "web_search", "source_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
+		for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
 			if _, ok := registry.Lookup(name); !ok {
 				t.Fatalf("%s missing tool %q", profile, name)
 			}
@@ -3122,6 +3122,87 @@ func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
 	}
 	if got := resp["next_required_tool"]; got != "submit_coagent_update" {
 		t.Fatalf("next_required_tool = %#v, want submit_coagent_update", got)
+	}
+}
+
+func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
+	rt, _, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+	filesRoot := t.TempDir()
+	t.Setenv("SANDBOX_FILES_ROOT", filesRoot)
+	if err := os.MkdirAll(filepath.Join(filesRoot, "imports"), 0o755); err != nil {
+		t.Fatalf("create imports dir: %v", err)
+	}
+	pptxBytes := buildMinimalPPTX(t, []string{
+		"Mission gradient\nFrozen source corpus",
+		"Recall check\nExact slide detail",
+	})
+	if err := os.WriteFile(filepath.Join(filesRoot, "imports", "deck.pptx"), pptxBytes, 0o644); err != nil {
+		t.Fatalf("write pptx: %v", err)
+	}
+
+	vtextTask, err := rt.StartRunWithMetadata(context.Background(), "own the draft", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataChannelID:    "doc-1",
+		runMetadataAgentID:      "vtext:doc-1",
+	})
+	if err != nil {
+		t.Fatalf("submit vtext task: %v", err)
+	}
+	researcherTask, err := rt.StartChildRun(context.Background(), vtextTask.RunID, "read deck source", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileResearcher,
+		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataChannelID:    "doc-1",
+	})
+	if err != nil {
+		t.Fatalf("submit researcher task: %v", err)
+	}
+
+	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	rawImport, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "import_document_content", json.RawMessage(`{
+		"file_path":"imports/deck.pptx"
+	}`))
+	if err != nil {
+		t.Fatalf("import_document_content: %v", err)
+	}
+	var imported map[string]any
+	if err := json.Unmarshal([]byte(rawImport), &imported); err != nil {
+		t.Fatalf("decode import_document_content: %v", err)
+	}
+	contentID, _ := imported["content_id"].(string)
+	if contentID == "" || imported["app_hint"] != "slides" {
+		t.Fatalf("imported = %#v", imported)
+	}
+	expectedHash := contentHashBytes(pptxBytes)
+	if imported["content_hash"] != expectedHash {
+		t.Fatalf("content_hash = %#v, want raw artifact hash %s", imported["content_hash"], expectedHash)
+	}
+	if imported["selector_count"].(float64) != 2 {
+		t.Fatalf("selector_count = %#v", imported["selector_count"])
+	}
+
+	rawList, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "list_content_item_selectors", json.RawMessage(`{
+		"content_id":"`+contentID+`"
+	}`))
+	if err != nil {
+		t.Fatalf("list_content_item_selectors: %v", err)
+	}
+	if !strings.Contains(rawList, "slide-2") || !strings.Contains(rawList, "Exact slide detail") {
+		t.Fatalf("selector list = %s", rawList)
+	}
+
+	rawRead, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "read_content_item_selector", json.RawMessage(`{
+		"content_id":"`+contentID+`",
+		"selector_id":"slide-2"
+	}`))
+	if err != nil {
+		t.Fatalf("read_content_item_selector: %v", err)
+	}
+	if !strings.Contains(rawRead, "Recall check") || !strings.Contains(rawRead, "Exact slide detail") {
+		t.Fatalf("selector read = %s", rawRead)
 	}
 }
 

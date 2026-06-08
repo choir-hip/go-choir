@@ -468,6 +468,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if profile == AgentProfileResearcher {
 		b.WriteString("\n\nResearcher loops must converge quickly.")
 		b.WriteString("\nUse web_search and fetch_url with the parallelism appropriate to the model, task, novelty, and provider health.")
+		b.WriteString("\nFor PDFs, DOCX, EPUBs, PPTX decks, HTML documents, and other durable source files, prefer import_document_content, list_content_item_selectors, and read_content_item_selector over fetch_url snippets. Read selectors such as pages, slides, sections, or chunks so long documents stay bounded and citeable.")
 		b.WriteString("\nSearch tool results and Trace expose provider endpoints, latency, errors, rate limits, and result counts; adapt your breadth from that feedback.")
 		b.WriteString("\nDo not keep issuing near-duplicate searches once you already have enough grounded material to checkpoint an improvement for the document.")
 		b.WriteString("\nTreat rate-limit errors as backpressure: narrow, wait, or checkpoint what you already learned rather than continuing to issue searches.")
