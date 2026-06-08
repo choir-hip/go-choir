@@ -987,3 +987,17 @@ deployed product-path proof: a headless Playwright probe against `https://choir.
 partial or unproven claims: this proves signed-out/public product behavior and normal VText window launch semantics for related refs. It does not yet prove the authenticated owner Comet path because the Computer Use plugin still reports `Computer Use is not active` for Comet after a readable `get_app_state`. It also does not complete the larger newsroom architecture: live VText-agent-owned articles, processor/reconciler/researcher handoffs, authenticated living revisions, source expansion beyond the current staging corpus, and passage-range VText transclusion remain open.
 
 remaining error field: the product floor now has a desktop Global Wire icon, clean article prose, native source refs, native related-VText refs, and click-to-open VText graph traversal. The mission remains incomplete until Global Wire produces and revises publication-quality articles through long-running shared-harness agents over a much broader multilingual source stream, with staging proof that VText agents own the article lifecycle rather than deterministic fallback content.
+
+## Checkpoint 2026-06-08T00:39Z: source-health failure count misclassifies cached feeds
+
+status: checkpoint_incomplete
+
+objective: keep moving the mission along the highest-value source-realism axis by auditing the deployed source-service proof surface before adding more sources or UI claims.
+
+problem documented before fix: the deployed `sourcecycled` latest-cycle source-health response currently counts every fetch status other than `ok` as a failed fetch. That incorrectly treats HTTP `304 not_modified` conditional-cache responses as failures. On Node B, `go-choir-sourcecycled.service` is active on port `8787`; `/internal/source-service/health` reports `53,234` stored SourceItems and `6,217` fetch records at `2026-06-08T00:28:43Z`. The latest cycle `cycle_f7454e39ab307e5c976d0a13` ran from `2026-06-08T00:26:02Z` to `2026-06-08T00:26:09Z`, fetched `211` configured sources, deduped `544` new items, and queued `24` processor requests plus `1` reconciler request. Its source-health summary reported `144` success fetches and `67` failed fetches, but the failure list included many `not_modified` records such as `arxiv:cs_ai`, `official:fed:press`, `official:nasa:releases`, `official:noaa:nhc`, `official:who:news`, and others. Those are successful freshness checks, not source failures.
+
+belief-state change: source volume is no longer the immediate blocker in the same way as the initial 14/16-source state. The running source service is ingesting hundreds of new items per 15-minute cycle from `211` configured sources, including long-tail Telegram and HN/comparable tech-community coverage. The next source-realism problem is health/observability correctness: owner-facing counts must separate active fetches, not-modified cache hits, and actual failures before the UI or mission evidence can make reliable claims about source breadth.
+
+required correction: classify `ok` and `not_modified` as successful fetch outcomes in source-service source-health summaries. Keep actual HTTP errors, parser errors, timeouts, and other error statuses in the failure count/list. Add regression coverage so conditional-cache behavior cannot inflate failed-source counts again.
+
+remaining error field: this does not complete source breadth or article ownership. It only fixes the source proof surface so later Global Wire UI and mission evidence do not misrepresent the health of a large multilingual registry.
