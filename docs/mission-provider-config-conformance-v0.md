@@ -432,40 +432,69 @@ problem.
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: 2026-06-08T14:35Z mission defined before conformance run
+last checkpoint: 2026-06-08T15:48Z OpenAI-compatible tool-loop path fixed,
+  deployed, and proven through staging gateway plus product VText appagent
 current artifact state:
   Direct DeepSeek and Xiaomi provider support is implemented and deployed at
-  commit `4aca6f3cbb69af5778fa7275004f44d0af066d70`, with docs checkpoints
-  through `c2f45f28`. Direct deployed gateway calls worked for small text and
-  image probes. A real VText product-path run reached DeepSeek but failed on
-  thinking plus exact tool choice.
+  commit `3dc9b05c221af8fc48a784f5ff937b62ae8fdbd0`. The first product-path
+  VText failure was root-caused to DeepSeek OpenAI chat-completions rejecting
+  thinking mode when tools are present, including exact tool choice and
+  post-tool continuation turns. The deployed adapter now disables thinking for
+  DeepSeek calls whenever tools are present while preserving reasoning settings
+  for free-form non-tool turns.
 what shipped:
-  This mission document defines the next provider conformance run. No new code
-  is included in this document.
+  `3dc9b05c221af8fc48a784f5ff937b62ae8fdbd0` hardens DeepSeek tool-loop
+  conformance, adds focused provider/runtime tests, adds env-gated live
+  DeepSeek/Xiaomi runtime tool-loop tests, and classifies the DeepSeek thinking
+  plus tool-choice 400 as a provider precondition error.
 what was proven:
-  DeepSeek exact tool choice works with thinking disabled in a toy live probe.
-  DeepSeek thinking plus exact tool choice is incompatible in OpenAI mode.
-  Xiaomi text and image calls work in small direct probes.
+  Local focused unit/runtime/provider tests passed. Env-gated live local
+  runtime tool-loop tests passed for DeepSeek and Xiaomi with real provider
+  keys. GitHub Actions run `27148918526` passed, including runtime shards and
+  deploy to staging. Staging `/health` reports proxy and sandbox build
+  `3dc9b05c221af8fc48a784f5ff937b62ae8fdbd0`. Node B gateway advertises
+  `chatgpt,zai,deepseek,xiaomi,fireworks`.
+
+  Deployed gateway proof passed for DeepSeek `deepseek-v4-flash`: medium
+  reasoning plus exact `function:record_status` returned `tool_use`, and the
+  continuation turn after a tool result returned
+  `GATEWAY_DEEPSEEK_TOOL_LOOP_OK` with `stop_reason=end_turn`.
+
+  Deployed gateway proof passed for Xiaomi `mimo-v2.5-pro`: exact tool choice
+  returned `tool_use`, and the continuation turn returned
+  `GATEWAY_XIAOMI_TOOL_LOOP_OK` with `stop_reason=end_turn`.
+
+  Product-path proof passed on `https://choir.news` using
+  `frontend/tests/vtext-long-doc-fluid-editing-live.spec.js` with
+  `GO_CHOIR_RUN_LIVE_VTEXT_EDIT=1`: a real staging user created a VText,
+  created owner revisions, submitted `/api/vtext/documents/{id}/revise`, and
+  received an appagent revision. Gateway logs for the run show DeepSeek
+  `deepseek-v4-flash` handled a `tool_use` turn and an `end_turn` continuation
+  for VM sandbox `vm-e978ade762857ddce16dd08a09ca5ce1` without a 400.
 unproven or partial claims:
-  DeepSeek Anthropic conformance, Xiaomi Anthropic conformance, full tool-call
-  modes, reasoning-content passback, product-path VText revision success,
-  product-path multimodal verification, and compaction/recall safety remain
-  unproven.
+  DeepSeek Anthropic conformance, Xiaomi Anthropic conformance, full
+  auto/required/none tool-mode matrix, reasoning-content passback,
+  product-path researcher/verifier runs, product-path multimodal verification,
+  compaction/recall safety, and the final Global Wire provider readiness report
+  remain unproven.
 belief-state changes:
-  Provider readiness is now the gating substrate for Global Wire. Do not resume
-  news article generation until provider conformance is proven or a known-good
-  provider path is selected.
+  The selected DeepSeek OpenAI-compatible path is now viable for VText exact
+  edit/tool loops when tool-bearing calls disable thinking. Provider readiness
+  is still not complete enough for Global Wire hard cutover until researcher,
+  multimodal verifier, and compaction behavior are proven or precisely bounded.
 remaining error field:
-  Build and run the provider/protocol conformance matrix, then select safe
-  model-policy defaults.
+  Complete the provider/protocol conformance matrix beyond the repaired
+  OpenAI-compatible tool loop, then select safe model-policy defaults for
+  processors, reconcilers, researchers, VText article agents, and multimodal
+  verifiers.
 highest-impact remaining uncertainty:
   Whether Anthropic-compatible APIs are the better route for DeepSeek/Xiaomi
   agent loops and whether reasoning-content can be preserved correctly through
   compaction.
 next executable probe:
-  Add focused DeepSeek/Xiaomi conformance tests for OpenAI and Anthropic
-  protocols, starting with exact tool choice, required tool choice, thinking
-  disabled/enabled, and tool-result continuation.
+  Evaluate DeepSeek and Xiaomi Anthropic-compatible routes, then run one
+  product-path researcher/verifier-style loop and one long-context compaction
+  proof with post-compaction recall and tool use.
 suggested resume goal string:
   /goal Run docs/mission-provider-config-conformance-v0.md as MissionGradient and make DeepSeek/Xiaomi production-ready for Choir agents.
 evidence artifact refs:
