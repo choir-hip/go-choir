@@ -25,6 +25,7 @@ const (
 	defaultSourceMaxxProcessorDispatchLimit = 32
 	defaultSourceMaxxRuntimeDispatchRetries = 8
 	defaultSourceMaxxRuntimeRetryDelay      = 2 * time.Second
+	defaultSourceMaxxQueueDrainInterval     = 1 * time.Minute
 )
 
 type runtimeRunSubmitRequest struct {
@@ -102,9 +103,11 @@ func main() {
 
 	server := startSourceServiceAPI(ctx, store)
 
-	// 3. Main Ingestion Loop (15-minute cycle)
+	// 3. Main Ingestion Loop (15-minute source cycle plus queue drain)
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
+	drainTicker := time.NewTicker(sourceMaxxQueueDrainIntervalFromEnv())
+	defer drainTicker.Stop()
 	defer func() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
@@ -125,6 +128,9 @@ func main() {
 		case <-ticker.C:
 			log.Println("Initiating scheduled cycle...")
 			runCycle(ctx, &registry, store)
+		case <-drainTicker.C:
+			log.Println("Initiating queued SourceMaxx dispatch drain...")
+			dispatchQueuedSourceMaxx(ctx, store)
 		}
 	}
 }
@@ -178,6 +184,15 @@ func sourceMaxxRuntimeDispatcherFromEnv() *sourceMaxxRuntimeDispatcher {
 		retryAttempts:        retries,
 		retryDelay:           defaultSourceMaxxRuntimeRetryDelay,
 	}
+}
+
+func sourceMaxxQueueDrainIntervalFromEnv() time.Duration {
+	raw := firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS", "SOURCECYCLED_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS")
+	seconds := parsePositiveInt(raw, int(defaultSourceMaxxQueueDrainInterval/time.Second))
+	if seconds < 10 {
+		seconds = 10
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func firstEnv(keys ...string) string {
@@ -483,6 +498,10 @@ func (d *sourceMaxxRuntimeDispatcher) dispatch(ctx context.Context, store *cycle
 	for _, req := range processorRequests {
 		run, err := d.submitProcessor(ctx, req)
 		if err != nil {
+			if isTransientRuntimeSubmitError(err) {
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: transient runtime unavailable: %v", req.RequestID, err))
+				break
+			}
 			result.ProcessorFailed++
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", req.RequestID, err))
 			if store != nil {
@@ -521,6 +540,10 @@ func (d *sourceMaxxRuntimeDispatcher) dispatch(ctx context.Context, store *cycle
 		}
 		run, err := d.submitReconciler(ctx, req)
 		if err != nil {
+			if isTransientRuntimeSubmitError(err) {
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: transient runtime unavailable: %v", req.RequestID, err))
+				break
+			}
 			result.ReconcilerFailed++
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", req.RequestID, err))
 			if store != nil {
@@ -685,6 +708,16 @@ func isTransientRuntimeSubmitError(err error) bool {
 	return true
 }
 
+func sourceMaxxDispatchResultHasActivity(result sourceMaxxDispatchResult) bool {
+	return result.ProcessorSubmitted > 0 ||
+		result.ReconcilerSubmitted > 0 ||
+		result.ProcessorFailed > 0 ||
+		result.ReconcilerFailed > 0 ||
+		result.ProcessorSkipped > 0 ||
+		result.ReconcilerSkipped > 0 ||
+		len(result.Errors) > 0
+}
+
 func parsePositiveInt(raw string, fallback int) int {
 	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || parsed <= 0 {
@@ -733,7 +766,7 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 		log.Println("No new items found in this cycle. Skipping synthesis.")
 		_ = store.RecordCycleEvent(ctx, cycleID, "", "cycle_completed_empty", "no new items found", map[string]any{"fetch_count": len(pollResult.Fetches)})
 		dispatchResult := sourceMaxxRuntimeDispatcherFromEnv().dispatch(ctx, store, cycle.SourceMaxxHandoff{})
-		if dispatchResult.ProcessorSubmitted > 0 || dispatchResult.ReconcilerSubmitted > 0 || dispatchResult.ProcessorFailed > 0 || dispatchResult.ReconcilerFailed > 0 || dispatchResult.ProcessorSkipped > 0 || dispatchResult.ReconcilerSkipped > 0 {
+		if sourceMaxxDispatchResultHasActivity(dispatchResult) {
 			_ = store.RecordCycleEvent(ctx, cycleID, "", "sourcemaxx_agent_queue_drain", "queued source handoffs drained during empty source cycle", map[string]any{
 				"processor_submitted":  dispatchResult.ProcessorSubmitted,
 				"processor_failed":     dispatchResult.ProcessorFailed,
@@ -773,7 +806,7 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 		"source_item_count":        len(items),
 	})
 	dispatchResult := sourceMaxxRuntimeDispatcherFromEnv().dispatch(ctx, store, handoff)
-	if dispatchResult.ProcessorSubmitted > 0 || dispatchResult.ReconcilerSubmitted > 0 || dispatchResult.ProcessorFailed > 0 || dispatchResult.ReconcilerFailed > 0 {
+	if sourceMaxxDispatchResultHasActivity(dispatchResult) {
 		_ = store.RecordCycleEvent(ctx, cycleID, "", "sourcemaxx_agent_runs_dispatched", "source handoffs submitted to processor/reconciler agent profiles", map[string]any{
 			"processor_submitted":  dispatchResult.ProcessorSubmitted,
 			"processor_failed":     dispatchResult.ProcessorFailed,
@@ -791,4 +824,32 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 	_ = store.FinishCycle(ctx, cycleID, "completed", len(items), len(pollResult.Fetches), nil)
 	log.Printf("Cycle completed in %v", cycleDuration)
 	log.Printf("Queued %d processor request(s) and %d reconciler request(s)", len(handoff.ProcessorRequests), len(handoff.ReconcilerRequests))
+}
+
+func dispatchQueuedSourceMaxx(ctx context.Context, store *cycle.Storage) {
+	if store == nil {
+		return
+	}
+	dispatcher := sourceMaxxRuntimeDispatcherFromEnv()
+	if dispatcher == nil {
+		log.Println("Queued SourceMaxx dispatch drain skipped: runtime dispatcher is not configured")
+		return
+	}
+	result := dispatcher.dispatch(ctx, store, cycle.SourceMaxxHandoff{})
+	if !sourceMaxxDispatchResultHasActivity(result) {
+		log.Println("Queued SourceMaxx dispatch drain found no dispatchable work")
+		return
+	}
+	log.Printf("Queued SourceMaxx dispatch drain: processor_submitted=%d processor_failed=%d processor_skipped=%d reconciler_submitted=%d reconciler_failed=%d reconciler_skipped=%d errors=%d",
+		result.ProcessorSubmitted,
+		result.ProcessorFailed,
+		result.ProcessorSkipped,
+		result.ReconcilerSubmitted,
+		result.ReconcilerFailed,
+		result.ReconcilerSkipped,
+		len(result.Errors),
+	)
+	for _, errText := range result.Errors {
+		log.Printf("Queued SourceMaxx dispatch drain error: %s", errText)
+	}
 }

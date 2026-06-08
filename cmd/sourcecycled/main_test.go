@@ -528,3 +528,59 @@ func TestSourceMaxxRuntimeDispatcherRetriesTransientRuntimeUnavailable(t *testin
 		t.Fatalf("unexpected run response: %+v", run)
 	}
 }
+
+func TestSourceMaxxRuntimeDispatcherKeepsQueuedRequestOnTransientRuntimeFailure(t *testing.T) {
+	ctx := context.Background()
+	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Date(2026, 6, 8, 7, 40, 0, 0, time.UTC)
+	cycleID, err := store.StartCycle(ctx)
+	if err != nil {
+		t.Fatalf("start cycle: %v", err)
+	}
+	req := cycle.ProcessorRequest{
+		RequestID:     "processor_transient_queue",
+		CycleID:       cycleID,
+		ProcessorKey:  "processor:global_firehose:global:gdelt",
+		Status:        "queued",
+		SourceItemIDs: []string{"srcitem_transient_1"},
+		SourceCount:   1,
+		ContinuityRef: "sourcecycled://processor/processor:global_firehose:global:gdelt/latest",
+		Prompt:        "Processor transient queue",
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	if err := store.SaveProcessorRequests(ctx, []cycle.ProcessorRequest{req}); err != nil {
+		t.Fatalf("save processor request: %v", err)
+	}
+
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeSourceServiceJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "runtime warming"})
+	}))
+	defer runtimeServer.Close()
+
+	dispatcher := &sourceMaxxRuntimeDispatcher{
+		baseURL:              runtimeServer.URL,
+		ownerID:              "owner-global-wire",
+		maxProcessorRequests: 1,
+		client:               runtimeServer.Client(),
+		retryAttempts:        1,
+		retryDelay:           time.Millisecond,
+	}
+	result := dispatcher.dispatch(ctx, store, cycle.SourceMaxxHandoff{})
+	if result.ProcessorSubmitted != 0 || result.ProcessorFailed != 0 || len(result.Errors) != 1 {
+		t.Fatalf("unexpected transient dispatch result: %+v", result)
+	}
+
+	processors, err := store.ListProcessorRequests(ctx, cycleID, 10)
+	if err != nil {
+		t.Fatalf("list processors: %v", err)
+	}
+	if len(processors) != 1 || processors[0].Status != "queued" || processors[0].RuntimeRunID != "" {
+		t.Fatalf("transient runtime failure should leave request queued: %+v", processors)
+	}
+}
