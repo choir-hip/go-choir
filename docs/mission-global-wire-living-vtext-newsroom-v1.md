@@ -1001,3 +1001,21 @@ belief-state change: source volume is no longer the immediate blocker in the sam
 required correction: classify `ok` and `not_modified` as successful fetch outcomes in source-service source-health summaries. Keep actual HTTP errors, parser errors, timeouts, and other error statuses in the failure count/list. Add regression coverage so conditional-cache behavior cannot inflate failed-source counts again.
 
 remaining error field: this does not complete source breadth or article ownership. It only fixes the source proof surface so later Global Wire UI and mission evidence do not misrepresent the health of a large multilingual registry.
+
+## Checkpoint 2026-06-08T00:44Z: source-health cache-hit classification fixed and deployed
+
+status: checkpoint_incomplete
+
+objective: correct the source-service proof surface so Global Wire can honestly report source freshness and failure counts while broad ingestion continues.
+
+what shipped: commit `3fe12308aedfbbcef864aa62e9904d9edc6bef6d` changes sourcecycled source-health classification so `ok` and `not_modified` both count as successful fetch outcomes. Actual HTTP errors, parser errors, timeouts, and other error statuses still count as failures and remain in the failure list. The commit adds `TestSourceServiceAPISourceMaxxLatestTreatsNotModifiedAsSuccessfulFetch` with an `ok`, a `304 not_modified`, and a real `403` error fixture.
+
+local proof: `nix develop -c go test ./cmd/sourcecycled -run 'TestGlobalWireSourceRegistryConfigKeepsBroadUntieredCoverage|TestSourceServiceAPISourceMaxxLatestReportsAgentHandoffs|TestSourceServiceAPISourceMaxxLatestTreatsNotModifiedAsSuccessfulFetch' -count=1` passed. `nix develop -c go test ./cmd/sourcecycled ./internal/cycle ./internal/sources ./internal/sourceapi -count=1` passed. `git diff --check` passed.
+
+staging proof: CI run `27109604295` passed Go vet/build, integration smoke, non-runtime tests, all four runtime shards, aggregate gate, and Node B deploy job `80004926031`. FlakeHub run `27109604302` succeeded. `https://choir.news/health`, Node B `/health`, and `/opt/go-choir` all reported deployed commit `3fe12308aedfbbcef864aa62e9904d9edc6bef6d` with deployed_at `2026-06-08T00:35:43Z`.
+
+source-service proof: Node B `go-choir-sourcecycled.service` on port `8787` returned latest cycle `cycle_4a1fd5a687ee697c929a732a`, started `2026-06-08T00:35:47Z`, ended `2026-06-08T00:35:54Z`, status `completed`, `211` configured/fetched sources, `4,976` deduped new cycle items, `4,977` summed source-health item count, `197` successful fetches, `14` failed fetches, `183` item-producing sources, `123` processor requests, and `1` reconciler request. The failure list contained `0` `not_modified` records; all listed failures had status `error`.
+
+belief-state change: the source ingestion substrate is materially alive now: hundreds to thousands of new source items per cycle, many active item-producing sources, and real processor/reconciler handoff volume. The higher-impact next uncertainty is no longer "are there hundreds of source items?" but "do processor/reconciler runs and VText agents turn those source handles into owned publication-quality VText revisions?"
+
+remaining error field: source-health correctness is improved, but the mission is still incomplete. The Global Wire UI should expose richer health semantics without dashboard clutter, and the architecture still needs staging proof that processor/reconciler handoffs result in VText-agent-owned article creation/revision with native source and related-VText transclusion.
