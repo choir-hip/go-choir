@@ -1,8 +1,9 @@
 // Package provider implements real LLM provider bridges for the go-choir
 // sandbox runtime. It supports Bedrock (Anthropic Messages API over AWS
 // Bedrock invoke endpoint), Z.AI (Anthropic-compatible API), DeepSeek
-// (OpenAI-compatible Chat Completions API), Xiaomi MiMo
-// (OpenAI-compatible Chat Completions API), and Fireworks AI
+// (OpenAI-compatible Chat Completions API plus Anthropic-compatible Messages
+// API), Xiaomi MiMo (OpenAI-compatible Chat Completions API plus
+// Anthropic-compatible Messages API), and Fireworks AI
 // (OpenAI-compatible Chat Completions API) as required deployed-provider paths for
 // deployed agent/runtime work.
 //
@@ -28,8 +29,12 @@
 //     with bearer auth via ZAI_API_KEY.
 //   - DeepSeek uses OpenAI-compatible Chat Completions at
 //     https://api.deepseek.com/chat/completions with bearer auth via DEEPSEEK_API_KEY.
+//     Its Anthropic-compatible route is registered separately as
+//     "deepseek-anthropic" at https://api.deepseek.com/anthropic/v1/messages.
 //   - Xiaomi uses OpenAI-compatible Chat Completions at
 //     https://api.xiaomimimo.com/v1/chat/completions with bearer auth via XIAOMI_API_KEY.
+//     Its Anthropic-compatible route is registered separately as
+//     "xiaomi-anthropic" at https://api.xiaomimimo.com/anthropic/v1/messages.
 //   - Fireworks AI uses OpenAI-compatible Chat Completions at
 //     https://api.fireworks.ai/inference/v1/chat/completions with bearer auth via FIREWORKS_API_KEY.
 //     Keep this path distinct from Anthropic-compatible adapters; Fireworks
@@ -304,6 +309,10 @@ type ProviderConfig struct {
 	// not initialized even if DEEPSEEK_API_KEY is set.
 	DeepSeekModels []string
 
+	// DeepSeekAnthropicModels lists DeepSeek models to expose through the
+	// Anthropic-compatible Messages API. If empty, DeepSeekModels are reused.
+	DeepSeekAnthropicModels []string
+
 	// DeepSeekReasoningEffort seeds DeepSeek reasoning effort for requests
 	// that do not carry a per-request value. Leave empty until the adapter
 	// explicitly proves a DeepSeek reasoning parameter.
@@ -314,6 +323,10 @@ type ProviderConfig struct {
 	// still controls per-call selection. If empty, Xiaomi is not initialized even
 	// if XIAOMI_API_KEY is set.
 	XiaomiModels []string
+
+	// XiaomiAnthropicModels lists Xiaomi models to expose through the
+	// Anthropic-compatible Messages API. If empty, XiaomiModels are reused.
+	XiaomiAnthropicModels []string
 
 	// XiaomiReasoningEffort seeds MiMo thinking effort for requests that do not
 	// carry a per-request value. "none" disables thinking; other values enable
@@ -639,6 +652,196 @@ func (p *ZAIProvider) buildRequestBody(req LLMRequest, modelID string) anthropic
 	ar.Messages = convertMessages(req.Messages)
 	ar.Tools = convertToolDefs(req.Tools)
 	return ar
+}
+
+// AnthropicCompatProvider implements Anthropic-compatible Messages API routes
+// for providers that use x-api-key auth and standard /v1/messages semantics.
+// It is intentionally registered under protocol-qualified provider names such
+// as "deepseek-anthropic" so default OpenAI-compatible routes do not silently
+// change while conformance is still being built.
+type AnthropicCompatProvider struct {
+	apiKey                   string
+	modelID                  string
+	reasoning                string
+	httpClient               *http.Client
+	baseURL                  string
+	providerName             string
+	disableThinkingWithTools bool
+}
+
+type AnthropicCompatConfig struct {
+	APIKey                   string
+	ModelID                  string
+	ReasoningEffort          string
+	BaseURL                  string
+	ProviderName             string
+	DisableThinkingWithTools bool
+}
+
+func NewAnthropicCompatProvider(cfg AnthropicCompatConfig) (*AnthropicCompatProvider, error) {
+	if strings.TrimSpace(cfg.APIKey) == "" {
+		return nil, fmt.Errorf("anthropic-compatible provider requires api key")
+	}
+	if strings.TrimSpace(cfg.ModelID) == "" {
+		return nil, fmt.Errorf("anthropic-compatible provider requires model_id")
+	}
+	if strings.TrimSpace(cfg.BaseURL) == "" {
+		return nil, fmt.Errorf("anthropic-compatible provider requires base_url")
+	}
+	providerName := strings.TrimSpace(cfg.ProviderName)
+	if providerName == "" {
+		providerName = "anthropic-compatible"
+	}
+	return &AnthropicCompatProvider{
+		apiKey:                   strings.TrimSpace(cfg.APIKey),
+		modelID:                  strings.TrimSpace(cfg.ModelID),
+		reasoning:                strings.TrimSpace(cfg.ReasoningEffort),
+		httpClient:               &http.Client{Timeout: defaultProviderHTTPTimeout},
+		baseURL:                  strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"),
+		providerName:             providerName,
+		disableThinkingWithTools: cfg.DisableThinkingWithTools,
+	}, nil
+}
+
+func NewDeepSeekAnthropicProviderFromEnv(modelID, reasoningEffort string) (*AnthropicCompatProvider, error) {
+	baseURL := strings.TrimSpace(os.Getenv("DEEPSEEK_ANTHROPIC_BASE_URL"))
+	if baseURL == "" {
+		baseURL = "https://api.deepseek.com/anthropic"
+	}
+	p, err := NewAnthropicCompatProvider(AnthropicCompatConfig{
+		APIKey:                   os.Getenv("DEEPSEEK_API_KEY"),
+		ModelID:                  modelID,
+		ReasoningEffort:          reasoningEffort,
+		BaseURL:                  baseURL,
+		ProviderName:             "deepseek-anthropic",
+		DisableThinkingWithTools: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("deepseek anthropic from env: %w", err)
+	}
+	return p, nil
+}
+
+func NewXiaomiAnthropicProviderFromEnv(modelID, reasoningEffort string) (*AnthropicCompatProvider, error) {
+	apiKey := os.Getenv("XIAOMI_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("xiaomi_api_key")
+	}
+	baseURL := strings.TrimSpace(os.Getenv("XIAOMI_ANTHROPIC_BASE_URL"))
+	if baseURL == "" {
+		baseURL = "https://api.xiaomimimo.com/anthropic"
+	}
+	p, err := NewAnthropicCompatProvider(AnthropicCompatConfig{
+		APIKey:          apiKey,
+		ModelID:         modelID,
+		ReasoningEffort: reasoningEffort,
+		BaseURL:         baseURL,
+		ProviderName:    "xiaomi-anthropic",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("xiaomi anthropic from env: %w", err)
+	}
+	return p, nil
+}
+
+func (p *AnthropicCompatProvider) Name() string { return p.providerName }
+func (p *AnthropicCompatProvider) IsReal() bool { return true }
+
+func (p *AnthropicCompatProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
+	endpoint := anthropicMessagesEndpoint(p.baseURL)
+	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("%s: %w", p.providerName, err)
+	}
+	body := p.buildRequestBody(req, modelID)
+	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
+	if err != nil {
+		return nil, fmt.Errorf("%s: build request: %w", p.providerName, err)
+	}
+	httpReq.Header.Set("x-api-key", p.apiKey)
+	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+
+	log.Printf("provider: %s call model=%s", p.providerName, modelID)
+
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("%s: http call: %w", p.providerName, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return parseAnthropicResponse(resp, modelID, p.providerName)
+}
+
+func (p *AnthropicCompatProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	endpoint := anthropicMessagesEndpoint(p.baseURL)
+	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("%s: %w", p.providerName, err)
+	}
+	req.Stream = true
+	body := p.buildRequestBody(req, modelID)
+	body.Stream = true
+	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
+	if err != nil {
+		return nil, fmt.Errorf("%s: build stream request: %w", p.providerName, err)
+	}
+	httpReq.Header.Set("x-api-key", p.apiKey)
+	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+
+	log.Printf("provider: %s stream model=%s", p.providerName, modelID)
+
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("%s: stream http call: %w", p.providerName, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("%s: status %s (sanitized)", p.providerName, resp.Status)
+	}
+	return parseSSEStream(resp.Body, modelID, p.providerName, onChunk)
+}
+
+func (p *AnthropicCompatProvider) buildRequestBody(req LLMRequest, modelID string) anthropicRequest {
+	tools := convertToolDefs(req.Tools)
+	reasoning := effectiveReasoning(req.ReasoningEffort, p.reasoning)
+	if p.disableThinkingWithTools && len(tools) > 0 {
+		reasoning = "none"
+	}
+	ar := anthropicRequest{
+		Model:            modelID,
+		MaxTokens:        defaultMaxTokens(req.MaxTokens),
+		AnthropicVersion: "2023-06-01",
+		Stream:           false,
+		Messages:         convertMessages(req.Messages),
+		Tools:            tools,
+		ToolChoice:       anthropicToolChoice(req.ToolChoice),
+	}
+	if req.System != "" {
+		ar.System = []anthropicSystemBlock{{
+			Type: "text",
+			Text: req.System,
+		}}
+	}
+	if thinking := anthropicThinkingForReasoning(reasoning); thinking != nil {
+		ar.Thinking = thinking
+	}
+	return ar
+}
+
+func anthropicMessagesEndpoint(baseURL string) string {
+	base := strings.TrimRight(baseURL, "/")
+	switch {
+	case strings.HasSuffix(base, "/v1/messages"):
+		return base
+	case strings.HasSuffix(base, "/v1"):
+		return base + "/messages"
+	default:
+		return base + "/v1/messages"
+	}
 }
 
 // FireworksProvider implements the Provider interface for Fireworks AI using
@@ -1657,9 +1860,16 @@ type anthropicRequest struct {
 	System           any                `json:"system,omitempty"`
 	Messages         []anthropicMessage `json:"messages"`
 	Tools            []anthropicTool    `json:"tools,omitempty"`
+	ToolChoice       any                `json:"tool_choice,omitempty"`
+	Thinking         *anthropicThinking `json:"thinking,omitempty"`
 	MaxTokens        int                `json:"max_tokens"`
 	Stream           bool               `json:"stream,omitempty"`
 	AnthropicVersion string             `json:"anthropic_version,omitempty"`
+}
+
+type anthropicThinking struct {
+	Type         string `json:"type"`
+	BudgetTokens int    `json:"budget_tokens,omitempty"`
 }
 
 type anthropicSystemBlock struct {
@@ -1683,6 +1893,8 @@ type anthropicMessage struct {
 type anthropicContent struct {
 	Type      string          `json:"type"`
 	Text      string          `json:"text,omitempty"`
+	Thinking  string          `json:"thinking,omitempty"`
+	Signature string          `json:"signature,omitempty"`
 	Source    any             `json:"source,omitempty"`
 	ID        string          `json:"id,omitempty"`          // tool_use: call ID
 	Name      string          `json:"name,omitempty"`        // tool_use: tool name
@@ -1701,11 +1913,13 @@ type anthropicResponse struct {
 }
 
 type anthropicResponseBlock struct {
-	Type  string          `json:"type"`
-	Text  string          `json:"text,omitempty"`
-	ID    string          `json:"id,omitempty"`    // tool_use: provider-assigned call ID
-	Name  string          `json:"name,omitempty"`  // tool_use: tool name
-	Input json.RawMessage `json:"input,omitempty"` // tool_use: tool arguments
+	Type      string          `json:"type"`
+	Text      string          `json:"text,omitempty"`
+	Thinking  string          `json:"thinking,omitempty"`
+	Signature string          `json:"signature,omitempty"`
+	ID        string          `json:"id,omitempty"`    // tool_use: provider-assigned call ID
+	Name      string          `json:"name,omitempty"`  // tool_use: tool name
+	Input     json.RawMessage `json:"input,omitempty"` // tool_use: tool arguments
 }
 
 type anthropicUsage struct {
@@ -1719,6 +1933,9 @@ func convertMessages(msgs []Message) []anthropicMessage {
 		item := anthropicMessage{
 			Role:    msg.Role,
 			Content: make([]anthropicContent, 0, len(msg.Content)),
+		}
+		if msg.Role == "assistant" {
+			item.Content = append(item.Content, decodeAnthropicThinkingBlocks(msg.ReasoningContent)...)
 		}
 		for _, block := range msg.Content {
 			ac := anthropicContent{
@@ -1740,6 +1957,100 @@ func convertMessages(msgs []Message) []anthropicMessage {
 			item.Content = append(item.Content, ac)
 		}
 		out = append(out, item)
+	}
+	return out
+}
+
+func anthropicToolChoice(choice string) any {
+	switch strings.TrimSpace(choice) {
+	case "", "auto":
+		return nil
+	case "none":
+		return map[string]string{"type": "none"}
+	case "required":
+		return map[string]string{"type": "any"}
+	default:
+		if name, ok := strings.CutPrefix(choice, "function:"); ok && strings.TrimSpace(name) != "" {
+			return map[string]string{"type": "tool", "name": strings.TrimSpace(name)}
+		}
+		return nil
+	}
+}
+
+func anthropicThinkingForReasoning(reasoning string) *anthropicThinking {
+	switch strings.ToLower(strings.TrimSpace(reasoning)) {
+	case "":
+		return nil
+	case "none", "disabled", "off":
+		return &anthropicThinking{Type: "disabled"}
+	case "low":
+		return &anthropicThinking{Type: "enabled", BudgetTokens: 1024}
+	case "medium":
+		return &anthropicThinking{Type: "enabled", BudgetTokens: 2048}
+	case "high":
+		return &anthropicThinking{Type: "enabled", BudgetTokens: 4096}
+	default:
+		if n, err := strconv.Atoi(strings.TrimSpace(reasoning)); err == nil && n > 0 {
+			return &anthropicThinking{Type: "enabled", BudgetTokens: n}
+		}
+		return &anthropicThinking{Type: "enabled", BudgetTokens: 2048}
+	}
+}
+
+func encodeAnthropicThinkingBlocks(blocks []anthropicResponseBlock) string {
+	if len(blocks) == 0 {
+		return ""
+	}
+	type hiddenThinkingBlock struct {
+		Type      string `json:"type"`
+		Thinking  string `json:"thinking,omitempty"`
+		Signature string `json:"signature,omitempty"`
+	}
+	out := make([]hiddenThinkingBlock, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Type != "thinking" || strings.TrimSpace(block.Thinking) == "" {
+			continue
+		}
+		out = append(out, hiddenThinkingBlock{
+			Type:      "thinking",
+			Thinking:  block.Thinking,
+			Signature: block.Signature,
+		})
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(out)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func decodeAnthropicThinkingBlocks(reasoningContent string) []anthropicContent {
+	reasoningContent = strings.TrimSpace(reasoningContent)
+	if reasoningContent == "" {
+		return nil
+	}
+	type hiddenThinkingBlock struct {
+		Type      string `json:"type"`
+		Thinking  string `json:"thinking,omitempty"`
+		Signature string `json:"signature,omitempty"`
+	}
+	var blocks []hiddenThinkingBlock
+	if err := json.Unmarshal([]byte(reasoningContent), &blocks); err != nil {
+		return nil
+	}
+	out := make([]anthropicContent, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Type != "thinking" || strings.TrimSpace(block.Thinking) == "" {
+			continue
+		}
+		out = append(out, anthropicContent{
+			Type:      "thinking",
+			Thinking:  block.Thinking,
+			Signature: block.Signature,
+		})
 	}
 	return out
 }
@@ -1990,6 +2301,10 @@ func parseAnthropicResponse(resp *http.Response, modelID string, providerName st
 			if block.Text != "" {
 				result.Text += block.Text
 			}
+		case "thinking":
+			// Anthropic-compatible reasoning providers return signed thinking
+			// blocks that must stay hidden from user-visible text while still
+			// being available for provider-continuity replay on later turns.
 		case "tool_use":
 			result.ToolCalls = append(result.ToolCalls, ContentToolCall{
 				ID:        block.ID,
@@ -1998,6 +2313,7 @@ func parseAnthropicResponse(resp *http.Response, modelID string, providerName st
 			})
 		}
 	}
+	result.ReasoningContent = encodeAnthropicThinkingBlocks(payload.Content)
 
 	log.Printf("provider: %s response model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
 		providerName, result.Model, result.StopReason,
@@ -3074,6 +3390,17 @@ func ResolveAll(cfg ProviderConfig) *MultiProvider {
 		}
 	}
 
+	deepSeekAnthropicModels := cfg.DeepSeekAnthropicModels
+	if len(deepSeekAnthropicModels) == 0 {
+		deepSeekAnthropicModels = cfg.DeepSeekModels
+	}
+	if os.Getenv("DEEPSEEK_API_KEY") != "" && len(deepSeekAnthropicModels) > 0 {
+		if p, err := NewDeepSeekAnthropicProviderFromEnv(deepSeekAnthropicModels[0], cfg.DeepSeekReasoningEffort); err == nil {
+			mp.Register("deepseek-anthropic", p)
+			log.Printf("provider: resolved deepseek-anthropic (seed_model=%s)", p.modelID)
+		}
+	}
+
 	// Try Xiaomi MiMo. Register one provider; req.Model selects the model.
 	xiaomiAPIKey := os.Getenv("XIAOMI_API_KEY")
 	if xiaomiAPIKey == "" {
@@ -3088,6 +3415,17 @@ func ResolveAll(cfg ProviderConfig) *MultiProvider {
 		}); err == nil {
 			mp.Register("xiaomi", p)
 			log.Printf("provider: resolved xiaomi (seed_model=%s)", p.modelID)
+		}
+	}
+
+	xiaomiAnthropicModels := cfg.XiaomiAnthropicModels
+	if len(xiaomiAnthropicModels) == 0 {
+		xiaomiAnthropicModels = cfg.XiaomiModels
+	}
+	if xiaomiAPIKey != "" && len(xiaomiAnthropicModels) > 0 {
+		if p, err := NewXiaomiAnthropicProviderFromEnv(xiaomiAnthropicModels[0], cfg.XiaomiReasoningEffort); err == nil {
+			mp.Register("xiaomi-anthropic", p)
+			log.Printf("provider: resolved xiaomi-anthropic (seed_model=%s)", p.modelID)
 		}
 	}
 

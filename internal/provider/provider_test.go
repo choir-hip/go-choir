@@ -2538,6 +2538,167 @@ func TestXiaomiProviderCallUsesMiMoChatSchemaAndPreservesReasoningContent(t *tes
 	}
 }
 
+func TestDeepSeekAnthropicProviderDisablesThinkingForToolCalls(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages" {
+			t.Fatalf("path = %q, want /v1/messages", r.URL.Path)
+		}
+		if got := r.Header.Get("x-api-key"); got != "sk-test-key" {
+			t.Fatalf("x-api-key = %q", got)
+		}
+		var raw map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		thinking, ok := raw["thinking"].(map[string]any)
+		if !ok || thinking["type"] != "disabled" {
+			t.Fatalf("thinking = %#v, want disabled object", raw["thinking"])
+		}
+		toolChoice, ok := raw["tool_choice"].(map[string]any)
+		if !ok || toolChoice["type"] != "tool" || toolChoice["name"] != "record_status" {
+			t.Fatalf("tool_choice = %#v", raw["tool_choice"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"id":"msg_deepseek_anthropic_tool",
+			"model":"deepseek-v4-flash",
+			"stop_reason":"tool_use",
+			"content":[{
+				"type":"tool_use",
+				"id":"call_1",
+				"name":"record_status",
+				"input":{"status":"ok"}
+			}],
+			"usage":{"input_tokens":11,"output_tokens":7}
+		}`)
+	}))
+	defer server.Close()
+
+	p := &AnthropicCompatProvider{
+		apiKey:                   "sk-test-key",
+		modelID:                  "deepseek-v4-flash",
+		reasoning:                "medium",
+		httpClient:               server.Client(),
+		baseURL:                  server.URL,
+		providerName:             "deepseek-anthropic",
+		disableThinkingWithTools: true,
+	}
+	resp, err := p.Call(context.Background(), LLMRequest{
+		Model: "deepseek-v4-flash",
+		Messages: []Message{{
+			Role:    "user",
+			Content: []Block{{Type: "text", Text: "record status"}},
+		}},
+		Tools: []ToolDef{{
+			Name:        "record_status",
+			Description: "Record status.",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+		ToolChoice:      "function:record_status",
+		ReasoningEffort: "medium",
+		MaxTokens:       64,
+	})
+	if err != nil {
+		t.Fatalf("deepseek anthropic call: %v", err)
+	}
+	if resp.ProviderName != "deepseek-anthropic" || resp.StopReason != "tool_use" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "record_status" {
+		t.Fatalf("tool calls = %#v", resp.ToolCalls)
+	}
+}
+
+func TestXiaomiAnthropicProviderPreservesAndReplaysThinkingBlocks(t *testing.T) {
+	var sawThinkingReplay bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages" {
+			t.Fatalf("path = %q, want /v1/messages", r.URL.Path)
+		}
+		var body anthropicRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if len(body.Messages) > 1 && body.Messages[1].Role == "assistant" {
+			for _, block := range body.Messages[1].Content {
+				if block.Type == "thinking" && block.Thinking == "prior hidden thought" && block.Signature == "sig-1" {
+					sawThinkingReplay = true
+				}
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if !sawThinkingReplay {
+			_, _ = fmt.Fprint(w, `{
+				"id":"msg_xiaomi_anthropic_tool",
+				"model":"mimo-v2.5-pro",
+				"stop_reason":"tool_use",
+				"content":[
+					{"type":"thinking","thinking":"prior hidden thought","signature":"sig-1"},
+					{"type":"tool_use","id":"call_1","name":"record_status","input":{"status":"ok"}}
+				],
+				"usage":{"input_tokens":12,"output_tokens":8}
+			}`)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{
+			"id":"msg_xiaomi_anthropic_done",
+			"model":"mimo-v2.5-pro",
+			"stop_reason":"end_turn",
+			"content":[
+				{"type":"text","text":"done"},
+				{"type":"thinking","thinking":"next hidden thought","signature":"sig-2"}
+			],
+			"usage":{"input_tokens":21,"output_tokens":9}
+		}`)
+	}))
+	defer server.Close()
+
+	p := &AnthropicCompatProvider{
+		apiKey:       "xm-test-key",
+		modelID:      "mimo-v2.5-pro",
+		reasoning:    "medium",
+		httpClient:   server.Client(),
+		baseURL:      server.URL,
+		providerName: "xiaomi-anthropic",
+	}
+	first, err := p.Call(context.Background(), LLMRequest{
+		Model: "mimo-v2.5-pro",
+		Messages: []Message{{
+			Role:    "user",
+			Content: []Block{{Type: "text", Text: "record status"}},
+		}},
+		Tools: []ToolDef{{Name: "record_status", InputSchema: map[string]any{"type": "object"}}},
+	})
+	if err != nil {
+		t.Fatalf("xiaomi anthropic first call: %v", err)
+	}
+	if first.ReasoningContent == "" || strings.Contains(first.Text, "hidden thought") {
+		t.Fatalf("reasoning_content/text = %q / %q", first.ReasoningContent, first.Text)
+	}
+	second, err := p.Call(context.Background(), LLMRequest{
+		Model: "mimo-v2.5-pro",
+		Messages: []Message{
+			{Role: "user", Content: []Block{{Type: "text", Text: "record status"}}},
+			{Role: "assistant", ReasoningContent: first.ReasoningContent, Content: []Block{{Type: "tool_use", ID: "call_1", Name: "record_status", Input: json.RawMessage(`{"status":"ok"}`)}}},
+			{Role: "user", Content: []Block{{Type: "tool_result", ToolUseID: "call_1", Text: `{"recorded":true}`}}},
+		},
+		Tools: []ToolDef{{Name: "record_status", InputSchema: map[string]any{"type": "object"}}},
+	})
+	if err != nil {
+		t.Fatalf("xiaomi anthropic second call: %v", err)
+	}
+	if !sawThinkingReplay {
+		t.Fatal("expected assistant thinking block replay")
+	}
+	if second.Text != "done" || strings.Contains(second.Text, "next hidden") {
+		t.Fatalf("second text = %q", second.Text)
+	}
+	if second.ReasoningContent == "" {
+		t.Fatal("expected next hidden reasoning content")
+	}
+}
+
 func TestIntegrationDeepSeekDirectLive(t *testing.T) {
 	if os.Getenv("CHOIR_PROVIDER_LIVE_TESTS") != "1" {
 		t.Skip("set CHOIR_PROVIDER_LIVE_TESTS=1 to spend provider credits")
@@ -2683,6 +2844,71 @@ func TestIntegrationXiaomiRuntimeExactToolChoiceLive(t *testing.T) {
 		t.Fatalf("xiaomi runtime tool loop: %v", err)
 	}
 	if !strings.Contains(text, "XIAOMI_RUNTIME_TOOL_LOOP_OK") {
+		t.Fatalf("text = %q, want marker; usage=%+v", text, usage)
+	}
+}
+
+func TestIntegrationDeepSeekAnthropicRuntimeExactToolChoiceLive(t *testing.T) {
+	if os.Getenv("CHOIR_PROVIDER_LIVE_TESTS") != "1" {
+		t.Skip("set CHOIR_PROVIDER_LIVE_TESTS=1 to spend provider credits")
+	}
+	apiKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
+	if apiKey == "" {
+		t.Skip("DEEPSEEK_API_KEY is not set")
+	}
+	p, err := NewAnthropicCompatProvider(AnthropicCompatConfig{
+		APIKey:                   apiKey,
+		ModelID:                  "deepseek-v4-flash",
+		BaseURL:                  "https://api.deepseek.com/anthropic",
+		ProviderName:             "deepseek-anthropic",
+		DisableThinkingWithTools: true,
+	})
+	if err != nil {
+		t.Fatalf("new deepseek anthropic provider: %v", err)
+	}
+	text, usage, err := runLiveProviderToolLoop(t, p, runtime.LLMSelection{
+		Provider:        "deepseek-anthropic",
+		Model:           "deepseek-v4-flash",
+		ReasoningEffort: "medium",
+	}, "DEEPSEEK_ANTHROPIC_RUNTIME_TOOL_LOOP_OK")
+	if err != nil {
+		t.Fatalf("deepseek anthropic runtime tool loop: %v", err)
+	}
+	if !strings.Contains(text, "DEEPSEEK_ANTHROPIC_RUNTIME_TOOL_LOOP_OK") {
+		t.Fatalf("text = %q, want marker; usage=%+v", text, usage)
+	}
+}
+
+func TestIntegrationXiaomiAnthropicRuntimeExactToolChoiceLive(t *testing.T) {
+	if os.Getenv("CHOIR_PROVIDER_LIVE_TESTS") != "1" {
+		t.Skip("set CHOIR_PROVIDER_LIVE_TESTS=1 to spend provider credits")
+	}
+	apiKey := strings.TrimSpace(os.Getenv("XIAOMI_API_KEY"))
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("xiaomi_api_key"))
+	}
+	if apiKey == "" {
+		t.Skip("XIAOMI_API_KEY is not set")
+	}
+	p, err := NewAnthropicCompatProvider(AnthropicCompatConfig{
+		APIKey:          apiKey,
+		ModelID:         "mimo-v2.5-pro",
+		ReasoningEffort: "medium",
+		BaseURL:         "https://api.xiaomimimo.com/anthropic",
+		ProviderName:    "xiaomi-anthropic",
+	})
+	if err != nil {
+		t.Fatalf("new xiaomi anthropic provider: %v", err)
+	}
+	text, usage, err := runLiveProviderToolLoop(t, p, runtime.LLMSelection{
+		Provider:        "xiaomi-anthropic",
+		Model:           "mimo-v2.5-pro",
+		ReasoningEffort: "medium",
+	}, "XIAOMI_ANTHROPIC_RUNTIME_TOOL_LOOP_OK")
+	if err != nil {
+		t.Fatalf("xiaomi anthropic runtime tool loop: %v", err)
+	}
+	if !strings.Contains(text, "XIAOMI_ANTHROPIC_RUNTIME_TOOL_LOOP_OK") {
 		t.Fatalf("text = %q, want marker; usage=%+v", text, usage)
 	}
 }

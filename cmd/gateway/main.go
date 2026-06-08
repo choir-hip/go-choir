@@ -75,7 +75,15 @@ func loadProviderConfig() provider.ProviderConfig {
 			"deepseek-v4-flash",
 			"deepseek-v4-pro",
 		},
+		DeepSeekAnthropicModels: []string{
+			"deepseek-v4-flash",
+			"deepseek-v4-pro",
+		},
 		XiaomiModels: []string{
+			"mimo-v2.5",
+			"mimo-v2.5-pro",
+		},
+		XiaomiAnthropicModels: []string{
 			"mimo-v2.5",
 			"mimo-v2.5-pro",
 		},
@@ -99,11 +107,17 @@ func loadProviderConfig() provider.ProviderConfig {
 	if v := os.Getenv("GATEWAY_DEEPSEEK_MODELS"); v != "" {
 		cfg.DeepSeekModels = strings.Split(v, ",")
 	}
+	if v := os.Getenv("GATEWAY_DEEPSEEK_ANTHROPIC_MODELS"); v != "" {
+		cfg.DeepSeekAnthropicModels = strings.Split(v, ",")
+	}
 	if v := os.Getenv("GATEWAY_DEEPSEEK_REASONING_EFFORT"); v != "" {
 		cfg.DeepSeekReasoningEffort = v
 	}
 	if v := os.Getenv("GATEWAY_XIAOMI_MODELS"); v != "" {
 		cfg.XiaomiModels = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GATEWAY_XIAOMI_ANTHROPIC_MODELS"); v != "" {
+		cfg.XiaomiAnthropicModels = strings.Split(v, ",")
 	}
 	if v := os.Getenv("GATEWAY_XIAOMI_REASONING_EFFORT"); v != "" {
 		cfg.XiaomiReasoningEffort = v
