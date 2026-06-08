@@ -390,6 +390,70 @@ Rollback refs to record during execution:
 
 ```text
 status: checkpoint_incomplete
+last checkpoint: 2026-06-08T14:08Z deployed DeepSeek/Xiaomi cutover exposes VText tool-choice blocker
+  checkpoint updated after staging deploy, credential lift, direct gateway
+  proof, and a product-path VText run that reached the new DeepSeek policy but
+  failed before article revision.
+current artifact state:
+  Commit `4aca6f3cbb69af5778fa7275004f44d0af066d70` is live on staging for
+  both proxy and sandbox. Node B gateway now advertises
+  `chatgpt,zai,deepseek,xiaomi,fireworks`. The provider credential lift wrote
+  DeepSeek and Xiaomi credentials to `/var/lib/go-choir/gateway-provider.env`
+  and restarted `go-choir-gateway`.
+what shipped:
+  Direct DeepSeek and Xiaomi providers are registered in gateway/runtime,
+  default model policy now prefers direct DeepSeek for text roles and Xiaomi
+  MiMo for multimodal verifier roles, and the provider credential deployment
+  script now lifts DeepSeek/Xiaomi keys and model lists.
+what was proven:
+  CI run `27142296748` passed and forced staging deploy succeeded. Staging
+  `/health` returned `ok` at deployed commit
+  `4aca6f3cbb69af5778fa7275004f44d0af066d70`. Direct deployed gateway probes
+  succeeded for `deepseek/deepseek-v4-flash`, `xiaomi/mimo-v2.5-pro`, and
+  multimodal `xiaomi/mimo-v2.5` with a base64 red PNG.
+unproven or partial claims:
+  A normal product-path prompt-bar/VText run did not complete article-writing
+  work on the new policy. Submission
+  `520b3c5b-162f-4bbd-b2af-509b9cc36863` opened VText document
+  `de8140d4-d93b-47bd-be87-b3ba32df594c`, but gateway logs show the first
+  appagent turn failed upstream:
+  `provider=deepseek model=deepseek-v4-flash tools=1 tool_choice=function:edit_vtext
+  reasoning=medium`, followed by sanitized `deepseek: status 400 Bad Request`.
+belief-state changes:
+  The direct provider cutover is live enough to expose the next real
+  compatibility bug. The product blocker is no longer Fireworks access; it is
+  DeepSeek request-shape compatibility for VText's exact initial tool choice
+  and/or reasoning/tool schema.
+remaining error field:
+  Investigate and fix DeepSeek OpenAI-compatible tool request serialization for
+  the VText first turn. The expected behavior is that exact `edit_vtext`
+  forcing either works, or the runtime's existing exact-tool-choice relaxation
+  path recognizes DeepSeek's 400 as a provider precondition error and retries
+  with `required` without losing the VText appagent contract.
+highest-impact remaining uncertainty:
+  Whether DeepSeek rejects the exact `tool_choice` object, the specific tool
+  schema, `thinking` with tools, or some combination. Do not assume based on
+  Fireworks behavior; reproduce with a small request and inspect sanitized-safe
+  upstream error shape or a local live test.
+next executable probe:
+  Add a focused live/fixture test for DeepSeek VText-style tool choice, then
+  patch the provider/runtime compatibility path and rerun the product-path
+  prompt-bar VText proof until it produces an appagent revision through
+  `deepseek-v4-flash` or records a narrower blocker.
+evidence artifact refs:
+  Staging health proof: `curl https://choir.news/health` returned proxy and
+  sandbox deployed commit `4aca6f3cbb69af5778fa7275004f44d0af066d70`.
+  Node B gateway health provider set:
+  `chatgpt,zai,deepseek,xiaomi,fireworks`.
+  Direct gateway probes at 2026-06-08T14:00Z:
+  DeepSeek returned `gateway-deepseek-ok`; Xiaomi Pro returned a valid MiMo
+  text completion; Xiaomi Vision returned `Solid red.` for the image probe.
+rollback refs:
+  Revert provider/model-policy commits or restore the previous gateway provider
+  env backup if direct providers destabilize runtime. Do not restore old
+  Fireworks DeepSeek defaults as a product claim; Fireworks is currently
+  returning 412 and is not an acceptable default path.
+
 last checkpoint: 2026-06-08T13:31Z direct DeepSeek plus Xiaomi MiMo provider proof
   checkpoint updated after local live provider probes and before deployment.
 current artifact state:
