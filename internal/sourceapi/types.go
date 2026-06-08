@@ -126,9 +126,9 @@ type ItemResult struct {
 	Language        string   `json:"language,omitempty"`
 	Region          string   `json:"region,omitempty"`
 	ContentHash     string   `json:"content_hash,omitempty"`
-	BodyKind        string   `json:"body_kind,omitempty"`
-	BodyLength      int      `json:"body_length,omitempty"`
-	ReaderSnapshot  bool     `json:"reader_snapshot,omitempty"`
+	BodyKind        string   `json:"body_kind"`
+	BodyLength      int      `json:"body_length"`
+	ReaderSnapshot  bool     `json:"reader_snapshot"`
 	EvidenceLevel   string   `json:"evidence_level,omitempty"`
 	VintagePolicy   string   `json:"vintage_policy,omitempty"`
 	LookaheadStatus string   `json:"lookahead_status,omitempty"`

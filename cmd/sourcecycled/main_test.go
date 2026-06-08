@@ -142,6 +142,9 @@ func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 	if search.Provider != sourceapi.ProviderName || search.Metadata.TargetKind != sourceapi.TargetKind {
 		t.Fatalf("unexpected search identity: %+v", search)
 	}
+	if !strings.Contains(searchRec.Body.String(), `"reader_snapshot":false`) || !strings.Contains(searchRec.Body.String(), `"body_length":32`) {
+		t.Fatalf("search body classification fields not explicit: %s", searchRec.Body.String())
+	}
 	if len(search.Results) != 1 {
 		t.Fatalf("search results = %d, want 1", len(search.Results))
 	}
