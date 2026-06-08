@@ -505,8 +505,23 @@ what was proven so far:
 
 - Nix evaluation succeeds for the normal sandbox VM and the Playwright worker
   VM with the document tool packages declared.
+- Pre-matrix sandbox conformance was rechecked after checkpoint
+  `15fc4d0a`:
+  - `nix eval .#nixosConfigurations.go-choir-sandbox-vm.config.system.build.toplevel.drvPath`
+    returned sandbox derivation
+    `/nix/store/k1vsc5357m9kh8qm5jwl5qgalma8hdck-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d.drv`;
+  - `nix eval .#nixosConfigurations.go-choir-sandbox-vm-playwright.config.system.build.toplevel.drvPath`
+    returned Playwright worker derivation
+    `/nix/store/wb6ji3ifnh5df7x5i4wap5d16jyvjppx-nixos-system-go-choir-playwright-worker-26.05.20260409.4c1018d.drv`;
+  - `nix/sandbox-vm.nix` declares `documentPython` with
+    `beautifulsoup4`, `ebooklib`, `lxml`, `pdfplumber`, `pypdf`, and
+    `python-docx`, and includes `libreoffice`, `pandoc`, and
+    `poppler-utils` in both the sandbox service PATH and system packages.
 - Focused local tests prove shared extraction/selectors, researcher document
   selector tools, and VText file import reuse for DOCX/PDF/PPTX fixtures.
+- Focused pre-matrix tool tests passed after checkpoint `15fc4d0a`:
+  - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact|TestAgentToolProfiles|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot' -count=1`;
+  - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLCreatesProvenanceRecord|TestContentImportURLCleansReaderChrome|TestContentImportFileCreatesExtractedPPTXContentItem' -count=1`.
 - URL document imports now get a larger document-only byte cap so public PDFs
   and decks are not forced through the ordinary 2 MiB web snippet limit.
 - GitHub CI run `27169883438` completed successfully.
@@ -639,6 +654,14 @@ unproven or partial claims:
   beyond the deployed product API proof;
 - frozen-corpus matrix execution without live search;
 - natural post-compaction recall across target models.
+- product-visible matrix launch control is not yet implemented: prompt-bar
+  intentionally accepts only user intent and rejects runtime metadata;
+  `/api/agent/*` run/spawn/status handlers exist as runtime handlers but are
+  intentionally not registered as browser-public product routes and are
+  forbidden for acceptance proof by `AGENTS.md`; `/internal/runtime/runs`
+  exists only for service-to-service worker VM submission. A narrow
+  authenticated eval runner is required before the scored matrix can be started
+  without policy bypass.
 
 belief-state changes:
 
@@ -654,13 +677,15 @@ remaining error field:
 - image/package size impact of adding document tools;
 - extraction quality variance across file formats;
 - whether all target providers remain available during the run.
+- eval runner shape: it must be product-visible, owner-scoped,
+  trace-visible, overlay-policy based, and unable to bypass prompt-bar
+  metadata protections or live-search restrictions.
 
 highest-impact remaining uncertainty:
 
-- does the refreshed user/candidate computer environment actually carry the
-  same document extraction capability proven through staging product APIs, or
-  is there an image/deploy gap that would make the compaction eval measure the
-  wrong substrate?
+- can a narrow product-visible eval runner launch researcher/VText-adjacent
+  model arms with scoped policy overlays and frozen ContentItem handles without
+  reopening the forbidden `/api/agent/*` browser control surface?
 
 latest local proof:
 
@@ -704,16 +729,14 @@ latest staging proof:
 
 next executable probe:
 
-- run the pre-matrix sandbox conformance check: verify the refreshed
-  user/candidate computer path has the declared document tools and can expose
-  representative frozen-corpus ContentItems/selectors through normal
-  researcher/VText-compatible tooling. If that passes or is explicitly accepted
-  as covered by deployed product-path proof, start the model matrix using scoped
-  model-policy overlays for frozen corpus owner
-  `49bc8b74-2158-46e2-b387-a7a9a40fb6ad`; verify each target model reads the
-  same ContentItem handles, triggers automatic compaction under realistic
-  context pressure, and answers approximate and exact recall prompts without
-  live search.
+- implement the minimum authenticated product-visible compaction recall eval
+  runner. It should accept frozen owner-scoped ContentItem ids, a scoped
+  `model_policy_overlay_id`, and recall questions; validate that each
+  ContentItem belongs to the authenticated owner; resolve the overlay through
+  model policy; start a normal researcher or VText-adjacent researcher run with
+  trace-visible eval metadata; and expose status/results through non-`/api/agent`
+  routes. After that ships and is proven on staging, start the model matrix for
+  the frozen corpus owner `49bc8b74-2158-46e2-b387-a7a9a40fb6ad`.
 
 suggested resume goal string:
 
