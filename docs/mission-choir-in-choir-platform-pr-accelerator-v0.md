@@ -1112,3 +1112,75 @@ next executable probe:
   readiness/backlog test that proves a large durable queue can drain after the
   runtime becomes available without prematurely submitting reconcilers.
 ```
+
+```text
+status: shipped_partial
+last checkpoint: 2026-06-08T07:49Z Source Service queue drain now runs between
+  ingestion cycles and staging no longer pins processor dispatch at 7.
+current artifact state:
+  Commit e1b177d6796e52474810488e42ede347c247211f is on origin/main and
+  deployed to staging. It follows documentation checkpoint
+  d79fda97d49b8f9d8ef633c8bb39ac28e899952ce, which recorded the backlog
+  problem before the fix.
+what shipped:
+  - `cmd/sourcecycled/main.go` now runs a queued SourceMaxx dispatch drain every
+    minute between the 15-minute source ingestion cycles.
+  - Transient runtime submission failures leave processor/reconciler requests
+    queued for a later drain instead of marking them permanently
+    `dispatch_failed`.
+  - `nix/node-b.nix` now deploys
+    `SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=32` and
+    `SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS=60`.
+  - `cmd/sourcecycled/main_test.go` adds regression coverage proving transient
+    runtime unavailability keeps a processor request queued with no runtime run
+    ID.
+what was proven:
+  - Local `git diff --check` passed.
+  - Local `nix develop -c go test ./cmd/sourcecycled` passed.
+  - Local `nix develop -c go test ./internal/cycle` passed.
+  - CI run 27123001146 passed for commit
+    e1b177d6796e52474810488e42ede347c247211f, including Go gates and staging
+    deploy.
+  - FlakeHub run 27123001150 passed for the same commit.
+  - Public staging `/health` reported proxy and sandbox deployed commit
+    e1b177d6796e52474810488e42ede347c247211f with
+    `deployed_at=2026-06-08T07:41:14Z`.
+  - Node B process env for sourcecycled reported
+    `SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=32`,
+    `SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS=60`, and
+    `SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085`.
+  - Source Service health reported `status=ok`, `item_count=69108`,
+    `fetch_count=12969` at 2026-06-08T07:44:58Z.
+  - Post-deploy sourcecycled logs show repeated drain ticks:
+    at 07:45:22Z, 32 processors submitted, 0 failed, 6 reconcilers skipped;
+    at 07:46:23Z, 32 processors submitted, 1 reconciler submitted, 5 skipped;
+    at 07:47:22Z, 32 processors submitted, 0 failed, 5 skipped.
+  - A read-only copy of the deployed DB after those drains showed processor
+    status counts of 7 `dispatch_failed`, 667 `submitted`, and 2,045 `queued`;
+    reconciler status counts of 1 `dispatch_failed`, 79 `submitted`, and
+    5 `queued`.
+unproven or partial claims:
+  This proves that queue drain now repeats and can submit processors/reconcilers
+  after deployment. It does not prove the backlog is solved. The queue remains
+  large because prior cycles created thousands of processor requests, and the
+  system still needs an agentic scheduling decision about whether older queued
+  chunks should be compacted, superseded, merged by continuity ref, or drained
+  exactly as historical work.
+belief-state changes:
+  The source system is now visibly ingesting thousands of items and dispatching
+  durable processor/reconciler work, but the processor topology remains too
+  literal: every historical source chunk is treated as work to submit unless a
+  future scheduler says otherwise. For the news product, the higher-value next
+  move is not only more concurrency; it is continuity-aware processor state,
+  compaction/supersession rules, and real article/VText ownership.
+remaining error field:
+  Do not call Global Wire source processing ship-worthy while 2,045 queued
+  processor requests remain and latest-cycle APIs still obscure global backlog.
+  The next realism axis should expose queue/backlog health productively and add
+  supersession/compaction semantics so processors do not spend all capacity on
+  stale chunks when newer source context has already arrived.
+rollback refs:
+  Revert e1b177d to restore the previous sourcecycled behavior: dispatch only
+  during source cycles, tracked staging cap of 7, and transient runtime failures
+  marked as dispatch failures.
+```
