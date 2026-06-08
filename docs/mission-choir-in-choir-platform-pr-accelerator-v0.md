@@ -1676,3 +1676,78 @@ rollback refs:
   Revert fca07803 to restore the previous hardcoded seed freshness behavior.
   Revert 9fef8eb only if the problem checkpoint should be removed.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T09:35Z product-path continuation submitted and
+  front-page population problem narrowed before behavior changes.
+current artifact state:
+  Staging still reports deployed commit
+  fca07803a56606fa00500a76c36dffaa78d27fbb. Codex submitted a new
+  authenticated prompt-bar/VText continuation through Comet, asking Choir to
+  run this mission as a MissionGradient continuation focused on the remaining
+  Global Wire front-page article population/ranking axis. The visible mission
+  VText id in the app was `1bd1038e-b...d733c3`, and the VText run shown in
+  the UI was `296c079b-ac0d-4781-8d8c-d905a3e0f50b`. The VText created a
+  structured problem statement and called `request_super_execution`.
+new evidence:
+  Comet/browser product-path observation before the raw-API navigation showed
+  the signed-in Global Wire app rendering `3 articles`, with the deleted
+  Sources Chronology/search surface and bespoke Style.vtext controls still
+  absent. The three visible articles were the seeded source-neighborhood
+  stories.
+
+  A Node B internal diagnostic against the active sandbox service at
+  `http://127.0.0.1:8085/api/global-wire/stories`, with the same visible owner
+  id injected by the proxy header, returned 15 stories:
+
+  - 12 `source-network-vtext-*` live articles owned by `global-wire-platform`,
+    including Iran regional infrastructure risk, Iran missile interceptions,
+    Xi in Pyongyang, ERCOT/data-center grid risk, Kashmir clashes,
+    Israel/Iran escalation, Ukraine/Crimea supply lines, DRC Ebola, ISS leak,
+    HN AI-career anxiety, DRC Ebola, and Nigerian hostage rescue;
+  - followed by the 3 seeded owner stories with `seed source neighborhood`.
+
+  That diagnostic means the deployed backend source-network VText index is
+  capable of producing live front-page article candidates. The stronger
+  current hypothesis is no longer "the VText article index is empty." It is
+  one of:
+
+  - the public/Svelte app session or candidate route is rendering from a
+    preview/stale route even while showing owner-looking labels;
+  - the public proxy/session path used by the SPA differs from the active
+    sandbox service queried internally;
+  - the Global Wire component loaded before the live stories were available
+    and does not refresh after source-network updates;
+  - the app window remained mounted with stale state while the backend had
+    already advanced.
+
+  Direct Comet navigation to `https://choir.news/api/global-wire/stories`
+  returned `401 authentication required`, and navigating back degraded the
+  tab to signed-out preview. Treat this as a browser/session diagnostic, not
+  proof that the SPA fetch itself is unauthenticated.
+belief-state changes:
+  The immediate front-page population bug appears to be a product-path
+  visibility/refresh/session-route issue, not absence of live VText-owned
+  source-network articles. The backend already has enough live article objects
+  to exceed the three seeded stories; the shipped UI and/or public product
+  route is not reliably surfacing them to the owner.
+remaining error field:
+  The mission still needs a reviewable AppChangePackage or precise blocker
+  from the product-path worker run. Any fix must preserve the deletion of the
+  detritus source ledger and bespoke Style.vtext controls, must not replace
+  VText-owned articles with static story fixtures, and must distinguish
+  internal diagnostics from public authenticated product proof.
+next executable probe:
+  Inspect the product-path run that started from VText
+  `1bd1038e-b...d733c3` and run `296c079b-ac0d-4781-8d8c-d905a3e0f50b`. If it
+  publishes an AppChangePackage, review the package diff and evidence before
+  landing. If it does not, root-cause whether `request_super_execution`
+  failed, worker lease/delegation failed, or the worker reported only a VText
+  checkpoint. In parallel, inspect the Global Wire frontend load/refresh logic
+  and candidate-route/proxy session behavior for why a backend response with
+  15 stories can render as a 3-story front page.
+rollback refs:
+  No behavior change in this checkpoint. Staging rollback remains
+  fca07803a56606fa00500a76c36dffaa78d27fbb.
+```
