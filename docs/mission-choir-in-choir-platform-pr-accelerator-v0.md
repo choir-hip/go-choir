@@ -1437,3 +1437,53 @@ rollback refs:
   Source Service API/storage path. Revert 042c35f1 only if the problem
   checkpoint should be removed from the mission history.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T09:02Z reader-snapshot enrichment blocker
+  documented before the next behavior change.
+current artifact state:
+  The latest pushed commit is docs-only
+  594da5dddf4a08b3c4c573ea95666c74f04d780a, which records the owner's
+  deletion-bias eval note. Staging behavior is still the source-body
+  classification slice from 55ddce3f1c61fdac8b6d50840f7e24a03f8bb501 unless a
+  newer deploy has landed externally.
+new evidence:
+  Code inspection found that `ensureGlobalWireSourceServiceContentItem` in
+  `internal/runtime/global_wire.go` still creates the article-attached source
+  ContentItem from `result["body"]` alone. When a Source Service result is an
+  RSS feed summary, empty feed item, or GDELT metadata packet, Global Wire
+  stores that weak body as the source item text even though the source may have
+  an HTTP URL that could yield a reader snapshot.
+
+  The runtime already has a reusable URL reader path:
+  `Runtime.ImportURLContent` in `internal/runtime/content.go`. It validates
+  HTTP URLs, fetches/extracts readable text, stores a ContentItem, and marks
+  HTML imports with `reader_artifact_kind=cleaned_reader_markdown`. Reusing this
+  path is preferable to adding a new crawler.
+
+  The Source Service storage schema already stores source policy on the
+  `sources` table (`tos_class`, `robots_policy`, `auth_policy`,
+  `store_body_policy`). However `SearchItems`, `GetItem`, and
+  `sourceAPIItemResult` currently return item body classification but not the
+  source policy fields. As a result, Global Wire cannot make a policy-aware
+  decision about whether a second-stage reader import is allowed for a given
+  source result.
+belief-state changes:
+  The next source realism step is not "fetch everything." The safe topology is
+  to expose source policy at the Source Service boundary, then let Global Wire
+  attempt bounded reader-snapshot import only for policy-compatible URL source
+  results and only when the existing body is not already a reader/source body.
+remaining error field:
+  Full article/source bodies are still partial. Source volume is high, but
+  article-attached sources can remain feed summaries or metadata packets unless
+  the policy-aware reader-snapshot enrichment path lands. The fix must avoid
+  increasing background load blindly and must record failure/skip state rather
+  than silently overclaiming source richness.
+next executable probe:
+  Add source policy fields to Source Service item results by joining item rows
+  to their source rows. Then add bounded Global Wire source conversion logic
+  that reuses `ImportURLContent` for allowed URL sources, records
+  `reader_snapshot_status`, and preserves explicit skip/failure metadata for
+  disallowed or failed imports.
+```
