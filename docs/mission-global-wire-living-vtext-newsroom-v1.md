@@ -1198,3 +1198,57 @@ manifest fallback for VText-owned Global Wire articles with a bounded
 cycle-provenance fallback. Keep full-cycle IDs in revision metadata for
 auditing and future graph walking, but do not render them as the article's
 source neighborhood unless the VText revision actually transcludes them.
+
+## Checkpoint 2026-06-08T01:19Z: bounded manifest fallback deployed
+
+status: checkpoint_incomplete
+
+objective: remove the false article-local evidence signal created when a
+VText-owned Global Wire article inherited a broad source cycle's full
+`source_item_ids` but did not visibly transclude those sources in prose.
+
+what shipped: commit `81788b3146faaf98b735269a3981cf5dc92aa4c0` changes the
+Global Wire VText story index so article manifests still prefer visible native
+`source:` entity refs, but no longer expand metadata-only full-cycle
+`source_item_ids` into visible lead/context rows. If no article-visible source
+entities are used, the story shows one bounded cycle-provenance context item
+instead.
+
+local proof: focused comprehensive runtime tests passed for
+`TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads` and
+`TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest`.
+The local runtime shard script also passed.
+
+staging proof: CI run `27110619610` passed integration smoke, Go vet/build,
+non-runtime tests, all four runtime shards, aggregate gate, and Node B deploy
+job `80007829206`. FlakeHub run `27110619613` succeeded.
+`https://choir.news/health`, Node B `/health`, and Node B `/opt/go-choir`
+all report deployed commit `81788b3146faaf98b735269a3981cf5dc92aa4c0`,
+deployed_at `2026-06-08T01:15:26Z`.
+
+API proof: authenticated `GET /api/global-wire/stories` on sandbox port `8085`
+returned `15` stories from `durable-storygraph+source-network-vtexts`. The
+previously over-broad newer Pentagon article
+`8edf35f2-0807-4b05-a296-82193619abe1` now reports `0` lead and `1` context
+item, `Source network cycle cycle_e2dd4ddbb15ecb618902cd60`, instead of
+`context: 498`. The previously over-broad Peru article
+`d9fe19df-de7b-4944-a68f-42b42d9d1261` now reports the same bounded
+`1`-context cycle-provenance shape. Other articles with actual visible source
+refs still expose article-local lead/context sources.
+
+remaining error field: this fixes the collection surface's false precision,
+but it also makes the next product gap clearer. Some live VText articles still
+do not use enough native inline source transclusions in reader-facing prose,
+so the collection can only show bounded cycle provenance rather than
+article-specific lead sources. Several deks still carry publication-style
+labels such as bold datelines or `Breaking News | June 8, 2026 | 01:11 UTC`.
+That is less damaging than the full-cycle source manifest, but it is still not
+publication-quality article ownership.
+
+next executable probe: strengthen the processor/reconciler-to-VText handoff
+and VText article prompt so every Global Wire article revision must embed a
+small set of native source transclusions in prose, using source entities passed
+through revision metadata, and must keep datelines/publication labels out of
+the dek unless the chosen Style.vtext intentionally calls for them. Then prove
+against a fresh source cycle or an explicit VText article revision request,
+not only by reindexing already-written articles.
