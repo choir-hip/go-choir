@@ -1751,3 +1751,91 @@ rollback refs:
   No behavior change in this checkpoint. Staging rollback remains
   fca07803a56606fa00500a76c36dffaa78d27fbb.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T09:57Z Global Wire mounted-window story-load retry
+  fix landed and was proved on staging.
+current artifact state:
+  Commit 24c589ca88fb3ab715b6a616bf5092e357868a29 is on origin/main and
+  deployed to staging. It follows documentation checkpoint
+  32601389f63d0c267900f8d4f4796d3a55038bd6, which narrowed the front-page
+  population problem before the behavior change.
+what shipped:
+  - `GlobalWireApp.svelte` no longer treats an authenticated Global Wire story
+    load as complete before the fetch succeeds.
+  - A transient authenticated `/api/global-wire/stories` failure no longer
+    pins the mounted window to the three-story preview/seed state forever.
+  - Authenticated Global Wire windows retry after transient failure, refresh
+    periodically, and refresh when the window regains focus or the page becomes
+    visible.
+  - The old Sources Chronology/search ledger and bespoke Style.vtext controls
+    remain deleted.
+what was proven:
+  - Local `git diff --check` passed.
+  - Local `cd frontend && npm run build` passed.
+  - Local `cd frontend && PLAYWRIGHT_BASE_URL=http://localhost:4173 npm run e2e
+    -- global-wire-app.spec.js` passed after running the local service harness
+    in the repo Nix dev shell. The new regression proves an authenticated
+    Global Wire window whose first `/api/global-wire/stories` request returns
+    503 retries and renders four live source-network stories instead of
+    staying on the three preview stories.
+  - CI run 27129723868 passed for commit
+    24c589ca88fb3ab715b6a616bf5092e357868a29, including Go shards, non-runtime
+    tests, frontend build, and staging deploy.
+  - FlakeHub run 27129723860 passed for the same commit.
+  - Public staging `/health` reported proxy and sandbox deployed commit
+    24c589ca88fb3ab715b6a616bf5092e357868a29 with
+    `deployed_at=2026-06-08T09:54:49Z`.
+  - Deployed frontend index referenced `GlobalWireApp-D9OMYV56.js`, and that
+    deployed chunk contained the new authenticated retry/refresh code
+    (`setInterval(... force: true, silent: true ...)` and
+    `visibilitychange`).
+  - Authenticated deployed sandbox API proof for owner
+    `5bd6de97-3b58-408c-bf89-c42c81b083de` returned 15 Global Wire stories
+    from `durable-storygraph+source-network-vtexts`; the first three were live
+    `source-network-vtext-*` platform-owned VText articles with real headlines
+    and `updated just now` freshness.
+belief-state changes:
+  The specific 3-story visible state is now plausibly explained by a mounted
+  Global Wire window caching preview/failure state after a transient
+  authenticated route failure. The backend article index was not empty; it was
+  already capable of returning live source-network VText articles. The shipped
+  frontend now keeps the mounted window connected to that advancing backend
+  state instead of treating the first authenticated attempt as final.
+unproven or partial claims:
+  - This does not prove the exact earlier Comet window refreshed in place after
+    the user-visible failure; it proves the deployed code path and the local
+    product regression for the same failure class.
+  - This does not solve ranking quality, source prominence scoring, processor
+    overload, or publication-quality article prose.
+  - No product-path Choir-in-Choir AppChangePackage appeared for this probe;
+    Codex landed the frontend retry fix directly after the prior docs
+    checkpoint.
+remaining error field:
+  Global Wire still needs the larger news mission: processors and reconcilers
+  should keep producing publication-quality VText-agent-owned articles from
+  many source bodies, front-page ordering should reflect source-network
+  prominence/novelty/freshness/contradiction/update pressure rather than flat
+  source-network prominence scores, and the Choir-in-Choir platform PR
+  accelerator still needs to prove a worker can produce a reviewable
+  AppChangePackage or a precise blocker for this class of platform work.
+highest-impact remaining uncertainty:
+  Whether the current Choir-in-Choir request path reliably converts a VText
+  mission continuation into a Super/vsuper worker run with durable
+  AppChangePackage evidence. The observed UI run called
+  `request_super_execution`, but no package was visible through the active
+  deployed API before this Codex-landed fix.
+next executable probe:
+  Resume the mission on the Choir-in-Choir accelerator axis: trace the
+  prompt-bar/VText/Super handoff for the `1bd1038e-b...d733c3` mission window
+  and `296c079b-ac0d-4781-8d8c-d905a3e0f50b` visible run. Determine whether
+  the product run is stored under a different owner/candidate route, whether
+  `request_super_execution` failed to lease a worker, or whether the worker
+  produced only a VText checkpoint. Then either fix the handoff/package path
+  with documentation-first discipline or record the exact blocker.
+rollback refs:
+  Revert 24c589ca to restore the previous one-shot authenticated Global Wire
+  load behavior. Revert 32601389 only if the problem checkpoint should be
+  removed from mission history.
+```
