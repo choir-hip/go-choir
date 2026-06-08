@@ -669,7 +669,7 @@ func sourceMaxxVisibleSourceEntities(meta map[string]any, content string) []vtex
 	if len(entities) == 0 {
 		return nil
 	}
-	refs := sourceMaxxInlineSourceRefs(content)
+	refs := sourceMaxxInlineSourceRefs(sourceMaxxArticleProseForSourceRefs(content))
 	if len(refs) == 0 {
 		return nil
 	}
@@ -684,6 +684,19 @@ func sourceMaxxVisibleSourceEntities(meta map[string]any, content string) []vtex
 		out = append(out, entity)
 	}
 	return out
+}
+
+func sourceMaxxArticleProseForSourceRefs(content string) string {
+	var b strings.Builder
+	for _, raw := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(raw)
+		if sourceMaxxArticleLineStartsInventorySection(line) {
+			break
+		}
+		b.WriteString(raw)
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 func sourceMaxxInlineSourceRefs(content string) map[string]bool {
@@ -854,10 +867,14 @@ func sourceMaxxArticleLineIsScaffold(line string) bool {
 	trimmed := strings.TrimSpace(line)
 	plain := strings.Trim(trimmed, "*_ \t")
 	lower := strings.ToLower(plain)
+	normalized := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(trimmed, "**", ""), "__", "")))
 	if plain == "---" || plain == "***" {
 		return true
 	}
 	if strings.HasPrefix(lower, "published:") ||
+		strings.HasPrefix(lower, "date:") ||
+		strings.HasPrefix(lower, "status:") ||
+		strings.HasPrefix(lower, "by ") ||
 		strings.HasPrefix(lower, "source:") ||
 		strings.HasPrefix(lower, "style.vtext source") ||
 		strings.HasPrefix(lower, "style source:") ||
@@ -869,6 +886,32 @@ func sourceMaxxArticleLineIsScaffold(line string) bool {
 	if lower == "source handles" ||
 		lower == "source manifest" ||
 		lower == "style.vtext source" {
+		return true
+	}
+	if strings.HasPrefix(normalized, "published:") ||
+		strings.HasPrefix(normalized, "date:") ||
+		strings.HasPrefix(normalized, "status:") ||
+		strings.HasPrefix(normalized, "by ") ||
+		strings.HasPrefix(normalized, "source:") {
+		return true
+	}
+	return sourceMaxxArticleLineStartsInventorySection(trimmed)
+}
+
+func sourceMaxxArticleLineStartsInventorySection(line string) bool {
+	plain := strings.TrimSpace(strings.TrimLeft(line, "#*_ \t"))
+	lower := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(plain, "**", ""), "__", "")))
+	if lower == "source handles" ||
+		lower == "source manifest" ||
+		lower == "sources" ||
+		lower == "style.vtext source" ||
+		lower == "style source" {
+		return true
+	}
+	if strings.HasPrefix(lower, "source handles:") ||
+		strings.HasPrefix(lower, "source manifest:") ||
+		strings.HasPrefix(lower, "style.vtext source:") ||
+		strings.HasPrefix(lower, "style source:") {
 		return true
 	}
 	return false
