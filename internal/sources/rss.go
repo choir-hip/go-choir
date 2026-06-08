@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	stdhtml "html"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
+	xhtml "golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 )
 
@@ -95,6 +97,7 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 			published = parsed
 		}
 
+		bodyText := cleanFeedDescriptionText(feedItem.Description)
 		item := Item{
 			ID:            StableItemID(*source, feedItem.GUID, feedItem.Link, feedItem.Title, feedItem.Description),
 			SourceID:      source.ID,
@@ -102,7 +105,7 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 			FetchID:       fetch.FetchID,
 			OriginalID:    feedItem.GUID,
 			Title:         feedItem.Title,
-			Body:          feedItem.Description,
+			Body:          bodyText,
 			URL:           feedItem.Link,
 			CanonicalURL:  NormalizeURL(feedItem.Link),
 			Published:     published.UTC(),
@@ -119,6 +122,49 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 	fetch.ItemCount = len(items)
 
 	return PollResult{Fetch: fetch, Items: items}, nil
+}
+
+func cleanFeedDescriptionText(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if !strings.Contains(raw, "<") && !strings.Contains(raw, "&") {
+		return cleanFeedDescriptionWhitespace(raw)
+	}
+	if !strings.Contains(raw, "<") {
+		return cleanFeedDescriptionWhitespace(stdhtml.UnescapeString(raw))
+	}
+	var parts []string
+	tokenizer := xhtml.NewTokenizer(strings.NewReader(raw))
+	for {
+		switch tokenizer.Next() {
+		case xhtml.ErrorToken:
+			if len(parts) == 0 {
+				return cleanFeedDescriptionWhitespace(stdhtml.UnescapeString(raw))
+			}
+			return cleanFeedDescriptionWhitespace(strings.Join(parts, " "))
+		case xhtml.TextToken:
+			if text := strings.TrimSpace(stdhtml.UnescapeString(tokenizer.Token().Data)); text != "" {
+				parts = append(parts, text)
+			}
+		}
+	}
+}
+
+func cleanFeedDescriptionWhitespace(text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	replacer := strings.NewReplacer(
+		" .", ".",
+		" ,", ",",
+		" ;", ";",
+		" :", ":",
+		" !", "!",
+		" ?", "?",
+		"( ", "(",
+		" )", ")",
+	)
+	return replacer.Replace(text)
 }
 
 type feedEnvelope struct {

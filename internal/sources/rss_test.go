@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
@@ -71,6 +72,47 @@ func TestRSSPollerReturnsFetchRecordAndStableItem(t *testing.T) {
 	}
 	if first.Items[0].SourceID != source.ID || first.Items[0].EvidenceLevel != "source_feed" {
 		t.Fatalf("item provenance incomplete: %+v", first.Items[0])
+	}
+}
+
+func TestRSSPollerCleansHTMLDescriptionsForSourceBody(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Feed</title>
+    <item>
+      <title>HTML body item</title>
+      <link>https://example.test/html-body</link>
+      <description><![CDATA[<div><p>Markets &amp; policy <strong>shifted</strong>.</p><p><a href="https://example.test">Read more</a></p></div>]]></description>
+      <pubDate>Thu, 04 Jun 2026 12:00:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>`))
+	}))
+	defer server.Close()
+
+	source := Source{
+		ID:        "rss:html-body",
+		Type:      SourceTypeRSS,
+		Name:      "HTML Body Test",
+		URL:       server.URL,
+		Languages: []string{"en"},
+	}
+	poller := NewRSSPoller("ChoirTest/1.0")
+	result, err := poller.Poll(context.Background(), &source)
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("item count = %d, want 1", len(result.Items))
+	}
+	if got := result.Items[0].Body; got != "Markets & policy shifted. Read more" {
+		t.Fatalf("cleaned body = %q", got)
+	}
+	if strings.Contains(result.Items[0].Body, "<") || strings.Contains(result.Items[0].Body, "&amp;") {
+		t.Fatalf("body still contains markup/entities: %q", result.Items[0].Body)
 	}
 }
 
