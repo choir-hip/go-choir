@@ -599,6 +599,11 @@ func TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead(t *testing.T) {
 		"processor or reconciler handoff is newsroom source context",
 		"first edit_vtext call must write a publishable article",
 		"not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder",
+		"Use uncertainty and native source handles in reader-facing article prose",
+		"cite a bounded set of distinct listed handles with [label](source:ENTITY_ID)",
+		"source refs only in source inventories or metadata sections do not count",
+		"Use selected Style.vtext sources to shape voice, structure, and editorial judgment",
+		"do not name the selected Style.vtext, style rationale, source inventory, or handoff mechanics in reader-facing prose",
 		"do not end the run with the document head still at a brief or status checkpoint",
 	} {
 		if !strings.Contains(prompt, want) {

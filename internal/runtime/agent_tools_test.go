@@ -2194,12 +2194,19 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	if !strings.Contains(vtextRun.Prompt, "must be a publishable article or correction/update draft") ||
 		!strings.Contains(vtextRun.Prompt, "not a Source Brief, Working Revision, Evidence Gathering note") ||
 		!strings.Contains(vtextRun.Prompt, "(source:"+sourceEntities[0].EntityID+")") ||
+		!strings.Contains(vtextRun.Prompt, "cite at least 1 distinct listed native source handle") ||
+		!strings.Contains(vtextRun.Prompt, "reader-facing article prose using [label](source:entity_id)") ||
+		!strings.Contains(vtextRun.Prompt, "Citations that appear only in Source Handles, Source Manifest, source inventories, notes, or metadata sections do not satisfy this requirement") ||
 		!strings.Contains(vtextRun.Prompt, "do not replace them with a plain source manifest") ||
+		!strings.Contains(vtextRun.Prompt, "Use the selected Style.vtext sources to shape voice, structure, and editorial judgment") ||
+		!strings.Contains(vtextRun.Prompt, "do not name the selected Style.vtext or style rationale in reader-facing prose") ||
 		!strings.Contains(vtextRun.Prompt, "Keep Style.vtext selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body") ||
-		!strings.Contains(vtextRun.Prompt, "Do not include placeholder metadata") {
+		!strings.Contains(vtextRun.Prompt, "Do not include placeholder metadata or publication labels") ||
+		!strings.Contains(vtextRun.Prompt, "Breaking News |") ||
+		!strings.Contains(vtextRun.Prompt, "By Choir News") {
 		t.Fatalf("processor vtext run missing article-head completion contract: %q", vtextRun.Prompt)
 	}
-	articleContent := "# Fed rate cut expectations cool as inflation prints remain uneven\n\nMarkets repriced the near-term rate path after the latest inflation batch, but the stronger claim is not that a cut is off the table. The useful reading is narrower: officials have less room to declare victory while price pressure remains uneven across services and shelter measures [inflation batch](source:" + sourceEntities[0].EntityID + ").\n\nThe article uses Style.vtext: Market Brief because the story is primarily a market-moving macro update.\n"
+	articleContent := "# Fed rate cut expectations cool as inflation prints remain uneven\n\nMarkets repriced the near-term rate path after the latest inflation batch, but the stronger claim is not that a cut is off the table. The useful reading is narrower: officials have less room to declare victory while price pressure remains uneven across services and shelter measures [inflation batch](source:" + sourceEntities[0].EntityID + ").\n\nThe result is a market-moving macro update with a narrower evidentiary claim: officials can still cut later, but the latest batch gives them less room to declare inflation contained.\n"
 	editArgs, err := json.Marshal(map[string]any{
 		"doc_id":           vtextSpawn.DocID,
 		"base_revision_id": vtextSpawn.SeedRevisionID,

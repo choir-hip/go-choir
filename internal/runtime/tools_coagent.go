@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -457,6 +458,7 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 	b.WriteString("Selection rationale: ")
 	b.WriteString(styleRationale)
 	if len(sourceEntities) > 0 {
+		requiredSourceRefs := min(3, len(sourceEntities))
 		b.WriteString("\n\nNative source handles available to this article revision:\n")
 		for _, entity := range sourceEntities {
 			if strings.TrimSpace(entity.EntityID) == "" {
@@ -477,15 +479,23 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 			}
 			b.WriteString("\n")
 		}
+		b.WriteString("\nArticle citation requirement: cite at least ")
+		b.WriteString(strconv.Itoa(requiredSourceRefs))
+		b.WriteString(" distinct listed native source handle")
+		if requiredSourceRefs != 1 {
+			b.WriteString("s")
+		}
+		b.WriteString(" in reader-facing article prose using [label](source:entity_id). Citations that appear only in Source Handles, Source Manifest, source inventories, notes, or metadata sections do not satisfy this requirement.")
 	}
 	b.WriteString("\n\nHard requirements:")
 	b.WriteString("\n- Use edit_vtext to write the canonical VText revision; do not leave the article only in the run result.")
 	b.WriteString("\n- The current document head after this run must be a publishable article or correction/update draft, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
-	b.WriteString("\n- Preserve source handles and use native VText source refs like [label](source:entity_id); do not replace them with a plain source manifest.")
+	b.WriteString("\n- Preserve source handles and use native VText source refs like [label](source:entity_id) inside article prose; do not replace them with a plain source manifest or isolate them in an inventory section.")
+	b.WriteString("\n- Use the selected Style.vtext sources to shape voice, structure, and editorial judgment; do not name the selected Style.vtext or style rationale in reader-facing prose unless it is genuinely part of the story.")
 	b.WriteString("\n- Transclude related VTexts where editorially useful; do not render bare related-VText ID lists as article content.")
 	b.WriteString("\n- Keep Style.vtext selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body unless they are editorially necessary. They belong in revision metadata and native source/transclusion affordances, not as reader-facing sections.")
-	b.WriteString("\n- Do not include placeholder metadata such as \"Published: [Date TBD]\", \"Source:\", \"Story id\", \"State\", \"Source Handles\", \"Source Manifest\", \"Style.vtext Source\", horizontal-rule separators, or tool/process notes in the article body.")
+	b.WriteString("\n- Do not include placeholder metadata or publication labels such as \"Published: [Date TBD]\", \"Breaking News |\", \"Date:\", \"By Choir News\", \"Source:\", \"Story id\", \"State\", \"Source Handles\", \"Source Manifest\", \"Style.vtext Source\", horizontal-rule separators, or tool/process notes in the article body.")
 	b.WriteString("\n- If evidence is insufficient, write the best honest publishable draft with uncertainty and request researcher follow-up rather than inventing facts.")
 	b.WriteString("\n\nDocument: ")
 	b.WriteString(doc.DocID)
