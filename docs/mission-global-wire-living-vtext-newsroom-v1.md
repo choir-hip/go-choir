@@ -969,3 +969,21 @@ partial or unproven claims: the Comet browser remains readable but not clickable
 remaining error field: source breadth, article metadata, fallback article depth, desktop launch, native source refs, and first related-VText refs are now advanced. The mission still needs live VText-agent-owned article generation/revision from processor/reconciler/researcher handoffs, authenticated Comet/product-path proof, first-class related VText passage transclusion/open behavior, and continued source/research reliability work including the previously observed gateway search outages.
 
 next executable probe: add click/open behavior for `vtext:` refs so related article refs open the target VText document in the normal VText app, then prove it on staging with a deployed browser probe and, if the Computer Use plugin state issue clears, in Comet.
+
+## Checkpoint 2026-06-08T00:28Z: related VText refs now open normal VText windows
+
+status: checkpoint_incomplete
+
+objective: make related-VText transclusions act like first-class VText graph edges from the reader/editor surface: clicking a related article ref should open the target article as a normal VText window instead of remaining a passive inline snapshot.
+
+what shipped: commit `50eeed58b47692f3f1e6518e2797b0d85ad10153` adds pointer/click/keyboard handling for `[data-vtext-related-ref]` entities in `VTextEditor.svelte`. A related ref now launches the VText app with the target document id when authenticated, or with a preview snapshot when signed out, using the same `launchapp` path as other desktop apps. Source refs keep their existing inline source behavior. The Global Wire Playwright coverage now opens the first article and clicks its related VText transclusion, proving a related article opens as another VText surface.
+
+local proof: `npm run build` passed; `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 npm run e2e -- global-wire-app.spec.js --reporter=line` passed; `npm run e2e -- vtext-source-entities.spec.js:85 --reporter=line` passed.
+
+staging proof: GitHub CI run `27109268849` passed, including integration smoke, Go vet/build, non-runtime tests, all runtime shards, frontend build, aggregate gate, and Node B deploy job `80003950785`. FlakeHub run `27109268838` succeeded. `https://choir.news/health`, Node B `/health`, and `/opt/go-choir` all reported deployed commit `50eeed58b47692f3f1e6518e2797b0d85ad10153` with deployed_at `2026-06-08T00:21:29Z`.
+
+deployed product-path proof: a headless Playwright probe against `https://choir.news/` double-clicked the `Global Wire` desktop icon, opened the first article VText, observed real article prose, `5` native source refs, `1` related-VText ref, and no old `Source Manifest` or `My Edit` sections. Clicking the related-VText ref increased the VText editor count from `2` to `3` and opened the related article containing `Grid operators add reserve alerts as heat forecast shifts north` and `Forecast changes moved stress from the southern peak window toward northern reserve margins.`
+
+partial or unproven claims: this proves signed-out/public product behavior and normal VText window launch semantics for related refs. It does not yet prove the authenticated owner Comet path because the Computer Use plugin still reports `Computer Use is not active` for Comet after a readable `get_app_state`. It also does not complete the larger newsroom architecture: live VText-agent-owned articles, processor/reconciler/researcher handoffs, authenticated living revisions, source expansion beyond the current staging corpus, and passage-range VText transclusion remain open.
+
+remaining error field: the product floor now has a desktop Global Wire icon, clean article prose, native source refs, native related-VText refs, and click-to-open VText graph traversal. The mission remains incomplete until Global Wire produces and revises publication-quality articles through long-running shared-harness agents over a much broader multilingual source stream, with staging proof that VText agents own the article lifecycle rather than deterministic fallback content.
