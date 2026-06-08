@@ -384,10 +384,38 @@ export function renderInlineSourceRef(label: string, entityID: string, sourceEnt
   </span>`;
 }
 
-export function renderInlineMarkdown(value: unknown, sourceEntities: any[] = []): string {
+function vtextEntityDocID(entity: any): string {
+  return String(entity?.target?.doc_id || entity?.doc_id || entity?.document_id || '').trim();
+}
+
+export function findVTextEntity(relatedVTexts: any[] = [], docID = ''): any | null {
+  const normalized = String(docID || '').trim();
+  if (!normalized) return null;
+  return relatedVTexts.find((entity) => vtextEntityDocID(entity) === normalized) || null;
+}
+
+export function renderInlineVTextRef(label: string, docID: string, relatedVTexts: any[] = []): string {
+  const entity = findVTextEntity(relatedVTexts, docID);
+  const title = String(entity?.title || entity?.label || label || 'related VText').trim();
+  const displayLabel = String(label || entity?.label || title || 'VText').trim();
+  const snapshot = String(entity?.transclusion?.snapshot_text || entity?.snapshot_text || '').trim();
+  const className = entity ? 'vtext-related-ref' : 'vtext-related-ref vtext-related-ref--missing';
+  return `<span class="${className}" data-vtext-related-ref data-vtext-doc-id="${escapeHTML(docID)}" data-vtext-label="${escapeHTML(displayLabel)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Related VText: ${title}`)}">
+    <span class="vtext-related-ref-label">${escapeHTML(displayLabel)}</span>
+    <span class="vtext-related-ref-popover" data-vtext-inline-transclusion role="note">
+      <strong>${escapeHTML(title)}</strong>
+      ${snapshot ? `<span class="vtext-transclusion-quote">${renderInlineMarkdown(snapshot, [], [])}</span>` : ''}
+    </span>
+  </span>`;
+}
+
+export function renderInlineMarkdown(value: unknown, sourceEntities: any[] = [], relatedVTexts: any[] = []): string {
   let html = escapeHTML(value);
   html = html.replace(/\[([^\]]+)\]\(source:([^)]+)\)/g, (_match, label, entityID) =>
     renderInlineSourceRef(label, entityID, sourceEntities)
+  );
+  html = html.replace(/\[([^\]]+)\]\(vtext:([^)]+)\)/g, (_match, label, docID) =>
+    renderInlineVTextRef(label, docID, relatedVTexts)
   );
   html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');

@@ -10,6 +10,11 @@ function serializeInlineMarkdown(node: Node | null): string {
     const entityID = element.getAttribute('data-source-entity-id') || '';
     return entityID ? `[${label}](source:${entityID})` : label;
   }
+  if (element.matches?.('[data-vtext-related-ref]')) {
+    const label = element.getAttribute('data-vtext-label') || element.querySelector?.('.vtext-related-ref-label')?.textContent || 'VText';
+    const docID = element.getAttribute('data-vtext-doc-id') || '';
+    return docID ? `[${label}](vtext:${docID})` : label;
+  }
   if (element.closest?.('[data-vtext-source-flow]')) return '';
   if (element.closest?.('[data-vtext-source-entity]')) return '';
 

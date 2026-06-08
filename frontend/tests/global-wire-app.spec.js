@@ -27,14 +27,15 @@ async function applyTheme(page, id) {
   }, { id, name: names[id] });
 }
 
-test('Global Wire renders as a newspaper SourceMaxx surface with every article openable as VText', async ({ page }) => {
+test('Global Wire renders as a living newspaper surface with every article openable as VText', async ({ page }) => {
   await page.goto(BASE_URL);
   await openDeskApp(page, 'global-wire');
 
   const app = page.locator('[data-global-wire-app]');
   await expect(app).toBeVisible();
   await expect(app.getByRole('heading', { name: 'Global Wire' })).toBeVisible();
-  await expect(app.locator('text=SourceMaxx newsroom')).toBeVisible();
+  await expect(app.locator('text=SourceMaxx newsroom')).toHaveCount(0);
+  await expect(app.locator('text=Living source network')).toBeVisible();
   await expect(app.locator('[data-global-wire-story]')).toHaveCount(3);
   await expect(app.locator('[data-global-wire-story-reader]').first()).toContainText('Port congestion indicators eased');
   await expect(app.locator('[data-global-wire-evidence]')).toContainText('Port authority throughput bulletin');
@@ -45,8 +46,11 @@ test('Global Wire renders as a newspaper SourceMaxx surface with every article o
   await app.locator('[data-global-wire-open-vtext]').first().click();
   const vtext = page.locator('[data-vtext-editor]').last();
   await expect(vtext).toBeVisible();
-  await expect(vtext).toContainText('Source Manifest');
-  await expect(vtext).toContainText('User edits create user-owned versions');
+  await expect(vtext.locator('[data-vtext-source-ref]').first()).toBeVisible();
+  await expect(vtext.locator('[data-vtext-related-ref]').first()).toBeVisible();
+  await expect(vtext).not.toContainText('Source Manifest');
+  await expect(vtext).not.toContainText('User edits create user-owned versions');
+  await expect(vtext).not.toContainText('The current version keeps');
 });
 
 test('Global Wire keeps Style.vtext routing compact and source provenance visible', async ({ page }) => {

@@ -93,6 +93,9 @@ func TestGlobalWireExistingArticleVTextBodyRepair(t *testing.T) {
 	if strings.Count(repaired.Content, "source:gw-src-") < 4 {
 		t.Fatalf("repaired content has too few native source refs:\n%s", repaired.Content)
 	}
+	if !strings.Contains(repaired.Content, "vtext:") {
+		t.Fatalf("repaired content has no related VText transclusion refs:\n%s", repaired.Content)
+	}
 	for _, required := range []string{
 		"The lead signal is still the narrowest one",
 		"The source neighborhood keeps the story open",
@@ -113,6 +116,10 @@ func TestGlobalWireExistingArticleVTextBodyRepair(t *testing.T) {
 	}
 	if meta["repaired_from_revision_id"] != "stale-global-wire-head" {
 		t.Fatalf("repaired_from_revision_id = %v, want stale head", meta["repaired_from_revision_id"])
+	}
+	related, _ := meta["related_vtexts"].([]any)
+	if len(related) == 0 {
+		t.Fatalf("repaired metadata missing related_vtexts: %#v", meta["related_vtexts"])
 	}
 
 	before, err := s.CountRevisionsByDoc(ctx, doc.DocID, ownerID)
@@ -192,7 +199,7 @@ func TestGlobalWireThinArticleVTextBodyRepairsForward(t *testing.T) {
 	if strings.Count(repaired.Content, "\n\n") < 7 || strings.Count(repaired.Content, "source:gw-src-") < 4 {
 		t.Fatalf("thin repair did not create a full source-linked article:\n%s", repaired.Content)
 	}
-	if !strings.Contains(repaired.Content, "related grid reserve-alert and retail margin exposure articles") {
-		t.Fatalf("thin repair missing related VText prose:\n%s", repaired.Content)
+	if !strings.Contains(repaired.Content, "vtext:") || strings.Contains(repaired.Content, "read alongside the related") {
+		t.Fatalf("thin repair did not create related VText transclusion refs:\n%s", repaired.Content)
 	}
 }

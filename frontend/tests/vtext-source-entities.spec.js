@@ -11,6 +11,7 @@ import {
   sourceOpenPlan,
   sourceEntityInlineExcerptText,
   sourceEntityOpenPlan,
+  renderInlineMarkdown,
   publicationSourceEntityToLocal,
   selectorTextQuote,
   sourceEvidenceState,
@@ -79,6 +80,23 @@ test('source inline excerpts prefer selected transclusion over full reader snaps
   };
 
   expect(sourceEntityInlineExcerptText(entity)).toBe('Selected bounded citation excerpt.');
+});
+
+test('related VText inline refs render as native transclusion refs', () => {
+  const html = renderInlineMarkdown(
+    'Read the related [grid update](vtext:doc-grid-story).',
+    [],
+    [{
+      label: 'grid update',
+      title: 'Grid operators add reserve alerts as heat forecast shifts north',
+      target: { target_kind: 'vtext_document', doc_id: 'doc-grid-story' },
+      transclusion: { snapshot_text: 'Forecast changes moved stress toward northern reserve margins.' },
+    }],
+  );
+
+  expect(html).toContain('data-vtext-related-ref');
+  expect(html).toContain('data-vtext-doc-id="doc-grid-story"');
+  expect(html).toContain('Forecast changes moved stress toward northern reserve margins.');
 });
 
 test('source evidence states normalize to typed reader labels', () => {

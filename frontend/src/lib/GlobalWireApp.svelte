@@ -311,7 +311,6 @@
 
   function sourceRef(item = {}, fallback = 'source') {
     const label = item.title || fallback;
-    if (!item.content_id) return label;
     const entityId = sourceEntityId(item);
     return entityId ? `[${label}](source:${entityId})` : label;
   }
@@ -333,14 +332,14 @@
     return manifestItems(story)
       .map((item) => {
         const entityId = sourceEntityId(item);
-        if (!entityId || !item.content_id) return null;
+        if (!entityId) return null;
         return {
           entity_id: entityId,
           kind: 'content_item',
           label: item.title,
           target: {
             target_kind: 'content_item',
-            content_id: item.content_id,
+            content_id: item.content_id || item.id || entityId,
             canonical_url: item.canonical_url || '',
           },
           selectors: [{ selector_kind: 'whole_resource' }],
@@ -365,25 +364,66 @@
       .filter(Boolean);
   }
 
+  function storyRelatedVTexts(story = selectedStory) {
+    return (story.related || [])
+      .map((storyId) => {
+        const related = stories.find((item) => item.id === storyId);
+        if (!related) return null;
+        return {
+          entity_id: `gw-vtext-${storyId}`,
+          label: related.headline,
+          title: related.headline,
+          target: {
+            target_kind: 'vtext_document',
+            doc_id: related.story_vtext_doc_id || storyId,
+            story_id: storyId,
+          },
+          transclusion: {
+            snapshot_text: related.dek || related.projections?.['wire-style'] || '',
+            relation: 'related_story',
+          },
+          provenance: {
+            created_by: 'global_wire',
+            source: 'global_wire_related_story_index',
+          },
+        };
+      })
+      .filter(Boolean);
+  }
+
   function storyVTextContent(story = selectedStory, style = selectedStyle) {
     const lead = story.manifest?.lead?.[0];
+    const secondLead = story.manifest?.lead?.[1];
     const supporting = story.manifest?.supporting?.[0];
     const qualifying = story.manifest?.contrary?.[0];
     const context = story.manifest?.context?.[0];
-    const sourceSentence = [
-      lead ? `lead evidence from ${sourceRef(lead, 'lead source')}` : '',
-      supporting ? `supporting context from ${sourceRef(supporting, 'supporting source')}` : '',
-      qualifying ? `a qualifying account from ${sourceRef(qualifying, 'qualifying source')}` : '',
-      context ? `background from ${sourceRef(context, 'context source')}` : '',
-    ].filter(Boolean).join(', ');
+    const related = (story.related || [])
+      .map((storyId) => {
+        const relatedStory = stories.find((item) => item.id === storyId);
+        if (!relatedStory) return '';
+        return `[${relatedStory.headline}](vtext:${relatedStory.story_vtext_doc_id || storyId})`;
+      })
+      .filter(Boolean);
     return [
       `# ${story.headline}`,
       '',
       story.dek,
       '',
+      lead ? `The lead signal is still the narrowest one: ${sourceRef(lead, 'lead source')} supports the update without turning it into an all-clear.${secondLead ? ` ${sourceRef(secondLead, 'operator source')} keeps the operator view attached to the story.` : ''}` : '',
+      '',
       story.projections[style.id] || story.projections['wire-style'],
       '',
-      sourceSentence ? `The current version keeps ${sourceSentence} in view.` : '',
+      supporting || qualifying
+        ? `The source neighborhood keeps the story open rather than flattening it into a verdict.${supporting ? ` ${sourceRef(supporting, 'supporting source')} adds context for the headline improvement.` : ''}${qualifying ? ` ${sourceRef(qualifying, 'qualifying source')} remains visible as qualifying evidence.` : ''}`
+        : '',
+      '',
+      context ? `Background remains part of the article rather than a hidden appendix. ${sourceRef(context, 'context source')} supplies the context future revisions can walk when the story updates.` : '',
+      '',
+      related.length
+        ? `This article transcludes the related ${related.join(related.length === 2 ? ' and ' : ', ')} VTexts so reconcilers can review cross-story updates without flattening the relationship into a list.`
+        : '',
+      '',
+      'This is a living Global Wire VText. Later processor and reconciler updates should revise this article as ordinary VText versions, with corrections treated as progress rather than as a separate product surface.',
     ].join('\n');
   }
 
@@ -408,7 +448,7 @@
     ].join('\n');
   }
 
-  function launchVText({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = true, sourceEntities = [] }) {
+  function launchVText({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = true, sourceEntities = [], relatedVTexts = [] }) {
     dispatch('launchapp', {
       appId: 'vtext',
       appName: 'VText',
@@ -421,6 +461,7 @@
         createdFrom,
         sourcePath,
         sourceEntities,
+        relatedVTexts,
         appHint: 'global-wire',
         allowMultiple: true,
       },
@@ -441,6 +482,7 @@
       docId: openDocId,
       createInitialVersion: !openDocId && !story.owner_id,
       sourceEntities: storySourceEntities(story),
+      relatedVTexts: storyRelatedVTexts(story),
     });
   }
 

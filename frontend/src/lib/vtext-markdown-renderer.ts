@@ -4,6 +4,7 @@ type RenderMarkdownOptions = {
   emptyHTML?: string;
   headingLevelOffset?: number;
   wrapTables?: boolean;
+  relatedVTexts?: any[];
 };
 
 function splitTableCells(value: string): string[] {
@@ -61,7 +62,7 @@ export function renderMarkdownBlocks(value: unknown, sourceEntities: any[] = [],
   const headingOffset = Number.isFinite(options.headingLevelOffset) ? Number(options.headingLevelOffset) : 0;
   const wrapTables = options.wrapTables !== false;
 
-  const inline = (text: string) => renderInlineMarkdown(text, sourceEntities);
+  const inline = (text: string) => renderInlineMarkdown(text, sourceEntities, options.relatedVTexts || []);
 
   function flushParagraph() {
     if (paragraph.length === 0) return;

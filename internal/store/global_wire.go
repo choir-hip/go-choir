@@ -287,7 +287,7 @@ func (s *Store) ensureDefaultGlobalWireStories(ctx context.Context, ownerID stri
 			return err
 		}
 		sourceBackedStory.StyleSources = styleSources
-		docID, err := s.createGlobalWireSeedVText(ctx, ownerID, sourceBackedStory.Headline, globalWireStoryVTextContent(sourceBackedStory), globalWireStoryVTextCitations(sourceBackedStory), map[string]any{
+		docID, err := s.createGlobalWireSeedVText(ctx, ownerID, sourceBackedStory.Headline, globalWireStoryVTextContent(sourceBackedStory, nil), globalWireStoryVTextCitations(sourceBackedStory), map[string]any{
 			"created_from":    "global_wire_storygraph_seed",
 			"storygraph_id":   sourceBackedStory.ID,
 			"source_state":    globalWireSeedState,
@@ -306,7 +306,7 @@ func (s *Store) ensureDefaultGlobalWireStories(ctx context.Context, ownerID stri
 			return err
 		}
 	}
-	return nil
+	return s.ensureExistingGlobalWireArticleVTextRevisions(ctx, ownerID)
 }
 
 func (s *Store) ensureExistingGlobalWireArticleVTextRevisions(ctx context.Context, ownerID string) error {
@@ -337,14 +337,16 @@ func (s *Store) ensureExistingGlobalWireArticleVTextRevisions(ctx context.Contex
 	if err := s.attachGlobalWireProjectionRefs(ctx, ownerID, stories); err != nil {
 		return err
 	}
+	relatedStories := globalWireStoriesByID(stories)
 	now := time.Now().UTC()
 	for _, story := range stories {
 		if strings.TrimSpace(story.StoryVTextDoc) != "" {
-			if err := s.repairGlobalWireArticleVTextRevision(ctx, ownerID, story.StoryVTextDoc, story.Headline, globalWireStoryVTextContent(story), globalWireStoryVTextCitations(story), map[string]any{
+			if err := s.repairGlobalWireArticleVTextRevision(ctx, ownerID, story.StoryVTextDoc, story.Headline, globalWireStoryVTextContent(story, relatedStories), globalWireStoryVTextCitations(story), map[string]any{
 				"created_from":    "global_wire_article_body_repair",
 				"storygraph_id":   story.ID,
 				"source_state":    story.SourceState,
 				"source_entities": globalWireSourceEntities(story),
+				"related_vtexts":  globalWireRelatedVTextEntities(story, relatedStories),
 			}, now); err != nil {
 				return err
 			}
@@ -437,12 +439,23 @@ func globalWireArticleVTextNeedsBodyRepair(content string) bool {
 		"Projection review id:",
 		"Projection Review Approval",
 		"The current version keeps",
+		"This VText should be read alongside the related",
 	} {
 		if strings.Contains(content, token) {
 			return true
 		}
 	}
 	return false
+}
+
+func globalWireStoriesByID(stories []types.GlobalWireStory) map[string]types.GlobalWireStory {
+	out := make(map[string]types.GlobalWireStory, len(stories))
+	for _, story := range stories {
+		if strings.TrimSpace(story.ID) != "" {
+			out[story.ID] = story
+		}
+	}
+	return out
 }
 
 func (s *Store) ensureGlobalWireStoryProjections(ctx context.Context, ownerID string, story types.GlobalWireStory, styles []types.GlobalWireStyleSource, now time.Time) (map[string]string, error) {
@@ -756,7 +769,7 @@ func (s *Store) createGlobalWireSeedVText(ctx context.Context, ownerID, title, c
 	return docID, nil
 }
 
-func globalWireStoryVTextContent(story types.GlobalWireStory) string {
+func globalWireStoryVTextContent(story types.GlobalWireStory, relatedStories map[string]types.GlobalWireStory) string {
 	lead := globalWireFirstSourceRef(story.Manifest.Lead, 1)
 	secondLead := globalWireNthSourceRef(story.Manifest.Lead, 1, 2)
 	support := globalWireFirstSourceRef(story.Manifest.Supporting, 3)
@@ -804,7 +817,7 @@ func globalWireStoryVTextContent(story types.GlobalWireStory) string {
 	if context != "" {
 		lines = append(lines, "Background remains part of the article rather than a hidden appendix. "+context+" supplies the broader context that future revisions can walk when the story updates.", "")
 	}
-	if related := globalWireRelatedVTextSentence(story); related != "" {
+	if related := globalWireRelatedVTextSentence(story, relatedStories); related != "" {
 		lines = append(lines, related, "")
 	}
 	lines = append(lines,
@@ -845,10 +858,10 @@ func globalWireClaimsSentence(claims []string) string {
 	}
 }
 
-func globalWireRelatedVTextSentence(story types.GlobalWireStory) string {
+func globalWireRelatedVTextSentence(story types.GlobalWireStory, relatedStories map[string]types.GlobalWireStory) string {
 	labels := make([]string, 0, len(story.Related))
 	for _, id := range story.Related {
-		if label := globalWireRelatedStoryLabel(id); label != "" {
+		if label := globalWireRelatedVTextRefLabel(id, relatedStories); label != "" {
 			labels = append(labels, label)
 		}
 	}
@@ -856,9 +869,54 @@ func globalWireRelatedVTextSentence(story types.GlobalWireStory) string {
 		return ""
 	}
 	if len(labels) == 1 {
-		return "This VText should be read alongside the related " + labels[0] + " article when reconcilers review cross-story updates."
+		return "This article transcludes the related " + labels[0] + " VText so reconcilers can review cross-story updates without flattening the relationship into a list."
 	}
-	return "This VText should be read alongside the related " + strings.Join(labels[:len(labels)-1], ", ") + " and " + labels[len(labels)-1] + " articles when reconcilers review cross-story updates."
+	return "This article transcludes the related " + strings.Join(labels[:len(labels)-1], ", ") + " and " + labels[len(labels)-1] + " VTexts so reconcilers can review cross-story updates without flattening the relationship into a list."
+}
+
+func globalWireRelatedVTextRefLabel(id string, relatedStories map[string]types.GlobalWireStory) string {
+	related, ok := relatedStories[strings.TrimSpace(id)]
+	if !ok || strings.TrimSpace(related.StoryVTextDoc) == "" {
+		return globalWireRelatedStoryLabel(id)
+	}
+	label := globalWireRelatedStoryLabel(id)
+	if label == "" {
+		label = related.Headline
+	}
+	return fmt.Sprintf("[%s](vtext:%s)", label, related.StoryVTextDoc)
+}
+
+func globalWireRelatedVTextEntities(story types.GlobalWireStory, relatedStories map[string]types.GlobalWireStory) []map[string]any {
+	entities := make([]map[string]any, 0, len(story.Related))
+	for _, id := range story.Related {
+		related, ok := relatedStories[strings.TrimSpace(id)]
+		if !ok || strings.TrimSpace(related.StoryVTextDoc) == "" {
+			continue
+		}
+		label := globalWireRelatedStoryLabel(id)
+		if label == "" {
+			label = related.Headline
+		}
+		entities = append(entities, map[string]any{
+			"entity_id": "gw-vtext-" + strings.TrimPrefix(globalWireSourceEntityID(types.GlobalWireSourceItem{ID: related.ID}), "gw-src-"),
+			"label":     label,
+			"title":     related.Headline,
+			"target": map[string]any{
+				"target_kind": "vtext_document",
+				"doc_id":      related.StoryVTextDoc,
+				"story_id":    related.ID,
+			},
+			"transclusion": map[string]any{
+				"snapshot_text": related.Dek,
+				"relation":      "related_story",
+			},
+			"provenance": map[string]any{
+				"created_by": "global_wire",
+				"source":     "global_wire_related_story_index",
+			},
+		})
+	}
+	return entities
 }
 
 func globalWireRelatedStoryLabel(id string) string {

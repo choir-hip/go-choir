@@ -182,6 +182,13 @@
     });
   }
 
+  function revisionRelatedVTexts(revision = currentRevision) {
+    const metadata = revision?.metadata || {};
+    if (Array.isArray(metadata.related_vtexts)) return metadata.related_vtexts;
+    if (Array.isArray(appContext.relatedVTexts)) return appContext.relatedVTexts;
+    return [];
+  }
+
   function currentSourceRepairCandidates(content = editorValue, gaps = revisionSourceGaps(currentRevision)) {
     return sourceRepairCandidates(content, gaps);
   }
@@ -227,7 +234,10 @@
 
   function renderDocumentHTML(value = editorValue) {
     const entities = revisionSourceEntities();
-    return renderMarkdownBlocks(value, entities, { emptyHTML: '<p class="empty-doc">Blank document.</p>' });
+    return renderMarkdownBlocks(value, entities, {
+      emptyHTML: '<p class="empty-doc">Blank document.</p>',
+      relatedVTexts: revisionRelatedVTexts(),
+    });
   }
 
   function syncEditorSurface(html, { force = false } = {}) {
@@ -416,6 +426,9 @@
     if (appContext.createdFrom) metadata.created_from = appContext.createdFrom;
     if (Array.isArray(appContext.sourceEntities) && appContext.sourceEntities.length) {
       metadata.source_entities = appContext.sourceEntities;
+    }
+    if (Array.isArray(appContext.relatedVTexts) && appContext.relatedVTexts.length) {
+      metadata.related_vtexts = appContext.relatedVTexts;
     }
     if (publishedBundle?.publication?.id) {
       metadata.source_publication_id = publishedBundle.publication.id;
@@ -2323,6 +2336,55 @@
 
   .rendered-doc :global(.vtext-source-ref--missing) {
     border-color: var(--choir-status-danger);
+  }
+
+  .rendered-doc :global(.vtext-related-ref) {
+    position: relative;
+    display: inline-flex;
+    align-items: baseline;
+    margin: 0 0.08rem;
+    border-radius: 0.25rem;
+    padding: 0.02rem 0.22rem;
+    color: var(--choir-text-accent);
+    background: color-mix(in srgb, var(--choir-state-selected) 54%, transparent);
+    font-size: 0.82em;
+    font-weight: 760;
+    line-height: 1.22;
+    cursor: pointer;
+  }
+
+  .rendered-doc :global(.vtext-related-ref--missing) {
+    color: var(--choir-status-warning);
+  }
+
+  .rendered-doc :global(.vtext-related-ref:focus-visible) {
+    outline: 2px solid var(--choir-state-active-glow);
+    outline-offset: 2px;
+  }
+
+  .rendered-doc :global(.vtext-related-ref-popover) {
+    position: absolute;
+    z-index: 28;
+    left: 0;
+    top: calc(100% + 0.35rem);
+    display: none;
+    width: min(24rem, calc(100vw - 3rem));
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 8px;
+    padding: 0.58rem 0.64rem;
+    color: var(--choir-text-primary);
+    background: var(--choir-surface-pane);
+    box-shadow: 0 18px 42px color-mix(in srgb, var(--choir-shadow-color) 28%, transparent);
+    font-family: var(--choir-font-ui);
+    font-size: 0.82rem;
+    font-weight: 620;
+    line-height: 1.35;
+  }
+
+  .rendered-doc :global(.vtext-related-ref:hover .vtext-related-ref-popover),
+  .rendered-doc :global(.vtext-related-ref:focus .vtext-related-ref-popover) {
+    display: grid;
+    gap: 0.42rem;
   }
 
   .rendered-doc :global(.vtext-source-ref-popover) {
