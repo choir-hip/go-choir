@@ -1309,3 +1309,57 @@ staging, capture the processor/reconciler run id and VText doc id, and inspect
 the resulting current revision plus `GET /api/global-wire/stories`. If the
 new article still lacks prose source refs, document that failure before adding
 runtime-level validation or stronger source-entity selection.
+
+## Checkpoint 2026-06-08T01:40Z: fresh live handoff proves prose but misses native source syntax
+
+status: checkpoint_incomplete
+
+objective: inspect a fresh post-`019a2d00038751c5c7d56e46218be84c6afb7d73`
+Global Wire source cycle and its shared-harness processor/reconciler/VText
+children before adding more code.
+
+live staging evidence: authenticated `GET /api/global-wire/source-status` on
+Node B reported cycle `cycle_8a9a56e7a99d61b38ef02a5f`, started
+`2026-06-08T01:35:47Z`, ended `2026-06-08T01:35:52Z`, with `211` source
+fetches and `548` items. The source surface reported the expected broad-source
+topology, `source-items -> processor-handoffs -> corpus-reconciler-handoff`.
+During the live run, processor state reached `5` completed and `2` running,
+with processor children `researcher: 2` and `vtext: 2`; the reconciler was
+running with children `researcher: 3` and `vtext: 1`.
+
+article evidence: authenticated `GET /api/global-wire/stories` returned new
+source-network VText stories from this cycle, including
+`source-network-vtext-2d58b31c-d87c-4222-a08d-3fe833e20ff7`, headline
+`BREAKING: Israeli Navy launches cruise missiles at Iran; explosions reported
+in Tehran, Beirut, Baghdad`, created `2026-06-08T01:37:01Z`, updated
+`2026-06-08T01:39:47Z`. Its `vtext_content` is a real prose article with
+sections such as `What is known so far`, `Broader context`, and `Sourcing
+caveats`, and it uses longtail monitoring/social sources including
+DDGeopolitics, warmonitors, Middle East Observer, and other source-ledger
+handles. This is substantially closer to the intended product than the earlier
+outline/stub failure.
+
+new problem documented before fix: the fresh article did not satisfy native
+VText source transclusion syntax. It wrote bare tokens such as
+`[source:src_718e2f432842de16]`, `[source:src_52a039f26ed5abd3]`, and
+`[source:src_af4fb76614282671]` instead of canonical inline source refs like
+`[DDGeopolitics](source:src_718e2f432842de16)`. The VText renderer and
+serializer recognize the canonical `[label](source:ENTITY_ID)` form, and the
+Global Wire source-neighborhood index also scans for that form. Because the
+article-local refs were bare tokens, the story projected `0` lead sources and
+only a bounded cycle-provenance context item:
+`source-network-cycle:cycle_8a9a56e7a99d61b38ef02a5f`.
+
+secondary quality notes: the prose still has some traditional-news formatting
+such as `**TEL AVIV** --` in another fresh Iran article, and collection claims
+still expose internal style rationale strings. Those are lower priority than
+the native-source failure, but they show the VText article contract needs
+runtime-level hygiene, not prompt-only hope.
+
+remaining error field: the architecture is now producing broad-source,
+longtail-informed VText-owned prose through processors/reconcilers, but it is
+not yet reliably producing native transclusion-ready article heads. The next
+fix should preserve the good prose/source breadth while normalizing or
+validating bare `[source:ENTITY_ID]` tokens into canonical source refs before
+the revision becomes the article head, and it should keep the story index from
+falling back to cycle-only evidence when recoverable source refs are present.
