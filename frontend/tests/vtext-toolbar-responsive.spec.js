@@ -64,6 +64,12 @@ async function toolbarMetrics(page) {
       verticalSpread,
       overlapPairs,
       text: toolbar.innerText.trim().replace(/\s+/g, ' '),
+      itemTexts: visibleItems.map((item) => item.text),
+      toolbarLeft: toolbarRect.left,
+      firstActionLeft: visibleItems.find((item) => ['Compare', 'Sources'].includes(item.text) || item.text.startsWith('Publish'))?.rect.left || 0,
+      reviseLeft: visibleItems.find((item) => item.text === 'Revise')?.rect.left || 0,
+      rightEdge: toolbarRect.right,
+      publishRight: visibleItems.find((item) => item.text.startsWith('Publish'))?.rect.right || 0,
     };
   });
 }
@@ -72,7 +78,7 @@ test('VText toolbar stays one row with invariant height across window widths', a
   await page.goto(BASE_URL);
   await expect(page.locator('[data-vtext-toolbar]')).toBeVisible();
 
-  const widths = [900, 640, 560, 460, 390, 340];
+  const widths = [1600, 1200, 900, 640, 560, 460, 390, 340];
   let expectedHeight = null;
 
   for (const width of widths) {
@@ -87,5 +93,9 @@ test('VText toolbar stays one row with invariant height across window widths', a
     expect(metrics.overflowX, `${width}px toolbar should not overflow horizontally`).toBe(false);
     expect(metrics.overflowY, `${width}px toolbar should not overflow vertically`).toBe(false);
     expect(metrics.overlapPairs, `${width}px toolbar controls should not overlap`).toEqual([]);
+    expect(metrics.text, `${width}px toolbar should not use illegible action initials`).not.toMatch(/\b[RSP]\b/);
+    expect(metrics.firstActionLeft - metrics.toolbarLeft, `${width}px non-Revise actions should stay left-aligned`).toBeLessThan(520);
+    expect(metrics.reviseLeft, `${width}px Revise should sit to the right of Publish`).toBeGreaterThan(metrics.publishRight);
+    expect(metrics.rightEdge - metrics.reviseLeft, `${width}px Revise should occupy the right action slot`).toBeLessThanOrEqual(110);
   }
 });

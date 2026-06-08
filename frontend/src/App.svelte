@@ -54,6 +54,7 @@
   let globalWirePublicLink = null;
   let globalWirePublicStatus = '';
   let globalWirePublicError = '';
+  const THEME_BOOT_CACHE_KEY = 'choir.theme.boot.v2';
 
   $: isAuthenticated = authState === 'signed_in';
   $: authIntentMessage = getAuthIntentMessage(pendingAuthIntent);
@@ -339,14 +340,34 @@
     }
     currentTheme = normalized;
     applyThemeToElement(document.documentElement, normalized);
+    saveThemeBootCache(normalized);
     if (persist && isAuthenticated) {
       saveThemePreference(normalized).catch(() => {});
     }
     return validation;
   }
 
+  function loadThemeBootCache() {
+    try {
+      const raw = window.localStorage?.getItem(THEME_BOOT_CACHE_KEY);
+      if (!raw) return DEFAULT_THEME;
+      const parsed = JSON.parse(raw);
+      const validation = validateThemeConfig(parsed);
+      return validation.ok ? normalizeThemeConfig(parsed) : DEFAULT_THEME;
+    } catch (_err) {
+      return DEFAULT_THEME;
+    }
+  }
+
+  function saveThemeBootCache(theme) {
+    try {
+      window.localStorage?.setItem(THEME_BOOT_CACHE_KEY, JSON.stringify(normalizeThemeConfig(theme)));
+    } catch (_err) {
+      // The server preference remains authoritative; the boot cache is only a first-paint hint.
+    }
+  }
+
   async function loadServerTheme() {
-    if (!isAuthenticated) return;
     try {
       const stored = await fetchThemePreference();
       const theme = stored && Object.keys(stored).length > 0 ? stored : DEFAULT_THEME;
@@ -360,7 +381,7 @@
   onMount(() => {
     publicRoutePath = window.location.pathname.startsWith('/pub/vtext/') ? window.location.pathname : '';
     globalWirePublicToken = globalWirePublicTokenFromPath(window.location.pathname);
-    applyTheme(DEFAULT_THEME, false);
+    applyTheme(loadThemeBootCache(), false);
     if (globalWirePublicToken) {
       void loadGlobalWirePublicLink(globalWirePublicToken);
     }

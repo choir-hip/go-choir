@@ -102,17 +102,6 @@
         <span class="label-tiny">{publishedActionPending ? '…' : 'E'}</span>
       </button>
     {:else}
-      <button
-        class="prompt-btn"
-        data-vtext-prompt
-        data-vtext-save
-        on:click={() => dispatch('prompt')}
-        disabled={loading || submitting || agentPending || isViewingHistorical || publishedActionPending}
-      >
-        <span class="label-full">{promptLabel}</span>
-        <span class="label-compact">{promptLabel}</span>
-        <span class="label-tiny">{submitting || agentPending ? '…' : 'R'}</span>
-      </button>
       {#if agentPending}
         <button
           class="secondary-action danger"
@@ -134,7 +123,7 @@
         >
           <span class="label-full">{publishedActionPending ? 'Submitting…' : 'Propose'}</span>
           <span class="label-compact">{publishedActionPending ? '…' : 'Propose'}</span>
-          <span class="label-tiny">{publishedActionPending ? '…' : 'P'}</span>
+          <span class="label-tiny">{publishedActionPending ? '…' : 'Propose'}</span>
         </button>
       {:else}
         {#if hasMergePreview}
@@ -146,7 +135,7 @@
           >
             <span class="label-full">{mergePending ? 'Accepting…' : 'Accept'}</span>
             <span class="label-compact">{mergePending ? '…' : 'Accept'}</span>
-            <span class="label-tiny">{mergePending ? '…' : 'A'}</span>
+            <span class="label-tiny">{mergePending ? '…' : 'Accept'}</span>
           </button>
           <button
             class="secondary-action danger"
@@ -156,7 +145,7 @@
           >
             <span class="label-full">Discard</span>
             <span class="label-compact">Discard</span>
-            <span class="label-tiny">D</span>
+            <span class="label-tiny">Discard</span>
           </button>
         {:else}
           <button
@@ -167,7 +156,7 @@
           >
             <span class="label-full">{comparePending ? 'Comparing…' : 'Compare'}</span>
             <span class="label-compact">{comparePending ? '…' : 'Compare'}</span>
-            <span class="label-tiny">{comparePending ? '…' : 'C'}</span>
+            <span class="label-tiny">{comparePending ? '…' : 'Compare'}</span>
           </button>
           <button
             class="secondary-action"
@@ -177,7 +166,7 @@
           >
             <span class="label-full">Sources{sourceCandidateCount ? ` ${sourceCandidateCount}` : ''}</span>
             <span class="label-compact">Sources</span>
-            <span class="label-tiny">S</span>
+            <span class="label-tiny">Sources</span>
           </button>
           {#if isViewingHistorical}
             <button
@@ -188,7 +177,7 @@
             >
               <span class="label-full">{restorePending ? 'Restoring…' : 'Restore'}</span>
               <span class="label-compact">{restorePending ? '…' : 'Restore'}</span>
-              <span class="label-tiny">{restorePending ? '…' : '↺'}</span>
+              <span class="label-tiny">{restorePending ? '…' : 'Restore'}</span>
             </button>
           {/if}
           {#if hasCompareResult}
@@ -200,7 +189,7 @@
             >
               <span class="label-full">{mergePending ? 'Merging…' : 'Merge into draft'}</span>
               <span class="label-compact">{mergePending ? '…' : 'Merge'}</span>
-              <span class="label-tiny">{mergePending ? '…' : 'M'}</span>
+              <span class="label-tiny">{mergePending ? '…' : 'Merge'}</span>
             </button>
           {/if}
         {/if}
@@ -215,7 +204,7 @@
           >
             <span class="label-full">{publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}</span>
             <span class="label-compact">{publishedActionPending ? '…' : 'Publish'}</span>
-            <span class="label-tiny">{publishedActionPending ? '…' : 'P'}</span>
+            <span class="label-tiny">{publishedActionPending ? '…' : 'Publish'}</span>
           </button>
           {#if publishMenuOpen}
             <div class="publish-menu" data-vtext-publish-menu role="menu" aria-label="Publish this version">
@@ -248,6 +237,17 @@
           {/if}
         </div>
       {/if}
+      <button
+        class="prompt-btn revise-action"
+        data-vtext-prompt
+        data-vtext-save
+        on:click={() => dispatch('prompt')}
+        disabled={loading || submitting || agentPending || isViewingHistorical || publishedActionPending}
+      >
+        <span class="label-full">{promptLabel}</span>
+        <span class="label-compact">{promptLabel}</span>
+        <span class="label-tiny">{submitting || agentPending ? '…' : promptLabel}</span>
+      </button>
     {/if}
   </div>
 </div>
@@ -319,8 +319,8 @@
   }
 
   .doc-actions {
-    flex: 0 1 auto;
-    justify-content: flex-end;
+    flex: 1 1 auto;
+    justify-content: flex-start;
   }
 
   .version-controls {
@@ -328,7 +328,7 @@
   }
 
   .doc-state {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     text-align: center;
     overflow: hidden;
@@ -411,10 +411,14 @@
     height: 2.1rem;
     padding: 0.62rem 0.95rem;
     font-size: 0.82rem;
-    font-weight: 700;
+    font-weight: 640;
     line-height: 1;
     white-space: nowrap;
     flex: 0 0 auto;
+  }
+
+  .revise-action {
+    margin-left: auto;
   }
 
   .secondary-action {
@@ -423,7 +427,7 @@
     height: 2.1rem;
     padding: 0.62rem 0.84rem;
     font-size: 0.78rem;
-    font-weight: 720;
+    font-weight: 620;
     color: var(--choir-text-accent);
     line-height: 1;
     white-space: nowrap;
@@ -456,7 +460,7 @@
     border-radius: 999px;
     padding: 0.62rem 0.84rem;
     font-size: 0.78rem;
-    font-weight: 720;
+    font-weight: 620;
     color: var(--choir-text-accent);
   }
 
@@ -627,6 +631,7 @@
       height: 1.95rem;
       padding: 0.5rem 0.7rem;
       font-size: 0.75rem;
+      font-weight: 600;
     }
 
     .secondary-action {
@@ -634,6 +639,7 @@
       min-width: auto;
       padding: 0.5rem 0.64rem;
       font-size: 0.72rem;
+      font-weight: 600;
     }
 
     .publish-action {
@@ -661,12 +667,11 @@
       max-width: 5.8rem;
     }
 
-    .label-full {
-      display: none;
-    }
-
-    .label-compact {
-      display: inline;
+    .prompt-btn,
+    .secondary-action {
+      padding-inline: 0.58rem;
+      font-size: 0.69rem;
+      letter-spacing: 0;
     }
   }
 
@@ -701,18 +706,12 @@
       padding: 0 0.38rem;
     }
 
-    .label-compact {
-      display: none;
-    }
-
-    .label-tiny {
-      display: inline;
-    }
-
     .prompt-btn,
     .secondary-action {
-      min-width: 2.15rem;
-      padding-inline: 0.52rem;
+      min-width: 0;
+      padding-inline: 0.44rem;
+      font-size: 0.64rem;
+      font-weight: 560;
     }
   }
 </style>
