@@ -2081,3 +2081,61 @@ rollback refs:
   VText channel fallback. Revert 0e4f38cc only if the problem checkpoint
   should be removed from mission history.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T11:10Z product-path mission continuation failed
+  in VText before Super delegation.
+current artifact state:
+  Behavior commit d487b2090f543af7fda6531c14a203af4a82d808 remains deployed
+  to staging and active on the owner-routed desktop sandbox at
+  http://10.202.180.2:8085. Documentation commit
+  5f9e0c95d8b5d3132186e16d4ee5d2723a98c8a67 records the prior routing proof.
+new evidence:
+  A focused product-path continuation was submitted through the owner-routed
+  prompt bar with trajectory id 7be84ab9-0d79-4f95-9046-1e70decbd540. It
+  created VText document e9c1e6e5-1235-4c8f-922d-8877c53e0071 and initial
+  revision 805f52a0-8b83-444e-a04c-d55d8695f020.
+
+  The continuation asked VText to create/update the mission narrative and then
+  ask Super to lease worker-medium for the first implementation target:
+  deleting the current Global Wire Sources Chronology/search/source-ledger
+  surface, while preserving article-attached source transclusion/source-reader
+  access.
+
+  The run failed before any Super request or worker delegation. Trace moment
+  ae6db819-2c39-478e-b90e-ab3be7515387 records:
+  `tool loop iteration 0: gateway call failed: gateway client: fireworks:
+  status 412 Precondition Failed (sanitized)`. The run log showed the VText
+  provider path using Fireworks model
+  `accounts/fireworks/models/deepseek-v4-flash`, prompt length about 11052,
+  and forced tool choice `function:edit_vtext`.
+
+  The VText document remained at its initial revision and did not receive a
+  mission-state revision or a Super handoff. The error was posted to the
+  trajectory channel, not converted into a useful owner-readable mission
+  narrative revision.
+belief-state changes:
+  The stale `submit_coagent_update` target fallback is still useful, but the
+  next reliability bottleneck for unattended Choir-in-Choir runs has shifted
+  earlier: VText can fail on the initial model call before it has a chance to
+  write a mission checkpoint or request Super. This makes an overnight run
+  fragile even when downstream worker reporting is repaired.
+remaining error field:
+  Investigate the Fireworks 412 root cause in the VText provider/tool-choice
+  path. Determine whether the request shape, forced tool choice, model policy,
+  context size, provider adapter, or retry/fallback semantics are responsible.
+  Do not treat this as a generic transient unless evidence shows repeated
+  successful retry behavior under the same request shape. A VText initial-turn
+  failure must either recover through an appropriate alternate provider/model
+  path or leave a clear owner-readable blocker in the VText narrative.
+next executable probe:
+  Inspect gateway/provider request construction for VText forced tool calls,
+  the model policy active on staging, and existing fallback behavior for
+  Fireworks 412. Add focused regression coverage for a VText initial-turn
+  gateway failure so the mission does not silently stop before Super.
+rollback refs:
+  No code change in this checkpoint. Revert only this checkpoint if the
+  evidence is superseded by a more precise provider-root-cause document before
+  any behavior fix lands.
+```
