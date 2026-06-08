@@ -437,6 +437,18 @@ last checkpoint:
   2026-06-08 mission created from compaction notes and owner correction:
   deterministic checkpointing is too primitive for readiness; normal path should
   become real LLM compaction, then threshold at context_window * 0.7.
+
+  2026-06-08 implementation preflight problem checkpoint: code inspection
+  confirmed the runtime still uses deterministic `summarizeRunMemoryMessages`
+  checkpoints assembled from truncated message descriptions, fixed 160k default
+  threshold config, and approximate message-only token pressure. The existing
+  positive substrate is durable raw run memory, latest-checkpoint rebuild,
+  recent tail retention, partial tool-result cut protection, and
+  `get_run_memory_entry`. The next behavior-changing commit should replace the
+  normal checkpoint path with an LLM-generated typed checkpoint, add
+  model-catalog context windows for the 1M-token DeepSeek/Xiaomi models, and
+  make model-aware 70% thresholding the normal default while preserving explicit
+  diagnostic overrides.
 current artifact state:
   Current runtime run-memory compaction is automatic and durable but uses a
   deterministic text checkpoint assembled from truncated message descriptions.
