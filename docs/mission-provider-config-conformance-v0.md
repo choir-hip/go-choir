@@ -713,13 +713,26 @@ what was proven:
   `set -a; source .env; set +a; CHOIR_PROVIDER_LIVE_TESTS=1 nix develop -c go
   test ./internal/provider -run 'TestIntegrationDeepSeekXiaomiOpenAIStreamingLive'
   -count=1 -v` passed in 5.616s.
+
+  The run-memory retrieval mechanism now has a deterministic shared-harness
+  diagnostic for the exact recovery path that a live long-context proof should
+  use. `TestRuntimeRunMemoryOverflowRecoveryRetrievesRawEntry` drives a
+  profiled runtime tool loop through a simulated provider context-overflow
+  error, lets the runtime force-compact the single oversized raw prompt, verifies
+  that the compacted retry context no longer contains the exact sentinel but
+  does contain a raw `entry_id`, calls the registered `get_run_memory_entry`
+  evidence tool, and then verifies the final provider turn can see the exact
+  raw sentinel from the retrieved entry. This proves compaction summary handles
+  can be used to recover exact pre-compaction content through the shared evidence
+  tool path. It is still a deterministic diagnostic, not a live DeepSeek/Xiaomi
+  long-context proof.
 unproven or partial claims:
   Product-path coverage for the full auto/required/none tool-mode matrix,
   non-tool reasoning-content passback for DeepSeek Anthropic, Anthropic-compatible
   streaming behavior if those routes are ever selected for default policy,
-  long-context compaction and post-compaction recall safety, reliable
-  arbitrary-image-URL verifier behavior, and the final Global Wire provider
-  readiness report remain unproven.
+  live provider long-context compaction and post-compaction recall safety,
+  reliable arbitrary-image-URL verifier behavior, and the final Global Wire
+  provider readiness report remain unproven.
 belief-state changes:
   The selected DeepSeek OpenAI-compatible path is now viable for VText exact
   edit/tool loops when tool-bearing calls disable thinking. Anthropic-compatible
@@ -737,10 +750,13 @@ belief-state changes:
   path still has only narrower VText/researcher/verifier proofs. OpenAI-
   compatible DeepSeek and Xiaomi streaming now has live no-cap evidence, and
   Xiaomi short-code verifier prompts should use explicit health-check framing
-  instead of brittle "exact marker" phrasing. Provider readiness is still not
-  complete enough for Global Wire hard cutover until long-context compaction
-  behavior is proven or precisely bounded and the final provider readiness
-  report is written.
+  instead of brittle "exact marker" phrasing. The compaction/exact-retrieval
+  mechanism is now covered locally under simulated context overflow, but the
+  mission still needs live/provider or product-path evidence that a real model
+  will follow those handles correctly after context pressure. Provider readiness
+  is still not complete enough for Global Wire hard cutover until live
+  long-context compaction behavior is proven or precisely bounded and the final
+  provider readiness report is written.
 remaining error field:
   Carry the provider/protocol conformance matrix into product-path evidence
   where it matters, prove or bound long-context compaction/recall continuity,

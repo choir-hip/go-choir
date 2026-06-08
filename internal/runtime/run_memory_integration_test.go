@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -201,6 +202,103 @@ func TestChildRunUsesRunMemory(t *testing.T) {
 	if entries[0].Kind != types.RunMemoryEntryMessage || entries[0].Role != "user" {
 		t.Fatalf("first child memory entry should be user message, got %+v", entries[0])
 	}
+}
+
+func TestRuntimeRunMemoryOverflowRecoveryRetrievesRawEntry(t *testing.T) {
+	registry := NewToolRegistry()
+	provider := &runMemoryOverflowRetrievalProvider{
+		sentinel: "RAW_ENTRY_SENTINEL_6b8c1f0e_exact",
+	}
+	rt, _ := testRuntimeWithProviderAndRegistry(t, provider, registry)
+	if err := RegisterEvidenceTools(registry, rt); err != nil {
+		t.Fatalf("register evidence tools: %v", err)
+	}
+	rt.cfg.RunMemoryContextThresholdTokens = 1_000_000
+
+	prompt := strings.Join([]string{
+		"Diagnostic objective: recover from context overflow by retrieving the raw compacted entry.",
+		strings.Repeat("summary-visible filler before the raw-only sentinel ", 20),
+		"Exact raw-only value: " + provider.sentinel,
+	}, "\n")
+	rec, err := rt.StartRun(context.Background(), prompt, "user-alice")
+	if err != nil {
+		t.Fatalf("start run: %v", err)
+	}
+	done := waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
+	if done.State != types.RunCompleted {
+		t.Fatalf("state: got %s, want completed", done.State)
+	}
+	if done.Result != "retrieved raw sentinel" {
+		t.Fatalf("result = %q", done.Result)
+	}
+	if got := atomic.LoadInt32(&provider.calls); got != 3 {
+		t.Fatalf("provider calls = %d, want 3", got)
+	}
+}
+
+type runMemoryOverflowRetrievalProvider struct {
+	Provider
+	sentinel string
+	calls    int32
+}
+
+func (p *runMemoryOverflowRetrievalProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	call := atomic.AddInt32(&p.calls, 1)
+	raw := rawMessagesForTest(req.Messages)
+	switch call {
+	case 1:
+		if !strings.Contains(raw, p.sentinel) {
+			return nil, fmt.Errorf("first raw context missing sentinel before overflow")
+		}
+		return nil, fmt.Errorf("maximum context length exceeded")
+	case 2:
+		if strings.Contains(raw, p.sentinel) {
+			return nil, fmt.Errorf("compacted retry context leaked exact sentinel")
+		}
+		entryID := extractRunMemoryEntryIDForTest(raw)
+		if entryID == "" {
+			return nil, fmt.Errorf("compacted retry context missing raw entry id: %s", raw)
+		}
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-get-memory",
+				Name:      "get_run_memory_entry",
+				Arguments: json.RawMessage(fmt.Sprintf(`{"entry_id":%q}`, entryID)),
+			}},
+			Usage: TokenUsage{InputTokens: 10, OutputTokens: 5},
+			Model: "test-model",
+		}, nil
+	case 3:
+		if !strings.Contains(raw, p.sentinel) {
+			return nil, fmt.Errorf("final context missing sentinel from retrieved raw entry")
+		}
+		return &ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       "retrieved raw sentinel",
+			Usage:      TokenUsage{InputTokens: 8, OutputTokens: 4},
+			Model:      "test-model",
+		}, nil
+	default:
+		return nil, fmt.Errorf("unexpected provider call %d", call)
+	}
+}
+
+func extractRunMemoryEntryIDForTest(raw string) string {
+	const marker = "entry_id="
+	idx := strings.Index(raw, marker)
+	if idx < 0 {
+		return ""
+	}
+	rest := raw[idx+len(marker):]
+	end := len(rest)
+	for i, r := range rest {
+		if r == ' ' || r == '\\' || r == '\n' || r == '\t' || r == '"' {
+			end = i
+			break
+		}
+	}
+	return strings.TrimSpace(rest[:end])
 }
 
 type runtimeOverflowProvider struct {
