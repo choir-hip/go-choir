@@ -797,3 +797,62 @@ next executable probe:
   a researcher handoff containing only `source_service_item:<id>` yields a
   VText source entity and Global Wire manifest with the resolved article title.
 ```
+
+```text
+status: shipped_partial
+last checkpoint: 2026-06-08T06:38Z source-service item handles now resolve
+  into reader-facing Global Wire source metadata.
+current artifact state:
+  Commit 2c6690633091aa30af234aa24b1cdaa0ec652eef is on origin/main and
+  deployed to staging. Global Wire still reads ordinary VText article revisions
+  and native source entities; the fix does not reintroduce a source ledger UI
+  and does not flatten source bodies into article prose.
+what shipped:
+  - `internal/runtime/tools_research.go`: Source Service HTTP client can resolve
+    `/internal/source-service/items/{id}` in addition to search/latest status.
+  - `internal/runtime/vtext_media_sources.go`: source-service entities derived
+    from worker/researcher handles are enriched from local Source Service item
+    records when available, with a short bounded timeout and existing fallback
+    labels when unavailable.
+  - `internal/runtime/global_wire.go`: Global Wire manifest projection enriches
+    only the cited source entities that will be shown in the story source
+    neighborhood, so already-created VText articles can render real source
+    titles/URLs without mutating stored VText metadata.
+  - `internal/types/global_wire.go`: source manifest items now carry optional
+    `source_id` and `fetch_id` fields alongside `canonical_url`.
+what was proven:
+  - Focused local Go test passed:
+    `nix develop -c go test ./internal/runtime -run 'TestVTextPromptDerivesSourceServiceEntitiesFromResearcherUpdates|TestVTextSourceServiceEntitiesResolveItemTitles|TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads'`.
+  - CI run 27120207895 passed for commit
+    2c6690633091aa30af234aa24b1cdaa0ec652eef, including runtime shards, build,
+    and staging deploy.
+  - FlakeHub run 27120207902 passed.
+  - Public staging `/health` and Node B sandbox `/health` both reported
+    deployed commit 2c6690633091aa30af234aa24b1cdaa0ec652eef with
+    `deployed_at=2026-06-08T06:34:50Z`.
+  - Deployed staging API proof against Node B
+    `/api/global-wire/stories` returned
+    `durable-storygraph+source-network-vtexts`; the first live story's manifest
+    lead sources included resolved titles such as "Telegram Post from
+    Slavyangrad Telegram" and Euronews article titles, plus `source_id`,
+    `fetch_id`, and `canonical_url`.
+unproven or partial claims:
+  The source labels are now real item metadata, but the quality of some source
+  bodies remains mixed: RSS bodies may include HTML; GDELT bodies may be GKG
+  metadata rather than article text; Telegram items are short social posts.
+  Article ranking, source-body cleaning/readability extraction, mobile source
+  open behavior, and deeper Choir-in-Choir acceptance remain open.
+belief-state changes:
+  The source pipeline is materially more real than the earlier screenshots
+  implied: current cycles have hundreds of items and live VText articles.
+  The next realism gap is not "sources do not exist"; it is source-body quality,
+  normalization, and how article agents choose and cite the best source mix.
+remaining error field:
+  Continue toward publication-quality Global Wire by improving source body
+  normalization/readability, ranking/prominence/novelty, and source-open
+  behavior. Preserve the deletion of detritus ledger/style controls.
+rollback refs:
+  Revert 2c669063 to remove source-service item enrichment and return to
+  handle-only source labels. Revert aa5bef5b only if the deleted detritus
+  surfaces must be restored, which remains contrary to product direction.
+```
