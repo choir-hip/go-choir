@@ -1252,3 +1252,60 @@ through revision metadata, and must keep datelines/publication labels out of
 the dek unless the chosen Style.vtext intentionally calls for them. Then prove
 against a fresh source cycle or an explicit VText article revision request,
 not only by reindexing already-written articles.
+
+## Checkpoint 2026-06-08T01:33Z: fresh Global Wire VText runs now require prose source refs
+
+status: checkpoint_incomplete
+
+objective: tighten the article-generation side of the system so future
+VText-owned Global Wire article revisions use native source transclusions in
+reader-facing prose, not only revision metadata, source inventories, or the
+collection index fallback.
+
+what shipped: commit `019a2d00038751c5c7d56e46218be84c6afb7d73` changes the
+processor/reconciler-to-VText article prompt and the Global Wire VText system
+prompt. When source entities are available, the VText handoff now requires a
+bounded number of distinct native source refs in article prose using
+`[label](source:entity_id)`, explicitly says source refs only in source
+inventories or metadata sections do not count, and tells the VText agent to
+use selected Style.vtext sources to shape voice/structure/judgment without
+naming the Style.vtext or style rationale in reader-facing prose. The handoff
+also bans visible publication/process labels such as `Breaking News |`,
+`Date:`, `By Choir News`, `Source Handles`, `Source Manifest`, and
+`Style.vtext Source` from the article body unless editorially necessary.
+
+local proof: focused comprehensive runtime tests passed for
+`TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText`
+and `TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead`. A broader
+Global Wire/source-entity prompt slice passed, and the local runtime shard
+script passed.
+
+staging proof: CI run `27110959684` passed integration smoke, Go vet/build,
+non-runtime tests, all four runtime shards, aggregate gate, and Node B deploy
+job `80008793210`. FlakeHub run `27110959693` succeeded.
+`https://choir.news/health`, Node B `/health`, and Node B `/opt/go-choir`
+all report deployed commit `019a2d00038751c5c7d56e46218be84c6afb7d73`,
+deployed_at `2026-06-08T01:28:30Z`.
+
+API proof: authenticated `GET /api/global-wire/stories` on sandbox port `8085`
+still returns `15` stories from `durable-storygraph+source-network-vtexts`;
+the live collection remains functional after the prompt-contract deploy. The
+top live stories include a mix of article-local manifests with visible lead
+source refs and bounded cycle-provenance fallbacks where older article bodies
+still lack visible native source refs.
+
+remaining error field: this checkpoint proves the deployed prompt contract,
+not that a fresh article generated under the new contract has already been
+created and inspected. Existing articles remain mixed because the prompt change
+does not rewrite previous VText heads. The next proof must create or observe a
+fresh processor/reconciler-to-VText article revision after
+`019a2d00038751c5c7d56e46218be84c6afb7d73`, then verify that the new VText
+head contains real prose, no visible process/style/source-inventory scaffolds,
+and several native source transclusions that Global Wire indexes as
+article-local lead/context sources.
+
+next executable probe: run or wait for a fresh source-cycle/VText handoff on
+staging, capture the processor/reconciler run id and VText doc id, and inspect
+the resulting current revision plus `GET /api/global-wire/stories`. If the
+new article still lacks prose source refs, document that failure before adding
+runtime-level validation or stronger source-entity selection.
