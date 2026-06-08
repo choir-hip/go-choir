@@ -995,3 +995,54 @@ rollback refs:
   Revert 436ef202 to restore prior behavior where any source URL, including
   `choir://`, rendered as a browser anchor.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T07:18Z source intake is no longer paltry, but
+  processor dispatch is capped below the current source volume.
+current artifact state:
+  Commit cebb21c1ea63bdc23b855c6bee3370f1c64689ca is on origin/main as the
+  latest docs checkpoint.
+  Staging behavior code remains deployed at
+  436ef202a385273bec5924d179b8e452c215562b. Source Service is running on
+  Node B with the compiled processor dispatch default and no service
+  environment override for `SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS` or
+  `SOURCECYCLED_AGENT_DISPATCH_MAX_PROCESSORS`.
+new evidence:
+  Source Service latest cycle `cycle_1d67b589d1aa22af1b539729` ran from
+  2026-06-08T07:02:31Z to 2026-06-08T07:02:38Z. It fetched from 211 configured
+  sources, had 198 successful fetches and 13 failed fetches, produced 611 new
+  items for the cycle, and reported 3,873 stored source items. The runtime
+  source-status API for a staging authenticated user reported 28 processor
+  requests and 1 reconciler request for that cycle; 7 processor requests were
+  submitted and 21 remained queued. Source Service's own latest summary also
+  reported `processor_status_counts={queued:21, submitted:7}`.
+code-path finding:
+  `cmd/sourcecycled/main.go` sets
+  `defaultSourceMaxxProcessorDispatchLimit = 7`. The dispatcher reads
+  `SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS` /
+  `SOURCECYCLED_AGENT_DISPATCH_MAX_PROCESSORS`, then submits only the first
+  `maxProcessorRequests` processor handoffs in the current cycle and increments
+  `ProcessorSkipped` for the rest. Skipped requests remain queued; there is no
+  observed follow-up drain loop in this pass.
+belief-state changes:
+  The earlier "16 sources is paltry" problem has materially moved: the system
+  is now ingesting hundreds of items per cycle from RSS, GDELT, Telegram, and
+  other configured source classes. The more immediate architecture question is
+  how live processors should absorb source bursts without losing coverage,
+  overloading LLM agents, or pretending that 7 processed chunks represent the
+  whole source cycle.
+remaining error field:
+  Do not solve this by blindly raising the cap in tracked config. The next
+  design/fix should decide whether queued processor requests need a drain
+  worker, adaptive concurrency, per-processor continuity scheduling, backpressure
+  metrics, or a different handoff topology. Acceptance evidence should show
+  that queued processor requests either drain later or are explicitly
+  superseded/merged with provenance, not silently stranded.
+next executable probe:
+  Inspect Source Service storage for queued processor requests across multiple
+  cycles and recent runtime run durations. Then choose the scheduling topology
+  that preserves processor continuity, drains or supersedes queued work
+  explicitly, and avoids dispatching redundant stale chunks after newer cycles
+  make them obsolete.
+```
