@@ -415,7 +415,8 @@ what was proven:
 unproven or partial claims:
   Real article throughput, source-body completeness, front-page ranking, and
   VText-agent-owned publication-quality article generation remain unproven.
-  Direct DeepSeek gateway calls are not yet proven on Node B.
+  Direct DeepSeek gateway calls are not yet proven on Node B. Xiaomi MiMo
+  direct calls are not yet implemented or proven.
 belief-state changes:
   Compatibility with old seeded StoryGraph behavior is now classified as a
   product bug, not a helpful fallback. Fireworks-hosted DeepSeek should no
@@ -445,6 +446,13 @@ evidence artifact refs:
   DeepSeek docs consulted: `https://api-docs.deepseek.com/`,
   `https://api-docs.deepseek.com/quick_start/pricing/`, and
   `https://api-docs.deepseek.com/api/create-chat-completion`.
+  Xiaomi MiMo docs consulted: `https://platform.xiaomimimo.com/docs/en-US/welcome`,
+  `https://platform.xiaomimimo.com/docs/en-US/quick-start/first-api-call`,
+  `https://platform.xiaomimimo.com/docs/en-US/quick-start/model`,
+  `https://platform.xiaomimimo.com/docs/en-US/api/chat/openai-api`,
+  `https://platform.xiaomimimo.com/docs/en-US/api/chat/anthropic-api`,
+  `https://platform.xiaomimimo.com/docs/en-US/usage-guide/multimodal-understanding/image-understanding`,
+  and `https://platform.xiaomimimo.com/docs/en-US/usage-guide/passing-back-reasoning_content`.
 rollback refs:
   None yet for this mission. Preserve prior rollback refs in
   `docs/mission-choir-in-choir-platform-pr-accelerator-v0.md`. Gateway secret
