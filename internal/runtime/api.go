@@ -46,6 +46,17 @@ type promptBarSubmitRequest struct {
 	Text string `json:"text"`
 }
 
+type modelPolicyResolveResponse struct {
+	Role            string `json:"role"`
+	OverlayID       string `json:"overlay_id,omitempty"`
+	Provider        string `json:"provider,omitempty"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	MaxTokens       int    `json:"max_tokens,omitempty"`
+	Source          string `json:"source,omitempty"`
+	PolicyError     string `json:"policy_error,omitempty"`
+}
+
 type promptBarSubmitResponse struct {
 	SubmissionID string         `json:"submission_id"`
 	State        types.RunState `json:"state"`
@@ -457,6 +468,50 @@ func (h *APIHandler) HandlePromptBarSubmission(w http.ResponseWriter, r *http.Re
 	}
 
 	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+func (h *APIHandler) HandleModelPolicyResolve(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	role := normalizeModelPolicyRole(r.URL.Query().Get("role"))
+	if role == "" {
+		role = AgentProfileConductor
+	}
+	metadata := map[string]any{
+		runMetadataAgentProfile: role,
+		runMetadataAgentRole:    role,
+	}
+	overlayID := strings.TrimSpace(r.URL.Query().Get("overlay_id"))
+	if overlayID != "" {
+		metadata[runMetadataLLMPolicyOverlayID] = overlayID
+	}
+	metadata = h.rt.ensureResolvedLLMMetadata(r.Context(), ownerID, metadata)
+	writeAPIJSON(w, http.StatusOK, modelPolicyResolveResponse{
+		Role:            role,
+		OverlayID:       overlayID,
+		Provider:        metadataStringValue(metadata, runMetadataLLMProvider),
+		Model:           metadataStringValue(metadata, runMetadataLLMModel),
+		ReasoningEffort: metadataStringValue(metadata, runMetadataLLMReasoningEffort),
+		MaxTokens:       metadataIntValue(metadata, runMetadataLLMMaxTokens),
+		Source:          metadataStringValue(metadata, runMetadataLLMPolicySource),
+		PolicyError:     metadataStringValue(metadata, runMetadataLLMPolicyError),
+	})
+}
+
+func (h *APIHandler) HandleModelPolicyRouter(w http.ResponseWriter, r *http.Request) {
+	switch {
+	case r.URL.Path == "/api/model-policy/resolve":
+		h.HandleModelPolicyResolve(w, r)
+	default:
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "model policy route not found"})
+	}
 }
 
 func (h *APIHandler) HandleRunContinuationsRoot(w http.ResponseWriter, r *http.Request) {
@@ -1536,6 +1591,7 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/prompt-bar", h.HandlePromptBar)
 	s.HandleFunc("/api/prompt-bar/submissions/", h.HandlePromptBarSubmission)
+	s.HandleFunc("/api/model-policy/", h.HandleModelPolicyRouter)
 	s.HandleFunc("/api/trace/trajectories", h.HandleTraceTrajectories)
 	s.HandleFunc("/api/trace/trajectories/", h.HandleTraceTrajectories)
 	s.HandleFunc("/api/podcast/subscriptions/refresh", h.HandlePodcastSubscriptionsRefresh)

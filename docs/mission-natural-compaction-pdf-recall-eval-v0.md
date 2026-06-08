@@ -424,6 +424,9 @@ what shipped:
 - pending behavior work adds scoped model-policy overlays at
   `System/model-policy-overlays/<overlay_id>.toml`, with per-run overlay ids
   recorded in metadata.
+- pending behavior work also adds authenticated read-only
+  `/api/model-policy/resolve` so staging can prove overlay resolution through a
+  browser-public product route without using forbidden `/api/agent/*` routes.
 
 what was proven so far:
 
@@ -459,6 +462,8 @@ what was proven so far:
   - child researcher runs inherit overlay ids into resolved `llm_provider` and
     `llm_model` metadata;
   - `spawn_agent` can pass a trace-visible `model_policy_overlay_id`.
+- Focused comprehensive API test proves `/api/model-policy/resolve` resolves a
+  researcher role through an owner-visible overlay file.
 
 unproven or partial claims:
 
@@ -495,6 +500,7 @@ latest local proof:
 - `nix eval .#nixosConfigurations.go-choir-sandbox-vm-playwright.config.system.build.toplevel.drvPath`
 - `nix develop -c go test ./internal/runtime -run 'TestRuntime.*ModelPolicy|TestStartChildRunResolvesModelPolicy|TestParseModelPolicy|TestEnsureDefaultModelPolicy'`
 - `nix develop -c go test ./internal/runtime -run 'TestAgentToolProfiles|TestStartChildRunResolvesModelPolicy|TestRuntimeResolvesModelPolicy|TestRuntimeRejectsExpiredModelPolicyOverlay|TestProviderPreconditionFallbackSelections|TestRunToolLoop'`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestHandleModelPolicyResolveUsesOverlayFile'`
 - `nix develop -c go test ./internal/runtime -run 'TestExtract|TestSystemPromptForResearcher|TestContent'`
 - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact|TestAgentToolProfiles|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot'`
 

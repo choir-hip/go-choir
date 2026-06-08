@@ -109,6 +109,65 @@ func TestHandlePromptBarRejectsBrowserRuntimeMetadata(t *testing.T) {
 	}
 }
 
+func TestHandleModelPolicyResolveUsesOverlayFile(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	overlayDir := filepath.Join(filepath.Dir(policyPath), "model-policy-overlays")
+	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(policyPath, []byte(`
+[defaults]
+fallback_provider = "deepseek"
+fallback_model = "deepseek-v4-flash"
+
+[roles.researcher]
+provider = "deepseek"
+model = "deepseek-v4-flash"
+reasoning = "medium"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	if err := os.WriteFile(filepath.Join(overlayDir, "mimo-eval.toml"), []byte(`
+[overlay]
+expires_at = "`+future+`"
+
+[roles.researcher]
+provider = "xiaomi"
+model = "mimo-v2.5-pro"
+reasoning = "medium"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rt.cfg.ModelPolicyPath = policyPath
+
+	req := authenticatedRequest(http.MethodGet, "/api/model-policy/resolve?role=researcher&overlay_id=mimo-eval", "", "user-alice")
+	w := httptest.NewRecorder()
+
+	handler.HandleModelPolicyRouter(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d want %d body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp modelPolicyResolveResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Role != AgentProfileResearcher || resp.OverlayID != "mimo-eval" {
+		t.Fatalf("route response identity = %+v", resp)
+	}
+	if resp.Provider != "xiaomi" || resp.Model != "mimo-v2.5-pro" || resp.ReasoningEffort != "medium" {
+		t.Fatalf("selection = %+v", resp)
+	}
+	if resp.Source != filepath.Join(overlayDir, "mimo-eval.toml") {
+		t.Fatalf("source = %q", resp.Source)
+	}
+	if resp.PolicyError != "" {
+		t.Fatalf("policy_error = %q", resp.PolicyError)
+	}
+}
+
 func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	ctx := context.Background()
