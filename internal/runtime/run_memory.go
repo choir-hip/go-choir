@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	runtimestore "github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -19,6 +21,8 @@ var (
 	// ErrRunMemoryCompactionFailed marks a failure in durable memory compaction
 	// before a provider call.
 	ErrRunMemoryCompactionFailed = errors.New("run memory compaction failed")
+
+	runMemoryCompactionLocks sync.Map
 )
 
 type runMemoryManager struct {
@@ -26,7 +30,11 @@ type runMemoryManager struct {
 	rec                       *types.RunRecord
 	cfg                       Config
 	emit                      EventEmitFunc
+	provider                  ToolLoopProvider
+	llmConfig                 LLMSelection
+	promptOverheadTokens      int
 	overflowRecoveryAttempted bool
+	compactionInProgress      bool
 }
 
 func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg Config, emit EventEmitFunc) *runMemoryManager {
@@ -36,6 +44,13 @@ func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg Co
 		cfg:   normalizeConfig(cfg),
 		emit:  emit,
 	}
+}
+
+func (m *runMemoryManager) withLLMCompactor(provider ToolLoopProvider, llmConfig LLMSelection, promptOverheadTokens int) *runMemoryManager {
+	m.provider = provider
+	m.llmConfig = llmConfig
+	m.promptOverheadTokens = promptOverheadTokens
+	return m
 }
 
 func (m *runMemoryManager) initialize(ctx context.Context, initialMessages []json.RawMessage) ([]json.RawMessage, error) {
@@ -136,13 +151,23 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 		return false, nil
 	}
 	if !force {
-		tokens := estimateRawMessagesTokens(buildRunMemoryContext(entries))
-		if tokens <= m.cfg.RunMemoryContextThresholdTokens {
+		tokens := m.estimatePromptPressureTokens(entries)
+		if tokens <= m.effectiveContextThresholdTokens() {
 			return false, nil
 		}
 		if entries[len(entries)-1].Kind == types.RunMemoryEntryCompaction {
 			return false, nil
 		}
+	}
+	if m.compactionInProgress {
+		return false, fmt.Errorf("run memory compaction already in progress for run %s", m.rec.RunID)
+	}
+	lockKey := m.runCompactionLockKey()
+	if lockKey != "" {
+		if _, loaded := runMemoryCompactionLocks.LoadOrStore(lockKey, true); loaded {
+			return false, fmt.Errorf("run memory compaction already in progress for run %s", m.rec.RunID)
+		}
+		defer runMemoryCompactionLocks.Delete(lockKey)
 	}
 
 	keepRecentTokens := m.cfg.RunMemoryKeepRecentTokens
@@ -156,29 +181,52 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 		}
 		return false, nil
 	}
-
+	m.compactionInProgress = true
+	defer func() {
+		m.compactionInProgress = false
+	}()
 	startPayload, _ := json.Marshal(map[string]any{
-		"reason":        reason,
-		"tokens_before": plan.TokensBefore,
-		"message_count": plan.CompactedMessages + plan.KeptMessages,
+		"reason":           reason,
+		"tokens_before":    plan.TokensBefore,
+		"message_count":    plan.CompactedMessages + plan.KeptMessages,
+		"threshold_tokens": m.effectiveContextThresholdTokens(),
 	})
 	m.emit(types.EventRunCompactionStarted, "run_memory", startPayload)
+
+	compaction, err := m.generateLLMCompaction(ctx, plan)
+	if err != nil {
+		failedPayload, _ := json.Marshal(map[string]any{
+			"reason":         reason,
+			"tokens_before":  plan.TokensBefore,
+			"provider_error": err.Error(),
+			"fallback":       "deterministic_emergency",
+		})
+		m.emit(types.EventRunProgress, "run_memory_compaction_failed", failedPayload)
+		compaction = deterministicEmergencyRunMemoryCompaction(plan, err)
+	}
 
 	entry, err := m.store.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
 		RunID:            m.rec.RunID,
 		OwnerID:          m.rec.OwnerID,
 		AgentID:          m.rec.AgentID,
 		Kind:             types.RunMemoryEntryCompaction,
-		Summary:          plan.Summary,
+		Summary:          compaction.Summary,
 		FirstKeptEntryID: plan.FirstKeptEntryID,
 		TokensBefore:     plan.TokensBefore,
 		Reason:           reason,
+		Model:            strings.TrimSpace(m.llmConfig.Model),
 		Details: map[string]any{
 			"compacted_messages":        plan.CompactedMessages,
 			"kept_messages":             plan.KeptMessages,
 			"tokens_after":              plan.TokensAfterEstimate,
 			"raw_entry_ids":             plan.RawEntryIDs,
 			"raw_tool_result_entry_ids": plan.RawToolResultEntryIDs,
+			"checkpoint":                compaction.Details,
+			"checkpoint_status":         compaction.Status,
+			"checkpoint_provider":       compaction.Provider,
+			"checkpoint_model":          compaction.Model,
+			"threshold_tokens":          m.effectiveContextThresholdTokens(),
+			"prompt_overhead_tokens":    m.promptOverheadTokens,
 		},
 	})
 	if err != nil {
@@ -195,9 +243,20 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 		"kept_messages":             plan.KeptMessages,
 		"raw_entry_ids":             plan.RawEntryIDs,
 		"raw_tool_result_entry_ids": plan.RawToolResultEntryIDs,
+		"checkpoint_status":         compaction.Status,
+		"checkpoint_provider":       compaction.Provider,
+		"checkpoint_model":          compaction.Model,
+		"threshold_tokens":          m.effectiveContextThresholdTokens(),
 	})
 	m.emit(types.EventRunCompactionCompleted, "run_memory", donePayload)
 	return true, nil
+}
+
+func (m *runMemoryManager) runCompactionLockKey() string {
+	if m == nil || m.rec == nil || strings.TrimSpace(m.rec.RunID) == "" {
+		return ""
+	}
+	return strings.TrimSpace(m.rec.OwnerID) + "/" + strings.TrimSpace(m.rec.RunID)
 }
 
 func canCheckpointRunEventLedger(reason string) bool {
@@ -271,6 +330,8 @@ func (m *runMemoryManager) compactRunEventLedger(ctx context.Context, entries []
 
 type runMemoryCompactionPlan struct {
 	Summary               string
+	PreviousSummary       string
+	Reason                string
 	FirstKeptEntryID      string
 	TokensBefore          int
 	TokensAfterEstimate   int
@@ -278,6 +339,33 @@ type runMemoryCompactionPlan struct {
 	KeptMessages          int
 	RawEntryIDs           []string
 	RawToolResultEntryIDs []string
+	SummarizedEntries     []types.RunMemoryEntry
+}
+
+type runMemoryLLMCompaction struct {
+	Summary  string
+	Details  map[string]any
+	Status   string
+	Provider string
+	Model    string
+}
+
+type runMemoryCheckpoint struct {
+	CurrentObjective       string   `json:"current_objective"`
+	ActiveTask             string   `json:"active_task"`
+	UserHardConstraints    []string `json:"user_hard_constraints"`
+	CompletedWork          []string `json:"completed_work"`
+	KeyDecisions           []string `json:"key_decisions"`
+	OpenObligations        []string `json:"open_obligations"`
+	FailedAttempts         []string `json:"failed_attempts"`
+	SourceEvidenceHandles  []string `json:"source_evidence_handles"`
+	RawEntryHandles        []string `json:"raw_entry_handles"`
+	RawToolResultHandles   []string `json:"raw_tool_result_handles"`
+	FilesDocsResources     []string `json:"files_docs_resources"`
+	BlockersUncertainties  []string `json:"blockers_uncertainties"`
+	NextActions            []string `json:"next_actions"`
+	RetrievalInstructions  []string `json:"retrieval_instructions"`
+	ContinuationCheckpoint string   `json:"continuation_checkpoint"`
 }
 
 func planRunMemoryCompaction(entries []types.RunMemoryEntry, keepRecentTokens int, reason string) (runMemoryCompactionPlan, bool) {
@@ -353,6 +441,8 @@ func planRunMemoryCompaction(entries []types.RunMemoryEntry, keepRecentTokens in
 
 	return runMemoryCompactionPlan{
 		Summary:               summary,
+		PreviousSummary:       previousSummary,
+		Reason:                reason,
 		FirstKeptEntryID:      firstKeptEntryID,
 		TokensBefore:          tokensBefore,
 		TokensAfterEstimate:   estimateRawMessagesTokens(afterEstimateMessages),
@@ -360,7 +450,308 @@ func planRunMemoryCompaction(entries []types.RunMemoryEntry, keepRecentTokens in
 		KeptMessages:          keptMessages,
 		RawEntryIDs:           rawEntryIDs,
 		RawToolResultEntryIDs: rawToolResultEntryIDs,
+		SummarizedEntries:     append([]types.RunMemoryEntry(nil), summarized...),
 	}, true
+}
+
+func (m *runMemoryManager) effectiveContextThresholdTokens() int {
+	if m.cfg.RunMemoryContextThresholdTokens > 0 {
+		return m.cfg.RunMemoryContextThresholdTokens
+	}
+	window := modelcatalog.ContextWindowTokensForModel(m.llmConfig.Model)
+	if window <= 0 {
+		window = modelcatalog.DefaultContextWindowTokens
+	}
+	threshold := int(float64(window) * DefaultRunMemoryContextThresholdRatio)
+	if threshold <= 0 {
+		return DefaultRunMemoryPromptReserveTokens
+	}
+	return threshold
+}
+
+func (m *runMemoryManager) estimatePromptPressureTokens(entries []types.RunMemoryEntry) int {
+	return estimateRawMessagesTokens(buildRunMemoryContext(entries)) +
+		m.promptOverheadTokens +
+		DefaultRunMemoryPromptReserveTokens
+}
+
+func (m *runMemoryManager) generateLLMCompaction(ctx context.Context, plan runMemoryCompactionPlan) (runMemoryLLMCompaction, error) {
+	if m.provider == nil {
+		return runMemoryLLMCompaction{}, fmt.Errorf("llm compactor provider is not configured")
+	}
+	if strings.TrimSpace(m.llmConfig.Provider) == "" || strings.TrimSpace(m.llmConfig.Model) == "" {
+		return runMemoryLLMCompaction{}, fmt.Errorf("llm compactor model selection is incomplete")
+	}
+	system := strings.Join([]string{
+		"You are Choir's runtime run-memory compactor.",
+		"Convert durable run memory into a concise typed checkpoint for the same agent run.",
+		"Return only one JSON object matching the requested schema.",
+		"Do not continue the conversation. Do not expose hidden reasoning.",
+		"Preserve exact entry_id handles so the future agent can call get_run_memory_entry when details are needed.",
+	}, "\n")
+	userText := buildRunMemoryCompactionPrompt(m.rec, plan)
+	msg, _ := json.Marshal(map[string]any{
+		"role": "user",
+		"content": []any{
+			map[string]string{"type": "text", "text": userText},
+		},
+	})
+	resp, err := m.provider.CallWithTools(ctx, ToolLoopRequest{
+		Provider:        m.llmConfig.Provider,
+		Model:           m.llmConfig.Model,
+		ReasoningEffort: m.llmConfig.ReasoningEffort,
+		System:          system,
+		Messages:        []json.RawMessage{msg},
+		MaxTokens:       MaxInteractiveOutputTokensForSelection(m.llmConfig, agentProfileForRun(m.rec)),
+	})
+	if err != nil {
+		return runMemoryLLMCompaction{}, err
+	}
+	checkpoint, err := parseRunMemoryCheckpoint(resp.Text)
+	if err != nil {
+		return runMemoryLLMCompaction{}, err
+	}
+	summary := renderRunMemoryCheckpointSummary(checkpoint, plan)
+	details := checkpointDetails(checkpoint)
+	details["llm_stop_reason"] = resp.StopReason
+	details["llm_response_model"] = resp.Model
+	details["llm_input_tokens"] = resp.Usage.InputTokens
+	details["llm_output_tokens"] = resp.Usage.OutputTokens
+	details["reasoning_content_present"] = strings.TrimSpace(resp.ReasoningContent) != ""
+	return runMemoryLLMCompaction{
+		Summary:  summary,
+		Details:  details,
+		Status:   "llm_checkpoint",
+		Provider: m.llmConfig.Provider,
+		Model:    m.llmConfig.Model,
+	}, nil
+}
+
+func buildRunMemoryCompactionPrompt(rec *types.RunRecord, plan runMemoryCompactionPlan) string {
+	var b strings.Builder
+	b.WriteString("Create a typed checkpoint for this Choir run. Return only JSON with these fields:\n")
+	b.WriteString(`{"current_objective":"","active_task":"","user_hard_constraints":[],"completed_work":[],"key_decisions":[],"open_obligations":[],"failed_attempts":[],"source_evidence_handles":[],"raw_entry_handles":[],"raw_tool_result_handles":[],"files_docs_resources":[],"blockers_uncertainties":[],"next_actions":[],"retrieval_instructions":[],"continuation_checkpoint":""}`)
+	b.WriteString("\n\nRules:\n")
+	b.WriteString("- Preserve user hard constraints, current objective, tool obligations, failed attempts, source/evidence handles, and next actions.\n")
+	b.WriteString("- Include compacted raw entry ids in raw_entry_handles when they may need exact retrieval.\n")
+	b.WriteString("- Include tool-result entry ids in raw_tool_result_handles.\n")
+	b.WriteString("- Use get_run_memory_entry(entry_id) in retrieval_instructions when exact raw content may matter.\n")
+	b.WriteString("- Do not invent facts. Say uncertain when uncertain.\n")
+	b.WriteString("- Keep continuation_checkpoint concise but useful.\n")
+	if rec != nil {
+		b.WriteString("\nRun record:\n")
+		fmt.Fprintf(&b, "- loop_id=%s state=%s agent_profile=%s agent_role=%s\n", rec.RunID, rec.State, rec.AgentProfile, rec.AgentRole)
+		if strings.TrimSpace(rec.Prompt) != "" {
+			fmt.Fprintf(&b, "- original_prompt=%s\n", truncateForRunMemory(rec.Prompt, 1400))
+		}
+	}
+	if strings.TrimSpace(plan.PreviousSummary) != "" {
+		b.WriteString("\nPrevious checkpoint summary:\n")
+		b.WriteString(truncateForRunMemory(plan.PreviousSummary, 3000))
+		b.WriteString("\n")
+	}
+	b.WriteString("\nCompaction metadata:\n")
+	fmt.Fprintf(&b, "- reason=%s\n", plan.Reason)
+	fmt.Fprintf(&b, "- tokens_before_estimate=%d\n", plan.TokensBefore)
+	fmt.Fprintf(&b, "- first_kept_entry_id=%s\n", plan.FirstKeptEntryID)
+	fmt.Fprintf(&b, "- raw_entry_ids=%s\n", strings.Join(plan.RawEntryIDs, ","))
+	fmt.Fprintf(&b, "- raw_tool_result_entry_ids=%s\n", strings.Join(plan.RawToolResultEntryIDs, ","))
+	b.WriteString("\nCompacted messages:\n")
+	for _, entry := range plan.SummarizedEntries {
+		fmt.Fprintf(&b, "- entry_id=%s role=%s seq=%d content=%s\n",
+			entry.EntryID,
+			firstNonEmpty(entry.Role, runMemoryMessageRole(entry.Message)),
+			entry.Seq,
+			describeRunMemoryMessageForLLM(entry.Message),
+		)
+	}
+	return b.String()
+}
+
+func parseRunMemoryCheckpoint(text string) (runMemoryCheckpoint, error) {
+	text = strings.TrimSpace(text)
+	start := strings.Index(text, "{")
+	end := strings.LastIndex(text, "}")
+	if start < 0 || end <= start {
+		return runMemoryCheckpoint{}, fmt.Errorf("llm compaction response did not contain JSON object: %s", truncateForRunMemory(text, 500))
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(text[start:end+1]), &raw); err != nil {
+		return runMemoryCheckpoint{}, fmt.Errorf("decode llm compaction checkpoint: %w", err)
+	}
+	checkpoint := runMemoryCheckpoint{
+		CurrentObjective:       checkpointStringField(raw, "current_objective"),
+		ActiveTask:             checkpointStringField(raw, "active_task"),
+		UserHardConstraints:    checkpointStringListField(raw, "user_hard_constraints"),
+		CompletedWork:          checkpointStringListField(raw, "completed_work"),
+		KeyDecisions:           checkpointStringListField(raw, "key_decisions"),
+		OpenObligations:        checkpointStringListField(raw, "open_obligations"),
+		FailedAttempts:         checkpointStringListField(raw, "failed_attempts"),
+		SourceEvidenceHandles:  checkpointStringListField(raw, "source_evidence_handles"),
+		RawEntryHandles:        checkpointStringListField(raw, "raw_entry_handles"),
+		RawToolResultHandles:   checkpointStringListField(raw, "raw_tool_result_handles"),
+		FilesDocsResources:     checkpointStringListField(raw, "files_docs_resources"),
+		BlockersUncertainties:  checkpointStringListField(raw, "blockers_uncertainties"),
+		NextActions:            checkpointStringListField(raw, "next_actions"),
+		RetrievalInstructions:  checkpointStringListField(raw, "retrieval_instructions"),
+		ContinuationCheckpoint: checkpointStringField(raw, "continuation_checkpoint"),
+	}
+	if strings.TrimSpace(checkpoint.CurrentObjective) == "" &&
+		strings.TrimSpace(checkpoint.ActiveTask) == "" &&
+		strings.TrimSpace(checkpoint.ContinuationCheckpoint) == "" {
+		return runMemoryCheckpoint{}, fmt.Errorf("llm compaction checkpoint is empty")
+	}
+	return checkpoint, nil
+}
+
+func checkpointStringField(raw map[string]any, key string) string {
+	value, ok := raw[key]
+	if !ok {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case []any:
+		values := checkpointStringListField(raw, key)
+		return strings.Join(values, "; ")
+	default:
+		encoded, _ := json.Marshal(typed)
+		return strings.TrimSpace(string(encoded))
+	}
+}
+
+func checkpointStringListField(raw map[string]any, key string) []string {
+	value, ok := raw[key]
+	if !ok {
+		return nil
+	}
+	switch typed := value.(type) {
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return nil
+		}
+		return []string{strings.TrimSpace(typed)}
+	case []string:
+		return cleanCheckpointStrings(typed)
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			switch v := item.(type) {
+			case string:
+				out = append(out, v)
+			default:
+				encoded, _ := json.Marshal(v)
+				out = append(out, string(encoded))
+			}
+		}
+		return cleanCheckpointStrings(out)
+	default:
+		encoded, _ := json.Marshal(typed)
+		return cleanCheckpointStrings([]string{string(encoded)})
+	}
+}
+
+func renderRunMemoryCheckpointSummary(checkpoint runMemoryCheckpoint, plan runMemoryCompactionPlan) string {
+	var b strings.Builder
+	b.WriteString("Run memory LLM checkpoint\n")
+	b.WriteString("Reason: ")
+	b.WriteString(plan.Reason)
+	b.WriteString("\n\n")
+	writeCheckpointScalar(&b, "Current objective", checkpoint.CurrentObjective)
+	writeCheckpointScalar(&b, "Active task", checkpoint.ActiveTask)
+	writeCheckpointList(&b, "User hard constraints", checkpoint.UserHardConstraints)
+	writeCheckpointList(&b, "Completed work", checkpoint.CompletedWork)
+	writeCheckpointList(&b, "Key decisions", checkpoint.KeyDecisions)
+	writeCheckpointList(&b, "Open obligations", checkpoint.OpenObligations)
+	writeCheckpointList(&b, "Failed attempts / do not repeat", checkpoint.FailedAttempts)
+	writeCheckpointList(&b, "Source/evidence/artifact handles", checkpoint.SourceEvidenceHandles)
+	writeCheckpointList(&b, "Raw entry handles", checkpoint.RawEntryHandles)
+	writeCheckpointList(&b, "Raw tool-result handles", checkpoint.RawToolResultHandles)
+	writeCheckpointList(&b, "Files/docs/resources", checkpoint.FilesDocsResources)
+	writeCheckpointList(&b, "Blockers and uncertainties", checkpoint.BlockersUncertainties)
+	writeCheckpointList(&b, "Next actions", checkpoint.NextActions)
+	writeCheckpointList(&b, "Retrieval instructions", checkpoint.RetrievalInstructions)
+	writeCheckpointScalar(&b, "Continuation checkpoint", checkpoint.ContinuationCheckpoint)
+	if len(plan.RawEntryIDs) > 0 {
+		b.WriteString("\nCompacted raw entry ids available via get_run_memory_entry:\n")
+		for _, id := range plan.RawEntryIDs {
+			fmt.Fprintf(&b, "- %s\n", id)
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func checkpointDetails(checkpoint runMemoryCheckpoint) map[string]any {
+	return map[string]any{
+		"current_objective":       checkpoint.CurrentObjective,
+		"active_task":             checkpoint.ActiveTask,
+		"user_hard_constraints":   checkpoint.UserHardConstraints,
+		"completed_work":          checkpoint.CompletedWork,
+		"key_decisions":           checkpoint.KeyDecisions,
+		"open_obligations":        checkpoint.OpenObligations,
+		"failed_attempts":         checkpoint.FailedAttempts,
+		"source_evidence_handles": checkpoint.SourceEvidenceHandles,
+		"raw_entry_handles":       checkpoint.RawEntryHandles,
+		"raw_tool_result_handles": checkpoint.RawToolResultHandles,
+		"files_docs_resources":    checkpoint.FilesDocsResources,
+		"blockers_uncertainties":  checkpoint.BlockersUncertainties,
+		"next_actions":            checkpoint.NextActions,
+		"retrieval_instructions":  checkpoint.RetrievalInstructions,
+		"continuation_checkpoint": checkpoint.ContinuationCheckpoint,
+	}
+}
+
+func deterministicEmergencyRunMemoryCompaction(plan runMemoryCompactionPlan, cause error) runMemoryLLMCompaction {
+	details := map[string]any{
+		"fallback":                    "deterministic_emergency",
+		"fallback_is_readiness_proof": false,
+		"fallback_error":              "",
+		"raw_entry_handles":           plan.RawEntryIDs,
+		"raw_tool_result_handles":     plan.RawToolResultEntryIDs,
+	}
+	if cause != nil {
+		details["fallback_error"] = cause.Error()
+	}
+	return runMemoryLLMCompaction{
+		Summary:  plan.Summary + "\n\nEmergency fallback: LLM compaction failed. This deterministic checkpoint preserves raw entry handles for recovery but is not provider-readiness evidence.",
+		Details:  details,
+		Status:   "emergency_fallback",
+		Provider: "",
+		Model:    "",
+	}
+}
+
+func writeCheckpointScalar(b *strings.Builder, label, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	fmt.Fprintf(b, "%s: %s\n\n", label, value)
+}
+
+func writeCheckpointList(b *strings.Builder, label string, values []string) {
+	cleaned := cleanCheckpointStrings(values)
+	if len(cleaned) == 0 {
+		return
+	}
+	b.WriteString(label)
+	b.WriteString(":\n")
+	for _, value := range cleaned {
+		fmt.Fprintf(b, "- %s\n", value)
+	}
+	b.WriteString("\n")
+}
+
+func cleanCheckpointStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func buildRunMemoryContext(entries []types.RunMemoryEntry) []json.RawMessage {
@@ -694,6 +1085,51 @@ func describeRunMemoryMessage(msg json.RawMessage) string {
 		}
 	}
 	return truncateForRunMemory(string(msg), 500)
+}
+
+func describeRunMemoryMessageForLLM(msg json.RawMessage) string {
+	var parsed struct {
+		Content any `json:"content"`
+	}
+	if err := json.Unmarshal(msg, &parsed); err != nil {
+		return truncateForRunMemory(string(msg), 4000)
+	}
+	switch content := parsed.Content.(type) {
+	case string:
+		return truncateForRunMemory(content, 4000)
+	case []any:
+		parts := make([]string, 0, len(content))
+		for _, item := range content {
+			block, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			blockType, _ := block["type"].(string)
+			switch blockType {
+			case "text":
+				if text, _ := block["text"].(string); text != "" {
+					parts = append(parts, "text="+truncateForRunMemory(text, 2500))
+				}
+			case "tool_use":
+				name, _ := block["name"].(string)
+				id, _ := block["id"].(string)
+				args, _ := json.Marshal(block["input"])
+				parts = append(parts, fmt.Sprintf("tool_use name=%s id=%s input=%s", name, id, truncateForRunMemory(string(args), 1000)))
+			case "tool_result":
+				id, _ := block["tool_use_id"].(string)
+				contentText, _ := block["content"].(string)
+				parts = append(parts, fmt.Sprintf("tool_result id=%s content=%s", id, truncateForRunMemory(contentText, 1500)))
+			default:
+				if blockType != "" {
+					parts = append(parts, blockType)
+				}
+			}
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, "; ")
+		}
+	}
+	return truncateForRunMemory(string(msg), 4000)
 }
 
 func estimateRawMessagesTokens(messages []json.RawMessage) int {

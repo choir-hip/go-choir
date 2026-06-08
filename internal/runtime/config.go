@@ -41,9 +41,18 @@ const (
 	// findings before the runtime schedules the next vtext synthesis.
 	DefaultVTextWakeDebounce = 3 * time.Second
 
-	// DefaultRunMemoryContextThresholdTokens is the approximate context size at
-	// which the runtime creates a run-memory compaction checkpoint.
-	DefaultRunMemoryContextThresholdTokens = 160000
+	// DefaultRunMemoryContextThresholdTokens is zero so normal runtime
+	// compaction derives from the selected model's context window. Set
+	// RUNTIME_RUN_MEMORY_CONTEXT_THRESHOLD_TOKENS only for explicit diagnostics.
+	DefaultRunMemoryContextThresholdTokens = 0
+
+	// DefaultRunMemoryContextThresholdRatio is the fraction of a selected model's
+	// context window where automatic run-memory compaction starts.
+	DefaultRunMemoryContextThresholdRatio = 0.70
+
+	// DefaultRunMemoryPromptReserveTokens approximates system/tool/output slack
+	// until provider-tokenizer accounting is available in the runtime.
+	DefaultRunMemoryPromptReserveTokens = 12000
 
 	// DefaultRunMemoryKeepRecentTokens is the approximate amount of recent raw
 	// conversation retained after a compaction checkpoint.
@@ -134,7 +143,8 @@ type Config struct {
 	EnableTestAPIs bool
 
 	// RunMemoryContextThresholdTokens controls automatic context compaction for
-	// tool-loop runs. The estimator is intentionally approximate.
+	// tool-loop runs. Zero means derive from the selected model context window.
+	// The estimator is intentionally approximate.
 	RunMemoryContextThresholdTokens int
 
 	// RunMemoryKeepRecentTokens controls how much recent raw context is kept

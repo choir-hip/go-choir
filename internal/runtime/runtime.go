@@ -1034,13 +1034,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	})
 	initialMessages = append(initialMessages, userMsg)
 
-	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit)
-	initialMessages, err := memory.initialize(ctx, initialMessages)
-	if err != nil {
-		rt.handleExecutionError(ctx, rec, fmt.Errorf("initialize run memory: %w", err))
-		return
-	}
-
 	systemPrompt, err := rt.systemPromptForRun(rec)
 	if err != nil {
 		rt.handleExecutionError(ctx, rec, err)
@@ -1048,6 +1041,17 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	ctx = WithToolExecutionContext(ctx, rec)
 	llmConfig := ResolvedLLMConfigFromMetadata(rec.Metadata)
+	renderedSystemPrompt := systemPrompt
+	if registry != nil {
+		renderedSystemPrompt = buildSystemPromptWithTools(systemPrompt, registry)
+	}
+	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit).
+		withLLMCompactor(tlp, llmConfig, estimateTextTokens(renderedSystemPrompt))
+	initialMessages, err = memory.initialize(ctx, initialMessages)
+	if err != nil {
+		rt.handleExecutionError(ctx, rec, fmt.Errorf("initialize run memory: %w", err))
+		return
+	}
 	maxOutputTokens := MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
 	platformFallback := LLMSelection{
 		Provider:        rt.cfg.LLMProvider,
@@ -1160,6 +1164,7 @@ func (rt *Runtime) CompactRunMemory(ctx context.Context, runID, ownerID, reason 
 		rt.emitEvent(ctx, rec, kind, events.CauseSupervisorRecovery, payload)
 	}
 	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit)
+	memory.withLLMCompactor(asToolLoopProvider(rt.provider), ResolvedLLMConfigFromMetadata(rec.Metadata), 0)
 	compacted, err := memory.compactIfNeeded(ctx, reason, true)
 	if err != nil {
 		return err

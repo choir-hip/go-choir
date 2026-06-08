@@ -778,22 +778,37 @@ belief-state changes:
   model-aware 70% thresholding for the 1M-token DeepSeek/Xiaomi context windows,
   post-compaction exact retrieval, and the final provider readiness report is
   written.
+
+  The LLM compaction mission has now produced local implementation evidence but
+  not staging readiness. The runtime normal compaction path locally calls the
+  selected run provider/model for a typed checkpoint, stores structured
+  checkpoint details and exact retrieval handles in existing RunMemoryEntry
+  compaction records, derives default pressure threshold from
+  `context_window_tokens * 0.7`, and keeps deterministic compaction as a labeled
+  emergency fallback only. Env-gated live provider schema proof passed for
+  `deepseek/deepseek-v4-flash` and `xiaomi/mimo-v2.5-pro` with no artificial
+  output token cap. That proof also surfaced and fixed a practical provider
+  variance: list-valued checkpoint fields may arrive as scalar strings, so the
+  runtime parser now normalizes scalar-or-list fields. This is necessary
+  progress, but it is not yet deployed product-path proof.
 remaining error field:
   Carry the provider/protocol conformance matrix into product-path evidence
-  where it matters, complete `docs/mission-llm-run-memory-compaction-v0.md`,
-  and then select safe model-policy defaults for processors, reconcilers,
-  researchers, VText article agents, and multimodal verifiers.
+  where it matters, deploy and prove `docs/mission-llm-run-memory-compaction-v0.md`
+  on staging, and then select safe model-policy defaults for processors,
+  reconcilers, researchers, VText article agents, and multimodal verifiers.
 highest-impact remaining uncertainty:
-  Whether DeepSeek/Xiaomi reliably generate usable typed LLM compaction
-  checkpoints and follow retrieval handles after context pressure, and whether
-  the Anthropic-compatible routes provide enough additional value to justify
+  Whether deployed DeepSeek/Xiaomi agent loops use the new LLM checkpoint to
+  continue and retrieve exact pre-compaction content through
+  `get_run_memory_entry` under product-path pressure, and whether the
+  Anthropic-compatible routes provide enough additional value to justify
   selecting them for any default agent role.
 next executable probe:
-  Run `docs/mission-llm-run-memory-compaction-v0.md` first. After Node B proves
-  LLM-generated checkpoints, 70%-of-context-window thresholding, and
-  post-compaction exact retrieval, return here to write the Global Wire provider
-  readiness report, explicitly distinguishing env-gated provider-loop proof from
-  product-path VText/researcher/verifier/compaction proof.
+  Finish `docs/mission-llm-run-memory-compaction-v0.md` through the landing
+  loop. After Node B proves LLM-generated checkpoints, model-aware
+  70%-of-context-window thresholding or a clearly labeled diagnostic threshold,
+  and post-compaction exact retrieval, return here to write the Global Wire
+  provider readiness report, explicitly distinguishing env-gated provider-loop
+  proof from product-path VText/researcher/verifier/compaction proof.
 suggested resume goal string:
   /goal Run docs/mission-provider-config-conformance-v0.md as MissionGradient and make DeepSeek/Xiaomi production-ready for Choir agents.
 evidence artifact refs:

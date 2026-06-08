@@ -3118,6 +3118,109 @@ func TestIntegrationRuntimeToolChoiceModesLive(t *testing.T) {
 	}
 }
 
+func TestIntegrationDeepSeekXiaomiRunMemoryCompactionSchemaLive(t *testing.T) {
+	if os.Getenv("CHOIR_PROVIDER_LIVE_TESTS") != "1" {
+		t.Skip("set CHOIR_PROVIDER_LIVE_TESTS=1 to spend provider credits")
+	}
+	type compactionCase struct {
+		name      string
+		provider  Provider
+		model     string
+		reasoning string
+	}
+	cases := make([]compactionCase, 0, 2)
+	if apiKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")); apiKey != "" {
+		p, err := NewDeepSeekProvider(DeepSeekConfig{APIKey: apiKey, ModelID: "deepseek-v4-flash"})
+		if err != nil {
+			t.Fatalf("new deepseek provider: %v", err)
+		}
+		cases = append(cases, compactionCase{
+			name:      "deepseek-openai",
+			provider:  p,
+			model:     "deepseek-v4-flash",
+			reasoning: "medium",
+		})
+	}
+	if apiKey := firstNonEmpty(strings.TrimSpace(os.Getenv("XIAOMI_API_KEY")), strings.TrimSpace(os.Getenv("xiaomi_api_key"))); apiKey != "" {
+		p, err := NewXiaomiProvider(XiaomiConfig{APIKey: apiKey, ModelID: "mimo-v2.5-pro"})
+		if err != nil {
+			t.Fatalf("new xiaomi provider: %v", err)
+		}
+		cases = append(cases, compactionCase{
+			name:      "xiaomi-openai",
+			provider:  p,
+			model:     "mimo-v2.5-pro",
+			reasoning: "medium",
+		})
+	}
+	if len(cases) == 0 {
+		t.Skip("DEEPSEEK_API_KEY and XIAOMI_API_KEY are not set")
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+			defer cancel()
+			resp, err := tc.provider.Call(ctx, LLMRequest{
+				Model:           tc.model,
+				ReasoningEffort: tc.reasoning,
+				System: strings.Join([]string{
+					"You are Choir's runtime run-memory compactor.",
+					"Return only one JSON object matching the requested schema.",
+					"Do not continue the conversation.",
+				}, "\n"),
+				Messages: []Message{{
+					Role: "user",
+					Content: []Block{{Type: "text", Text: strings.Join([]string{
+						`Return only JSON with keys current_objective, active_task, user_hard_constraints, completed_work, key_decisions, open_obligations, failed_attempts, source_evidence_handles, raw_entry_handles, raw_tool_result_handles, files_docs_resources, blockers_uncertainties, next_actions, retrieval_instructions, continuation_checkpoint.`,
+						`Every field except current_objective, active_task, and continuation_checkpoint must be an array of strings.`,
+						`Use these facts: objective="prove live compaction schema"; hard_constraint="no arbitrary max_tokens"; raw_entry_id="entry-live-1"; tool_result_id="entry-tool-live-1"; next_action="continue provider conformance".`,
+						`The retrieval_instructions array must include the literal tool name get_run_memory_entry and raw handle entry-live-1.`,
+					}, "\n")}},
+				}},
+			})
+			if err != nil {
+				t.Fatalf("live compaction call: %v", err)
+			}
+			checkpoint := parseJSONMapFromProviderTextForTest(t, resp.Text)
+			for _, key := range []string{
+				"current_objective",
+				"active_task",
+				"user_hard_constraints",
+				"raw_entry_handles",
+				"raw_tool_result_handles",
+				"next_actions",
+				"retrieval_instructions",
+				"continuation_checkpoint",
+			} {
+				if _, ok := checkpoint[key]; !ok {
+					t.Fatalf("%s missing key %q in %s", tc.name, key, resp.Text)
+				}
+			}
+			if !strings.Contains(resp.Text, "entry-live-1") || !strings.Contains(resp.Text, "get_run_memory_entry") {
+				t.Fatalf("%s checkpoint did not preserve retrieval handle/instruction: %s", tc.name, resp.Text)
+			}
+			if resp.StopReason == "max_tokens" {
+				t.Fatalf("%s stopped at max_tokens without an explicit policy budget", tc.name)
+			}
+		})
+	}
+}
+
+func parseJSONMapFromProviderTextForTest(t *testing.T, text string) map[string]any {
+	t.Helper()
+	start := strings.Index(text, "{")
+	end := strings.LastIndex(text, "}")
+	if start < 0 || end <= start {
+		t.Fatalf("provider text did not contain JSON object: %q", text)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(text[start:end+1]), &out); err != nil {
+		t.Fatalf("decode provider JSON %q: %v", text, err)
+	}
+	return out
+}
+
 func runLiveProviderToolLoop(t *testing.T, p Provider, selection runtime.LLMSelection, initialToolChoice, marker string) (string, runtime.TokenUsage, error) {
 	t.Helper()
 	registry := runtime.NewToolRegistry()

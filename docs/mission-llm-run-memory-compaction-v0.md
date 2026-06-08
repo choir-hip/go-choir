@@ -449,37 +449,72 @@ last checkpoint:
   model-catalog context windows for the 1M-token DeepSeek/Xiaomi models, and
   make model-aware 70% thresholding the normal default while preserving explicit
   diagnostic overrides.
+
+  2026-06-08 local implementation checkpoint: the normal runtime compaction
+  path now attempts an LLM-generated typed checkpoint through the selected run
+  provider/model, stores structured checkpoint details on the existing
+  RunMemoryEntry compaction record, keeps deterministic compaction only as a
+  labeled emergency fallback, and derives the default threshold from
+  `context_window_tokens * 0.7`. The implementation also records prompt/tool
+  overhead estimate, threshold, checkpoint provider/model/status, raw entry
+  handles, and raw tool-result handles. Start/completed events now bracket the
+  compactor call, and a run-scoped in-process lock prevents concurrent
+  compaction attempts for the same run. Live local DeepSeek/Xiaomi schema proof
+  exposed a reliability wrinkle: real providers may return a valid checkpoint
+  with scalar strings where arrays were requested. The parser now normalizes
+  scalar-or-array fields rather than needlessly falling back to deterministic
+  emergency compaction.
 current artifact state:
-  Current runtime run-memory compaction is automatic and durable but uses a
-  deterministic text checkpoint assembled from truncated message descriptions.
-  It preserves raw entries and exposes get_run_memory_entry, but it is not yet
-  real LLM compaction. Provider conformance is checkpoint-incomplete primarily
-  because compaction/recall readiness and the final Global Wire provider
-  readiness conclusion remain unproven.
+  Local code now has shared-harness LLM run-memory compaction and model-aware
+  70% thresholding for the new DeepSeek/Xiaomi provider models. Raw entries,
+  recent tail, and `get_run_memory_entry` remain the exact recovery mechanism.
+  This has not yet been pushed, deployed, or proven on Node B/staging.
 what shipped:
-  Mission doc only.
+  Problem-documentation checkpoint exists before behavior changes. This
+  checkpoint records the implementation evidence before the landing loop;
+  staging proof remains pending.
 what was proven:
-  Prior deterministic tests prove raw entry retrieval mechanics. They do not
-  prove LLM compaction or Node B long-context safety.
+  Local focused tests passed:
+  `nix develop -c go test ./internal/modelcatalog ./internal/provider
+  ./internal/runtime -run
+  'TestContextWindowTokensForNewProviderModels|TestMaxOutputTokensForModelUsesSupportedModelCatalog|TestRunMemory|TestContextOverflowErrorDetection'`.
+  Local broad focused tests passed across modelcatalog/provider/gateway/runtime.
+  Comprehensive runtime compaction fixtures passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestRuntimeRunMemoryThresholdCompaction|TestRuntimeRunMemoryOverflowRetriesOnceThenCompletes|TestRuntimeRunMemoryOverflowFailureBlocksRun|TestRuntimeRunMemoryOverflowRecoveryRetrievesRawEntry|TestRuntimeManualRunMemoryCompaction'
+  -count=1`. Runtime shard script passed:
+  `nix develop -c scripts/go-test-runtime-shards`. Env-gated live provider
+  schema proof passed for `deepseek/deepseek-v4-flash` and
+  `xiaomi/mimo-v2.5-pro`:
+  `set -a; . ./.env; set +a; CHOIR_PROVIDER_LIVE_TESTS=1 nix develop -c go
+  test ./internal/provider -run
+  TestIntegrationDeepSeekXiaomiRunMemoryCompactionSchemaLive -count=1 -v`.
 unproven or partial claims:
-  LLM typed checkpoint generation, model-aware 70% thresholding, Node B
-  product-path compaction, post-compaction exact retrieval by a real model, and
-  provider/config readiness remain unproven.
+  Node B/staging product-path compaction, deployed commit identity,
+  post-compaction exact retrieval by a real product-path model, provider logs
+  showing DeepSeek/Xiaomi handling the deployed compaction path, and final
+  provider/config readiness remain unproven. The local live schema proof proves
+  checkpoint generation, not full post-compaction continuation under product
+  context pressure.
 belief-state changes:
-  The right 80/20 is not to polish deterministic summary formatting. Replace
-  normal compaction with LLM structured checkpointing, keep exact retrieval
-  handles, add a few reliability guards, prove on Node B, then return to news.
+  The right 80/20 implementation route is now confirmed locally: use selected
+  run model/provider for typed checkpoint generation, normalize small schema
+  deviations from real providers, keep exact raw retrieval handles, and label
+  deterministic fallback as non-readiness evidence. The next uncertainty is not
+  whether the local harness can build/store checkpoints; it is whether staging
+  agents continue and retrieve exact compacted content under product-path
+  pressure.
 remaining error field:
-  Implement runtime LLM compactor, threshold at context_window * 0.7, verify
-  tool/message invariants, and prove staging behavior.
+  Commit and push the implementation, monitor CI/deploy, verify staging commit
+  identity, run deployed product-path compaction proof, and update provider
+  conformance with the final readiness conclusion.
 highest-impact remaining uncertainty:
-  Whether DeepSeek/Xiaomi reliably generate usable typed checkpoints and then
-  follow retrieval handles after compaction under product-path pressure.
+  Whether a deployed DeepSeek/Xiaomi agent loop will use the LLM checkpoint and
+  call `get_run_memory_entry` for exact old content after compaction.
 next executable probe:
-  Inspect provider/model catalog context-window representation and runtime
-  provider-call plumbing, then implement the smallest shared-harness LLM
-  compactor that writes structured details plus prompt-visible summary into
-  existing RunMemoryEntry compaction records.
+  Commit the local LLM compaction implementation, push, monitor CI/deploy, then
+  run a staging product-path proof with an explicitly labeled diagnostic
+  threshold if necessary before attempting any expensive 70%-threshold evidence.
 suggested resume goal string:
   /goal Run docs/mission-llm-run-memory-compaction-v0.md as MissionGradient; ship LLM compaction and close provider conformance.
 evidence artifact refs:

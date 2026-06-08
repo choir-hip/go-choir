@@ -28,6 +28,12 @@ func TestRuntimeRunMemoryThresholdCompaction(t *testing.T) {
 		},
 		&ToolLoopResponse{
 			StopReason: "end_turn",
+			Text:       runMemoryCheckpointJSONForTest("remember this through the tool call", []string{"echo tool completed"}, []string{"continue after compaction"}),
+			Usage:      TokenUsage{InputTokens: 12, OutputTokens: 6},
+			Model:      "test-model",
+		},
+		&ToolLoopResponse{
+			StopReason: "end_turn",
 			Text:       "finished after compaction",
 			Usage:      TokenUsage{InputTokens: 8, OutputTokens: 4},
 			Model:      "test-model",
@@ -60,6 +66,9 @@ func TestRuntimeRunMemoryThresholdCompaction(t *testing.T) {
 			if entry.TokensBefore == 0 {
 				t.Fatalf("tokens_before should be recorded")
 			}
+			if entry.Details["checkpoint_status"] != "llm_checkpoint" {
+				t.Fatalf("checkpoint_status = %#v, want llm_checkpoint", entry.Details["checkpoint_status"])
+			}
 		}
 	}
 	if !foundCompaction {
@@ -71,11 +80,22 @@ func TestRuntimeRunMemoryThresholdCompaction(t *testing.T) {
 		t.Fatalf("list events: %v", err)
 	}
 	kinds := map[types.EventKind]bool{}
-	for _, ev := range events {
+	startIndex := -1
+	completedIndex := -1
+	for i, ev := range events {
+		if ev.Kind == types.EventRunCompactionStarted && startIndex < 0 {
+			startIndex = i
+		}
+		if ev.Kind == types.EventRunCompactionCompleted && completedIndex < 0 {
+			completedIndex = i
+		}
 		kinds[ev.Kind] = true
 	}
 	if !kinds[types.EventRunCompactionStarted] || !kinds[types.EventRunCompactionCompleted] {
 		t.Fatalf("missing compaction events: %+v", kinds)
+	}
+	if startIndex < 0 || completedIndex < 0 || startIndex > completedIndex {
+		t.Fatalf("compaction event order start=%d completed=%d events=%+v", startIndex, completedIndex, events)
 	}
 }
 
@@ -96,8 +116,8 @@ func TestRuntimeRunMemoryOverflowRetriesOnceThenCompletes(t *testing.T) {
 	if done.State != types.RunCompleted {
 		t.Fatalf("state: got %s, want completed", done.State)
 	}
-	if got := atomic.LoadInt32(&provider.calls); got != 2 {
-		t.Fatalf("provider calls: got %d, want 2", got)
+	if got := atomic.LoadInt32(&provider.calls); got != 3 {
+		t.Fatalf("provider calls: got %d, want 3 including LLM compaction", got)
 	}
 
 	events, err := s.ListEvents(context.Background(), rec.RunID, 100)
@@ -138,6 +158,7 @@ func TestRuntimeManualRunMemoryCompaction(t *testing.T) {
 	registry := testRunMemoryRegistry(t)
 	provider := newMockToolLoopProvider(
 		&ToolLoopResponse{StopReason: "end_turn", Text: "manual compaction target", Model: "test-model"},
+		&ToolLoopResponse{StopReason: "end_turn", Text: runMemoryCheckpointJSONForTest("manual compaction prompt", []string{"manual run completed"}, []string{"resume from manual checkpoint"}), Model: "test-model"},
 	)
 	rt, s := testRuntimeWithProviderAndRegistry(t, provider, registry)
 	rt.cfg.RunMemoryKeepRecentTokens = 1
@@ -164,6 +185,9 @@ func TestRuntimeManualRunMemoryCompaction(t *testing.T) {
 	}
 	if latest.Reason != "manual_test" {
 		t.Fatalf("compaction reason: got %q, want manual_test", latest.Reason)
+	}
+	if latest.Details["checkpoint_status"] != "llm_checkpoint" {
+		t.Fatalf("checkpoint_status = %#v, want llm_checkpoint", latest.Details["checkpoint_status"])
 	}
 }
 
@@ -231,19 +255,29 @@ func TestRuntimeRunMemoryOverflowRecoveryRetrievesRawEntry(t *testing.T) {
 	if done.Result != "retrieved raw sentinel" {
 		t.Fatalf("result = %q", done.Result)
 	}
-	if got := atomic.LoadInt32(&provider.calls); got != 3 {
-		t.Fatalf("provider calls = %d, want 3", got)
+	if got := atomic.LoadInt32(&provider.calls); got != 4 {
+		t.Fatalf("provider calls = %d, want 4 including LLM compaction", got)
 	}
 }
 
 type runMemoryOverflowRetrievalProvider struct {
 	Provider
-	sentinel string
-	calls    int32
+	sentinel   string
+	calls      int32
+	agentCalls int32
 }
 
 func (p *runMemoryOverflowRetrievalProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
-	call := atomic.AddInt32(&p.calls, 1)
+	atomic.AddInt32(&p.calls, 1)
+	if strings.Contains(req.System, "runtime run-memory compactor") {
+		return &ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       runMemoryCheckpointJSONForTest("recover from overflow", []string{"raw sentinel compacted"}, []string{"call get_run_memory_entry for the compacted entry id"}),
+			Usage:      TokenUsage{InputTokens: 12, OutputTokens: 6},
+			Model:      req.Model,
+		}, nil
+	}
+	call := atomic.AddInt32(&p.agentCalls, 1)
 	raw := rawMessagesForTest(req.Messages)
 	switch call {
 	case 1:
@@ -287,13 +321,26 @@ func (p *runMemoryOverflowRetrievalProvider) CallWithTools(ctx context.Context, 
 func extractRunMemoryEntryIDForTest(raw string) string {
 	const marker = "entry_id="
 	idx := strings.Index(raw, marker)
+	if idx >= 0 {
+		rest := raw[idx+len(marker):]
+		return firstRunMemoryEntryTokenForTest(rest)
+	}
+	const listMarker = "Compacted raw entry ids available via get_run_memory_entry:"
+	idx = strings.Index(raw, listMarker)
 	if idx < 0 {
 		return ""
 	}
-	rest := raw[idx+len(marker):]
+	rest := raw[idx+len(listMarker):]
+	if dash := strings.Index(rest, "- "); dash >= 0 {
+		rest = rest[dash+2:]
+	}
+	return firstRunMemoryEntryTokenForTest(rest)
+}
+
+func firstRunMemoryEntryTokenForTest(rest string) string {
 	end := len(rest)
 	for i, r := range rest {
-		if r == ' ' || r == '\\' || r == '\n' || r == '\t' || r == '"' {
+		if r == ' ' || r == '\\' || r == '\n' || r == '\t' || r == '"' || r == '<' {
 			end = i
 			break
 		}
@@ -301,14 +348,46 @@ func extractRunMemoryEntryIDForTest(raw string) string {
 	return strings.TrimSpace(rest[:end])
 }
 
+func runMemoryCheckpointJSONForTest(objective string, completed, next []string) string {
+	payload := runMemoryCheckpoint{
+		CurrentObjective:       objective,
+		ActiveTask:             "LLM run-memory compaction test",
+		UserHardConstraints:    []string{"preserve retrieval handles"},
+		CompletedWork:          completed,
+		KeyDecisions:           []string{"use LLM checkpoint"},
+		OpenObligations:        []string{"continue the run"},
+		FailedAttempts:         []string{},
+		SourceEvidenceHandles:  []string{},
+		RawEntryHandles:        []string{"entry-from-test"},
+		RawToolResultHandles:   []string{},
+		FilesDocsResources:     []string{},
+		BlockersUncertainties:  []string{},
+		NextActions:            next,
+		RetrievalInstructions:  []string{"call get_run_memory_entry when exact raw content matters"},
+		ContinuationCheckpoint: "Continue from this LLM checkpoint.",
+	}
+	encoded, _ := json.Marshal(payload)
+	return string(encoded)
+}
+
 type runtimeOverflowProvider struct {
 	Provider
 	failuresBeforeSuccess int32
 	calls                 int32
+	agentCalls            int32
 }
 
 func (p *runtimeOverflowProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
-	call := atomic.AddInt32(&p.calls, 1)
+	atomic.AddInt32(&p.calls, 1)
+	if strings.Contains(req.System, "runtime run-memory compactor") {
+		return &ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       runMemoryCheckpointJSONForTest("recover from overflow", []string{"provider overflow compacted"}, []string{"continue the run"}),
+			Usage:      TokenUsage{InputTokens: 12, OutputTokens: 6},
+			Model:      req.Model,
+		}, nil
+	}
+	call := atomic.AddInt32(&p.agentCalls, 1)
 	if call <= p.failuresBeforeSuccess {
 		return nil, fmt.Errorf("maximum context length exceeded")
 	}

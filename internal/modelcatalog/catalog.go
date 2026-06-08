@@ -2,7 +2,10 @@ package modelcatalog
 
 import "strings"
 
-const DefaultMaxOutputTokens = 65536
+const (
+	DefaultMaxOutputTokens     = 65536
+	DefaultContextWindowTokens = 200000
+)
 
 // ModelInfo describes a supported model and its associated provider.
 type ModelInfo struct {
@@ -18,6 +21,10 @@ type ModelInfo struct {
 
 	// MaxOutputTokens is the maximum output tokens for this model.
 	MaxOutputTokens int `json:"max_output_tokens"`
+
+	// ContextWindowTokens is the advertised or platform-assumed input context
+	// window used for runtime pressure and compaction policy.
+	ContextWindowTokens int `json:"context_window_tokens,omitempty"`
 
 	// Modalities names upstream content modalities known for this model.
 	Modalities []string `json:"modalities,omitempty"`
@@ -65,40 +72,44 @@ func SupportedModels() []ModelInfo {
 			MaxOutputTokens: 131072,
 		},
 		{
-			ID:                "deepseek-v4-pro",
-			DisplayName:       "DeepSeek V4 Pro",
-			Provider:          "deepseek",
-			MaxOutputTokens:   131072,
-			Modalities:        []string{"text"},
-			AdapterModalities: []string{"text"},
-			RecommendedFor:    []string{"super", "vsuper", "cosuper_coding", "verifier"},
+			ID:                  "deepseek-v4-pro",
+			DisplayName:         "DeepSeek V4 Pro",
+			Provider:            "deepseek",
+			MaxOutputTokens:     131072,
+			ContextWindowTokens: 1_000_000,
+			Modalities:          []string{"text"},
+			AdapterModalities:   []string{"text"},
+			RecommendedFor:      []string{"super", "vsuper", "cosuper_coding", "verifier"},
 		},
 		{
-			ID:                "deepseek-v4-flash",
-			DisplayName:       "DeepSeek V4 Flash",
-			Provider:          "deepseek",
-			MaxOutputTokens:   131072,
-			Modalities:        []string{"text"},
-			AdapterModalities: []string{"text"},
-			RecommendedFor:    []string{"conductor", "vtext", "researcher"},
+			ID:                  "deepseek-v4-flash",
+			DisplayName:         "DeepSeek V4 Flash",
+			Provider:            "deepseek",
+			MaxOutputTokens:     131072,
+			ContextWindowTokens: 1_000_000,
+			Modalities:          []string{"text"},
+			AdapterModalities:   []string{"text"},
+			RecommendedFor:      []string{"conductor", "vtext", "researcher"},
 		},
 		{
-			ID:                "mimo-v2.5-pro",
-			DisplayName:       "MiMo V2.5 Pro",
-			Provider:          "xiaomi",
-			MaxOutputTokens:   65536,
-			Modalities:        []string{"text"},
-			AdapterModalities: []string{"text"},
-			RecommendedFor:    []string{"super", "vsuper", "cosuper_coding", "verifier"},
+			ID:                  "mimo-v2.5-pro",
+			DisplayName:         "MiMo V2.5 Pro",
+			Provider:            "xiaomi",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: 1_000_000,
+			Modalities:          []string{"text"},
+			AdapterModalities:   []string{"text"},
+			RecommendedFor:      []string{"super", "vsuper", "cosuper_coding", "verifier"},
 		},
 		{
-			ID:                "mimo-v2.5",
-			DisplayName:       "MiMo V2.5",
-			Provider:          "xiaomi",
-			MaxOutputTokens:   65536,
-			Modalities:        []string{"text", "image"},
-			AdapterModalities: []string{"text", "image"},
-			RecommendedFor:    []string{"verifier_multimodal"},
+			ID:                  "mimo-v2.5",
+			DisplayName:         "MiMo V2.5",
+			Provider:            "xiaomi",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: 1_000_000,
+			Modalities:          []string{"text", "image"},
+			AdapterModalities:   []string{"text", "image"},
+			RecommendedFor:      []string{"verifier_multimodal"},
 		},
 		{
 			ID:                "accounts/fireworks/models/deepseek-v4-pro",
@@ -156,4 +167,14 @@ func MaxOutputTokensForModel(modelID string) int {
 		}
 	}
 	return DefaultMaxOutputTokens
+}
+
+func ContextWindowTokensForModel(modelID string) int {
+	modelID = strings.TrimSpace(modelID)
+	for _, model := range SupportedModels() {
+		if model.ID == modelID && model.ContextWindowTokens > 0 {
+			return model.ContextWindowTokens
+		}
+	}
+	return DefaultContextWindowTokens
 }
