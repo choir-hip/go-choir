@@ -38,8 +38,6 @@ test('Global Wire renders as a living newspaper surface with every article opena
   await expect(app.locator('text=Living source network')).toBeVisible();
   await expect(app.locator('[data-global-wire-story]')).toHaveCount(3);
   await expect(app.locator('[data-global-wire-story-reader]').first()).toContainText('Port congestion indicators eased');
-  await expect(app.locator('[data-global-wire-evidence]')).toContainText('Port authority throughput bulletin');
-  await expect(app.locator('[data-global-wire-evidence]')).toContainText('Regional grid operator reserve notice');
 
   await expect(app.locator('[data-global-wire-open-vtext]')).toHaveCount(3);
   await expect(app.locator('[data-global-wire-open-vtext]').first()).not.toContainText('Open in VText');
@@ -58,15 +56,21 @@ test('Global Wire renders as a living newspaper surface with every article opena
   await expect(relatedVText).toContainText('Forecast changes moved stress');
 });
 
-test('Global Wire keeps Style.vtext routing compact and source provenance visible', async ({ page }) => {
+test('Global Wire deletes detritus source chronology and bespoke style controls', async ({ page }) => {
   await page.goto(BASE_URL);
   await openDeskApp(page, 'global-wire');
 
   const app = page.locator('[data-global-wire-app]');
-  await app.locator('[data-global-wire-style-switcher] button').filter({ hasText: 'Audit' }).click();
-  await expect(app.locator('[data-global-wire-style-switcher]')).toContainText('Cites Style.vtext: Claim Audit');
-  await expect(app.locator('[data-global-wire-style-switcher]')).toContainText('source provenance stays with the VText version');
-  await expect(app.locator('[data-global-wire-story-reader]').first()).toContainText('strongest supported claim');
+  await expect(app.locator('[data-global-wire-evidence]')).toHaveCount(0);
+  await expect(app.locator('[data-global-wire-style-switcher]')).toHaveCount(0);
+  await expect(app.locator('[data-global-wire-source-search]')).toHaveCount(0);
+  await expect(app.locator('[data-global-wire-fetch-cycle]')).toHaveCount(0);
+  await expect(app.locator('[data-global-wire-open-style]')).toHaveCount(0);
+  await expect(app.locator('[data-global-wire-compose-style]')).toHaveCount(0);
+  await expect(app.locator('[data-global-wire-replace-style]')).toHaveCount(0);
+  await expect(app.locator('[data-global-wire-ask-choir]')).toHaveCount(0);
+  await expect(app.locator('text=Chronology')).toHaveCount(0);
+  await expect(app.locator('text=Style.vtext')).toHaveCount(0);
 });
 
 test('Global Wire has no nested dashboard panels, story boxes, theme selector, or Autoradio surface', async ({ page }) => {
@@ -100,12 +104,10 @@ test('Global Wire remains a responsive Choir web desktop app across all three th
     await applyTheme(page, themeId);
     await expect(page.locator('.app-root')).toHaveAttribute('data-theme-id', themeId);
     await expect(app.locator('[data-global-wire-story]').first()).toBeVisible();
-    await expect(app.locator('[data-global-wire-evidence]')).toBeVisible();
   }
 
   await page.setViewportSize({ width: 430, height: 860 });
   await expect(app.locator('[data-global-wire-story]').first()).toBeVisible();
-  await expect(app.locator('[data-global-wire-evidence]')).toBeVisible();
 
   const layout = await app.evaluate((node) => {
     const paper = node.querySelector('.wire-paper');
