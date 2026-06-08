@@ -1046,3 +1046,69 @@ next executable probe:
   explicitly, and avoids dispatching redundant stale chunks after newer cycles
   make them obsolete.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T07:36Z deployed queue drain is real but too weak
+  for current source volume, and latest-cycle evidence hides global backlog.
+current artifact state:
+  Commit c7fa65114a3e238b6f1bfec7c5088b295632f837 is on origin/main and
+  deployed to staging. It adds durable queued-processor draining and prevents a
+  reconciler request from dispatching until its processor request handles have
+  `submitted` status and non-empty runtime run IDs.
+new evidence:
+  GitHub Actions run 27122347993 passed and deployed commit
+  c7fa65114a3e238b6f1bfec7c5088b295632f837. Staging `/health` reported that
+  commit for proxy and sandbox at 2026-06-08T07:26:39Z.
+
+  Node B Source Service first post-deploy cycle
+  `cycle_6d17c95662e648f06b65dde0` ran from 2026-06-08T07:26:43Z to
+  2026-06-08T07:26:50Z. It fetched 211 configured sources, produced 4,975
+  source items, queued 124 processor requests, and queued 1 reconciler request.
+  The latest-cycle endpoint showed all 124 processors still queued and the
+  reconciler queued.
+
+  Service logs explain part of the transition: the first dispatch attempt after
+  sourcecycled restart saw `Post "http://127.0.0.1:8085/internal/runtime/runs":
+  dial tcp 127.0.0.1:8085: connect: connection refused`. Runtime health later
+  reported ready on commit c7fa6511, so this was startup ordering / readiness
+  timing, not a permanently missing runtime.
+
+  The sourcecycled process environment on Node B still pins
+  `SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=7`, so the code default of 32
+  cannot take effect on staging. A read-only copy of
+  `/var/lib/go-choir/source-service/sourcecycled.db` showed global request
+  state after deploy:
+
+  - processor requests: 7 `dispatch_failed`, 532 `submitted`, 1,902 `queued`
+  - reconciler requests: 1 `dispatch_failed`, 75 `submitted`, 6 `queued`
+  - the post-deploy dispatch submitted 7 older queued processor requests from
+    `cycle_8a3fd397a071c7d2b1f27b05`, not the latest cycle.
+code-path finding:
+  The queue drain patch does select queued processors globally by oldest
+  created-at order, then selects queued reconcilers and submits a reconciler
+  only if its processor request IDs are already submitted. That explains why
+  the latest cycle still looked untouched: the durable queue had a large older
+  backlog and staging was capped at 7 submissions per cycle.
+belief-state changes:
+  Reconciler gating is now closer to the desired topology: it should not
+  summarize a cycle before processor work is at least dispatched. The remaining
+  failure is source-pressure scheduling. Current staging intake can create
+  hundreds of processor chunks in minutes, while the deployed dispatcher only
+  drains seven per cycle and has no readiness-independent drain job. The
+  latest-cycle UI/API is also an insufficient operations view because it cannot
+  distinguish "this cycle is stranded" from "the daemon is draining older
+  queued work first."
+remaining error field:
+  Fixing this requires more than raising one constant. The next code change
+  should remove or update the tracked deployed cap, make dispatch resilient to
+  runtime readiness/startup ordering, and expose enough queue/backlog evidence
+  that staging proof can show whether processors drain, fail, or are
+  intentionally superseded. Do not claim processor scheduling solved while
+  1,902 queued requests remain invisible behind a latest-cycle-only summary.
+next executable probe:
+  Find the tracked source of `SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=7`
+  and decide whether to remove it, raise it, or make it adaptive. Then add a
+  readiness/backlog test that proves a large durable queue can drain after the
+  runtime becomes available without prematurely submitting reconcilers.
+```
