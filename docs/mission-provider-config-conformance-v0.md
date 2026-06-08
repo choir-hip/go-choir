@@ -639,11 +639,22 @@ what was proven:
   Current belief is that reliable multimodal verifier acceptance should use
   source-resolved/base64 image payloads or known-accessible URLs rather than
   arbitrary third-party image URLs that may block provider fetchers.
+
+  A low-cost continuation-selection compaction probe was attempted through the
+  authenticated product API after the verifier trajectory. `POST
+  /api/continuations` with `source_loop_id`
+  `737c5434-21f8-4aba-b19b-1f2ba67a187d` returned `400 {"error":"record not
+  found"}`; retrying with concrete completed super loop
+  `861b6dd4-870f-417b-998b-bef49b4c2915` returned the same error. Trace and
+  diagnosis APIs can see the trajectory and loop ids, but the continuation
+  endpoint did not resolve them from the current product route. This did not
+  produce compaction evidence.
 unproven or partial claims:
   Full auto/required/none tool-mode matrix, non-tool reasoning-content passback
   for DeepSeek Anthropic, streaming behavior for the new routes, compaction and
-  post-compaction recall safety, reliable arbitrary-image-URL verifier behavior,
-  and the final Global Wire provider readiness report remain unproven.
+  post-compaction recall safety, continuation endpoint resolution for
+  trace-visible run ids, reliable arbitrary-image-URL verifier behavior, and the
+  final Global Wire provider readiness report remain unproven.
 belief-state changes:
   The selected DeepSeek OpenAI-compatible path is now viable for VText exact
   edit/tool loops when tool-bearing calls disable thinking. Anthropic-compatible
@@ -669,8 +680,10 @@ highest-impact remaining uncertainty:
 next executable probe:
   Run one long-context compaction proof with post-compaction recall and at least
   one post-compaction tool call, using normal model policy and no arbitrary token
-  caps. Then extend the provider/protocol tool-mode matrix to auto/required/none
-  and write the Global Wire provider readiness report.
+  caps. If using `/api/continuations` as the control path, first root-cause why
+  it returns `record not found` for trace-visible product-loop ids. Then extend
+  the provider/protocol tool-mode matrix to auto/required/none and write the
+  Global Wire provider readiness report.
 suggested resume goal string:
   /goal Run docs/mission-provider-config-conformance-v0.md as MissionGradient and make DeepSeek/Xiaomi production-ready for Choir agents.
 evidence artifact refs:
