@@ -902,3 +902,37 @@ remaining error field:
 rollback refs:
   Revert 1fd56a29 to restore raw RSS descriptions as source item bodies.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T07:05Z source reader links can expose app-only
+  source URLs as browser links on mobile.
+current artifact state:
+  Commit 1fd56a2924eeb5dd6c49a1c7cbe0101574f7a776 is deployed to staging.
+  Global Wire source transclusions open an internal Source Viewer window, but
+  that Source Viewer renders `sourceUrl` as a normal external anchor whenever a
+  source URL is present.
+new evidence:
+  User iPhone screenshots show tapping "Open original" in a source window
+  triggers Safari's "Open in Choir?" deep-link prompt and then goes nowhere in
+  the web app context. Code inspection shows `frontend/src/lib/ContentViewer.svelte`
+  unconditionally renders `<a href={sourceUrl}>` for any source URL. Seed
+  Global Wire source items still use app-only canonical URLs of the form
+  `choir://global-wire/source/<id>` in `internal/store/global_wire.go`, so the
+  source reader can expose a non-web URL to Safari.
+belief-state changes:
+  Opening a source inside Choir and opening the original web URL are separate
+  operations. The internal source-reader path should keep working for
+  `choir://` and source-service handles, but the browser-facing "Open original"
+  control should exist only for web-safe URLs such as `http:` and `https:`.
+remaining error field:
+  Patch the Source Viewer so app-only or unsupported source URLs are not
+  rendered as clickable browser anchors, while preserving clickable original
+  links for real web URLs and preserving the Source Viewer reader/provenance
+  apparatus.
+next executable probe:
+  Add regression coverage proving a `choir://` source URL does not render an
+  `.source-link`, while an `https://` source URL still renders the external
+  original link. Then run the focused source-entity frontend test and deployed
+  proof after landing.
+```
