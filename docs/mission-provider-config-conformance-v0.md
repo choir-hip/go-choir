@@ -18,6 +18,8 @@ conformance object needed before returning to Global Wire:
   agent loops;
 - model policy can select providers by capability without hard-coded role myths;
 - failures are observable, recoverable, and documented before patches;
+- provider readiness probes use the normal Choir agent harness and default
+  provider budgets unless a narrow diagnostic explicitly requires otherwise;
 - news processors, reconcilers, researchers, and VText article agents can be
   moved onto the provider substrate without rediscovering basic provider
   incompatibilities.
@@ -113,6 +115,10 @@ processors/reconcilers/researchers/VText article agents.
   required modality.
 - No silent fallback to Fireworks, ChatGPT, or any other provider during
   DeepSeek/Xiaomi conformance tests.
+- No arbitrary `max_tokens` caps in normal provider config, readiness probes, or
+  product-path agent loops. If response length matters, prompt for the desired
+  length. A hard token cap is allowed only as a narrow diagnostic and must not be
+  counted as production-readiness evidence.
 - Staging is the acceptance environment for platform behavior.
 - Problem documentation precedes behavior-changing fixes.
 
@@ -334,7 +340,9 @@ for VText article generation and source/research tooling.
 - Do not claim tool support unless a tool call, tool result, and continuation
   are all proven.
 - Do not claim multimodal support unless image input reaches the model through
-  the deployed gateway or product path.
+  the deployed gateway or product path under realistic agent-loop settings. A
+  tiny fixture image with artificial token/reasoning settings is only a
+  serialization smoke test.
 - Do not claim reasoning support unless reasoning-content passback is tested or
   reasoning is explicitly disabled for that path.
 - Do not claim compaction safety from a short conversation that never compacted.
@@ -350,7 +358,8 @@ At each control interval:
 
 1. Pick the highest-value unproven provider/protocol behavior.
 2. Predict expected request/response/log/trace evidence.
-3. Run the smallest live probe that can falsify the assumption.
+3. Run the smallest realistic live probe that can falsify the assumption without
+   inventing non-production configuration such as arbitrary token caps.
 4. Patch only the implicated layer.
 5. Run focused unit tests.
 6. Run env-gated live provider tests.
@@ -432,8 +441,10 @@ problem.
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: 2026-06-08T16:50Z deterministic multimodal verifier fixture
-  implemented, deployed, and proven through product-path staging logs
+last checkpoint: 2026-06-08T17:10Z provider proof reframed around realistic
+  agent-harness conformance after identifying that the deterministic multimodal
+  fixture acceptance used artificial `max_tokens=64` and `reasoning=none`
+  settings
 current artifact state:
   Direct DeepSeek and Xiaomi provider support is implemented and deployed at
   commit `58881c172c51e3a862129eea7fab6feaf1deec53`. OpenAI-compatible
@@ -467,6 +478,12 @@ what shipped:
   `image_base64`, rejects relative `image_url`, and provider media validation
   rejects malformed base64 or non-http(s) image URLs before an upstream provider
   call can become a sanitized 400.
+
+  `f62220694d1f97019750f8309aac1e744744ac4e` recorded a product-path
+  deterministic image-fixture proof. That proof is now explicitly demoted to a
+  serialization smoke test because it used `max_tokens=64` and
+  `reasoning=none`. It must not be treated as production-readiness evidence for
+  multimodal verifier behavior.
 what was proven:
   Local focused unit/runtime/provider tests passed. Env-gated live local
   runtime exact-tool tests passed for DeepSeek, Xiaomi, DeepSeek Anthropic, and
@@ -554,24 +571,40 @@ what was proven:
   DeepSeek `deepseek-v4-flash`, super on DeepSeek `deepseek-v4-pro`, then a
   `verify_model_capability` call through `xiaomi/mimo-v2.5` with `max_tokens=64`,
   `reasoning=none`, and no tools. The Xiaomi gateway call succeeded with
-  `tokens=81+60` and `text_len=187`. This proves the deterministic fixture route
-  reaches Xiaomi multimodal through the real VText -> super product path.
+  `tokens=81+60` and `text_len=187`. This proves only that deterministic image
+  fixture serialization can reach Xiaomi through the real VText -> super product
+  path. It does not prove realistic multimodal verifier readiness, because the
+  run did not use normal agent-loop budgets, did not use meaningful image
+  evidence, and explicitly disabled reasoning.
+
+  A more realistic product-path researcher probe was started through normal
+  browser/WebAuthn registration and `/api/prompt-bar`. Submission
+  `e3b8187a-2f74-462f-b3d4-1bc99c071987` created VText document
+  `59ceeee3-fc5a-47ca-b765-06df43bf7035`, child VText run
+  `a6597e4d-1dfe-488a-98d9-7fef0677e259`, and researcher run
+  `bd237974-73ee-4ec5-9364-aa898b2b72ac`. Logs showed VText using
+  DeepSeek `deepseek-v4-flash`, the researcher using DeepSeek
+  `deepseek-v4-flash` with the normal researcher toolset and medium reasoning,
+  and Brave search returning 15 results. This is closer to the required
+  evidence shape, but remains partial until the mission records the final
+  researcher finding, VText follow-up, and any continuation/compaction behavior.
 unproven or partial claims:
   Full auto/required/none tool-mode matrix, non-tool reasoning-content passback
-  for DeepSeek Anthropic, streaming behavior for the new routes,
-  product-path researcher runs, trace/diagnosis surfacing of verifier evidence,
-  compaction/recall safety, and the final Global Wire provider readiness report
-  remain unproven.
+  for DeepSeek Anthropic, streaming behavior for the new routes, complete
+  product-path researcher runs, realistic multimodal verifier runs,
+  trace/diagnosis surfacing of verifier evidence, compaction/recall safety, and
+  the final Global Wire provider readiness report remain unproven.
 belief-state changes:
   The selected DeepSeek OpenAI-compatible path is now viable for VText exact
   edit/tool loops when tool-bearing calls disable thinking. Anthropic-compatible
   routes are viable conformance/alternative routes for exact tool loops, but
   they are not yet selected as default policy. Product-path VText can request
   persistent super and super can call provider verifier routes. Xiaomi
-  multimodal is viable when explicit base64 image data or the deterministic
-  `red_pixel_png` fixture reaches `verify_model_capability`. Provider readiness
-  is still not complete enough for Global Wire hard cutover until researcher
-  and compaction behavior are proven or precisely bounded.
+  multimodal input validation and deterministic fixture serialization are now
+  safer, but realistic Xiaomi multimodal verifier readiness remains unproven.
+  Provider readiness is still not complete enough for Global Wire hard cutover
+  until researcher, multimodal verifier, and compaction behavior are proven or
+  precisely bounded.
 remaining error field:
   Complete the provider/protocol conformance matrix beyond the repaired
   OpenAI-compatible tool loop, then select safe model-policy defaults for
@@ -583,9 +616,11 @@ highest-impact remaining uncertainty:
   hidden reasoning/compaction continuity remains correct under long-context
   pressure.
 next executable probe:
-  Run one product-path researcher loop and one long-context compaction proof
-  with post-compaction recall and tool use. Extend the tool-mode matrix to
-  auto/required/none after the product-path probes.
+  Continue with realistic product-path probes only: finish or rerun one
+  researcher loop using normal model policy and default budgets, run one
+  realistic multimodal verifier loop without artificial token caps, and run one
+  long-context compaction proof with post-compaction recall and tool use. Extend
+  the tool-mode matrix to auto/required/none after those product-path probes.
 suggested resume goal string:
   /goal Run docs/mission-provider-config-conformance-v0.md as MissionGradient and make DeepSeek/Xiaomi production-ready for Choir agents.
 evidence artifact refs:
