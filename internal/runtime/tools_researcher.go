@@ -57,11 +57,42 @@ func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID str
 	if explicitAgentID != "" {
 		target, err := rt.store.GetAgent(ctx, explicitAgentID)
 		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				if fallbackAgentID, fallbackChannelID := vtextDeliveryFallbackFromContext(runRec, explicitAgentID); fallbackAgentID != "" && fallbackChannelID != "" {
+					return fallbackAgentID, fallbackChannelID, nil
+				}
+			}
 			return "", "", fmt.Errorf("resolve delivery target lookup: %w", err)
 		}
 		return explicitAgentID, strings.TrimSpace(target.ChannelID), nil
 	}
 	return "", "", fmt.Errorf("structured delivery requires agent_id, a parent run, or a vtext requester")
+}
+
+func vtextDeliveryFallbackFromContext(runRec *types.RunRecord, explicitAgentID string) (string, string) {
+	if runRec == nil {
+		return "", ""
+	}
+	channelID := strings.TrimSpace(metadataStringValue(runRec.Metadata, runMetadataChannelID))
+	if channelID == "" {
+		channelID = strings.TrimSpace(runRec.ChannelID)
+	}
+	explicitAgentID = strings.TrimSpace(explicitAgentID)
+	if strings.HasPrefix(explicitAgentID, "vtext:") {
+		explicitDocID := strings.TrimSpace(strings.TrimPrefix(explicitAgentID, "vtext:"))
+		if explicitDocID != "" {
+			if channelID == "" {
+				channelID = explicitDocID
+			}
+			if explicitDocID == channelID {
+				return explicitAgentID, channelID
+			}
+		}
+	}
+	if channelID == "" {
+		return "", ""
+	}
+	return "vtext:" + channelID, channelID
 }
 
 func authoritativeDeliveryChannelID(targetChannelID, explicitChannelID, contextChannelID string) string {

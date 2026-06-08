@@ -3630,6 +3630,83 @@ func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing
 	}
 }
 
+func TestSubmitWorkerUpdateFallsBackToVTextChannelWhenExplicitTargetMissing(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	ownerID := "user-alice"
+	docID := "doc-terminal-blocker"
+	superRun, err := rt.StartRunWithMetadata(ctx, "Report terminal worker blocker", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      "super:terminal-blocker",
+		runMetadataChannelID:    docID,
+		runMetadataTrajectoryID: "traj-terminal-blocker",
+	})
+	if err != nil {
+		t.Fatalf("start super run: %v", err)
+	}
+
+	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	for _, tc := range []struct {
+		name            string
+		explicitAgentID string
+		updateID        string
+	}{
+		{name: "bare doc id", explicitAgentID: docID, updateID: "terminal-blocker-bare-doc"},
+		{name: "missing vtext agent", explicitAgentID: "vtext:" + docID, updateID: "terminal-blocker-vtext-agent"},
+		{name: "stale owner id", explicitAgentID: ownerID, updateID: "terminal-blocker-owner-id"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rawArgs := json.RawMessage(fmt.Sprintf(`{
+				"update_id":%q,
+				"agent_id":%q,
+				"kind":"blocker",
+				"summary":"Worker canceled after terminal evidence failed to publish.",
+				"findings":["submit_coagent_update should route to the VText channel when the explicit target is stale."]
+			}`, tc.updateID, tc.explicitAgentID))
+			raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", rawArgs)
+			if err != nil {
+				t.Fatalf("submit_coagent_update: %v", err)
+			}
+			var resp struct {
+				AgentID   string `json:"agent_id"`
+				ChannelID string `json:"channel_id"`
+				Status    string `json:"status"`
+			}
+			if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+				t.Fatalf("decode submit_coagent_update response: %v", err)
+			}
+			if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
+				t.Fatalf("response target/channel/status = %+v, want vtext fallback", resp)
+			}
+			update, err := s.GetWorkerUpdate(ctx, ownerID, tc.updateID)
+			if err != nil {
+				t.Fatalf("get worker update: %v", err)
+			}
+			if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
+				t.Fatalf("worker update target/channel = %+v, want vtext fallback", update)
+			}
+		})
+	}
+
+	messages, err := s.ListChannelMessages(ctx, ownerID, docID, 0, 10)
+	if err != nil {
+		t.Fatalf("list channel messages: %v", err)
+	}
+	if len(messages) != 3 {
+		t.Fatalf("messages len = %d, want 3: %+v", len(messages), messages)
+	}
+	for _, message := range messages {
+		if message.ToAgentID != "vtext:"+docID || message.ChannelID != docID {
+			t.Fatalf("message did not route through vtext fallback: %+v", message)
+		}
+	}
+}
+
 func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 	ctx := context.Background()
 	rt, s, _ := testRuntimeWithTempCWD(t)
