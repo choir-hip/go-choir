@@ -63,6 +63,14 @@ blocker named.
 
 ## Cognitive Transforms Applied
 
+Current uncertainty or obstacle:
+
+Choir has durable run memory, but the current compaction mechanism is a
+deterministic truncation summary. The risk is that the next implementation
+either overbuilds a memory system or underbuilds by polishing the deterministic
+path. The mission must route directly to a real, simple LLM compaction state
+transition and use Node B proof to decide provider readiness.
+
 ### Mechanism Upgrade
 
 The old object was "summarize old chat enough to fit." The real object is a
@@ -99,6 +107,47 @@ attempts.
 
 Operational consequence: verifier prompts must ask questions that require old
 content, old constraints, and exact retrieval after compaction.
+
+### State Machine
+
+Compaction is not a paragraph generator. It has states and impossible states:
+
+```text
+not_needed -> requested -> compacting -> compacted -> continued
+                         -> failed -> emergency_fallback_or_blocked
+```
+
+Impossible or bad states include:
+
+- compacted without a durable raw transcript;
+- compacted without exact retrieval handles;
+- compacted while orphaning a tool result;
+- provider call retried with neither LLM checkpoint nor labeled fallback;
+- provider conformance marked complete while compaction remains only a local or
+  deterministic proof.
+
+Operational consequence: implementation and tests should assert state
+transitions and event evidence, not just that a summary string exists.
+
+### Model Versus System
+
+The intelligence is not only in the checkpoint model. The durable behavior comes
+from model + harness + prompt builder + run-memory store + exact retrieval tool
++ staging proof.
+
+Operational consequence: do not search for the perfect compaction prompt before
+shipping the harness primitive. The 80/20 is a typed prompt, parser, durable
+details, raw tail, retrieval handles, thresholding, and Node B proof.
+
+### Value Of Information
+
+The highest-information observation is whether a real staging agent can compact,
+continue, and retrieve exact pre-compaction content under DeepSeek/Xiaomi model
+policy.
+
+Operational consequence: avoid speculative tuning. Implement the smallest LLM
+compactor that can generate typed checkpoints, then spend proof budget on the
+Node B product path.
 
 ## Hard Invariants
 
@@ -374,6 +423,12 @@ Node B proof, exact retrieval, or provider behavior.
 Use only after root-cause probes and at least one serious alternative route.
 Name the smallest safe next probe or the external dependency.
 
+## Slash Goalstring
+
+```text
+/goal Run docs/mission-llm-run-memory-compaction-v0.md as MissionGradient; ship LLM compaction and close provider conformance.
+```
+
 ## Run Checkpoint & Resumption State
 
 ```text
@@ -414,7 +469,7 @@ next executable probe:
   compactor that writes structured details plus prompt-visible summary into
   existing RunMemoryEntry compaction records.
 suggested resume goal string:
-  /goal Run docs/mission-llm-run-memory-compaction-v0.md as MissionGradient.
+  /goal Run docs/mission-llm-run-memory-compaction-v0.md as MissionGradient; ship LLM compaction and close provider conformance.
 evidence artifact refs:
   Provider/config context: docs/mission-provider-config-conformance-v0.md
 rollback refs:
