@@ -1096,3 +1096,60 @@ deks ignore metadata/style sections, manifests are built from native
 source-entity handles used by the article, and full-cycle source ids remain
 background provenance. Then deploy and prove with authenticated Global Wire API
 checks plus browser/Comet visual proof where the tool state allows it.
+
+## Checkpoint 2026-06-08T01:02Z: scoped manifest fix deployed; residual scaffold/ref parsing remains
+
+status: checkpoint_incomplete
+
+objective: deploy the first article-hygiene/source-scoping correction and
+verify the live Global Wire projection against the observed staging failure.
+
+what shipped: commit `f5a95abd85a7a002f5e2b7d28aefecbf57bd1f9d`
+changes Global Wire source-network VText indexing to prefer source entities
+actually cited by inline `source:` refs over inherited full-cycle
+`source_item_ids`, and tightens the processor/reconciler-to-VText article
+prompt so visible article copy should not contain Style.vtext/source inventory,
+placeholder publication metadata, or tool/process notes.
+
+local proof: focused comprehensive runtime tests passed for
+`TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest`,
+`TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads`,
+`TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText`,
+and `TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead`. The local
+runtime shard script also passed.
+
+staging proof: CI run `27110174855` passed integration smoke, Go vet/build,
+non-runtime tests, all four runtime shards, aggregate gate, and Node B deploy
+job `80006531435`. FlakeHub run `27110174850` succeeded.
+`https://choir.news/health` and Node B `/health` report build/deployed commit
+`f5a95abd85a7a002f5e2b7d28aefecbf57bd1f9d`, deployed_at
+`2026-06-08T00:58:29Z`. Node B `/opt/go-choir` is also at that SHA.
+
+API proof: authenticated `GET /api/global-wire/stories` on sandbox port `8085`
+returned `15` stories from `durable-storygraph+source-network-vtexts`. The
+previously observed live VText-owned Pentagon article
+`49884f39-3017-463f-9bff-a6a6b8b34343` now projects a prose dek and a small
+manifest (`3` lead, `4` context) instead of the prior full-cycle thousands.
+The Iran article `35798d5c-cac1-49bb-8342-8c92958abf75` now projects `3` lead
+and `2` context sources.
+
+new residual problems documented before fix:
+
+- Newer live articles still leak markdown metadata lines into deks, especially
+  `**Date:** ...`, `**Status:** ...`, and byline/source labels such as `**By
+  Choir News**`. The dek extractor strips headings and bullets, but its
+  scaffold recognizer does not normalize markdown-bolded labels.
+- Source refs inside visible or legacy `Source Handles`/`Source Manifest`
+  sections can still inflate manifests because the manifest ref extractor
+  scans the whole article body. It should scan only reader-facing article prose
+  before scaffold/source-inventory sections.
+- Some articles have been updated by later live agents since the previous
+  checkpoint, creating duplicate or newer articles around the same story
+  cluster. That is evidence the living newsroom loop is active, but the
+  collection surface still needs reconciliation quality: not every new VText
+  should appear as an equally prominent duplicate front-page item.
+
+next executable probe: update the dek/scaffold parser to normalize markdown
+label syntax and update source-ref extraction to ignore source/style inventory
+sections. Keep duplicate-story reconciliation as a later, separately
+documented product problem unless the parser fix exposes a direct cause.
