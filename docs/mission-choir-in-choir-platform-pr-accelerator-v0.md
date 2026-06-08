@@ -856,3 +856,49 @@ rollback refs:
   handle-only source labels. Revert aa5bef5b only if the deleted detritus
   surfaces must be restored, which remains contrary to product direction.
 ```
+
+```text
+status: shipped_partial
+last checkpoint: 2026-06-08T06:50Z RSS source item bodies are normalized at
+  ingestion for future source cycles.
+current artifact state:
+  Commit 1fd56a2924eeb5dd6c49a1c7cbe0101574f7a776 is on origin/main and
+  deployed to staging. Source Service RSS polling now stores cleaned text for
+  item bodies when feed descriptions contain HTML fragments or entities.
+what shipped:
+  - `internal/sources/rss.go`: RSS item body creation now extracts text from
+    HTML description fragments with an HTML tokenizer, unescapes entities, and
+    collapses whitespace/punctuation spacing before computing the item content
+    hash.
+  - `internal/sources/rss_test.go`: regression coverage proves an RSS
+    description such as `<p>Markets &amp; policy <strong>shifted</strong>.</p>`
+    becomes `Markets & policy shifted.` rather than raw HTML.
+what was proven:
+  - Local tests passed:
+    `nix develop -c go test ./internal/sources`
+    and `nix develop -c go test ./cmd/sourcecycled`.
+  - CI run 27120708225 passed for commit
+    1fd56a2924eeb5dd6c49a1c7cbe0101574f7a776, including runtime shards,
+    non-runtime tests, build, and staging deploy.
+  - FlakeHub run 27120708229 passed.
+  - Public staging `/health` and Node B sandbox `/health` both reported
+    deployed commit 1fd56a2924eeb5dd6c49a1c7cbe0101574f7a776 with
+    `deployed_at=2026-06-08T06:47:27Z`.
+unproven or partial claims:
+  This is an ingestion-time normalization fix. It does not rewrite old source
+  item rows that already contain raw RSS HTML, and it does not fetch full
+  article bodies beyond the feed description. GDELT source items may still be
+  metadata summaries rather than article text. A deeper readability/fetch-body
+  mission remains open.
+belief-state changes:
+  RSS body quality is now improved for new items without adding latency to
+  source reads. The next source-body axis is full article extraction and
+  source-type-specific representation quality, not simply stripping feed HTML.
+remaining error field:
+  Existing stored items may remain noisy until refreshed or reprocessed. Source
+  Service still needs a principled representation policy for RSS summary,
+  article body fetch, GDELT metadata, Telegram posts, and publication-safe
+  excerpts.
+rollback refs:
+  Revert 1fd56a29 to restore raw RSS descriptions as source item bodies.
+```
