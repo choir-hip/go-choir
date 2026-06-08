@@ -2016,3 +2016,68 @@ rollback refs:
   No code change in this checkpoint. Revert 8b32ebfa to remove the earlier
   Super pre-delegation blocker fallback if it causes regressions.
 ```
+
+```text
+status: shipped_partial
+last checkpoint: 2026-06-08T10:56Z stale coagent update target fallback
+  landed and was proved on staging.
+current artifact state:
+  Documentation commit 0e4f38cccd0be2af1637de41b2d12b4d9694232d records
+  the terminal-reporting blocker before the fix. Behavior commit
+  d487b2090f543af7fda6531c14a203af4a82d808 is on origin/main and deployed to
+  staging.
+what shipped:
+  `submit_coagent_update` target resolution now preserves normal parent,
+  requester, and existing explicit-agent routing, but if an explicit target
+  agent is stale/missing and the run still has a VText channel/document
+  context, it falls back to `vtext:<channel_id>` instead of failing with
+  `resolve delivery target lookup: record not found`.
+what was proven:
+  - Local `git diff --check` passed.
+  - Local focused ordinary runtime test passed:
+    `nix develop -c go test ./internal/runtime -run 'TestRuntimeSynthesizesVTextBlockerWhenSuperFailsBeforeDelegation'`.
+  - Local focused comprehensive tests passed:
+    `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestSubmitWorkerUpdate(FallsBackToVTextChannelWhenExplicitTargetMissing|UsesVTextRequesterMetadataWhenAgentMissing)$'`.
+  - CI run 27132481605 passed for commit
+    d487b2090f543af7fda6531c14a203af4a82d808, including Go vet/build,
+    runtime shards, non-runtime tests, integration-tagged smoke, and staging
+    deploy.
+  - FlakeHub run 27132481602 passed for the same commit.
+  - Public staging `/health` reported proxy and sandbox deployed commit
+    d487b2090f543af7fda6531c14a203af4a82d808 with
+    `deployed_at=2026-06-08T10:48:51Z`.
+  - Owner-routed sandbox http://10.202.180.2:8085 also reported deployed
+    commit d487b2090f543af7fda6531c14a203af4a82d808.
+  - Deployed product-path acceptance probe used prompt-bar plus
+    `POST /api/vtext/documents/46ce1a2f-c5ba-46a9-ad9e-aa3036a4c955/revise`.
+    VText requested Super execution; Super called `submit_coagent_update`
+    with stale `agent_id=5bd6de97-3b58-408c-bf89-c42c81b083de` and update id
+    `deployed-stale-target-fallback-20260608T1050Z`.
+  - The deployed tool result was successful:
+    `status=submitted`, `agent_id=vtext:46ce1a2f-c5ba-46a9-ad9e-aa3036a4c955`,
+    `channel_id=46ce1a2f-c5ba-46a9-ad9e-aa3036a4c955`, `cursor=2`,
+    `trajectory_id=c0ee94d8-786f-49ae-a540-2af370bf8c30`.
+  - VText consumed that worker update into revision
+    ee7adeb5-376f-45a1-9a4b-a798a80223f7; revision metadata includes
+    `worker_updates_consumed` with the Super channel message.
+residual risk:
+  The acceptance trajectory later failed on an unrelated Fireworks
+  `412 Precondition Failed` during extra VText/Super model turns. That does
+  not invalidate the routing fix, but it remains a separate provider/runtime
+  reliability issue for unattended overnight runs.
+remaining error field:
+  Choir-in-Choir is now better at returning terminal blockers to VText after
+  stale target ids, but the larger platform PR accelerator still needs a new
+  overnight rerun that reaches package/adoption evidence or a product-level
+  blocker. The worker itself still showed a tendency toward broad read loops,
+  co-super provider failures, and cancellation without product code output.
+next executable probe:
+  Rerun the overnight mission with a tighter initial worker objective that
+  names one implementation target and terminal artifact, then inspect whether
+  the worker deletes the Global Wire detritus source ledger surface as recorded
+  in `docs/choir-in-choir-deletion-bias-eval-note-2026-06-08.md`.
+rollback refs:
+  Revert d487b2090f543af7fda6531c14a203af4a82d808 to remove the stale-target
+  VText channel fallback. Revert 0e4f38cc only if the problem checkpoint
+  should be removed from mission history.
+```
