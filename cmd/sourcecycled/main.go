@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	defaultSourceMaxxProcessorDispatchLimit = 7
+	defaultSourceMaxxProcessorDispatchLimit = 32
 	defaultSourceMaxxRuntimeDispatchRetries = 8
 	defaultSourceMaxxRuntimeRetryDelay      = 2 * time.Second
 )
@@ -57,6 +57,7 @@ type sourceMaxxDispatchResult struct {
 	ProcessorSkipped    int
 	ReconcilerSubmitted int
 	ReconcilerFailed    int
+	ReconcilerSkipped   int
 	RunIDs              []string
 	Errors              []string
 }
@@ -462,35 +463,85 @@ func (d *sourceMaxxRuntimeDispatcher) dispatch(ctx context.Context, store *cycle
 	if processorLimit <= 0 {
 		processorLimit = defaultSourceMaxxProcessorDispatchLimit
 	}
-	for idx, req := range handoff.ProcessorRequests {
-		if idx >= processorLimit {
-			result.ProcessorSkipped++
-			continue
+	processorRequests := handoff.ProcessorRequests
+	if store != nil {
+		queuedCount, err := store.CountQueuedProcessorRequests(ctx)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("count queued processors: %v", err))
+			result.ProcessorSkipped += len(handoff.ProcessorRequests)
+			return result
 		}
+		queued, err := store.ListQueuedProcessorRequests(ctx, processorLimit)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("list queued processors: %v", err))
+			result.ProcessorSkipped += len(handoff.ProcessorRequests)
+			return result
+		}
+		processorRequests = queued
+		result.ProcessorSkipped += maxInt(0, queuedCount-len(queued))
+	}
+	for _, req := range processorRequests {
 		run, err := d.submitProcessor(ctx, req)
 		if err != nil {
 			result.ProcessorFailed++
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", req.RequestID, err))
-			_ = store.UpdateProcessorRequestStatus(ctx, req.RequestID, "dispatch_failed")
+			if store != nil {
+				_ = store.UpdateProcessorRequestStatus(ctx, req.RequestID, "dispatch_failed")
+			}
 			continue
 		}
 		result.ProcessorSubmitted++
 		result.RunIDs = append(result.RunIDs, run.RunID)
-		_ = store.UpdateProcessorRequestRuntimeRun(ctx, req.RequestID, "submitted", run.RunID)
+		if store != nil {
+			_ = store.UpdateProcessorRequestRuntimeRun(ctx, req.RequestID, "submitted", run.RunID)
+		}
 	}
-	for _, req := range handoff.ReconcilerRequests {
+	reconcilerRequests := handoff.ReconcilerRequests
+	if store != nil {
+		queued, err := store.ListQueuedReconcilerRequests(ctx, 50)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("list queued reconcilers: %v", err))
+			result.ReconcilerSkipped += len(handoff.ReconcilerRequests)
+			return result
+		}
+		reconcilerRequests = queued
+	}
+	for _, req := range reconcilerRequests {
+		if store != nil {
+			ready, err := store.ProcessorRequestsSubmitted(ctx, req.ProcessorRequestIDs)
+			if err != nil {
+				result.ReconcilerFailed++
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: check processor readiness: %v", req.RequestID, err))
+				continue
+			}
+			if !ready {
+				result.ReconcilerSkipped++
+				continue
+			}
+		}
 		run, err := d.submitReconciler(ctx, req)
 		if err != nil {
 			result.ReconcilerFailed++
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", req.RequestID, err))
-			_ = store.UpdateReconcilerRequestStatus(ctx, req.RequestID, "dispatch_failed")
+			if store != nil {
+				_ = store.UpdateReconcilerRequestStatus(ctx, req.RequestID, "dispatch_failed")
+			}
 			continue
 		}
 		result.ReconcilerSubmitted++
 		result.RunIDs = append(result.RunIDs, run.RunID)
-		_ = store.UpdateReconcilerRequestRuntimeRun(ctx, req.RequestID, "submitted", run.RunID)
+		if store != nil {
+			_ = store.UpdateReconcilerRequestRuntimeRun(ctx, req.RequestID, "submitted", run.RunID)
+		}
 	}
 	return result
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (d *sourceMaxxRuntimeDispatcher) submitProcessor(ctx context.Context, req cycle.ProcessorRequest) (runtimeRunStatusResponse, error) {
@@ -681,6 +732,19 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 	if len(items) == 0 {
 		log.Println("No new items found in this cycle. Skipping synthesis.")
 		_ = store.RecordCycleEvent(ctx, cycleID, "", "cycle_completed_empty", "no new items found", map[string]any{"fetch_count": len(pollResult.Fetches)})
+		dispatchResult := sourceMaxxRuntimeDispatcherFromEnv().dispatch(ctx, store, cycle.SourceMaxxHandoff{})
+		if dispatchResult.ProcessorSubmitted > 0 || dispatchResult.ReconcilerSubmitted > 0 || dispatchResult.ProcessorFailed > 0 || dispatchResult.ReconcilerFailed > 0 || dispatchResult.ProcessorSkipped > 0 || dispatchResult.ReconcilerSkipped > 0 {
+			_ = store.RecordCycleEvent(ctx, cycleID, "", "sourcemaxx_agent_queue_drain", "queued source handoffs drained during empty source cycle", map[string]any{
+				"processor_submitted":  dispatchResult.ProcessorSubmitted,
+				"processor_failed":     dispatchResult.ProcessorFailed,
+				"processor_skipped":    dispatchResult.ProcessorSkipped,
+				"reconciler_submitted": dispatchResult.ReconcilerSubmitted,
+				"reconciler_failed":    dispatchResult.ReconcilerFailed,
+				"reconciler_skipped":   dispatchResult.ReconcilerSkipped,
+				"runtime_run_ids":      dispatchResult.RunIDs,
+				"errors":               dispatchResult.Errors,
+			})
+		}
 		_ = store.FinishCycle(ctx, cycleID, "completed", 0, len(pollResult.Fetches), nil)
 		return
 	}
@@ -716,6 +780,7 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 			"processor_skipped":    dispatchResult.ProcessorSkipped,
 			"reconciler_submitted": dispatchResult.ReconcilerSubmitted,
 			"reconciler_failed":    dispatchResult.ReconcilerFailed,
+			"reconciler_skipped":   dispatchResult.ReconcilerSkipped,
 			"runtime_run_ids":      dispatchResult.RunIDs,
 			"errors":               dispatchResult.Errors,
 		})

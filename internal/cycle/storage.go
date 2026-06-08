@@ -605,6 +605,34 @@ func (s *Storage) ListProcessorRequests(ctx context.Context, cycleID string, lim
 	return out, rows.Err()
 }
 
+func (s *Storage) ListQueuedProcessorRequests(ctx context.Context, limit int) ([]ProcessorRequest, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 50
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids,
+		source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
+		FROM processor_requests WHERE status = 'queued' ORDER BY created_at ASC, request_id ASC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ProcessorRequest
+	for rows.Next() {
+		req, err := scanProcessorRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, req)
+	}
+	return out, rows.Err()
+}
+
+func (s *Storage) CountQueuedProcessorRequests(ctx context.Context) (int, error) {
+	var count int
+	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM processor_requests WHERE status = 'queued'`).Scan(&count)
+	return count, err
+}
+
 func (s *Storage) ListReconcilerRequests(ctx context.Context, cycleID string, limit int) ([]ReconcilerRequest, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -632,6 +660,55 @@ func (s *Storage) ListReconcilerRequests(ctx context.Context, cycleID string, li
 		out = append(out, req)
 	}
 	return out, rows.Err()
+}
+
+func (s *Storage) ListQueuedReconcilerRequests(ctx context.Context, limit int) ([]ReconcilerRequest, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, status, runtime_run_id, scope, source_item_ids,
+		processor_request_ids, prompt, created_at, updated_at
+		FROM reconciler_requests WHERE status = 'queued' ORDER BY created_at ASC, request_id ASC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ReconcilerRequest
+	for rows.Next() {
+		req, err := scanReconcilerRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, req)
+	}
+	return out, rows.Err()
+}
+
+func (s *Storage) ProcessorRequestsSubmitted(ctx context.Context, requestIDs []string) (bool, error) {
+	ids := make([]string, 0, len(requestIDs))
+	for _, requestID := range requestIDs {
+		requestID = strings.TrimSpace(requestID)
+		if requestID != "" {
+			ids = append(ids, requestID)
+		}
+	}
+	if len(ids) == 0 {
+		return false, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for idx, id := range ids {
+		placeholders[idx] = "?"
+		args[idx] = id
+	}
+	query := `SELECT COUNT(*), SUM(CASE WHEN status = 'submitted' AND runtime_run_id != '' THEN 1 ELSE 0 END)
+		FROM processor_requests WHERE request_id IN (` + strings.Join(placeholders, ",") + `)`
+	var total int
+	var submitted sql.NullInt64
+	if err := s.DB.QueryRowContext(ctx, query, args...).Scan(&total, &submitted); err != nil {
+		return false, err
+	}
+	return total == len(ids) && int(submitted.Int64) == len(ids), nil
 }
 
 func (s *Storage) LatestCycleSummary(ctx context.Context) (CycleSummary, error) {

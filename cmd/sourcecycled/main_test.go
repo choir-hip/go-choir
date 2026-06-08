@@ -411,23 +411,20 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 		client:               runtimeServer.Client(),
 	}
 	result := dispatcher.dispatch(ctx, store, handoff)
-	if result.ProcessorSubmitted != 1 || result.ProcessorSkipped != len(handoff.ProcessorRequests)-1 || result.ReconcilerSubmitted != 1 {
+	if result.ProcessorSubmitted != 1 || result.ProcessorSkipped != len(handoff.ProcessorRequests)-1 || result.ReconcilerSubmitted != 0 || result.ReconcilerSkipped != 1 {
 		t.Fatalf("unexpected dispatch result: %+v", result)
 	}
 	if result.ProcessorFailed != 0 || result.ReconcilerFailed != 0 || len(result.Errors) != 0 {
 		t.Fatalf("unexpected dispatch failures: %+v", result)
 	}
-	if len(submissions) != 2 {
-		t.Fatalf("runtime submissions = %d, want processor + reconciler", len(submissions))
+	if len(submissions) != 1 {
+		t.Fatalf("runtime submissions = %d, want one processor before all processor handoffs are submitted", len(submissions))
 	}
 	if submissions[0].OwnerID != "owner-global-wire" || submissions[0].Metadata["agent_profile"] != "processor" || submissions[0].Metadata["processor_key"] == "" {
 		t.Fatalf("unexpected processor submission: %+v", submissions[0])
 	}
 	if !strings.Contains(submissions[0].Prompt, "Source item handles:") || !strings.Contains(submissions[0].Prompt, "Do not paste source bodies") {
 		t.Fatalf("processor prompt missing source handle contract:\n%s", submissions[0].Prompt)
-	}
-	if submissions[1].Metadata["agent_profile"] != "reconciler" || submissions[1].Metadata["reconciler_scope"] != "story-corpus" {
-		t.Fatalf("unexpected reconciler submission: %+v", submissions[1])
 	}
 
 	processors, err := store.ListProcessorRequests(ctx, cycleID, 10)
@@ -455,8 +452,28 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 	if err != nil {
 		t.Fatalf("list reconcilers: %v", err)
 	}
+	if len(reconcilers) != 1 || reconcilers[0].Status != "queued" || reconcilers[0].RuntimeRunID != "" {
+		t.Fatalf("reconciler should wait for all processor handoffs: %+v", reconcilers)
+	}
+
+	dispatcher.maxProcessorRequests = 10
+	secondResult := dispatcher.dispatch(ctx, store, cycle.SourceMaxxHandoff{})
+	if secondResult.ProcessorSubmitted != len(handoff.ProcessorRequests)-1 || secondResult.ProcessorSkipped != 0 || secondResult.ReconcilerSubmitted != 1 || secondResult.ReconcilerSkipped != 0 {
+		t.Fatalf("unexpected second dispatch result: %+v", secondResult)
+	}
+	if len(submissions) != len(handoff.ProcessorRequests)+1 {
+		t.Fatalf("runtime submissions after drain = %d, want processors + reconciler", len(submissions))
+	}
+	lastSubmission := submissions[len(submissions)-1]
+	if lastSubmission.Metadata["agent_profile"] != "reconciler" || lastSubmission.Metadata["reconciler_scope"] != "story-corpus" {
+		t.Fatalf("unexpected reconciler submission: %+v", lastSubmission)
+	}
+	reconcilers, err = store.ListReconcilerRequests(ctx, cycleID, 10)
+	if err != nil {
+		t.Fatalf("list reconcilers after drain: %v", err)
+	}
 	if len(reconcilers) != 1 || reconcilers[0].Status != "submitted" || reconcilers[0].RuntimeRunID == "" {
-		t.Fatalf("reconciler status = %+v", reconcilers)
+		t.Fatalf("reconciler status after drain = %+v", reconcilers)
 	}
 }
 
