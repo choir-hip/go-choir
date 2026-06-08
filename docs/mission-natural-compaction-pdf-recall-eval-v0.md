@@ -395,15 +395,16 @@ Likely first goal:
 
 ## Run Checkpoint & Resumption State
 
-status: substrate_and_policy_control_proven_pre_eval
+status: substrate_policy_and_file_import_proven_pre_eval
 
 last checkpoint: mission upgraded so the sandbox/user-computer document
 substrate preamble is an explicit prerequisite before any compaction recall
 eval. Slides remain strictly parked as a future mission; this mission only
 extracts PPTX/HTML slide artifacts as sources. The substrate and scoped
 model-policy control-plane behavior changes have been pushed, passed CI,
-deployed to staging, and proven through an authenticated product route; the
-frozen-corpus compaction eval has not started.
+deployed to staging, and proven through authenticated product routes. A narrow
+uploaded-file ContentItem import route has also shipped and been proven with an
+uploaded PPTX fixture. The frozen-corpus compaction eval has not started.
 
 current artifact state:
 
@@ -433,6 +434,12 @@ what shipped:
 - behavior commit `46f1b764` adds authenticated read-only
   `/api/model-policy/resolve` so staging can prove overlay resolution through a
   browser-public product route without using forbidden `/api/agent/*` routes.
+- docs-only checkpoint `d40deea2` records the uploaded-file corpus import gap:
+  `ImportFileContent` existed for researcher tools, but repeatable corpus setup
+  needed an authenticated product route.
+- behavior commit `d3b4cb98` adds authenticated
+  `POST /api/content/import-file`, plus a frontend helper and a comprehensive
+  PPTX file-import regression test.
 
 what was proven so far:
 
@@ -487,6 +494,32 @@ what was proven so far:
     returned `provider: xiaomi`, `model: mimo-v2.5-pro`,
     `reasoning_effort: medium`, and source
     `/mnt/persistent/files/System/model-policy-overlays/compaction-eval-1780959566031.toml`.
+- Focused local proof for file import:
+  - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportFileCreatesExtractedPPTXContentItem|TestContentImportURLCreatesProvenanceRecord|TestContentCreateSupportsDurableMediaReferences'`;
+  - `nix develop -c go test ./internal/runtime -run 'TestRegisteredPromptBarRouteAcceptsIntentOnly|TestRuntimeRejectsExpiredModelPolicyOverlay|TestRunToolLoop'`.
+- GitHub CI run `27173112280` completed successfully for `d3b4cb98`,
+  including staging deploy.
+- FlakeHub publish run `27173112299` completed successfully for `d3b4cb98`.
+- `https://choir.news/health` reports proxy and sandbox deployed at
+  `d3b4cb98798d895a627c7c94695175af17f6a011`.
+- A deployed product-path uploaded-file import proof succeeded through an
+  authenticated `https://choir.news` passkey session:
+  - owner/user id `ccde4835-7fa6-4c15-bef9-1dbfb486f2eb`;
+  - owner email `codex-file-import-proof-1780960904946@example.test`;
+  - uploaded PPTX path `frozen-corpus/proof-1780960904946.pptx`;
+  - authenticated `PUT /api/files/frozen-corpus/proof-1780960904946.pptx`
+    returned `200`;
+  - authenticated `POST /api/content/import-file` returned ContentItem
+    `fcda1409-8740-49b1-b35b-bd27de323e2c`;
+  - imported item stored `source_type: file`,
+    `media_type: application/vnd.openxmlformats-officedocument.presentationml.presentation`,
+    `app_hint: slides`, `extraction_adapter:
+    pptx_ooxml_slide_text_projection`, `selector_count: 2`,
+    `content_hash: 94344408a0b514ec8f9c932d23e60a0adaf81f56e411b172720494adb559c804`,
+    raw hash `sha256:94344408a0b514ec8f9c932d23e60a0adaf81f56e411b172720494adb559c804`,
+    extracted text hash
+    `657b946e7f715876f9ae1b3e92c28307596364e3c7fa49bd6b0e59cee1f372b0`,
+    and slide selectors `slide-1`, `slide-2`.
 
 unproven or partial claims:
 
@@ -509,10 +542,6 @@ remaining error field:
 - image/package size impact of adding document tools;
 - extraction quality variance across file formats;
 - frozen corpus selection and import quality;
-- uploaded-file corpus setup currently lacks a browser-public authenticated
-  ContentItem import route; `ImportFileContent` exists for researcher tools, but
-  repeatable corpus preparation should not require spending an LLM turn just to
-  convert an already-uploaded file into a ContentItem;
 - whether all target providers remain available during the run.
 
 highest-impact remaining uncertainty:
@@ -527,6 +556,8 @@ latest local proof:
 - `nix develop -c go test ./internal/runtime -run 'TestRuntime.*ModelPolicy|TestStartChildRunResolvesModelPolicy|TestParseModelPolicy|TestEnsureDefaultModelPolicy'`
 - `nix develop -c go test ./internal/runtime -run 'TestAgentToolProfiles|TestStartChildRunResolvesModelPolicy|TestRuntimeResolvesModelPolicy|TestRuntimeRejectsExpiredModelPolicyOverlay|TestProviderPreconditionFallbackSelections|TestRunToolLoop'`
 - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestHandleModelPolicyResolveUsesOverlayFile'`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportFileCreatesExtractedPPTXContentItem|TestContentImportURLCreatesProvenanceRecord|TestContentCreateSupportsDurableMediaReferences'`
+- `nix develop -c go test ./internal/runtime -run 'TestRegisteredPromptBarRouteAcceptsIntentOnly|TestRuntimeRejectsExpiredModelPolicyOverlay|TestRunToolLoop'`
 - `nix develop -c go test ./internal/runtime -run 'TestExtract|TestSystemPromptForResearcher|TestContent'`
 - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact|TestAgentToolProfiles|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot'`
 
@@ -536,6 +567,8 @@ latest staging proof:
 - `gh run view 27169883384 --json status,conclusion,workflowName,url,headSha`
 - `gh run view 27171676079 --json status,conclusion,workflowName,url,headSha`
 - `gh run view 27171676075 --json status,conclusion,workflowName,url,headSha`
+- `gh run view 27173112280 --json status,conclusion,workflowName,url,headSha`
+- `gh run view 27173112299 --json status,conclusion,workflowName,url,headSha`
 - `curl -fsS https://choir.news/health`
 - authenticated staging product-path import of public PDF ContentItem
   `4222d5fc-aea5-43bd-93eb-077f9c3540a7` with Poppler extraction and page
@@ -543,14 +576,16 @@ latest staging proof:
 - authenticated staging product-path overlay resolver proof for overlay
   `compaction-eval-1780959566031`, resolving researcher to
   `xiaomi/mimo-v2.5-pro` with `medium` reasoning.
+- authenticated staging product-path uploaded-PPTX proof for ContentItem
+  `fcda1409-8740-49b1-b35b-bd27de323e2c`, preserving raw hash, extracted text
+  hash, adapter metadata, and slide selectors.
 
 next executable probe:
 
-- add a narrow authenticated product route for importing an existing
-  user-computer file path into a ContentItem through the same `ImportFileContent`
-  substrate, prove it with an uploaded PPTX fixture, then build the frozen
-  multi-format corpus and start the model matrix using scoped model-policy
-  overlays.
+- build the frozen multi-format corpus using URL imports for public documents
+  and file imports for uploaded fixtures, record ContentItem
+  ids/hashes/selectors/adapters, then start the model matrix using scoped
+  model-policy overlays.
 
 suggested resume goal string:
 
