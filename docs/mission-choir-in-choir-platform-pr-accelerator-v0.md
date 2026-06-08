@@ -1367,3 +1367,73 @@ next executable probe:
   include tests and staging proof that API-resolved source items expose the
   classification.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T08:33Z source-body availability classification
+  landed and was proved on staging.
+current artifact state:
+  Commit 55ddce3f1c61fdac8b6d50840f7e24a03f8bb501 is on origin/main and
+  deployed to staging. It follows documentation checkpoint
+  042c35f1a54d118d0c31e4024ead188985bb0926, which recorded the source-body
+  integrity problem before the behavior change.
+what shipped:
+  - `sources.Item` now carries `body_kind`, `body_length`, and
+    `reader_snapshot` classification.
+  - RSS items are classified as `feed_summary` when they contain feed body text
+    and `empty` when body text is absent.
+  - GDELT items are classified as `metadata_packet`.
+  - Telegram items are classified as `social_post`.
+  - Source Service storage persists the new fields and derives them on read for
+    legacy rows whose classification columns are empty.
+  - Source Service search/resolve API results expose `body_kind`,
+    `body_length`, and explicit `reader_snapshot: false` when no reader/full
+    snapshot exists.
+  - Researcher source-search projections and Global Wire Source Service
+    content-item metadata carry the same classification.
+  - VText source entities enriched from Source Service items now include body
+    classification and an uncertainty note when the body is only a feed
+    summary, metadata packet, social post, or empty.
+what was proven:
+  - Local `git diff --check` passed.
+  - Local `nix develop -c go test ./internal/sourceapi ./internal/sourcecontract ./internal/sources ./internal/cycle ./cmd/sourcecycled`
+    passed.
+  - Local `nix develop -c go test ./internal/runtime -run 'TestResearcherSourceSearchCallsSourceServiceAPI|TestVText|TestGlobalWire'`
+    passed.
+  - Follow-up local `nix develop -c go test ./cmd/sourcecycled ./internal/sourceapi`
+    and `nix develop -c go test ./internal/runtime -run 'TestResearcherSourceSearchCallsSourceServiceAPI'`
+    passed after making false/zero classification fields explicit in JSON.
+  - CI run 27125359353 passed for commit
+    55ddce3f1c61fdac8b6d50840f7e24a03f8bb501, including Go gates and staging
+    deploy.
+  - FlakeHub run 27125359369 passed for the same commit.
+  - Public staging `/health` reported proxy and sandbox deployed commit
+    55ddce3f1c61fdac8b6d50840f7e24a03f8bb501 with
+    `deployed_at=2026-06-08T08:30:39Z`.
+  - Node B Source Service search for an existing RSS item
+    `srcitem_02e62eff64001f85b3a33963` returned
+    `body_kind=feed_summary`, `body_length=164`, and
+    `reader_snapshot=false`.
+  - Node B Source Service search for an existing RSS item with no body
+    `srcitem_9b7830af5a2c40378af4bbb7` returned `body_kind=empty`,
+    `body_length=0`, and `reader_snapshot=false`.
+  - Node B Source Service search for a GDELT result returned
+    `body_kind=metadata_packet`, `body_length=418`, and
+    `reader_snapshot=false`.
+belief-state changes:
+  The product can now honestly distinguish source volume from source-body
+  richness at the Source Service boundary. This does not ingest full article
+  bodies yet, but it prevents the current source cards/transclusions from
+  silently treating feed summaries and metadata packets as equivalent to
+  reader snapshots.
+remaining error field:
+  Global Wire is still not ship-worthy. The next source-body realism axis is a
+  second-stage reader/full-article extraction path for URLs where policy allows
+  it, with clear failure states and no dead mobile deep links. Separate
+  remaining axes are front-page ranking by prominence/novelty/freshness and
+  VText-agent-owned publication-quality article prose.
+rollback refs:
+  Revert 55ddce3f and 8433aa50 to remove body availability fields from the
+  Source Service API/storage path. Revert 042c35f1 only if the problem
+  checkpoint should be removed from the mission history.
+```
