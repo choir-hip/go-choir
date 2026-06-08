@@ -432,8 +432,9 @@ problem.
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: 2026-06-08T16:20Z Anthropic-compatible provider routes
-  implemented, deployed, and proven for exact tool choice plus continuation
+last checkpoint: 2026-06-08T16:35Z product-path verifier routing partially
+  proven; Xiaomi explicit-base64 multimodal verifier call proven through
+  staging gateway logs
 current artifact state:
   Direct DeepSeek and Xiaomi provider support is implemented and deployed at
   commit `58881c172c51e3a862129eea7fab6feaf1deec53`. OpenAI-compatible
@@ -497,19 +498,51 @@ what was proven:
   `reasoning_content` was present, and the continuation turn returned
   `GATEWAY_XIAOMI_ANTHROPIC_TOOL_LOOP_OK` with hidden reasoning content
   preserved.
+
+  Product-path verifier-routing probe on staging used a normal browser/WebAuthn
+  registration and `/api/prompt-bar`, not an internal route. Submission
+  `ca5f0dea-be74-498c-a3ef-a0d03971394b` created VText document
+  `8f722daa-ae80-4ba4-8f09-451a421f01e5` and child VText run
+  `ec1d149c-4718-4260-ab06-1c247f5e7dec`. Node B gateway logs show the VText
+  run used DeepSeek `deepseek-v4-flash`, requested persistent super, and the
+  super run used DeepSeek `deepseek-v4-pro`. The super then invoked
+  `verify_model_capability`-style provider calls through the configured
+  gateway: `deepseek-anthropic/deepseek-v4-flash` returned successfully with
+  `stop=end_turn`, and `xiaomi/mimo-v2.5` returned one sanitized 400 on the
+  first image attempt before a later Xiaomi text verification call succeeded.
+  This proves the real VText -> persistent super -> provider verifier route
+  exists, but it does not yet prove robust product-path multimodal behavior.
+
+  A narrower product-path multimodal probe then used a normal browser/WebAuthn
+  registration and `/api/prompt-bar` with an explicit tiny base64 PNG. Submission
+  `94b2a9cf-82a5-43be-9585-6c356e69c445` created VText document
+  `e7716626-36fc-4c0e-bba7-3aa2a09eaf27` and child VText run
+  `2ac1e711-69c7-4b75-b813-e404502c0734`. Node B gateway logs show VText on
+  DeepSeek `deepseek-v4-flash`, persistent super on DeepSeek `deepseek-v4-pro`,
+  and a `verify_model_capability` call through `xiaomi/mimo-v2.5` with
+  `max_tokens=64`, `reasoning=none`, and no tools. The Xiaomi gateway call
+  succeeded with `tokens=82+64` and `text_len=286`. This proves explicit
+  base64-image input can reach Xiaomi through a real VText-requested super
+  verifier path.
 unproven or partial claims:
   Full auto/required/none tool-mode matrix, non-tool reasoning-content passback
   for DeepSeek Anthropic, streaming behavior for the new routes,
-  product-path researcher/verifier runs, product-path multimodal verification,
-  compaction/recall safety, and the final Global Wire provider readiness report
-  remain unproven.
+  product-path researcher runs, robust product-path multimodal verification
+  without prompt-fragile image arguments, trace/diagnosis surfacing of verifier
+  evidence, compaction/recall safety, and the final Global Wire provider
+  readiness report remain unproven.
 belief-state changes:
   The selected DeepSeek OpenAI-compatible path is now viable for VText exact
   edit/tool loops when tool-bearing calls disable thinking. Anthropic-compatible
   routes are viable conformance/alternative routes for exact tool loops, but
-  they are not yet selected as default policy. Provider readiness is still not
-  complete enough for Global Wire hard cutover until researcher, multimodal
-  verifier, and compaction behavior are proven or precisely bounded.
+  they are not yet selected as default policy. Product-path VText can request
+  persistent super and super can call provider verifier routes. Xiaomi
+  multimodal is viable when explicit base64 image data reaches
+  `verify_model_capability`, but the first open-ended product prompt produced a
+  sanitized Xiaomi 400, so the product path still needs a less prompt-fragile
+  media handoff contract. Provider readiness is still not complete enough for
+  Global Wire hard cutover until researcher, robust multimodal verifier, and
+  compaction behavior are proven or precisely bounded.
 remaining error field:
   Complete the provider/protocol conformance matrix beyond the repaired
   OpenAI-compatible tool loop, then select safe model-policy defaults for
@@ -521,9 +554,12 @@ highest-impact remaining uncertainty:
   hidden reasoning/compaction continuity remains correct under long-context
   pressure.
 next executable probe:
-  Run one product-path researcher/verifier-style loop, then one long-context
-  compaction proof with post-compaction recall and tool use. Extend the
-  tool-mode matrix to auto/required/none after the product-path probes.
+  Document and fix the product-path multimodal handoff so
+  `verify_model_capability` receives validated image input instead of relying on
+  a model to invent a usable image source, then run one product-path researcher
+  loop and one long-context compaction proof with post-compaction recall and
+  tool use. Extend the tool-mode matrix to auto/required/none after the
+  product-path probes.
 suggested resume goal string:
   /goal Run docs/mission-provider-config-conformance-v0.md as MissionGradient and make DeepSeek/Xiaomi production-ready for Choir agents.
 evidence artifact refs:
