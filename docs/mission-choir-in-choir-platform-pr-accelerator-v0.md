@@ -1580,3 +1580,43 @@ rollback refs:
   policy fields from the Source Service result path. Revert 36106c59 only if
   the problem checkpoint should be removed from mission history.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T09:15Z front-page freshness/ranking problem
+  documented before behavior changes.
+current artifact state:
+  Staging serves behavior commit 3c432e125b0ffad4534bddddbfbef91686672d08.
+  Latest origin/main is docs checkpoint
+  8ff6f049c92c2a1612b88616e9721f4067453b3d.
+new evidence:
+  Code inspection found that the seeded Global Wire stories in
+  `internal/store/global_wire.go` still store literal freshness copy such as
+  `updated 18 min ago`, `updated 41 min ago`, and `updated 1 hr ago`.
+  The frontend fallback data in `frontend/src/lib/GlobalWireApp.svelte` repeats
+  the same hardcoded strings. This matches the user-observed failure: the top
+  stories can sit on screen for hours while still claiming minute-scale updates.
+
+  `ListGlobalWireStories` orders durable stories by `prominence DESC,
+  updated_at DESC`. That is not a full importance/novelty ranking model, but it
+  is at least a stable current ordering primitive. The more immediate product
+  bug is that seed/story freshness is copy, not state. Runtime source-network
+  VText stories already use `sourceMaxxFreshness(doc.UpdatedAt)`, and graph
+  candidate promotion sets `story.UpdatedAt = now`, so real promoted updates can
+  use relative time honestly.
+belief-state changes:
+  The first honest ranking/freshness slice should separate seed source
+  neighborhoods from live updates. Seed stories should say they are seeded
+  source neighborhoods, not recently updated news. VText-derived and promoted
+  stories can use relative updated time from their actual `UpdatedAt`.
+remaining error field:
+  This will not implement a complete prominence/importance/novelty ranking
+  model. It only removes a misleading time signal and prevents fallback UI from
+  showing stale minute-copy. The larger ranking problem remains open.
+next executable probe:
+  Normalize Global Wire story presentation at the API boundary: for seeded
+  stories, replace hardcoded `updated ... ago` freshness with an explicit seed
+  status; for non-seeded stories whose freshness is empty or update-like,
+  derive relative freshness from `UpdatedAt`. Update frontend fallback copy and
+  focused tests.
+```
