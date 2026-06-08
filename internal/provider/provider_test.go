@@ -2749,7 +2749,6 @@ func TestIntegrationDeepSeekDirectLive(t *testing.T) {
 			Role:    "user",
 			Content: []Block{{Type: "text", Text: "Reply exactly: deepseek-ok"}},
 		}},
-		MaxTokens: 64,
 	})
 	if err != nil {
 		t.Fatalf("deepseek live call: %v", err)
@@ -2784,7 +2783,6 @@ func TestIntegrationXiaomiTextAndImageLive(t *testing.T) {
 			Role:    "user",
 			Content: []Block{{Type: "text", Text: "Reply with the token xiaomi-ok somewhere in the first sentence."}},
 		}},
-		MaxTokens: 64,
 	})
 	if err != nil {
 		t.Fatalf("xiaomi text live call: %v", err)
@@ -2807,7 +2805,6 @@ func TestIntegrationXiaomiTextAndImageLive(t *testing.T) {
 				}},
 			},
 		}},
-		MaxTokens: 64,
 	})
 	if err != nil {
 		t.Fatalf("xiaomi image live call: %v", err)
@@ -2836,7 +2833,7 @@ func TestIntegrationDeepSeekRuntimeExactToolChoiceLive(t *testing.T) {
 		Provider:        "deepseek",
 		Model:           "deepseek-v4-flash",
 		ReasoningEffort: "medium",
-	}, "DEEPSEEK_RUNTIME_TOOL_LOOP_OK")
+	}, "function:record_status", "DEEPSEEK_RUNTIME_TOOL_LOOP_OK")
 	if err != nil {
 		t.Fatalf("deepseek runtime tool loop: %v", err)
 	}
@@ -2867,7 +2864,7 @@ func TestIntegrationXiaomiRuntimeExactToolChoiceLive(t *testing.T) {
 		Provider:        "xiaomi",
 		Model:           "mimo-v2.5-pro",
 		ReasoningEffort: "none",
-	}, "XIAOMI_RUNTIME_TOOL_LOOP_OK")
+	}, "function:record_status", "XIAOMI_RUNTIME_TOOL_LOOP_OK")
 	if err != nil {
 		t.Fatalf("xiaomi runtime tool loop: %v", err)
 	}
@@ -2898,7 +2895,7 @@ func TestIntegrationDeepSeekAnthropicRuntimeExactToolChoiceLive(t *testing.T) {
 		Provider:        "deepseek-anthropic",
 		Model:           "deepseek-v4-flash",
 		ReasoningEffort: "medium",
-	}, "DEEPSEEK_ANTHROPIC_RUNTIME_TOOL_LOOP_OK")
+	}, "function:record_status", "DEEPSEEK_ANTHROPIC_RUNTIME_TOOL_LOOP_OK")
 	if err != nil {
 		t.Fatalf("deepseek anthropic runtime tool loop: %v", err)
 	}
@@ -2932,7 +2929,7 @@ func TestIntegrationXiaomiAnthropicRuntimeExactToolChoiceLive(t *testing.T) {
 		Provider:        "xiaomi-anthropic",
 		Model:           "mimo-v2.5-pro",
 		ReasoningEffort: "medium",
-	}, "XIAOMI_ANTHROPIC_RUNTIME_TOOL_LOOP_OK")
+	}, "function:record_status", "XIAOMI_ANTHROPIC_RUNTIME_TOOL_LOOP_OK")
 	if err != nil {
 		t.Fatalf("xiaomi anthropic runtime tool loop: %v", err)
 	}
@@ -2941,7 +2938,106 @@ func TestIntegrationXiaomiAnthropicRuntimeExactToolChoiceLive(t *testing.T) {
 	}
 }
 
-func runLiveProviderToolLoop(t *testing.T, p Provider, selection runtime.LLMSelection, marker string) (string, runtime.TokenUsage, error) {
+func TestIntegrationRuntimeToolChoiceModesLive(t *testing.T) {
+	if os.Getenv("CHOIR_PROVIDER_LIVE_TESTS") != "1" {
+		t.Skip("set CHOIR_PROVIDER_LIVE_TESTS=1 to spend provider credits")
+	}
+	type liveProviderCase struct {
+		name      string
+		provider  Provider
+		selection runtime.LLMSelection
+	}
+	cases := make([]liveProviderCase, 0, 4)
+	if apiKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")); apiKey != "" {
+		p, err := NewDeepSeekProvider(DeepSeekConfig{APIKey: apiKey, ModelID: "deepseek-v4-flash"})
+		if err != nil {
+			t.Fatalf("new deepseek provider: %v", err)
+		}
+		cases = append(cases, liveProviderCase{
+			name:     "deepseek-openai",
+			provider: p,
+			selection: runtime.LLMSelection{
+				Provider:        "deepseek",
+				Model:           "deepseek-v4-flash",
+				ReasoningEffort: "medium",
+			},
+		})
+		pAnthropic, err := NewAnthropicCompatProvider(AnthropicCompatConfig{
+			APIKey:                   apiKey,
+			ModelID:                  "deepseek-v4-flash",
+			BaseURL:                  "https://api.deepseek.com/anthropic",
+			ProviderName:             "deepseek-anthropic",
+			DisableThinkingWithTools: true,
+		})
+		if err != nil {
+			t.Fatalf("new deepseek anthropic provider: %v", err)
+		}
+		cases = append(cases, liveProviderCase{
+			name:     "deepseek-anthropic",
+			provider: pAnthropic,
+			selection: runtime.LLMSelection{
+				Provider:        "deepseek-anthropic",
+				Model:           "deepseek-v4-flash",
+				ReasoningEffort: "medium",
+			},
+		})
+	}
+	if apiKey := firstNonEmpty(strings.TrimSpace(os.Getenv("XIAOMI_API_KEY")), strings.TrimSpace(os.Getenv("xiaomi_api_key"))); apiKey != "" {
+		p, err := NewXiaomiProvider(XiaomiConfig{APIKey: apiKey, ModelID: "mimo-v2.5-pro"})
+		if err != nil {
+			t.Fatalf("new xiaomi provider: %v", err)
+		}
+		cases = append(cases, liveProviderCase{
+			name:     "xiaomi-openai",
+			provider: p,
+			selection: runtime.LLMSelection{
+				Provider:        "xiaomi",
+				Model:           "mimo-v2.5-pro",
+				ReasoningEffort: "medium",
+			},
+		})
+		pAnthropic, err := NewAnthropicCompatProvider(AnthropicCompatConfig{
+			APIKey:          apiKey,
+			ModelID:         "mimo-v2.5-pro",
+			ReasoningEffort: "medium",
+			BaseURL:         "https://api.xiaomimimo.com/anthropic",
+			ProviderName:    "xiaomi-anthropic",
+		})
+		if err != nil {
+			t.Fatalf("new xiaomi anthropic provider: %v", err)
+		}
+		cases = append(cases, liveProviderCase{
+			name:     "xiaomi-anthropic",
+			provider: pAnthropic,
+			selection: runtime.LLMSelection{
+				Provider:        "xiaomi-anthropic",
+				Model:           "mimo-v2.5-pro",
+				ReasoningEffort: "medium",
+			},
+		})
+	}
+	if len(cases) == 0 {
+		t.Skip("DEEPSEEK_API_KEY and XIAOMI_API_KEY are not set")
+	}
+	for _, tc := range cases {
+		tc := tc
+		for _, mode := range []string{"auto", "required", "function:record_status", "none"} {
+			mode := mode
+			t.Run(tc.name+"/"+mode, func(t *testing.T) {
+				marker := strings.ToUpper(strings.NewReplacer("-", "_", ":", "_").Replace(tc.name + "_" + mode + "_OK"))
+				text, usage, err := runLiveProviderToolLoop(t, tc.provider, tc.selection, mode, marker)
+				if err != nil {
+					t.Fatalf("%s %s runtime tool loop: %v", tc.name, mode, err)
+				}
+				if !strings.Contains(text, marker) {
+					t.Fatalf("text = %q, want marker %q; usage=%+v", text, marker, usage)
+				}
+			})
+		}
+	}
+}
+
+func runLiveProviderToolLoop(t *testing.T, p Provider, selection runtime.LLMSelection, initialToolChoice, marker string) (string, runtime.TokenUsage, error) {
 	t.Helper()
 	registry := runtime.NewToolRegistry()
 	if err := registry.Register(runtime.Tool{
@@ -2960,17 +3056,23 @@ func runLiveProviderToolLoop(t *testing.T, p Provider, selection runtime.LLMSele
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
+	userInstruction := "Call record_status with status OK exactly once, then respond with " + marker + "."
+	systemPrompt := "You are a Choir provider conformance proof agent. Use the tool exactly once when requested, then return the requested marker."
+	if initialToolChoice == "none" {
+		userInstruction = "Do not call tools. Respond with " + marker + "."
+		systemPrompt = "You are a Choir provider conformance proof agent. When tool choice is none, answer directly with the requested marker and do not call tools."
+	}
 	return runtime.RunToolLoop(
 		ctx,
 		NewBridgeProvider(p),
 		registry,
-		[]json.RawMessage{json.RawMessage(fmt.Sprintf(`{"role":"user","content":[{"type":"text","text":"Call record_status with status OK, then respond with %s."}]}`, marker))},
-		"You are a Choir provider conformance proof agent. Use the tool exactly once when requested, then return the requested marker.",
+		[]json.RawMessage{json.RawMessage(fmt.Sprintf(`{"role":"user","content":[{"type":"text","text":%q}]}`, userInstruction))},
+		systemPrompt,
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
 		runtime.WithToolLoopLLMConfig(selection),
-		runtime.WithInitialToolChoice("function:record_status"),
+		runtime.WithInitialToolChoice(initialToolChoice),
 	)
 }
 

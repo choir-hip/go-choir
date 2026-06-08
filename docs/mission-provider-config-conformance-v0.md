@@ -655,12 +655,27 @@ what was proven:
   `compaction_status:"completed"` and no runtime patch. This proves the
   continuation-selection compaction route can work on staging for a same-owner
   product run. It still does not prove long-context post-compaction recall.
+
+  The env-gated live provider tests were brought back into line with the
+  mission's no-arbitrary-token-cap invariant. `MaxTokens: 64` was removed from
+  the direct DeepSeek text and Xiaomi text/image live probes. A new live runtime
+  tool-choice matrix test now exercises the normal `RunToolLoop` bridge for all
+  four provider/protocol rows: `deepseek`, `deepseek-anthropic`, `xiaomi`, and
+  `xiaomi-anthropic`. For each row it proves `auto`, `required`, exact
+  `function:record_status`, and `none` tool-choice modes with normal provider
+  budgets. Live command:
+  `set -a; source .env; set +a; CHOIR_PROVIDER_LIVE_TESTS=1 nix develop -c go
+  test ./internal/provider -run 'TestIntegrationRuntimeToolChoiceModesLive'
+  -count=1 -v` passed in 57.536s. The same uncapped direct live probes passed:
+  `CHOIR_PROVIDER_LIVE_TESTS=1 nix develop -c go test ./internal/provider -run
+  'TestIntegrationDeepSeekDirectLive|TestIntegrationXiaomiTextAndImageLive'
+  -count=1 -v`.
 unproven or partial claims:
-  Full auto/required/none tool-mode matrix, non-tool reasoning-content passback
-  for DeepSeek Anthropic, streaming behavior for the new routes, long-context
-  compaction and post-compaction recall safety, reliable arbitrary-image-URL
-  verifier behavior, and the final Global Wire provider readiness report remain
-  unproven.
+  Product-path coverage for the full auto/required/none tool-mode matrix,
+  non-tool reasoning-content passback for DeepSeek Anthropic, streaming behavior
+  for the new routes, long-context compaction and post-compaction recall safety,
+  reliable arbitrary-image-URL verifier behavior, and the final Global Wire
+  provider readiness report remain unproven.
 belief-state changes:
   The selected DeepSeek OpenAI-compatible path is now viable for VText exact
   edit/tool loops when tool-bearing calls disable thinking. Anthropic-compatible
@@ -673,14 +688,17 @@ belief-state changes:
   image URL fetch behavior remains unreliable. The continuation-selection
   compaction route works for same-owner product runs, but this only proves the
   control path and a compacted checkpoint, not recall under real long-context
-  pressure. Provider readiness is still not complete enough for Global Wire hard
-  cutover until long-context compaction behavior is proven or precisely bounded
-  and the final provider readiness report is written.
+  pressure. Env-gated live provider evidence now covers the local
+  provider/protocol tool-choice matrix without artificial token caps; product
+  path still has only narrower VText/researcher/verifier proofs. Provider
+  readiness is still not complete enough for Global Wire hard cutover until
+  long-context compaction behavior is proven or precisely bounded and the final
+  provider readiness report is written.
 remaining error field:
-  Complete the provider/protocol conformance matrix beyond the repaired
-  OpenAI-compatible tool loop, prove or bound long-context compaction/recall
-  continuity, and then select safe model-policy defaults for processors,
-  reconcilers, researchers, VText article agents, and multimodal verifiers.
+  Carry the provider/protocol conformance matrix into product-path evidence
+  where it matters, prove or bound long-context compaction/recall continuity,
+  and then select safe model-policy defaults for processors, reconcilers,
+  researchers, VText article agents, and multimodal verifiers.
 highest-impact remaining uncertainty:
   Whether hidden reasoning/compaction continuity remains correct under
   long-context pressure, and whether the Anthropic-compatible routes provide
@@ -690,8 +708,9 @@ next executable probe:
   one post-compaction tool call, using normal model policy and no arbitrary token
   caps. Use a fresh same-owner product-path run or preserve the auth state for
   any source run ids being replayed; old Playwright-auth ids are not durable
-  cross-user evidence. Then extend the provider/protocol tool-mode matrix to
-  auto/required/none and write the Global Wire provider readiness report.
+  cross-user evidence. Then write the Global Wire provider readiness report,
+  explicitly distinguishing env-gated provider-loop proof from product-path
+  VText/researcher/verifier proof.
 suggested resume goal string:
   /goal Run docs/mission-provider-config-conformance-v0.md as MissionGradient and make DeepSeek/Xiaomi production-ready for Choir agents.
 evidence artifact refs:
