@@ -76,6 +76,15 @@ func TestContentImportURLCreatesProvenanceRecord(t *testing.T) {
 	if item.Metadata["raw_content_hash"] == "" {
 		t.Fatalf("metadata missing raw_content_hash: %#v", item.Metadata)
 	}
+	if item.Metadata["extraction_adapter"] != "html_readability_lite" {
+		t.Fatalf("metadata extraction_adapter = %#v", item.Metadata["extraction_adapter"])
+	}
+	if item.Metadata["extracted_text_hash"] == "" {
+		t.Fatalf("metadata missing extracted_text_hash: %#v", item.Metadata)
+	}
+	if count, _ := item.Metadata["selector_count"].(float64); count < 1 {
+		t.Fatalf("metadata missing selectors: %#v", item.Metadata)
+	}
 	if item.Provenance["hash_algorithm"] != "sha256" {
 		t.Fatalf("provenance hash_algorithm = %#v", item.Provenance["hash_algorithm"])
 	}

@@ -577,7 +577,11 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 
 	result.MediaType = mediaType
 	if isHTMLMedia(result.MediaType) {
-		result.Title, result.Text = extractReadableHTML(raw)
+		extracted := extractContentDocument(ctx, targetURL, result.MediaType, raw)
+		result.Title = extracted.Title
+		result.Text = extracted.Text
+		result.Extraction = &extracted
+		result.Warnings = append(result.Warnings, extracted.Warnings...)
 		result.Rungs = append(result.Rungs, extractionRung{Name: htmlRungName, Status: statusForText(result.Text), TextChars: len(result.Text)})
 	} else if isTextMedia(result.MediaType) {
 		result.Text = strings.TrimSpace(string(raw))
