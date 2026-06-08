@@ -1785,6 +1785,34 @@ func TestValidateMediaRequestRejectsUnresolvedArtifactRefs(t *testing.T) {
 	}
 }
 
+func TestValidateMediaRequestRejectsMalformedBase64(t *testing.T) {
+	req := LLMRequest{
+		Model: "mimo-v2.5",
+		Messages: []Message{{
+			Role:    "user",
+			Content: []Block{{Type: "image", Source: &MediaSource{Kind: "base64", MIMEType: "image/png", Data: "not standard base64"}}},
+		}},
+	}
+	err := validateMediaRequest(req.Model, req)
+	if err == nil || !strings.Contains(err.Error(), "valid standard base64") {
+		t.Fatalf("error = %v, want base64 validation blocker", err)
+	}
+}
+
+func TestValidateMediaRequestRejectsRelativeImageURL(t *testing.T) {
+	req := LLMRequest{
+		Model: "mimo-v2.5",
+		Messages: []Message{{
+			Role:    "user",
+			Content: []Block{{Type: "image", Source: &MediaSource{Kind: "url", URL: "/local/screen.png"}}},
+		}},
+	}
+	err := validateMediaRequest(req.Model, req)
+	if err == nil || !strings.Contains(err.Error(), "absolute http(s) URL") {
+		t.Fatalf("error = %v, want absolute URL validation blocker", err)
+	}
+}
+
 // --- CallWithTools with Tool Definitions Tests ---
 
 func TestBridgeProviderCallWithToolsPassesToolDefinitions(t *testing.T) {

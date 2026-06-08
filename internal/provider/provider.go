@@ -2120,12 +2120,20 @@ func validateMediaRequest(modelID string, req LLMRequest) error {
 			}
 			switch strings.TrimSpace(block.Source.Kind) {
 			case "base64":
-				if strings.TrimSpace(block.Source.Data) == "" {
+				data := strings.TrimSpace(block.Source.Data)
+				if data == "" {
 					return fmt.Errorf("image block base64 source missing data")
 				}
+				if _, err := base64.StdEncoding.DecodeString(data); err != nil {
+					return fmt.Errorf("image block base64 source is not valid standard base64: %w", err)
+				}
 			case "url":
-				if strings.TrimSpace(block.Source.URL) == "" {
+				url := strings.TrimSpace(block.Source.URL)
+				if url == "" {
 					return fmt.Errorf("image block url source missing url")
+				}
+				if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
+					return fmt.Errorf("image block url source must be an absolute http(s) URL")
 				}
 			case "artifact_ref":
 				return fmt.Errorf("image artifact_ref %q requires gateway artifact resolver before provider call", block.Source.Ref)

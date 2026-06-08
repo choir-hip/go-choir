@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -18,8 +19,11 @@ type verifyModelCapabilityArgs struct {
 	ImageURL        string `json:"image_url,omitempty"`
 	ImageBase64     string `json:"image_base64,omitempty"`
 	ImageMIMEType   string `json:"image_mime_type,omitempty"`
+	ImageFixture    string `json:"image_fixture,omitempty"`
 	MaxTokens       int    `json:"max_tokens,omitempty"`
 }
+
+const verifierRedPixelPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP8z8AARQAHAQH/kX7rAAAAAElFTkSuQmCC"
 
 func newVerifyModelCapabilityTool(rt *Runtime) Tool {
 	return Tool{
@@ -31,9 +35,10 @@ func newVerifyModelCapabilityTool(rt *Runtime) Tool {
 			"model":            map[string]any{"type": "string", "description": "Optional explicit model override from the configured model catalog."},
 			"reasoning_effort": map[string]any{"type": "string", "description": "Optional provider reasoning setting."},
 			"prompt":           map[string]any{"type": "string"},
-			"image_url":        map[string]any{"type": "string", "description": "Optional image URL for multimodal verification."},
-			"image_base64":     map[string]any{"type": "string", "description": "Optional base64 image data for multimodal verification."},
+			"image_url":        map[string]any{"type": "string", "description": "Optional absolute http(s) image URL for multimodal verification."},
+			"image_base64":     map[string]any{"type": "string", "description": "Optional valid base64 image data for multimodal verification."},
 			"image_mime_type":  map[string]any{"type": "string", "description": "MIME type for image_base64, default image/png."},
+			"image_fixture":    map[string]any{"type": "string", "description": "Optional deterministic image fixture for capability probes. Use \"red_pixel_png\" when the caller needs a known valid tiny PNG without supplying image_base64."},
 			"max_tokens":       map[string]any{"type": "integer", "description": "Optional explicit output budget. Omit for provider defaults."},
 		}, []string{"role", "prompt"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -64,11 +69,15 @@ func (rt *Runtime) verifyModelCapability(ctx context.Context, in verifyModelCapa
 		return "", err
 	}
 
-	hasImage := strings.TrimSpace(in.ImageURL) != "" || strings.TrimSpace(in.ImageBase64) != ""
+	normalized, err := normalizeVerifyImageInput(in)
+	if err != nil {
+		return "", err
+	}
+	hasImage := strings.TrimSpace(normalized.ImageURL) != "" || strings.TrimSpace(normalized.ImageBase64) != ""
 	if hasImage && !catalogModelSupportsModality(selection.Model, "image") {
 		return "", fmt.Errorf("model %q is text-only in Choir model catalog; image input requires a multimodal model policy", selection.Model)
 	}
-	messages := []json.RawMessage{buildVerificationUserMessage(prompt, in)}
+	messages := []json.RawMessage{buildVerificationUserMessage(prompt, normalized)}
 	maxTokens := in.MaxTokens
 	if maxTokens <= 0 {
 		maxTokens = MaxInteractiveOutputTokensForSelection(selection, role)
@@ -100,6 +109,35 @@ func (rt *Runtime) verifyModelCapability(ctx context.Context, in verifyModelCapa
 		"reasoning_content_present": strings.TrimSpace(resp.ReasoningContent) != "",
 		"text_excerpt":              truncateToolText(resp.Text, 2000),
 	})
+}
+
+func normalizeVerifyImageInput(in verifyModelCapabilityArgs) (verifyModelCapabilityArgs, error) {
+	out := in
+	fixture := strings.TrimSpace(in.ImageFixture)
+	if fixture != "" {
+		if strings.TrimSpace(in.ImageBase64) != "" || strings.TrimSpace(in.ImageURL) != "" {
+			return verifyModelCapabilityArgs{}, fmt.Errorf("image_fixture cannot be combined with image_base64 or image_url")
+		}
+		switch fixture {
+		case "red_pixel_png":
+			out.ImageBase64 = verifierRedPixelPNGBase64
+			out.ImageMIMEType = "image/png"
+		default:
+			return verifyModelCapabilityArgs{}, fmt.Errorf("unsupported image_fixture %q", fixture)
+		}
+	}
+	if strings.TrimSpace(out.ImageURL) != "" && strings.TrimSpace(out.ImageBase64) != "" {
+		return verifyModelCapabilityArgs{}, fmt.Errorf("provide only one image source: image_url, image_base64, or image_fixture")
+	}
+	if url := strings.TrimSpace(out.ImageURL); url != "" && !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
+		return verifyModelCapabilityArgs{}, fmt.Errorf("image_url must be an absolute http(s) URL")
+	}
+	if data := strings.TrimSpace(out.ImageBase64); data != "" {
+		if _, err := base64.StdEncoding.DecodeString(data); err != nil {
+			return verifyModelCapabilityArgs{}, fmt.Errorf("image_base64 must be valid standard base64: %w", err)
+		}
+	}
+	return out, nil
 }
 
 func (rt *Runtime) resolveToolModelSelection(ctx context.Context, ownerID, role string, in verifyModelCapabilityArgs) (LLMSelection, string, error) {
