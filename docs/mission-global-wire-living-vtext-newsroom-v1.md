@@ -1019,3 +1019,80 @@ source-service proof: Node B `go-choir-sourcecycled.service` on port `8787` retu
 belief-state change: the source ingestion substrate is materially alive now: hundreds to thousands of new source items per cycle, many active item-producing sources, and real processor/reconciler handoff volume. The higher-impact next uncertainty is no longer "are there hundreds of source items?" but "do processor/reconciler runs and VText agents turn those source handles into owned publication-quality VText revisions?"
 
 remaining error field: source-health correctness is improved, but the mission is still incomplete. The Global Wire UI should expose richer health semantics without dashboard clutter, and the architecture still needs staging proof that processor/reconciler handoffs result in VText-agent-owned article creation/revision with native source and related-VText transclusion.
+
+## Checkpoint 2026-06-08T00:55Z: live VText-owned articles proven; article hygiene and source scoping now lead
+
+status: checkpoint_incomplete
+
+objective: prove whether the deployed processor/reconciler handoff path is
+actually producing VText-agent-owned article revisions, then name the next
+quality blockers before fixing them.
+
+what was proven: Node B sourcecycled latest cycle
+`cycle_4a1fd5a687ee697c929a732a` processed `211` configured sources and
+`4,976` deduped new SourceItems, submitted `7` processor runtime runs and `1`
+reconciler runtime run, and queued the remaining processor requests. The
+reconciler run `7b71d8fe-e94d-4c66-83e0-3d6c53287d2e` completed after
+reviewing the new SourceItems and processor handoffs. It spawned VText agents
+for two high-urgency articles rather than writing canonical article prose
+itself:
+
+- `vtext:35798d5c-cac1-49bb-8342-8c92958abf75`, run
+  `4cf476cd-34f9-49bb-9e48-878435327c9b`, for the Iran-Israel missile
+  escalation article.
+- `vtext:49884f39-3017-463f-9bff-a6a6b8b34343`, run
+  `aa92bea3-fe63-40d2-9162-ed940e58061c`, for the Pentagon/Israel
+  counterintelligence threat article.
+
+The reconciler-created document heads were `source_brief` seed revisions with
+`article_version=false`. Each child VText run then called `edit_vtext` and
+stored an article revision with `source=edit_vtext`,
+`artifact_kind=article_revision`, `article_version=true`, native `source:`
+handles, and `source_maxx_cycle_id=cycle_4a1fd5a687ee697c929a732a`. The
+Pentagon article later consumed researcher output and advanced to current
+revision `407f5941-6d04-40b3-ba92-9f738e6e5c19`; the Iran article advanced to
+current revision `0fed8d50-e23d-4673-aeb1-7c2ce53beb4c`.
+
+API proof: authenticated `GET /api/global-wire/stories` on sandbox port `8085`
+with user `yusefnathanson@me.com` returned source
+`durable-storygraph+source-network-vtexts` and `15` stories. The indexed
+stories included the VText-owned Iran article, the VText-owned Pentagon
+article, and additional live VText-owned articles such as the Mindanao
+earthquake story. This proves the current live product has crossed from
+deterministic stubs into VText-agent-owned article revisions.
+
+new problems documented before fix:
+
+- Article-body hygiene is still below the publication-quality bar. Some live
+  article bodies and Global Wire deks leak scaffolding such as `Published:
+  [Date TBD]`, `Source: ...`, `Market Brief`, horizontal-rule separators, and
+  visible `Style.vtext Source` or source-handle inventory sections. Style
+  source selection and provenance should live in revision metadata and native
+  source/transclusion affordances, not in reader-facing article copy unless
+  editorially intentional.
+- Source scoping is too broad for reconciler-spawned article revisions. The
+  current revisions inherit the reconciler's full-cycle `source_item_ids`,
+  causing Global Wire manifests to show thousands of context items for a single
+  article even when the article itself cites a small set of relevant source
+  handles. The index should prefer the article revision's actual
+  `source_entities`/inline `source:` handles and use full-cycle ids only as
+  background provenance, not as the visible article source manifest.
+- Follow-up researcher loops are now visible in the VText lifecycle, which is
+  good, but article update quality must be verified as a normal living VText
+  revision sequence: seed brief -> article revision -> researcher evidence ->
+  revised article head. The current trace proves this sequence for the
+  Pentagon story, but the rendered article still needs cleanup before it is
+  ship-worthy.
+
+belief-state change: article ownership is no longer the primary blocker.
+VText agents are owning live article versions through the shared harness, and
+researchers can feed subsequent revisions. The leading error field is now
+publication-quality article hygiene plus correct source-scope projection from
+VText metadata/transclusions into the Global Wire collection surface.
+
+next executable probe: tighten the VText article prompt/tool contract and the
+Global Wire VText story index so visible article copy excludes scaffolding,
+deks ignore metadata/style sections, manifests are built from native
+source-entity handles used by the article, and full-cycle source ids remain
+background provenance. Then deploy and prove with authenticated Global Wire API
+checks plus browser/Comet visual proof where the tool state allows it.
