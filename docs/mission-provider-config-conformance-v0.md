@@ -425,6 +425,68 @@ If direct providers destabilize VText product behavior, do not restore broken
 Fireworks DeepSeek defaults as a success claim. Either select a known-good
 provider path or record the blocker.
 
+## Global Wire Provider Readiness Report
+
+Status: ready enough to unblock the next Global Wire hard cutover mission.
+
+Recommended provider paths:
+
+- Processors: OpenAI-compatible `deepseek/deepseek-v4-flash` for ordinary text
+  ingestion, source-packet synthesis, and watch-state updates. Use
+  `deepseek-v4-pro` when the prompt requires slower, deeper reconciliation or
+  a processor is struggling with multilingual/source-density complexity.
+- Reconcilers: OpenAI-compatible `deepseek/deepseek-v4-pro` for contradiction,
+  consensus, and update/correction synthesis; `deepseek-v4-flash` remains valid
+  for smaller reconciliation passes. Use the shared evidence/research toolset,
+  not a role-specific harness branch.
+- Researchers: OpenAI-compatible DeepSeek routes for text research, source
+  fetching, and structured findings. Use Xiaomi only when the research turn
+  needs images or other media input.
+- VText article agents: OpenAI-compatible `deepseek/deepseek-v4-flash` as the
+  default draft/revision path for normal article versions, with DeepSeek
+  thinking disabled on tool-bearing calls because DeepSeek rejects thinking
+  mode with exact/forced tools. Escalate to `deepseek-v4-pro` for publication
+  quality revisions that need more synthesis depth.
+- Multimodal verification: `xiaomi/mimo-v2.5` for image-capable verifier turns.
+  Prefer source-resolved/base64 payloads or known-accessible URLs; arbitrary
+  third-party image URLs remain unreliable because providers may be blocked from
+  fetching them.
+- Anthropic-compatible DeepSeek/Xiaomi routes: keep as conformance and fallback
+  routes, not default long-writing routes. They are useful for protocol
+  comparisons and exact-tool alternatives, but their request schema naturally
+  carries explicit output-budget surfaces that should not become hidden defaults
+  for ordinary agent loops.
+
+Evidence basis:
+
+- Direct deployed gateway probes worked for DeepSeek and Xiaomi model routes.
+- Env-gated live tests cover direct text/image calls, OpenAI-compatible
+  streaming with no arbitrary `max_tokens`, and runtime tool-choice modes across
+  DeepSeek, DeepSeek Anthropic-compatible, Xiaomi, and Xiaomi
+  Anthropic-compatible providers.
+- Product-path VText loops have produced appagent revisions through the selected
+  provider path.
+- Product-path researcher/verifier-style loops have worked through the selected
+  provider path, including a Xiaomi multimodal verifier route with
+  `max_tokens_requested:false`.
+- `docs/evidence/llm-run-memory-compaction-staging-2026-06-08.md` proves
+  deployed DeepSeek LLM run-memory compaction, 1M-context-derived
+  `threshold_tokens:700000`, raw retrieval handles, and exact retrieval through
+  `get_run_memory_entry` by a later VText run.
+
+Residual caveats:
+
+- Do not rely on arbitrary external image URLs for multimodal verifier proof;
+  resolve media into provider-accessible payloads.
+- Do not select DeepSeek thinking mode for tool-bearing calls.
+- The 700k automatic threshold was not naturally crossed on staging because
+  that would be an intentionally expensive stress probe; local runtime tests
+  cover automatic triggering and staging artifacts record the selected 700k
+  threshold.
+- The next Global Wire mission should spend its budget on deleting mock news
+  surfaces and ingesting real source volume, not on rediscovering provider
+  basics.
+
 ## Stopping Conditions
 
 ### Complete
@@ -467,10 +529,12 @@ problem.
 ## Run Checkpoint & Resumption State
 
 ```text
-status: checkpoint_incomplete
-last checkpoint: 2026-06-08T17:35Z verifier max-token override removed,
-  deployed, and proven through a realistic prompt-bar -> VText -> persistent
-  super -> Xiaomi verifier trajectory with `max_tokens_requested=false`
+status: complete
+last checkpoint: 2026-06-08T20:20Z LLM compaction and exact retrieval proof
+  deployed at `aa8bee5fe5500d48841cef054b9ab8b449929e4e`, and the Global Wire
+  provider readiness report now names provider paths for processors,
+  reconcilers, researchers, VText article agents, multimodal verification, and
+  Anthropic-compatible fallback routes.
 current artifact state:
   Direct DeepSeek and Xiaomi provider support is implemented and deployed at
   commit `58881c172c51e3a862129eea7fab6feaf1deec53`. OpenAI-compatible
@@ -486,6 +550,12 @@ current artifact state:
   Anthropic-compatible route can return signed `thinking` content blocks; the
   adapter stores them as hidden `reasoning_content` and replays them as
   Anthropic `thinking` blocks on continuation turns.
+
+  The LLM compaction dependency is now closed. Staging product-path proof
+  created real VText runs, compacted a DeepSeek VText loop into an
+  `llm_checkpoint`, recorded the 1M-context-derived threshold as `700000`, and
+  drove a later VText run to call `get_run_memory_entry` and recover exact
+  compacted content by handle.
 what shipped:
   `3dc9b05c221af8fc48a784f5ff937b62ae8fdbd0` hardens DeepSeek tool-loop
   conformance, adds focused provider/runtime tests, adds env-gated live
@@ -519,6 +589,11 @@ what shipped:
   `max_tokens` argument from `verify_model_capability`. Verifier probes now use
   normal model policy/provider defaults instead of letting super or another
   agent accidentally turn capability checks into capped config experiments.
+
+  `aa8bee5fe5500d48841cef054b9ab8b449929e4e` adds LLM run-memory compaction,
+  model-aware `context_window * 0.7` thresholding for 1M-token DeepSeek/Xiaomi
+  models, structured checkpoint details, scalar/list checkpoint parser
+  hardening, and exact raw-entry retrieval handles.
 what was proven:
   Local focused unit/runtime/provider tests passed. Env-gated live local
   runtime exact-tool tests passed for DeepSeek, Xiaomi, DeepSeek Anthropic, and
@@ -544,6 +619,17 @@ what was proven:
   received an appagent revision. Gateway logs for the run show DeepSeek
   `deepseek-v4-flash` handled a `tool_use` turn and an `end_turn` continuation
   for VM sandbox `vm-e978ade762857ddce16dd08a09ca5ce1` without a 400.
+
+  Product-path compaction and recall proof passed on `https://choir.news`.
+  Staging `/health` reported commit
+  `aa8bee5fe5500d48841cef054b9ab8b449929e4e`; Playwright created a VText run,
+  forced continuation-selection compaction, observed a public Trace
+  run-memory artifact with `checkpoint_status:"llm_checkpoint"`,
+  `checkpoint_provider:"deepseek"`, `checkpoint_model:"deepseek-v4-flash"`,
+  and `threshold_tokens:700000`; then a later VText run invoked
+  `get_run_memory_entry` and retrieved exact compacted sentinel content by raw
+  entry id. Evidence summary:
+  `docs/evidence/llm-run-memory-compaction-staging-2026-06-08.md`.
 
   Deployed gateway proof passed for `deepseek-anthropic` using
   `deepseek-v4-flash`: exact `function:record_status` returned `tool_use`, and
@@ -745,13 +831,14 @@ what was proven:
   tool path. It is still a deterministic diagnostic, not a live DeepSeek/Xiaomi
   long-context proof.
 unproven or partial claims:
-  Product-path coverage for the full auto/required/none tool-mode matrix,
-  non-tool reasoning-content passback for DeepSeek Anthropic, Anthropic-compatible
-  streaming behavior if those routes are ever selected for default policy,
-  real LLM run-memory compaction and post-compaction recall safety,
-  model-aware 70%-of-context-window threshold policy, reliable
-  arbitrary-image-URL verifier behavior, and the final Global Wire provider
-  readiness report remain unproven.
+  Product-path coverage for every provider/protocol matrix cell remains broader
+  than necessary for the next Global Wire mission; env-gated live conformance
+  covers the matrix and product-path evidence covers the selected default paths.
+  Arbitrary external image URLs remain unreliable for Xiaomi multimodal
+  verification; use source-resolved/base64 media or known-accessible URLs. The
+  700k automatic threshold was not naturally crossed on staging, but local
+  runtime tests cover automatic triggering and staging compaction artifacts
+  record the selected `threshold_tokens:700000`.
 belief-state changes:
   The selected DeepSeek OpenAI-compatible path is now viable for VText exact
   edit/tool loops when tool-bearing calls disable thinking. Anthropic-compatible
@@ -761,59 +848,37 @@ belief-state changes:
   direct-DeepSeek researcher loop and a no-token-cap Xiaomi multimodal verifier
   loop have now been proven through product paths. Xiaomi multimodal is viable
   for base64/fixture and at least one accessible public URL, but arbitrary
-  image URL fetch behavior remains unreliable. The continuation-selection
-  compaction route works for same-owner product runs, but this only proves the
-  control path and a compacted checkpoint, not recall under real long-context
-  pressure. Env-gated live provider evidence now covers the local
-  provider/protocol tool-choice matrix without artificial token caps; product
-  path still has only narrower VText/researcher/verifier proofs. OpenAI-
-  compatible DeepSeek and Xiaomi streaming now has live no-cap evidence, and
-  Xiaomi short-code verifier prompts should use explicit health-check framing
-  instead of brittle "exact marker" phrasing. The compaction/exact-retrieval
-  mechanism is now covered locally under simulated context overflow, but the
-  mission still needs live/provider or product-path evidence that a real model
-  will follow those handles correctly after context pressure. Provider readiness
-  is still not complete enough for Global Wire hard cutover until the superseding
-  LLM compaction mission proves or precisely bounds real checkpoint generation,
-  model-aware 70% thresholding for the 1M-token DeepSeek/Xiaomi context windows,
-  post-compaction exact retrieval, and the final provider readiness report is
-  written.
-
-  The LLM compaction mission has now produced local implementation evidence but
-  not staging readiness. The runtime normal compaction path locally calls the
-  selected run provider/model for a typed checkpoint, stores structured
-  checkpoint details and exact retrieval handles in existing RunMemoryEntry
-  compaction records, derives default pressure threshold from
-  `context_window_tokens * 0.7`, and keeps deterministic compaction as a labeled
-  emergency fallback only. Env-gated live provider schema proof passed for
-  `deepseek/deepseek-v4-flash` and `xiaomi/mimo-v2.5-pro` with no artificial
-  output token cap. That proof also surfaced and fixed a practical provider
-  variance: list-valued checkpoint fields may arrive as scalar strings, so the
-  runtime parser now normalizes scalar-or-list fields. This is necessary
-  progress, but it is not yet deployed product-path proof.
+  image URL fetch behavior remains unreliable. Env-gated live provider evidence
+  now covers the local provider/protocol tool-choice matrix without artificial
+  token caps; product-path evidence covers the selected VText, researcher,
+  verifier, and compaction paths. OpenAI-compatible DeepSeek and Xiaomi
+  streaming now has live no-cap evidence, and Xiaomi short-code verifier prompts
+  should use explicit health-check framing instead of brittle "exact marker"
+  phrasing. The LLM compaction mission has now produced deployed product-path
+  evidence: a DeepSeek VText loop generated an LLM checkpoint with exact raw
+  entry handles and a later VText loop retrieved exact compacted content by
+  `get_run_memory_entry`. Provider readiness is now sufficient to unblock
+  Global Wire hard cutover.
 remaining error field:
-  Carry the provider/protocol conformance matrix into product-path evidence
-  where it matters, deploy and prove `docs/mission-llm-run-memory-compaction-v0.md`
-  on staging, and then select safe model-policy defaults for processors,
-  reconcilers, researchers, VText article agents, and multimodal verifiers.
+  No provider/config blocker remains for Global Wire. The next error field is
+  Global Wire itself: delete mock/detritus surfaces, ingest real high-volume
+  sources, and route source packets through processors, reconcilers, researchers,
+  and VText article agents.
 highest-impact remaining uncertainty:
-  Whether deployed DeepSeek/Xiaomi agent loops use the new LLM checkpoint to
-  continue and retrieve exact pre-compaction content through
-  `get_run_memory_entry` under product-path pressure, and whether the
-  Anthropic-compatible routes provide enough additional value to justify
-  selecting them for any default agent role.
+  Whether the Global Wire architecture can turn the now-ready provider substrate
+  into real high-volume ingestion and publication-quality VText articles without
+  preserving old mock surfaces.
 next executable probe:
-  Finish `docs/mission-llm-run-memory-compaction-v0.md` through the landing
-  loop. After Node B proves LLM-generated checkpoints, model-aware
-  70%-of-context-window thresholding or a clearly labeled diagnostic threshold,
-  and post-compaction exact retrieval, return here to write the Global Wire
-  provider readiness report, explicitly distinguishing env-gated provider-loop
-  proof from product-path VText/researcher/verifier/compaction proof.
+  Run the Global Wire hard-cutover mission against staging: remove legacy mock
+  news surfaces, prove real source ingestion volume, and have VText agents own
+  real article versions with embedded/transcluded source evidence.
 suggested resume goal string:
-  /goal Run docs/mission-provider-config-conformance-v0.md as MissionGradient and make DeepSeek/Xiaomi production-ready for Choir agents.
+  /goal Run docs/mission-global-wire-hard-cutover-real-newsroom-v0.md as MissionGradient; replace Global Wire mocks with real source ingestion and VText-owned articles.
 evidence artifact refs:
   Prior mission evidence lives in
   `docs/mission-global-wire-hard-cutover-real-newsroom-v0.md`.
+  LLM compaction staging evidence:
+  `docs/evidence/llm-run-memory-compaction-staging-2026-06-08.md`.
 rollback refs:
   Restore previous provider env/model policy only if direct providers break
   staging behavior. Do not treat Fireworks DeepSeek as a valid fallback while

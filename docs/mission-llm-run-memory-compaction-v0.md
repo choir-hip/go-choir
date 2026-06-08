@@ -432,7 +432,7 @@ Name the smallest safe next probe or the external dependency.
 ## Run Checkpoint & Resumption State
 
 ```text
-status: checkpoint_incomplete
+status: complete
 last checkpoint:
   2026-06-08 mission created from compaction notes and owner correction:
   deterministic checkpointing is too primitive for readiness; normal path should
@@ -464,15 +464,28 @@ last checkpoint:
   with scalar strings where arrays were requested. The parser now normalizes
   scalar-or-array fields rather than needlessly falling back to deterministic
   emergency compaction.
+  2026-06-08 staging acceptance checkpoint: commit
+  `aa8bee5fe5500d48841cef054b9ab8b449929e4e` reached staging and public
+  product-path Playwright proofs passed. The first proof created a real VText
+  run through `/api/prompt-bar`, forced continuation-selection compaction on the
+  VText run, and observed a public Trace run-memory artifact with
+  `checkpoint_status:"llm_checkpoint"`, `checkpoint_provider:"deepseek"`,
+  `checkpoint_model:"deepseek-v4-flash"`, `threshold_tokens:700000`, raw entry
+  handles, and prompt-visible `get_run_memory_entry` guidance. The second proof
+  repeated the compaction and then drove a later same-owner VText run to invoke
+  `get_run_memory_entry` for the compacted raw entry id; the Trace tool-result
+  detail contained the original sentinel from the compacted raw entry.
 current artifact state:
-  Local code now has shared-harness LLM run-memory compaction and model-aware
-  70% thresholding for the new DeepSeek/Xiaomi provider models. Raw entries,
-  recent tail, and `get_run_memory_entry` remain the exact recovery mechanism.
-  This has not yet been pushed, deployed, or proven on Node B/staging.
+  Deployed staging code now has shared-harness LLM run-memory compaction and
+  model-aware 70% thresholding for the new DeepSeek/Xiaomi provider models.
+  Raw entries, recent tail, and `get_run_memory_entry` remain the exact recovery
+  mechanism. Deterministic compaction is retained only as a labeled emergency
+  fallback or event-ledger checkpoint path, not as provider readiness evidence.
 what shipped:
-  Problem-documentation checkpoint exists before behavior changes. This
-  checkpoint records the implementation evidence before the landing loop;
-  staging proof remains pending.
+  `938caf84` documented the implementation problem before behavior changes.
+  `aa8bee5f` added LLM-generated typed checkpoints, model-aware thresholding,
+  scalar/list checkpoint parser hardening, run-scoped compaction locking,
+  structured checkpoint details, and focused tests.
 what was proven:
   Local focused tests passed:
   `nix develop -c go test ./internal/modelcatalog ./internal/provider
@@ -489,37 +502,50 @@ what was proven:
   `set -a; . ./.env; set +a; CHOIR_PROVIDER_LIVE_TESTS=1 nix develop -c go
   test ./internal/provider -run
   TestIntegrationDeepSeekXiaomiRunMemoryCompactionSchemaLive -count=1 -v`.
+  Landing proof passed: GitHub CI run `27163306315` and FlakeHub push run
+  `27163306209` completed successfully for commit
+  `aa8bee5fe5500d48841cef054b9ab8b449929e4e`; staging `/health` reported both
+  proxy and upstream sandbox at that commit. Staging product proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news
+  LLM_COMPACTION_EVIDENCE_PATH=/tmp/choir-llm-compaction-staging-proof.json
+  npx playwright test tests/llm-compaction-staging-proof.tmp.spec.js
+  --project=chromium --reporter=line` and
+  `PLAYWRIGHT_BASE_URL=https://choir.news
+  LLM_COMPACTION_RETRIEVAL_EVIDENCE_PATH=/tmp/choir-llm-compaction-retrieval-staging-proof.json
+  npx playwright test tests/llm-compaction-retrieval-staging-proof.tmp.spec.js
+  --project=chromium --reporter=line`. Durable evidence summary:
+  `docs/evidence/llm-run-memory-compaction-staging-2026-06-08.md`.
 unproven or partial claims:
-  Node B/staging product-path compaction, deployed commit identity,
-  post-compaction exact retrieval by a real product-path model, provider logs
-  showing DeepSeek/Xiaomi handling the deployed compaction path, and final
-  provider/config readiness remain unproven. The local live schema proof proves
-  checkpoint generation, not full post-compaction continuation under product
-  context pressure.
+  The staging proof did not spend tokens to naturally exceed a 700k estimated
+  prompt-pressure threshold. Automatic threshold behavior is covered by local
+  runtime tests, and staging recorded the correct `threshold_tokens:700000` on
+  the deployed compaction artifact. This is acceptable for the current 80/20
+  mission; a future stress mission can drive a true 700k live prompt if the
+  owner wants provider-window boundary evidence.
 belief-state changes:
-  The right 80/20 implementation route is now confirmed locally: use selected
-  run model/provider for typed checkpoint generation, normalize small schema
-  deviations from real providers, keep exact raw retrieval handles, and label
-  deterministic fallback as non-readiness evidence. The next uncertainty is not
-  whether the local harness can build/store checkpoints; it is whether staging
-  agents continue and retrieve exact compacted content under product-path
-  pressure.
+  The right 80/20 implementation route is now confirmed locally and on staging:
+  use selected run model/provider for typed checkpoint generation, normalize
+  small schema deviations from real providers, keep exact raw retrieval handles,
+  and label deterministic fallback as non-readiness evidence. A real deployed
+  VText run retrieved exact compacted content through `get_run_memory_entry`.
 remaining error field:
-  Commit and push the implementation, monitor CI/deploy, verify staging commit
-  identity, run deployed product-path compaction proof, and update provider
-  conformance with the final readiness conclusion.
+  No compaction mission blocker remains. The remaining work belongs to the next
+  Global Wire mission: use the now-ready provider/config substrate to replace
+  hardwired/stub news behavior with real source ingestion and article ownership.
 highest-impact remaining uncertainty:
-  Whether a deployed DeepSeek/Xiaomi agent loop will use the LLM checkpoint and
-  call `get_run_memory_entry` for exact old content after compaction.
+  For compaction, the highest-impact uncertainty has been retired. For future
+  scale work, the next uncertainty is cost/latency behavior near the true 700k
+  threshold under long-running production workloads.
 next executable probe:
-  Commit the local LLM compaction implementation, push, monitor CI/deploy, then
-  run a staging product-path proof with an explicitly labeled diagnostic
-  threshold if necessary before attempting any expensive 70%-threshold evidence.
+  Resume Global Wire hard cutover: delete old mock/detritus surfaces, ingest
+  real sources at volume, route source packets through processors/reconcilers,
+  and have VText agents own publication-quality article versions.
 suggested resume goal string:
-  /goal Run docs/mission-llm-run-memory-compaction-v0.md as MissionGradient; ship LLM compaction and close provider conformance.
+  /goal Run docs/mission-global-wire-hard-cutover-real-newsroom-v0.md as MissionGradient; replace Global Wire mocks with real source ingestion and VText-owned articles.
 evidence artifact refs:
   Provider/config context: docs/mission-provider-config-conformance-v0.md
+  Staging proof: docs/evidence/llm-run-memory-compaction-staging-2026-06-08.md
 rollback refs:
-  Revert behavior-changing compaction commits to the commit before this mission's
-  implementation begins.
+  Revert `aa8bee5f` to restore the previous deterministic run-memory compaction
+  path if deployed LLM checkpoints destabilize agent loops.
 ```
