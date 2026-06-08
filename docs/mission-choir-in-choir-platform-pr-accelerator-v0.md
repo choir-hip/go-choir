@@ -652,3 +652,67 @@ rollback refs:
   no rejected package has been adopted or deployed. Staging remains at
   c9b02be2.
 ```
+
+```text
+status: shipped_partial
+last checkpoint: 2026-06-08T05:50Z Codex salvaged and landed the deletion
+  payload after rejecting the malformed Choir-in-Choir package.
+current artifact state:
+  Commit aa5bef5bee595d13fe95a22cbf9a52089e3d75c7 is on origin/main and
+  deployed to staging. It removes the Global Wire Sources Chronology/search
+  surface and bespoke Style.vtext controls from the shipped app while
+  preserving article columns, per-article VText open buttons, source entity
+  transclusions, and related VText transclusions.
+what shipped:
+  - `frontend/src/lib/GlobalWireApp.svelte`: deleted the source chronology
+    sidebar, source search/fetch/schedule controls, bespoke style selector,
+    style compose/replace controls, Ask button, and all associated state,
+    fetches, helper functions, and CSS.
+  - `frontend/tests/global-wire-app.spec.js`: now asserts the detritus source
+    and style surfaces are absent and that every article remains openable as a
+    VText.
+what was proven:
+  - Local `npm run build` passed without Svelte warnings after cleanup.
+  - Local focused Playwright passed:
+    `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm run e2e -- tests/global-wire-app.spec.js`.
+  - CI run 27118442072 passed, including frontend build and staging deploy.
+  - FlakeHub run 27118442058 passed.
+  - Staging `/health` reports proxy and sandbox deployed commit
+    aa5bef5bee595d13fe95a22cbf9a52089e3d75c7 with
+    `deployed_at=2026-06-08T05:46:34Z`.
+  - Deployed focused Playwright passed:
+    `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- tests/global-wire-app.spec.js`.
+unproven or partial claims:
+  This is a shipped product cleanup and a partial Choir-in-Choir proof, not a
+  complete news-system delivery. Source-body integrity, front-page ranking
+  truthfulness, mobile source-open/deep-link behavior, processor/reconciler
+  reliability, longtail Telegram/feed ingestion, and source article body
+  availability remain open mission axes.
+belief-state changes:
+  The multiagent system did delete the detritus surfaces rather than merely
+  recommending deletion, which is a useful positive eval. It still failed at
+  source fidelity and verification honesty: the package contained malformed
+  Svelte markup and overstated a timed-out build. Codex review remains required
+  before landing Choir-in-Choir artifacts.
+remaining error field:
+  Continue the news mission from the real source pipeline: ingest many more
+  RSS/GDELT/Telegram/HN/science/finance/industry sources with full article
+  bodies, make article VTexts real prose owned by VText agents, and fix
+  ranking/freshness/source-open truthfulness. Separately, improve
+  AppChangePackage/source-transfer verification so packages cannot be reported
+  as build-passed after a timeout or published with escaped source markup.
+next executable probe:
+  Use the next Choir-in-Choir run on a non-UI source-truthfulness payload, but
+  require it to run the exact frontend/backend acceptance relevant to the
+  files it changes and to record failures as review findings before package
+  publication.
+evidence artifact refs:
+  documentation checkpoint commit 05f5271b; shipped fix commit
+  aa5bef5bee595d13fe95a22cbf9a52089e3d75c7; CI run 27118442072; FlakeHub run
+  27118442058; rejected package 5365bcb7-a51c-4f49-9a06-d10c465c8a7b; product
+  trajectory f2330486-99e4-4a7b-a283-a9eaf1625dbc.
+rollback refs:
+  Revert aa5bef5b to restore the deleted Global Wire surfaces, though product
+  direction says they should stay deleted. Rejected package 5365bcb7 was never
+  adopted.
+```
