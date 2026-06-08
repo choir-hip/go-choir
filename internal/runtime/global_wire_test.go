@@ -144,6 +144,98 @@ func TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads(t *testing.T) {
 	}
 }
 
+func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := types.Document{
+		DocID:     "doc-source-network-scoped-sources",
+		OwnerID:   "global-wire-platform",
+		Title:     "Scoped sources.vtext",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := handler.rt.Store().CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create platform source-network doc: %v", err)
+	}
+	meta, _ := json.Marshal(map[string]any{
+		"source":                   "edit_vtext",
+		"source_maxx_cycle_id":     "cycle-scoped",
+		"source_maxx_request_id":   "reconciler-scoped",
+		"source_maxx_request_kind": "reconciler",
+		"selected_style_sources":   []map[string]any{{"title": "Style.vtext: Global Wire"}},
+		"source_item_ids":          []string{"srcitem_cycle_1", "srcitem_cycle_2", "srcitem_cycle_3", "srcitem_cycle_4"},
+		"source_entities": []map[string]any{
+			{
+				"entity_id": "src_cited_one",
+				"kind":      "source_service_item",
+				"label":     "Regional wire bulletin",
+				"target":    map[string]any{"target_kind": "source_service_item", "item_id": "srcitem_cited_one"},
+			},
+			{
+				"entity_id": "src_cited_two",
+				"kind":      "content_item",
+				"label":     "Local emergency notice",
+				"target":    map[string]any{"target_kind": "content_item", "content_id": "content-cited-two"},
+			},
+			{
+				"entity_id": "src_uncited",
+				"kind":      "source_service_item",
+				"label":     "Uncited cycle context",
+				"target":    map[string]any{"target_kind": "source_service_item", "item_id": "srcitem_uncited"},
+			},
+		},
+	})
+	rev := types.Revision{
+		RevisionID:  "rev-source-network-scoped-sources",
+		DocID:       doc.DocID,
+		OwnerID:     doc.OwnerID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "vtext:doc-source-network-scoped-sources",
+		Content: strings.Join([]string{
+			"# Scoped sources",
+			"",
+			"**Published:** [Date TBD] | **Source:** internal handoff",
+			"",
+			"PARIS -- Emergency crews reopened the rail corridor after overnight flooding, with regional authorities saying inspections will continue through the afternoon [wire](source:src_cited_one).",
+			"",
+			"Local notices still warn commuters to expect rolling delays while crews clear debris from the lowest platforms [notice](source:src_cited_two).",
+			"",
+			"## Style.vtext Source",
+			"",
+			"Selection rationale: Global Wire style.",
+		}, "\n"),
+		Citations: json.RawMessage("[]"),
+		Metadata:  meta,
+		CreatedAt: now,
+	}
+	if err := handler.rt.Store().CreateRevision(ctx, rev); err != nil {
+		t.Fatalf("create platform source-network revision: %v", err)
+	}
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-global-wire")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/global-wire/stories status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp globalWireStoriesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode stories response: %v", err)
+	}
+	story := resp.Stories[0]
+	if story.ID != "source-network-vtext-"+doc.DocID {
+		t.Fatalf("first story = %q, want scoped source-network doc", story.ID)
+	}
+	if strings.Contains(story.Dek, "Published:") || strings.Contains(story.Dek, "Source:") || !strings.Contains(story.Dek, "Emergency crews reopened") {
+		t.Fatalf("dek leaked scaffolding or missed article prose: %q", story.Dek)
+	}
+	if len(story.Manifest.Lead) != 2 || len(story.Manifest.Context) != 0 {
+		t.Fatalf("manifest should use only cited source entities, got %+v", story.Manifest)
+	}
+	if story.Manifest.Lead[0].ID != "srcitem_cited_one" || story.Manifest.Lead[1].ID != "content-cited-two" {
+		t.Fatalf("manifest did not expose cited source entity ids: %+v", story.Manifest.Lead)
+	}
+}
+
 func TestHandleGlobalWireStyleSourcesComposeAndReplace(t *testing.T) {
 	_, handler := testAPISetup(t)
 

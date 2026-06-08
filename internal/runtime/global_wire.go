@@ -575,8 +575,7 @@ func sourceMaxxVTextStoryFromCurrentRevision(doc types.Document, rev types.Revis
 	headline := sourceMaxxArticleHeadline(doc.Title, content)
 	dek := sourceMaxxArticleDek(content)
 	projection := sourceMaxxArticleProjection(content)
-	sourceIDs := sourceMaxxMetadataStringSlice(meta["source_item_ids"])
-	manifest := sourceMaxxManifestFromHandles(sourceIDs, headline)
+	manifest := sourceMaxxManifestFromRevision(meta, content, headline)
 	if len(manifest.Lead) == 0 {
 		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
 			ID:       "source-network-cycle:" + metadataString(meta, "source_maxx_cycle_id"),
@@ -654,6 +653,103 @@ func sourceMaxxMetadataStringSlice(value any) []string {
 		}
 	}
 	return out
+}
+
+func sourceMaxxManifestFromRevision(meta map[string]any, content, headline string) types.GlobalWireSourceManifest {
+	entities := sourceMaxxVisibleSourceEntities(meta, content)
+	if len(entities) > 0 {
+		return sourceMaxxManifestFromSourceEntities(entities)
+	}
+	sourceIDs := sourceMaxxMetadataStringSlice(meta["source_item_ids"])
+	return sourceMaxxManifestFromHandles(sourceIDs, headline)
+}
+
+func sourceMaxxVisibleSourceEntities(meta map[string]any, content string) []vtextSourceEntity {
+	entities := decodeVTextSourceEntities(meta["source_entities"])
+	if len(entities) == 0 {
+		return nil
+	}
+	refs := sourceMaxxInlineSourceRefs(content)
+	if len(refs) == 0 {
+		return nil
+	}
+	out := []vtextSourceEntity{}
+	seen := map[string]bool{}
+	for _, entity := range entities {
+		id := strings.TrimSpace(entity.EntityID)
+		if id == "" || !refs[id] || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, entity)
+	}
+	return out
+}
+
+func sourceMaxxInlineSourceRefs(content string) map[string]bool {
+	out := map[string]bool{}
+	rest := content
+	for {
+		idx := strings.Index(rest, "(source:")
+		if idx < 0 {
+			break
+		}
+		rest = rest[idx+len("(source:"):]
+		end := strings.Index(rest, ")")
+		if end < 0 {
+			break
+		}
+		id := strings.TrimSpace(rest[:end])
+		if id != "" {
+			out[id] = true
+		}
+		rest = rest[end+1:]
+	}
+	return out
+}
+
+func sourceMaxxManifestFromSourceEntities(entities []vtextSourceEntity) types.GlobalWireSourceManifest {
+	manifest := types.GlobalWireSourceManifest{}
+	for i, entity := range entities {
+		id := sourceMaxxSourceEntityManifestID(entity)
+		if id == "" {
+			continue
+		}
+		item := types.GlobalWireSourceItem{
+			ID:       id,
+			Title:    sourceMaxxSourceEntityManifestTitle(entity),
+			Standing: sourceMaxxSourceEntityManifestStanding(entity),
+			Role:     "lead",
+		}
+		if i >= 3 {
+			item.Role = "context"
+			manifest.Context = append(manifest.Context, item)
+			continue
+		}
+		manifest.Lead = append(manifest.Lead, item)
+	}
+	return manifest
+}
+
+func sourceMaxxSourceEntityManifestID(entity vtextSourceEntity) string {
+	return firstNonEmpty(entity.Target.ItemID, entity.Target.ContentID, entity.Target.DocID, entity.EntityID)
+}
+
+func sourceMaxxSourceEntityManifestTitle(entity vtextSourceEntity) string {
+	return firstNonEmpty(entity.Label, entity.Target.CanonicalURL, entity.Target.URL, sourceMaxxSourceEntityManifestID(entity))
+}
+
+func sourceMaxxSourceEntityManifestStanding(entity vtextSourceEntity) string {
+	switch strings.TrimSpace(entity.Kind) {
+	case "content_item":
+		return "embedded source"
+	case "source_service_item":
+		return "source-service handle"
+	case "vtext":
+		return "related VText"
+	default:
+		return firstNonEmpty(entity.Kind, "source handle")
+	}
 }
 
 func sourceMaxxManifestFromHandles(sourceIDs []string, headline string) types.GlobalWireSourceManifest {
@@ -737,6 +833,10 @@ func sourceMaxxArticleParagraphs(content string) []string {
 			flush()
 			continue
 		}
+		if sourceMaxxArticleLineIsScaffold(line) {
+			flush()
+			continue
+		}
 		if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "- ") || strings.HasPrefix(line, ">") {
 			flush()
 			continue
@@ -748,6 +848,30 @@ func sourceMaxxArticleParagraphs(content string) []string {
 	}
 	flush()
 	return out
+}
+
+func sourceMaxxArticleLineIsScaffold(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	plain := strings.Trim(trimmed, "*_ \t")
+	lower := strings.ToLower(plain)
+	if plain == "---" || plain == "***" {
+		return true
+	}
+	if strings.HasPrefix(lower, "published:") ||
+		strings.HasPrefix(lower, "source:") ||
+		strings.HasPrefix(lower, "style.vtext source") ||
+		strings.HasPrefix(lower, "style source:") ||
+		strings.HasPrefix(lower, "selection rationale:") ||
+		strings.HasPrefix(lower, "story id:") ||
+		strings.HasPrefix(lower, "state:") {
+		return true
+	}
+	if lower == "source handles" ||
+		lower == "source manifest" ||
+		lower == "style.vtext source" {
+		return true
+	}
+	return false
 }
 
 func sourceMaxxArticleClaims(content, _ string, meta map[string]any) []string {
