@@ -515,6 +515,9 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 	} else if err != nil {
 		log.Printf("global wire: source-network vtext index unavailable: %v", err)
 	}
+	for i := range stories {
+		stories[i] = normalizeGlobalWireStoryPresentation(stories[i])
+	}
 	writeAPIJSON(w, http.StatusOK, globalWireStoriesResponse{
 		Stories:      stories,
 		StyleSources: styleSources,
@@ -976,6 +979,22 @@ func sourceMaxxFreshness(updatedAt time.Time) string {
 	default:
 		return updatedAt.UTC().Format("2006-01-02")
 	}
+}
+
+func normalizeGlobalWireStoryPresentation(story types.GlobalWireStory) types.GlobalWireStory {
+	if globalWireStoryFreshnessLooksAuto(story.Freshness) {
+		if strings.EqualFold(strings.TrimSpace(story.SourceState), "seeded-source-neighborhood") {
+			story.Freshness = "seed source neighborhood"
+			return story
+		}
+		story.Freshness = sourceMaxxFreshness(story.UpdatedAt)
+	}
+	return story
+}
+
+func globalWireStoryFreshnessLooksAuto(freshness string) bool {
+	freshness = strings.TrimSpace(strings.ToLower(freshness))
+	return freshness == "" || strings.HasPrefix(freshness, "updated ")
 }
 
 func prependGlobalWireStories(prefix, existing []types.GlobalWireStory) []types.GlobalWireStory {

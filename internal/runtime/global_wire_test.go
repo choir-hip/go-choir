@@ -37,6 +37,9 @@ func TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts(t *testing.T) {
 	if story.StoryVTextDoc == "" {
 		t.Fatalf("story has no linked VText doc: %+v", story)
 	}
+	if story.Freshness != "seed source neighborhood" {
+		t.Fatalf("seed story freshness = %q, want honest seed status", story.Freshness)
+	}
 	if story.ProjectionVTextDocs["claim-audit-style"] == "" {
 		t.Fatalf("story has no claim-audit projection VText doc: %+v", story.ProjectionVTextDocs)
 	}
@@ -134,6 +137,9 @@ func TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads(t *testing.T) {
 	}
 	if story.Headline != "Madrid dispatch" || !strings.Contains(story.Projections["wire-style"], "MADRID -- Pope Leo XIV") {
 		t.Fatalf("indexed source-network story did not expose article head: %+v", story)
+	}
+	if story.Freshness != "updated just now" {
+		t.Fatalf("source-network story freshness = %q, want relative update time", story.Freshness)
 	}
 	if len(story.Manifest.Lead) != 0 || len(story.Manifest.Context) != 1 ||
 		story.Manifest.Context[0].ID != "source-network-cycle:cycle-live" ||
