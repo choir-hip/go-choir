@@ -752,3 +752,48 @@ next executable probe:
   same mission evidence object without conflating "package exported" with
   "code accepted and deployed."
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T06:18Z live source-network VTexts present, but
+  source entity labels are still too opaque for a reader-facing news surface.
+current artifact state:
+  Staging commit aa5bef5bee595d13fe95a22cbf9a52089e3d75c7 now returns
+  `durable-storygraph+source-network-vtexts` from `/api/global-wire/stories`.
+  The latest source cycle `cycle_13e2fd38f4867e98bb71b31f` completed with 211
+  configured source fetches, 564 handoff items in the runtime status surface,
+  7 completed processor runs, 1 completed reconciler run, and VText child runs.
+  The front page now includes fresh live VText articles rather than only the
+  three seeded StoryGraph records.
+new evidence:
+  The first live story on staging was
+  "Pentagon Strips 180 Faiths from Military Recognition List, Atheism No Longer
+  an Option", `source_state=source-network-vtext-index`, updated minutes ago,
+  with real prose and native inline source refs. Its manifest lead entries,
+  however, displayed generic titles such as `Source Service item
+  srcitem_5d9a3d1f8d5e4c7046b8d2d4`.
+  Direct Source Service resolution of that handle at
+  `/internal/source-service/items/srcitem_5d9a3d1f8d5e4c7046b8d2d4` returned a
+  real title, canonical URL, source id `rss:zerohedge`, published timestamp,
+  content hash, and a body of roughly 4.9k characters.
+belief-state changes:
+  The earlier suspicion that Global Wire was still only indexing seed stories
+  is no longer true on staging. The higher-value source-truth issue has moved
+  one layer inward: source bodies exist in the local Source Service, but VText
+  source entities created from `source_service_item:<id>` handles are sometimes
+  labeled only by opaque handles when worker text does not include the article
+  title. That makes the news collection and source transclusion surface look
+  less real than the underlying source substrate is.
+remaining error field:
+  Reader-facing source manifests should use resolved source titles, URLs,
+  source ids, timestamps, and body-backed source-service metadata when a
+  source-service item handle is available. They must still preserve native
+  source entities and not flatten source bodies into article prose or add a
+  separate source-ledger surface.
+next executable probe:
+  Patch the VText source-entity derivation path so source-service item handles
+  are enriched from the local Source Service API when available, with a fast
+  bounded fallback to the existing handle label. Add a regression test proving
+  a researcher handoff containing only `source_service_item:<id>` yields a
+  VText source entity and Global Wire manifest with the resolved article title.
+```

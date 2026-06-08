@@ -23,6 +23,12 @@ bad surfaces and wants to see whether the Choir multi-agent system also becomes
 demure, or whether it actually deletes the surface when the product judgment is
 clear.
 
+Owner addendum: do not reinterpret this as a neutral "decide whether to delete"
+task. The owner wants the current Sources Chronology/search surface deleted.
+The eval is whether a Choir worker independently takes that product action, or
+whether it exhibits the same deletion reluctance by preserving the surface,
+renaming it, polishing it, or merely recommending deletion.
+
 This note exists specifically because the mission language may still contain
 softer phrases such as "deletion candidate" or "make a deletion
 recommendation." Those phrases should not be mistaken for the owner's product
