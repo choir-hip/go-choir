@@ -47,6 +47,30 @@ func (rt *Runtime) synthesizeDelegateWorkerUpdateOnSuperFailure(ctx context.Cont
 	return nil
 }
 
+func (rt *Runtime) synthesizeSuperFailureUpdate(ctx context.Context, rec *types.RunRecord, runErr error) error {
+	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != AgentProfileSuper {
+		return nil
+	}
+	channelID, targetAgentID, ok := delegateWorkerUpdateTarget(rec)
+	if !ok {
+		return nil
+	}
+
+	eventsForRun, err := rt.store.ListEvents(ctx, rec.RunID, 1000)
+	if err != nil {
+		return err
+	}
+	if hasSuccessfulToolResult(eventsForRun, "submit_coagent_update") ||
+		hasSuccessfulToolResult(eventsForRun, "delegate_worker_vm") {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	update := superFailureFallbackUpdate(rec, runErr, eventsForRun, targetAgentID, channelID, now)
+	_, _, err = rt.dispatchDelegateWorkerUpdate(ctx, rec, update)
+	return err
+}
+
 func (rt *Runtime) synthesizeDelegateWorkerUpdateCheckpoint(ctx context.Context, rec *types.RunRecord, output map[string]any, source string) error {
 	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != AgentProfileSuper {
 		return nil
@@ -413,6 +437,60 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 	}
 }
 
+func superFailureFallbackUpdate(rec *types.RunRecord, runErr error, eventsForRun []types.EventRecord, targetAgentID, channelID string, now time.Time) types.WorkerUpdateRecord {
+	successfulTools := successfulToolNames(eventsForRun)
+	toolSummary := "no successful tools"
+	if len(successfulTools) > 0 {
+		toolSummary = "successful tools: " + strings.Join(successfulTools, ", ")
+	}
+
+	findings := []string{
+		"Persistent Super was requested by VText but failed before sending a structured coagent update.",
+		fmt.Sprintf("Super ended with error: %s", strings.TrimSpace(runErr.Error())),
+	}
+	if hasName(successfulTools, "request_worker_vm") && !hasName(successfulTools, "start_worker_delegation") {
+		findings = append(findings, "request_worker_vm succeeded, but no start_worker_delegation result was recorded before Super failed.")
+	} else if !hasName(successfulTools, "request_worker_vm") && !hasName(successfulTools, "start_worker_delegation") {
+		findings = append(findings, "No worker lease/delegation tool result was recorded; no worker run or AppChangePackage exists for this Super attempt.")
+	} else if hasName(successfulTools, "start_worker_delegation") {
+		findings = append(findings, "start_worker_delegation appeared in the run, but Super failed before reporting terminal worker evidence to VText.")
+	}
+	findings = append(findings, "The runtime synthesized this VText-visible blocker so the mission narrative can resume from evidence instead of only a failed Trace.")
+
+	refs := []string{
+		"run:" + rec.RunID,
+		"trajectory:" + metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
+	}
+	notes := []string{
+		"auto_synthesized_from=super_failure_before_delegate_checkpoint",
+		"provider_error=" + strings.TrimSpace(runErr.Error()),
+		toolSummary,
+	}
+	if len(eventsForRun) > 0 {
+		notes = append(notes, fmt.Sprintf("super_event_count=%d", len(eventsForRun)))
+	}
+
+	return types.WorkerUpdateRecord{
+		UpdateID:      "super-failure-checkpoint-" + sanitizeExportPart(rec.RunID),
+		OwnerID:       rec.OwnerID,
+		AgentID:       agentIDForRun(rec),
+		TargetAgentID: targetAgentID,
+		ChannelID:     channelID,
+		TrajectoryID:  metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
+		Role:          AgentProfileSuper,
+		Kind:          "blocker",
+		Summary:       "Runtime fallback: Super failed before worker delegation/package evidence reached VText.",
+		Findings:      trimDedupeNonEmpty(findings),
+		EvidenceIDs:   []string{"run:" + rec.RunID},
+		Refs:          trimDedupeNonEmpty(refs),
+		Proposals: []string{
+			"Resume with a smaller control step: either call request_worker_vm/start_worker_delegation immediately with the mission objective, or submit_coagent_update with the exact blocker before further repo exploration.",
+		},
+		Notes:     trimDedupeNonEmpty(notes),
+		CreatedAt: now,
+	}
+}
+
 func delegateWorkerCheckpointUpdateID(rec *types.RunRecord, output map[string]any, updateKey string) string {
 	prefix := "delegate-worker-vm-checkpoint-"
 	if delegateWorkerContinuationRequired(output) {
@@ -472,6 +550,33 @@ func latestSuccessfulToolResultOutput(eventsForRun []types.EventRecord, tool str
 		found = true
 	}
 	return latest, latestOutput, found
+}
+
+func successfulToolNames(eventsForRun []types.EventRecord) []string {
+	seen := map[string]bool{}
+	var names []string
+	for _, ev := range eventsForRun {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		payload, ok := decodeToolResultPayload(ev)
+		if !ok || payload.IsError || payload.Tool == "" || seen[payload.Tool] {
+			continue
+		}
+		seen[payload.Tool] = true
+		names = append(names, payload.Tool)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func hasName(names []string, name string) bool {
+	for _, value := range names {
+		if value == name {
+			return true
+		}
+	}
+	return false
 }
 
 func hasSuccessfulToolResult(eventsForRun []types.EventRecord, tool string) bool {
