@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { createEventDispatcher } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
+  import { browserOpenableSourceURL } from './source-url';
   import { renderMarkdownBlocks } from './vtext-markdown-renderer';
   import {
     normalizeSourceEvidenceState,
@@ -27,6 +28,7 @@
   $: sourceEntityReaderSnapshot = sourceEntityReaderSnapshotText(sourceEntity);
   $: sourceEntityFallbackSnapshot = sourceEntityExcerptText(sourceEntity);
   $: sourceUrl = item?.source_url || appContext?.sourceUrl || '';
+  $: browserSourceUrl = browserOpenableSourceURL(sourceUrl);
   $: filePath = item?.file_path || appContext?.filePath || '';
   $: mediaType = item?.media_type || appContext?.mediaType || '';
   $: appHint = item?.app_hint || appContext?.appHint || appContext?.appId || 'files';
@@ -128,8 +130,8 @@
         </p>
       {/if}
     </div>
-    {#if sourceUrl}
-      <a class="source-link" href={sourceUrl} target="_blank" rel="noreferrer">{isSourceReader ? 'Open original' : 'Open source'}</a>
+    {#if browserSourceUrl}
+      <a class="source-link" href={browserSourceUrl} target="_blank" rel="noreferrer">{isSourceReader ? 'Open original' : 'Open source'}</a>
     {/if}
   </header>
 

@@ -18,6 +18,7 @@ import {
   sourceEvidenceStateLabel,
 } from '../src/lib/vtext-source-renderer.ts';
 import { buildSourceReviewPayload } from '../src/lib/vtext-source-review.js';
+import { browserOpenableSourceURL } from '../src/lib/source-url.ts';
 
 const sourceContractMatrix = JSON.parse(readFileSync(fileURLToPath(
   new URL('../../internal/sourcecontract/testdata/source_contract_matrix.json', import.meta.url),
@@ -62,6 +63,14 @@ test('source review URL repairs default to Source Viewer open surface', () => {
       open_surface: 'source',
     },
   });
+});
+
+test('source reader exposes only web-safe original links to the browser', () => {
+  expect(browserOpenableSourceURL('https://example.com/source-reader-fixture')).toBe('https://example.com/source-reader-fixture');
+  expect(browserOpenableSourceURL('http://example.com/source-reader-fixture')).toBe('http://example.com/source-reader-fixture');
+  expect(browserOpenableSourceURL('choir://global-wire/source/source-port-authority')).toBe('');
+  expect(browserOpenableSourceURL('source_service_item:srcitem_123')).toBe('');
+  expect(browserOpenableSourceURL('/api/content/items/item_123')).toBe('');
 });
 
 test('source inline excerpts prefer selected transclusion over full reader snapshot', () => {
