@@ -1487,3 +1487,96 @@ next executable probe:
   `reader_snapshot_status`, and preserves explicit skip/failure metadata for
   disallowed or failed imports.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T09:03Z policy-aware reader snapshot enrichment
+  landed and was proved on staging.
+current artifact state:
+  Commit 3c432e125b0ffad4534bddddbfbef91686672d08 is on origin/main and
+  deployed to staging. It follows documentation checkpoint
+  36106c595157897c65b0eb788ed066f5a631ff8a, which recorded the reader-snapshot
+  enrichment problem before the behavior change.
+what shipped:
+  - Source Service item search/resolve now joins `items` to `sources` and
+    exposes `source_tos_class`, `source_robots_policy`,
+    `source_auth_policy`, and `store_body_policy`.
+  - Researcher/runtime source-search projections carry the same policy fields.
+  - Global Wire source-service ContentItem conversion now records source policy
+    fields in metadata.
+  - When a Source Service result is not already a reader snapshot and has
+    weak body kind (`empty` or `feed_summary`) plus an allowed store-body
+    policy (`bounded_text` or `bounded_release_text`), Global Wire attempts a
+    direct, bounded `ImportURLContent` reader import with a 12 second context
+    timeout and no SearXNG fallback query.
+  - Successful reader imports replace the deterministic Global Wire
+    source-service item body with extracted reader text and record
+    `reader_snapshot=true`, `body_kind=reader_snapshot`,
+    `reader_snapshot_status=imported`, and the imported reader content id.
+  - Disallowed, unsupported, failed, or low-content imports preserve the
+    original source-service body and record explicit `reader_snapshot_status`
+    metadata such as `skipped_store_body_policy`, `skipped_body_kind`,
+    `fetch_failed`, or `low_content`.
+what was proven:
+  - Local `git diff --check` passed.
+  - Local `nix develop -c go test ./internal/cycle ./cmd/sourcecycled ./internal/sourceapi ./internal/sources`
+    passed.
+  - Local `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWireSourceSearchImports|TestHandleGlobalWireSourceSearchImportsAllowedReaderSnapshot|TestResearcherSourceSearchCallsSourceServiceAPI'`
+    passed.
+  - Local `nix develop -c go test ./internal/runtime -run 'TestGlobalWire|TestHandleGlobalWire|TestVTextSourceService'`
+    passed.
+  - Local `nix develop -c go test ./cmd/sourcecycled ./internal/cycle` passed.
+  - CI run 27126653731 passed for commit
+    3c432e125b0ffad4534bddddbfbef91686672d08, including Go gates and staging
+    deploy.
+  - FlakeHub run 27126653950 passed for the same commit.
+  - Public staging `/health` reported proxy and sandbox deployed commit
+    3c432e125b0ffad4534bddddbfbef91686672d08 with
+    `deployed_at=2026-06-08T08:56:51Z`.
+  - Node B Source Service health reported `status=ok`, `item_count=71470`,
+    and `fetch_count=14024` at 2026-06-08T08:59:09Z.
+  - Node B Source Service search for `technology` returned live policy fields:
+    RSS result `srcitem_92f12eebfead4be3a08c68a9` from `rss:finextra` had
+    `body_kind=feed_summary`, `reader_snapshot=false`,
+    `store_body_policy=bounded_text`, `source_auth_policy=none`, and
+    `source_robots_policy=feed_allowed`; GDELT results had
+    `store_body_policy=bounded_metadata` and `source_robots_policy=dataset_feed`.
+  - Authenticated deployed product-path call to
+    `POST https://choir.news/api/global-wire/source-search` with query
+    `technology` and `max_results=1` returned status 200 and converted the
+    live `rss:finextra` result into ContentItem
+    `global-wire-source-service-3d83dde8-9a75-5429-8dcf-db6b7fd36087`.
+    Because the original article URL returned HTTP 403, the stored metadata
+    recorded `reader_snapshot_status=fetch_failed`,
+    `reader_snapshot_error="URL import failed: direct_http returned status 403 Forbidden"`,
+    `body_kind=feed_summary`, `reader_snapshot=false`,
+    `store_body_policy=bounded_text`, and
+    `source_robots_policy=feed_allowed`. This proves the deployed product path
+    attempts eligible imports and preserves honest failure state rather than
+    silently overclaiming a feed summary as a full source body.
+belief-state changes:
+  Global Wire source conversion is now policy-aware and has explicit
+  reader-snapshot attempt/skip/failure state. The system still does not
+  guarantee full article bodies for all source types, but it no longer has to
+  collapse source-body weakness into an unlabelled text item.
+unproven or partial claims:
+  - Staging proof saw an eligible live source fail with HTTP 403; successful
+    live reader import was not found in the quick deployed probe. Successful
+    import is covered by local runtime test using a real HTTP reader server.
+  - Existing deterministic Global Wire source-service ContentItems are not
+    backfilled or updated if they were created before this commit; the new path
+    affects new source conversions.
+  - GDELT article URLs remain metadata packets because the GDELT source policy
+    is `bounded_metadata`; a separate policy/design decision is required before
+    fetching article URLs discovered through a dataset source.
+remaining error field:
+  The next realism axes remain front-page ranking by prominence/importance/
+  novelty/freshness, VText-agent-owned publication-quality article prose with
+  native source transclusion, and eventually a redesigned source exploration
+  workflow if one is actually needed. Do not restore the deleted source
+  chronology/search ledger or bespoke Style.vtext controls.
+rollback refs:
+  Revert 3c432e12 to remove policy-aware reader snapshot enrichment and source
+  policy fields from the Source Service result path. Revert 36106c59 only if
+  the problem checkpoint should be removed from mission history.
+```
