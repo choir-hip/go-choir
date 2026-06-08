@@ -417,7 +417,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				}
 				continue
 			}
-			if isInitialToolChoicePreconditionError(req.ToolChoice, err) && i == 1 && preconditionFallbackIndex < len(options.providerPreconditionFallbacks) {
+			if isInitialToolChoicePreconditionError(req.ToolChoice, err) && preconditionFallbackIndex < len(options.providerPreconditionFallbacks) {
 				next := options.providerPreconditionFallbacks[preconditionFallbackIndex]
 				preconditionFallbackIndex++
 				if !sameLLMSelection(activeLLMConfig, next) && strings.TrimSpace(next.Provider) != "" && strings.TrimSpace(next.Model) != "" {

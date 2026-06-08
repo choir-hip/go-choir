@@ -537,19 +537,52 @@ func ResolvedLLMConfigFromMetadata(metadata map[string]any) LLMSelection {
 	}
 }
 
-func providerPreconditionFallbackSelections(sel LLMSelection) []LLMSelection {
+func providerPreconditionFallbackSelections(sel, platformFallback LLMSelection) []LLMSelection {
 	provider := strings.ToLower(strings.TrimSpace(sel.Provider))
 	model := strings.TrimSpace(sel.Model)
 	if provider != defaultFireworksProvider || model == "" {
 		return nil
 	}
+	fallbacks := make([]LLMSelection, 0, 2)
 	if model == defaultSuperModel {
-		return nil
+		fallbacks = appendProviderPreconditionPlatformFallback(fallbacks, sel, platformFallback)
+		return fallbacks
 	}
-	return []LLMSelection{{
+	fallbacks = append(fallbacks, LLMSelection{
 		Provider:        defaultFireworksProvider,
 		Model:           defaultSuperModel,
 		ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
 		Source:          "provider_precondition_fallback",
-	}}
+	})
+	fallbacks = appendProviderPreconditionPlatformFallback(fallbacks, sel, platformFallback)
+	return fallbacks
+}
+
+func appendProviderPreconditionPlatformFallback(fallbacks []LLMSelection, active, platformFallback LLMSelection) []LLMSelection {
+	provider := strings.TrimSpace(platformFallback.Provider)
+	model := strings.TrimSpace(platformFallback.Model)
+	if provider == "" || model == "" {
+		return fallbacks
+	}
+	candidate := LLMSelection{
+		Provider:        provider,
+		Model:           model,
+		ReasoningEffort: strings.TrimSpace(platformFallback.ReasoningEffort),
+		MaxTokens:       platformFallback.MaxTokens,
+		Source:          "provider_precondition_platform_fallback",
+	}
+	if sameProviderModelSelection(active, candidate) {
+		return fallbacks
+	}
+	for _, fallback := range fallbacks {
+		if sameProviderModelSelection(fallback, candidate) {
+			return fallbacks
+		}
+	}
+	return append(fallbacks, candidate)
+}
+
+func sameProviderModelSelection(a, b LLMSelection) bool {
+	return strings.TrimSpace(a.Provider) == strings.TrimSpace(b.Provider) &&
+		strings.TrimSpace(a.Model) == strings.TrimSpace(b.Model)
 }

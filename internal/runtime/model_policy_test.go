@@ -537,9 +537,13 @@ func TestProviderPreconditionFallbackSelectionsUseFireworksProForFlash(t *testin
 		Provider:        "fireworks",
 		Model:           "accounts/fireworks/models/deepseek-v4-flash",
 		ReasoningEffort: "medium",
+	}, LLMSelection{
+		Provider:        "chatgpt",
+		Model:           "gpt-5.5",
+		ReasoningEffort: "low",
 	})
-	if len(fallbacks) != 1 {
-		t.Fatalf("fallbacks = %+v, want one Fireworks Pro fallback", fallbacks)
+	if len(fallbacks) != 2 {
+		t.Fatalf("fallbacks = %+v, want Fireworks Pro plus platform fallback", fallbacks)
 	}
 	if got := fallbacks[0]; got.Provider != "fireworks" ||
 		got.Model != "accounts/fireworks/models/deepseek-v4-pro" ||
@@ -547,11 +551,30 @@ func TestProviderPreconditionFallbackSelectionsUseFireworksProForFlash(t *testin
 		got.Source != "provider_precondition_fallback" {
 		t.Fatalf("fallback = %+v", got)
 	}
+	if got := fallbacks[1]; got.Provider != "chatgpt" ||
+		got.Model != "gpt-5.5" ||
+		got.ReasoningEffort != "low" ||
+		got.Source != "provider_precondition_platform_fallback" {
+		t.Fatalf("platform fallback = %+v", got)
+	}
 
 	if got := providerPreconditionFallbackSelections(LLMSelection{
 		Provider: "fireworks",
 		Model:    "accounts/fireworks/models/deepseek-v4-pro",
-	}); len(got) != 0 {
-		t.Fatalf("pro fallbacks = %+v, want none", got)
+	}, LLMSelection{
+		Provider: "chatgpt",
+		Model:    "gpt-5.5",
+	}); len(got) != 1 || got[0].Provider != "chatgpt" {
+		t.Fatalf("pro fallbacks = %+v, want platform fallback", got)
+	}
+
+	if got := providerPreconditionFallbackSelections(LLMSelection{
+		Provider: "fireworks",
+		Model:    "accounts/fireworks/models/deepseek-v4-flash",
+	}, LLMSelection{
+		Provider: "fireworks",
+		Model:    "accounts/fireworks/models/deepseek-v4-pro",
+	}); len(got) != 1 {
+		t.Fatalf("deduped fallbacks = %+v, want one Fireworks Pro fallback", got)
 	}
 }
