@@ -1891,3 +1891,128 @@ rollback refs:
   No behavior change in this checkpoint. Staging rollback remains
   24c589ca88fb3ab715b6a616bf5092e357868a29.
 ```
+
+```text
+status: shipped_partial
+last checkpoint: 2026-06-08T10:26Z Super pre-delegation failure fallback
+  landed and was proved through CI/staging identity.
+current artifact state:
+  Documentation checkpoint 591da77be7874adff6087f1e5375a978ed8475d9 records
+  the observed Super failure before the behavior change. Behavior commit
+  8b32ebfae80274cd5a69d5303330b3a66da0abbe is on origin/main and deployed to
+  staging.
+what shipped:
+  - `handleExecutionError` now invokes a Super failure fallback after the
+    existing delegate-worker fallback.
+  - When persistent Super was requested by a VText and fails without
+    `submit_coagent_update` or delegate-worker evidence, runtime synthesizes a
+    structured VText-addressed blocker update instead of leaving only a failed
+    Trace.
+  - The synthesized update records the Super run id, trajectory id, error,
+    successful tool names, and whether worker lease/delegation evidence was
+    missing.
+  - Existing delegate-worker fallback behavior is preserved and takes
+    precedence when `delegate_worker_vm` evidence exists.
+what was proven:
+  - Local `git diff --check` passed.
+  - Local focused ordinary test passed:
+    `nix develop -c go test ./internal/runtime -run 'TestRuntimeSynthesizesVTextBlockerWhenSuperFailsBeforeDelegation'`.
+  - Local focused comprehensive test passed:
+    `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestSuperFailureAfterDelegateSynthesizesWorkerUpdate'`.
+  - CI run 27131235293 passed for commit
+    8b32ebfae80274cd5a69d5303330b3a66da0abbe, including Go vet/build,
+    all runtime shards, non-runtime tests, integration-tagged smoke, and
+    staging deploy.
+  - FlakeHub run 27131235269 passed for the same commit.
+  - Public staging `/health` reported proxy and sandbox deployed commit
+    8b32ebfae80274cd5a69d5303330b3a66da0abbe with
+    `deployed_at=2026-06-08T10:23:37Z`.
+belief-state changes:
+  The particular failure mode from trajectory
+  cff02946-bcc0-46e0-bacf-f3641750a250 should no longer disappear into a
+  failed Super trace with no owner-readable blocker. If a VText-requested
+  Super again spends its loop budget before delegation, VText should receive a
+  blocker update that can drive a follow-up revision or resumed Super request.
+unproven or partial claims:
+  This does not prove a new product-path mission continuation now reaches
+  worker-medium or publishes an AppChangePackage. It only proves the runtime
+  fallback for the pre-delegation failure class.
+remaining error field:
+  The accelerator still needs a fresh product-path rerun: VText mission
+  continuation -> Super -> worker-medium/vsuper delegation -> package or
+  precise blocker -> VText narrative. The next run should either make progress
+  to a worker artifact or, if Super fails again before delegation, surface the
+  new synthesized blocker in the mission VText channel.
+rollback refs:
+  Revert 8b32ebfa to remove the Super pre-delegation blocker fallback. Revert
+  591da77b only if the problem checkpoint should be removed from mission
+  history.
+```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T10:40Z product-path rerun reached worker-medium,
+  but terminal worker reporting failed after cancellation.
+current artifact state:
+  Behavior commit 8b32ebfae80274cd5a69d5303330b3a66da0abbe remains deployed
+  to staging and active on the owner-routed desktop sandbox at
+  http://10.202.180.2:8085. Product-path rerun trajectory
+  ea8013ff-ca9b-4ecb-99b4-e7dd0431bf40 created VText document
+  a6948b75-5a92-40f1-8cb4-08522f0ba4a3 and delegated to worker sandbox
+  http://10.202.207.2:8085 on worker VM
+  vm-a8d52e96d64e6dc1d46ad6542439019f.
+new evidence:
+  The rerun improved over the prior failure. VText sent Super a concrete
+  instruction to lease worker-medium and call `start_worker_delegation`.
+  Super did so. The worker run id was
+  61574de4-578f-4608-8ddc-85e7b232b606, and the worker repo bootstrap cloned
+  `https://github.com/choir-hip/go-choir.git` into Source/platform and
+  Source/candidate at commit 8b32ebfae80274cd5a69d5303330b3a66da0abbe.
+
+  The worker did not publish an AppChangePackage. It entered broad source
+  reading, spawned co-super child
+  4cb584d5-7aff-4a06-bbd7-34c9c1e98de9, which failed with Fireworks
+  `503 Service Unavailable`, then spawned co-super child
+  e745acec-f96c-482d-8849-d54aef88efba, which began editing but did not
+  produce a package before the parent cancellation. Super observed the worker
+  repeatedly, redirected it twice, then cancelled the worker delegation.
+
+  The cancellation certificate recorded this reason: the worker was stuck in
+  a read-only loop across 156 events, two redirects were ignored, one child
+  failed with Fireworks 503, the second child was repeating reads/edits, and
+  zero code changes, commits, or AppChangePackages were produced. After
+  cancellation, Super attempted `submit_coagent_update` three times, but each
+  attempt failed with:
+  `tool_error: resolve delivery target lookup: record not found`.
+
+  The previously shipped fallback did fire earlier in the same trajectory:
+  when Super hit a Fireworks 503 before terminal reporting, the runtime
+  synthesized a VText-visible blocker update. That proves the
+  pre-delegation/failed-Super fallback works for one class, but does not cover
+  this later explicit `submit_coagent_update` target-resolution failure.
+belief-state changes:
+  Choir-in-Choir can now reach worker-medium/vsuper through the product path,
+  clone the candidate repository, spawn worker-local helpers, and expose
+  worker progress to the mission VText. The next reliability blocker is no
+  longer initial Super delegation. It is terminal coordination under failure:
+  after cancellation or continuation handoff, Super may be unable to deliver
+  the final blocker/cancellation certificate because `submit_coagent_update`
+  cannot resolve its target.
+remaining error field:
+  The platform PR accelerator is not ready for overnight unattended platform
+  work. It can begin the work, but it still lacks a reliable terminal action
+  path. A worker that fails to produce a package must always leave a
+  VText-visible blocker or cancellation certificate. The observed target
+  lookup failure means the mission can still strand decisive evidence in Trace
+  instead of returning it to the owner-readable VText narrative.
+next executable probe:
+  Document and fix the `submit_coagent_update` delivery-target resolution
+  failure after Super continuation/cancellation. The fix should preserve
+  normal addressed updates, but fall back to the VText channel/document when
+  the explicit delivery target lookup fails and the run has an owner-scoped
+  channel id. Add regression coverage for a Super continuation that cancels a
+  worker and then submits a blocker update to the originating VText.
+rollback refs:
+  No code change in this checkpoint. Revert 8b32ebfa to remove the earlier
+  Super pre-delegation blocker fallback if it causes regressions.
+```
