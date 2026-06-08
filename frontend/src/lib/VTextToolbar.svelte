@@ -38,6 +38,9 @@
   $: previousTitle = previousVersionLabel ? `Go to ${previousVersionLabel}` : 'At oldest version';
   $: nextTitle = nextRevisionLabel ? `Go to ${nextRevisionLabel}` : 'At latest version';
   $: publishDisabled = loading || submitting || agentPending || hasMergePreview || publishedActionPending || !hasCurrentDoc;
+  $: normalizedRevisionLineLabel = String(revisionLineLabel || '').trim().toLowerCase();
+  $: normalizedStateLabel = String(stateLabel || '').trim().toLowerCase();
+  $: visibleStateLabel = normalizedStateLabel && normalizedStateLabel !== normalizedRevisionLineLabel ? stateLabel : '';
 </script>
 
 <div class="doc-toolbar" class:toolbar-hidden={toolbarHidden} data-vtext-toolbar>
@@ -66,7 +69,9 @@
     <span class="draft-line" data-vtext-draft-line>{revisionLineLabel}</span>
   </div>
 
-  <div class="doc-state" data-vtext-state>{stateLabel}</div>
+  <div class="doc-state" class:doc-state-empty={!visibleStateLabel} data-vtext-state aria-hidden={!visibleStateLabel}>
+    {visibleStateLabel}
+  </div>
 
   <div class="doc-actions">
     {#if isPublishedReader}
@@ -92,7 +97,9 @@
         on:click={() => dispatch('edit-published')}
         disabled={loading || publishedActionPending}
       >
-        {publishedActionPending ? 'Opening…' : currentUser ? 'Edit my version' : 'Edit'}
+        <span class="label-full">{publishedActionPending ? 'Opening…' : currentUser ? 'Edit my version' : 'Edit'}</span>
+        <span class="label-compact">{publishedActionPending ? 'Opening…' : 'Edit'}</span>
+        <span class="label-tiny">{publishedActionPending ? '…' : 'E'}</span>
       </button>
     {:else}
       <button
@@ -102,7 +109,9 @@
         on:click={() => dispatch('prompt')}
         disabled={loading || submitting || agentPending || isViewingHistorical || publishedActionPending}
       >
-        {promptLabel}
+        <span class="label-full">{promptLabel}</span>
+        <span class="label-compact">{promptLabel}</span>
+        <span class="label-tiny">{submitting || agentPending ? '…' : 'R'}</span>
       </button>
       {#if agentPending}
         <button
@@ -111,7 +120,9 @@
           on:click={() => dispatch('cancel-revision')}
           disabled={cancelPending}
         >
-          {cancelPending ? 'Cancelling…' : 'Cancel'}
+          <span class="label-full">{cancelPending ? 'Cancelling…' : 'Cancel'}</span>
+          <span class="label-compact">{cancelPending ? '…' : 'Cancel'}</span>
+          <span class="label-tiny">{cancelPending ? '…' : 'X'}</span>
         </button>
       {/if}
       {#if isPublishedMode}
@@ -121,7 +132,9 @@
           on:click={() => dispatch('submit-proposal')}
           disabled={loading || submitting || agentPending || publishedActionPending || !hasCurrentDoc}
         >
-          {publishedActionPending ? 'Submitting…' : 'Propose'}
+          <span class="label-full">{publishedActionPending ? 'Submitting…' : 'Propose'}</span>
+          <span class="label-compact">{publishedActionPending ? '…' : 'Propose'}</span>
+          <span class="label-tiny">{publishedActionPending ? '…' : 'P'}</span>
         </button>
       {:else}
         {#if hasMergePreview}
@@ -131,7 +144,9 @@
             on:click={() => dispatch('accept-merge')}
             disabled={mergePending || publishedActionPending || !hasCurrentDoc}
           >
-            {mergePending ? 'Accepting…' : 'Accept'}
+            <span class="label-full">{mergePending ? 'Accepting…' : 'Accept'}</span>
+            <span class="label-compact">{mergePending ? '…' : 'Accept'}</span>
+            <span class="label-tiny">{mergePending ? '…' : 'A'}</span>
           </button>
           <button
             class="secondary-action danger"
@@ -139,7 +154,9 @@
             on:click={() => dispatch('discard-merge')}
             disabled={mergePending || publishedActionPending}
           >
-            Discard
+            <span class="label-full">Discard</span>
+            <span class="label-compact">Discard</span>
+            <span class="label-tiny">D</span>
           </button>
         {:else}
           <button
@@ -148,7 +165,9 @@
             on:click={() => dispatch('compare')}
             disabled={loading || submitting || agentPending || comparePending || nextDisabled}
           >
-            {comparePending ? 'Comparing…' : 'Compare'}
+            <span class="label-full">{comparePending ? 'Comparing…' : 'Compare'}</span>
+            <span class="label-compact">{comparePending ? '…' : 'Compare'}</span>
+            <span class="label-tiny">{comparePending ? '…' : 'C'}</span>
           </button>
           <button
             class="secondary-action"
@@ -156,7 +175,9 @@
             on:click={() => dispatch('sources')}
             disabled={loading || submitting || agentPending || !hasCurrentDoc}
           >
-            Sources{sourceCandidateCount ? ` ${sourceCandidateCount}` : ''}
+            <span class="label-full">Sources{sourceCandidateCount ? ` ${sourceCandidateCount}` : ''}</span>
+            <span class="label-compact">Sources</span>
+            <span class="label-tiny">S</span>
           </button>
           {#if isViewingHistorical}
             <button
@@ -165,7 +186,9 @@
               on:click={() => dispatch('restore')}
               disabled={loading || submitting || agentPending || restorePending || !hasCurrentRevision}
             >
-              {restorePending ? 'Restoring…' : 'Restore'}
+              <span class="label-full">{restorePending ? 'Restoring…' : 'Restore'}</span>
+              <span class="label-compact">{restorePending ? '…' : 'Restore'}</span>
+              <span class="label-tiny">{restorePending ? '…' : '↺'}</span>
             </button>
           {/if}
           {#if hasCompareResult}
@@ -175,7 +198,9 @@
               on:click={() => dispatch('merge-preview')}
               disabled={mergePending || selectedMergeSuggestionCount === 0}
             >
-              {mergePending ? 'Merging…' : 'Merge into draft'}
+              <span class="label-full">{mergePending ? 'Merging…' : 'Merge into draft'}</span>
+              <span class="label-compact">{mergePending ? '…' : 'Merge'}</span>
+              <span class="label-tiny">{mergePending ? '…' : 'M'}</span>
             </button>
           {/if}
         {/if}
@@ -188,7 +213,9 @@
             on:click={() => dispatch('toggle-publish')}
             disabled={publishDisabled}
           >
-            {publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}
+            <span class="label-full">{publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}</span>
+            <span class="label-compact">{publishedActionPending ? '…' : 'Publish'}</span>
+            <span class="label-tiny">{publishedActionPending ? '…' : 'P'}</span>
           </button>
           {#if publishMenuOpen}
             <div class="publish-menu" data-vtext-publish-menu role="menu" aria-label="Publish this version">
@@ -230,16 +257,17 @@
     position: relative;
     z-index: 10;
     flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    display: flex;
     align-items: center;
     gap: 0.55rem;
+    height: 3.7rem;
     min-height: 3.7rem;
     padding: 0.5rem 0.72rem;
     border-bottom: 1px solid var(--choir-border-strong);
     background: var(--choir-state-selected);
     max-height: 3.7rem;
     overflow: visible;
+    container-type: inline-size;
     transition:
       opacity 180ms ease,
       transform 180ms ease,
@@ -267,10 +295,10 @@
   }
 
   .doc-toolbar.toolbar-hidden:focus-within {
-    height: auto;
-    max-height: 4.2rem;
-    padding-top: 0.58rem;
-    padding-bottom: 0.58rem;
+    height: 3.7rem;
+    max-height: 3.7rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
     border-bottom-color: var(--choir-border-strong);
     opacity: 1;
     pointer-events: auto;
@@ -291,10 +319,16 @@
   }
 
   .doc-actions {
+    flex: 0 1 auto;
     justify-content: flex-end;
   }
 
+  .version-controls {
+    flex: 0 0 auto;
+  }
+
   .doc-state {
+    flex: 1 1 auto;
     min-width: 0;
     text-align: center;
     overflow: hidden;
@@ -302,6 +336,10 @@
     white-space: nowrap;
     color: var(--choir-text-accent);
     font-size: 0.74rem;
+  }
+
+  .doc-state-empty {
+    visibility: hidden;
   }
 
   .nav-version {
@@ -318,6 +356,7 @@
     font-size: 0.76rem;
     font-weight: 650;
     backdrop-filter: blur(8px);
+    flex: 0 0 auto;
   }
 
   .draft-line {
@@ -336,6 +375,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 0 0 auto;
   }
 
   .nav-btn,
@@ -352,19 +392,29 @@
     transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
   }
 
+  .label-compact,
+  .label-tiny {
+    display: none;
+  }
+
   .nav-btn {
     width: 1.95rem;
     height: 1.95rem;
     border-radius: 999px;
     font-size: 0.92rem;
     font-weight: 700;
+    flex: 0 0 auto;
   }
 
   .prompt-btn {
     border-radius: 999px;
+    height: 2.1rem;
     padding: 0.62rem 0.95rem;
     font-size: 0.82rem;
     font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    flex: 0 0 auto;
   }
 
   .secondary-action {
@@ -377,6 +427,7 @@
     color: var(--choir-text-accent);
     line-height: 1;
     white-space: nowrap;
+    flex: 0 0 auto;
   }
 
   .primary-action {
@@ -470,6 +521,7 @@
     position: relative;
     display: inline-flex;
     align-items: center;
+    flex: 0 0 auto;
   }
 
   .publish-menu {
@@ -535,28 +587,19 @@
     cursor: not-allowed;
   }
 
-  @media (max-width: 768px) {
+  @container (max-width: 680px) {
     .doc-toolbar {
-      grid-template-columns: minmax(0, 1fr);
-      align-items: stretch;
-      gap: 0.38rem;
-      max-height: none;
-      padding: 0.46rem 0.55rem 0.56rem;
+      gap: 0.42rem;
+      padding-inline: 0.56rem;
     }
 
     .version-controls,
     .doc-actions {
       gap: 0.32rem;
-      flex-wrap: wrap;
-      justify-content: flex-start;
     }
 
     .doc-state {
-      order: 3;
-      text-align: left;
-      font-size: 0.68rem;
-      white-space: normal;
-      line-height: 1.2;
+      display: none;
     }
 
     .nav-version {
@@ -581,11 +624,13 @@
     }
 
     .prompt-btn {
+      height: 1.95rem;
       padding: 0.5rem 0.7rem;
       font-size: 0.75rem;
     }
 
     .secondary-action {
+      height: 1.95rem;
       min-width: auto;
       padding: 0.5rem 0.64rem;
       font-size: 0.72rem;
@@ -598,6 +643,76 @@
     .publish-menu {
       right: -0.2rem;
       width: min(18rem, calc(100vw - 1.4rem));
+    }
+  }
+
+  @container (max-width: 560px) {
+    .doc-toolbar {
+      gap: 0.34rem;
+      padding-inline: 0.48rem;
+    }
+
+    .version-controls,
+    .doc-actions {
+      gap: 0.28rem;
+    }
+
+    .draft-line {
+      max-width: 5.8rem;
+    }
+
+    .label-full {
+      display: none;
+    }
+
+    .label-compact {
+      display: inline;
+    }
+  }
+
+  @container (max-width: 460px) {
+    .draft-line {
+      display: none;
+    }
+
+    .secondary-action[data-vtext-compare]:disabled {
+      display: none;
+    }
+
+    .publish-action {
+      min-width: 3.15rem;
+    }
+  }
+
+  @container (max-width: 380px) {
+    .doc-toolbar {
+      gap: 0.25rem;
+      padding-inline: 0.38rem;
+    }
+
+    .version-controls,
+    .doc-actions {
+      gap: 0.22rem;
+    }
+
+    .nav-version {
+      width: auto;
+      min-width: 2.25rem;
+      padding: 0 0.38rem;
+    }
+
+    .label-compact {
+      display: none;
+    }
+
+    .label-tiny {
+      display: inline;
+    }
+
+    .prompt-btn,
+    .secondary-action {
+      min-width: 2.15rem;
+      padding-inline: 0.52rem;
     }
   }
 </style>
