@@ -733,7 +733,8 @@ func isProviderPreconditionError(err error) bool {
 	}
 	text := strings.ToLower(err.Error())
 	return strings.Contains(text, "412") ||
-		strings.Contains(text, "precondition failed")
+		strings.Contains(text, "precondition failed") ||
+		strings.Contains(text, "thinking mode does not support this tool_choice")
 }
 
 func sameLLMSelection(a, b LLMSelection) bool {

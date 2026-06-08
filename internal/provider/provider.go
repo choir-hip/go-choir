@@ -939,6 +939,13 @@ func (p *DeepSeekProvider) deepSeekChatCompletionsEndpoint() string {
 func (p *DeepSeekProvider) buildChatCompletionsRequestBody(req LLMRequest, modelID string) openAIChatCompletionRequest {
 	tools := convertOpenAIChatTools(req.Tools)
 	reasoning := effectiveReasoning(req.ReasoningEffort, p.reasoning)
+	if len(tools) > 0 {
+		// DeepSeek OpenAI chat completions rejects thinking mode for exact
+		// function choices and also fails on later tool-result continuation
+		// turns when thinking is re-enabled. Keep OpenAI-format tool loops on
+		// the proven non-thinking path; free-form turns may still opt in.
+		reasoning = "none"
+	}
 	body := openAIChatCompletionRequest{
 		Model:      modelID,
 		Messages:   convertOpenAIChatMessages(req.System, req.Messages),

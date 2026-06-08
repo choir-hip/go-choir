@@ -2305,6 +2305,122 @@ func TestDeepSeekProviderDisablesThinkingForNoneAndSerializesToolChoice(t *testi
 	}
 }
 
+func TestDeepSeekProviderDisablesThinkingForExactToolChoice(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		thinking, ok := raw["thinking"].(map[string]any)
+		if !ok || thinking["type"] != "disabled" {
+			t.Fatalf("thinking = %#v, want disabled for exact tool choice", raw["thinking"])
+		}
+		if _, ok := thinking["reasoning_effort"]; ok {
+			t.Fatalf("disabled thinking must omit reasoning_effort: %#v", thinking)
+		}
+		if _, ok := raw["tool_choice"].(map[string]any); !ok {
+			t.Fatalf("tool_choice = %#v, want exact function object", raw["tool_choice"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"id":"chatcmpl_deepseek_exact_tool",
+			"model":"deepseek-v4-flash",
+			"choices":[{
+				"finish_reason":"tool_calls",
+				"message":{
+					"role":"assistant",
+					"content":"",
+					"tool_calls":[{
+						"id":"call_1",
+						"type":"function",
+						"function":{"name":"record_status","arguments":"{\"status\":\"ok\"}"}
+					}]
+				}
+			}],
+			"usage":{"prompt_tokens":12,"completion_tokens":7,"total_tokens":19}
+		}`)
+	}))
+	defer server.Close()
+
+	p := &DeepSeekProvider{
+		apiKey:     "sk-test-key",
+		modelID:    "deepseek-v4-flash",
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+	}
+	resp, err := p.Call(context.Background(), LLMRequest{
+		Messages:        []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Record ok."}}}},
+		ReasoningEffort: "medium",
+		Tools: []ToolDef{{
+			Name:        "record_status",
+			Description: "Record status.",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+		ToolChoice: "function:record_status",
+	})
+	if err != nil {
+		t.Fatalf("deepseek call: %v", err)
+	}
+	if resp.StopReason != "tool_use" {
+		t.Fatalf("StopReason = %q", resp.StopReason)
+	}
+}
+
+func TestDeepSeekProviderDisablesThinkingWheneverToolsArePresent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		thinking, ok := raw["thinking"].(map[string]any)
+		if !ok || thinking["type"] != "disabled" {
+			t.Fatalf("thinking = %#v, want disabled for tool loop continuation", raw["thinking"])
+		}
+		if _, ok := raw["tool_choice"]; ok {
+			t.Fatalf("tool_choice should be omitted when unset: %#v", raw["tool_choice"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"id":"chatcmpl_deepseek_tool_continue",
+			"model":"deepseek-v4-flash",
+			"choices":[{
+				"finish_reason":"stop",
+				"message":{"role":"assistant","content":"done"}
+			}],
+			"usage":{"prompt_tokens":22,"completion_tokens":3,"total_tokens":25}
+		}`)
+	}))
+	defer server.Close()
+
+	p := &DeepSeekProvider{
+		apiKey:     "sk-test-key",
+		modelID:    "deepseek-v4-flash",
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+	}
+	resp, err := p.Call(context.Background(), LLMRequest{
+		Messages: []Message{
+			{Role: "user", Content: []Block{{Type: "text", Text: "Record ok."}}},
+			{Role: "assistant", Content: []Block{{Type: "tool_use", ID: "call_1", Name: "record_status", Input: json.RawMessage(`{"status":"ok"}`)}}},
+			{Role: "user", Content: []Block{{Type: "tool_result", ToolUseID: "call_1", Text: `{"recorded":true}`}}},
+		},
+		ReasoningEffort: "medium",
+		Tools: []ToolDef{{
+			Name:        "record_status",
+			Description: "Record status.",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("deepseek call: %v", err)
+	}
+	if resp.Text != "done" {
+		t.Fatalf("Text = %q", resp.Text)
+	}
+}
+
 func TestXiaomiProviderCallUsesMiMoChatSchemaAndPreservesReasoningContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
@@ -2510,6 +2626,98 @@ func TestIntegrationXiaomiTextAndImageLive(t *testing.T) {
 	if !strings.Contains(strings.ToLower(imageResp.Text), "red") {
 		t.Fatalf("xiaomi image text = %q", imageResp.Text)
 	}
+}
+
+func TestIntegrationDeepSeekRuntimeExactToolChoiceLive(t *testing.T) {
+	if os.Getenv("CHOIR_PROVIDER_LIVE_TESTS") != "1" {
+		t.Skip("set CHOIR_PROVIDER_LIVE_TESTS=1 to spend provider credits")
+	}
+	apiKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
+	if apiKey == "" {
+		t.Skip("DEEPSEEK_API_KEY is not set")
+	}
+	p, err := NewDeepSeekProvider(DeepSeekConfig{
+		APIKey:  apiKey,
+		ModelID: "deepseek-v4-flash",
+	})
+	if err != nil {
+		t.Fatalf("new deepseek provider: %v", err)
+	}
+	text, usage, err := runLiveProviderToolLoop(t, p, runtime.LLMSelection{
+		Provider:        "deepseek",
+		Model:           "deepseek-v4-flash",
+		ReasoningEffort: "medium",
+	}, "DEEPSEEK_RUNTIME_TOOL_LOOP_OK")
+	if err != nil {
+		t.Fatalf("deepseek runtime tool loop: %v", err)
+	}
+	if !strings.Contains(text, "DEEPSEEK_RUNTIME_TOOL_LOOP_OK") {
+		t.Fatalf("text = %q, want marker; usage=%+v", text, usage)
+	}
+}
+
+func TestIntegrationXiaomiRuntimeExactToolChoiceLive(t *testing.T) {
+	if os.Getenv("CHOIR_PROVIDER_LIVE_TESTS") != "1" {
+		t.Skip("set CHOIR_PROVIDER_LIVE_TESTS=1 to spend provider credits")
+	}
+	apiKey := strings.TrimSpace(os.Getenv("XIAOMI_API_KEY"))
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("xiaomi_api_key"))
+	}
+	if apiKey == "" {
+		t.Skip("XIAOMI_API_KEY is not set")
+	}
+	p, err := NewXiaomiProvider(XiaomiConfig{
+		APIKey:  apiKey,
+		ModelID: "mimo-v2.5-pro",
+	})
+	if err != nil {
+		t.Fatalf("new xiaomi provider: %v", err)
+	}
+	text, usage, err := runLiveProviderToolLoop(t, p, runtime.LLMSelection{
+		Provider:        "xiaomi",
+		Model:           "mimo-v2.5-pro",
+		ReasoningEffort: "none",
+	}, "XIAOMI_RUNTIME_TOOL_LOOP_OK")
+	if err != nil {
+		t.Fatalf("xiaomi runtime tool loop: %v", err)
+	}
+	if !strings.Contains(text, "XIAOMI_RUNTIME_TOOL_LOOP_OK") {
+		t.Fatalf("text = %q, want marker; usage=%+v", text, usage)
+	}
+}
+
+func runLiveProviderToolLoop(t *testing.T, p Provider, selection runtime.LLMSelection, marker string) (string, runtime.TokenUsage, error) {
+	t.Helper()
+	registry := runtime.NewToolRegistry()
+	if err := registry.Register(runtime.Tool{
+		Name:        "record_status",
+		Description: "Record a provider conformance status.",
+		Parameters: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"status": map[string]any{"type": "string"}},
+			"required":   []string{"status"},
+		},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"recorded":true,"status":"ok"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register record_status: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	return runtime.RunToolLoop(
+		ctx,
+		NewBridgeProvider(p),
+		registry,
+		[]json.RawMessage{json.RawMessage(fmt.Sprintf(`{"role":"user","content":[{"type":"text","text":"Call record_status with status OK, then respond with %s."}]}`, marker))},
+		"You are a Choir provider conformance proof agent. Use the tool exactly once when requested, then return the requested marker.",
+		0,
+		func(types.EventKind, string, json.RawMessage) {},
+		nil,
+		runtime.WithToolLoopLLMConfig(selection),
+		runtime.WithInitialToolChoice("function:record_status"),
+	)
 }
 
 func TestFireworksProviderUsesDefaultReasoningEffort(t *testing.T) {

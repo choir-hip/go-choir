@@ -1281,6 +1281,80 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 	}
 }
 
+type deepSeekToolChoicePreconditionThenToolProvider struct {
+	Provider
+	choices []string
+	calls   int32
+}
+
+func (p *deepSeekToolChoicePreconditionThenToolProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.choices = append(p.choices, req.ToolChoice)
+	call := atomic.AddInt32(&p.calls, 1)
+	if call == 1 {
+		return nil, fmt.Errorf("provider deepseek call failed: deepseek: Thinking mode does not support this tool_choice")
+	}
+	return &ToolLoopResponse{
+		StopReason: "tool_use",
+		ToolCalls: []types.ToolCall{{
+			ID:        "call-edit",
+			Name:      "edit_vtext",
+			Arguments: json.RawMessage(`{"content":"ok"}`),
+		}},
+		Usage: TokenUsage{InputTokens: 11, OutputTokens: 5},
+		Model: req.Model,
+	}, nil
+}
+
+func TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError(t *testing.T) {
+	provider := &deepSeekToolChoicePreconditionThenToolProvider{}
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "edit_vtext",
+		Description: "Edit the VText document.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"ok","revision_id":"rev-1"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register edit_vtext: %v", err)
+	}
+	var retrySeen bool
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunRetry && phase == "provider_tool_choice" {
+			retrySeen = true
+			var decoded map[string]any
+			if err := json.Unmarshal(payload, &decoded); err != nil {
+				t.Fatalf("decode retry payload: %v", err)
+			}
+			if decoded["tool_choice"] != "function:edit_vtext" || decoded["retry_tool_choice"] != "required" {
+				t.Fatalf("retry payload = %+v", decoded)
+			}
+		}
+	}
+
+	_, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write"}]}`)},
+		"You are a VText appagent.",
+		0,
+		emit,
+		nil,
+		WithInitialToolChoice("function:edit_vtext"),
+		WithTerminalToolSuccesses("edit_vtext"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if len(provider.choices) != 2 || provider.choices[0] != "function:edit_vtext" || provider.choices[1] != "required" {
+		t.Fatalf("tool choices = %#v, want exact then required", provider.choices)
+	}
+	if !retrySeen {
+		t.Fatal("missing provider_tool_choice retry event")
+	}
+}
+
 func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *testing.T) {
 	provider := &providerPreconditionThenToolProvider{failuresBeforeSuccess: 2}
 	registry := NewToolRegistry()
