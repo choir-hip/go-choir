@@ -2368,3 +2368,68 @@ rollback refs:
   definition scoping. Revert 3c3521c02a08dfec3df15b29b6a4a34f15faf3a7 to
   remove exact-choice precondition retry.
 ```
+
+```text
+status: checkpoint_incomplete
+last checkpoint: 2026-06-08T11:56Z platform fallback commit deployed, but
+  deployed VText did not attempt the platform fallback.
+current artifact state:
+  Documentation checkpoint ab84250df9bfa79d48dbfb7769490adcaa99e208 and
+  behavior commit 427b3e178eafd964aa17b48a737a248c48e74539 are on origin/main.
+  CI run 27135573511 passed, including runtime shards, non-runtime tests, Go
+  vet/build, integration-tagged smoke, and staging deploy. FlakeHub run
+  27135573490 passed. Public `https://choir.news/health` and owner-routed
+  `http://10.202.180.2:8085/health` both reported deployed commit
+  427b3e178eafd964aa17b48a737a248c48e74539 with
+  `deployed_at=2026-06-08T11:51:09Z`.
+what shipped:
+  The provider-precondition fallback builder now appends the explicit runtime
+  platform fallback provider/model after Fireworks Pro when the active
+  selection is Fireworks and the platform fallback is non-empty. On staging,
+  the sandbox runtime process exposes `RUNTIME_LLM_PROVIDER=chatgpt`,
+  `RUNTIME_LLM_MODEL=gpt-5.5`, and `RUNTIME_LLM_REASONING_EFFORT=low`.
+what was proven:
+  - Local `git diff --check` passed.
+  - Local focused tests passed:
+    `nix develop -c go test ./internal/runtime -run
+    'TestRunToolLoop(RelaxesExactInitialToolChoiceAfterProviderPrecondition|FallsBackModelAfterRelaxedInitialToolChoicePrecondition|TriesMultipleProviderPreconditionFallbacks|RetriesProviderRateLimit|TerminalToolSuccessStopsWithoutExtraProviderTurn)$|TestProviderPreconditionFallbackSelectionsUseFireworksProForFlash'`.
+  - Local broader focused runtime tests passed:
+    `nix develop -c go test ./internal/runtime -run
+    'TestRunToolLoop|Test.*ModelPolicy|TestProviderPreconditionFallbackSelections'`.
+  - Product-path rerun trajectory 61a2818b-ad93-4c1e-8776-526f982d3d39
+    created VText document d0b1ac1e-7119-48db-a4c4-b6bcdec11aac and VText run
+    245c2021-dc64-4e55-ab27-8110790a0490.
+new failure evidence:
+  The deployed trace showed Fireworks Flash exact, retry after
+  `exact_initial_tool_choice_precondition`, Fireworks Flash `required`, retry
+  after `provider_precondition_fallback`, and Fireworks Pro `required`. It then
+  failed at `tool loop iteration 2` with Fireworks 412. It did not emit a
+  second `provider_precondition_fallback` retry or a provider call for
+  `chatgpt/gpt-5.5`.
+belief-state changes:
+  The latest code path works in local unit tests but not in the deployed VText
+  execution path. The most likely causes are that `executeWithToolLoop` is not
+  receiving `rt.cfg.LLMProvider/LLMModel` for this deployed VText run, the
+  deployed VText path is using an older or separate runtime configuration
+  object than the sandbox process environment suggests, or the fallback list is
+  being truncated before reaching `RunToolLoop`.
+remaining error field:
+  The next fix should identify why the platform fallback is absent from the
+  deployed VText run rather than adding another retry. Add trace-visible
+  fallback-list metadata on provider-call start or retry, or add a focused
+  runtime test that constructs a Runtime with `LLMProvider=chatgpt` and proves
+  `executeWithToolLoop` passes both fallbacks into `RunToolLoop`.
+next executable probe:
+  Inspect runtime initialization and provider bridge setup for whether
+  `runtime.LoadConfig()` and the `Runtime` object used by VText share the same
+  config. Add test coverage at the `executeWithToolLoop`/runtime boundary if
+  feasible. If the config is empty because runtime config is not preserved in
+  the `Runtime`, fix that plumbing and rerun the owner prompt-bar path. If the
+  config is present but still not visible, emit a bounded fallback-count/detail
+  trace payload before the provider call.
+rollback refs:
+  Revert 427b3e178eafd964aa17b48a737a248c48e74539 to remove platform fallback
+  ordering. Revert ef6121c7d7225de67045a67b0ba1a9fc92b44444 to remove model
+  fallback. Revert cce5dd840abe06418bee93ed7753589a84a28d91 to remove initial
+  tool definition scoping.
+```
