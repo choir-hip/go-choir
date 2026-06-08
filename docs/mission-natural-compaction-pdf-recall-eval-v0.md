@@ -395,14 +395,15 @@ Likely first goal:
 
 ## Run Checkpoint & Resumption State
 
-status: substrate_and_policy_control_deployed_pre_eval
+status: substrate_and_policy_control_proven_pre_eval
 
 last checkpoint: mission upgraded so the sandbox/user-computer document
 substrate preamble is an explicit prerequisite before any compaction recall
 eval. Slides remain strictly parked as a future mission; this mission only
 extracts PPTX/HTML slide artifacts as sources. The substrate and scoped
-model-policy control-plane behavior changes have been pushed, passed CI, and
-deployed to staging; the frozen-corpus compaction eval has not started.
+model-policy control-plane behavior changes have been pushed, passed CI,
+deployed to staging, and proven through an authenticated product route; the
+frozen-corpus compaction eval has not started.
 
 current artifact state:
 
@@ -473,6 +474,19 @@ what was proven so far:
 - FlakeHub publish run `27171676075` completed successfully for `46f1b764`.
 - `https://choir.news/health` reports proxy and sandbox deployed at
   `46f1b764d15adaf30314d14cc5a1b7b61f7d728d`.
+- A deployed product-path model-policy overlay proof succeeded through an
+  authenticated `https://choir.news` passkey session:
+  - owner/user id `ffae0057-fa57-4301-8e49-486764bb6ed6`;
+  - owner email `codex-overlay-proof-1780959566031@example.test`;
+  - overlay file
+    `System/model-policy-overlays/compaction-eval-1780959566031.toml`;
+  - overlay expiration `2026-06-09T22:59:26.031Z`;
+  - authenticated `PUT /api/files/System/model-policy-overlays/compaction-eval-1780959566031.toml`
+    returned `200`;
+  - authenticated `GET /api/model-policy/resolve?role=researcher&overlay_id=compaction-eval-1780959566031`
+    returned `provider: xiaomi`, `model: mimo-v2.5-pro`,
+    `reasoning_effort: medium`, and source
+    `/mnt/persistent/files/System/model-policy-overlays/compaction-eval-1780959566031.toml`.
 
 unproven or partial claims:
 
@@ -481,8 +495,7 @@ unproven or partial claims:
 - high-quality long PDF/DOCX/EPUB/PPTX/HTML extraction through normal product
   tools;
 - frozen-corpus matrix execution without live search;
-- natural post-compaction recall across target models;
-- deployed proof of scoped model-policy overlay selection on staging.
+- natural post-compaction recall across target models.
 
 belief-state changes:
 
@@ -495,7 +508,7 @@ remaining error field:
 
 - image/package size impact of adding document tools;
 - extraction quality variance across file formats;
-- model-policy overlay deployed behavior through product-path API proof;
+- frozen corpus selection and import quality;
 - whether all target providers remain available during the run.
 
 highest-impact remaining uncertainty:
@@ -523,13 +536,15 @@ latest staging proof:
 - authenticated staging product-path import of public PDF ContentItem
   `4222d5fc-aea5-43bd-93eb-077f9c3540a7` with Poppler extraction and page
   selector metadata.
+- authenticated staging product-path overlay resolver proof for overlay
+  `compaction-eval-1780959566031`, resolving researcher to
+  `xiaomi/mimo-v2.5-pro` with `medium` reasoning.
 
 next executable probe:
 
-- run a deployed product-path proof that an overlay file under
-  `System/model-policy-overlays/` controls `/api/model-policy/resolve` for a
-  researcher role, then build the frozen multi-format corpus and start the
-  model matrix.
+- build the frozen multi-format corpus through product-path document imports,
+  record ContentItem ids/hashes/selectors/adapters, then start the model matrix
+  using scoped model-policy overlays.
 
 suggested resume goal string:
 
