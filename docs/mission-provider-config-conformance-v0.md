@@ -123,6 +123,11 @@ processors/reconcilers/researchers/VText article agents.
   policy, not when an agent or test is inventing a cap to make a probe cheaper.
   The tool-loop's finite required-next-tool recovery budget is a bounded retry
   guard for a missed required tool, not a provider configuration default.
+- Prefer OpenAI-compatible provider routes for normal DeepSeek/Xiaomi agent
+  loops when no explicit output budget is desired. Anthropic-compatible Messages
+  APIs commonly require a `max_tokens` request field; treat those routes as
+  interop/fallback/proof paths unless an owner/platform policy intentionally
+  selects a budget.
 - Staging is the acceptance environment for platform behavior.
 - Problem documentation precedes behavior-changing fixes.
 
@@ -686,6 +691,15 @@ what was proven:
   compaction content by `get_run_memory_entry`. Do not lower context thresholds
   or add token caps for product-readiness evidence; if a lower threshold is used
   at all, it is a local diagnostic and must be labeled as such.
+
+  Provider-semantics review after the no-cap correction found that normal
+  DeepSeek/Xiaomi policy already selects OpenAI-compatible routes, where
+  foreground agent loops omit explicit output budgets unless model policy sets
+  one. Anthropic-compatible routes remain useful for compatibility and fallback
+  conformance, but should not become the default long-writing route simply
+  because tests pass: their request schema expects an explicit `max_tokens`
+  field, which is exactly the kind of silent cap surface this mission is trying
+  to avoid for ordinary agent loops.
 unproven or partial claims:
   Product-path coverage for the full auto/required/none tool-mode matrix,
   non-tool reasoning-content passback for DeepSeek Anthropic, streaming behavior
