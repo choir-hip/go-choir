@@ -1,7 +1,7 @@
 ---
 name: mission-gradient
 description: Compile ambitious long-running Codex /goal work into an invariant-preserving optimization landscape instead of a procedural checklist. Use when preparing overnight or multi-hour coding/research/ops missions, especially when the user wants "homotopy not ladder", mission-gradient control, agentic root-cause investigation, cognitive search-space reframing before stopping, belief-state tracking, quality-sensitive work, dense verification, anti-Goodhart constraints, rollback policy, staging/deployed proof, or self-development through production-like pathways.
-version: 1.1.0
+version: 1.2.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -14,7 +14,7 @@ metadata:
 
 Use MissionGradient to convert a long-running agent mission into a navigable optimization landscape.
 
-The output is not a normal plan. It is a goal geometry: real artifact, invariants, value criterion, quality gradient, homotopy parameters, belief state, receding-horizon control, dense feedback, evidence ledger, anti-Goodhart constraints, rollback policy, learning side-channel, escalation rules, and stopping condition.
+The output is not a normal plan. It is a goal geometry: real artifact, invariants, value criterion, quality gradient, homotopy parameters, belief state, receding-horizon control, dense feedback, evidence ledger, mission report, anti-Goodhart constraints, rollback policy, learning side-channel, escalation rules, and stopping condition.
 
 ## Execution Kernel
 
@@ -29,6 +29,7 @@ Use it to:
 - transform the cognitive search space when the current route stalls;
 - improve quality after first correctness;
 - collect evidence without checklist theater;
+- keep a legible mission report current while the run unfolds;
 - preserve rollback and promotion discipline;
 - stop or escalate on invariant-level surprises.
 
@@ -43,7 +44,7 @@ Do not:
 - keep working after the mission identity has changed;
 - claim completion without named evidence.
 
-MissionGradient guides the trajectory. The evidence ledger records what was proven. Promotion changes reality. Do not confuse these layers.
+MissionGradient guides the trajectory. The evidence ledger records what was proven. The mission report explains the trajectory in owner-readable form. Promotion changes reality. Do not confuse these layers.
 
 ## Agentic Problem Solving Default
 
@@ -92,6 +93,63 @@ For orchestration, a `checkpoint_incomplete` result from a worker, vsuper, or co
 - spawn a new agent with a narrower continuation objective;
 - reparameterize the mission if target-level learning changed the route;
 - escalate only if the blocker is invariant-level, external, or unsafe.
+
+## Mission Report Discipline
+
+Long-running MissionGradient work needs two durable written surfaces:
+
+- the mission document: the control object, invariants, belief state, frontier,
+  checkpoint/resumption state, and stopping condition;
+- the mission report: a human-readable narrative of what happened, what changed,
+  what was proven, what remains uncertain, and what should happen next.
+
+Create or name the report file near mission start, usually:
+
+```text
+docs/mission-report-<short-mission-name>-<YYYY-MM-DD>.md
+```
+
+Update the report throughout the run, not only at the end. At minimum, update
+it after:
+
+- the initial substrate/belief-state inspection;
+- any docs-first problem checkpoint;
+- each behavior-changing commit or promotion;
+- each deployed/product-path proof;
+- each target-level route change;
+- each incomplete checkpoint, blocker, or completion decision.
+
+Keep the report legible. It should be readable without replaying Trace or chat.
+Do not dump logs into it. Link or name bulky evidence artifacts, traces,
+screenshots, PDFs, command outputs, and run ids.
+
+The report should normally include:
+
+```text
+mission goal and artifact
+invariants preserved or violated
+timeline of major decisions
+what shipped
+CI/deploy/product-path evidence
+model/provider/tooling evidence when relevant
+problem checkpoints and root causes
+what was proven vs merely attempted
+residual risks
+rollback refs
+next mission or next executable probe
+```
+
+At the end of the mission, create a PDF version of the report and save it under
+the owner's iCloud Drive mission reports directory:
+
+```text
+~/Library/Mobile Documents/com~apple~CloudDocs/mission reports/
+```
+
+Create the directory if needed. Prefer the `make-pdf` skill when available; if
+not available, use the project's established Markdown-to-PDF route. The PDF is
+a final owner-facing artifact. Keep the Markdown report in the repo unless the
+user explicitly asks otherwise.
 
 Before final response after any broad MissionGradient run, update the mission document unless the user explicitly says not to. Keep the update concise and resumable. Do not turn the mission document into a chat log; put bulky logs, screenshots, traces, and transcripts in a dated evidence artifact and link them.
 
@@ -225,6 +283,20 @@ For each nontrivial claim, record:
 Do not report behavior as verified unless the evidence was produced by an executed command, captured trace, deployed endpoint, screenshot, log, durable artifact, or explicitly named manual observation.
 
 Do not confuse a filled ledger with success. Success requires the artifact to move uphill under the mission gradient.
+
+## Mission Report
+
+The mission report turns the evidence ledger into a readable owner-facing
+account. It should explain the run without requiring the reader to replay chat,
+Trace, or raw logs.
+
+Maintain the report as work proceeds. The report should be current enough that
+if the agent stops, another agent or the owner can understand what happened,
+what changed, what is proven, and what remains uncertain.
+
+Do not duplicate bulky evidence. Name or link artifact paths, trace ids, run
+ids, screenshots, command outputs, commits, CI runs, deploy ids, and rollback
+refs.
 
 ## Unknown Learning Without Drift
 
@@ -390,6 +462,24 @@ uncertainty/caveat
 promotion relevance
 ```
 
+### Mission Report
+
+Define how the owner-readable report will be maintained.
+
+At minimum:
+
+```text
+markdown report path:
+pdf report path in iCloud:
+update cadence:
+expected audience:
+evidence artifact linking policy:
+```
+
+The report is not a raw evidence dump. It should explain the trajectory,
+decisions, shipped changes, proof, residual risks, and next mission in a form a
+human can read after waking up or after a long handoff.
+
 ### Run Checkpoint & Resumption State
 
 Define how the mission document should be updated during or after execution.
@@ -451,6 +541,8 @@ Completion requires proof, not effort:
 - quality level satisfied or residual quality debt stated;
 - deployed proof when deployment is part of the target;
 - artifacts/traces/screenshots/logs named in final report;
+- mission report updated, and PDF saved to the owner's iCloud mission reports
+  directory for broad MissionGradient runs;
 - residual risks stated plainly;
 - rollback target exists when state was mutated;
 - evidence ledger supports the promotion recommendation.
