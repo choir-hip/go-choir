@@ -1,7 +1,7 @@
 ---
 name: mission-gradient
 description: Compile ambitious long-running Codex /goal work into an invariant-preserving optimization landscape instead of a procedural checklist. Use when preparing overnight or multi-hour coding/research/ops missions, especially when the user wants "homotopy not ladder", mission-gradient control, agentic root-cause investigation, cognitive search-space reframing before stopping, belief-state tracking, quality-sensitive work, dense verification, anti-Goodhart constraints, rollback policy, staging/deployed proof, or self-development through production-like pathways.
-version: 1.2.0
+version: 1.3.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -36,6 +36,8 @@ Use it to:
 Do not:
 
 - create fake stages or fake APIs;
+- create fake work, placeholder implementations, parallel mock systems, or code
+  detritus that future agents will imitate as precedent;
 - optimize a checklist instead of the artifact;
 - treat code existence as behavioral proof;
 - hide uncertainty;
@@ -94,12 +96,13 @@ For orchestration, a `checkpoint_incomplete` result from a worker, vsuper, or co
 - reparameterize the mission if target-level learning changed the route;
 - escalate only if the blocker is invariant-level, external, or unsafe.
 
-## Mission Report Discipline
+## Written Artifacts
 
-Long-running MissionGradient work needs two durable written surfaces:
+Long-running MissionGradient work needs three durable written surfaces:
 
 - the mission document: the control object, invariants, belief state, frontier,
   checkpoint/resumption state, and stopping condition;
+- the evidence ledger: claims and proof, with artifact refs;
 - the mission report: a human-readable narrative of what happened, what changed,
   what was proven, what remains uncertain, and what should happen next.
 
@@ -184,6 +187,14 @@ Define one real system parameterized from low to high resolution. Simplify by re
 A simplification that cannot continuously deform into the full system is a different object, not a useful rung.
 
 A low-resolution version is valid only if it is a projection of the real system. A fake island is not progress.
+
+This is the core anti-detritus rule. The model's trained instinct is often to
+make a small fake thing that looks like progress: a mock route, a stub service,
+a demo panel, a seed artifact, a permissive test, or a separate data structure
+that bypasses the real object. Those shortcuts waste time twice: first by not
+proving the target behavior, then by becoming in-context precedent that future
+agents copy. MissionGradient exists to keep simplification continuous with the
+real system, not to make fake islands more elaborate.
 
 ## Value Criterion
 
@@ -283,20 +294,6 @@ For each nontrivial claim, record:
 Do not report behavior as verified unless the evidence was produced by an executed command, captured trace, deployed endpoint, screenshot, log, durable artifact, or explicitly named manual observation.
 
 Do not confuse a filled ledger with success. Success requires the artifact to move uphill under the mission gradient.
-
-## Mission Report
-
-The mission report turns the evidence ledger into a readable owner-facing
-account. It should explain the run without requiring the reader to replay chat,
-Trace, or raw logs.
-
-Maintain the report as work proceeds. The report should be current enough that
-if the agent stops, another agent or the owner can understand what happened,
-what changed, what is proven, and what remains uncertain.
-
-Do not duplicate bulky evidence. Name or link artifact paths, trace ids, run
-ids, screenshots, command outputs, commits, CI runs, deploy ids, and rollback
-refs.
 
 ## Unknown Learning Without Drift
 
@@ -573,7 +570,9 @@ Mark an item complete only when the verifier proves the behavior. Do not mark co
 
 ## `/goal` Usage
 
-Prefer a repo mission document plus a short `/goal`.
+Every MissionGradient mission document must include a short `/goal` string.
+The `/goal` is not optional: it is the executable handle that transfers the
+mission geometry into a long-running agent run.
 
 Short `/goal` shape:
 
@@ -615,7 +614,12 @@ The outer weights are constant during ordinary inference. But context induces hi
 
 Prompt design should target that layer. Give the model objective geometry, error structure, invariants, and dense feedback.
 
-Do not overclaim the mechanism. The point is not that every frontier model literally runs vanilla gradient descent during every natural-language task. The point is operational: fixed transformer weights can implement task adaptation over context, so prompts for long-running agents should behave less like recipes and more like a training/evaluation environment with coherent local error signals.
+Do not overclaim the mechanism. The point is not that every frontier model
+literally runs vanilla gradient descent during every natural-language task. The
+point is operational: fixed transformer weights can implement task adaptation
+over context, so prompts for long-running agents should behave less like
+recipes and more like a training/evaluation environment with coherent local
+error signals.
 
 ### Context Programming Model
 
@@ -661,16 +665,6 @@ The state-machine invariant was violated here; the event trace diverged from exp
 ```
 
 Good feedback exposes local error structure and turns the run into inference-time learning.
-
-### Related Research Frame
-
-In-context learning research shows that transformers can adapt to task structure from context without changing outer weights. Garg, Tsipras, Liang, and Valiant studied transformers learning function classes in context, including linear functions, sparse linear functions, two-layer neural networks, and decision trees.
-
-Mechanistic work on induction heads gives one concrete circuit family for in-context learning. Olsson et al. describe induction heads as attention heads implementing sequence-completion behavior, with causal evidence in small attention-only models and more correlational evidence in larger models.
-
-Optimization-flavored work goes further. Von Oswald et al. show a construction where linear self-attention induces a transformation equivalent to a gradient descent update on a regression loss, and trained self-attention-only transformers on simple regression tasks often resemble that construction. Dai et al. describe language models as meta-optimizers and in-context learning as implicit finetuning, arguing that attention has a dual form of gradient descent and can produce meta-gradients from demonstrations.
-
-Other work suggests the inner algorithm can be richer than first-order gradient descent. Ahn et al. analyze transformers implementing preconditioned gradient descent for in-context learning. Fu, Chen, Jia, and Sharan argue that transformers can behave more like iterative Newton methods for in-context linear regression.
 
 Operational takeaway:
 
