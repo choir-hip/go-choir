@@ -449,6 +449,30 @@ instead of filled with seeded stories.
   underlying Global Wire source-refresh/reconciliation path is still tied to
   seeded StoryGraph dossier state rather than the Community Wire
   source-artifact -> VText-edition topology.
+- Source-native Global Wire repair deploy: commit
+  `e75697b77b7422414df7f6653c29fb8b31325401` passed CI run `27226620966`;
+  deploy job `80395758795` succeeded. Staging `/health` reported proxy and
+  sandbox commit `e75697b77b7422414df7f6653c29fb8b31325401`, deployed at
+  `2026-06-09T18:20:11Z`.
+- Authenticated staging reprobe after `e75697b`: the live `Command prompt`
+  submitted a source-native Community Wire proof request that explicitly asked
+  for `/api/global-wire/source-refresh` without a seeded `story_id`, research
+  evidence completion, Article VText draft/approval, publication update and
+  artifact approval, and `global-wire/Wire.vtext` inclusion using only public
+  authenticated product APIs. The product opened VText doc
+  `2d097c76-e179-4655-b6e4-c32ffa8c70ec` with
+  `data-vtext-initial-loop-id="ce6a3e77-332b-4fb5-af06-c695d136b4cb"`, and
+  activity run `5bd6de97-3b58-408c-bf89-c42c81b083de` called
+  `source_search` and `product_api_request`. The VText then recorded a blocker
+  before the Wire pipeline completed:
+  `Runtime memory compaction failed with encoding error (Incorrect string value:
+  '\xE2\x80...;...' for column 'summary')`. The document's blocker log states
+  that no worker lease, delegation, or AppChangePackage was produced, and the
+  status table kept source query, research evidence, Article VText approval,
+  publication update, Wire.vtext inclusion, and verifier proof all pending.
+  This is the next documented problem before any fix: the source-native product
+  path is deployed, but long-running VText/super proof cannot progress reliably
+  while run-memory compaction can fail on UTF-8 punctuation in summaries.
 
 ## Run State
 
@@ -537,6 +561,11 @@ what was proven:
   `nix develop -c go test ./internal/runtime -run TestHandleGlobalWireSourceNativeRefreshPublishesEditionVText -count=1`,
   the neighboring seeded-story Global Wire tests, and
   `nix develop -c scripts/go-test-local`.
+- The source-native Global Wire repair is deployed at `e75697b`, and staging
+  health confirms that commit. The first authenticated product-path reprobe got
+  as far as source search and foreground product API calls, then hit a
+  run-memory compaction encoding blocker before publication evidence could be
+  produced.
 
 unproven or partial claims:
 
@@ -577,9 +606,10 @@ unproven or partial claims:
   coagent evidence. Positive edition proof remains blocked by seeded
   StoryGraph/source-refresh state, not by prompt routing, worker auth, or
   foreground product API access.
-- The source-native Global Wire repair is local only until committed, pushed,
-  deployed, and reprobed against the authenticated staging prompt. It proves the
-  no-seeded-story product API sequence locally, not staging acceptance yet.
+- The source-native Global Wire repair is committed, pushed, deployed, and
+  locally verified, but the authenticated staging prompt has not yet completed
+  the source-native publication flow because VText/super proof state can fail
+  during runtime memory compaction on summary text encoding.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -587,6 +617,7 @@ unproven or partial claims:
 
 next step:
 
-- Commit and deploy the source-native Global Wire repair, then reprobe the
-  authenticated staging prompt for real source artifacts, VText article/review
-  creation, `global-wire/Wire.vtext` update, and rendered edition output.
+- Repair or route around the runtime memory compaction encoding blocker, then
+  reprobe the authenticated staging prompt for real source artifacts, VText
+  article/review creation, `global-wire/Wire.vtext` update, and rendered
+  edition output.

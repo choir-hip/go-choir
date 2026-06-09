@@ -312,6 +312,26 @@ Update after 2026-06-09 staging slices:
   proof: StoryGraph is seeded (3 dossiers...)`, so the next problem has moved
   to seeded StoryGraph/source-refresh state rather than prompt routing,
   worker authentication, or foreground product API access.
+- Deployed evidence after source-native Global Wire repair: commit
+  `e75697b77b7422414df7f6653c29fb8b31325401` passed CI and deployed to
+  staging. Staging `/health` reported proxy and sandbox at that SHA, deployed
+  at `2026-06-09T18:20:11Z`. The repair lets authenticated
+  `/api/global-wire/source-refresh` omit `story_id`, import the Source Service
+  top result as a deterministic `source-native-*` review context, create
+  source/research/projection-review artifacts without persisting a seeded
+  `GlobalWireStory`, approve Article VText, and update `global-wire/Wire.vtext`
+  through publication artifact approval.
+- Authenticated reprobe after `e75697b` moved the product path again but still
+  did not produce staging acceptance. The live prompt created VText doc
+  `2d097c76-e179-4655-b6e4-c32ffa8c70ec` with
+  `data-vtext-initial-loop-id="ce6a3e77-332b-4fb5-af06-c695d136b4cb"`.
+  Activity run `5bd6de97-3b58-408c-bf89-c42c81b083de` called
+  `source_search` and `product_api_request`, but the VText blocker log then
+  recorded `Runtime memory compaction failed with encoding error (Incorrect
+  string value: '\xE2\x80...;...' for column 'summary')`. No worker lease,
+  delegation, AppChangePackage, source-native publication approval, or rendered
+  Wire edition evidence was produced. The next problem is runtime memory
+  compaction encoding reliability for long-running VText/super proof state.
 
 ## Homotopy Parameters
 
