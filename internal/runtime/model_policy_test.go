@@ -750,4 +750,17 @@ func TestProviderPreconditionFallbackSelectionsUseDeepSeekProForFlash(t *testing
 	}); len(got) != 1 {
 		t.Fatalf("deduped fallbacks = %+v, want one DeepSeek Pro fallback", got)
 	}
+
+	fireworksProFallbacks := providerPreconditionFallbackSelections(LLMSelection{
+		Provider: "fireworks",
+		Model:    "accounts/fireworks/models/deepseek-v4-pro",
+	}, LLMSelection{
+		Provider: "fireworks",
+		Model:    "accounts/fireworks/models/deepseek-v4-pro",
+	})
+	if len(fireworksProFallbacks) != 1 ||
+		fireworksProFallbacks[0].Provider != "deepseek" ||
+		fireworksProFallbacks[0].Model != "deepseek-v4-pro" {
+		t.Fatalf("fireworks pro fallbacks = %+v, want deepseek pro", fireworksProFallbacks)
+	}
 }

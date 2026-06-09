@@ -291,6 +291,17 @@ instead of filled with seeded stories.
   Precondition Failed (sanitized)`, the VText window remained in a failed or
   drafting state, Compute Monitor showed `0 running runs`, and Global Wire
   remained at `0 articles` with `community-wire-vtext-index`.
+- Local root-cause repair for the super blocker: provider precondition fallback
+  in the tool loop was only attempted when a `tool_choice` was present.
+  Persistent-super inbox runs do not use an initial tool choice, so a Fireworks
+  412 on the first super call bypassed the fallback list and failed before
+  `request_worker_vm` or `start_worker_delegation`. The local repair applies
+  provider precondition fallback to any provider 412/precondition error with
+  configured fallbacks, and gives legacy Fireworks pro/flash policies a
+  DeepSeek-pro fallback path before platform fallback.
+- Local verification for the provider precondition repair:
+  - `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop(RelaxesExactInitialToolChoiceAfterProviderPrecondition|TriesMultipleProviderPreconditionFallbacks|TriesProviderPreconditionFallbackWithoutToolChoice)|TestProviderPreconditionFallbackSelectionsUseDeepSeekProForFlash|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper'`
+  - `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice|ProviderPrecondition|ModelPolicy|RunToolLoop)'`
 
 ## Run State
 
@@ -352,6 +363,8 @@ what was proven:
   live proof prompt now reaches a visible persistent-super blocker instead of
   only a VText drafting blocker. This proves the initial handoff moved, but not
   that operational proof can proceed.
+- Local provider precondition fallback repair now covers super runs without
+  `tool_choice`, the failure shape observed on staging after `7b7bba73`.
 
 unproven or partial claims:
 
@@ -370,6 +383,8 @@ unproven or partial claims:
 - The deterministic handoff repair is deployed and reprobed, but the super path
   fails before worker delegation/package work and a VText run still reports
   Fireworks 412. The source-to-edition proof remains blocked.
+- The provider precondition repair is local only until pushed, deployed, and
+  reprobed against the authenticated staging prompt.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -377,9 +392,8 @@ unproven or partial claims:
 
 next step:
 
-- Investigate why the persistent-super path selected by the deployed proof
-  prompt falls into runtime fallback before worker delegation/package work, and
-  why the companion VText run still reaches Fireworks 412. Document that root
-  cause, then repair the model/tool routing so the product prompt can supervise
-  the source-to-edition flow and prove staging renders edition-transcluded VText
-  articles.
+- Land and deploy the provider precondition fallback repair, reprobe the
+  authenticated staging product prompt, and verify that super gets past the
+  initial provider 412 into worker delegation or a more precise blocker. Then
+  use that path to supervise the source-to-edition flow and prove staging
+  renders edition-transcluded VText articles.

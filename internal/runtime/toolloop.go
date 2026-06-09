@@ -435,12 +435,12 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				}
 				continue
 			}
-			if isInitialToolChoicePreconditionError(req.ToolChoice, err) && preconditionFallbackIndex < len(options.providerPreconditionFallbacks) {
+			if isProviderPreconditionError(err) && preconditionFallbackIndex < len(options.providerPreconditionFallbacks) {
 				next := options.providerPreconditionFallbacks[preconditionFallbackIndex]
 				preconditionFallbackIndex++
 				if !sameLLMSelection(activeLLMConfig, next) && strings.TrimSpace(next.Provider) != "" && strings.TrimSpace(next.Model) != "" {
 					activeLLMConfig = next
-					forceInitialToolChoiceRetry = true
+					forceInitialToolChoiceRetry = strings.TrimSpace(req.ToolChoice) != ""
 					if emit != nil {
 						payload, _ := json.Marshal(map[string]any{
 							"reason":          "provider_precondition_fallback",

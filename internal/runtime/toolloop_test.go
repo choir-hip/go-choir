@@ -1536,6 +1536,75 @@ func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopTriesProviderPreconditionFallbackWithoutToolChoice(t *testing.T) {
+	provider := &providerPreconditionThenToolProvider{failuresBeforeSuccess: 1}
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "edit_vtext",
+		Description: "Edit the VText document.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"ok","revision_id":"rev-1"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register edit_vtext: %v", err)
+	}
+	var fallbackModels []string
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind != types.EventRunRetry || phase != "provider_model_fallback" {
+			return
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(payload, &decoded); err != nil {
+			t.Fatalf("decode fallback payload: %v", err)
+		}
+		fallbackModels = append(fallbackModels, fmt.Sprintf("%s/%s", decoded["to_provider"], decoded["to_model"]))
+	}
+
+	_, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"lease a worker"}]}`)},
+		"You are Super.",
+		0,
+		emit,
+		nil,
+		WithToolLoopLLMConfig(LLMSelection{
+			Provider:        "fireworks",
+			Model:           "accounts/fireworks/models/deepseek-v4-pro",
+			ReasoningEffort: "medium",
+		}),
+		WithProviderPreconditionFallbacks(LLMSelection{
+			Provider:        "deepseek",
+			Model:           "deepseek-v4-pro",
+			ReasoningEffort: "medium",
+			Source:          "test_deepseek_fallback",
+		}),
+		WithTerminalToolSuccesses("edit_vtext"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if got := atomic.LoadInt32(&provider.calls); got != 2 {
+		t.Fatalf("provider calls = %d, want 2", got)
+	}
+	if !reflect.DeepEqual(fallbackModels, []string{"deepseek/deepseek-v4-pro"}) {
+		t.Fatalf("fallback models = %+v", fallbackModels)
+	}
+	if len(provider.requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(provider.requests))
+	}
+	for i, req := range provider.requests {
+		if req.ToolChoice != "" {
+			t.Fatalf("request %d tool choice = %q, want empty", i, req.ToolChoice)
+		}
+	}
+	if provider.requests[1].Provider != "deepseek" || provider.requests[1].Model != "deepseek-v4-pro" {
+		t.Fatalf("fallback request provider/model = %q/%q", provider.requests[1].Provider, provider.requests[1].Model)
+	}
+}
+
 func TestRunToolLoopRetriesProviderRateLimit(t *testing.T) {
 	originalDelays := providerRateLimitRetryDelays
 	providerRateLimitRetryDelays = []time.Duration{0}

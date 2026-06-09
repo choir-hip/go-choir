@@ -232,6 +232,13 @@ Update after 2026-06-09 staging slices:
   iteration 0: gateway call failed: gateway client: fireworks: status 412
   Precondition Failed (sanitized)`, Compute Monitor showed `0 running runs`, and
   Global Wire remained at `0 articles`.
+- Local root-cause repair after that evidence: provider precondition fallback in
+  the tool loop was gated on non-empty `tool_choice`. Persistent-super inbox
+  runs have no initial tool choice, so a Fireworks 412 on super iteration 0
+  bypassed model fallback and failed before worker delegation. The repair now
+  applies provider precondition fallback to any provider 412/precondition error
+  with configured fallbacks, and gives legacy Fireworks pro/flash selections a
+  DeepSeek-pro fallback path.
 
 ## Homotopy Parameters
 
@@ -526,6 +533,10 @@ what was proven:
   `2026-06-09T16:58:10Z`. Authenticated Chrome evidence showed a visible
   `Role: super` blocker for the prompt and a remaining Fireworks 412 VText
   blocker; Global Wire stayed empty.
+- Provider precondition fallback repair locally verified:
+  `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop(RelaxesExactInitialToolChoiceAfterProviderPrecondition|TriesMultipleProviderPreconditionFallbacks|TriesProviderPreconditionFallbackWithoutToolChoice)|TestProviderPreconditionFallbackSelectionsUseDeepSeekProForFlash|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper'`
+  and
+  `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice|ProviderPrecondition|ModelPolicy|RunToolLoop)'`.
 
 unproven or partial claims:
 
@@ -545,12 +556,14 @@ unproven or partial claims:
 - The deterministic handoff repair is deployed and reprobed, but the super run
   fails before worker delegation/package work and the companion VText run still
   reports Fireworks 412. Positive source-to-edition proof remains blocked.
+- The provider precondition repair is local only until pushed, deployed, and
+  reprobed on staging.
 
 next step:
 
-- Investigate and repair the persistent-super runtime fallback/model routing so
-  the authenticated product prompt can delegate the source-to-publication work
-  instead of stopping before worker/package activity, then rerun the staging
-  product-path proof that creates or approves a real article VText, updates
-  `global-wire/Wire.vtext`, and renders the edition-transcluded article in
-  Global Wire.
+- Land and deploy the provider precondition fallback repair, reprobe the
+  authenticated staging product prompt, and verify that super gets past the
+  initial provider 412 into worker delegation or a more precise blocker. Then
+  rerun the product-path proof that creates or approves a real article VText,
+  updates `global-wire/Wire.vtext`, and renders the edition-transcluded article
+  in Global Wire.

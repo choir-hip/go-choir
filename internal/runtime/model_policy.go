@@ -750,7 +750,19 @@ func providerPreconditionFallbackSelections(sel, platformFallback LLMSelection) 
 			ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
 			Source:          "provider_precondition_fallback",
 		})
+		fallbacks = append(fallbacks, LLMSelection{
+			Provider:        defaultDeepSeekProvider,
+			Model:           defaultSuperModel,
+			ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
+			Source:          "provider_precondition_fallback",
+		})
 	case provider == defaultFireworksProvider && model == "accounts/fireworks/models/deepseek-v4-pro":
+		fallbacks = append(fallbacks, LLMSelection{
+			Provider:        defaultDeepSeekProvider,
+			Model:           defaultSuperModel,
+			ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
+			Source:          "provider_precondition_fallback",
+		})
 		fallbacks = appendProviderPreconditionPlatformFallback(fallbacks, sel, platformFallback)
 		return fallbacks
 	default:
