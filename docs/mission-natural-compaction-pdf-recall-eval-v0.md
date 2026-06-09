@@ -39,6 +39,25 @@ documents.
 /goal Run docs/mission-natural-compaction-pdf-recall-eval-v0.md as MissionGradient; first upgrade sandbox document extraction for PDF/DOCX/EPUB/PPTX/HTML sources, then run a frozen-corpus natural compaction recall matrix across DeepSeek, Xiaomi, and gpt-5.4-mini without live search, proving approximate recall, exact retrieval, and automatic post-compaction continuation through normal Choir researcher/VText runs.
 ```
 
+## Current Resume Directive
+
+Do not start with the compaction eval. The next run starts with the sandbox
+setup preamble as the active mission object: inspect the normal user/candidate
+computer image, verify or add durable document extraction tooling, prove real
+document imports through the shared ContentItem substrate, and record that
+evidence. Only after that gate is freshly satisfied may the run move into the
+frozen-corpus compaction matrix.
+
+Treat prior sandbox evidence as useful but not sufficient by itself if the
+current deployed image, candidate image, or ContentItem extraction path has
+changed. The compaction eval is downstream of source-document reality; a recall
+matrix over weak imports is invalid.
+
+The Slides app remains a separate future mission. This mission may support PPTX
+and HTML slide files only as source documents with extracted text, selectors,
+hashes, and provenance. It must not build deck playback, desktop icons,
+presentation controls, slide routes, or any partial Slides app UI.
+
 ## Mission Phase Order
 
 This mission is deliberately ordered. Do not start the compaction matrix until
@@ -858,13 +877,14 @@ latest staging proof:
 
 next executable probe:
 
-- before running compaction, verify the sandbox setup preamble is still
-  satisfied end-to-end: declared user/candidate computer document tooling,
-  shared ContentItem import for PDF/DOCX/EPUB/PPTX/HTML/text, selector reads,
-  and staging or authorized Node B product-path evidence. If the gate is
-  satisfied, run a compaction-pressure pilot using selector-rich frozen
-  ContentItems, keeping live source acquisition disabled and proving whether
-  selector walks can cross the automatic compaction threshold.
+- start with the sandbox setup preamble, not the compaction eval. Verify or
+  repair declared user/candidate computer document tooling, shared ContentItem
+  import for PDF/DOCX/EPUB/PPTX/HTML/text, selector reads, and staging or
+  authorized Node B product-path evidence. Record the result in this mission
+  doc. If and only if the gate is satisfied, run a compaction-pressure pilot
+  using selector-rich frozen ContentItems, keeping live source acquisition
+  disabled and proving whether selector walks can cross the automatic
+  compaction threshold.
 
 suggested resume goal string:
 
@@ -1059,3 +1079,378 @@ compaction events, and post-compaction recall.
 Additional evidence artifact refs:
 
 - `/tmp/choir-compaction-continuation-pilot-1780968755221.json`
+
+## Latest Checkpoint: Sandbox Preamble Must Run First
+
+checkpoint date: 2026-06-09
+
+The mission has been tightened after owner clarification: the next run must not
+begin by launching the compaction eval. It begins by re-entering the
+sandbox/user-computer setup preamble and proving that normal Choir agents can
+ingest, extract, index, and selector-read real source documents through the
+shared ContentItem substrate. Prior evidence can be reused as evidence, but it
+does not waive the gate if the deployed image, candidate image, or extraction
+path has changed.
+
+Cognitive-transform update:
+
+- Substrate over score: a compaction result is meaningless unless the documents
+  being remembered are real source artifacts with durable selectors, hashes,
+  adapter metadata, caveats, and provenance.
+- Mission boundary over opportunistic product work: PPTX and HTML slide support
+  is source extraction work here. Deck playback and a full Slides app are a
+  different product mission and must not be started during this eval mission.
+- Runtime realism over harness theater: the eval remains a normal
+  researcher/VText-adjacent agent loop. The sandbox preamble may add tools and
+  substrate support, but the recall matrix must still prove automatic runtime
+  compaction and continuation through product-visible traces.
+
+Current next executable probe:
+
+1. Inspect and, if needed, repair the normal user/candidate computer NixOS
+   document-tooling image for PDF, DOCX, EPUB, PPTX, HTML, and plain text.
+2. Prove product-path imports create ContentItems with raw/extracted hashes,
+   adapter metadata, extraction warnings, selectors, and selector-read access.
+3. Confirm VText and researcher paths share that substrate rather than using
+   separate format-specific hacks.
+4. Update this mission doc with the fresh preamble evidence.
+5. Only then run the selector-pressure compaction pilot and later the full
+   DeepSeek/Xiaomi/gpt-5.4-mini recall matrix.
+
+Slides app disposition:
+
+The Slides app is saved for `docs/mission-slides-app-pptx-html-v0.md` or a
+future mission doc. This mission must not add Slides desktop icons, viewer
+routes, presentation controls, or deck playback UI.
+
+## Latest Checkpoint: Sandbox Preamble Re-Proven On Staging
+
+checkpoint date: 2026-06-09
+
+The sandbox/user-computer setup preamble was re-entered before attempting the
+compaction eval. The current result is that the preamble is satisfied strongly
+enough to proceed to the selector-pressure compaction pilot, with the caveat
+that selector reads through researcher tools are proven by focused runtime
+tests while browser-public product routes prove import and selector metadata.
+
+Fresh local evidence:
+
+- `git status --short --branch` showed only this mission doc modified before
+  the temporary product-path proof was created.
+- `nix eval .#nixosConfigurations.go-choir-sandbox-vm.config.system.build.toplevel.drvPath`
+  returned
+  `/nix/store/pjp9b822a5lp95cqqqnzsqp4vz3yic8z-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d.drv`.
+- `nix eval .#nixosConfigurations.go-choir-sandbox-vm-playwright.config.system.build.toplevel.drvPath`
+  returned
+  `/nix/store/k1g36hxk0wipcml4gc4nriynq44l54mf-nixos-system-go-choir-playwright-worker-26.05.20260409.4c1018d.drv`.
+- `nix develop -c go test ./internal/runtime -run 'TestExtract|TestContentImportURLCreatesPlainTextSelectors|TestContentImportURLCreatesProvenanceRecord|TestContentImportURLCleansReaderChrome|TestContentImportFileCreatesExtractedPPTXContentItem' -count=1`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact|TestAgentToolProfiles|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot|TestHandleCompactionRecallEvalStartsResearcherWithOverlayAndFrozenContent' -count=1`
+  passed.
+
+Fresh deployed product-path evidence:
+
+- `curl -fsS https://choir.news/health` showed proxy and sandbox deployed at
+  `68cfc60a8fffb3d5aade50982332adda3a648ec6`.
+- Temporary deployed Playwright proof passed:
+  `cd frontend && PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/.tmp-sandbox-preamble-product-proof.spec.js --project=chromium --reporter=list`.
+- The temporary proof registered a fresh owner through passkey auth, used only
+  browser-public authenticated product routes, imported URL sources and uploaded
+  file sources, loaded each resulting ContentItem, and wrote
+  `/tmp/choir-sandbox-preamble-product-proof-1780971773379.json`.
+- The temporary proof was deleted after the run and its Playwright scratch
+  output was removed.
+
+The deployed artifact confirms these current staging imports:
+
+- HTML URL: `html_readability_lite`, `text/markdown`, 1 selector, 127 text
+  chars.
+- Plain text RFC URL: `plain_text_decode`, `text/plain`, 26 selectors, 307,198
+  text chars.
+- PDF URL: `pdf_poppler_pdftotext`, `application/pdf`, 1 selector, 14 text
+  chars.
+- Uploaded DOCX: `docx_pandoc_markdown`,
+  `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, 1
+  selector, 94 text chars.
+- Uploaded EPUB: `epub_pandoc_markdown`, `application/epub+zip`, 1 selector,
+  190 text chars.
+- Uploaded PPTX: `pptx_ooxml_slide_text_projection`,
+  `application/vnd.openxmlformats-officedocument.presentationml.presentation`,
+  2 selectors, 150 text chars.
+
+Interpretation:
+
+The sandbox preamble is now freshly satisfied for the mission's next stage.
+The document substrate is not yet a finished document-product system, but it is
+good enough for the compaction eval because source documents are durable
+ContentItems with raw/extracted hashes, adapter metadata, text, selectors, and
+researcher-compatible selector reads. The Slides app remains out of scope.
+
+Next executable probe:
+
+Run one deployed selector-pressure compaction pilot using frozen ContentItems
+and the explicit `read_policy`/`minimum_selector_reads` contract. Do not run the
+full five-arm matrix until Trace proves enough selector reads, zero live-search
+attempts, runtime-owned compaction events, and post-compaction recall.
+
+## Latest Checkpoint: Selector-Pressure Compaction Pilot Passed
+
+checkpoint date: 2026-06-09
+
+After the sandbox preamble was re-proven, a deployed selector-pressure pilot was
+run through the normal compaction eval route. Two smaller DeepSeek flash pilots
+were informative but insufficient:
+
+- `/tmp/choir-compaction-pressure-pilot-1780972032470.json`: two RFC
+  ContentItems, 45 selector-read minimum. The model completed and claimed 45
+  selector reads, but trace collection initially used the wrong start-response
+  field (`run_id` instead of `loop_id`), so the artifact did not prove Trace.
+- `/tmp/choir-compaction-pressure-pilot-1780972254521.json`: two RFC
+  ContentItems, corrected Trace collection. Trace showed 104 selector-read
+  moments, 4 selector-list moments, zero actual search attempts, and zero
+  compaction events. The selector contract worked, but the corpus was too small
+  for a 1M-context model's 70 percent threshold.
+- `/tmp/choir-compaction-pressure-pilot-1780972478918.json`: eight RFC
+  ContentItems, 144 selectors read, zero actual search attempts, and zero
+  compaction events. This showed the gap was still insufficient prompt pressure:
+  roughly 1.7M characters of selector text is below the 700k-token threshold
+  after the runtime's simple `len(raw_json)/4` estimate and reserve.
+
+The successful pilot:
+
+- artifact: `/tmp/choir-compaction-pressure-pilot-1780972790380.json`;
+- deployed commit: `68cfc60a8fffb3d5aade50982332adda3a648ec6`;
+- provider/model: `deepseek/deepseek-v4-flash`, reasoning `medium`;
+- trajectory id: `903e94dd-5e19-4ef0-9579-345a6bd2497e`;
+- corpus: 16 RFC `text/plain` ContentItems imported through staging
+  product routes;
+- available selectors: 223;
+- selector-read evidence: Trace recorded 446 selector-read moments, which
+  corresponds to invoked plus returned events for all 223 selectors;
+- selector-list evidence: Trace recorded 32 selector-list moments;
+- live search evidence: structured Trace recorded zero search attempts;
+- compaction evidence: structured Trace recorded one runtime compaction start
+  and one runtime compaction completion;
+- final run state: completed.
+
+The 16-source corpus contained:
+
+- RFC 9110, 26 selectors, 307,198 chars;
+- RFC 9000, 26 selectors, 307,198 chars;
+- RFC 8446, 26 selectors, 307,199 chars;
+- RFC 7540, 18 selectors, 209,571 chars;
+- RFC 9112, 10 selectors, 109,909 chars;
+- RFC 9113, 16 selectors, 191,808 chars;
+- RFC 9114, 13 selectors, 155,197 chars;
+- RFC 9204, 9 selectors, 99,249 chars;
+- RFC 9111, 8 selectors, 84,473 chars;
+- RFC 3986, 12 selectors, 141,802 chars;
+- RFC 7230, 18 selectors, 205,938 chars;
+- RFC 7231, 20 selectors, 235,044 chars;
+- RFC 7232, 5 selectors, 56,687 chars;
+- RFC 7233, 4 selectors, 46,924 chars;
+- RFC 7234, 8 selectors, 90,638 chars;
+- RFC 7235, 4 selectors, 38,133 chars.
+
+Interpretation:
+
+The mission now has a deployed proof that the frozen-corpus route can create
+real source pressure, preserve the no-live-search invariant, trigger automatic
+runtime compaction, and continue to a completed answer. This is not the full
+matrix yet. It is the required single-arm transition proof that justifies
+running the DeepSeek, Xiaomi, and gpt-5.4-mini matrix.
+
+Next executable probe:
+
+Run the five-arm matrix using the same 16-RFC corpus shape and explicit
+selector-read contract, with model-policy overlays for `deepseek-v4-flash`,
+`deepseek-v4-pro`, `mimo-v2.5`, `mimo-v2.5-pro`, and `gpt-5.4-mini`. The matrix
+must collect, per arm, provider/model metadata, selector-read counts, structured
+search attempts, compaction start/completion counts, final state, approximate
+recall quality, exact selector-local recall, and any provider-specific failures.
+
+## Latest Checkpoint: Matrix Mostly Passed, GPT Mini Recall Still Weak
+
+checkpoint date: 2026-06-09
+
+The deployed five-arm matrix was run through `https://choir.news` using
+browser-public product routes, fresh passkey owners, owner-visible
+`System/model-policy-overlays/*.toml` files, and the same 16-RFC frozen corpus
+shape. The matrix used no live search and imported the corpus through
+`/api/content/import-url` before each arm.
+
+Important harness findings:
+
+- The deployed eval start response uses `loop_id`, not `run_id`; the temporary
+  proof was corrected to poll `/api/evals/compaction-recall/runs/{loop_id}`.
+- Fresh owners do not necessarily have `System/model-policy-overlays` yet; the
+  proof created `System` and `System/model-policy-overlays` through
+  `/api/files` before writing overlays.
+- Long-running browser sessions can receive 401s while polling. The proof
+  re-authenticated with the same passkey through normal auth routes when this
+  happened.
+- Trace selector-read counts include both tool invocation and tool result
+  moments. Therefore 446 selector-read moments equals 223 actual selector reads.
+
+Primary matrix artifact:
+
+- `/tmp/choir-compaction-matrix-1780975059970.json`;
+- command:
+  `cd frontend && PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/.tmp-compaction-matrix.spec.js --project=chromium --reporter=list`;
+- result: 5 Playwright arms completed in 37.6 minutes;
+- corpus per arm: 16 RFC ContentItems, 223 selectors;
+- forbidden route evidence: no `/api/agent/*`, `/api/prompts`,
+  `/api/test/*`, `/internal/*`, or `/api/events` calls were observed.
+
+Primary matrix results:
+
+- `deepseek-v4-pro`, `deepseek`/`deepseek-v4-pro`, reasoning `medium`:
+  completed; 446 selector-read moments = 223 actual selector reads; zero search
+  attempts; one compaction start and one compaction completion; final synthesis
+  answered the recall questions.
+- `mimo-v2.5`, `xiaomi`/`mimo-v2.5`, reasoning `medium`: completed; 446
+  selector-read moments = 223 actual selector reads; zero search attempts; one
+  compaction start and one compaction completion.
+- `mimo-v2.5-pro`, `xiaomi`/`mimo-v2.5-pro`, reasoning `medium`: completed;
+  446 selector-read moments = 223 actual selector reads; zero search attempts;
+  one compaction start and one compaction completion; final synthesis included
+  exact protocol details such as HTTP/2 connection preface, ALPN tokens, and
+  HTTP/3 vs HTTP/2 framing differences.
+- Initial `deepseek-v4-flash` attempt: completed but weak; 376 selector-read
+  moments = 188 actual selector reads, zero search attempts, and no detected
+  compaction event.
+- Initial `gpt-5.4-mini` attempt with `low` reasoning: completed but weak; 140
+  selector-read moments = 70 actual selector reads; zero search attempts; four
+  compaction starts/completions.
+
+Retry artifact:
+
+- `/tmp/choir-compaction-matrix-1780977389639.json`;
+- command:
+  `cd frontend && PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/.tmp-compaction-matrix.spec.js --project=chromium --reporter=list`;
+- result: two-arm retry completed in 15.3 minutes.
+
+Retry results:
+
+- `deepseek-v4-flash`, `deepseek`/`deepseek-v4-flash`, reasoning `medium`:
+  completed; 446 selector-read moments = 223 actual selector reads; zero search
+  attempts; one compaction start and one compaction completion; final answer
+  provided broad approximate recall and many exact corpus details.
+- `gpt-5.4-mini`, `chatgpt`/`gpt-5.4-mini`, reasoning `medium`: completed;
+  532 selector-read moments = 266 actual selector reads; zero search attempts;
+  four compaction starts/completions. However, the final answer was not a valid
+  recall synthesis: it said selector coverage was satisfied and then stopped
+  with "I'm ready for the concise final synthesis if you want it."
+
+Final GPT mini retry artifact:
+
+- `/tmp/choir-compaction-matrix-1780978538731.json`;
+- command:
+  `cd frontend && PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/.tmp-compaction-matrix.spec.js --project=chromium --reporter=list`;
+- result: GPT-only retry completed in 5.4 minutes.
+- `gpt-5.4-mini`, `chatgpt`/`gpt-5.4-mini`, reasoning `medium`: completed;
+  288 selector-read moments = 144 actual selector reads; zero search attempts;
+  four compaction starts/completions. The stricter final-answer wording improved
+  neither selector coverage nor final recall proof.
+
+Interpretation:
+
+The document substrate and provider/model policy routes are now proven strongly
+enough for this mission. Automatic compaction under frozen-corpus pressure is
+proven for DeepSeek pro, DeepSeek flash on retry, Xiaomi Mimo v2.5, Xiaomi Mimo
+v2.5 Pro, and GPT mini. Full no-search selector coverage is proven for DeepSeek
+pro, DeepSeek flash on retry, Xiaomi Mimo v2.5, Xiaomi Mimo v2.5 Pro, and one
+GPT mini retry. Approximate/exact recall quality is not fully proven across the
+entire target matrix because GPT mini's successful tool/compaction run did not
+produce a final recall synthesis, and the final-answer retry under-read the
+corpus.
+
+Run Checkpoint & Resumption State:
+
+```text
+status: checkpoint_incomplete
+last checkpoint: deployed matrix evidence collected on 2026-06-09
+current artifact state: sandbox document extraction and four target model arms
+  are proven through product routes; GPT mini mechanics are proven but final
+  recall behavior remains weak
+what shipped: no code shipped in this checkpoint; docs/evidence only
+what was proven: PDF/DOCX/EPUB/PPTX/HTML substrate preamble, frozen RFC corpus
+  import, per-arm model overlays, no-live-search invariant, automatic
+  compaction, and selector-read coverage for DeepSeek and Xiaomi arms
+unproven or partial claims: GPT mini full-selector final-answer recall quality
+  is not proven; initial flash was nondeterministic but passed on retry
+belief-state changes: prompt-only eval contracts are insufficient for all
+  providers; GPT mini can compact and retrieve but may stop at a readiness
+  note or under-read despite explicit instructions
+remaining error field: add an eval-grade final-answer/coverage verifier or a
+  product-supported continuation loop that detects incomplete recall answers
+  and resumes the same agent/run until the final answer contract is satisfied
+highest-impact remaining uncertainty: whether GPT mini can satisfy this eval
+  with verifier-driven continuation, or whether its policy should be excluded
+  from high-pressure exhaustive selector recall work
+next executable probe: document the GPT mini final-answer gap as a problem
+  first, then implement the smallest product-path verifier/continuation repair
+  for `/api/evals/compaction-recall` and rerun the GPT mini arm
+suggested resume goal string: /goal Resume docs/mission-natural-compaction-pdf-recall-eval-v0.md; repair the compaction recall eval so completed runs with insufficient selector coverage or non-answer final prose synthesize/start a normal continuation, then rerun GPT mini and update the evidence ledger.
+evidence artifact refs: /tmp/choir-compaction-matrix-1780975059970.json,
+  /tmp/choir-compaction-matrix-1780977389639.json,
+  /tmp/choir-compaction-matrix-1780978538731.json
+rollback refs: no source code changed in this checkpoint
+```
+
+## Latest Checkpoint: Eval Continuation Repair In Progress
+
+checkpoint date: 2026-06-09
+
+After the matrix showed GPT mini can compact and retrieve but may finish with a
+readiness note instead of a recall synthesis, the next product-path repair was
+started: `/api/evals/compaction-recall/runs/{loop_id}` should expose an
+assessment of selector coverage, search attempts, compaction evidence, and final
+answer shape, and `/api/evals/compaction-recall/runs/{loop_id}/continue` should
+start a normal researcher continuation when the eval contract is not satisfied.
+
+Problem documented before repair:
+
+- GPT mini final-answer quality is not proven by a completed run when the final
+  prose says it is ready to synthesize rather than actually synthesizing.
+- A browser proof harness needs a product route that can distinguish a completed
+  but invalid recall run from a valid recall synthesis without using forbidden
+  `/api/agent/*` routes.
+- The continuation route must be retry/idempotency safe: repeated browser calls
+  after a continuation has already started should return the existing
+  continuation, not fail because the selected record is no longer in the
+  `selected` state.
+- A focused comprehensive continuation test exposed existing continuation
+  dedupe debt: the ontology treats "candidate-computer product change" and
+  "candidate world product patch" as the same bounded continuation objective,
+  but the current objective fingerprint normalizer does not collapse those
+  synonyms, so the test creates duplicate continuations.
+
+Current repair target:
+
+- add eval assessment to the browser-public compaction eval status route;
+- add a normal continuation route for incomplete eval answers;
+- preserve the scoped model-policy overlay into continuation child runs;
+- include explicit frozen ContentItem ids and recall questions in continuation
+  objective text;
+- make eval continuation retry idempotent;
+- restore continuation objective dedupe for known candidate-world/computer and
+  patch/change vocabulary.
+
+Local verification after repair:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestHandleCompactionRecallEvalStartsResearcherWithOverlayAndFrozenContent|TestCompactionRecallEvalStatusAssessesCoverageAndAnswerContract|TestCompactionRecallEvalContinueStartsResearcherWithOverlay' -count=1`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestRunContinuationCompactsAndStartsBoundedNextGoal|TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped' -count=1`
+  passed after restoring the expected continuation objective dedupe behavior.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestStartChildRunResolvesModelPolicyOverlayIntoRunMetadata|TestRuntimeRejectsExpiredModelPolicyOverlay|TestHandleModelPolicyResolveUsesOverlayFile' -count=1`
+  passed, proving overlay metadata still resolves through child runs.
+
+Remaining evidence required before mission completion:
+
+- commit and push the docs-first problem checkpoint and behavior repair;
+- monitor CI and staging deploy identity;
+- rerun the GPT mini compaction arm on staging through product routes;
+- if the assessment marks the completed run invalid, call the new continuation
+  route and prove the continuation child produces the final recall synthesis
+  without live search.
