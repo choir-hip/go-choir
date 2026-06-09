@@ -432,7 +432,7 @@ func TestHandleGlobalWirePublicationArtifactApprovalPublishesEditionVText(t *tes
 	if err := json.NewDecoder(storiesBeforeW.Body).Decode(&storiesBefore); err != nil {
 		t.Fatalf("decode stories before approval: %v", err)
 	}
-	if storiesBefore.Source != "community-wire-vtext-index" || storiesBefore.Edition != nil {
+	if storiesBefore.Source != "community-wire-vtext-index" || len(storiesBefore.Stories) != 0 || storiesBefore.Edition != nil {
 		t.Fatalf("unapproved artifact should not populate edition: %+v", storiesBefore)
 	}
 
@@ -458,7 +458,7 @@ func TestHandleGlobalWirePublicationArtifactApprovalPublishesEditionVText(t *tes
 		t.Fatalf("decode stories after approval: %v", err)
 	}
 	if storiesResp.Source != "community-wire-edition-vtext" ||
-		len(storiesResp.Stories) == 0 ||
+		len(storiesResp.Stories) != 1 ||
 		storiesResp.Stories[0].SourceState != "community-wire-edition-vtext" ||
 		!strings.Contains(storiesResp.Stories[0].Headline, "Port backlog recedes") ||
 		storiesResp.Edition == nil ||
@@ -656,15 +656,7 @@ func TestHandleGlobalWireStyleSourcesComposeAndReplace(t *testing.T) {
 		t.Fatalf("compose style citations too sparse: %+v", citations)
 	}
 
-	storiesW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-style")
-	if storiesW.Code != http.StatusOK {
-		t.Fatalf("stories after compose status = %d body=%s", storiesW.Code, storiesW.Body.String())
-	}
-	var storiesResp globalWireStoriesResponse
-	if err := json.NewDecoder(storiesW.Body).Decode(&storiesResp); err != nil {
-		t.Fatalf("decode stories after compose: %v", err)
-	}
-	composedStory := storiesResp.Stories[0]
+	composedStory := composeResp.Story
 	if findGlobalWireStyleSource(composedStory.StyleSources, composeResp.Style.ID).ID == "" ||
 		composedStory.ProjectionVTextDocs[composeResp.Style.ID] == "" ||
 		strings.Contains(composedStory.Projections[composeResp.Style.ID], "Composed Style.vtext projection") ||
@@ -1347,16 +1339,8 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	t.Setenv("SOURCECYCLED_API_URL", "")
 
 	_, handler := testAPISetup(t)
-	seedGlobalWireStoryFixture(t, handler, "user-alpha")
-	storiesBeforeW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
-	if storiesBeforeW.Code != http.StatusOK {
-		t.Fatalf("stories before status = %d body=%s", storiesBeforeW.Code, storiesBeforeW.Body.String())
-	}
-	var storiesBefore globalWireStoriesResponse
-	if err := json.NewDecoder(storiesBeforeW.Body).Decode(&storiesBefore); err != nil {
-		t.Fatalf("decode stories before: %v", err)
-	}
-	beforeManifest := storiesBefore.Stories[0].Manifest
+	seededStory := seedGlobalWireStoryFixture(t, handler, "user-alpha")
+	beforeManifest := seededStory.Manifest
 
 	body := `{"story_id":"story-supply-resilience","query":"port congestion refresh","max_results":2}`
 	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/source-refresh", body, "user-alpha")
@@ -1440,15 +1424,11 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("extraction artifact missing source-neighborhood overlay contract: %+v", resp.ExtractionArtifact)
 	}
 
-	storiesAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
-	if storiesAfterW.Code != http.StatusOK {
-		t.Fatalf("stories after status = %d body=%s", storiesAfterW.Code, storiesAfterW.Body.String())
+	storyAfterRefresh, err := handler.rt.Store().GetGlobalWireStory(context.Background(), "user-alpha", "story-supply-resilience")
+	if err != nil {
+		t.Fatalf("get story after source refresh: %v", err)
 	}
-	var storiesAfter globalWireStoriesResponse
-	if err := json.NewDecoder(storiesAfterW.Body).Decode(&storiesAfter); err != nil {
-		t.Fatalf("decode stories after: %v", err)
-	}
-	afterManifest := storiesAfter.Stories[0].Manifest
+	afterManifest := storyAfterRefresh.Manifest
 	if len(afterManifest.Lead) != len(beforeManifest.Lead) || len(afterManifest.Supporting) != len(beforeManifest.Supporting) ||
 		len(afterManifest.Contrary) != len(beforeManifest.Contrary) || len(afterManifest.Context) != len(beforeManifest.Context) {
 		t.Fatalf("StoryGraph manifest mutated during source refresh: before=%+v after=%+v", beforeManifest, afterManifest)
@@ -1949,15 +1929,11 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 		t.Fatalf("source dossier missing review signal: %+v", finalReconciliation.SourceDossiers[0])
 	}
 
-	storiesTaskAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
-	if storiesTaskAfterW.Code != http.StatusOK {
-		t.Fatalf("stories after task status = %d body=%s", storiesTaskAfterW.Code, storiesTaskAfterW.Body.String())
+	storyTaskAfter, err := handler.rt.Store().GetGlobalWireStory(context.Background(), "user-alpha", "story-supply-resilience")
+	if err != nil {
+		t.Fatalf("get story after research task lifecycle: %v", err)
 	}
-	var storiesTaskAfter globalWireStoriesResponse
-	if err := json.NewDecoder(storiesTaskAfterW.Body).Decode(&storiesTaskAfter); err != nil {
-		t.Fatalf("decode stories after task: %v", err)
-	}
-	taskAfterManifest := storiesTaskAfter.Stories[0].Manifest
+	taskAfterManifest := storyTaskAfter.Manifest
 	if len(taskAfterManifest.Lead) != len(beforeManifest.Lead) || len(taskAfterManifest.Supporting) != len(beforeManifest.Supporting) ||
 		len(taskAfterManifest.Contrary) != len(beforeManifest.Contrary) || len(taskAfterManifest.Context) != len(beforeManifest.Context) {
 		t.Fatalf("StoryGraph manifest mutated during research task lifecycle: before=%+v after=%+v", beforeManifest, taskAfterManifest)
@@ -2159,16 +2135,7 @@ func TestHandleGlobalWirePromotesClassifiedRefreshIntoStoryGraphAndPlatformVText
 	t.Setenv("SOURCECYCLED_API_URL", "")
 
 	_, handler := testAPISetup(t)
-	seedGlobalWireStoryFixture(t, handler, "user-alpha")
-	storiesBeforeW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
-	if storiesBeforeW.Code != http.StatusOK {
-		t.Fatalf("stories before status = %d body=%s", storiesBeforeW.Code, storiesBeforeW.Body.String())
-	}
-	var storiesBefore globalWireStoriesResponse
-	if err := json.NewDecoder(storiesBeforeW.Body).Decode(&storiesBefore); err != nil {
-		t.Fatalf("decode stories before: %v", err)
-	}
-	beforeStory := storiesBefore.Stories[0]
+	beforeStory := seedGlobalWireStoryFixture(t, handler, "user-alpha")
 	beforeDoc, err := handler.rt.Store().GetDocument(context.Background(), beforeStory.StoryVTextDoc, "user-alpha")
 	if err != nil {
 		t.Fatalf("get platform story doc before: %v", err)
@@ -2249,17 +2216,8 @@ func TestHandleGlobalWirePromotesClassifiedRefreshIntoStoryGraphAndPlatformVText
 
 func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(t *testing.T) {
 	_, handler := testAPISetup(t)
-	seedGlobalWireStoryFixture(t, handler, "user-alpha")
-
-	storiesBeforeW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
-	if storiesBeforeW.Code != http.StatusOK {
-		t.Fatalf("stories before status = %d body=%s", storiesBeforeW.Code, storiesBeforeW.Body.String())
-	}
-	var storiesBefore globalWireStoriesResponse
-	if err := json.NewDecoder(storiesBeforeW.Body).Decode(&storiesBefore); err != nil {
-		t.Fatalf("decode stories before: %v", err)
-	}
-	beforeManifest := storiesBefore.Stories[0].Manifest
+	seededStory := seedGlobalWireStoryFixture(t, handler, "user-alpha")
+	beforeManifest := seededStory.Manifest
 
 	contributionBody := `{"story_id":"story-supply-resilience","kind":"source","headline":"Port backlog recedes","text":"Reviewer source text for reconciliation."}`
 	contributionW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/contributions", contributionBody, "user-alpha")
@@ -2333,15 +2291,11 @@ func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(
 		t.Fatalf("candidate lineage missing: %+v", candidateList.Candidates[0])
 	}
 
-	storiesAfterW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
-	if storiesAfterW.Code != http.StatusOK {
-		t.Fatalf("stories after status = %d body=%s", storiesAfterW.Code, storiesAfterW.Body.String())
+	storyAfterDecision, err := handler.rt.Store().GetGlobalWireStory(context.Background(), "user-alpha", "story-supply-resilience")
+	if err != nil {
+		t.Fatalf("get story after reconciliation decision: %v", err)
 	}
-	var storiesAfter globalWireStoriesResponse
-	if err := json.NewDecoder(storiesAfterW.Body).Decode(&storiesAfter); err != nil {
-		t.Fatalf("decode stories after: %v", err)
-	}
-	afterManifest := storiesAfter.Stories[0].Manifest
+	afterManifest := storyAfterDecision.Manifest
 	if len(afterManifest.Lead) != len(beforeManifest.Lead) || len(afterManifest.Supporting) != len(beforeManifest.Supporting) ||
 		len(afterManifest.Contrary) != len(beforeManifest.Contrary) || len(afterManifest.Context) != len(beforeManifest.Context) {
 		t.Fatalf("StoryGraph manifest mutated: before=%+v after=%+v", beforeManifest, afterManifest)
@@ -2484,15 +2438,10 @@ func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(
 	if approvedDocW.Code != http.StatusOK {
 		t.Fatalf("get approved projection VText status = %d body=%s", approvedDocW.Code, approvedDocW.Body.String())
 	}
-	approvedStoriesW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
-	if approvedStoriesW.Code != http.StatusOK {
-		t.Fatalf("stories after projection approval status = %d body=%s", approvedStoriesW.Code, approvedStoriesW.Body.String())
+	approvedStory, err := handler.rt.Store().GetGlobalWireStory(context.Background(), "user-alpha", draftResp.Review.StoryID)
+	if err != nil {
+		t.Fatalf("get approved projection story: %v", err)
 	}
-	var approvedStories globalWireStoriesResponse
-	if err := json.NewDecoder(approvedStoriesW.Body).Decode(&approvedStories); err != nil {
-		t.Fatalf("decode approved stories: %v", err)
-	}
-	approvedStory := approvedStories.Stories[0]
 	if approvedStory.ProjectionVTextDocs[draftResp.Review.StyleID] != approveResp.Document.DocID ||
 		strings.Contains(approvedStory.Projections[draftResp.Review.StyleID], "Review status: approved") ||
 		strings.Contains(approvedStory.Projections[draftResp.Review.StyleID], "Projection Review Approval") {

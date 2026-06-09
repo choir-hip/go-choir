@@ -512,26 +512,19 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	ownerID, err := authenticateUser(r)
+	_, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	stories, err := h.rt.Store().ListGlobalWireStories(r.Context(), ownerID)
-	if err != nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load Wire articles"})
-		return
-	}
+	stories := []types.GlobalWireStory{}
 	styleSources := []types.GlobalWireStyleSource{}
-	if len(stories) > 0 {
-		styleSources = stories[0].StyleSources
-	}
 	source := "community-wire-vtext-index"
 	var edition *globalWireEditionResponse
 	if editionStories, editionResp, err := h.communityWireEditionVTextStories(r.Context(), styleSources, 12); err == nil {
 		edition = editionResp
 		if len(editionStories) > 0 {
-			stories = prependGlobalWireStories(editionStories, stories)
+			stories = editionStories
 			source = "community-wire-edition-vtext"
 		} else if editionResp != nil {
 			source = "community-wire-edition-vtext"
@@ -1114,20 +1107,6 @@ func normalizeGlobalWireStoryPresentation(story types.GlobalWireStory) types.Glo
 func globalWireStoryFreshnessLooksAuto(freshness string) bool {
 	freshness = strings.TrimSpace(strings.ToLower(freshness))
 	return freshness == "" || strings.HasPrefix(freshness, "updated ")
-}
-
-func prependGlobalWireStories(prefix, existing []types.GlobalWireStory) []types.GlobalWireStory {
-	out := make([]types.GlobalWireStory, 0, len(prefix)+len(existing))
-	seen := map[string]bool{}
-	for _, story := range append(prefix, existing...) {
-		key := strings.TrimSpace(firstNonEmptyString(story.StoryVTextDoc, story.ID, story.Headline))
-		if key == "" || seen[key] {
-			continue
-		}
-		seen[key] = true
-		out = append(out, story)
-	}
-	return out
 }
 
 // HandleGlobalWireSourceStatus reports non-sensitive source-service aggregate
