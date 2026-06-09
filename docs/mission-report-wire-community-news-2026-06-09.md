@@ -602,6 +602,19 @@ what was proven:
   staging health confirms that commit. The proof run no longer stops at the
   compaction encoding blocker; it now reaches a partial-pass publication record
   chain.
+- The public publication approval guard is deployed at
+  `d0ad4ed264a6f256a0e4b979397c24883ac7d3d7`, CI run `27228093837` passed,
+  staging deploy job `80400949898` passed, and staging health confirms proxy
+  and sandbox at that SHA. The guard prevents public Community Wire artifacts
+  from being marked `publication-approved` unless an approved Article VText is
+  available for edition publication.
+- A fresh authenticated staging proof prompt after `d0ad4ed2` reached the live
+  foreground proof path but failed before Global Wire source-native API
+  orchestration. Activity run `68f1ed7e-882e-432e-884a-c6ab5bba559a` reported
+  `tool loop iteration 2: gateway call failed: gateway client: deepseek:
+  status 402 Payment Required (sanitized)`. This is the next documented
+  product-path blocker: deployed model/provider policy selected an unavailable
+  fallback model for the operational proof run.
 
 unproven or partial claims:
 
@@ -648,6 +661,11 @@ unproven or partial claims:
   because the post-fix proof used seeded `story-supply-resilience` context and
   the approved artifact was not visible through `/api/global-wire/stories` or
   the story endpoint.
+- The approval guard for that false-positive public artifact state is
+  committed, pushed, deployed, and locally verified. The next authenticated
+  staging prompt is now blocked earlier by deployed DeepSeek 402 provider
+  availability, so no fresh source-native publication/edition visibility proof
+  exists after the guard.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -655,7 +673,8 @@ unproven or partial claims:
 
 next step:
 
-- Repair the post-compaction product visibility/source-native mismatch: the
-  owner prompt must force the no-`story_id` source-native route through
-  publication approval, and the approved article must appear through
+- Repair the deployed operational proof model/provider policy so foreground
+  source-native proof runs do not fail with DeepSeek 402 before product API
+  orchestration. Then rerun the no-`story_id` source-native route through
+  publication approval and verify the approved article appears through
   `global-wire/Wire.vtext` and `/api/global-wire/stories`.

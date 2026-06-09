@@ -351,6 +351,25 @@ Update after 2026-06-09 staging slices:
   orchestration and visibility after publication approval: the prompt must
   force the source-native route and the approved Article VText must be
   findable through `global-wire/Wire.vtext` and the public story API.
+- Local repair after that visibility blocker: public Community Wire publication
+  artifact approval now refuses to mark an artifact `publication-approved`
+  unless the artifact already has an approved Article VText/projection
+  available for the edition update. The repair prevents internally approved
+  publication artifacts from claiming public approval while
+  `global-wire/Wire.vtext` and `/api/global-wire/stories` remain empty.
+- Deployed evidence after the approval guard: commit
+  `d0ad4ed264a6f256a0e4b979397c24883ac7d3d7` passed CI run `27228093837` and
+  staging deploy job `80400949898`. Staging `/health` reported proxy and
+  sandbox at that SHA, deployed at `2026-06-09T18:46:57Z`. A fresh
+  authenticated Community Wire source-native proof prompt reached VText doc
+  `Run a fresh Community Wire source-native staging proof on...`, but run
+  `68f1ed7e-882e-432e-884a-c6ab5bba559a` reported
+  `tool loop iteration 2: gateway call failed: gateway client: deepseek:
+  status 402 Payment Required (sanitized)`. The next problem is now runtime
+  model/provider policy for the deployed operational proof path: the product
+  reaches the foreground proof run, but the selected fallback model is
+  unavailable before Global Wire source-native product API orchestration can
+  execute.
 
 ## Homotopy Parameters
 
