@@ -197,6 +197,15 @@ Update after 2026-06-09 staging slices:
 - Remaining highest-impact uncertainty is now the positive path: prove that a
   real product source/review/publication cycle, not a test fixture, produces an
   article VText and updates `global-wire/Wire.vtext` on staging.
+- Authenticated staging after commit
+  `465c9cffb65548b54f834fd9e84737b52cabbc31` proved a new blocker in that
+  positive path. An owner submitted a live `Command prompt` asking Community
+  Wire to run the existing source-refresh/research/projection/publication flow,
+  create or approve an Article VText, update `global-wire/Wire.vtext`, and
+  leave evidence IDs. The product opened a VText document for the prompt,
+  created a revision, and then reported a Fireworks 412 gateway blocker instead
+  of supervising the operational Wire flow. The immediate uncertainty is now
+  prompt-bar/conductor/VText handoff for operational proof requests.
 
 ## Homotopy Parameters
 
@@ -457,6 +466,19 @@ what was proven:
 - Authenticated Chrome proof after `90839193` showed the remaining fallback
   problem: Global Wire rendered three durable legacy seed stories and visible
   `seed source neighborhood` metadata despite having no active edition.
+- Source-network metadata cleanup committed as `465c9cff`: fresh
+  publication-approved Community Wire article revisions now use
+  `source_network_*` provenance metadata instead of minting new
+  `source_maxx_*` metadata. CI run `27220546359` and deploy job
+  `80374232404` succeeded; staging `/health` reported proxy and sandbox at
+  `465c9cffb65548b54f834fd9e84737b52cabbc31`.
+- Docs evidence checkpoint committed as `b9175495`.
+- Authenticated owner-prompt proof attempt after `465c9cff` found the next
+  blocker: the live command prompt turned the operational Wire proof request
+  into a VText draft/revision and the VText run reported `gateway client:
+  fireworks: status 412 Precondition Failed (sanitized)`. Global Wire remained
+  at the honest empty state; no deployed positive `Wire.vtext` article
+  transclusion was created.
 
 unproven or partial claims:
 
@@ -467,6 +489,14 @@ unproven or partial claims:
   is still the honest empty state until a real `global-wire/Wire.vtext`
   includes article transclusions.
 - Product-path creation/update of `Wire.vtext` is implemented and locally
-  tested through publication artifact approval, but deployed positive proof is
-  blocked by the remaining stored-story fallback and still needs a live
-  approved artifact/edition acceptance run.
+  tested through publication artifact approval, but deployed positive proof now
+  needs a live owner-prompt orchestration path that supervises the Wire
+  source-to-publication sequence rather than routing the request to VText-only
+  drafting.
+
+next step:
+
+- Inspect and repair the prompt-bar/conductor/VText handoff for operational
+  Community Wire proof requests, then run a staging product-path proof that
+  creates or approves a real article VText, updates `global-wire/Wire.vtext`,
+  and renders the edition-transcluded article in Global Wire.

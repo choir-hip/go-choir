@@ -219,6 +219,28 @@ instead of filled with seeded stories.
   `/health` reported proxy and sandbox commit
   `465c9cffb65548b54f834fd9e84737b52cabbc31`, deployed at
   `2026-06-09T16:29:49Z`.
+- Docs evidence checkpoint: commit
+  `b91754952aa404343f974b0f42f90202e66243a5` records the `465c9cff`
+  deployment and source-network metadata cleanup proof.
+- New staging problem discovered after the `465c9cff` deploy: an authenticated
+  owner prompt submitted through the live `Command prompt` asked Community Wire
+  to run the existing source-refresh/research/projection/publication flow,
+  create or approve an Article VText, update `global-wire/Wire.vtext`, and
+  leave evidence IDs without using test/internal routes or seed stories. The
+  product path opened a VText document for that prompt, created a VText
+  revision, and then reported a blocker:
+  `tool loop iteration 2: gateway call failed: gateway client: fireworks:
+  status 412 Precondition Failed (sanitized)`. This proves the next positive
+  edition proof is not yet reachable through the foreground owner prompt path:
+  the request was routed into VText/document drafting and failed at the VText
+  provider boundary instead of being supervised as an operational Wire
+  source-to-publication run.
+- Same staging probe confirmed the Global Wire surface stayed at the honest
+  empty state while this positive path failed. A direct browser-public API
+  attempt through the Chrome automation context was not a usable substitute for
+  product proof: page-script fetch primitives were unavailable in that context
+  and direct navigation to `/api/global-wire/stories` was blocked by the
+  browser profile.
 
 ## Run State
 
@@ -259,6 +281,11 @@ what was proven:
   mint new `source_maxx_*` metadata; existing legacy metadata is still accepted
   as read-only compatibility input while the old records/routes are deleted in
   later slices.
+- The live authenticated owner prompt path currently routes the positive Wire
+  proof request into VText drafting and exposes a Fireworks 412 provider
+  blocker. This is not evidence that the Wire publication chain is impossible;
+  it is evidence that the product-level orchestration entry point is wrong or
+  under-specified for operational Community Wire proof.
 
 unproven or partial claims:
 
@@ -268,6 +295,9 @@ unproven or partial claims:
 - The authenticated stored-story fallback blocker is fixed, but only as an
   honest empty-state proof. It is not yet proof that a real product source
   cycle creates and publishes an article into the edition.
+- No product-path owner prompt has yet supervised the source-refresh,
+  research-evidence, graph-candidate, projection-review, publication-update,
+  publication-artifact, publication-approval sequence to completion on staging.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -275,6 +305,9 @@ unproven or partial claims:
 
 next step:
 
-- Continue toward creating/updating `global-wire/Wire.vtext` through the
-  product source cycle rather than test fixtures, then prove staging renders
-  edition-transcluded VText articles.
+- Inspect and repair the prompt-bar/conductor/VText handoff for operational
+  Community Wire proof requests so a foreground owner prompt can supervise the
+  product source-to-publication chain instead of becoming a VText draft that
+  fails on the provider boundary. Then create/update `global-wire/Wire.vtext`
+  through the product source cycle rather than test fixtures and prove staging
+  renders edition-transcluded VText articles.
