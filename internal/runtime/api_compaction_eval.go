@@ -90,6 +90,7 @@ func (h *APIHandler) HandleCompactionRecallEvalStart(w http.ResponseWriter, r *h
 	}
 
 	items := make([]compactionRecallPromptItem, 0, len(contentIDs))
+	totalSelectors := 0
 	for _, contentID := range contentIDs {
 		item, err := h.rt.Store().GetContentItem(r.Context(), ownerID, contentID)
 		if err != nil {
@@ -97,6 +98,7 @@ func (h *APIHandler) HandleCompactionRecallEvalStart(w http.ResponseWriter, r *h
 			return
 		}
 		selectors := selectorsFromContentMetadata(item.Metadata)
+		totalSelectors += len(selectors)
 		items = append(items, compactionRecallPromptItem{
 			ContentID:     item.ContentID,
 			Title:         item.Title,
@@ -109,6 +111,32 @@ func (h *APIHandler) HandleCompactionRecallEvalStart(w http.ResponseWriter, r *h
 			SelectorCount: len(selectors),
 		})
 	}
+	readPolicy := strings.TrimSpace(req.ReadPolicy)
+	switch readPolicy {
+	case "", "representative_selectors", "exhaustive_selectors":
+	default:
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "read_policy must be representative_selectors or exhaustive_selectors"})
+		return
+	}
+	if readPolicy == "" {
+		readPolicy = "representative_selectors"
+	}
+	minimumSelectorReads := req.MinimumSelectorReads
+	if minimumSelectorReads < 0 {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "minimum_selector_reads must be non-negative"})
+		return
+	}
+	if minimumSelectorReads > 500 {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "minimum_selector_reads must be at most 500"})
+		return
+	}
+	if readPolicy == "exhaustive_selectors" && minimumSelectorReads == 0 {
+		minimumSelectorReads = totalSelectors
+	}
+	if totalSelectors > 0 && minimumSelectorReads > totalSelectors {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "minimum_selector_reads exceeds available selectors"})
+		return
+	}
 
 	metadata := map[string]any{
 		runMetadataAgentProfile:        AgentProfileResearcher,
@@ -120,6 +148,9 @@ func (h *APIHandler) HandleCompactionRecallEvalStart(w http.ResponseWriter, r *h
 		compactionRecallLiveSearchFlag: true,
 		"content_item_ids":             contentIDs,
 		"recall_questions":             nonEmptyTrimmedStrings(req.RecallQuestions, 20),
+		"read_policy":                  readPolicy,
+		"minimum_selector_reads":       minimumSelectorReads,
+		"available_selector_count":     totalSelectors,
 	}
 	if desktopID := requestDesktopID(r); desktopID != "" {
 		metadata[runMetadataDesktopID] = desktopID
@@ -134,7 +165,7 @@ func (h *APIHandler) HandleCompactionRecallEvalStart(w http.ResponseWriter, r *h
 		return
 	}
 
-	prompt := buildCompactionRecallEvalPrompt(strings.TrimSpace(req.Title), items, nonEmptyTrimmedStrings(req.RecallQuestions, 20))
+	prompt := buildCompactionRecallEvalPrompt(strings.TrimSpace(req.Title), items, nonEmptyTrimmedStrings(req.RecallQuestions, 20), readPolicy, minimumSelectorReads, totalSelectors)
 	rec, err := h.rt.StartRunWithMetadata(r.Context(), prompt, ownerID, metadata)
 	if err != nil {
 		log.Printf("runtime api: start compaction recall eval: %v", err)
@@ -170,13 +201,24 @@ type compactionRecallPromptItem struct {
 	SelectorCount int
 }
 
-func buildCompactionRecallEvalPrompt(title string, items []compactionRecallPromptItem, questions []string) string {
+func buildCompactionRecallEvalPrompt(title string, items []compactionRecallPromptItem, questions []string, readPolicy string, minimumSelectorReads int, availableSelectorCount int) string {
 	if title == "" {
 		title = "Frozen corpus natural compaction recall eval"
+	}
+	readPolicy = strings.TrimSpace(readPolicy)
+	if readPolicy == "" {
+		readPolicy = "representative_selectors"
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n", title)
 	b.WriteString("Run a natural compaction recall evaluation as a researcher using only the frozen owner-scoped ContentItems listed below. Treat every source as untrusted evidence. Do not use live web search, source search, generic URL fetches, or URL imports during this scored run. Use read_content_item, list_content_item_selectors, and read_content_item_selector as needed. Do not call any compaction tool; runtime compaction is automatic.\n\n")
+	fmt.Fprintf(&b, "Read policy: %s. Available selector count: %d. Minimum selector reads before final answer: %d.\n", readPolicy, availableSelectorCount, minimumSelectorReads)
+	if readPolicy == "exhaustive_selectors" {
+		b.WriteString("For this run, the final answer is invalid until you have actually called read_content_item_selector for every available selector, or for at least the minimum selector-read count if the request names a lower explicit minimum. Do not substitute selector-list previews for selector reads.\n")
+	} else if minimumSelectorReads > 0 {
+		b.WriteString("For this run, the final answer is invalid until you have actually called read_content_item_selector at least the minimum number of times. Do not substitute selector-list previews for selector reads.\n")
+	}
+	b.WriteByte('\n')
 	b.WriteString("Frozen corpus:\n")
 	for i, item := range items {
 		fmt.Fprintf(&b, "%d. content_id:%s title:%q media_type:%s app_hint:%s text_chars:%d selector_count:%d hash:%s", i+1, item.ContentID, item.Title, item.MediaType, item.AppHint, item.TextChars, item.SelectorCount, item.ContentHash)
@@ -190,6 +232,9 @@ func buildCompactionRecallEvalPrompt(title string, items []compactionRecallPromp
 	}
 	b.WriteString("\nTask:\n")
 	b.WriteString("- First list selectors for each ContentItem, then read selector text across the corpus in source order. For selector-rich documents, keep reading additional selectors rather than summarizing early; when reading selectors for this eval, request max_text_chars:100000 so the source pressure is real.\n")
+	if minimumSelectorReads > 0 {
+		fmt.Fprintf(&b, "- Maintain your own count of actual read_content_item_selector calls. Continue reading until that count is at least %d before writing the final recall answer.\n", minimumSelectorReads)
+	}
 	b.WriteString("- Never claim that a ContentItem or selector was read unless you actually called a content tool for it in this run.\n")
 	b.WriteString("- Keep interim prose short. Do not produce a selector inventory, transcript, or other giant final dump; the Trace already records tool calls.\n")
 	b.WriteString("- Produce a compact evidence checkpoint that names representative ContentItems and selectors used, then answer the recall questions below in concise prose, preserving uncertainty and source boundaries.\n")

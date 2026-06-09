@@ -229,6 +229,7 @@ reasoning = "low"
 		"title":"one arm",
 		"model_policy_overlay_id":"gpt-mini-eval",
 		"content_item_ids":["content-alpha"],
+		"read_policy":"exhaustive_selectors",
 		"recall_questions":["What exact marker appears on page one?"]
 	}`
 	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/evals/compaction-recall", body, "user-alice")
@@ -258,11 +259,23 @@ reasoning = "low"
 	if !metadataBoolValue(rec.Metadata, compactionRecallLiveSearchFlag) {
 		t.Fatalf("live search flag missing: %+v", rec.Metadata)
 	}
+	if got := metadataStringValue(rec.Metadata, "read_policy"); got != "exhaustive_selectors" {
+		t.Fatalf("read_policy = %q, want exhaustive_selectors; metadata=%+v", got, rec.Metadata)
+	}
+	if got := intFromMetadata(rec.Metadata, "minimum_selector_reads"); got != 1 {
+		t.Fatalf("minimum_selector_reads = %d, want 1; metadata=%+v", got, rec.Metadata)
+	}
+	if got := intFromMetadata(rec.Metadata, "available_selector_count"); got != 1 {
+		t.Fatalf("available_selector_count = %d, want 1; metadata=%+v", got, rec.Metadata)
+	}
 	if !strings.Contains(rec.Prompt, "content_id:content-alpha") || !strings.Contains(rec.Prompt, "Do not use live web search") {
 		t.Fatalf("prompt missing frozen corpus contract: %s", rec.Prompt)
 	}
 	for _, want := range []string{
 		"request max_text_chars:100000",
+		"Read policy: exhaustive_selectors",
+		"Minimum selector reads before final answer: 1",
+		"Continue reading until that count is at least 1",
 		"Never claim that a ContentItem or selector was read unless you actually called a content tool",
 		"Do not produce a selector inventory, transcript, or other giant final dump",
 	} {
@@ -3813,6 +3826,19 @@ func TestProviderFailureDoesNotCrashRuntime(t *testing.T) {
 
 	if newW.Code != http.StatusAccepted {
 		t.Errorf("status after failure: got %d, want %d", newW.Code, http.StatusAccepted)
+	}
+}
+
+func intFromMetadata(metadata map[string]any, key string) int {
+	switch value := metadata[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
 	}
 }
 

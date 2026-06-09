@@ -102,6 +102,8 @@ type compactionRecallEvalStartRequest struct {
 	ModelPolicyOverlayID string   `json:"model_policy_overlay_id"`
 	ContentItemIDs       []string `json:"content_item_ids"`
 	RecallQuestions      []string `json:"recall_questions,omitempty"`
+	ReadPolicy           string   `json:"read_policy,omitempty"`
+	MinimumSelectorReads int      `json:"minimum_selector_reads,omitempty"`
 }
 
 type compactionRecallEvalStartResponse struct {
