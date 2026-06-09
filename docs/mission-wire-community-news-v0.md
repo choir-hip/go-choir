@@ -370,6 +370,22 @@ Update after 2026-06-09 staging slices:
   reaches the foreground proof run, but the selected fallback model is
   unavailable before Global Wire source-native product API orchestration can
   execute.
+- Deployed evidence after provider-availability fallback repair: commit
+  `eba8bd05c5d3ec08662cfdd758e4466e4f5f102c` passed CI run `27228719168` and
+  staging deploy job `80403153718`. Staging `/health` reported proxy and
+  sandbox at that SHA, deployed at `2026-06-09T18:57:53Z`. A fresh
+  authenticated source-native proof prompt created VText doc
+  `3138b6db-3167-417d-a8c9-db0297d2e85b` with
+  `data-vtext-initial-loop-id="53580323-5b55-4995-97e1-8a08e916ac2d"`, but
+  after the observation window the owner-visible document remained at v0 with
+  `Writing first draft...` / `Revising...` and no new source search,
+  `product_api_request`, publication, `global-wire/Wire.vtext`, or story API
+  evidence visible in the authenticated product surface. The previous
+  `68f1ed7e...` DeepSeek 402 blocker remained visible only as old activity.
+  The next problem is now prompt/VText execution liveness after provider
+  availability fallback: the deployed run no longer exposes a fresh 402
+  blocker, but it also does not visibly reach the source-native Wire product
+  API path or produce a documented blocker.
 
 ## Homotopy Parameters
 

@@ -615,6 +615,28 @@ what was proven:
   status 402 Payment Required (sanitized)`. This is the next documented
   product-path blocker: deployed model/provider policy selected an unavailable
   fallback model for the operational proof run.
+- Provider availability fallback repair: commit
+  `eba8bd05c5d3ec08662cfdd758e4466e4f5f102c` treats provider billing/
+  availability errors such as `402 Payment Required` as model-fallback-worthy
+  in the tool loop. Local focused tool-loop tests and `nix develop -c
+  scripts/go-test-local` passed. CI run `27228719168` succeeded, deploy job
+  `80403153718` succeeded, and staging `/health` reported proxy and sandbox at
+  `eba8bd05c5d3ec08662cfdd758e4466e4f5f102c`, deployed at
+  `2026-06-09T18:57:53Z`.
+- Authenticated staging reprobe after `eba8bd05`: a fresh source-native
+  Community Wire proof prompt created VText doc
+  `3138b6db-3167-417d-a8c9-db0297d2e85b` with
+  `data-vtext-initial-loop-id="53580323-5b55-4995-97e1-8a08e916ac2d"`. After
+  an additional observation window, the document still showed v0,
+  `Writing first draft...`, and `Revising...`. The authenticated product
+  surface showed no fresh source search, foreground `product_api_request`,
+  publication update/artifact, `global-wire/Wire.vtext` inclusion, rendered
+  story, or precise new blocker for that loop. The old
+  `68f1ed7e...` DeepSeek 402 blocker remained visible as historical activity,
+  but no fresh 402 blocker was observed for the `eba8bd05` prompt. This is the
+  next documented problem before any fix: provider availability fallback is
+  deployed, but the owner-visible VText/proof run can stall in draft state
+  without surfacing either product API progress or a blocker.
 
 unproven or partial claims:
 
@@ -666,6 +688,11 @@ unproven or partial claims:
   staging prompt is now blocked earlier by deployed DeepSeek 402 provider
   availability, so no fresh source-native publication/edition visibility proof
   exists after the guard.
+- The provider availability fallback repair is committed, pushed, deployed, and
+  locally verified. The fresh authenticated staging prompt after that repair no
+  longer surfaced a new DeepSeek 402 blocker, but it also did not visibly reach
+  source-native Wire product API orchestration or publish a blocker; the VText
+  document remained in first-draft/revising state.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -673,8 +700,9 @@ unproven or partial claims:
 
 next step:
 
-- Repair the deployed operational proof model/provider policy so foreground
-  source-native proof runs do not fail with DeepSeek 402 before product API
-  orchestration. Then rerun the no-`story_id` source-native route through
-  publication approval and verify the approved article appears through
-  `global-wire/Wire.vtext` and `/api/global-wire/stories`.
+- Repair prompt/VText execution liveness and blocker surfacing after provider
+  fallback so foreground source-native proof runs either reach product API
+  orchestration or publish a precise blocker. Then rerun the no-`story_id`
+  source-native route through publication approval and verify the approved
+  article appears through `global-wire/Wire.vtext` and
+  `/api/global-wire/stories`.
