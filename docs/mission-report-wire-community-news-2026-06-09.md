@@ -320,6 +320,17 @@ instead of filled with seeded stories.
   it says "before worker delegation" even though the feed observed
   `start_worker_delegation`; the next problem is likely delegation terminal
   evidence/fallback classification, not initial provider precondition fallback.
+- Local worker-delegation fallback repair: runtime fallback synthesis still
+  looked for the deprecated `delegate_worker_vm` result when deciding whether a
+  failed super had preserved worker evidence. Current super uses
+  `start_worker_delegation`, so a successful start result could be followed by
+  the stale "before worker delegation/package" fallback. The local repair treats
+  both `start_worker_delegation` and `delegate_worker_vm` as worker-delegation
+  evidence, picks the latest successful result across both names, and uses
+  neutral "worker delegation" wording in VText-visible fallback updates.
+- Local verification for worker-delegation fallback repair:
+  - `nix develop -c go test ./internal/runtime -run 'TestRuntimeSynthesizes(VTextBlockerWhenSuperFailsBeforeDelegation|WorkerDelegationUpdateAfterStartWorkerDelegation)|TestSuperFailureAfterDelegateWorkerVMSynthesizesVTextWorkerUpdate'`
+  - `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice|ProviderPrecondition|ModelPolicy|RunToolLoop|WorkerDelegation|DelegateWorker|SuperFailure)'`
 
 ## Run State
 
@@ -386,6 +397,9 @@ what was proven:
 - Deployed reprobe after `c14d10e6` shows the repair moved the product path one
   step forward: super reached `start_worker_delegation`, then failed or was
   classified as failed before durable worker/package evidence reached VText.
+- Local fallback classification now recognizes `start_worker_delegation`
+  results as worker evidence and should preserve the worker start result instead
+  of producing the stale before-delegation summary.
 
 unproven or partial claims:
 
@@ -410,6 +424,8 @@ unproven or partial claims:
   source-to-edition proof is still blocked at worker delegation evidence. The
   runtime-visible blocker text may be stale or misleading for
   `start_worker_delegation` attempts.
+- The worker-delegation fallback repair is local only until pushed, deployed,
+  and reprobed on staging.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -417,8 +433,7 @@ unproven or partial claims:
 
 next step:
 
-- Investigate why a super run that visibly called `start_worker_delegation`
-  still produced a runtime fallback summary saying it failed before worker
-  delegation/package evidence reached VText. Repair the delegation terminal
-  evidence/fallback classification or the worker start failure reporting, then
-  rerun the staging prompt toward a real source-to-edition proof.
+- Land and deploy the worker-delegation fallback repair, reprobe the
+  authenticated staging prompt, and verify that any failed
+  `start_worker_delegation` produces a precise worker-delegation update or that
+  the worker continues to package/source-to-edition evidence.

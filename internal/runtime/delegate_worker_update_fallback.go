@@ -30,7 +30,7 @@ func (rt *Runtime) synthesizeDelegateWorkerUpdateOnSuperFailure(ctx context.Cont
 	if hasSuccessfulToolResult(eventsForRun, "submit_coagent_update") {
 		return nil
 	}
-	delegateEvent, delegateOutput, ok := latestSuccessfulToolResultOutput(eventsForRun, "delegate_worker_vm")
+	delegateEvent, delegateOutput, ok := latestSuccessfulWorkerDelegationResultOutput(eventsForRun)
 	if !ok {
 		return nil
 	}
@@ -61,7 +61,7 @@ func (rt *Runtime) synthesizeSuperFailureUpdate(ctx context.Context, rec *types.
 		return err
 	}
 	if hasSuccessfulToolResult(eventsForRun, "submit_coagent_update") ||
-		hasSuccessfulToolResult(eventsForRun, "delegate_worker_vm") {
+		hasSuccessfulWorkerDelegationResult(eventsForRun) {
 		return nil
 	}
 
@@ -289,13 +289,13 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 	exportCount := len(mapSliceValue(output, "app_change_packages"))
 
 	findings := []string{
-		fmt.Sprintf("delegate_worker_vm returned status %q with worker state %q before super reported back to VText.", firstNonEmpty(status, "unknown"), firstNonEmpty(state, "unknown")),
+		fmt.Sprintf("worker delegation returned status %q with worker state %q before super reported back to VText.", firstNonEmpty(status, "unknown"), firstNonEmpty(state, "unknown")),
 		fmt.Sprintf("super run ended with %s; preserving delegate evidence as a structured worker update.", firstNonEmpty(string(rec.State), "terminal state")),
 	}
 	if exportCount > 0 {
-		findings = append(findings, fmt.Sprintf("delegate_worker_vm returned %d AppChangePackage(s).", exportCount))
+		findings = append(findings, fmt.Sprintf("worker delegation returned %d AppChangePackage(s).", exportCount))
 	} else {
-		findings = append(findings, "delegate_worker_vm returned no AppChangePackages; treat this as blocked below package-level.")
+		findings = append(findings, "worker delegation returned no AppChangePackages; treat this as blocked below package-level.")
 	}
 	if eventCount > 0 {
 		findings = append(findings, fmt.Sprintf("worker event summary was preserved with %d event(s) and %d channel message(s).", eventCount, channelMessages))
@@ -324,7 +324,7 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 	refs = append(refs, provenance.Refs...)
 	artifacts := append(exportArtifactRefs(output), provenance.Artifacts...)
 	notes := []string{
-		"auto_synthesized_from=delegate_worker_vm_after_super_failure",
+		"auto_synthesized_from=worker_delegation_after_super_failure",
 		"provider_error=" + strings.TrimSpace(runErr.Error()),
 	}
 	if terminalError != "" {
@@ -348,7 +348,7 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 		Artifacts:     trimDedupeNonEmpty(artifacts),
 		Refs:          trimDedupeNonEmpty(refs),
 		Proposals: []string{
-			"Continue with a termination/package probe that makes vsuper call publish_app_change_package or submit_coagent_update before delegate timeout.",
+			"Continue with a termination/package probe that makes vsuper call publish_app_change_package or submit_coagent_update before delegation timeout.",
 		},
 		Notes:     trimDedupeNonEmpty(notes),
 		CreatedAt: now,
@@ -367,13 +367,13 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 	exportCount := len(mapSliceValue(output, "app_change_packages"))
 
 	findings := []string{
-		fmt.Sprintf("delegate_worker_vm returned status %q with worker state %q.", firstNonEmpty(status, "unknown"), firstNonEmpty(state, "unknown")),
+		fmt.Sprintf("worker delegation returned status %q with worker state %q.", firstNonEmpty(status, "unknown"), firstNonEmpty(state, "unknown")),
 		"super preserved this delegate result as a VText worker-update checkpoint before relying on another LLM turn.",
 	}
 	if exportCount > 0 {
-		findings = append(findings, fmt.Sprintf("delegate_worker_vm returned %d AppChangePackage(s).", exportCount))
+		findings = append(findings, fmt.Sprintf("worker delegation returned %d AppChangePackage(s).", exportCount))
 	} else {
-		findings = append(findings, "delegate_worker_vm returned no AppChangePackages; treat this as blocked below package-level.")
+		findings = append(findings, "worker delegation returned no AppChangePackages; treat this as blocked below package-level.")
 	}
 	if eventCount > 0 {
 		findings = append(findings, fmt.Sprintf("worker event summary was preserved with %d event(s) and %d channel message(s).", eventCount, channelMessages))
@@ -400,8 +400,8 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 	}
 	refs = append(refs, provenance.Refs...)
 	notes := []string{
-		"auto_synthesized_from=delegate_worker_vm_checkpoint",
-		"checkpoint_source=" + firstNonEmpty(source, "delegate_worker_vm_result"),
+		"auto_synthesized_from=worker_delegation_checkpoint",
+		"checkpoint_source=" + firstNonEmpty(source, "worker_delegation_result"),
 	}
 	if terminalError != "" {
 		notes = append(notes, "delegate_terminal_error="+terminalError)
@@ -579,6 +579,29 @@ func hasName(names []string, name string) bool {
 	return false
 }
 
+func latestSuccessfulWorkerDelegationResultOutput(eventsForRun []types.EventRecord) (types.EventRecord, map[string]any, bool) {
+	var latest types.EventRecord
+	var latestOutput map[string]any
+	found := false
+	for _, ev := range eventsForRun {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		payload, ok := decodeToolResultPayload(ev)
+		if !ok || payload.IsError || (payload.Tool != "start_worker_delegation" && payload.Tool != "delegate_worker_vm") {
+			continue
+		}
+		var output map[string]any
+		if err := json.Unmarshal([]byte(payload.Output), &output); err != nil {
+			output = map[string]any{"raw_output": strings.TrimSpace(payload.Output)}
+		}
+		latest = ev
+		latestOutput = output
+		found = true
+	}
+	return latest, latestOutput, found
+}
+
 func hasSuccessfulToolResult(eventsForRun []types.EventRecord, tool string) bool {
 	for _, ev := range eventsForRun {
 		if ev.Kind != types.EventToolResult {
@@ -590,6 +613,11 @@ func hasSuccessfulToolResult(eventsForRun []types.EventRecord, tool string) bool
 		}
 	}
 	return false
+}
+
+func hasSuccessfulWorkerDelegationResult(eventsForRun []types.EventRecord) bool {
+	return hasSuccessfulToolResult(eventsForRun, "start_worker_delegation") ||
+		hasSuccessfulToolResult(eventsForRun, "delegate_worker_vm")
 }
 
 type toolResultPayload struct {

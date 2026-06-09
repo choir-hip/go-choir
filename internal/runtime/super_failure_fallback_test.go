@@ -96,3 +96,102 @@ func TestRuntimeSynthesizesVTextBlockerWhenSuperFailsBeforeDelegation(t *testing
 		t.Fatalf("notes missing successful tool summary: %+v", update.Notes)
 	}
 }
+
+func TestRuntimeSynthesizesWorkerDelegationUpdateAfterStartWorkerDelegation(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	ownerID := "user-super-start-fallback"
+	docID := "doc-super-start-fallback"
+
+	now := time.Now().UTC()
+	superRun := &types.RunRecord{
+		RunID:        "super-run-after-start-delegation",
+		AgentID:      "super:" + ownerID,
+		ChannelID:    docID,
+		AgentProfile: AgentProfileSuper,
+		AgentRole:    AgentProfileSuper,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Run MissionGradient continuation and delegate worker-medium",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileSuper,
+			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentID:      "super:" + ownerID,
+			runMetadataChannelID:    docID,
+			runMetadataTrajectoryID: "traj-super-after-start-delegation",
+			"requested_by_agent_id": "vtext:" + docID,
+			"requested_by_profile":  AgentProfileVText,
+		},
+	}
+	if err := s.CreateRun(ctx, *superRun); err != nil {
+		t.Fatalf("create super run: %v", err)
+	}
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   "super:" + ownerID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileSuper,
+		Role:      AgentProfileSuper,
+		ChannelID: docID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert super agent: %v", err)
+	}
+
+	startOutput, _ := json.Marshal(map[string]any{
+		"status":              "worker_run_incomplete",
+		"state":               "failed",
+		"worker_run_id":       "worker-run-started",
+		"worker_id":           "worker-1",
+		"worker_vm_id":        "vm-1",
+		"completion_blocker":  "worker_failed_before_package",
+		"terminal_error":      "worker failed before AppChangePackage evidence",
+		"app_change_packages": []map[string]any{},
+	})
+	payload, _ := json.Marshal(map[string]any{
+		"tool":     "start_worker_delegation",
+		"is_error": false,
+		"output":   string(startOutput),
+	})
+	if err := s.AppendEvent(ctx, &types.EventRecord{
+		EventID:      "event-start-worker-delegation",
+		RunID:        superRun.RunID,
+		AgentID:      agentIDForRun(superRun),
+		ChannelID:    docID,
+		OwnerID:      ownerID,
+		TrajectoryID: "traj-super-after-start-delegation",
+		Timestamp:    time.Now().UTC(),
+		Kind:         types.EventToolResult,
+		Payload:      payload,
+	}); err != nil {
+		t.Fatalf("append start_worker_delegation event: %v", err)
+	}
+
+	rt.handleExecutionError(ctx, superRun, fmt.Errorf("tool loop iteration 7: gateway call failed"))
+
+	updates, err := s.ListWorkerUpdatesByTrajectory(ctx, ownerID, "traj-super-after-start-delegation", 10)
+	if err != nil {
+		t.Fatalf("list worker updates: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("worker updates = %d, want 1", len(updates))
+	}
+	update := updates[0]
+	if !containsString(update.EvidenceIDs, "event:event-start-worker-delegation") {
+		t.Fatalf("evidence ids missing start_worker_delegation event: %+v", update.EvidenceIDs)
+	}
+	findings := strings.Join(update.Findings, "\n")
+	if !strings.Contains(findings, "worker delegation returned status") {
+		t.Fatalf("findings missing worker delegation summary: %+v", update.Findings)
+	}
+	if strings.Contains(findings, "No worker lease/delegation tool result was recorded") {
+		t.Fatalf("findings used stale before-delegation fallback: %+v", update.Findings)
+	}
+	if !strings.Contains(strings.Join(update.Notes, "\n"), "delegate_terminal_error=worker failed before AppChangePackage evidence") {
+		t.Fatalf("notes missing worker terminal error: %+v", update.Notes)
+	}
+}

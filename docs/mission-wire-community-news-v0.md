@@ -249,6 +249,12 @@ Update after 2026-06-09 staging slices:
   Monitor showed `0 running runs`, and Global Wire remained at `0 articles`.
   The fallback classification is now suspect because observed activity includes
   `start_worker_delegation`.
+- Local worker-delegation fallback repair: runtime fallback synthesis still
+  keyed on the deprecated `delegate_worker_vm` result. Current super uses
+  `start_worker_delegation`, so failed super runs could report a stale
+  before-delegation blocker even after a worker start result existed. The repair
+  treats both tool names as worker-delegation evidence and preserves the latest
+  successful worker-delegation result with neutral fallback wording.
 
 ## Homotopy Parameters
 
@@ -553,6 +559,10 @@ what was proven:
   `c14d10e66ead343efac6d6b299b3634cbf7eaea7`, deployed at
   `2026-06-09T17:09:16Z`. The reprobe reached `start_worker_delegation` but no
   durable worker/package evidence or Wire edition was visible.
+- Worker-delegation fallback repair locally verified:
+  `nix develop -c go test ./internal/runtime -run 'TestRuntimeSynthesizes(VTextBlockerWhenSuperFailsBeforeDelegation|WorkerDelegationUpdateAfterStartWorkerDelegation)|TestSuperFailureAfterDelegateWorkerVMSynthesizesVTextWorkerUpdate'`
+  and
+  `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice|ProviderPrecondition|ModelPolicy|RunToolLoop|WorkerDelegation|DelegateWorker|SuperFailure)'`.
 
 unproven or partial claims:
 
@@ -577,13 +587,15 @@ unproven or partial claims:
 - The provider precondition repair is deployed and reprobed. The next blocker is
   worker-delegation terminal evidence or fallback classification after
   `start_worker_delegation`.
+- The worker-delegation fallback repair is local only until pushed, deployed,
+  and reprobed on staging.
 
 next step:
 
-- Investigate why a super run that visibly called `start_worker_delegation`
-  still produced a runtime fallback summary saying it failed before worker
-  delegation/package evidence reached VText. Repair the delegation terminal
-  evidence/fallback classification or worker start failure reporting, then rerun
-  the product-path proof that creates or approves a real article VText, updates
+- Land and deploy the worker-delegation fallback repair, reprobe the
+  authenticated staging prompt, and verify that any failed
+  `start_worker_delegation` produces a precise worker-delegation update or that
+  the worker continues to package/source-to-edition evidence. Then rerun the
+  product-path proof that creates or approves a real article VText, updates
   `global-wire/Wire.vtext`, and renders the edition-transcluded article in
   Global Wire.

@@ -3894,7 +3894,7 @@ func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 	if !strings.Contains(strings.Join(update.Findings, "\n"), "no AppChangePackages") {
 		t.Fatalf("findings missing export blocker: %+v", update.Findings)
 	}
-	if !strings.Contains(update.Content, "delegate_worker_vm returned") {
+	if !strings.Contains(update.Content, "worker delegation returned") {
 		t.Fatalf("worker update content missing delegate summary: %q", update.Content)
 	}
 
@@ -3905,7 +3905,7 @@ func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 	if len(messages) != 1 || messages[0].ToAgentID != "vtext:"+docID {
 		t.Fatalf("channel messages = %+v", messages)
 	}
-	if !strings.Contains(messages[0].Content, "delegate_worker_vm returned") {
+	if !strings.Contains(messages[0].Content, "worker delegation returned") {
 		t.Fatalf("message content missing delegate summary: %q", messages[0].Content)
 	}
 }
