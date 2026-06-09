@@ -473,6 +473,38 @@ instead of filled with seeded stories.
   This is the next documented problem before any fix: the source-native product
   path is deployed, but long-running VText/super proof cannot progress reliably
   while run-memory compaction can fail on UTF-8 punctuation in summaries.
+- Run-memory compaction persistence repair: commit
+  `d4b24de821e4dccfe5bdc65a6f42b1fbd480d106` normalizes run-memory message
+  JSON, summary, reason, model, and details text before persistence. Local
+  verification passed:
+  `nix develop -c go test ./internal/store -run 'TestRunMemoryAppend(NormalizesUnicodeText|ListAndLatest)$' -count=1`,
+  `nix develop -c go test ./internal/runtime -run 'TestRunMemory|TestRuntimeRunMemory' -count=1`,
+  `nix develop -c go test ./internal/store -count=1`, and
+  `nix develop -c scripts/go-test-local`.
+- CI/deploy for `d4b24de821e4dccfe5bdc65a6f42b1fbd480d106`: CI run
+  `27227525121` succeeded, including all runtime shards, non-runtime tests,
+  integration-tagged smoke, Go vet/build, and deploy. Deploy job
+  `80398935659` succeeded in 32s. Staging `/health` reported proxy and sandbox
+  commit `d4b24de821e4dccfe5bdc65a6f42b1fbd480d106`, deployed at
+  `2026-06-09T18:36:42Z`.
+- Authenticated staging reprobe after `d4b24de8`: the prior source-native proof
+  VText progressed past the compaction blocker and recorded a partial-pass
+  pipeline in run `11d7cfe2-db39-4e4f-b6a4-2c805cfb24f9`, with verification
+  ref `global-wire-verification-853a2c65`. The evidence chain includes
+  `source_content:global-wire-source-service-7a63fa2f-f0b1-5ffb-8275-a20b6df813f1`,
+  `refresh_run:global-wire-source-refresh-47387144-46d6-4eb2-8204-f3defbd2f620`,
+  `research_evidence:global-wire-research-evidence-414eabbd-4bbb-4243-a97f-c8f98b8e12a7`,
+  `research_decision:global-wire-research-decision-d246e8ab-f50c-4abe-98fa-3200038859e2`,
+  `publication_update:global-wire-publication-update-1e2cb8c8-22b9-4a91-9568-30fd63fd5608`,
+  and `publication_artifact:global-wire-publication-artifact-fec7e799-90bc-492d-8450-03b0a893f042`.
+  The proof is not acceptance: the VText reports `Story ID:
+  story-supply-resilience` despite the prompt requesting no seeded `story_id`,
+  and the verifier says `/api/global-wire/stories` returns empty while the story
+  endpoint returns 404 for the approved artifact. This documents the next
+  problem before any fix: the orchestration can now get past compaction and
+  produce internally linked publication records, but it can still fall back to
+  seeded StoryGraph context and produce an approved artifact that is not
+  visible through the public edition/story API.
 
 ## Run State
 
@@ -566,6 +598,10 @@ what was proven:
   as far as source search and foreground product API calls, then hit a
   run-memory compaction encoding blocker before publication evidence could be
   produced.
+- The run-memory compaction persistence repair is deployed at `d4b24de8`, and
+  staging health confirms that commit. The proof run no longer stops at the
+  compaction encoding blocker; it now reaches a partial-pass publication record
+  chain.
 
 unproven or partial claims:
 
@@ -607,9 +643,11 @@ unproven or partial claims:
   StoryGraph/source-refresh state, not by prompt routing, worker auth, or
   foreground product API access.
 - The source-native Global Wire repair is committed, pushed, deployed, and
-  locally verified, but the authenticated staging prompt has not yet completed
-  the source-native publication flow because VText/super proof state can fail
-  during runtime memory compaction on summary text encoding.
+  locally verified, and the compaction persistence blocker is repaired and
+  deployed. The authenticated staging prompt still has not completed acceptance
+  because the post-fix proof used seeded `story-supply-resilience` context and
+  the approved artifact was not visible through `/api/global-wire/stories` or
+  the story endpoint.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -617,7 +655,7 @@ unproven or partial claims:
 
 next step:
 
-- Repair or route around the runtime memory compaction encoding blocker, then
-  reprobe the authenticated staging prompt for real source artifacts, VText
-  article/review creation, `global-wire/Wire.vtext` update, and rendered
-  edition output.
+- Repair the post-compaction product visibility/source-native mismatch: the
+  owner prompt must force the no-`story_id` source-native route through
+  publication approval, and the approved article must appear through
+  `global-wire/Wire.vtext` and `/api/global-wire/stories`.

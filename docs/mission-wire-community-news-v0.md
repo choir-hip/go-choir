@@ -332,6 +332,25 @@ Update after 2026-06-09 staging slices:
   delegation, AppChangePackage, source-native publication approval, or rendered
   Wire edition evidence was produced. The next problem is runtime memory
   compaction encoding reliability for long-running VText/super proof state.
+- Deployed evidence after run-memory compaction persistence repair: commit
+  `d4b24de821e4dccfe5bdc65a6f42b1fbd480d106` passed CI run `27227525121` and
+  staging deploy job `80398935659`. Staging `/health` reported proxy and
+  sandbox at that SHA, deployed at `2026-06-09T18:36:42Z`. The prior
+  source-native proof VText then progressed past the compaction blocker and
+  recorded partial-pass pipeline evidence in run
+  `11d7cfe2-db39-4e4f-b6a4-2c805cfb24f9`, with verification ref
+  `global-wire-verification-853a2c65`.
+- The post-compaction proof is still not acceptance. It recorded
+  `refresh_run:global-wire-source-refresh-47387144-46d6-4eb2-8204-f3defbd2f620`,
+  `publication_update:global-wire-publication-update-1e2cb8c8-22b9-4a91-9568-30fd63fd5608`,
+  and `publication_artifact:global-wire-publication-artifact-fec7e799-90bc-492d-8450-03b0a893f042`,
+  but the VText evidence says the refresh used `Story ID:
+  story-supply-resilience` despite the no-seeded-`story_id` prompt. Its
+  verifier also reports `/api/global-wire/stories` empty and the story endpoint
+  returning 404 for the approved artifact. The next problem is product-path
+  orchestration and visibility after publication approval: the prompt must
+  force the source-native route and the approved Article VText must be
+  findable through `global-wire/Wire.vtext` and the public story API.
 
 ## Homotopy Parameters
 
@@ -671,6 +690,17 @@ what was proven:
   `nix develop -c go test ./internal/runtime -run TestHandleGlobalWireSourceNativeRefreshPublishesEditionVText -count=1`,
   the neighboring seeded-story Global Wire tests, and
   `nix develop -c scripts/go-test-local`.
+- Source-native Global Wire repair deployed and reprobed: commit `e75697b`
+  passed CI/deploy and staging `/health` reported that SHA. The first reprobe
+  hit the runtime memory compaction encoding blocker before publication proof.
+  The follow-up compaction persistence repair `d4b24de8` passed CI/deploy, and
+  staging `/health` reported that SHA at `2026-06-09T18:36:42Z`.
+- Post-compaction staging proof reached a partial-pass publication record chain
+  but not a rendered public edition article. The VText proof names source,
+  refresh, research, publication update, and publication artifact IDs, but also
+  names seeded `story-supply-resilience` context and a product API visibility
+  gap: `/api/global-wire/stories` returned empty and the story endpoint returned
+  404 for the approved artifact.
 
 unproven or partial claims:
 
@@ -707,11 +737,14 @@ unproven or partial claims:
 - The prompt now reaches foreground product API orchestration on staging, but
   the positive source-to-edition proof remains blocked by seeded
   StoryGraph/source-refresh state.
-- The source-native Global Wire repair is local only until committed, pushed,
-  deployed, and reprobed on staging.
+- The source-native Global Wire repair and compaction persistence repair are
+  committed, pushed, deployed, and reprobed on staging. Acceptance remains
+  partial because the deployed proof used seeded story context and the approved
+  artifact did not become visible through the public edition/story API.
 
 next step:
 
-- Commit and deploy the source-native Global Wire repair, then reprobe the
-  authenticated staging prompt for real source artifacts, VText article/review
-  creation, `global-wire/Wire.vtext` update, and rendered edition output.
+- Repair the post-compaction product visibility/source-native mismatch: the
+  authenticated prompt must force source-refresh without `story_id`, approve a
+  source-native Article VText, update `global-wire/Wire.vtext`, and render the
+  article through `/api/global-wire/stories`.
