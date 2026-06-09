@@ -37,8 +37,12 @@ func (s *Store) AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryE
 
 	messageJSON := ""
 	if len(entry.Message) > 0 {
-		messageJSON = string(entry.Message)
+		messageJSON = sanitizeStoreText(string(entry.Message))
 	}
+	entry.Summary = sanitizeStoreText(entry.Summary)
+	entry.FirstKeptEntryID = sanitizeStoreText(entry.FirstKeptEntryID)
+	entry.Reason = sanitizeStoreText(entry.Reason)
+	entry.Model = sanitizeStoreText(entry.Model)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -98,7 +102,7 @@ func (s *Store) AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryE
 		entry.TokensBefore,
 		entry.Reason,
 		entry.Model,
-		string(detailsJSON),
+		sanitizeStoreText(string(detailsJSON)),
 		entry.CreatedAt.UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {
