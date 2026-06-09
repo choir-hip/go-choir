@@ -251,6 +251,20 @@ instead of filled with seeded stories.
   - `nix develop -c go test ./internal/runtime -run 'TestInitialVTextToolChoiceUsesExactTools|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestHandlePromptBarOperationalProofInitialRunRequestsSuperFirst|TestVTextPromptInitialRevisionUsesSingleWriterLoop'`
   - `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice)'`
   - `nix develop -c scripts/go-test-runtime-shards`
+- Prompt orchestration repair deploy: commit
+  `cbfd0637ab921947bfd5652fbe47411dca20ef79` passed CI run `27221392006`;
+  deploy job `80377182065` succeeded; staging `/health` reported proxy and
+  sandbox commit `cbfd0637ab921947bfd5652fbe47411dca20ef79`, deployed at
+  `2026-06-09T16:45:15Z`.
+- Counter-evidence after `cbfd0637`: the authenticated staging `Command
+  prompt` was reprobed with the same Community Wire product-path proof request.
+  The product still opened a VText document for the prompt and reported
+  `tool loop iteration 2: gateway call failed: gateway client: fireworks:
+  status 412 Precondition Failed (sanitized)`. Global Wire remained at
+  `0 articles`, `community-wire-vtext-index`, and the honest empty edition
+  state. The local exact initial tool-choice repair is therefore insufficient
+  as a product fix; the operational handoff must not depend on another VText
+  provider turn to create the persistent-super request.
 
 ## Run State
 
@@ -300,6 +314,12 @@ what was proven:
   shape as a super-execution obligation before the first VText edit, preserving
   VText ownership for ordinary documents while unblocking supervised product
   mutation/proof requests.
+- Deployed counter-evidence after `cbfd0637` shows that provider-level exact
+  tool-choice steering still leaves the request exposed to the same Fireworks
+  412 blocker. The next repair should create the persistent-super request
+  deterministically inside the runtime when the prompt is classified as an
+  operational execution/proof request, rather than asking the VText model to
+  make that handoff.
 
 unproven or partial claims:
 
@@ -312,8 +332,9 @@ unproven or partial claims:
 - No product-path owner prompt has yet supervised the source-refresh,
   research-evidence, graph-candidate, projection-review, publication-update,
   publication-artifact, publication-approval sequence to completion on staging.
-- The prompt orchestration repair is only locally verified until it is pushed,
-  deployed, and reprobed through the authenticated staging command prompt.
+- The first prompt orchestration repair was pushed and deployed, but
+  authenticated staging reprobe still hit the VText Fireworks 412 blocker
+  before any visible persistent-super handoff.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -321,8 +342,9 @@ unproven or partial claims:
 
 next step:
 
-- Land and deploy the prompt-bar/conductor/VText handoff repair, verify that an
-  authenticated staging Community Wire proof prompt requests persistent super
-  execution first, then use that path to create/update `global-wire/Wire.vtext`
-  through the product source cycle rather than test fixtures and prove staging
-  renders edition-transcluded VText articles.
+- Replace provider-steered operational handoff with a deterministic runtime
+  persistent-super request for execution/proof prompts, deploy it, verify that
+  the authenticated staging Community Wire proof prompt produces a visible
+  super execution handoff, then use that path to create/update
+  `global-wire/Wire.vtext` through the product source cycle rather than test
+  fixtures and prove staging renders edition-transcluded VText articles.

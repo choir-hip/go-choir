@@ -212,6 +212,12 @@ Update after 2026-06-09 staging slices:
   `request_super_execution` first. Ordinary writing and factual prompts still
   start with `edit_vtext`, and scheduled worker-wake turns remain free to
   choose the next tool.
+- Deployed counter-evidence after that repair: commit
+  `cbfd0637ab921947bfd5652fbe47411dca20ef79` passed CI and deployed to
+  staging, but the same authenticated Community Wire proof prompt still opened
+  a VText document and hit the Fireworks 412 blocker. The next repair should
+  create the persistent-super handoff deterministically in runtime for
+  operational proof prompts, not depend on another VText provider turn.
 
 ## Homotopy Parameters
 
@@ -489,6 +495,12 @@ what was proven:
   `nix develop -c go test ./internal/runtime -run 'TestInitialVTextToolChoiceUsesExactTools|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestHandlePromptBarOperationalProofInitialRunRequestsSuperFirst|TestVTextPromptInitialRevisionUsesSingleWriterLoop'`,
   `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice)'`,
   and `nix develop -c scripts/go-test-runtime-shards`.
+- Prompt orchestration repair deploy and failed reprobe: commit `cbfd0637`
+  passed CI run `27221392006`; deploy job `80377182065` succeeded; staging
+  `/health` reported proxy and sandbox at
+  `cbfd0637ab921947bfd5652fbe47411dca20ef79`. An authenticated `Command
+  prompt` reprobe still opened a VText document and reported the same
+  Fireworks 412 blocker before any visible persistent-super execution handoff.
 
 unproven or partial claims:
 
@@ -503,12 +515,15 @@ unproven or partial claims:
   needs a live owner-prompt orchestration path that supervises the Wire
   source-to-publication sequence rather than routing the request to VText-only
   drafting.
-- The prompt orchestration repair is not yet deployed or reprobed on staging.
+- The first prompt orchestration repair was deployed and reprobed on staging,
+  but it still depends on a VText provider turn and failed with Fireworks 412.
 
 next step:
 
-- Land and deploy the prompt-bar/conductor/VText handoff repair, verify the
-  authenticated staging command prompt requests persistent super execution for
-  the Community Wire proof prompt, then run a staging product-path proof that
-  creates or approves a real article VText, updates `global-wire/Wire.vtext`,
-  and renders the edition-transcluded article in Global Wire.
+- Replace provider-steered handoff with a deterministic runtime
+  persistent-super request for operational proof prompts, deploy it, verify the
+  authenticated staging command prompt produces a visible super execution
+  handoff for the Community Wire proof prompt, then run a staging product-path
+  proof that creates or approves a real article VText, updates
+  `global-wire/Wire.vtext`, and renders the edition-transcluded article in
+  Global Wire.
