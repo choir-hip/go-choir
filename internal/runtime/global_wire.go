@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,16 @@ type globalWireStoriesResponse struct {
 	Stories      []types.GlobalWireStory       `json:"stories"`
 	StyleSources []types.GlobalWireStyleSource `json:"style_sources"`
 	Source       string                        `json:"source"`
+	Edition      *globalWireEditionResponse    `json:"edition,omitempty"`
+}
+
+type globalWireEditionResponse struct {
+	DocID          string   `json:"doc_id"`
+	RevisionID     string   `json:"revision_id"`
+	SourcePath     string   `json:"source_path"`
+	Title          string   `json:"title"`
+	IncludedDocIDs []string `json:"included_doc_ids"`
+	UpdatedAt      string   `json:"updated_at,omitempty"`
 }
 
 type globalWireContributionListResponse struct {
@@ -149,6 +160,10 @@ type sourceMaxxResolvedRun struct {
 	LocalRecord  *types.RunRecord
 	Events       []types.EventRecord
 }
+
+const communityWireEditionSourcePath = "global-wire/Wire.vtext"
+
+var vtextTransclusionRefRE = regexp.MustCompile(`vtext:([A-Za-z0-9_.:-]{1,160})`)
 
 type globalWireReconciliationResponse struct {
 	Contributions         []types.GlobalWireContribution              `json:"contributions"`
@@ -510,11 +525,17 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 		styleSources = stories[0].StyleSources
 	}
 	source := "community-wire-vtext-index"
-	if sourceMaxxStories, err := h.sourceMaxxVTextStories(r.Context(), styleSources, 12); err == nil && len(sourceMaxxStories) > 0 {
-		stories = prependGlobalWireStories(sourceMaxxStories, stories)
-		source = "community-wire-vtext-index"
+	var edition *globalWireEditionResponse
+	if editionStories, editionResp, err := h.communityWireEditionVTextStories(r.Context(), styleSources, 12); err == nil {
+		edition = editionResp
+		if len(editionStories) > 0 {
+			stories = prependGlobalWireStories(editionStories, stories)
+			source = "community-wire-edition-vtext"
+		} else if editionResp != nil {
+			source = "community-wire-edition-vtext"
+		}
 	} else if err != nil {
-		log.Printf("global wire: source-network vtext index unavailable: %v", err)
+		log.Printf("global wire: community wire edition unavailable: %v", err)
 	}
 	for i := range stories {
 		stories[i] = normalizeGlobalWireStoryPresentation(stories[i])
@@ -523,7 +544,102 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 		Stories:      stories,
 		StyleSources: styleSources,
 		Source:       source,
+		Edition:      edition,
 	})
+}
+
+func (h *APIHandler) communityWireEditionVTextStories(ctx context.Context, styleSources []types.GlobalWireStyleSource, limit int) ([]types.GlobalWireStory, *globalWireEditionResponse, error) {
+	if h == nil || h.rt == nil || h.rt.Store() == nil {
+		return nil, nil, nil
+	}
+	platformOwner := sourceMaxxPlatformOwnerID()
+	editionDocID, err := h.rt.Store().GetDocumentAlias(ctx, platformOwner, communityWireEditionSourcePath)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+	editionDoc, err := h.rt.Store().GetDocument(ctx, editionDocID, platformOwner)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+	if strings.TrimSpace(editionDoc.CurrentRevisionID) == "" {
+		return nil, &globalWireEditionResponse{
+			DocID:      editionDoc.DocID,
+			SourcePath: communityWireEditionSourcePath,
+			Title:      editionDoc.Title,
+			UpdatedAt:  editionDoc.UpdatedAt.Format(time.RFC3339Nano),
+		}, nil
+	}
+	editionRev, err := h.rt.Store().GetRevision(ctx, editionDoc.CurrentRevisionID, platformOwner)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+	includedDocIDs := communityWireEditionIncludedDocIDs(editionRev.Content, editionDoc.DocID)
+	edition := &globalWireEditionResponse{
+		DocID:          editionDoc.DocID,
+		RevisionID:     editionRev.RevisionID,
+		SourcePath:     communityWireEditionSourcePath,
+		Title:          editionDoc.Title,
+		IncludedDocIDs: includedDocIDs,
+		UpdatedAt:      editionDoc.UpdatedAt.Format(time.RFC3339Nano),
+	}
+	stories := make([]types.GlobalWireStory, 0, min(len(includedDocIDs), limit))
+	for _, docID := range includedDocIDs {
+		if limit > 0 && len(stories) >= limit {
+			break
+		}
+		doc, err := h.rt.Store().GetDocument(ctx, docID, platformOwner)
+		if err != nil {
+			if err == store.ErrNotFound {
+				continue
+			}
+			return nil, nil, err
+		}
+		if strings.TrimSpace(doc.CurrentRevisionID) == "" {
+			continue
+		}
+		rev, err := h.rt.Store().GetRevision(ctx, doc.CurrentRevisionID, platformOwner)
+		if err != nil {
+			if err == store.ErrNotFound {
+				continue
+			}
+			return nil, nil, err
+		}
+		story, ok := sourceMaxxVTextStoryFromCurrentRevision(ctx, doc, rev, styleSources)
+		if !ok {
+			continue
+		}
+		story.Prominence = 100 - len(stories)
+		story.SourceState = "community-wire-edition-vtext"
+		stories = append(stories, story)
+	}
+	return stories, edition, nil
+}
+
+func communityWireEditionIncludedDocIDs(content, editionDocID string) []string {
+	seen := map[string]bool{}
+	editionDocID = strings.TrimSpace(editionDocID)
+	out := []string{}
+	for _, match := range vtextTransclusionRefRE.FindAllStringSubmatch(content, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		docID := strings.TrimSpace(match[1])
+		if docID == "" || docID == editionDocID || seen[docID] {
+			continue
+		}
+		seen[docID] = true
+		out = append(out, docID)
+	}
+	return out
 }
 
 func (h *APIHandler) sourceMaxxVTextStories(ctx context.Context, styleSources []types.GlobalWireStyleSource, limit int) ([]types.GlobalWireStory, error) {

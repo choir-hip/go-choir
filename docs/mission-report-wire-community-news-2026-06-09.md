@@ -135,6 +135,17 @@ instead of filled with seeded stories.
   `seed source neighborhood`, `Port backlog recedes`, and `StoryGraph desk`
   were all `0`. Screenshot evidence was written outside the repo at
   `/tmp/choir-staging-global-wire-open-proof.png`.
+- Second behavior slice: `/api/global-wire/stories` now recognizes the
+  canonical Community Wire edition alias `global-wire/Wire.vtext`. Platform
+  VText articles are no longer indexed merely because they are recent platform
+  documents; they must be transcluded by that edition VText through a
+  `vtext:<doc_id>` reference. The response reports
+  `community-wire-edition-vtext` and edition metadata when an edition exists.
+- Focused verification for the edition gate:
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWireStories(ReturnsHonestEmptyState|DoesNotIndexUntranscludedPlatformVTexts|IndexesEditionTranscludedVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest)'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  - `nix develop -c go test ./internal/runtime -run '^$'`
+  - `npm run build` in `frontend/`
 
 ## Run State
 
@@ -162,11 +173,14 @@ what was proven:
 - Staging health reports both proxy and sandbox at that SHA.
 - The deployed public Global Wire UI renders the honest empty Community Wire
   state and no longer exposes the deleted preview/seed front-page text.
+- Locally, the story endpoint now requires the canonical `Wire.vtext` edition
+  to transclude platform VText articles before they appear in Global Wire.
 
 unproven or partial claims:
 
 - No source-cycle proof yet.
-- No VText edition rendering proof yet.
+- No deployed VText edition rendering proof yet; the edition gate is locally
+  implemented but not pushed/deployed.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -174,7 +188,6 @@ unproven or partial claims:
 
 next step:
 
-- Increase realism from honest-empty front page to edition VText truth: add a
-  Community Wire edition VText index/renderer path, then prove that the deployed
-  front page renders VText-owned articles from source artifacts rather than the
-  compatibility story-list shape.
+- Commit, push, monitor CI/deploy, and run staging acceptance for the
+  edition-gated `Wire.vtext` path. Then continue toward creating/updating the
+  edition VText through the product source cycle rather than test fixtures.

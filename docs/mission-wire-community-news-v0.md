@@ -357,11 +357,19 @@ last checkpoint:
   `community-wire-vtext-index`, and no `SourceMaxx newsroom`,
   `seed source neighborhood`, `Port backlog recedes`, or `StoryGraph desk`
   text.
+- Second behavior slice implemented locally: Global Wire now uses
+  `global-wire/Wire.vtext` as the canonical Community Wire edition alias, and
+  platform article VTexts must be transcluded by that edition before they enter
+  the front-page story response.
 
 current artifact state:
 
 - The deployed Wire app/API path no longer invents seeded front-page stories
   when no VText-owned articles exist.
+- The local API path now has an edition gate for platform VText articles:
+  untranscluded platform VTexts remain invisible to Global Wire, while
+  `vtext:<doc_id>` refs in `global-wire/Wire.vtext` include those article
+  VTexts in edition order.
 - Existing code still contains legacy StoryGraph/SourceMaxx data structures,
   style-source, source-refresh, publication, autoradio, newsletter, and deeper
   compatibility behavior that has not yet been deleted.
@@ -373,6 +381,8 @@ what shipped:
 - First behavior slice commit `205125c9`.
 - Explicit fixture repair commit `a89f8a48`.
 - Forced staging deploy for `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`.
+- Edition-gated API slice is local only until its own commit/push/deploy loop
+  completes.
 
 what was proven:
 
@@ -396,11 +406,18 @@ what was proven:
 - Staging browser proof showed the deployed Global Wire empty state, zero
   stories, `community-wire-vtext-index`, and zero occurrences of deleted seed
   texts.
+- Local tests proved the edition gate:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWireStories(ReturnsHonestEmptyState|DoesNotIndexUntranscludedPlatformVTexts|IndexesEditionTranscludedVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest)'`,
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`,
+  `nix develop -c go test ./internal/runtime -run '^$'`, and
+  `npm run build` in `frontend/`.
 
 unproven or partial claims:
 
 - Real VText creation from current source cycles.
 - Telegram API ingestion.
 - Removal of Telegram public preview HTML scraping from the Wire ingestion path.
-- Edition VText graph rendering; the current deployed surface is an honest
-  empty state or compatibility story-list view, not the final edition object.
+- Deployed edition VText graph rendering; the current deployed surface is still
+  the honest empty state until this local edition-gated slice lands.
+- Product-path creation/update of `Wire.vtext`; this slice proves fixture-backed
+  edition indexing only.
