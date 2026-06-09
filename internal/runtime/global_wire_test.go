@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -2050,6 +2051,181 @@ func TestHandleGlobalWireFetchCycleCreatesRegistryAndRefreshEvidence(t *testing.
 		len(listResp.SchedulerRuns) != 1 ||
 		listResp.SchedulerRuns[0].FetchCycleID != resp.FetchCycle.ID {
 		t.Fatalf("fetch cycle not listed durably: %+v", listResp)
+	}
+}
+
+func TestHandleGlobalWireSourceNativeRefreshPublishesEditionVText(t *testing.T) {
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/source-service/search" {
+			t.Fatalf("unexpected source service path %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("q"); got != "school board budget vote" {
+			t.Fatalf("query = %q, want school board budget vote", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(sourceapi.SearchResponse{
+			Query:    "school board budget vote",
+			Provider: sourceapi.ProviderName,
+			Metadata: sourceapi.Metadata{TargetKind: sourceapi.TargetKind},
+			Results: []sourceapi.ItemResult{{
+				Rank:          1,
+				TargetKind:    sourceapi.TargetKind,
+				ItemID:        "srcitem_school_budget",
+				SourceID:      "rss:community",
+				SourceType:    "rss",
+				FetchID:       "fetch-school-budget",
+				Title:         "School board approves budget after late amendment",
+				Body:          "The board approved a revised budget after adding a late amendment for after-school transportation.",
+				URL:           "https://example.test/school-budget",
+				CanonicalURL:  "https://example.test/school-budget",
+				ContentHash:   "hash-school-budget",
+				EvidenceLevel: "source-service-ledger",
+			}},
+		})
+	}))
+	defer sourceServer.Close()
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	stories, err := handler.rt.Store().ListGlobalWireStories(ctx, "user-alpha")
+	if err != nil {
+		t.Fatalf("list stories before source-native refresh: %v", err)
+	}
+	if len(stories) != 0 {
+		t.Fatalf("test requires no seeded StoryGraph stories, got %+v", stories)
+	}
+
+	refreshW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/source-refresh", `{"query":"school board budget vote","max_results":2}`, "user-alpha")
+	if refreshW.Code != http.StatusCreated {
+		t.Fatalf("source-native refresh status = %d body=%s", refreshW.Code, refreshW.Body.String())
+	}
+	var refreshResp globalWireSourceRefreshResponse
+	if err := json.NewDecoder(refreshW.Body).Decode(&refreshResp); err != nil {
+		t.Fatalf("decode source-native refresh: %v", err)
+	}
+	if refreshResp.ContentItem == nil ||
+		refreshResp.Candidate == nil ||
+		refreshResp.ResearchTask == nil ||
+		refreshResp.ExtractionArtifact == nil ||
+		len(refreshResp.ProjectionReviews) != 1 ||
+		!strings.HasPrefix(refreshResp.RefreshRun.StoryID, "source-native-") ||
+		refreshResp.ProjectionReviews[0].StoryID != refreshResp.RefreshRun.StoryID ||
+		refreshResp.ProjectionReviews[0].SourceContentID != refreshResp.ContentItem.ContentID {
+		t.Fatalf("source-native refresh missing review artifacts: %+v", refreshResp)
+	}
+	if _, err := handler.rt.Store().GetGlobalWireStory(ctx, "user-alpha", refreshResp.RefreshRun.StoryID); err != store.ErrNotFound {
+		t.Fatalf("source-native refresh persisted StoryGraph story, err=%v", err)
+	}
+
+	taskBody := fmt.Sprintf(`{"task_id":%q,"action":"complete","evidence_summary":"Reviewed source-service evidence for source-native Community Wire article.","evidence_level":"reconciliation-level"}`, refreshResp.ResearchTask.ID)
+	taskW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/research-tasks", taskBody, "user-alpha")
+	if taskW.Code != http.StatusCreated {
+		t.Fatalf("complete source-native research task status = %d body=%s", taskW.Code, taskW.Body.String())
+	}
+	var taskResp globalWireResearchTaskLifecycleResponse
+	if err := json.NewDecoder(taskW.Body).Decode(&taskResp); err != nil {
+		t.Fatalf("decode source-native research task: %v", err)
+	}
+	handoffBody := fmt.Sprintf(`{"evidence_id":%q,"decision":"accept","note":"Accept source-native article evidence for platform review."}`, taskResp.Evidence.ID)
+	handoffW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/research-evidence", handoffBody, "user-alpha")
+	if handoffW.Code != http.StatusCreated {
+		t.Fatalf("source-native research evidence handoff status = %d body=%s", handoffW.Code, handoffW.Body.String())
+	}
+	var handoffResp globalWireResearchEvidenceDecisionResponse
+	if err := json.NewDecoder(handoffW.Body).Decode(&handoffResp); err != nil {
+		t.Fatalf("decode source-native handoff: %v", err)
+	}
+
+	draftBody := fmt.Sprintf(`{"review_id":%q}`, refreshResp.ProjectionReviews[0].ID)
+	draftW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/projection-reviews", draftBody, "user-alpha")
+	if draftW.Code != http.StatusCreated {
+		t.Fatalf("source-native projection draft status = %d body=%s", draftW.Code, draftW.Body.String())
+	}
+	var draftResp globalWireProjectionReviewDraftResponse
+	if err := json.NewDecoder(draftW.Body).Decode(&draftResp); err != nil {
+		t.Fatalf("decode source-native projection draft: %v", err)
+	}
+	if draftResp.Review.Status != "draft-created" ||
+		!strings.Contains(draftResp.Revision.Content, "School board approves budget") ||
+		!strings.Contains(draftResp.Revision.Content, "source:gw-src-") {
+		t.Fatalf("source-native projection draft missing article/source content: %+v", draftResp)
+	}
+	approveBody := fmt.Sprintf(`{"review_id":%q,"action":"approve"}`, draftResp.Review.ID)
+	approveW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/projection-reviews", approveBody, "user-alpha")
+	if approveW.Code != http.StatusOK {
+		t.Fatalf("source-native projection approve status = %d body=%s", approveW.Code, approveW.Body.String())
+	}
+	var approveResp globalWireProjectionReviewDraftResponse
+	if err := json.NewDecoder(approveW.Body).Decode(&approveResp); err != nil {
+		t.Fatalf("decode source-native projection approval: %v", err)
+	}
+	if approveResp.Review.Status != "approved" ||
+		approveResp.Review.ApprovedStoryDocID != approveResp.Document.DocID ||
+		approveResp.Review.ApprovedRevisionID != approveResp.Revision.RevisionID ||
+		approveResp.Projection.StoryID != refreshResp.RefreshRun.StoryID {
+		t.Fatalf("source-native projection approval missing lineage: %+v", approveResp)
+	}
+
+	publicationBody := fmt.Sprintf(`{"research_decision_id":%q}`, handoffResp.Decision.ID)
+	publicationW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-updates", publicationBody, "user-alpha")
+	if publicationW.Code != http.StatusCreated {
+		t.Fatalf("source-native publication update status = %d body=%s", publicationW.Code, publicationW.Body.String())
+	}
+	var publicationResp globalWirePublicationUpdateResponse
+	if err := json.NewDecoder(publicationW.Body).Decode(&publicationResp); err != nil {
+		t.Fatalf("decode source-native publication update: %v", err)
+	}
+	if publicationResp.Update.StoryID != refreshResp.RefreshRun.StoryID ||
+		len(publicationResp.Update.ProjectionReviewIDs) != 1 ||
+		publicationResp.Update.ProjectionStates[0] != "approved" {
+		t.Fatalf("source-native publication update missing approved projection review: %+v", publicationResp)
+	}
+
+	artifactBody := fmt.Sprintf(`{"update_id":%q,"channel":"community-wire"}`, publicationResp.Update.ID)
+	artifactW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-artifacts", artifactBody, "user-alpha")
+	if artifactW.Code != http.StatusCreated {
+		t.Fatalf("source-native publication artifact status = %d body=%s", artifactW.Code, artifactW.Body.String())
+	}
+	var artifactResp globalWirePublicationArtifactResponse
+	if err := json.NewDecoder(artifactW.Body).Decode(&artifactResp); err != nil {
+		t.Fatalf("decode source-native publication artifact: %v", err)
+	}
+	if artifactResp.Story.ID != refreshResp.RefreshRun.StoryID ||
+		artifactResp.Artifact.SourceContentID != refreshResp.ContentItem.ContentID ||
+		!slices.Contains(artifactResp.Artifact.CitationRefs, "projection_review:"+approveResp.Review.ID) {
+		t.Fatalf("source-native publication artifact missing lineage: %+v", artifactResp)
+	}
+
+	reviewBody := fmt.Sprintf(`{"artifact_id":%q,"decision":"approve","note":"owner approved source-native article for Community Wire"}`, artifactResp.Artifact.ID)
+	reviewW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-artifact-reviews", reviewBody, "user-alpha")
+	if reviewW.Code != http.StatusCreated {
+		t.Fatalf("source-native artifact approval status = %d body=%s", reviewW.Code, reviewW.Body.String())
+	}
+	var reviewResp globalWirePublicationArtifactReviewResponse
+	if err := json.NewDecoder(reviewW.Body).Decode(&reviewResp); err != nil {
+		t.Fatalf("decode source-native artifact approval: %v", err)
+	}
+	if reviewResp.Edition == nil ||
+		reviewResp.Edition.SourcePath != "global-wire/Wire.vtext" ||
+		len(reviewResp.Edition.IncludedDocIDs) != 1 {
+		t.Fatalf("source-native artifact approval did not update edition: %+v", reviewResp)
+	}
+
+	storiesW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
+	if storiesW.Code != http.StatusOK {
+		t.Fatalf("stories after source-native publication status = %d body=%s", storiesW.Code, storiesW.Body.String())
+	}
+	var storiesResp globalWireStoriesResponse
+	if err := json.NewDecoder(storiesW.Body).Decode(&storiesResp); err != nil {
+		t.Fatalf("decode source-native stories response: %v", err)
+	}
+	if storiesResp.Source != "community-wire-edition-vtext" ||
+		len(storiesResp.Stories) != 1 ||
+		!strings.Contains(storiesResp.Stories[0].Headline, "School board approves budget") {
+		t.Fatalf("published source-native article missing from front page stories: %+v", storiesResp)
 	}
 }
 

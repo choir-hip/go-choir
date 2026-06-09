@@ -641,6 +641,16 @@ what was proven:
   `2026-06-09T18:01:08Z`. The proof prompt now reaches
   `product_api_request`, `finish_worker_delegation`, `save_evidence`, and
   `submit_coagent_update`.
+- Source-native Global Wire repair locally verified: authenticated
+  `/api/global-wire/source-refresh` can now run without a seeded `story_id`,
+  create a deterministic `source-native-*` source context, produce
+  claim/research/extraction/projection-review artifacts without persisting a
+  `GlobalWireStory`, approve article VText, package a publication artifact, and
+  update `global-wire/Wire.vtext` through publication artifact approval.
+  Verification passed with
+  `nix develop -c go test ./internal/runtime -run TestHandleGlobalWireSourceNativeRefreshPublishesEditionVText -count=1`,
+  the neighboring seeded-story Global Wire tests, and
+  `nix develop -c scripts/go-test-local`.
 
 unproven or partial claims:
 
@@ -677,10 +687,11 @@ unproven or partial claims:
 - The prompt now reaches foreground product API orchestration on staging, but
   the positive source-to-edition proof remains blocked by seeded
   StoryGraph/source-refresh state.
+- The source-native Global Wire repair is local only until committed, pushed,
+  deployed, and reprobed on staging.
 
 next step:
 
-- Repair the seeded StoryGraph/source-refresh dependency exposed by foreground
-  product API orchestration. The next proof should move from seeded dossier
-  evidence to real source artifacts, VText article/review creation,
-  `global-wire/Wire.vtext` update, and rendered edition output.
+- Commit and deploy the source-native Global Wire repair, then reprobe the
+  authenticated staging prompt for real source artifacts, VText article/review
+  creation, `global-wire/Wire.vtext` update, and rendered edition output.

@@ -526,6 +526,17 @@ what was proven:
 - Local foreground-super product API repair now gives the active super a typed
   owner-context product API path, avoiding both worker browser impersonation
   and model-controlled trusted-header spoofing.
+- Local source-native Global Wire repair now lets authenticated
+  `/api/global-wire/source-refresh` omit `story_id`, import the Source Service
+  top result as a deterministic `source-native-*` review context, create
+  claim/research/extraction/projection-review artifacts without persisting a
+  seeded `GlobalWireStory`, approve article VText, package a publication
+  artifact, and update `global-wire/Wire.vtext` through the existing
+  publication artifact approval path.
+- Local verification passed for the source-native path:
+  `nix develop -c go test ./internal/runtime -run TestHandleGlobalWireSourceNativeRefreshPublishesEditionVText -count=1`,
+  the neighboring seeded-story Global Wire tests, and
+  `nix develop -c scripts/go-test-local`.
 
 unproven or partial claims:
 
@@ -566,6 +577,9 @@ unproven or partial claims:
   coagent evidence. Positive edition proof remains blocked by seeded
   StoryGraph/source-refresh state, not by prompt routing, worker auth, or
   foreground product API access.
+- The source-native Global Wire repair is local only until committed, pushed,
+  deployed, and reprobed against the authenticated staging prompt. It proves the
+  no-seeded-story product API sequence locally, not staging acceptance yet.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -573,7 +587,6 @@ unproven or partial claims:
 
 next step:
 
-- Repair the seeded StoryGraph/source-refresh dependency exposed by foreground
-  `product_api_request`. The next proof should move the product API flow from
-  seeded dossier evidence toward real source artifacts, VText article/review
+- Commit and deploy the source-native Global Wire repair, then reprobe the
+  authenticated staging prompt for real source artifacts, VText article/review
   creation, `global-wire/Wire.vtext` update, and rendered edition output.

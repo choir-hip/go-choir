@@ -81,6 +81,7 @@ type globalWireSourceRefreshResponse struct {
 	Contribution       *types.GlobalWireContribution           `json:"contribution,omitempty"`
 	Decision           *types.GlobalWireReconciliationDecision `json:"decision,omitempty"`
 	Candidate          *types.GlobalWireGraphUpdateCandidate   `json:"candidate,omitempty"`
+	ProjectionReviews  []types.GlobalWireProjectionReview      `json:"projection_reviews,omitempty"`
 	ClaimRecord        *types.GlobalWireClaimRecord            `json:"claim_record,omitempty"`
 	SourceReviewSignal *types.GlobalWireSourceReviewSignal     `json:"source_review_signal,omitempty"`
 	ResearchTask       *types.GlobalWireResearchTask           `json:"research_task,omitempty"`
@@ -1621,15 +1622,15 @@ func (h *APIHandler) HandleGlobalWireSourceRefresh(w http.ResponseWriter, r *htt
 	}
 	req.StoryID = strings.TrimSpace(req.StoryID)
 	req.Query = strings.TrimSpace(req.Query)
-	if req.StoryID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "story_id is required"})
-		return
-	}
 	if req.MaxResults <= 0 {
 		req.MaxResults = 3
 	}
 	if req.MaxResults > 10 {
 		req.MaxResults = 10
+	}
+	if req.StoryID == "" {
+		h.handleGlobalWireSourceNativeRefresh(w, r, ownerID, req)
+		return
 	}
 	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, req.StoryID)
 	if err != nil {
@@ -1795,6 +1796,227 @@ func (h *APIHandler) HandleGlobalWireSourceRefresh(w http.ResponseWriter, r *htt
 		ResearchTask:       &researchTask,
 		ExtractionArtifact: &extractionArtifact,
 	})
+}
+
+func (h *APIHandler) handleGlobalWireSourceNativeRefresh(w http.ResponseWriter, r *http.Request, ownerID string, req globalWireSourceRefreshRequest) {
+	if req.Query == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "query is required when story_id is omitted"})
+		return
+	}
+	sourceClient := newSourceSearchClientFromEnv()
+	if sourceClient == nil {
+		run, runErr := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+			ID:       "global-wire-source-refresh-" + uuid.NewString(),
+			OwnerID:  ownerID,
+			Query:    req.Query,
+			Status:   "unavailable",
+			Provider: "source-service",
+			Message:  "Source Service is not configured for this runtime.",
+		})
+		if runErr != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
+			return
+		}
+		writeAPIJSON(w, http.StatusServiceUnavailable, globalWireSourceRefreshResponse{
+			Status:     run.Status,
+			Source:     run.Provider,
+			Query:      run.Query,
+			Message:    run.Message,
+			RefreshRun: run,
+		})
+		return
+	}
+	resp, err := sourceClient.SearchSources(r.Context(), req.Query, req.MaxResults)
+	if err != nil {
+		run, runErr := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+			ID:       "global-wire-source-refresh-" + uuid.NewString(),
+			OwnerID:  ownerID,
+			Query:    req.Query,
+			Status:   "unavailable",
+			Provider: "source-service",
+			Message:  err.Error(),
+		})
+		if runErr != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
+			return
+		}
+		writeAPIJSON(w, http.StatusBadGateway, globalWireSourceRefreshResponse{
+			Status:     run.Status,
+			Source:     run.Provider,
+			Query:      run.Query,
+			Message:    run.Message,
+			RefreshRun: run,
+		})
+		return
+	}
+	provider := firstNonEmptyString(resp.Provider, sourceapi.ProviderName)
+	query := firstNonEmptyString(resp.Query, req.Query)
+	if len(resp.Results) == 0 {
+		run, runErr := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+			ID:       "global-wire-source-refresh-" + uuid.NewString(),
+			OwnerID:  ownerID,
+			Query:    query,
+			Status:   "no-evidence",
+			Provider: provider,
+			Message:  "Source Service returned no matching evidence.",
+		})
+		if runErr != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, globalWireSourceRefreshResponse{
+			Status:     run.Status,
+			Source:     run.Provider,
+			Query:      run.Query,
+			Message:    run.Message,
+			RefreshRun: run,
+		})
+		return
+	}
+	item, err := h.ensureGlobalWireSourceServiceContentItem(r, ownerID, resp.Results[0])
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to import source refresh result"})
+		return
+	}
+	story := globalWireSourceNativeStory(ownerID, item)
+	classification := globalWireSourceNativeClassification(item)
+	contribution, decision, candidate, err := h.createGlobalWireSourceRefreshArtifacts(r, ownerID, story, item, classification)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create source refresh artifacts"})
+		return
+	}
+	run, err := h.createGlobalWireSourceRefreshRun(r, types.GlobalWireSourceRefreshRun{
+		ID:                   "global-wire-source-refresh-" + uuid.NewString(),
+		OwnerID:              ownerID,
+		StoryID:              story.ID,
+		Query:                query,
+		Status:               classification.Status,
+		Provider:             provider,
+		Message:              classification.Message,
+		UpdateClassification: classification.UpdateClassification,
+		StoryGraphAction:     classification.StoryGraphAction,
+		ProjectionAction:     classification.ProjectionAction,
+		SourceContentID:      item.ContentID,
+		ContributionID:       contribution.ID,
+		DecisionID:           decision.ID,
+		CandidateID:          candidate.ID,
+	})
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record source refresh run"})
+		return
+	}
+	claimRecord, sourceReviewSignal, researchTask, extractionArtifact, err := h.createGlobalWireClaimResearchArtifacts(r, ownerID, story, item, classification, run, contribution, decision, candidate)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create claim research artifacts"})
+		return
+	}
+	reviews, err := h.createGlobalWireSourceNativeProjectionReviews(r, ownerID, story, item, candidate)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create source-native projection review"})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, globalWireSourceRefreshResponse{
+		Status:             run.Status,
+		Source:             run.Provider,
+		Query:              run.Query,
+		Message:            run.Message,
+		RefreshRun:         run,
+		ContentItem:        &item,
+		Contribution:       &contribution,
+		Decision:           &decision,
+		Candidate:          &candidate,
+		ProjectionReviews:  reviews,
+		ClaimRecord:        &claimRecord,
+		SourceReviewSignal: &sourceReviewSignal,
+		ResearchTask:       &researchTask,
+		ExtractionArtifact: &extractionArtifact,
+	})
+}
+
+func globalWireSourceNativeClassification(item types.ContentItem) globalWireSourceUpdateClassification {
+	return globalWireSourceUpdateClassification{
+		UpdateClassification: "source-native-article-candidate",
+		CandidateKind:        "source-native-article-candidate",
+		SourceTier:           "lead",
+		EdgeKind:             "source-native",
+		StoryGraphAction:     "source-native-review",
+		ProjectionAction:     "projection-review-required",
+		Status:               "candidate-review",
+		Message:              "Source Service evidence imported as a source-native Community Wire article candidate; no seeded StoryGraph node is required or mutated.",
+		Rationale:            "Review the imported source as article evidence and create owner-approved VText before publication.",
+	}
+}
+
+func globalWireSourceNativeStory(ownerID string, item types.ContentItem) types.GlobalWireStory {
+	storyID := globalWireSourceNativeStoryID(ownerID, item)
+	title := firstNonEmptyString(strings.TrimSpace(item.Title), strings.TrimSpace(item.CanonicalURL), strings.TrimSpace(item.SourceURL), "Community Wire source candidate")
+	body := strings.TrimSpace(item.TextContent)
+	dek := truncateRunes(body, 220)
+	if dek == "" {
+		dek = "Source-native Community Wire article candidate imported from Source Service evidence."
+	}
+	source := types.GlobalWireSourceItem{
+		ID:           firstNonEmptyString(item.ContentID, storyID),
+		ContentID:    item.ContentID,
+		Title:        title,
+		Standing:     "source-service evidence",
+		Role:         "lead",
+		CanonicalURL: firstNonEmptyString(item.CanonicalURL, item.SourceURL),
+	}
+	projection := body
+	if projection == "" {
+		projection = dek
+	}
+	return types.GlobalWireStory{
+		ID:                  storyID,
+		OwnerID:             ownerID,
+		Headline:            title,
+		Dek:                 dek,
+		Freshness:           "source-native",
+		Prominence:          1,
+		Tension:             "Owner review required before publication.",
+		ChangeState:         "source-native-review",
+		NodeTone:            "evidence-led",
+		Manifest:            types.GlobalWireSourceManifest{Lead: []types.GlobalWireSourceItem{source}},
+		Claims:              []string{dek},
+		Projections:         map[string]string{"wire-style": projection},
+		ProjectionVTextDocs: map[string]string{},
+		StyleSources: []types.GlobalWireStyleSource{{
+			ID:      "wire-style",
+			Title:   "Community Wire source-native article",
+			Label:   "Wire",
+			Summary: "Default source-native article projection for Community Wire.",
+		}},
+		SourceState: "source-native-content-item",
+	}
+}
+
+func globalWireSourceNativeStoryID(ownerID string, item types.ContentItem) string {
+	key := firstNonEmptyString(item.ContentID, item.ContentHash, item.CanonicalURL, item.SourceURL, item.Title)
+	return "source-native-" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ownerID+":"+key)).String()
+}
+
+func isGlobalWireSourceNativeStoryID(storyID string) bool {
+	return strings.HasPrefix(strings.TrimSpace(storyID), "source-native-")
+}
+
+func (h *APIHandler) createGlobalWireSourceNativeProjectionReviews(r *http.Request, ownerID string, story types.GlobalWireStory, item types.ContentItem, candidate types.GlobalWireGraphUpdateCandidate) ([]types.GlobalWireProjectionReview, error) {
+	review, err := h.rt.Store().CreateGlobalWireProjectionReview(r.Context(), types.GlobalWireProjectionReview{
+		ID:               "global-wire-projection-review-" + uuid.NewString(),
+		OwnerID:          ownerID,
+		StoryID:          story.ID,
+		CandidateID:      candidate.ID,
+		SourceContentID:  item.ContentID,
+		StyleID:          "wire-style",
+		StyleTitle:       "Community Wire source-native article",
+		ProjectionAction: "projection-review-required",
+		Status:           "projection-review-required",
+		Rationale:        "Source-native Community Wire article candidate requires owner-approved VText before publication.",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return []types.GlobalWireProjectionReview{review}, nil
 }
 
 // HandleGlobalWireFetchCycles lists or runs a bounded source-registry fetch
@@ -4712,7 +4934,15 @@ func (h *APIHandler) createGlobalWirePublicationUpdate(r *http.Request, ownerID 
 	if decision.Decision != "accepted-for-review" || decision.ResultState != "ready-for-platform-review" {
 		return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, store.ErrNotFound
 	}
-	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, decision.StoryID)
+	var sourceItem *types.ContentItem
+	if strings.TrimSpace(decision.SourceContentID) != "" {
+		rec, err := h.rt.Store().GetContentItem(r.Context(), ownerID, decision.SourceContentID)
+		if err != nil {
+			return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, err
+		}
+		sourceItem = &rec
+	}
+	story, err := h.globalWireStoryContext(r, ownerID, decision.StoryID, sourceItem)
 	if err != nil {
 		return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, err
 	}
@@ -4723,14 +4953,6 @@ func (h *APIHandler) createGlobalWirePublicationUpdate(r *http.Request, ownerID 
 			return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, err
 		}
 		candidate = &rec
-	}
-	var sourceItem *types.ContentItem
-	if strings.TrimSpace(decision.SourceContentID) != "" {
-		rec, err := h.rt.Store().GetContentItem(r.Context(), ownerID, decision.SourceContentID)
-		if err != nil {
-			return types.GlobalWirePublicationUpdate{}, types.GlobalWireResearchEvidenceDecision{}, nil, nil, nil, err
-		}
-		sourceItem = &rec
 	}
 	allReviews, err := h.rt.Store().ListGlobalWireProjectionReviews(r.Context(), ownerID, decision.StoryID, 100)
 	if err != nil {
@@ -4838,6 +5060,20 @@ func globalWirePublicationUpdateSummary(story types.GlobalWireStory, decision ty
 	return fmt.Sprintf("Publication update package for %q: research decision %s, candidate state %s, %d projection review(s). This is queued for owner/platform publication review and does not publish or mutate the platform story.", story.Headline, decision.ID, candidateState, len(reviews))
 }
 
+func (h *APIHandler) globalWireStoryContext(r *http.Request, ownerID, storyID string, sourceItem *types.ContentItem) (types.GlobalWireStory, error) {
+	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, storyID)
+	if err == nil {
+		return story, nil
+	}
+	if err != store.ErrNotFound || !isGlobalWireSourceNativeStoryID(storyID) {
+		return types.GlobalWireStory{}, err
+	}
+	if sourceItem != nil {
+		return globalWireSourceNativeStory(ownerID, *sourceItem), nil
+	}
+	return types.GlobalWireStory{}, store.ErrNotFound
+}
+
 func (h *APIHandler) createGlobalWirePublicationArtifact(r *http.Request, ownerID string, req globalWirePublicationArtifactRequest) (types.GlobalWirePublicationArtifact, types.GlobalWirePublicationUpdate, types.GlobalWireStory, []types.GlobalWireProjectionReview, *types.ContentItem, error) {
 	update, err := h.rt.Store().GetGlobalWirePublicationUpdate(r.Context(), ownerID, req.UpdateID)
 	if err != nil {
@@ -4846,10 +5082,6 @@ func (h *APIHandler) createGlobalWirePublicationArtifact(r *http.Request, ownerI
 	if update.Status != "packaged-for-publication-review" {
 		return types.GlobalWirePublicationArtifact{}, types.GlobalWirePublicationUpdate{}, types.GlobalWireStory{}, nil, nil, store.ErrNotFound
 	}
-	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, update.StoryID)
-	if err != nil {
-		return types.GlobalWirePublicationArtifact{}, types.GlobalWirePublicationUpdate{}, types.GlobalWireStory{}, nil, nil, err
-	}
 	var sourceItem *types.ContentItem
 	if strings.TrimSpace(update.SourceContentID) != "" {
 		rec, err := h.rt.Store().GetContentItem(r.Context(), ownerID, update.SourceContentID)
@@ -4857,6 +5089,10 @@ func (h *APIHandler) createGlobalWirePublicationArtifact(r *http.Request, ownerI
 			return types.GlobalWirePublicationArtifact{}, types.GlobalWirePublicationUpdate{}, types.GlobalWireStory{}, nil, nil, err
 		}
 		sourceItem = &rec
+	}
+	story, err := h.globalWireStoryContext(r, ownerID, update.StoryID, sourceItem)
+	if err != nil {
+		return types.GlobalWirePublicationArtifact{}, types.GlobalWirePublicationUpdate{}, types.GlobalWireStory{}, nil, nil, err
 	}
 	reviews, err := h.globalWirePublicationArtifactProjectionReviews(r, ownerID, update)
 	if err != nil {
@@ -4926,10 +5162,6 @@ func (h *APIHandler) globalWirePublicationFeedItems(r *http.Request, ownerID str
 		if channel != "" && artifact.Channel != channel {
 			continue
 		}
-		story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, artifact.StoryID)
-		if err != nil {
-			return nil, err
-		}
 		var sourceItem *types.ContentItem
 		if strings.TrimSpace(artifact.SourceContentID) != "" {
 			rec, err := h.rt.Store().GetContentItem(r.Context(), ownerID, artifact.SourceContentID)
@@ -4937,6 +5169,10 @@ func (h *APIHandler) globalWirePublicationFeedItems(r *http.Request, ownerID str
 				return nil, err
 			}
 			sourceItem = &rec
+		}
+		story, err := h.globalWireStoryContext(r, ownerID, artifact.StoryID, sourceItem)
+		if err != nil {
+			return nil, err
 		}
 		items = append(items, globalWirePublicationFeedItem{
 			Artifact:      artifact,
@@ -5801,10 +6037,6 @@ func (h *APIHandler) ensureGlobalWireProjectionReviewDraft(r *http.Request, owne
 		}
 		return doc, rev, review, nil
 	}
-	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, review.StoryID)
-	if err != nil {
-		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
-	}
 	var sourceItem *types.ContentItem
 	if strings.TrimSpace(review.SourceContentID) != "" {
 		item, err := h.rt.Store().GetContentItem(r.Context(), ownerID, review.SourceContentID)
@@ -5812,6 +6044,10 @@ func (h *APIHandler) ensureGlobalWireProjectionReviewDraft(r *http.Request, owne
 			return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
 		}
 		sourceItem = &item
+	}
+	story, err := h.globalWireStoryContext(r, ownerID, review.StoryID, sourceItem)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, err
 	}
 	now := time.Now().UTC()
 	doc := types.Document{
@@ -5888,6 +6124,9 @@ func (h *APIHandler) approveGlobalWireProjectionReview(r *http.Request, ownerID 
 		if err != nil {
 			return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
 		}
+		if isGlobalWireSourceNativeStoryID(review.StoryID) {
+			return doc, rev, globalWireSourceNativeProjectionFromReview(review, doc, rev), review, nil
+		}
 		projection, err := h.rt.Store().GetGlobalWireStoryProjection(r.Context(), ownerID, review.StoryID, review.StyleID)
 		if err != nil {
 			return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
@@ -5896,6 +6135,9 @@ func (h *APIHandler) approveGlobalWireProjectionReview(r *http.Request, ownerID 
 	}
 	if strings.TrimSpace(review.DraftStoryDocID) == "" {
 		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, store.ErrNotFound
+	}
+	if isGlobalWireSourceNativeStoryID(review.StoryID) {
+		return h.approveGlobalWireSourceNativeProjectionReview(r, ownerID, review)
 	}
 	story, err := h.rt.Store().GetGlobalWireStory(r.Context(), ownerID, review.StoryID)
 	if err != nil {
@@ -5978,6 +6220,92 @@ func (h *APIHandler) approveGlobalWireProjectionReview(r *http.Request, ownerID 
 		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
 	}
 	return doc, storedRev, projection, updatedReview, nil
+}
+
+func (h *APIHandler) approveGlobalWireSourceNativeProjectionReview(r *http.Request, ownerID string, review types.GlobalWireProjectionReview) (types.Document, types.Revision, types.GlobalWireStoryProjection, types.GlobalWireProjectionReview, error) {
+	draftDoc, err := h.rt.Store().GetDocument(r.Context(), review.DraftStoryDocID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	draftRev, err := h.rt.Store().GetRevision(r.Context(), draftDoc.CurrentRevisionID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	var sourceItem *types.ContentItem
+	if strings.TrimSpace(review.SourceContentID) != "" {
+		item, err := h.rt.Store().GetContentItem(r.Context(), ownerID, review.SourceContentID)
+		if err != nil {
+			return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+		}
+		sourceItem = &item
+	}
+	story, err := h.globalWireStoryContext(r, ownerID, review.StoryID, sourceItem)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	now := time.Now().UTC()
+	metadata, err := json.Marshal(map[string]any{
+		"created_from":       "global_wire_source_native_projection_review_approval",
+		"artifact_kind":      "article_revision",
+		"article_version":    true,
+		"source_native":      true,
+		"storygraph_id":      review.StoryID,
+		"projection_review":  review.ID,
+		"draft_story_doc_id": review.DraftStoryDocID,
+		"draft_revision_id":  draftRev.RevisionID,
+		"candidate_id":       review.CandidateID,
+		"source_content_id":  review.SourceContentID,
+		"style_id":           review.StyleID,
+		"approval_state":     "approved_source_native_article_revision",
+		"source_entities":    globalWireRuntimeSourceEntitiesWithPromotedItem(story, review, sourceItem),
+	})
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	rev := types.Revision{
+		RevisionID:       uuid.NewString(),
+		DocID:            draftDoc.DocID,
+		OwnerID:          ownerID,
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "Global Wire",
+		Content:          globalWireApprovedProjectionVTextContent(review, draftRev.Content),
+		Citations:        draftRev.Citations,
+		Metadata:         metadata,
+		CreatedAt:        now,
+		ParentRevisionID: draftDoc.CurrentRevisionID,
+	}
+	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	storedRev, err := h.rt.Store().GetRevision(r.Context(), rev.RevisionID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, storedRev)
+	updatedReview, err := h.rt.Store().MarkGlobalWireProjectionReviewApproved(r.Context(), ownerID, review.ID, draftDoc.DocID, storedRev.RevisionID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	doc, err := h.rt.Store().GetDocument(r.Context(), draftDoc.DocID, ownerID)
+	if err != nil {
+		return types.Document{}, types.Revision{}, types.GlobalWireStoryProjection{}, types.GlobalWireProjectionReview{}, err
+	}
+	return doc, storedRev, globalWireSourceNativeProjectionFromReview(updatedReview, doc, storedRev), updatedReview, nil
+}
+
+func globalWireSourceNativeProjectionFromReview(review types.GlobalWireProjectionReview, doc types.Document, rev types.Revision) types.GlobalWireStoryProjection {
+	return types.GlobalWireStoryProjection{
+		ID:          "global-wire-source-native-projection-" + review.ID,
+		OwnerID:     review.OwnerID,
+		StoryID:     review.StoryID,
+		StyleID:     firstNonEmptyString(review.StyleID, "wire-style"),
+		StyleDocID:  review.StyleDocID,
+		StoryDocID:  doc.DocID,
+		ContextJSON: `{"audience":"global-wire","task":"source_native_article_projection"}`,
+		Text:        rev.Content,
+		CreatedAt:   doc.CreatedAt,
+		UpdatedAt:   rev.CreatedAt,
+	}
 }
 
 func globalWireProjectionDraftCitations(review types.GlobalWireProjectionReview, story types.GlobalWireStory, sourceItem *types.ContentItem) []types.Citation {
