@@ -1059,6 +1059,78 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 	}
 }
 
+func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default tools: %v", err)
+	}
+	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), "user-alice")
+	if err != nil {
+		t.Fatalf("ensure persistent super: %v", err)
+	}
+	now := time.Now().UTC()
+	blocked := types.RunRecord{
+		RunID:        "blocked-super-run",
+		AgentID:      superAgent.AgentID,
+		ChannelID:    superAgent.ChannelID,
+		AgentProfile: AgentProfileSuper,
+		AgentRole:    AgentProfileSuper,
+		OwnerID:      "user-alice",
+		SandboxID:    rt.cfg.SandboxID,
+		State:        types.RunBlocked,
+		Prompt:       "blocked old super loop",
+		Error:        "old provider blocker",
+		CreatedAt:    now.Add(-time.Hour),
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileSuper,
+			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentID:      superAgent.AgentID,
+			"request_source":        "super_inbox",
+		},
+	}
+	if err := s.CreateRun(context.Background(), blocked); err != nil {
+		t.Fatalf("create blocked super run: %v", err)
+	}
+
+	vtextRun, err := rt.StartRunWithMetadata(context.Background(), "request fresh super work", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataAgentID:      "vtext:doc-fresh-super",
+		runMetadataChannelID:    "doc-fresh-super",
+		runMetadataTrajectoryID: "trace-fresh-super",
+	})
+	if err != nil {
+		t.Fatalf("start vtext run: %v", err)
+	}
+	raw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(context.Background(), vtextRun), "request_super_execution", json.RawMessage(`{
+		"objective":"Process the fresh Community Wire product API handoff.",
+		"channel_id":"doc-fresh-super"
+	}`))
+	if err != nil {
+		t.Fatalf("request_super_execution: %v", err)
+	}
+	var resp struct {
+		LoopID string `json:"loop_id"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode response: %v\n%s", err, raw)
+	}
+	if resp.LoopID == "" || resp.LoopID == blocked.RunID {
+		t.Fatalf("fresh delivery loop_id = %q, want new run distinct from blocked %q", resp.LoopID, blocked.RunID)
+	}
+	fresh, err := s.GetRun(context.Background(), resp.LoopID)
+	if err != nil {
+		t.Fatalf("get fresh super run: %v", err)
+	}
+	if fresh.AgentID != superAgent.AgentID || !strings.Contains(fresh.Prompt, "fresh Community Wire product API handoff") {
+		t.Fatalf("fresh super run did not own new delivery: %+v", fresh)
+	}
+	if pending := pendingDeliveriesForAgent(t, s, "user-alice", superAgent.AgentID); len(pending) != 0 {
+		t.Fatalf("fresh delivery should be assigned to new run, still pending: %+v", pending)
+	}
+}
+
 func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {

@@ -24,8 +24,12 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	if agentID == "" {
 		agentID = persistentSuperAgentID(ownerID)
 	}
+	var blockedActive *types.RunRecord
 	if active, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID); err == nil {
-		return &active, nil
+		if active.State != types.RunBlocked {
+			return &active, nil
+		}
+		blockedActive = &active
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return nil, fmt.Errorf("check active super run: %w", err)
 	}
@@ -35,6 +39,9 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		return nil, fmt.Errorf("list super inbox: %w", err)
 	}
 	if len(deliveries) == 0 {
+		if blockedActive != nil {
+			return blockedActive, nil
+		}
 		return nil, nil
 	}
 
