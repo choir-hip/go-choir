@@ -302,6 +302,24 @@ instead of filled with seeded stories.
 - Local verification for the provider precondition repair:
   - `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop(RelaxesExactInitialToolChoiceAfterProviderPrecondition|TriesMultipleProviderPreconditionFallbacks|TriesProviderPreconditionFallbackWithoutToolChoice)|TestProviderPreconditionFallbackSelectionsUseDeepSeekProForFlash|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper'`
   - `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice|ProviderPrecondition|ModelPolicy|RunToolLoop)'`
+- Provider precondition repair deploy: commit
+  `c14d10e66ead343efac6d6b299b3634cbf7eaea7` passed CI run
+  `27222759295`; deploy job `80382014794` succeeded; staging `/health`
+  reported proxy and sandbox commit
+  `c14d10e66ead343efac6d6b299b3634cbf7eaea7`, deployed at
+  `2026-06-09T17:09:16Z`.
+- Authenticated staging reprobe after `c14d10e6`: the same product prompt no
+  longer stopped only at the first super provider precondition failure. The
+  activity feed showed `5bd6de97-3b58-408c-bf89-c42c81b083de called
+  start_worker_delegation`, proving the super path got past the initial
+  Fireworks 412 into a worker-delegation attempt. The product still did not
+  create a Wire edition: the feed then showed the same super agent reported a
+  blocker with summary `Runtime fallback: Super failed before worker
+  delegation/packa...`, Compute Monitor showed `0 running runs`, and Global
+  Wire remained at `0 articles`. The fallback summary is now suspicious because
+  it says "before worker delegation" even though the feed observed
+  `start_worker_delegation`; the next problem is likely delegation terminal
+  evidence/fallback classification, not initial provider precondition fallback.
 
 ## Run State
 
@@ -365,6 +383,9 @@ what was proven:
   that operational proof can proceed.
 - Local provider precondition fallback repair now covers super runs without
   `tool_choice`, the failure shape observed on staging after `7b7bba73`.
+- Deployed reprobe after `c14d10e6` shows the repair moved the product path one
+  step forward: super reached `start_worker_delegation`, then failed or was
+  classified as failed before durable worker/package evidence reached VText.
 
 unproven or partial claims:
 
@@ -385,6 +406,10 @@ unproven or partial claims:
   Fireworks 412. The source-to-edition proof remains blocked.
 - The provider precondition repair is local only until pushed, deployed, and
   reprobed against the authenticated staging prompt.
+- The provider precondition repair is deployed and reprobed, but positive
+  source-to-edition proof is still blocked at worker delegation evidence. The
+  runtime-visible blocker text may be stale or misleading for
+  `start_worker_delegation` attempts.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -392,8 +417,8 @@ unproven or partial claims:
 
 next step:
 
-- Land and deploy the provider precondition fallback repair, reprobe the
-  authenticated staging product prompt, and verify that super gets past the
-  initial provider 412 into worker delegation or a more precise blocker. Then
-  use that path to supervise the source-to-edition flow and prove staging
-  renders edition-transcluded VText articles.
+- Investigate why a super run that visibly called `start_worker_delegation`
+  still produced a runtime fallback summary saying it failed before worker
+  delegation/package evidence reached VText. Repair the delegation terminal
+  evidence/fallback classification or the worker start failure reporting, then
+  rerun the staging prompt toward a real source-to-edition proof.

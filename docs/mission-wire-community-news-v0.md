@@ -239,6 +239,16 @@ Update after 2026-06-09 staging slices:
   applies provider precondition fallback to any provider 412/precondition error
   with configured fallbacks, and gives legacy Fireworks pro/flash selections a
   DeepSeek-pro fallback path.
+- Deployed counter-evidence after provider precondition repair: commit
+  `c14d10e66ead343efac6d6b299b3634cbf7eaea7` passed CI and deployed to
+  staging. The authenticated prompt advanced past the initial provider 412 far
+  enough for the activity feed to show
+  `5bd6de97-3b58-408c-bf89-c42c81b083de called start_worker_delegation`. It
+  still did not create a Wire edition. The same super agent then reported
+  `Runtime fallback: Super failed before worker delegation/packa...`, Compute
+  Monitor showed `0 running runs`, and Global Wire remained at `0 articles`.
+  The fallback classification is now suspect because observed activity includes
+  `start_worker_delegation`.
 
 ## Homotopy Parameters
 
@@ -537,6 +547,12 @@ what was proven:
   `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop(RelaxesExactInitialToolChoiceAfterProviderPrecondition|TriesMultipleProviderPreconditionFallbacks|TriesProviderPreconditionFallbackWithoutToolChoice)|TestProviderPreconditionFallbackSelectionsUseDeepSeekProForFlash|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper'`
   and
   `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice|ProviderPrecondition|ModelPolicy|RunToolLoop)'`.
+- Provider precondition fallback repair deployed and reprobed: commit
+  `c14d10e6` passed CI run `27222759295`; deploy job `80382014794` succeeded;
+  staging `/health` reported proxy and sandbox at
+  `c14d10e66ead343efac6d6b299b3634cbf7eaea7`, deployed at
+  `2026-06-09T17:09:16Z`. The reprobe reached `start_worker_delegation` but no
+  durable worker/package evidence or Wire edition was visible.
 
 unproven or partial claims:
 
@@ -558,12 +574,16 @@ unproven or partial claims:
   reports Fireworks 412. Positive source-to-edition proof remains blocked.
 - The provider precondition repair is local only until pushed, deployed, and
   reprobed on staging.
+- The provider precondition repair is deployed and reprobed. The next blocker is
+  worker-delegation terminal evidence or fallback classification after
+  `start_worker_delegation`.
 
 next step:
 
-- Land and deploy the provider precondition fallback repair, reprobe the
-  authenticated staging product prompt, and verify that super gets past the
-  initial provider 412 into worker delegation or a more precise blocker. Then
-  rerun the product-path proof that creates or approves a real article VText,
-  updates `global-wire/Wire.vtext`, and renders the edition-transcluded article
-  in Global Wire.
+- Investigate why a super run that visibly called `start_worker_delegation`
+  still produced a runtime fallback summary saying it failed before worker
+  delegation/package evidence reached VText. Repair the delegation terminal
+  evidence/fallback classification or worker start failure reporting, then rerun
+  the product-path proof that creates or approves a real article VText, updates
+  `global-wire/Wire.vtext`, and renders the edition-transcluded article in
+  Global Wire.
