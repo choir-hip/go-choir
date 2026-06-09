@@ -5,9 +5,9 @@
 Run a realistic, search-quota-free compaction recall matrix across Choir's
 current first-class model providers by using long public documents as a frozen
 corpus. The compaction eval must not start until the user/candidate computer
-sandbox setup is proven through the product path: agents need real document
-tools, real ContentItems, real selectors, and real extracted text before any
-memory result is meaningful.
+sandbox setup is upgraded and proven through the product path: agents need real
+document tools, real ContentItems, real selectors, and real extracted text
+before any memory result is meaningful.
 
 This mission is not a search eval, not a slides-app mission, and not a general
 document-app build. The real artifact is:
@@ -45,7 +45,7 @@ This mission is deliberately ordered. Do not start the compaction matrix until
 the substrate has been proven in the environment where Choir agents actually
 run.
 
-Phase 0: sandbox setup preamble.
+Phase 0: sandbox setup preamble and hard gate.
 
 - Inspect the normal user/candidate computer NixOS image config.
 - Add or verify document extraction tools there, not only in local dev shell.
@@ -53,6 +53,7 @@ Phase 0: sandbox setup preamble.
   PDF, DOCX, EPUB, PPTX, and HTML/HTML-slide sources.
 - Prove extracted ContentItems expose hashes, adapter metadata, selectors, and
   selector reads through researcher/VText-compatible tooling.
+- Record the proof in this mission doc before starting any compaction eval arm.
 
 Phase 1: frozen corpus setup.
 
@@ -92,6 +93,11 @@ documents through the same product substrate that researchers and VText use.
 The compaction matrix is downstream of this proof; it is not allowed to treat
 PDF/DOCX/EPUB/PPTX/HTML support as a side quest, a local-only precondition, or
 an eval harness special case.
+
+Operational rule for future resumes: if this gate is incomplete or regressed,
+stop attempting compaction and repair the sandbox/document substrate first. A
+matrix run over broken imports is invalid even if the agents produce plausible
+summaries.
 
 The preamble is satisfied only when all of these are true:
 
@@ -436,6 +442,10 @@ is in place. That mission should treat PPTX and HTML slides as playable deck
 artifacts, with PDF/images as fallback views, and should reuse the same
 ContentItem extraction and selector records created here.
 
+This future mission is intentionally parked. The present mission may extract
+slides as source documents, but must not create a Slides app, desktop icon,
+deck viewer, presentation controls, slide playback routes, or related UI.
+
 Likely first goal:
 
 ```text
@@ -444,28 +454,27 @@ Likely first goal:
 
 ## Run Checkpoint & Resumption State
 
-status: matrix_attempt_incomplete_text_selector_gap
+status: checkpoint_incomplete_sandbox_preamble_upgraded_before_eval
 
 last checkpoint: mission upgraded so the sandbox/user-computer document
-substrate preamble is an explicit prerequisite before any compaction recall
+substrate preamble is the first active objective before any compaction recall
 eval. Slides remain strictly parked as a future mission; this mission only
 extracts PPTX/HTML slide artifacts as sources. The substrate and scoped
 model-policy control-plane behavior changes have been pushed, passed CI,
 deployed to staging, and proven through authenticated product routes. A narrow
 uploaded-file ContentItem import route has also shipped and been proven with an
-uploaded PPTX fixture. HTML URL imports now include selector and adapter
-metadata. A seven-item frozen corpus has been imported under one staging owner.
-The pre-matrix sandbox conformance check was rerun against the NixOS sandbox
-and Playwright worker configurations. The narrow authenticated product-visible
-compaction recall eval runner has shipped and been proven on staging without
-opening `/api/agent/*` to browser-public acceptance. A first five-arm matrix
-attempt completed across DeepSeek, Xiaomi, and ChatGPT with live search
-disabled and zero search attempts. It did not satisfy the mission because no
-arm triggered automatic compaction. The root cause observed from the corpus is
-that imported `text/plain` RFC documents stored large text but exposed no
-selector chunks or extraction adapter metadata, so agents could only perform
-bounded whole-ContentItem reads and did not create enough context pressure for
-the 700k-token DeepSeek/Xiaomi compaction threshold.
+uploaded PPTX fixture. HTML URL imports include selector and adapter metadata.
+The first five-arm matrix attempt completed across DeepSeek, Xiaomi, and
+ChatGPT with live search disabled and zero search attempts, but it did not
+satisfy the mission because no arm triggered automatic compaction. The observed
+root cause was a sandbox/document-substrate problem: imported `text/plain` RFC
+documents stored large text but exposed no selector chunks or extraction adapter
+metadata. A follow-up behavior change fixed `text/plain` URL imports by routing
+them through shared extraction, and staging proof now shows text/plain imports
+produce chunk selectors, raw/extracted hashes, and adapter metadata. The next
+run must treat that as sandbox preamble evidence and then decide whether any
+additional PDF/DOCX/EPUB/PPTX/HTML/user-computer proof is still required before
+launching the compaction matrix.
 
 current artifact state:
 
@@ -477,6 +486,9 @@ current artifact state:
   evaluated for normal and Playwright worker images.
 - Shared ContentItem extraction and researcher selector tools are implemented
   for PDF/DOCX/EPUB/PPTX/HTML before model runs.
+- Shared ContentItem extraction now also covers `text/plain` URL imports so
+  long public text documents expose selector chunks instead of becoming
+  selectorless blobs.
 - Scoped model-policy overlays are implemented for per-run eval arm selection
   without rewriting the base `System/model-policy.toml`.
 
@@ -515,6 +527,13 @@ what shipped:
   frozen ContentItems and scoped model-policy overlays, starts a normal
   researcher run with trace-visible eval metadata, and blocks live source
   acquisition tools during frozen-corpus eval runs.
+- docs-only checkpoint `f36328a8` records the first matrix attempt failure:
+  the eval route, no-search policy, and provider arms worked, but text/plain
+  source imports lacked selectors and could not create realistic long-context
+  pressure.
+- behavior commit `f901ce82` routes text/plain URL imports through the shared
+  extractor so imported public text documents get chunk selectors, raw and
+  extracted hashes, and extraction adapter metadata.
 
 what was proven so far:
 
@@ -708,7 +727,28 @@ what was proven so far:
 - Matrix attempt corpus finding: the 15 imported RFC `.txt` documents had
   `selector_count: 0` and no `extraction_adapter` despite large stored text
   bodies. The PDF item had `pdf_poppler_pdftotext` and 15 selectors. This is
-  now the blocking substrate gap for natural compaction pressure.
+  the substrate gap that caused the first matrix attempt to fail.
+- Focused local proof for text/plain selectors:
+  - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLCreatesPlainTextSelectors|TestContentImportURLCreatesProvenanceRecord|TestContentImportURLCleansReaderChrome' -count=1`;
+  - `nix develop -c go test ./internal/runtime -run 'TestFrozenCorpusEvalDisablesLiveSourceAcquisitionTools|TestRuntimeRejectsExpiredModelPolicyOverlay|TestRunToolLoop' -count=1`.
+- GitHub CI run `27176010820` completed successfully for `f901ce82`.
+- FlakeHub publish run `27176010799` completed successfully for `f901ce82`.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `f901ce8277f2e77c6ee8384a812969a935dcfb86`.
+- A deployed product-path text/plain selector proof succeeded through an
+  authenticated `https://choir.news` passkey session:
+  - owner/user id `d7d0d35c-0bee-4601-946e-14c6890d1d4e`;
+  - owner email `codex-text-selector-proof-1780965371252@example.test`;
+  - imported `https://www.rfc-editor.org/rfc/rfc7519.txt`;
+  - created ContentItem `88b9223d-6c35-44b0-a2e1-068a5acd826a`;
+  - stored `media_type: text/plain`, `app_hint: vtext`,
+    `extraction_adapter: plain_text_decode`, `selector_count: 6`,
+    content/raw hash
+    `fecd930e9ccf2276b95c0017c6c4ff5d09352e4bc3c7629946447894e0f97248`,
+    and extracted text hash
+    `b2dd5d6d5c896b5535fa26b5f8651bd1c7d91b5ad59f64aea10208bd29ad694c`;
+  - first selector `chunk-1` was readable through the content item selector
+    path.
 
 unproven or partial claims:
 
@@ -718,9 +758,10 @@ unproven or partial claims:
 - full automatic-compaction trigger evidence for the new eval runner; route
   launch and metadata are proven, but the model matrix still needs to drive
   enough context pressure to force runtime-owned LLM compaction.
-- `text/plain` URL imports do not yet expose selector chunks, which undermines
-  the eval's ability to walk large frozen public text documents at high source
-  pressure.
+- the sandbox/user-computer document gate has strong product-path proof, but
+  the next worker must explicitly recheck whether any required normal
+  user/candidate computer image proof is still missing before launching the
+  matrix.
 
 belief-state changes:
 
@@ -732,7 +773,10 @@ belief-state changes:
   before every recall-matrix attempt; the next run should not regress to local
   macOS-only extraction or prompt-text model overrides.
 - first matrix attempt proves provider routing and no-search enforcement, but
-  not compaction; source substrate selector quality is now the main loss term.
+  not compaction; source substrate selector quality was the main loss term and
+  has now been patched for text/plain imports.
+- the mission should not drift into Slides app work. PPTX/HTML slides are only
+  source artifacts here.
 
 remaining error field:
 
@@ -742,17 +786,18 @@ remaining error field:
 - eval runner realism: route launch is proven, but the matrix must still prove
   it can run all target arms through normal researcher loops with enough frozen
   corpus pressure to compact.
-- text/plain extraction currently creates no selector graph, so large public
-  text sources are not as walkable as PDFs/DOCX/EPUB/PPTX/HTML.
+- whether the current sandbox/user-computer proof is sufficient to launch the
+  next matrix attempt, or whether a refreshed user/candidate image proof must
+  be obtained first.
 
 highest-impact remaining uncertainty:
 
 - can the shipped product-visible eval runner drive all target models into
   automatic compaction and preserve both approximate and exact recall without
   live search or explicit memory-tool prompt steering?
-- will adding text/plain chunk selectors be enough to drive natural source
-  traversal above the compaction threshold without introducing fake eval-only
-  pathways?
+- after the sandbox preamble is explicitly accepted as satisfied, will selector
+  walks over large public documents drive natural source traversal above the
+  compaction threshold without introducing fake eval-only pathways?
 
 latest local proof:
 
@@ -813,12 +858,13 @@ latest staging proof:
 
 next executable probe:
 
-- fix the shared extraction substrate so imported `text/plain` public documents
-  produce chunk selectors, raw/extracted hash metadata, and an extraction
-  adapter name. Then rerun a compaction-pressure matrix or pilot using large
-  public text ContentItems plus PDF selectors, keeping live source acquisition
-  disabled and proving whether selector walks can cross the automatic
-  compaction threshold.
+- before running compaction, verify the sandbox setup preamble is still
+  satisfied end-to-end: declared user/candidate computer document tooling,
+  shared ContentItem import for PDF/DOCX/EPUB/PPTX/HTML/text, selector reads,
+  and staging or authorized Node B product-path evidence. If the gate is
+  satisfied, run a compaction-pressure pilot using selector-rich frozen
+  ContentItems, keeping live source acquisition disabled and proving whether
+  selector walks can cross the automatic compaction threshold.
 
 suggested resume goal string:
 
