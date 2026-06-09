@@ -647,6 +647,21 @@ what was proven:
   reserving `mimo-v2.5-pro` for vsuper, co-super when no multimodal input is
   needed, and reconciler. The next fix should migrate generated/default model
   policy and runtime fallback away from DeepSeek for these roles.
+- MiMo policy migration: commit
+  `da1631250afdfb0b2ab6bf1cd0059a3a7179026c` moves generated/default runtime
+  policy to Xiaomi MiMo. It uses `mimo-v2.5` for conductor, researcher,
+  processor, VText, super, and verifier, and reserves `mimo-v2.5-pro` for
+  vsuper, co-super, and reconciler. Local focused runtime tests and
+  `nix develop -c scripts/go-test-local` passed. CI run `27230587852`
+  succeeded, staging deploy job `80409677926` succeeded, and `/health`
+  reported proxy and sandbox at that SHA, deployed at
+  `2026-06-09T19:32:06Z`.
+- Fresh authenticated staging proof after `da163125` is blocked before prompt
+  submission by VM route availability. The Browser product UI shows
+  `BOOTSTRAP FAILED (502)` and keeps retrying `VM route returned 502`; the
+  same deployed `/health` response reports `status: degraded` and
+  `vmctl_status: unavailable`. This changes the immediate blocker from
+  DeepSeek provider policy to staging active-computer route availability.
 
 unproven or partial claims:
 
@@ -703,6 +718,9 @@ unproven or partial claims:
   prompt still surfaced a DeepSeek 402 blocker, so the repair is insufficient
   while generated/default policy continues to select DeepSeek for foreground
   proof roles.
+- The MiMo policy migration is committed, pushed, deployed, and locally
+  verified, but a fresh authenticated proof cannot currently start because the
+  staging active-computer bootstrap route returns 502 with vmctl unavailable.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -710,7 +728,7 @@ unproven or partial claims:
 
 next step:
 
-- Move generated/default model policy and runtime fallback to the operator's
-  Xiaomi MiMo allocation, then rerun the no-`story_id` source-native route
-  through publication approval and verify the approved article appears through
-  `global-wire/Wire.vtext` and `/api/global-wire/stories`.
+- Investigate and restore staging active-computer route availability, then
+  rerun the no-`story_id` source-native route through publication approval and
+  verify the approved article appears through `global-wire/Wire.vtext` and
+  `/api/global-wire/stories`.

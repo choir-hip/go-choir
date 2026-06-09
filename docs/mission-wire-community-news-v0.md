@@ -390,6 +390,18 @@ Update after 2026-06-09 staging slices:
   reconciler. The next problem remains deployed model/provider policy: the
   source-native Wire proof should not route operational proof turns through
   unavailable DeepSeek models.
+- Deployed evidence after MiMo policy migration: commit
+  `da1631250afdfb0b2ab6bf1cd0059a3a7179026c` passed CI run `27230587852` and
+  staging deploy job `80409677926`. Staging `/health` reported proxy and
+  sandbox at that SHA, deployed at `2026-06-09T19:32:06Z`, with generated and
+  fallback model policy moved to Xiaomi MiMo: `mimo-v2.5` for conductor,
+  researcher, processor, VText, super, and verifier; `mimo-v2.5-pro` for
+  vsuper, co-super, and reconciler. A fresh authenticated product UI proof
+  could not yet submit the MissionGradient prompt because the bootstrap surface
+  looped on `BOOTSTRAP FAILED (502)` / `VM route returned 502; retrying`; the
+  same health response reported `status: degraded` and
+  `vmctl_status: unavailable`. The next problem is staging VM route
+  availability, not DeepSeek model selection.
 
 ## Homotopy Parameters
 
@@ -586,6 +598,17 @@ last checkpoint:
   and "awaiting edition VTexts". This proves a remaining owner-scoped
   `GlobalWireStory` fallback still bypasses the edition invariant for
   authenticated users.
+- MiMo policy migration committed as `da163125`: generated/default policy now
+  uses `xiaomi/mimo-v2.5` for conductor, researcher, processor, VText, super,
+  and verifier, reserving `xiaomi/mimo-v2.5-pro` for vsuper, co-super, and
+  reconciler. CI run `27230587852` and staging deploy job `80409677926`
+  succeeded, and staging health reported proxy and sandbox at
+  `da1631250afdfb0b2ab6bf1cd0059a3a7179026c`.
+- Fresh authenticated UI proof after `da163125` could not submit the
+  source-native MissionGradient prompt because bootstrap failed with
+  `BOOTSTRAP FAILED (502)` / `VM route returned 502; retrying`. Staging health
+  simultaneously reported `status: degraded` and `vmctl_status: unavailable`.
+  The immediate blocker is now staging VM route availability.
 
 current artifact state:
 
@@ -599,9 +622,11 @@ current artifact state:
   style-source, source-refresh, publication, autoradio, newsletter, and deeper
   compatibility behavior that has not yet been deleted.
 - Existing source daemon has broad but shallow source ingestion.
-- The front-page response still includes authenticated owner-scoped stored
-  `GlobalWireStory` records when no `Wire.vtext` edition exists; this is now
-  the immediate blocker.
+- The model/provider policy blocker has been moved off exhausted DeepSeek
+  defaults and deployed to staging.
+- The current deployed product surface cannot start the authenticated
+  MissionGradient proof because the active computer route returns 502 during
+  bootstrap.
 
 what shipped:
 
@@ -612,6 +637,7 @@ what shipped:
 - Edition-gated API slice commit `f6707096` deployed to staging.
 - Product-path publication approval edition updater commit `90839193` deployed
   to staging.
+- Model policy migration commit `da163125` deployed to staging.
 
 what was proven:
 
