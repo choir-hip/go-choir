@@ -62,3 +62,51 @@ cannot self-heal the same stale route from the boot/recovery surface.
   after `wake_current_computer`.
 - Add a UI escape hatch after repeated bootstrap `502` retries so owners can
   trigger this repair without waiting for an operator-forced deploy.
+
+## Second Finding: Resolve-timeout boot loop after the route refresh fix
+
+After deploying `678d2df114d636a2c42e24f14f5a28d9e0f4e08b`, the same owner
+session produced a different boot failure. The BIOS panel no longer showed
+`BOOTSTRAP FAILED (502)`. It showed:
+
+- `COMPUTER BOOT IS STILL PENDING`
+- repeated `Bootstrap probe N is still waiting; retrying`
+- probe intervals of about 15 seconds
+
+Staging health at the same deployed commit showed:
+
+- `bootstrap.auth`: all authenticated `ok`
+- `bootstrap.resolve`: `23` requests, `17` errors, maximum duration about
+  `15011ms`
+- `bootstrap.total`: `17` `resolve_error` results
+- `bootstrap.upstream`: `6` requests, all `http_200`, maximum duration about
+  `1ms`
+- `api.resolve`: maximum duration about `180042ms`
+
+This moves the failing edge earlier than the first incident. The proxy is not
+reaching an unhealthy sandbox and receiving `502`; it is waiting inside vmctl
+desktop resolution until the browser's 15 second bootstrap probe aborts. The
+longer `api.resolve` maximum indicates at least one authenticated API request
+waited for the vmctl client's full 180 second timeout.
+
+Code inspection narrowed the vulnerable path:
+
+- `/api/shell/bootstrap` resolves the primary desktop with
+  `ResolveDesktopContext`.
+- `ResolveDesktopContext` is allowed to boot, resume, readiness-check, recover,
+  or join an in-flight pending assignment before it returns a route.
+- the boot UI aborts each bootstrap probe after 15 seconds.
+- `/api/compute/recovery` also starts `wake_current_computer` by calling
+  `ResolveDesktopContext`, so the recovery action can be trapped behind the
+  same pending readiness wait before it gets a chance to refresh an unreachable
+  current computer.
+
+The current belief is therefore:
+
+1. The previous fix repaired one recovery branch after a resolved route is
+   returned.
+2. It did not create a true escape hatch for a current computer whose primary
+   failure is that vmctl resolution itself is blocked or slow.
+3. Existing active ownership needs a fast lookup-first path for status/recovery,
+   and the boot UI needs to request that recovery path after repeated pending
+   bootstrap probes instead of only looping on `/api/shell/bootstrap`.
