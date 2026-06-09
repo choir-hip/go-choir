@@ -288,6 +288,17 @@ Update after 2026-06-09 staging slices:
   source-refresh blockers, and no Wire edition was created. The next problem is
   prompt-bar/VText-to-super routing or handoff observability on deployed
   staging, not the existence of the foreground `product_api_request` tool.
+- Deployed evidence after prompt handoff observability repair: commit
+  `a42e1afca9c5ba5cb26c3de4abe4b41779ccbaaf` passed CI and deployed to
+  staging. Staging `/health` reported proxy and sandbox at that SHA, deployed
+  at `2026-06-09T17:51:13Z`. Authenticated Chrome reprobe created VText doc
+  `532ffcab-9d0d-4b2e-a364-15b983f4fb90`; its VText root exposed
+  `data-vtext-initial-loop-id="a69ea9f3-32a4-4d49-acd7-974148b8a1e4"`. This
+  proves the prompt-bar decision can carry a persistent-super handoff id into
+  the product surface. The run still did not visibly progress to
+  `product_api_request`, worker/package evidence, or a Wire edition update
+  within the observation window. The next problem is persistent-super
+  execution/progress after handoff creation.
 
 ## Homotopy Parameters
 
@@ -603,6 +614,13 @@ what was proven:
   `2026-06-09T17:33:55Z`. The authenticated prompt reprobe did not yet reach
   visible super product API orchestration; it materialized prompt VText
   documents and left the existing worker-auth/StoryGraph blocker visible.
+- Prompt handoff observability repair deployed and reprobed: commit
+  `a42e1afc` passed CI run `27225029886`; deploy job `80390109123`
+  succeeded; staging `/health` reported proxy and sandbox at
+  `a42e1afca9c5ba5cb26c3de4abe4b41779ccbaaf`, deployed at
+  `2026-06-09T17:51:13Z`. The product surface now exposes the persistent-super
+  handoff id for the prompt doc, but no follow-on super progress was visible
+  after the handoff id appeared.
 
 unproven or partial claims:
 
@@ -633,12 +651,13 @@ unproven or partial claims:
   source-to-edition proof remains blocked at deployed prompt handoff or
   handoff observability. No evidence yet shows the new super tool being used on
   staging.
+- The prompt handoff id is now visible on staging, but positive source-to-edition
+  proof remains blocked because the persistent-super run behind that id does
+  not visibly progress to product API orchestration.
 
 next step:
 
-- Repair or instrument the deployed prompt-bar/VText-to-super handoff so the
-  authenticated Community Wire proof prompt creates visible persistent-super
-  evidence and can use `product_api_request` for active product API
-  orchestration. Preserve the trusted proxy boundary and keep workers focused
-  on candidate/repo/package work unless a sanctioned owner-auth product API path
-  exists for them.
+- Repair persistent-super run execution/progress after the prompt-bar handoff
+  id is created. The next proof should show the handoff run calling
+  `product_api_request`, producing a precise product API blocker, or advancing
+  the Community Wire source-to-edition flow.

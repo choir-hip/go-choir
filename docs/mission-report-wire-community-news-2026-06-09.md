@@ -395,6 +395,31 @@ instead of filled with seeded stories.
   boundary. This means the foreground `product_api_request` tool may be
   deployed, but the product prompt path is not yet reliably reaching a super run
   that can use it.
+- Prompt handoff observability repair: commit
+  `a42e1afca9c5ba5cb26c3de4abe4b41779ccbaaf` propagates
+  `initial_loop_id` from the prompt-bar conductor decision into the opened VText
+  app context and exposes it as `data-vtext-initial-loop-id` on the VText
+  product surface. The backend prompt-bar handoff test now uses the deployed
+  "using product paths only" wording. Local verification:
+  - `nix develop -c go test ./internal/runtime -run 'TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper'`
+  - `npm --prefix frontend run build`
+  - `npm --prefix frontend run e2e -- desktop-shell-core.spec.js -g "prompt bar routes normal input through conductor and opens vtext"` was attempted after starting `vite preview` on `127.0.0.1:4173`, but the local backend API was not running and auth registration failed with `register/begin failed: 500`; this did not exercise the new assertion.
+- CI/deploy for `a42e1afca9c5ba5cb26c3de4abe4b41779ccbaaf`: CI run
+  `27225029886` succeeded, including frontend build, all runtime shards,
+  non-runtime Go tests, integration-tagged smoke, Go vet/build, and deploy.
+  Deploy job `80390109123` succeeded in 31s. Staging `/health` reported proxy
+  and sandbox commit `a42e1afca9c5ba5cb26c3de4abe4b41779ccbaaf`, deployed at
+  `2026-06-09T17:51:13Z`.
+- Authenticated staging reprobe after `a42e1afc`: the live `Command prompt`
+  created VText doc `532ffcab-9d0d-4b2e-a364-15b983f4fb90` for the same
+  Community Wire proof request. The VText root exposed
+  `data-vtext-initial-loop-id="a69ea9f3-32a4-4d49-acd7-974148b8a1e4"`,
+  proving the conductor decision carried a persistent-super handoff id into the
+  product surface. After an additional 60-second observation window, the
+  activity feed still showed only the VText revision event for that doc and no
+  visible `product_api_request`, worker, package, or Wire edition update. The
+  next blocker is therefore not handoff-id visibility; it is execution/progress
+  of the persistent-super run after the handoff id is created.
 
 ## Run State
 
@@ -504,6 +529,9 @@ unproven or partial claims:
   API orchestration. The next blocker is prompt-bar/VText routing or
   observation of the super handoff after VText document creation, not the
   `product_api_request` tool registration itself.
+- The prompt handoff id is now product-visible on staging at `a42e1afc`, but
+  the persistent-super run behind that id did not visibly progress within the
+  observation window.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -511,9 +539,8 @@ unproven or partial claims:
 
 next step:
 
-- Repair or instrument the prompt-bar/VText-to-super handoff so deployed
-  operational Community Wire proof prompts produce a visible persistent-super
-  run that can use `product_api_request`. Preserve the current proxy trust
-  boundary: do not ask workers or external verifiers to spoof
-  `X-Authenticated-User`, and do not use internal/test routes as acceptance
-  proof.
+- Repair persistent-super run execution/progress after the prompt-bar handoff
+  id is created. The next proof should show run
+  `a69ea9f3-32a4-4d49-acd7-974148b8a1e4` or a fresh equivalent handoff calling
+  `product_api_request`, producing a precise product API blocker, or advancing
+  the Community Wire source-to-edition flow.
