@@ -358,6 +358,19 @@ instead of filled with seeded stories.
   Do not fix this before documenting it: the next behavior change must define
   or repair the worker/candidate authentication contract rather than asking the
   worker to spoof trusted proxy headers or use internal/test routes.
+- Local repair after the worker auth blocker: foreground super now has a
+  narrow `product_api_request` tool for active-computer product API
+  orchestration. The tool dispatches through the runtime's browser-public route
+  table, injects the authenticated owner from run context inside the runtime,
+  and refuses `/internal/*`, `/api/test/*`, `/api/agent/*`, prompt-config
+  routes, and paths outside the product-path allowlist. Super prompt policy now
+  tells foreground super to use that tool for authenticated product API
+  orchestration instead of delegating a worker to impersonate a browser session
+  or hand-setting trusted proxy headers. Worker/candidate repo and package work
+  still delegates to worker VMs.
+- Local verification for the product API tool repair:
+  - `nix develop -c go test ./internal/runtime -run 'TestProductAPIRequestTool|TestSuperSystemPromptIncludesDelegationPolicy|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|TestDefaultAgentToolRegistryByRole'`
+  - `nix develop -c go test ./internal/runtime -run 'Test(ProductAPIRequestTool|HandlePromptBar|InitialVText|RequestSuper|GlobalWire|VText|WorkerDelegation|DelegateWorker|SuperFailure|DefaultAgentToolRegistry|SuperSystemPrompt|CoagentUpdate)'`
 
 ## Run State
 
@@ -432,6 +445,9 @@ what was proven:
   cancellation certificate. The next blocker is not Wire indexing or VText
   publication logic yet; it is worker/candidate authentication to deployed
   product APIs.
+- Local foreground-super product API repair now gives the active super a typed
+  owner-context product API path, avoiding both worker browser impersonation
+  and model-controlled trusted-header spoofing.
 
 unproven or partial claims:
 
@@ -457,6 +473,8 @@ unproven or partial claims:
 - The worker-delegation fallback repair is deployed and reprobed, but positive
   source-to-edition proof is still blocked because the delegated worker cannot
   authenticate against staging product APIs.
+- The foreground-super product API repair is local only until pushed, deployed,
+  and reprobed against the authenticated staging prompt.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -464,9 +482,9 @@ unproven or partial claims:
 
 next step:
 
-- After this docs checkpoint, investigate and repair the worker/candidate
-  authentication contract for product-path Global Wire and VText API access on
-  staging, without spoofing trusted proxy headers or using internal/test routes.
-  Reprobe the authenticated Community Wire prompt and expect either a real
-  source-to-edition package path or a more precise authenticated product-path
-  blocker.
+- Land and deploy the foreground-super `product_api_request` repair, then
+  reprobe the authenticated Community Wire prompt. The expected next proof is
+  that super performs active product API orchestration directly, while worker
+  VMs remain reserved for candidate/repo/package work. If it still blocks, the
+  blocker should name the specific product API transition rather than worker
+  browser authentication.

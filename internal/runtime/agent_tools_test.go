@@ -71,7 +71,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	processor := rt.ToolRegistryForProfile(AgentProfileProcessor)
 	reconciler := rt.ToolRegistryForProfile(AgentProfileReconciler)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "start_worker_delegation", "observe_worker_delegation", "redirect_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "product_api_request", "start_worker_delegation", "observe_worker_delegation", "redirect_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}

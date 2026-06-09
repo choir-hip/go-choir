@@ -373,6 +373,8 @@ func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
 		"Super authority boundary",
 		"bounded local scratch work is allowed",
 		"API calls, curl fetches",
+		"product_api_request",
+		"instead of asking a worker VM to impersonate a browser session",
 		"Delegate work that changes Choir/app/harness behavior",
 		"first call request_worker_vm",
 		"start_worker_delegation` using the returned `start_args",

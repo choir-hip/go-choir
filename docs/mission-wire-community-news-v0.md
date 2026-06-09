@@ -267,6 +267,13 @@ Update after 2026-06-09 staging slices:
   worker's gateway token is not a user identity. The next repair must define or
   fix a sanctioned worker/candidate product API authentication contract, not
   spoof trusted headers or use internal/test routes.
+- Local repair after that blocker: foreground super now has a typed
+  `product_api_request` tool for active-computer product API orchestration. It
+  dispatches through the runtime's browser-public route table, injects the run
+  owner's authenticated identity inside runtime code, and refuses internal,
+  test, agent, prompt-config, and non-allowlisted routes. The super prompt now
+  directs authenticated product API orchestration through this tool instead of
+  worker browser impersonation or model-controlled trusted-header spoofing.
 
 ## Homotopy Parameters
 
