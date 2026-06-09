@@ -345,13 +345,23 @@ last checkpoint:
 
 - Wire/cloud/computer ontology specified.
 - Problem-documentation-first checkpoint committed as `87f7df56`.
-- First behavior slice removed active frontend preview stories and backend
-  read-time story seeding locally.
+- First behavior slice committed as `205125c9`: active frontend preview stories
+  and backend read-time story seeding were removed.
+- CI fixture repair committed as `a89f8a48`: legacy route tests now seed the
+  story/source/style/article/projection fixtures they need explicitly.
+- Forced staging deploy completed for
+  `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd` in workflow run
+  `27217273257`. Staging `/health` reported proxy and sandbox at that SHA.
+- Deployed browser proof opened Global Wire on `https://choir.news/`: zero
+  stories, honest empty state visible, data source
+  `community-wire-vtext-index`, and no `SourceMaxx newsroom`,
+  `seed source neighborhood`, `Port backlog recedes`, or `StoryGraph desk`
+  text.
 
 current artifact state:
 
-- The local Wire app/API path no longer invents seeded front-page stories when
-  no VText-owned articles exist.
+- The deployed Wire app/API path no longer invents seeded front-page stories
+  when no VText-owned articles exist.
 - Existing code still contains legacy StoryGraph/SourceMaxx data structures,
   style-source, source-refresh, publication, autoradio, newsletter, and deeper
   compatibility behavior that has not yet been deleted.
@@ -360,8 +370,9 @@ current artifact state:
 what shipped:
 
 - Docs-first checkpoint commit `87f7df56`.
-- First behavior slice is implemented locally but not yet committed, pushed, or
-  deployed.
+- First behavior slice commit `205125c9`.
+- Explicit fixture repair commit `a89f8a48`.
+- Forced staging deploy for `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`.
 
 what was proven:
 
@@ -377,11 +388,19 @@ what was proven:
 - Local browser proof against `http://127.0.0.1:5173/` showed zero stories,
   visible empty edition state, no seed text, no `Port backlog recedes`, and
   `community-wire-vtext-index` as the data source.
+- CI run `27217127841` succeeded for the fixture repair.
+- Forced deploy run `27217273257` succeeded, including deploy job
+  `80362634048`.
+- Staging `/health` reported proxy and sandbox build commit
+  `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`.
+- Staging browser proof showed the deployed Global Wire empty state, zero
+  stories, `community-wire-vtext-index`, and zero occurrences of deleted seed
+  texts.
 
 unproven or partial claims:
 
-- Live staging authenticated Wire source status.
 - Real VText creation from current source cycles.
 - Telegram API ingestion.
 - Removal of Telegram public preview HTML scraping from the Wire ingestion path.
-- Staging deploy identity and product-path acceptance for this behavior slice.
+- Edition VText graph rendering; the current deployed surface is an honest
+  empty state or compatibility story-list view, not the final edition object.

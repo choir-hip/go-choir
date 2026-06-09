@@ -116,6 +116,25 @@ instead of filled with seeded stories.
 - Local verification after CI fix:
   - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire(StyleSourcesComposeAndReplace|SourceRefreshCreatesCandidateWithoutMutatingStoryGraph|FetchCycleCreatesRegistryAndRefreshEvidence|SourceRefreshClassifiesNoVisibleChangeWithoutCandidate|PromotesClassifiedRefreshIntoStoryGraphAndPlatformVText|ReconciliationRecordsDecisionWithoutMutatingStoryGraph)'`
   - `nix develop -c scripts/go-test-runtime-shards`
+- Fixture repair commit: `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`.
+- Replacement CI for `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`:
+  run `27217127841`, success. Build Frontend and Deploy were skipped because
+  the commit changed docs/tests only.
+- Forced staging deploy run for the same SHA: workflow dispatch
+  `27217273257`, success. Deploy job `80362634048` completed in 6m11s.
+- Staging identity proof:
+  `curl -fsS https://choir.news/health` returned proxy and sandbox build
+  commit `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`, deployed at
+  `2026-06-09T15:34:43Z`.
+- Staging browser proof against `https://choir.news/`: opened Global Wire via
+  the Desk menu. The frontend build commit was
+  `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`; `[data-global-wire-app]` was
+  visible; story count was `0`; `[data-global-wire-empty-state]` was visible
+  with "No Wire edition articles yet"; app data source was
+  `community-wire-vtext-index`; counts for `SourceMaxx newsroom`,
+  `seed source neighborhood`, `Port backlog recedes`, and `StoryGraph desk`
+  were all `0`. Screenshot evidence was written outside the repo at
+  `/tmp/choir-staging-global-wire-open-proof.png`.
 
 ## Run State
 
@@ -138,16 +157,24 @@ what was proven:
   seeded preview articles.
 - Focused store/runtime tests and frontend production build pass.
 - Full local runtime shard script passes after explicit fixture repair.
+- GitHub CI and a forced staging deploy succeeded for
+  `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`.
+- Staging health reports both proxy and sandbox at that SHA.
+- The deployed public Global Wire UI renders the honest empty Community Wire
+  state and no longer exposes the deleted preview/seed front-page text.
 
 unproven or partial claims:
 
-- No staging acceptance proof yet.
 - No source-cycle proof yet.
 - No VText edition rendering proof yet.
-- Replacement CI run for the fixture repair has not completed yet.
+- No AppChangePackage/adoption or run-acceptance record was created in this
+  slice; the acceptance level remains staging-smoke-level, not promotion-level.
+- Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
+  routes still exist and need replacement or deletion.
 
 next step:
 
-- Commit and push the explicit fixture repair, monitor CI/deploy, then verify
-  staging identity and product-path behavior before increasing realism toward
-  edition VText rendering.
+- Increase realism from honest-empty front page to edition VText truth: add a
+  Community Wire edition VText index/renderer path, then prove that the deployed
+  front page renders VText-owned articles from source artifacts rather than the
+  compatibility story-list shape.
