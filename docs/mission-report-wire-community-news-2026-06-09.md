@@ -371,6 +371,30 @@ instead of filled with seeded stories.
 - Local verification for the product API tool repair:
   - `nix develop -c go test ./internal/runtime -run 'TestProductAPIRequestTool|TestSuperSystemPromptIncludesDelegationPolicy|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|TestDefaultAgentToolRegistryByRole'`
   - `nix develop -c go test ./internal/runtime -run 'Test(ProductAPIRequestTool|HandlePromptBar|InitialVText|RequestSuper|GlobalWire|VText|WorkerDelegation|DelegateWorker|SuperFailure|DefaultAgentToolRegistry|SuperSystemPrompt|CoagentUpdate)'`
+  - `nix develop -c scripts/go-test-runtime-shards`
+- Foreground-super product API repair deploy: commit
+  `8e9ff96bb3d01f9cf69ca73b184921f09878ea05` passed CI run
+  `27224095377`; deploy job `80386812136` succeeded. Staging `/health`
+  reported proxy and sandbox commit
+  `8e9ff96bb3d01f9cf69ca73b184921f09878ea05`, deployed at
+  `2026-06-09T17:33:55Z`.
+- New staging problem discovered after the `8e9ff96b` deploy: authenticated
+  Chrome proof submitted the Community Wire proof prompt through the live
+  `Command prompt`. Two variants created prompt VText documents instead of
+  surfacing a new persistent-super/product-api orchestration run within the
+  observation window:
+  `6aaae8b6-9edc-4ae2-8d66-a12f6edf40c1` for the "using product paths only"
+  wording, and `90fe95ef-4ecc-478e-93ac-2044ae18105c` for the exact
+  operational proof wording covered by the local prompt-bar handoff test. After
+  a 90-second deployed observation window, the desktop still showed the prompts
+  as VText documents with no visible new super handoff or active worker. The
+  visible Community Wire dashboard still carried the earlier worker-auth
+  blocker and StoryGraph-source-refresh blocker; no Wire edition was created.
+  The external verifier also confirmed that direct `curl` with a spoofed
+  `X-Authenticated-User` header receives `401`, preserving the proxy trust
+  boundary. This means the foreground `product_api_request` tool may be
+  deployed, but the product prompt path is not yet reliably reaching a super run
+  that can use it.
 
 ## Run State
 
@@ -475,6 +499,11 @@ unproven or partial claims:
   authenticate against staging product APIs.
 - The foreground-super product API repair is local only until pushed, deployed,
   and reprobed against the authenticated staging prompt.
+- The foreground-super product API repair is now deployed at `8e9ff96b`, but
+  the authenticated staging prompt reprobe did not reach visible super product
+  API orchestration. The next blocker is prompt-bar/VText routing or
+  observation of the super handoff after VText document creation, not the
+  `product_api_request` tool registration itself.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -482,9 +511,9 @@ unproven or partial claims:
 
 next step:
 
-- Land and deploy the foreground-super `product_api_request` repair, then
-  reprobe the authenticated Community Wire prompt. The expected next proof is
-  that super performs active product API orchestration directly, while worker
-  VMs remain reserved for candidate/repo/package work. If it still blocks, the
-  blocker should name the specific product API transition rather than worker
-  browser authentication.
+- Repair or instrument the prompt-bar/VText-to-super handoff so deployed
+  operational Community Wire proof prompts produce a visible persistent-super
+  run that can use `product_api_request`. Preserve the current proxy trust
+  boundary: do not ask workers or external verifiers to spoof
+  `X-Authenticated-User`, and do not use internal/test routes as acceptance
+  proof.

@@ -274,6 +274,20 @@ Update after 2026-06-09 staging slices:
   test, agent, prompt-config, and non-allowlisted routes. The super prompt now
   directs authenticated product API orchestration through this tool instead of
   worker browser impersonation or model-controlled trusted-header spoofing.
+- Deployed evidence after foreground-super product API repair: commit
+  `8e9ff96bb3d01f9cf69ca73b184921f09878ea05` passed CI and deployed to
+  staging. Staging `/health` reported proxy and sandbox at that SHA, deployed
+  at `2026-06-09T17:33:55Z`. Authenticated Chrome reprobe then submitted both
+  the "using product paths only" Community Wire proof prompt and the exact
+  operational proof wording covered by the local prompt-bar handoff test. The
+  product created prompt VText documents
+  `6aaae8b6-9edc-4ae2-8d66-a12f6edf40c1` and
+  `90fe95ef-4ecc-478e-93ac-2044ae18105c`, but after a 90-second observation
+  window no new visible persistent-super/product-api orchestration appeared.
+  The visible dashboard still carried the earlier worker-auth and StoryGraph
+  source-refresh blockers, and no Wire edition was created. The next problem is
+  prompt-bar/VText-to-super routing or handoff observability on deployed
+  staging, not the existence of the foreground `product_api_request` tool.
 
 ## Homotopy Parameters
 
@@ -582,6 +596,13 @@ what was proven:
   `nix develop -c go test ./internal/runtime -run 'TestRuntimeSynthesizes(VTextBlockerWhenSuperFailsBeforeDelegation|WorkerDelegationUpdateAfterStartWorkerDelegation)|TestSuperFailureAfterDelegateWorkerVMSynthesizesVTextWorkerUpdate'`
   and
   `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice|ProviderPrecondition|ModelPolicy|RunToolLoop|WorkerDelegation|DelegateWorker|SuperFailure)'`.
+- Foreground-super product API repair deployed and reprobed: commit
+  `8e9ff96b` passed CI run `27224095377`; deploy job `80386812136`
+  succeeded; staging `/health` reported proxy and sandbox at
+  `8e9ff96bb3d01f9cf69ca73b184921f09878ea05`, deployed at
+  `2026-06-09T17:33:55Z`. The authenticated prompt reprobe did not yet reach
+  visible super product API orchestration; it materialized prompt VText
+  documents and left the existing worker-auth/StoryGraph blocker visible.
 
 unproven or partial claims:
 
@@ -608,13 +629,16 @@ unproven or partial claims:
   `start_worker_delegation`.
 - The worker-delegation fallback repair is local only until pushed, deployed,
   and reprobed on staging.
+- The foreground-super product API repair is deployed, but positive
+  source-to-edition proof remains blocked at deployed prompt handoff or
+  handoff observability. No evidence yet shows the new super tool being used on
+  staging.
 
 next step:
 
-- Land and deploy the worker-delegation fallback repair, reprobe the
-  authenticated staging prompt, and verify that any failed
-  `start_worker_delegation` produces a precise worker-delegation update or that
-  the worker continues to package/source-to-edition evidence. Then rerun the
-  product-path proof that creates or approves a real article VText, updates
-  `global-wire/Wire.vtext`, and renders the edition-transcluded article in
-  Global Wire.
+- Repair or instrument the deployed prompt-bar/VText-to-super handoff so the
+  authenticated Community Wire proof prompt creates visible persistent-super
+  evidence and can use `product_api_request` for active product API
+  orchestration. Preserve the trusted proxy boundary and keep workers focused
+  on candidate/repo/package work unless a sanctioned owner-auth product API path
+  exists for them.
