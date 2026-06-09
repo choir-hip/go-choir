@@ -261,6 +261,15 @@ reasoning = "low"
 	if !strings.Contains(rec.Prompt, "content_id:content-alpha") || !strings.Contains(rec.Prompt, "Do not use live web search") {
 		t.Fatalf("prompt missing frozen corpus contract: %s", rec.Prompt)
 	}
+	for _, want := range []string{
+		"request max_text_chars:100000",
+		"Never claim that a ContentItem or selector was read unless you actually called a content tool",
+		"Do not produce a selector inventory, transcript, or other giant final dump",
+	} {
+		if !strings.Contains(rec.Prompt, want) {
+			t.Fatalf("prompt missing pressure instruction %q: %s", want, rec.Prompt)
+		}
+	}
 
 	statusW := registeredRuntimeRequest(t, handler, http.MethodGet, resp.StatusURL, "", "user-alice")
 	if statusW.Code != http.StatusOK {

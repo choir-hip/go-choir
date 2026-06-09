@@ -134,6 +134,8 @@ type pendingRequiredTool struct {
 
 const maxRequiredNextToolRetries = 2
 
+const maxTokenContinuationRetries = 3
+
 var requiredNextToolCallTimeout = 45 * time.Second
 
 const requiredNextToolDefaultMaxTokens = 2048
@@ -243,6 +245,8 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	activeLLMConfig := options.llmConfig
 	preconditionFallbackIndex := 0
 	var requiredNextTool *pendingRequiredTool
+	var maxTokenContinuationAttempts int
+	var partialTextFragments []string
 
 	appendMessage := func(role string, msg json.RawMessage) error {
 		messages = append(messages, msg)
@@ -274,6 +278,18 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		}
 		assistantMsg, _ := json.Marshal(msg)
 		return appendMessage("assistant", assistantMsg)
+	}
+	combinedFinalText := func(finalText string) string {
+		parts := make([]string, 0, len(partialTextFragments)+1)
+		for _, part := range partialTextFragments {
+			if strings.TrimSpace(part) != "" {
+				parts = append(parts, part)
+			}
+		}
+		if strings.TrimSpace(finalText) != "" {
+			parts = append(parts, finalText)
+		}
+		return strings.Join(parts, "\n")
 	}
 	appendRequiredNextToolReminder := func(required pendingRequiredTool, reason string) error {
 		text := requiredNextToolReminderText(required, reason)
@@ -530,7 +546,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 							})
 							emit(types.EventRunProgress, "terminal_tool_success", payload)
 						}
-						return resp.Text, totalUsage, nil
+						return combinedFinalText(resp.Text), totalUsage, nil
 					}
 				} else {
 					requiredNextTool = &next
@@ -571,7 +587,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					})
 					emit(types.EventRunProgress, "terminal_tool_success", payload)
 				}
-				return resp.Text, totalUsage, nil
+				return combinedFinalText(resp.Text), totalUsage, nil
 			}
 
 			log.Printf("tool loop: iteration %d, executed %d tools, continuing", i+1, len(resp.ToolCalls))
@@ -617,7 +633,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				return "", totalUsage, fmt.Errorf("tool loop persist assistant final message: %w", err)
 			}
 			// Normal completion — return the text.
-			return resp.Text, totalUsage, nil
+			return combinedFinalText(resp.Text), totalUsage, nil
 
 		case "max_tokens":
 			if req.ToolChoice != "" && len(resp.ToolCalls) == 0 && i < maxToolLoopIterations-1 {
@@ -652,7 +668,36 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				forceInitialToolChoiceRetry = true
 				continue
 			}
-			return resp.Text, totalUsage, fmt.Errorf("tool loop: model stopped at max_tokens (iteration %d)", i+1)
+			if strings.TrimSpace(resp.Text) == "" {
+				return combinedFinalText(resp.Text), totalUsage, fmt.Errorf("tool loop: model stopped at max_tokens without text (iteration %d)", i+1)
+			}
+			maxTokenContinuationAttempts++
+			if maxTokenContinuationAttempts > maxTokenContinuationRetries || i >= maxToolLoopIterations-1 {
+				return combinedFinalText(resp.Text), totalUsage, fmt.Errorf("tool loop: model stopped at max_tokens after %d continuation attempts (iteration %d)", maxTokenContinuationAttempts-1, i+1)
+			}
+			partialTextFragments = append(partialTextFragments, resp.Text)
+			if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
+				return "", totalUsage, fmt.Errorf("tool loop persist max_tokens partial assistant: %w", err)
+			}
+			continuationMsg, _ := json.Marshal(map[string]any{
+				"role": "user",
+				"content": []map[string]string{{
+					"type": "text",
+					"text": "The previous model turn stopped because the provider ended the output. Continue from that partial response. Keep the continuation concise; do not restart, repeat, or produce a giant inventory. If more source evidence is required, call the available tools; otherwise finish the remaining answer.",
+				}},
+			})
+			if err := appendMessage("user", continuationMsg); err != nil {
+				return "", totalUsage, fmt.Errorf("tool loop persist max_tokens continuation message: %w", err)
+			}
+			if emit != nil {
+				payload, _ := json.Marshal(map[string]any{
+					"iteration": i + 1,
+					"attempt":   maxTokenContinuationAttempts,
+					"reason":    "provider_output_stopped_with_partial_text",
+				})
+				emit(types.EventRunRetry, "max_tokens_continuation", payload)
+			}
+			continue
 
 		default:
 			return "", totalUsage, fmt.Errorf("tool loop: unsupported stop reason %q (iteration %d)", resp.StopReason, i+1)

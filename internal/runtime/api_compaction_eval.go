@@ -189,9 +189,10 @@ func buildCompactionRecallEvalPrompt(title string, items []compactionRecallPromp
 		b.WriteByte('\n')
 	}
 	b.WriteString("\nTask:\n")
-	b.WriteString("- Read enough of the corpus to build a durable mental model of the documents, their structures, caveats, and exact selector-addressable details.\n")
-	b.WriteString("- Produce a compact evidence checkpoint that names which ContentItems and selectors you used.\n")
-	b.WriteString("- Then answer the recall questions below, preserving uncertainty and source boundaries.\n")
+	b.WriteString("- First list selectors for each ContentItem, then read selector text across the corpus in source order. For selector-rich documents, keep reading additional selectors rather than summarizing early; when reading selectors for this eval, request max_text_chars:100000 so the source pressure is real.\n")
+	b.WriteString("- Never claim that a ContentItem or selector was read unless you actually called a content tool for it in this run.\n")
+	b.WriteString("- Keep interim prose short. Do not produce a selector inventory, transcript, or other giant final dump; the Trace already records tool calls.\n")
+	b.WriteString("- Produce a compact evidence checkpoint that names representative ContentItems and selectors used, then answer the recall questions below in concise prose, preserving uncertainty and source boundaries.\n")
 	b.WriteString("- For exact details, cite ContentItem ids and selectors where possible.\n\n")
 	if len(questions) > 0 {
 		b.WriteString("Recall questions:\n")

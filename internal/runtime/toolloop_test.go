@@ -1775,16 +1775,71 @@ func TestRunToolLoopMaxIterations(t *testing.T) {
 	}
 }
 
-func TestRunToolLoopMaxTokens(t *testing.T) {
+func TestRunToolLoopContinuesAfterMaxTokensPartialText(t *testing.T) {
 	provider := newMockToolLoopProvider(
 		&ToolLoopResponse{
 			StopReason: "max_tokens",
 			Text:       "partial...",
 			Usage:      TokenUsage{InputTokens: 10, OutputTokens: 4096},
+			Model:      "test-model",
+		},
+		&ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       "finished.",
+			Usage:      TokenUsage{InputTokens: 11, OutputTokens: 12},
+			Model:      "test-model",
 		},
 	)
 
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
+	var retryPhases []string
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunRetry {
+			retryPhases = append(retryPhases, phase)
+		}
+	}
+
+	text, usage, err := RunToolLoop(
+		context.Background(),
+		provider,
+		nil,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+		"You are helpful.",
+		0,
+		emit,
+		nil,
+	)
+
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "partial...\nfinished." {
+		t.Fatalf("text = %q, want partial plus continuation", text)
+	}
+	if usage.InputTokens != 21 || usage.OutputTokens != 4108 {
+		t.Fatalf("usage = %+v, want accumulated usage", usage)
+	}
+	if provider.CallCount() != 2 {
+		t.Fatalf("provider calls = %d, want 2", provider.CallCount())
+	}
+	if len(retryPhases) != 1 || retryPhases[0] != "max_tokens_continuation" {
+		t.Fatalf("retry phases = %+v, want max_tokens_continuation", retryPhases)
+	}
+	if provider.lastReq.MaxTokens != 0 {
+		t.Fatalf("continuation request max_tokens = %d, want omitted/0", provider.lastReq.MaxTokens)
+	}
+	if lastUser := extractLastUserMessage(provider.lastReq.Messages); !strings.Contains(lastUser, "Continue from that partial response") {
+		t.Fatalf("last user message = %q, want continuation instruction", lastUser)
+	}
+}
+
+func TestRunToolLoopMaxTokensWithoutTextStillFails(t *testing.T) {
+	provider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "max_tokens",
+			Usage:      TokenUsage{InputTokens: 10, OutputTokens: 4096},
+			Model:      "test-model",
+		},
+	)
 
 	_, _, err := RunToolLoop(
 		context.Background(),
@@ -1792,13 +1847,13 @@ func TestRunToolLoopMaxTokens(t *testing.T) {
 		nil,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
-		4096,
-		emit,
+		0,
+		func(kind types.EventKind, phase string, payload json.RawMessage) {},
 		nil,
 	)
 
-	if err == nil {
-		t.Fatal("expected error for max_tokens stop reason")
+	if err == nil || !strings.Contains(err.Error(), "max_tokens without text") {
+		t.Fatalf("error = %v, want max_tokens without text", err)
 	}
 }
 
