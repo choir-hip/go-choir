@@ -1204,6 +1204,31 @@ func (p *providerPreconditionThenToolProvider) CallWithTools(ctx context.Context
 	}, nil
 }
 
+type providerErrorsThenToolProvider struct {
+	Provider
+	errors   []error
+	calls    int32
+	requests []ToolLoopRequest
+}
+
+func (p *providerErrorsThenToolProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.requests = append(p.requests, req)
+	call := int(atomic.AddInt32(&p.calls, 1))
+	if call <= len(p.errors) {
+		return nil, p.errors[call-1]
+	}
+	return &ToolLoopResponse{
+		StopReason: "tool_use",
+		ToolCalls: []types.ToolCall{{
+			ID:        "call-edit",
+			Name:      "edit_vtext",
+			Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"mission checkpoint"}`),
+		}},
+		Usage: TokenUsage{InputTokens: 12, OutputTokens: 4},
+		Model: req.Model,
+	}, nil
+}
+
 func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *testing.T) {
 	provider := &exactToolChoicePreconditionThenToolProvider{}
 	registry := NewToolRegistry()
@@ -1532,6 +1557,102 @@ func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 		}
 		if len(req.ToolDefinitions) != 1 || req.ToolDefinitions[0].Name != "edit_vtext" {
 			t.Fatalf("request %d tool definitions = %+v, want only edit_vtext", i, req.ToolDefinitions)
+		}
+	}
+}
+
+func TestRunToolLoopFallsBackAfterProviderAvailabilityError(t *testing.T) {
+	provider := &providerErrorsThenToolProvider{errors: []error{
+		fmt.Errorf("gateway call failed: fireworks: status 412 Precondition Failed (sanitized)"),
+		fmt.Errorf("gateway call failed: deepseek: status 402 Payment Required (sanitized)"),
+	}}
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "edit_vtext",
+		Description: "Edit the VText document.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"ok","revision_id":"rev-1"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register edit_vtext: %v", err)
+	}
+	var fallbackReasons []string
+	var fallbackModels []string
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind != types.EventRunRetry || phase != "provider_model_fallback" {
+			return
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(payload, &decoded); err != nil {
+			t.Fatalf("decode fallback payload: %v", err)
+		}
+		fallbackReasons = append(fallbackReasons, fmt.Sprint(decoded["reason"]))
+		fallbackModels = append(fallbackModels, fmt.Sprintf("%s/%s", decoded["to_provider"], decoded["to_model"]))
+	}
+
+	text, usage, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"run the wire proof"}]}`)},
+		"You are Super.",
+		0,
+		emit,
+		nil,
+		WithToolLoopLLMConfig(LLMSelection{
+			Provider:        "fireworks",
+			Model:           "accounts/fireworks/models/deepseek-v4-pro",
+			ReasoningEffort: "medium",
+		}),
+		WithProviderPreconditionFallbacks(
+			LLMSelection{
+				Provider:        "deepseek",
+				Model:           "deepseek-v4-pro",
+				ReasoningEffort: "medium",
+				Source:          "test_deepseek_fallback",
+			},
+			LLMSelection{
+				Provider:        "chatgpt",
+				Model:           "gpt-5.5",
+				ReasoningEffort: "medium",
+				Source:          "test_platform_fallback",
+			},
+		),
+		WithTerminalToolSuccesses("edit_vtext"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "" {
+		t.Fatalf("text = %q, want empty terminal tool result", text)
+	}
+	if usage.InputTokens != 12 || usage.OutputTokens != 4 {
+		t.Fatalf("usage = %+v", usage)
+	}
+	if got := atomic.LoadInt32(&provider.calls); got != 3 {
+		t.Fatalf("provider calls = %d, want 3", got)
+	}
+	if !reflect.DeepEqual(fallbackReasons, []string{"provider_precondition_fallback", "provider_availability_fallback"}) {
+		t.Fatalf("fallback reasons = %+v", fallbackReasons)
+	}
+	if !reflect.DeepEqual(fallbackModels, []string{"deepseek/deepseek-v4-pro", "chatgpt/gpt-5.5"}) {
+		t.Fatalf("fallback models = %+v", fallbackModels)
+	}
+	if len(provider.requests) != 3 {
+		t.Fatalf("requests = %d, want 3", len(provider.requests))
+	}
+	wantModels := []string{
+		"accounts/fireworks/models/deepseek-v4-pro",
+		"deepseek-v4-pro",
+		"gpt-5.5",
+	}
+	for i, req := range provider.requests {
+		if req.ToolChoice != "" {
+			t.Fatalf("request %d tool choice = %q, want empty", i, req.ToolChoice)
+		}
+		if req.Model != wantModels[i] {
+			t.Fatalf("request %d model = %q, want %q", i, req.Model, wantModels[i])
 		}
 	}
 }

@@ -160,8 +160,9 @@ func WithToolLoopLLMConfig(config LLMSelection) ToolLoopOption {
 }
 
 // WithProviderPreconditionFallbacks configures alternate model selections for
-// provider request-shape precondition failures. The tool loop only uses these
-// after preserving the same tool obligation on the original selection first.
+// provider request-shape precondition or provider-availability failures. The
+// tool loop only uses these after preserving the same tool obligation on the
+// original selection first.
 func WithProviderPreconditionFallbacks(fallbacks ...LLMSelection) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.providerPreconditionFallbacks = append([]LLMSelection(nil), fallbacks...)
@@ -435,7 +436,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				}
 				continue
 			}
-			if isProviderPreconditionError(err) && preconditionFallbackIndex < len(options.providerPreconditionFallbacks) {
+			if isProviderModelFallbackError(err) && preconditionFallbackIndex < len(options.providerPreconditionFallbacks) {
 				next := options.providerPreconditionFallbacks[preconditionFallbackIndex]
 				preconditionFallbackIndex++
 				if !sameLLMSelection(activeLLMConfig, next) && strings.TrimSpace(next.Provider) != "" && strings.TrimSpace(next.Model) != "" {
@@ -443,7 +444,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					forceInitialToolChoiceRetry = strings.TrimSpace(req.ToolChoice) != ""
 					if emit != nil {
 						payload, _ := json.Marshal(map[string]any{
-							"reason":          "provider_precondition_fallback",
+							"reason":          providerModelFallbackReason(err),
 							"tool_choice":     req.ToolChoice,
 							"from_provider":   req.Provider,
 							"from_model":      req.Model,
@@ -780,6 +781,26 @@ func isProviderPreconditionError(err error) bool {
 	return strings.Contains(text, "412") ||
 		strings.Contains(text, "precondition failed") ||
 		strings.Contains(text, "thinking mode does not support this tool_choice")
+}
+
+func isProviderAvailabilityError(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "402") ||
+		strings.Contains(text, "payment required")
+}
+
+func isProviderModelFallbackError(err error) bool {
+	return isProviderPreconditionError(err) || isProviderAvailabilityError(err)
+}
+
+func providerModelFallbackReason(err error) string {
+	if isProviderAvailabilityError(err) {
+		return "provider_availability_fallback"
+	}
+	return "provider_precondition_fallback"
 }
 
 func sameLLMSelection(a, b LLMSelection) bool {
