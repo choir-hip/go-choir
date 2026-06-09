@@ -444,7 +444,7 @@ Likely first goal:
 
 ## Run Checkpoint & Resumption State
 
-status: frozen_corpus_imported_pre_matrix
+status: eval_runner_shipped_pre_matrix
 
 last checkpoint: mission upgraded so the sandbox/user-computer document
 substrate preamble is an explicit prerequisite before any compaction recall
@@ -455,11 +455,11 @@ deployed to staging, and proven through authenticated product routes. A narrow
 uploaded-file ContentItem import route has also shipped and been proven with an
 uploaded PPTX fixture. HTML URL imports now include selector and adapter
 metadata. A seven-item frozen corpus has been imported under one staging owner.
-Before the scored compaction matrix starts, the resumed run should perform a
-short pre-matrix sandbox conformance check against the refreshed user/candidate
-computer path or explicitly record why the deployed staging product-path proof
-is accepted as the environment proxy. The scored compaction matrix has not
-started.
+The pre-matrix sandbox conformance check was rerun against the NixOS sandbox
+and Playwright worker configurations. The narrow authenticated product-visible
+compaction recall eval runner has shipped and been proven on staging without
+opening `/api/agent/*` to browser-public acceptance. The scored compaction
+matrix has not started.
 
 current artifact state:
 
@@ -500,6 +500,15 @@ what shipped:
 - behavior commit `97cdd6d7` routes HTML URL imports through the shared
   extraction substrate so cleaned HTML reader ContentItems now preserve
   selector metadata, extraction adapter identity, and extracted text hash.
+- docs-only checkpoint `67038d71` records the eval runner control-plane gap:
+  prompt-bar rejects hidden runtime metadata, `/api/agent/*` is intentionally
+  not browser-public, and `/internal/runtime/runs` is service-to-service only.
+- behavior commit `610e0a04` adds authenticated
+  `POST /api/evals/compaction-recall` and
+  `GET /api/evals/compaction-recall/runs/{runID}`, validates owner-scoped
+  frozen ContentItems and scoped model-policy overlays, starts a normal
+  researcher run with trace-visible eval metadata, and blocks live source
+  acquisition tools during frozen-corpus eval runs.
 
 what was proven so far:
 
@@ -522,6 +531,9 @@ what was proven so far:
 - Focused pre-matrix tool tests passed after checkpoint `15fc4d0a`:
   - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact|TestAgentToolProfiles|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot' -count=1`;
   - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLCreatesProvenanceRecord|TestContentImportURLCleansReaderChrome|TestContentImportFileCreatesExtractedPPTXContentItem' -count=1`.
+- Focused eval-runner tests passed after checkpoint `67038d71`:
+  - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestHandleCompactionRecallEvalStartsResearcherWithOverlayAndFrozenContent|TestHandleModelPolicyResolveUsesOverlayFile|TestRegisteredPromptBarRouteAcceptsIntentOnly' -count=1`;
+  - `nix develop -c go test ./internal/runtime -run 'TestFrozenCorpusEvalDisablesLiveSourceAcquisitionTools|TestRuntimeRejectsExpiredModelPolicyOverlay|TestRunToolLoop' -count=1`.
 - URL document imports now get a larger document-only byte cap so public PDFs
   and decks are not forced through the ordinary 2 MiB web snippet limit.
 - GitHub CI run `27169883438` completed successfully.
@@ -647,21 +659,34 @@ what was proven so far:
     ContentItem `89cb6993-6d40-440c-9700-0f5d3c24a468`,
     adapter `pptx_ooxml_slide_text_projection`, selectors `3`, raw hash
     `5e69f62447cc5b88c42d0ac39719e10328933e6364bb829af159500140508acb`.
+- GitHub CI run `27174880474` completed successfully for `610e0a04`,
+  including staging deploy.
+- FlakeHub publish run `27174880473` completed successfully for `610e0a04`.
+- `https://choir.news/health` reports proxy and sandbox deployed at
+  `610e0a047d93474ebd46f208ce704562fa894590`.
+- A deployed product-path compaction eval runner proof succeeded through an
+  authenticated `https://choir.news` passkey session:
+  - owner/user id `04b2d60d-31c7-4f1d-80ff-62537f9115b8`;
+  - owner email `codex-compaction-eval-proof-1780963873943@example.test`;
+  - owner-visible overlay id `compaction-proof-1780963873943`;
+  - frozen proof ContentItem `e9239e9c-8661-4fad-877a-4a3a5fc877b9`;
+  - authenticated `POST /api/evals/compaction-recall` returned `202` with run
+    id `3318c728-ded4-4c46-a3e7-e35ec05f93c3`;
+  - authenticated
+    `GET /api/evals/compaction-recall/runs/3318c728-ded4-4c46-a3e7-e35ec05f93c3`
+    returned `200`;
+  - the run resolved `provider: chatgpt`, `model: gpt-5.4-mini`,
+    `reasoning_effort: low`;
+  - status metadata included `eval_kind: compaction_recall` and
+    `live_search_disabled: true`.
 
 unproven or partial claims:
 
-- document extraction tool availability in refreshed user/candidate computers
-  beyond the deployed product API proof;
 - frozen-corpus matrix execution without live search;
 - natural post-compaction recall across target models.
-- product-visible matrix launch control is not yet implemented: prompt-bar
-  intentionally accepts only user intent and rejects runtime metadata;
-  `/api/agent/*` run/spawn/status handlers exist as runtime handlers but are
-  intentionally not registered as browser-public product routes and are
-  forbidden for acceptance proof by `AGENTS.md`; `/internal/runtime/runs`
-  exists only for service-to-service worker VM submission. A narrow
-  authenticated eval runner is required before the scored matrix can be started
-  without policy bypass.
+- full automatic-compaction trigger evidence for the new eval runner; route
+  launch and metadata are proven, but the model matrix still needs to drive
+  enough context pressure to force runtime-owned LLM compaction.
 
 belief-state changes:
 
@@ -669,23 +694,24 @@ belief-state changes:
 - document parsing is a prerequisite product capability;
 - PPTX/HTML slide extraction belongs in source tooling now, while Slides app UI
   belongs in a future mission.
-- the next run should treat sandbox setup proof as a blocking preamble, even
-  though several product-path import proofs have already shipped.
+- the sandbox setup proof is now the entry gate that must remain satisfied
+  before every recall-matrix attempt; the next run should not regress to local
+  macOS-only extraction or prompt-text model overrides.
 
 remaining error field:
 
 - image/package size impact of adding document tools;
 - extraction quality variance across file formats;
 - whether all target providers remain available during the run.
-- eval runner shape: it must be product-visible, owner-scoped,
-  trace-visible, overlay-policy based, and unable to bypass prompt-bar
-  metadata protections or live-search restrictions.
+- eval runner realism: route launch is proven, but the matrix must still prove
+  it can run all target arms through normal researcher loops with enough frozen
+  corpus pressure to compact.
 
 highest-impact remaining uncertainty:
 
-- can a narrow product-visible eval runner launch researcher/VText-adjacent
-  model arms with scoped policy overlays and frozen ContentItem handles without
-  reopening the forbidden `/api/agent/*` browser control surface?
+- can the shipped product-visible eval runner drive all target models into
+  automatic compaction and preserve both approximate and exact recall without
+  live search or explicit memory-tool prompt steering?
 
 latest local proof:
 
@@ -699,6 +725,8 @@ latest local proof:
 - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLCreatesProvenanceRecord|TestContentImportURLCleansReaderChrome|TestContentImportFileCreatesExtractedPPTXContentItem'`
 - `nix develop -c go test ./internal/runtime -run 'TestExtract|TestSystemPromptForResearcher|TestContent'`
 - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact|TestAgentToolProfiles|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot'`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestHandleCompactionRecallEvalStartsResearcherWithOverlayAndFrozenContent|TestHandleModelPolicyResolveUsesOverlayFile|TestRegisteredPromptBarRouteAcceptsIntentOnly' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestFrozenCorpusEvalDisablesLiveSourceAcquisitionTools|TestRuntimeRejectsExpiredModelPolicyOverlay|TestRunToolLoop' -count=1`
 
 latest staging proof:
 
@@ -726,17 +754,26 @@ latest staging proof:
 - authenticated staging frozen corpus import for owner
   `49bc8b74-2158-46e2-b387-a7a9a40fb6ad`, creating seven ContentItems across
   PDF, HTML, DOCX, EPUB, HTML slides, and uploaded PPTX.
+- `gh run view 27174880474 --json status,conclusion,workflowName,url,headSha`
+- `gh run view 27174880473 --json status,conclusion,workflowName,url,headSha`
+- `curl -fsS https://choir.news/health`
+- authenticated staging compaction eval runner proof for run
+  `3318c728-ded4-4c46-a3e7-e35ec05f93c3`, using overlay
+  `compaction-proof-1780963873943` and frozen proof ContentItem
+  `e9239e9c-8661-4fad-877a-4a3a5fc877b9`; route launch and status retrieval
+  succeeded through `/api/evals/compaction-recall` and
+  `/api/evals/compaction-recall/runs/{runID}`.
 
 next executable probe:
 
-- implement the minimum authenticated product-visible compaction recall eval
-  runner. It should accept frozen owner-scoped ContentItem ids, a scoped
-  `model_policy_overlay_id`, and recall questions; validate that each
-  ContentItem belongs to the authenticated owner; resolve the overlay through
-  model policy; start a normal researcher or VText-adjacent researcher run with
-  trace-visible eval metadata; and expose status/results through non-`/api/agent`
-  routes. After that ships and is proven on staging, start the model matrix for
-  the frozen corpus owner `49bc8b74-2158-46e2-b387-a7a9a40fb6ad`.
+- start the model matrix through the shipped authenticated product-visible
+  compaction recall eval runner. Create scoped overlays for
+  `deepseek-v4-flash`, `deepseek-v4-pro`, `mimo-v2.5`, `mimo-v2.5-pro`, and
+  `gpt-5.4-mini`; use owner-scoped frozen ContentItems; keep live source
+  acquisition disabled during scored runs; drive enough frozen-corpus context
+  pressure to trigger runtime-owned automatic LLM compaction; then score
+  approximate recall, exact recall, natural selector/retrieval use, and
+  post-compaction continuation.
 
 suggested resume goal string:
 
