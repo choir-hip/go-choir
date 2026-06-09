@@ -139,3 +139,27 @@ The next prevention step is to let owner-scoped recovery fall back to vmctl
 refresh for stopped or hibernated current computers when wake/resume fails, and
 to allow vmctl refresh to target those states while preserving the persistent
 data image.
+
+## Fourth Finding: stopped ownership can outlive the vmmanager instance
+
+After deploying `6ce8526e58d47403ac8b8764ac2ab97f0a955259`, direct Node B
+diagnostics against vmctl showed the stopped primary ownership still existed:
+
+- `vm_id: vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19`
+- `state: stopped`
+- `stopped_by: vmctl-restart`
+- stale `sandbox_url: http://10.203.109.2:8085`
+
+But `POST /internal/vmctl/refresh` returned:
+
+```text
+failed to refresh VM vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19:
+vm vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19 not found
+```
+
+The ownership registry and vmmanager had diverged after restart: durable
+ownership still pointed at the stopped VM, while the in-memory vmmanager no
+longer had an instance to refresh. Accepting `stopped` in `RefreshVMForDesktop`
+is therefore not sufficient. Refresh must also handle a missing manager
+instance by booting from ownership-derived current deploy config, preserving the
+data image and issuing a gateway credential as `startExistingVM` already does.
