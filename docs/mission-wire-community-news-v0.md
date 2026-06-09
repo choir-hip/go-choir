@@ -255,6 +255,18 @@ Update after 2026-06-09 staging slices:
   before-delegation blocker even after a worker start result existed. The repair
   treats both tool names as worker-delegation evidence and preserves the latest
   successful worker-delegation result with neutral fallback wording.
+- Deployed evidence after worker-delegation fallback repair: commit
+  `4cf18f6dc282c906090ceace406575cb99fc67c2` passed CI and deployed to
+  staging. The authenticated Community Wire proof prompt then produced a
+  precise VText dashboard with super run
+  `da234dfc-91d1-47b3-9216-3d61150bb16a`, worker run
+  `bf18da24-002b-4875-9535-a227a83c7175`, state `cancelled`, and
+  `AppChangePackages: 0`. The blocker moved again: the worker VM can be
+  delegated, but it cannot authenticate to deployed Global Wire and VText
+  product APIs because `X-Authenticated-User` is a trusted proxy header and the
+  worker's gateway token is not a user identity. The next repair must define or
+  fix a sanctioned worker/candidate product API authentication contract, not
+  spoof trusted headers or use internal/test routes.
 
 ## Homotopy Parameters
 

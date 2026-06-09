@@ -331,6 +331,33 @@ instead of filled with seeded stories.
 - Local verification for worker-delegation fallback repair:
   - `nix develop -c go test ./internal/runtime -run 'TestRuntimeSynthesizes(VTextBlockerWhenSuperFailsBeforeDelegation|WorkerDelegationUpdateAfterStartWorkerDelegation)|TestSuperFailureAfterDelegateWorkerVMSynthesizesVTextWorkerUpdate'`
   - `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice|ProviderPrecondition|ModelPolicy|RunToolLoop|WorkerDelegation|DelegateWorker|SuperFailure)'`
+- Worker-delegation fallback repair deploy: commit
+  `4cf18f6dc282c906090ceace406575cb99fc67c2` passed CI run
+  `27223242171`; deploy job `80383782637` succeeded; staging `/health`
+  reported proxy and sandbox commit
+  `4cf18f6dc282c906090ceace406575cb99fc67c2`, deployed at
+  `2026-06-09T17:18:17Z`.
+- Authenticated staging reprobe after `4cf18f6d`: the same product prompt
+  reached a real worker run and produced a more precise VText dashboard:
+  `Community Wire Staging Proof -- Dashboard`, super run
+  `da234dfc-91d1-47b3-9216-3d61150bb16a`, worker run
+  `bf18da24-002b-4875-9535-a227a83c7175`, state `cancelled`, and
+  `AppChangePackages: 0`. The dashboard names a critical unresolved
+  authentication blocker: deployed `choir.news` is live, but the worker VM
+  cannot authenticate to Global Wire and VText product APIs because
+  `X-Authenticated-User` is a trusted proxy header and the worker's gateway
+  token is not a user identity. The worker spawned co-super
+  `3e5e6046-1526-4966-a05e-d5ea74d86611`, but it remained pending with zero
+  output. A later separate super run
+  `850dd4e5-04e8-4ef8-a025-decf996a77b9` hit gateway connection refused
+  before delegation, but the cancellation certificate for worker run
+  `bf18da24-002b-4875-9535-a227a83c7175` is the primary blocker evidence.
+- Problem checkpoint after `4cf18f6d`: product-path worker delegation now
+  reaches a worker, but the worker lacks a sanctioned authenticated product API
+  path for owner/platform-scoped Global Wire and VText operations on staging.
+  Do not fix this before documenting it: the next behavior change must define
+  or repair the worker/candidate authentication contract rather than asking the
+  worker to spoof trusted proxy headers or use internal/test routes.
 
 ## Run State
 
@@ -400,6 +427,11 @@ what was proven:
 - Local fallback classification now recognizes `start_worker_delegation`
   results as worker evidence and should preserve the worker start result instead
   of producing the stale before-delegation summary.
+- The worker-delegation fallback repair is deployed and reprobed. It changed
+  the evidence from a stale before-delegation summary to a concrete worker
+  cancellation certificate. The next blocker is not Wire indexing or VText
+  publication logic yet; it is worker/candidate authentication to deployed
+  product APIs.
 
 unproven or partial claims:
 
@@ -418,14 +450,13 @@ unproven or partial claims:
 - The deterministic handoff repair is deployed and reprobed, but the super path
   fails before worker delegation/package work and a VText run still reports
   Fireworks 412. The source-to-edition proof remains blocked.
-- The provider precondition repair is local only until pushed, deployed, and
-  reprobed against the authenticated staging prompt.
 - The provider precondition repair is deployed and reprobed, but positive
   source-to-edition proof is still blocked at worker delegation evidence. The
   runtime-visible blocker text may be stale or misleading for
   `start_worker_delegation` attempts.
-- The worker-delegation fallback repair is local only until pushed, deployed,
-  and reprobed on staging.
+- The worker-delegation fallback repair is deployed and reprobed, but positive
+  source-to-edition proof is still blocked because the delegated worker cannot
+  authenticate against staging product APIs.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -433,7 +464,9 @@ unproven or partial claims:
 
 next step:
 
-- Land and deploy the worker-delegation fallback repair, reprobe the
-  authenticated staging prompt, and verify that any failed
-  `start_worker_delegation` produces a precise worker-delegation update or that
-  the worker continues to package/source-to-edition evidence.
+- After this docs checkpoint, investigate and repair the worker/candidate
+  authentication contract for product-path Global Wire and VText API access on
+  staging, without spoofing trusted proxy headers or using internal/test routes.
+  Reprobe the authenticated Community Wire prompt and expect either a real
+  source-to-edition package path or a more precise authenticated product-path
+  blocker.
