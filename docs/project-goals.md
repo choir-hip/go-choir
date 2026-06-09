@@ -1,7 +1,7 @@
 # Choir Project Goals
 
 **Status:** canonical current goals
-**Last updated:** 2026-05-31
+**Last updated:** 2026-06-09
 
 This file replaces the old root `PROJECT-GOALS.md`. It keeps the live direction
 from that file while removing completed checklists and stale continuation
@@ -22,6 +22,17 @@ The current product vector remains:
 ```text
 automatic computer -> automatic newspaper -> automatic radio -> automatic capital
 ```
+
+The current concrete product language is:
+
+```text
+private AI cloud -> Wire -> radio -> later capital/economic surfaces
+```
+
+Wire is the reusable source-to-VText substrate. Community Wire is the public
+Choir Community Cloud instance. Private Choir Clouds run their own Wire
+instances on client-controlled NixOS hosts with private platform computers, many
+user computers, private sources, and publication/subscription boundaries.
 
 Do not implement token mechanics or capital surfaces now. Preserve provenance,
 evidence, artifact, citation, trajectory, computer lineage, model, publication,
@@ -185,6 +196,15 @@ After the `vtext` loop is reliable, add ingestion and publication pressure:
 - immutable publication events over selected private versions/artifact refs;
 - citation graph mechanics over published refs;
 - radio traversal over promoted meaning.
+
+Wire should be treated as reusable infrastructure, not a bespoke news app:
+
+- Community Wire ingests public sources and publishes public source-backed
+  VTexts and editions.
+- Private Wire instances ingest private and subscribed public sources for
+  firm, matter, research, market, and executive briefings.
+- User computers run user-level processors and reconcilers to personalize
+  accessible corpora into user-owned VTexts.
 
 ### State Model
 

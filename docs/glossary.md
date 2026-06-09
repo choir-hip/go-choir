@@ -1,35 +1,127 @@
 # Choir Glossary
 
 **Status:** canonical vocabulary
-**Last updated:** 2026-05-14
+**Last updated:** 2026-06-09
 
 This glossary names the current Choir product and runtime vocabulary. It folds
 the old root `PROJECT-GLOSSARY.md` into `docs/` and updates it for the current
-computer, run-control, promotion, and publication ontology.
+cloud, computer, Wire, run-control, promotion, and publication ontology.
+
+Read [computer-ontology.md](computer-ontology.md) for the durable computer
+model and
+[wire-news-system-learning-saga-2026-06-09.md](wire-news-system-learning-saga-2026-06-09.md)
+for the news/Wire terminology correction.
 
 ## Product Vector
 
-### Automatic Computer
+### private AI cloud
+
+The practical product frame for Choir: an open-source, self-hostable AI work
+system where an organization owns its computers, source artifacts, VTexts,
+agent state, model policy, publication boundaries, and learning derivatives.
+
+### automatic computer
 
 The private agentic workspace: a persistent user computer where apps, agents,
 files, prompts, local builds, Dolt state, package installs, and candidate
 branches can diverge from the platform baseline.
 
-### Automatic Newspaper
+### Wire
+
+The reusable source-to-VText substrate. Wire ingests public or private sources,
+lets processors, reconcilers, researchers, and VText agents synthesize them, and
+produces source-backed VTexts, edition VTexts, indexes, and publication or
+subscription artifacts.
+
+Wire is not only public news. Public news is the Community Cloud instance of
+Wire. Private Choir Clouds run the same substrate over private sources,
+subscribed public sources, and domain-specific corpora.
+
+### Community Wire
+
+The public Choir Community Cloud instance of Wire. It owns public source
+artifacts, platform-level processors/reconcilers/researchers, public article or
+report VTexts, public edition VTexts, and public indexes.
+
+Use "Community Wire" in architecture docs when disambiguating from private Wire
+instances. User-facing copy may simply say "Wire" when the context is clear.
+
+### Private Wire
+
+A Wire instance inside a Private Choir Cloud. It may run over private documents,
+client files, internal communications, private feeds, subscribed public Wire
+artifacts, and domain-specific sources. Examples include Firm Wire, Matter Wire,
+Research Wire, Market Wire, Science Wire, or executive briefings.
+
+### automatic newspaper
 
 The public memory layer where selected private artifacts become citeable,
 disputable, forkable, reusable, and durable.
 
-### Automatic Radio
+This remains a useful long-range projection, but current architecture should use
+Wire for the concrete source-to-VText substrate.
+
+### automatic radio
 
 The screenless traversal layer over promoted meaning. Radio is not separate from
 `vtext`; `vtext` is the semantic score and radio is one performance of it.
 
-### Automatic Capital
+### automatic capital
 
 The later capital-formation layer. It is not a current implementation target,
 but current systems should preserve provenance, citations, compute attribution,
 artifact ownership, and publication boundaries so this layer remains possible.
+
+## Clouds, Hosts, And Computers
+
+### cloud
+
+A deployment boundary containing host infrastructure, platform computers, user
+computers, candidate computers, source systems, policy, and publication or
+subscription boundaries.
+
+Do not use "tenant" as the main product term. A customer deployment may have a
+thousand employees and its own NixOS hosts. It is a cloud, not a row in a shared
+tenant table.
+
+### Choir Community Cloud
+
+The public/shared Choir deployment. It includes `choir.news`, public
+publication surfaces, Community Wire, public package/artifact surfaces, public
+user accounts, Community Cloud platform computers, and user computers hosted
+inside the public deployment.
+
+### Private Choir Cloud
+
+A customer-controlled Choir deployment. A Private Choir Cloud has its own NixOS
+host or host cluster, platform computer(s), many user computers, candidate
+computers, private source systems, model/search policy, compliance/egress
+policy, and optional publication/subscription links to the Choir Community
+Cloud.
+
+### host
+
+The NixOS machine or host cluster running cloud infrastructure: edge/proxy,
+auth, gateway, computer lifecycle, platform services, source services, storage,
+and other daemons. A host is infrastructure. A computer is the persistent
+product/runtime object owned by a platform or user inside a cloud.
+
+### platform computer
+
+A persistent computer owned by a cloud itself rather than an individual user.
+It runs platform-level agents and owns platform-level semantic state such as
+Community Wire source artifacts, public article/edition VTexts, platform agent
+notebooks, publication queues, and cloud-level indexes.
+
+A Private Choir Cloud can also have platform computers: firm-wide source
+systems, policy agents, matter indexes, firm templates, and shared private
+VTexts live there.
+
+### user computer
+
+A persistent computer owned by a user/person/service account inside a cloud. It
+owns private VTexts, user preferences, files, user agents, user-level
+processors/reconcilers, personal editions, forks, alerts, and candidate work.
 
 ## Computers And Candidate Worlds
 
@@ -72,6 +164,10 @@ branch.
 The current implementation name for the runtime service/process. It is not the
 product noun. Use `sandbox` only when referring to existing code, service names,
 paths, or compatibility surfaces.
+
+When writing product or architecture docs, prefer **computer**, **computer
+runtime**, or **platform/user/candidate computer**. "Sandbox" implies
+ephemerality and should not describe durable Choir computers.
 
 ### VM / microVM
 
@@ -186,6 +282,38 @@ The version-native document app and appagent. It owns canonical document
 versions, receives evidence and worker updates, synthesizes new versions, and is
 the semantic substrate for publication and radio.
 
+Only VText agents write canonical VText versions. Other agents may read VTexts
+and message VText agents with evidence, requests, and proposed changes.
+
+### processor
+
+An agent role that works from incoming or query-selected source material toward
+candidate understanding and requests. A processor asks what is new, what
+changed, which source handles matter, what should be watched, what needs
+research, and what VText work should be requested.
+
+Processors may exist at Community Cloud platform level, Private Cloud platform
+level, and user-computer level. A user-level processor can actively query and
+research over the user's accessible public/private corpus; it is not merely a
+deterministic subscription filter.
+
+Processors do not write canonical VText versions.
+
+### reconciler
+
+An agent role that works from existing VTexts, source neighborhoods, notes, and
+history toward coherence over time. A reconciler asks which VTexts disagree,
+which claims are stale, which source artifacts contradict each other, which
+related VTexts should be transcluded, and which emergent questions deserve new
+research or VText work.
+
+Reconcilers may exist at Community Cloud platform level, Private Cloud platform
+level, and user-computer level. User-level reconcilers personalize and preserve
+coherence across the user's editions, forks, interests, alerts, and private
+context.
+
+Reconcilers do not write canonical VText versions.
+
 ### `researcher`
 
 The proactive sensing layer. Researchers gather current/external information,
@@ -216,6 +344,28 @@ not structurally mutate canonical state.
 The general category for delegated agents such as researchers, supers, vsupers,
 cosupers, and future specialized roles. Workers produce updates, evidence,
 deltas, diagnostics, candidates, or reports.
+
+### platform agent
+
+An agent running under a platform computer's authority. Platform agents may own
+platform-level notes, evidence, and requests, but they still obey role
+authority: for example, a platform reconciler may request a public Wire VText
+revision but does not write that VText itself.
+
+### user agent
+
+An agent running under a user computer's authority. User agents may personalize,
+fork, brief, research, and request VText work over the user's accessible corpus,
+but they do not mutate platform-owned VTexts.
+
+### agent notebook / agent evidence
+
+Dolt-backed durable non-canonical state for processors, reconcilers,
+researchers, supers, and other agents: checkpoints, findings, uncertainty,
+source handles, requests, watch items, blockers, and evidence refs.
+
+Agent notebooks/evidence are not VText versions. They are inputs to VText
+agents, researchers, verifiers, and future runs.
 
 ### verification contract
 

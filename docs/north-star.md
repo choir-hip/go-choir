@@ -1,12 +1,12 @@
 # Choir North Star
 
-**Last updated:** 2026-05-30
+**Last updated:** 2026-06-09
 
 The Automatic Computer already exists in deployed form: web desktop, backend
 services, appagents, and NixOS-on-NixOS VM infrastructure. The product object is
 a persistent user computer, not an ephemeral sandbox. The current task is to
 stabilize the deployed system around versioned living documents, candidate
-computer execution, publication, and later citation/compute economics.
+computer execution, publication, Wire, and later citation/compute economics.
 
 Read [docs/current-architecture.md](current-architecture.md) first. It is the
 streamlined architecture memo for the current phase.
@@ -20,6 +20,13 @@ whole product ontology. The broader vector is:
 ```text
 automatic computer -> automatic newspaper -> automatic radio -> automatic capital
 ```
+
+The current concrete language for the newspaper/source layer is **Wire**: a
+reusable source-to-VText substrate that runs in the Choir Community Cloud and in
+Private Choir Clouds. Community Wire produces public source-backed VTexts and
+editions. Private Wire instances run over private sources and subscribed public
+sources. User computers personalize by creating user-owned editions, forks,
+briefings, and alerts.
 
 Read [docs/mission-geometry.md](mission-geometry.md) for the high-level frame
 and [docs/computer-ontology.md](computer-ontology.md) for the computer and
@@ -38,9 +45,10 @@ graphics, animations, Trace evidence, candidate demo videos, and nested VTexts.
 Those snippets should be readable in the VText flow and expandable into their
 own desktop app windows without losing the reader's place.
 
-The automatic newspaper is the public memory projection: selected vtexts,
-sources, claims, corrections, citations, and track records become discoverable,
-citeable, disputable, forkable, and reusable.
+The automatic newspaper is the public memory projection: selected VTexts,
+sources, corrections, citations, and track records become discoverable,
+citeable, disputable, forkable, and reusable. Wire is the near-term substrate
+that makes this practical.
 
 The automatic radio is the embodied traversal projection. It is not a pivot away
 from `vtext`; it depends on `vtext`. Vtext is the score; radio is the

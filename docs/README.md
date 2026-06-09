@@ -1,6 +1,6 @@
 # Choir Documentation Index
 
-Last reviewed: 2026-06-06
+Last reviewed: 2026-06-09
 
 This directory contains canonical architecture docs, active MissionGradient
 missions, proof artifacts, and a small number of historical pointers. Do not
@@ -29,6 +29,14 @@ Use these buckets when reading or editing docs:
 - `docs/missiongradient-method.md` - run-geometry method entrypoint for long-running agent work; canonical skill lives at `skills/mission-gradient/SKILL.md`.
 - `docs/cognitive-transform-portfolio.md` - transform portfolio entrypoint for route-changing reframes; canonical skill lives at `skills/cognitive-transform-portfolio/SKILL.md`.
 - `docs/computer-ontology.md` - canonical vocabulary for persistent user computers, ledger split, personal promotion, platform/public promotion, and update algebra.
+- `docs/wire-news-system-learning-saga-2026-06-09.md` - current learning record
+  for the news/Wire ontology correction: Wire is platform-level in the
+  Community Cloud, reusable in Private Clouds, and personalized in user
+  computers.
+- `docs/choir-strategy-overview-2026-06-09.md` - high-level strategy overview:
+  own your AI cloud, own the learning, private clouds, Wire, VText, and radio.
+- `docs/choir-deck-treatment-and-faq-2026-06-09.md` - current deck/FAQ treatment
+  for export after the Wire terminology correction.
 - `docs/vm-priority-policy.md` - current and future VM/computer warmness,
   reclaim, always-on, and uptime-tier policy.
 - `docs/platform-os-app-state.md` - current common platform/default computer
@@ -59,9 +67,15 @@ Use these buckets when reading or editing docs:
   source/news code-state and code-review note. Use it for sourcecycled,
   source_search, VText source-service refs, News app gaps, and rough future
   directions; do not treat its improvement list as accepted mission scope.
+- `docs/choir-wire-source-to-vtext-spec-2026-06-09.md` - current Wire
+  requirements contract: Community Wire, Private Wire reuse, platform/user
+  computer authority, VText ownership, source artifacts, and deletion of legacy
+  graph/source-maxxing behavior.
+- `docs/mission-wire-community-news-v0.md` - current MissionGradient for landing
+  the public Community Wire news product on the corrected ontology.
 - `docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md` -
-  product/architecture spec for Global Wire + Style.vtext as one collaborative
-  StoryGraph/VText system.
+  historical product/architecture spec for the superseded Global Wire +
+  StoryGraph/VText framing. Do not use it as current ontology.
 - `docs/vtext-styleguide-system-research-2026-06-06.md` - research synthesis
   for VText-native `Style.vtext` support, client corpus ingestion, learned style
   memory, edit feedback, style review, and optional future fine-tuning.
@@ -98,8 +112,8 @@ Use these buckets when reading or editing docs:
 - `docs/mission-run-memory-v0.md` - run-memory/compaction mission.
 - `docs/mission-web-surface-rationalization-v0.md` - Obscura/browser surface rationalization mission.
 - `docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md` -
-  draft MissionGradient for the Global Wire / Style.vtext collaborative
-  StoryGraph trajectory.
+  historical draft MissionGradient for the superseded Global Wire / Style.vtext
+  collaborative StoryGraph trajectory. Do not use it as current ontology.
 
 Read the current Campaign Compiler mission first. Older promotion-queue mission
 docs have been pruned; use the consolidated learnings doc when that context is

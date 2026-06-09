@@ -361,6 +361,22 @@ Do not hand the agent named fake stages that become local reward targets.
 
 When using this skill, produce a mission document with these sections.
 
+### Requirements Contract
+
+If the mission has, needs, or implies a separate spec/requirements document,
+name it near the top of the mission as the requirements contract. Use a direct
+repo-relative path when possible.
+
+The mission document controls trajectory, belief state, evidence, rollback, and
+stopping conditions. The requirements contract controls the product/architecture
+invariants and acceptance semantics. Do not duplicate a full spec into the
+mission and let the two drift. Summarize only the invariants needed for mission
+control, then link to the contract for the full requirements.
+
+If no separate spec exists for a broad behavior-changing mission, either create
+one first or explicitly state why the mission document itself is the
+requirements contract.
+
 ### Real Artifact
 
 Name the production artifact being optimized. Avoid vague verbs like "fix", "improve", or "build" unless the artifact is concrete.

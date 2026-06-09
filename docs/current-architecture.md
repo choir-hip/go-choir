@@ -1,6 +1,6 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-06-06
+**Last updated:** 2026-06-09
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `vtext`, conductor routing, workers, Trace, Dolt,
@@ -19,8 +19,7 @@ roadmap. Sections labeled target-only are not current-state claims.
 
 Use [intended-architecture-next-2026-06-06.md](intended-architecture-next-2026-06-06.md)
 for the intended architecture after the next week-plus of source, Base,
-desktop, news, voice, and Automatic Radio work is written, deployed, and proven
-stable.
+desktop, Wire, voice, and radio work is written, deployed, and proven stable.
 
 When this document says "current," it should be backed by one of:
 
@@ -37,8 +36,8 @@ this document should be fixed.
 Choir is a durable learning control system over versioned artifacts. The web
 desktop is the current general-purpose projection of that substrate, not the
 whole ontology. Read [docs/mission-geometry.md](mission-geometry.md) for the
-higher-level frame: automatic computer -> automatic newspaper -> automatic radio
--> automatic capital.
+higher-level frame and [glossary.md](glossary.md) for the current
+Community Cloud / Private Cloud / Wire vocabulary.
 
 The Automatic Computer already exists in deployed form: a web desktop, backend
 services, appagents, and NixOS-on-NixOS VM infrastructure. The product object is
@@ -84,6 +83,17 @@ public surface changes     -> platform computer candidate unless substrate chang
 private public surface     -> selected route projection, not whole-computer exposure
 ```
 
+The current cloud vocabulary matters for source/news work:
+
+- the **Choir Community Cloud** is the public/shared deployment;
+- a **Private Choir Cloud** is a customer-controlled NixOS host or host cluster
+  with platform computer(s), many user computers, candidate computers, private
+  source systems, and optional publication/subscription links;
+- **Wire** is the reusable source-to-VText substrate;
+- **Community Wire** is platform-level work in the Community Cloud, not a
+  user-computer feature;
+- personalization is user-computer work over accessible public/private corpora.
+
 ## Service Topology
 
 The current codebase/deployable topology is one product split across a small
@@ -104,11 +114,17 @@ host services
   -> maild owns email ingress/drafts/notifications where configured
   -> sourcecycled owns the current experimental source-service daemon
 
+platform computer runtime
+  -> cloud-level processors/reconcilers/researchers/VText agents where present
+  -> cloud-owned Wire artifacts, editions, indexes, and agent notebooks
+  -> cloud-owned source/publication state that is semantic product state
+
 per-user computer runtime
   -> conductor routes owner intent
   -> app surfaces project durable state
   -> appagents own canonical semantic artifacts when needed
   -> researcher/super/vsuper/co-super workers create evidence and candidates
+  -> user processors/reconcilers personalize accessible corpora where present
   -> embedded Dolt owns private computer product state
   -> zot can run as a Super Console subprocess when configured
 ```
@@ -125,6 +141,9 @@ Important boundary rules:
 - The per-user computer runtime is where private conductor, VText, appagent,
   Trace, run memory, app state, source metadata, and candidate-control product
   state live.
+- Platform-level semantic work, such as Community Wire article/edition VTexts
+  and public source synthesis, should be scoped to platform computer authority
+  even when host daemons perform serving, lifecycle, or adapter work.
 - Provider secrets stay in the gateway/platform boundary. Per-computer model
   policy chooses among platform-declared capabilities without copying secrets
   into user state.
@@ -209,14 +228,14 @@ Code-present/current foundations:
 5. Platform publication has `platformd`, proxy publish/read APIs, public
    `/pub/vtext/...` routes, sanitized publication bundles, export, retrieval
    search, proposal delivery state, and private-derivative/proposal flows.
-6. The source/news substrate has current code in `cmd/sourcecycled`,
+6. The source/Wire substrate has current code in `cmd/sourcecycled`,
    `internal/cycle`, `internal/sourcefetch`, `internal/sourcecontract`,
    `internal/sources`, runtime content/source entity handling, and frontend
    source panels/viewers. `source_search` can query Source Service for
    researcher turns when configured, and VText can preserve
    `source_service_item:<id>` refs, but there is not yet a user-facing
-   News/Newspaper app, subscription/event stream, newsletter pipeline, or
-   durable per-source scheduling proof.
+   Wire app over an edition VText, subscription/event stream, newsletter
+   pipeline, or durable per-source scheduling proof.
 
 Active hardening:
 
@@ -225,8 +244,9 @@ Active hardening:
 2. Make VText/researcher/super/user edit flows smoother, more observable, and
    less dependent on timing luck, while preserving the existing single-writer
    and machine-verifiable revision contract.
-3. Turn source/news from substrate into a prominent News/Newspaper product
-   surface with real front-page, issue, newsletter, and radio-queue projections.
+3. Turn source/Wire from substrate into a prominent Wire product surface with
+   real edition VTexts, userland personalization, and later newsletter and
+   radio-queue projections.
 4. Harden publication UX and review: retraction, supersession, route
    management, richer review evidence, export polish, and proposal
    inbox/acceptance flows.
@@ -238,8 +258,8 @@ Target-only direction:
 
 1. CHIPS and citation/compute economics.
 2. Choir Base/File Provider sync and native desktop surfaces.
-3. Automatic Radio, voice input/output, watch-first screenless control, and
-   native mobile radio/control apps.
+3. Radio, voice input/output, watch-first screenless control, and native mobile
+   radio/control apps.
 
 Later layers should shape today's data model, but they should not be built in a
 way that weakens the existing VText/source/publication contract.

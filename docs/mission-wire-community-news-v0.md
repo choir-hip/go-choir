@@ -1,0 +1,370 @@
+# MissionGradient: Wire Community News
+
+Date: 2026-06-09
+
+## Goal String
+
+```text
+/goal Run docs/mission-wire-community-news-v0.md as MissionGradient.
+```
+
+## Objective
+
+Land Community Wire as the public source-to-VText news instance of the Choir
+Community Cloud.
+
+Requirements contract:
+[choir-wire-source-to-vtext-spec-2026-06-09.md](choir-wire-source-to-vtext-spec-2026-06-09.md).
+
+## Required Launch Context
+
+The operator may start this mission in a fresh thread using only the goalstring.
+Therefore the worker must begin by reading this mission document and the
+requirements contract above before making behavior changes.
+
+Required context reads:
+
+- [AGENTS.md](../AGENTS.md) for repo operating contract, staging proof, and
+  problem-documentation-first rules;
+- [glossary.md](glossary.md) for current Community Cloud, Private Cloud,
+  platform computer, user computer, candidate computer, and Wire vocabulary;
+- [computer-ontology.md](computer-ontology.md) for host/computer/candidate
+  lineage and promotion boundaries;
+- [wire-news-system-learning-saga-2026-06-09.md](wire-news-system-learning-saga-2026-06-09.md)
+  for the news failure history and the platform-level realization;
+- [choir-wire-source-to-vtext-spec-2026-06-09.md](choir-wire-source-to-vtext-spec-2026-06-09.md)
+  for product/architecture requirements.
+
+Do not treat old Global Wire, StoryGraph, source-maxxing, source-ledger, or
+Style.vtext-control documents as current requirements unless this mission or the
+Wire spec explicitly mines them as historical failure evidence.
+
+At mission start, run `git status --short` and classify dirty paths. The docs
+created for this Wire ontology/mission are intentional mission context. Preserve
+unrelated user/agent work. Do not overwrite or revert dirty files unless the
+mission explicitly owns them and the diff has been read.
+
+Before the first behavior-changing code commit, perform the repo-required
+problem-documentation-first step: document the current fake/legacy Wire problem,
+evidence, belief-state update, and remaining error field in the mission report
+or a focused problem checkpoint doc. The fix commit(s) come after that
+documentation checkpoint.
+
+The shipped product should show live-updated important news from many public
+sources in Wire by rendering a published edition VText that transcludes
+VText-agent-authored articles/reports. Those VTexts transclude real source
+artifacts. Platform processors and reconcilers run under Community Cloud
+platform-computer authority. Userland personalization is designed but not
+required to ship in this mission unless it falls out naturally.
+
+This mission tables newsletter/email delivery, Autoradio, TTS/STT, vector DB,
+deterministic clustering, native mobile, and automatic capital.
+
+## Real Artifact
+
+The artifact is not a dashboard and not a legacy graph object.
+
+The real artifact is:
+
+```text
+Community Cloud source artifacts
+-> platform processor/reconciler/researcher notes and requests
+-> VText-agent-authored Article/Report.vtexts
+-> Wire.vtext public edition
+-> Wire app renderer over the edition VText graph
+```
+
+The app may use indexes for speed. Indexes are rebuildable caches over VTexts
+and source artifacts.
+
+## Value Criterion
+
+Minimize divergence between the public news product and the Wire/VText-native
+ontology while increasing source breadth, source depth, article quality, update
+freshness, and readable newspaper presentation.
+
+Loss increases when:
+
+- hardcoded mock/seed stories appear as product stories;
+- source labels masquerade as full sources;
+- Wire owns article prose outside VText;
+- platform and user-computer ownership are blurred;
+- legacy StoryGraph, source-maxxing, source-ledger, source-network rename
+  shims, Global-Wire-as-ontology, or style-control ontology remains visible or
+  authoritative;
+- rankings are fake deterministic placeholders;
+- article VTexts contain outlines/status/source manifests instead of
+  publishable prose;
+- source transclusions fail to open into source artifacts;
+- update/version propagation silently changes meaning;
+- tests protect old fake behavior.
+
+## Quality Bar
+
+Quality level: excellent.
+
+The standard is:
+
+- make it work: live source intake, real source artifacts, VText-authored
+  articles/reports, real edition VText, product-path proof;
+- make it nice: clean readable newspaper typography, no detritus, source-rich
+  prose, strong update semantics.
+
+## Hard Invariants
+
+1. Wire is reusable source-to-VText infrastructure.
+2. Community Wire is platform-level work owned by a Choir Community Cloud
+   platform computer, not a user-computer feature.
+3. Private Wire reuse must remain possible; do not build one-off public-news
+   code that cannot run in a Private Choir Cloud over private sources.
+4. Personalization belongs in user computers and creates user-owned VTexts,
+   forks, notes, alerts, preferences, and style.vtexts.
+5. Articles/reports and editions are VTexts.
+6. Article/report/edition writing and revision is owned by VText agents.
+7. Processors and reconcilers do not write canonical VText prose directly.
+8. Processors, reconcilers, researchers, supers, and coding agents may write
+   durable notes/evidence/messages in their computer scope and request VText
+   work.
+9. External sources are durable source artifacts/ContentItems, not forced
+   VTexts.
+10. Sources are transcluded into VTexts through native source systems.
+11. Related VTexts are transcluded VTexts.
+12. Public/private source visibility and egress policy are preserved.
+13. Transclusions preserve version semantics: pinned, live, or
+    live-with-review.
+14. Indexes are caches and must be rebuildable from VTexts/source artifacts.
+15. Excise and delete legacy StoryGraph, SourceMaxx/source-maxxing/source-maxx,
+    source-ledger, source-network rename shims, seed source neighborhoods,
+    source chronology/search detritus, style-control panels, durable-storygraph
+    labels, and hardcoded three-story fallback behavior from active product
+    behavior, APIs, runtime/store types, tests, active docs, and user-visible
+    copy.
+16. Telegram ingestion uses proper Telegram API paths. Public preview HTML
+    scraping is not an accepted fallback.
+17. No hardcoded source trust tiers.
+18. Wire app works in Future Noir, Carbon Kintsugi, and London Salmon with
+    OS-wide theme only.
+19. Staging proof on `https://choir.news` is required for behavior-changing
+    completion.
+
+## Current Belief State
+
+Evidence from code/doc review on 2026-06-09:
+
+- `configs/sources.json` contains 211 configured sources: 137 RSS, 73 Telegram,
+  1 GDELT, with broad language/vertical tags.
+- RSS ingestion currently stores feed summaries/excerpts, not consistently full
+  article bodies.
+- Telegram ingestion currently scrapes public preview HTML instead of using the
+  Telegram API; this is legacy behavior to remove, not a fallback to preserve.
+- GDELT ingestion currently uses one GKG source as metadata firehose, not enough
+  for the desired public-source breadth/depth.
+- Hacker News ingestion is not present as a first-class source adapter.
+- `GlobalWireApp.svelte` still has hardcoded preview stories.
+- `internal/store/global_wire.go` still auto-seeds three legacy graph stories
+  and seed source ContentItems.
+- `internal/runtime/global_wire.go` still mixes source-network-renamed VText
+  articles with seeded legacy graph fallback.
+- Tests still assert the old three-story/durable-storygraph behavior.
+- Backend routes still contain graph candidate, style-source compose/replace,
+  source-refresh, publication, autoradio, and dry-run newsletter detritus.
+- Source/document import tooling is stronger than source daemon ingestion:
+  researchers can import URL/PDF/DOCX/EPUB/PPTX/HTML content, but sourcecycled
+  does not yet consistently produce full source artifacts.
+- Existing Dolt-backed non-canonical agent state exists through
+  `agent_evidence`, run memory, and `submit_coagent_update`, but it should be
+  regularized as agent notebook/checkpoint behavior rather than bypassing VText
+  authority.
+
+Highest-impact uncertainty:
+
+- The cleanest hard cutover from old Global Wire graph/fallback behavior to
+  Community Wire edition-VText rendering without preserving fake compatibility
+  behavior.
+
+## Homotopy Parameters
+
+Preserve topology while increasing resolution along these axes:
+
+- source breadth: 211 configured sources -> more RSS/Atom, Telegram API
+  channels, HN, broader GDELT modes, science/finance/industry/long-tail
+  multilingual sources;
+- source depth: feed summaries -> full readability/source artifacts where
+  allowed;
+- cloud/computer ownership: user-level blur -> Community Cloud platform
+  computer authority;
+- article ownership: store-generated prose -> VText-agent-owned versions;
+- edition truth: frontend/API story list -> edition VText transclusions;
+- reconciliation: newest batch only -> corpus-level article/edition review;
+- personalization design: platform recommendation -> user-level
+  processor/reconciler/VText authorship;
+- ranking: hardcoded prominence -> agentic editorial prominence with source
+  overlap/novelty/contradiction reasoning;
+- UI: visible detritus -> clean Wire renderer;
+- verification: local tests -> staging product-path proof over live source
+  cycles.
+
+A lower-resolution version is acceptable only if it is the same object: source
+artifacts, VText-authored articles/reports, edition VText, app renderer. Fake
+seeded stories are not an acceptable low-resolution version.
+
+## Expected Route
+
+This is not a checklist; it is a likely route through the topology.
+
+1. Document the current fake legacy-graph/seed-front-page problem before
+   behavior changes.
+2. Replace public Wire product truth with edition VText and VText/source
+   indexes.
+3. Delete old StoryGraph, SourceMaxx/source-maxxing/source-maxx,
+   Global-Wire-as-ontology, seed/fallback/product routes, runtime/store types,
+   tests, and active-architecture docs; historical docs may remain only as
+   clearly superseded records, not active references.
+4. Delete frontend hardcoded preview stories as product behavior.
+5. Replace tests that protect old behavior with tests that require honest
+   empty/live states and VText-index rendering.
+6. Improve source ingestion:
+   - RSS/Atom full article/readability import where allowed;
+   - Telegram API ingestion as the only accepted Telegram ingestion path;
+   - broader GDELT use and clearer metadata/source artifact handling;
+   - Hacker News adapter;
+   - expanded source registry.
+7. Ensure platform processors/reconcilers create/update article/report VTexts
+   through VText agents and preserve source handles.
+8. Ensure article/report VTexts cite/transclude source artifacts natively.
+9. Ensure `Wire.vtext` transcludes article/report VTexts with version semantics.
+10. Ensure Wire app renders the edition VText graph cleanly on desktop/mobile
+    and all three themes.
+11. Prove staging behavior: live source status, VText creation/update, edition
+    update, source transclusion open, no fake stories.
+
+## Forbidden Shortcuts
+
+- Do not add new mock routes, fake stories, or seed articles to make the UI
+  look full.
+- Do not keep StoryGraph or SourceMaxx/source-maxxing as hidden product
+  authority under renamed labels such as source-network.
+- Do not claim RSS sources are full articles when they are feed summaries.
+- Do not claim Telegram API ingestion when only preview scraping ran.
+- Do not hardcode ranking/prominence to make front-page ordering look plausible.
+- Do not write article prose in Wire app/backend outside VText ownership.
+- Do not let processors, reconcilers, researchers, or supers write VTexts.
+  They may read VTexts/files/source artifacts and message VText agents. Only
+  VText agents write VText versions.
+- Do not create source manifest or related-story list sections when native
+  transclusion is available.
+- Do not spend the mission on newsletter/email.
+- Do not leave tests asserting old seed behavior.
+
+## Evidence Requirements
+
+Completion requires named evidence for:
+
+- source registry count and source classes after expansion;
+- source cycle producing live items from RSS, Telegram API, GDELT, and HN;
+- source artifacts containing full/extracted article content where allowed, not
+  only headlines;
+- platform processor/reconciler runs using shared harness and issuing
+  VText/research requests;
+- VText agent-created article/report version with source transclusions;
+- `Wire.vtext` edition revision transcluding article/report VTexts;
+- app rendering edition VText graph with no hardcoded preview stories;
+- every article/report openable in VText;
+- source transclusion opening native source viewer/content artifact;
+- update semantics visible when a current revision differs from a transcluded
+  revision;
+- responsive UI proof in Future Noir, Carbon Kintsugi, and London Salmon;
+- staging deploy SHA identity and acceptance proof.
+
+## Anti-Goodhart Checks
+
+If the final product shows more articles but they are old, fake, uncited,
+shallow, or not VText-owned, the mission failed.
+
+If the product shows hundreds of source items but articles do not synthesize and
+cite them, the mission failed.
+
+If the app is visually clean but backed by fake stories, the mission failed.
+
+If the backend creates a new parallel object that future agents must reconcile
+with VText truth, the mission failed.
+
+If platform and user-computer personalization authority are blurred, the mission
+failed.
+
+If source breadth improves but RSS/Telegram/GDELT/HN claims are not proven by
+source-cycle evidence, the mission failed.
+
+## Dense Feedback
+
+Use short receding-horizon loops:
+
+- inspect code/data/product evidence;
+- update mission report and belief state when a problem is found;
+- patch or delete the implicated layer;
+- run focused tests;
+- deploy/push when behavior changes;
+- verify staging product path;
+- update report and mission checkpoint.
+
+Use Computer Use/browser product-path probes where screenshots, responsive
+layout, source windows, or authenticated Wire behavior matter.
+
+## Rollback Policy
+
+Every behavior-changing commit must be independently reviewable.
+
+Prefer deletion commits that remove fake product behavior before replacement
+commits, when the deletion can leave an honest empty state.
+
+If a cutover breaks staging, rollback to the last known deployed SHA and
+preserve evidence in the mission report.
+
+Do not edit tracked files directly on Node B as source/config shortcut. Push
+through `origin/main` and monitor CI/deploy.
+
+## Mission Report
+
+Create and maintain:
+
+```text
+docs/mission-report-wire-community-news-2026-06-09.md
+```
+
+At mission end, save a PDF copy to:
+
+```text
+~/Library/Mobile Documents/com~apple~CloudDocs/mission reports/
+```
+
+## Run Checkpoint And Resumption State
+
+status: checkpoint_incomplete
+
+last checkpoint:
+
+- Wire/cloud/computer ontology specified.
+- No behavior-changing code has been changed by this mission document.
+
+current artifact state:
+
+- Existing code still contains legacy graph/seeded-story behavior and hardcoded
+  frontend preview stories.
+- Existing source daemon has broad but shallow source ingestion.
+
+what shipped:
+
+- Mission/spec docs only when this document is committed.
+
+what was proven:
+
+- Code review identified old seeded paths and source-ingestion gaps.
+- Existing docs now distinguish Community Cloud, Private Cloud, platform
+  computers, user computers, Wire, and userland personalization.
+
+unproven or partial claims:
+
+- Live staging authenticated Wire source status.
+- Real VText creation from current source cycles.
+- Telegram API ingestion.
+- Removal of Telegram public preview HTML scraping from the Wire ingestion path.

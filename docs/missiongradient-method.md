@@ -1,8 +1,11 @@
 # MissionGradient Method
 
-Last updated: 2026-05-14
+Last updated: 2026-06-09
 
-Canonical skill file: [`../skills/mission-gradient/SKILL.md`](../skills/mission-gradient/SKILL.md)
+Canonical skill file: local Codex skill
+`~/.codex/skills/mission-gradient/SKILL.md`. If this repo carries a synced copy
+in the future, keep it byte-for-byte equivalent or clearly mark which one is
+canonical.
 
 MissionGradient is a way to give long-running agents a **sense of direction** without pretending the route is already known.
 
@@ -95,6 +98,9 @@ If not, the “MVP” is probably a demo trap.
 
 A full MissionGradient should name:
 
+- **Requirements contract** — the spec or requirements doc that defines product
+  invariants and acceptance semantics, or an explicit statement that the mission
+  itself is the requirements contract;
 - **Real artifact** — the durable thing being changed;
 - **Invariants** — properties that define artifact identity and cannot be traded away;
 - **Value criterion** — what “uphill” means;
@@ -123,8 +129,12 @@ Before sending an overnight or multi-hour agent run, write the mission so it can
 Then the `/goal` can be short:
 
 ```text
-Use MissionGradient. Complete docs/<mission>.md by optimizing the real artifact under its invariants, belief-state updates, quality gradient, and verification criteria. Preserve topology, avoid forbidden shortcuts, maintain an evidence ledger, and stop/escalate on invariant-level surprises.
+/goal Run docs/<mission>.md as MissionGradient.
 ```
+
+The mission should then name its requirements contract near the top. This keeps
+the slash goal short while avoiding disconnected redundancy between a spec and a
+mission.
 
 ## What MissionGradient is not
 

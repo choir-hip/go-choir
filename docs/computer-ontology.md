@@ -1,7 +1,7 @@
 # Choir Computer Ontology
 
 **Status:** canonical architecture vocabulary
-**Last updated:** 2026-05-14
+**Last updated:** 2026-06-09
 
 This document names the durable object that Choir operates on.
 
@@ -14,6 +14,39 @@ runtime services, and user preferences can diverge from the platform baseline.
 it. It should not be the product ontology. A sandbox sounds disposable. A Choir
 computer is allowed to be durable, personal, divergent, useful, backed up,
 forked, merged, published from, and updated over time.
+
+## Cloud Boundary
+
+Choir clouds are deployment and ownership boundaries. A cloud contains NixOS
+host infrastructure, platform computers, user computers, candidate computers,
+source systems, policy, and publication/subscription boundaries.
+
+Use these terms:
+
+- **Choir Community Cloud**: the public/shared Choir deployment, including
+  `choir.news`, Community Wire, public publication surfaces, public user
+  computers, and Community Cloud platform computers.
+- **Private Choir Cloud**: a customer-controlled deployment with its own NixOS
+  host or host cluster, platform computer(s), many user computers, candidate
+  computers, private source systems, policy, and optional publication or
+  subscription links to the Community Cloud.
+- **Host**: the NixOS machine or host cluster running infrastructure services.
+- **Platform computer**: a persistent computer owned by a cloud itself rather
+  than an individual user.
+- **User computer**: a persistent computer owned by a person or service account
+  inside a cloud.
+- **Candidate computer**: a speculative fork of a platform computer or user
+  computer.
+
+Do not model a customer Private Choir Cloud as just a tenant row in the
+Community Cloud. A private cloud may have a thousand employees, its own NixOS
+hosts, its own platform computers, and its own private user computers.
+
+Host-side daemons may still exist for edge routing, auth, gateway, lifecycle,
+publication, or source-service work. Product authority should remain scoped to
+the relevant cloud and computer: platform-level semantic work belongs to a
+platform computer, user-level semantic work belongs to a user computer, and
+candidate mutation belongs to a candidate computer.
 
 ## Core Object
 
@@ -79,12 +112,14 @@ platform base P0
       -> candidate computer C1
 ```
 
-Platform releases and user computers are different levels.
+Platform releases, platform computers, and user computers are different levels.
 
 - A platform release is the official Choir baseline: source, services, runtime
   invariants, default apps, default prompts, and upgrade machinery.
+- A platform computer is a persistent cloud-owned computer for cloud-level
+  agents, cloud-owned artifacts, publication/source systems, and shared indexes.
 - A user computer is a persistent fork of that baseline.
-- A candidate computer is a speculative fork of a user computer.
+- A candidate computer is a speculative fork of a platform or user computer.
 - A published package/change is a typed artifact extracted from a user or
   candidate computer so another computer can import it.
 
