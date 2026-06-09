@@ -1454,3 +1454,105 @@ Remaining evidence required before mission completion:
 - if the assessment marks the completed run invalid, call the new continuation
   route and prove the continuation child produces the final recall synthesis
   without live search.
+
+## Final Checkpoint: GPT Mini Continuation Proof Completed
+
+checkpoint date: 2026-06-09
+
+The eval continuation repair shipped and was proven on staging against
+`https://choir.news`.
+
+Shipped commits:
+
+- `786df962 docs: checkpoint compaction recall eval repair`;
+- `4738e311 runtime: continue incomplete compaction recall evals`.
+
+CI and deploy evidence:
+
+- GitHub Actions run `27184624378` for
+  `4738e311908af6618b7ad5485a6dc40e9151bdef` passed;
+- FlakeHub publish run `27184624395` passed;
+- staging health reported proxy and sandbox deployed at
+  `4738e311908af6618b7ad5485a6dc40e9151bdef`;
+- staging deploy timestamp: `2026-06-09T04:53:41Z`.
+
+Deployed proof artifact:
+
+- `/tmp/choir-compaction-gpt-continuation-proof-1780988770494.json`.
+
+The temporary browser proof command failed after writing the artifact because
+the proof harness asserted against a truncated child summary. The product
+evidence in the artifact is still valid: the full child channel message detail
+was captured through browser-public trace routes and contains the final recall
+synthesis.
+
+Product-path proof:
+
+- initial GPT mini eval loop:
+  `e51a48ac-ffca-4413-a138-e4c081532792`;
+- provider/model: `chatgpt` / `gpt-5.4-mini`;
+- initial completed run assessment: invalid because final prose was not a recall
+  synthesis;
+- assessed initial selector coverage: 470 actual selector reads against a
+  required 223 selectors;
+- initial compaction evidence: 5 compaction starts and 5 completions;
+- continuation id: `085de033-ad99-41c6-a4bd-ebf32c4c08ec`;
+- continuation child loop: `7d9d5fdc-3c3b-42ad-b7e9-c6bad4459fa2`;
+- continuation preserved overlay:
+  `compaction-gpt-continuation-1780988770494`;
+- post-continuation trace counters: 1,389 moments, 1,040 selector-read
+  moments, 272 selector-list moments, 7 compaction starts, 7 compaction
+  completions, and zero search attempts.
+
+The continuation child produced a selector-cited recall synthesis covering:
+
+- HTTP semantics vs transport/framing in RFC 9110;
+- HTTP content semantics, fields, validators, and intermediary handling;
+- HTTP/2 framing and DATA-frame details from RFC 7540;
+- HTTP/2 malformed-message and CONNECT/Upgrade behavior from RFC 9113;
+- HTTP/3 over QUIC and HTTP/3 pseudo-header/CONNECT behavior from RFC 9114;
+- QUIC transport constraints from RFC 9000;
+- TLS 1.3 record-layer framing from RFC 8446;
+- an older HTTP/1.1 hop-by-hop connection handling detail reframed by the newer
+  HTTP core corpus.
+
+Interpretation:
+
+The full target matrix is now proven at the mission's intended confidence
+level. DeepSeek pro, DeepSeek flash on retry, Xiaomi Mimo v2.5, Xiaomi Mimo
+v2.5 Pro, and GPT mini all have deployed evidence for realistic document
+pressure, no live search, automatic compaction, and post-compaction recall.
+GPT mini additionally proved the repaired product continuation path: a completed
+but invalid eval can be assessed, resumed as a normal researcher continuation,
+preserve the scoped model-policy overlay, and finish with a selector-cited
+recall synthesis.
+
+Residual risks:
+
+- the final GPT mini proof harness should be promoted from temporary scratch
+  into a stable regression test before the next compaction-provider mission;
+- the browser-public trace summary can truncate child messages, so future
+  proofs should assert against full moment/message detail rather than summary
+  text;
+- this mission validates document extraction and recall behavior, not the
+  future Slides app; slides playback remains a separate mission.
+
+Run Checkpoint & Resumption State:
+
+```text
+status: complete
+last checkpoint: deployed GPT mini continuation proof on 2026-06-09
+current artifact state: sandbox document extraction preamble, frozen corpus,
+  provider matrix, compaction, and continuation recall are proven
+what shipped: compaction recall assessment and continuation product routes,
+  plus continuation overlay preservation and objective dedupe repair
+what was proven: normal product-path imports, no-live-search frozen corpus,
+  scoped model-policy overlays, automatic runtime compaction, selector recall,
+  and normal researcher continuation after invalid eval completion
+remaining error field: promote proof harness into a stable regression and use
+  full trace message details for assertions
+next product mission: return to Global Wire source ingestion and article
+  production, now that DeepSeek/Xiaomi/GPT mini provider and compaction behavior
+  are usable for long-running agents
+rollback refs: docs commit 786df962 and behavior commit 4738e311
+```
