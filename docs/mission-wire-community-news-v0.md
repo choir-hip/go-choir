@@ -299,6 +299,19 @@ Update after 2026-06-09 staging slices:
   `product_api_request`, worker/package evidence, or a Wire edition update
   within the observation window. The next problem is persistent-super
   execution/progress after handoff creation.
+- Deployed evidence after persistent-super inbox starvation repair: commit
+  `f78e5519d6ce9db843017f33796829cbaf18f6c3` passed CI and deployed to
+  staging. Staging `/health` reported proxy and sandbox at that SHA, deployed
+  at `2026-06-09T18:01:08Z`. Authenticated Chrome reprobe created VText doc
+  `2b7ffa7a-58a1-48be-b6f3-cbe5cd5d3d24` with
+  `data-vtext-initial-loop-id="ca50cf79-9fef-413b-a15f-6e4507edc639"`. The
+  activity feed then showed foreground super calling `product_api_request`,
+  `finish_worker_delegation`, `save_evidence`, and `submit_coagent_update`.
+  This proves the prompt path now reaches foreground product API orchestration.
+  The coagent update summarized the remaining blocker as `Global Wire staging
+  proof: StoryGraph is seeded (3 dossiers...)`, so the next problem has moved
+  to seeded StoryGraph/source-refresh state rather than prompt routing,
+  worker authentication, or foreground product API access.
 
 ## Homotopy Parameters
 
@@ -621,6 +634,13 @@ what was proven:
   `2026-06-09T17:51:13Z`. The product surface now exposes the persistent-super
   handoff id for the prompt doc, but no follow-on super progress was visible
   after the handoff id appeared.
+- Persistent-super inbox starvation repair deployed and reprobed: commit
+  `f78e5519` passed CI run `27225580546`; deploy job `80392089714`
+  succeeded; staging `/health` reported proxy and sandbox at
+  `f78e5519d6ce9db843017f33796829cbaf18f6c3`, deployed at
+  `2026-06-09T18:01:08Z`. The proof prompt now reaches
+  `product_api_request`, `finish_worker_delegation`, `save_evidence`, and
+  `submit_coagent_update`.
 
 unproven or partial claims:
 
@@ -654,10 +674,13 @@ unproven or partial claims:
 - The prompt handoff id is now visible on staging, but positive source-to-edition
   proof remains blocked because the persistent-super run behind that id does
   not visibly progress to product API orchestration.
+- The prompt now reaches foreground product API orchestration on staging, but
+  the positive source-to-edition proof remains blocked by seeded
+  StoryGraph/source-refresh state.
 
 next step:
 
-- Repair persistent-super run execution/progress after the prompt-bar handoff
-  id is created. The next proof should show the handoff run calling
-  `product_api_request`, producing a precise product API blocker, or advancing
-  the Community Wire source-to-edition flow.
+- Repair the seeded StoryGraph/source-refresh dependency exposed by foreground
+  product API orchestration. The next proof should move from seeded dossier
+  evidence to real source artifacts, VText article/review creation,
+  `global-wire/Wire.vtext` update, and rendered edition output.

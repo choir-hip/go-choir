@@ -420,6 +420,35 @@ instead of filled with seeded stories.
   visible `product_api_request`, worker, package, or Wire edition update. The
   next blocker is therefore not handoff-id visibility; it is execution/progress
   of the persistent-super run after the handoff id is created.
+- Persistent-super inbox starvation repair: commit
+  `f78e5519d6ce9db843017f33796829cbaf18f6c3` lets blocked persistent-super
+  inbox runs yield to fresh deliveries instead of treating `RunBlocked` as an
+  active loop that starves new prompt work. Local verification:
+  - `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestPersistentSuper(BlockedRunDoesNotStarveFreshInboxDelivery|ProcessesConcurrentInboxDeliveriesInFollowupRun)'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper'`
+  - `nix develop -c scripts/go-test-runtime-shards`
+- CI/deploy for `f78e5519d6ce9db843017f33796829cbaf18f6c3`: CI run
+  `27225580546` succeeded, including all runtime shards, non-runtime Go tests,
+  integration-tagged smoke, Go vet/build, and deploy. Deploy job
+  `80392089714` succeeded in 32s. Staging `/health` reported proxy and sandbox
+  commit `f78e5519d6ce9db843017f33796829cbaf18f6c3`, deployed at
+  `2026-06-09T18:01:08Z`.
+- Authenticated staging reprobe after `f78e5519`: the same Community Wire proof
+  prompt created VText doc `2b7ffa7a-58a1-48be-b6f3-cbe5cd5d3d24` with
+  `data-vtext-initial-loop-id="ca50cf79-9fef-413b-a15f-6e4507edc639"`. The
+  live activity feed then showed foreground super calling `product_api_request`,
+  `finish_worker_delegation`, `save_evidence`, and `submit_coagent_update`.
+  This proves the prompt path now reaches the foreground product API tool
+  instead of stopping at worker browser authentication or a blocked stale super
+  loop.
+- New staging blocker from the `f78e5519` reprobe: the super's coagent update
+  summarized the evidence as `Global Wire staging proof: StoryGraph is seeded
+  (3 dossiers...)`. The positive source-to-edition proof still did not create a
+  visible `global-wire/Wire.vtext` edition update or rendered article. The next
+  problem has moved again: foreground product API orchestration works, but the
+  underlying Global Wire source-refresh/reconciliation path is still tied to
+  seeded StoryGraph dossier state rather than the Community Wire
+  source-artifact -> VText-edition topology.
 
 ## Run State
 
@@ -532,6 +561,11 @@ unproven or partial claims:
 - The prompt handoff id is now product-visible on staging at `a42e1afc`, but
   the persistent-super run behind that id did not visibly progress within the
   observation window.
+- The blocked-super starvation repair is deployed and reprobed at `f78e5519`.
+  The proof prompt now reaches foreground super `product_api_request` and
+  coagent evidence. Positive edition proof remains blocked by seeded
+  StoryGraph/source-refresh state, not by prompt routing, worker auth, or
+  foreground product API access.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -539,8 +573,7 @@ unproven or partial claims:
 
 next step:
 
-- Repair persistent-super run execution/progress after the prompt-bar handoff
-  id is created. The next proof should show run
-  `a69ea9f3-32a4-4d49-acd7-974148b8a1e4` or a fresh equivalent handoff calling
-  `product_api_request`, producing a precise product API blocker, or advancing
-  the Community Wire source-to-edition flow.
+- Repair the seeded StoryGraph/source-refresh dependency exposed by foreground
+  `product_api_request`. The next proof should move the product API flow from
+  seeded dossier evidence toward real source artifacts, VText article/review
+  creation, `global-wire/Wire.vtext` update, and rendered edition output.
