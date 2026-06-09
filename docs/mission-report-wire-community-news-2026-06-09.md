@@ -105,6 +105,17 @@ instead of filled with seeded stories.
   `storyCount` was `0`, `[data-global-wire-empty-state]` was visible, seed text
   count was `0`, `Port backlog recedes` count was `0`, and
   `data-global-wire-data-source` was `community-wire-vtext-index`.
+- First pushed CI run for `205125c9596fc62ff4dd196fa0e48a1e80362b3b`
+  (`27216692179`) failed runtime shards because legacy route tests still
+  assumed implicit `story-supply-resilience` seeding. Root cause: tests were
+  depending on read-time product seeding that the behavior slice intentionally
+  removed.
+- CI fix: legacy route tests now create explicit store-backed Wire story,
+  source, style, article, and projection fixtures. This preserves the new
+  product invariant while keeping older route tests meaningful.
+- Local verification after CI fix:
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire(StyleSourcesComposeAndReplace|SourceRefreshCreatesCandidateWithoutMutatingStoryGraph|FetchCycleCreatesRegistryAndRefreshEvidence|SourceRefreshClassifiesNoVisibleChangeWithoutCandidate|PromotesClassifiedRefreshIntoStoryGraphAndPlatformVText|ReconciliationRecordsDecisionWithoutMutatingStoryGraph)'`
+  - `nix develop -c scripts/go-test-runtime-shards`
 
 ## Run State
 
@@ -115,6 +126,8 @@ current artifact state:
 - Problem documented before behavior changes.
 - First deletion slice implemented locally: fake frontend preview stories and
   backend read-time story seeding are removed from the active app/API path.
+- CI fix implemented locally: tests that need a legacy story now create explicit
+  fixtures instead of relying on product read-time seeding.
 - Existing deeper legacy SourceMaxx, style-source, publication, newsletter, and
   autoradio compatibility routes remain for later deletion/replacement.
 
@@ -124,16 +137,17 @@ what was proven:
 - The local app can now render an honest empty Community Wire state without
   seeded preview articles.
 - Focused store/runtime tests and frontend production build pass.
+- Full local runtime shard script passes after explicit fixture repair.
 
 unproven or partial claims:
 
 - No staging acceptance proof yet.
 - No source-cycle proof yet.
 - No VText edition rendering proof yet.
-- No commit/push/deploy proof yet for the first behavior slice.
+- Replacement CI run for the fixture repair has not completed yet.
 
 next step:
 
-- Commit the first behavior-changing deletion slice, push, monitor CI/deploy,
-  then verify staging identity and product-path behavior before increasing
-  realism toward edition VText rendering.
+- Commit and push the explicit fixture repair, monitor CI/deploy, then verify
+  staging identity and product-path behavior before increasing realism toward
+  edition VText rendering.

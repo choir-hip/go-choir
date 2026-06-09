@@ -16,6 +16,153 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+func seedGlobalWireStoryFixture(t *testing.T, handler *APIHandler, ownerID string) types.GlobalWireStory {
+	t.Helper()
+	ctx := context.Background()
+	if story, err := handler.rt.Store().GetGlobalWireStory(ctx, ownerID, "story-supply-resilience"); err == nil {
+		return story
+	}
+	now := time.Now().UTC()
+	sourceItems := []types.GlobalWireSourceItem{
+		{ID: ownerID + "-source-port-authority", ContentID: ownerID + "-content-port-authority", Title: "Port authority throughput bulletin", Standing: "official operations bulletin", Role: "lead", CanonicalURL: "https://example.test/port-authority"},
+		{ID: ownerID + "-source-carrier-note", ContentID: ownerID + "-content-carrier-note", Title: "Carrier service advisory", Standing: "operator disclosure", Role: "lead", CanonicalURL: "https://example.test/carrier-note"},
+		{ID: ownerID + "-source-rail-dwell", ContentID: ownerID + "-content-rail-dwell", Title: "Rail dwell dashboard", Standing: "public logistics metric", Role: "supporting", CanonicalURL: "https://example.test/rail-dwell"},
+		{ID: ownerID + "-source-exporters", ContentID: ownerID + "-content-exporters", Title: "Regional exporters report delays", Standing: "trade association survey", Role: "contrary", CanonicalURL: "https://example.test/exporters"},
+	}
+	for _, item := range sourceItems {
+		meta, _ := json.Marshal(map[string]any{"schema": "test.global_wire_source_fixture.v1", "source_id": item.ID})
+		if err := handler.rt.Store().CreateContentItem(ctx, types.ContentItem{
+			ContentID:    item.ContentID,
+			OwnerID:      ownerID,
+			SourceType:   "test_source",
+			MediaType:    "text/markdown",
+			AppHint:      "global-wire",
+			Title:        item.Title,
+			CanonicalURL: item.CanonicalURL,
+			TextContent:  "Fixture source artifact for " + item.Title + ".",
+			ContentHash:  "hash-" + item.ContentID,
+			Metadata:     meta,
+			Provenance:   json.RawMessage(`{"created_from":"test_fixture"}`),
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}); err != nil {
+			t.Fatalf("create fixture content item %s: %v", item.ContentID, err)
+		}
+	}
+	styleSources := []types.GlobalWireStyleSource{
+		{ID: "wire-style", Title: "Style.vtext: Global Wire", Label: "Wire", Summary: "Fixture wire style.", SourcePath: "styles/global-wire.style.vtext"},
+		{ID: "claim-audit-style", Title: "Style.vtext: Claim Audit", Label: "Audit", Summary: "Fixture audit style.", SourcePath: "styles/claim-audit.style.vtext"},
+		{ID: "market-brief-style", Title: "Style.vtext: Market Brief", Label: "Market", Summary: "Fixture market style.", SourcePath: "styles/market-brief.style.vtext"},
+	}
+	for i := range styleSources {
+		docID := ownerID + "-doc-" + styleSources[i].ID
+		revID := ownerID + "-rev-" + styleSources[i].ID
+		if err := handler.rt.Store().CreateDocument(ctx, types.Document{
+			DocID:     docID,
+			OwnerID:   ownerID,
+			Title:     styleSources[i].Title,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("create fixture style doc %s: %v", docID, err)
+		}
+		if err := handler.rt.Store().CreateRevision(ctx, types.Revision{
+			RevisionID:  revID,
+			DocID:       docID,
+			OwnerID:     ownerID,
+			AuthorKind:  types.AuthorAppAgent,
+			AuthorLabel: "Global Wire fixture",
+			Content:     "# " + styleSources[i].Title + "\n\n" + styleSources[i].Summary,
+			Citations:   json.RawMessage(`[]`),
+			Metadata:    json.RawMessage(`{"created_from":"test_fixture_style"}`),
+			CreatedAt:   now,
+		}); err != nil {
+			t.Fatalf("create fixture style revision %s: %v", revID, err)
+		}
+		styleSources[i].DocID = docID
+	}
+	storyDocID := ownerID + "-doc-story-supply-resilience"
+	if err := handler.rt.Store().CreateDocument(ctx, types.Document{
+		DocID:     storyDocID,
+		OwnerID:   ownerID,
+		Title:     "Port backlog recedes as carriers warn of uneven inland recovery",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create fixture story doc: %v", err)
+	}
+	if err := handler.rt.Store().CreateRevision(ctx, types.Revision{
+		RevisionID:  ownerID + "-rev-story-supply-resilience",
+		DocID:       storyDocID,
+		OwnerID:     ownerID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "Global Wire fixture",
+		Content:     "# Port backlog recedes as carriers warn of uneven inland recovery\n\nFixture article body with source:gw-src-port-authority and source:gw-src-rail-dwell references.",
+		Citations:   json.RawMessage(`[]`),
+		Metadata:    json.RawMessage(`{"created_from":"test_fixture_story"}`),
+		CreatedAt:   now,
+	}); err != nil {
+		t.Fatalf("create fixture story revision: %v", err)
+	}
+	story := types.GlobalWireStory{
+		ID:          "story-supply-resilience",
+		OwnerID:     ownerID,
+		Headline:    "Port backlog recedes as carriers warn of uneven inland recovery",
+		Dek:         "Lead port indicators improved while inland recovery remains uneven.",
+		Freshness:   "fixture source state",
+		Prominence:  82,
+		Tension:     "qualifying evidence",
+		ChangeState: "claim narrowed",
+		NodeTone:    "live",
+		Related:     []string{},
+		Manifest: types.GlobalWireSourceManifest{
+			Lead:       sourceItems[:2],
+			Supporting: sourceItems[2:3],
+			Contrary:   sourceItems[3:],
+			Context:    []types.GlobalWireSourceItem{},
+		},
+		Claims: []string{
+			"Container queue times improved at the port complex.",
+			"Inland recovery remains uneven.",
+		},
+		Projections: map[string]string{
+			"wire-style":         "Port congestion indicators eased while inland rail dwell still qualifies the public takeaway.",
+			"claim-audit-style":  "The strongest supported claim is narrower than a full recovery claim.",
+			"market-brief-style": "The market read remains mixed because inland bottlenecks still matter.",
+		},
+		ProjectionVTextDocs: map[string]string{
+			"wire-style":         storyDocID,
+			"claim-audit-style":  storyDocID,
+			"market-brief-style": storyDocID,
+		},
+		StyleSources:  styleSources,
+		StoryVTextDoc: storyDocID,
+		SourceState:   "test-fixture",
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	if err := handler.rt.Store().UpsertGlobalWireStory(ctx, story); err != nil {
+		t.Fatalf("upsert fixture story: %v", err)
+	}
+	for _, style := range styleSources {
+		if err := handler.rt.Store().UpsertGlobalWireStoryProjection(ctx, types.GlobalWireStoryProjection{
+			ID:          ownerID + "-projection-" + style.ID,
+			OwnerID:     ownerID,
+			StoryID:     story.ID,
+			StyleID:     style.ID,
+			StyleDocID:  style.DocID,
+			StoryDocID:  storyDocID,
+			ContextJSON: `{"created_from":"test_fixture"}`,
+			Text:        story.Projections[style.ID],
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}); err != nil {
+			t.Fatalf("upsert fixture projection %s: %v", style.ID, err)
+		}
+	}
+	return story
+}
+
 func TestHandleGlobalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	_, handler := testAPISetup(t)
 
@@ -254,6 +401,7 @@ func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifes
 
 func TestHandleGlobalWireStyleSourcesComposeAndReplace(t *testing.T) {
 	_, handler := testAPISetup(t)
+	seedGlobalWireStoryFixture(t, handler, "user-style")
 
 	composeBody := `{"story_id":"story-supply-resilience","action":"compose","base_style_ids":["wire-style","claim-audit-style"],"title":"Style.vtext: Wire Audit Hybrid","label":"Hybrid","summary":"Hybrid style preserving wire speed and claim-audit uncertainty."}`
 	composeW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/style-sources", composeBody, "user-style")
@@ -993,6 +1141,7 @@ func TestHandleGlobalWireSourceRefreshCreatesCandidateWithoutMutatingStoryGraph(
 	t.Setenv("SOURCECYCLED_API_URL", "")
 
 	_, handler := testAPISetup(t)
+	seedGlobalWireStoryFixture(t, handler, "user-alpha")
 	storiesBeforeW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
 	if storiesBeforeW.Code != http.StatusOK {
 		t.Fatalf("stories before status = %d body=%s", storiesBeforeW.Code, storiesBeforeW.Body.String())
@@ -1644,6 +1793,7 @@ func TestHandleGlobalWireFetchCycleCreatesRegistryAndRefreshEvidence(t *testing.
 	t.Setenv("SOURCECYCLED_API_URL", "")
 
 	_, handler := testAPISetup(t)
+	seedGlobalWireStoryFixture(t, handler, "user-cycle")
 	body := `{"story_ids":["story-supply-resilience"],"max_stories":1,"max_results":1,"trigger":"test-scheduled-cycle","scheduler_mode":true,"cadence_seconds":1800}`
 	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/fetch-cycles", body, "user-cycle")
 	if w.Code != http.StatusCreated {
@@ -1734,6 +1884,7 @@ func TestHandleGlobalWireSourceRefreshClassifiesNoVisibleChangeWithoutCandidate(
 	t.Setenv("SOURCECYCLED_API_URL", "")
 
 	_, handler := testAPISetup(t)
+	seedGlobalWireStoryFixture(t, handler, "user-alpha")
 	body := `{"story_id":"story-supply-resilience","query":"unchanged port refresh","max_results":1}`
 	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/source-refresh", body, "user-alpha")
 	if w.Code != http.StatusOK {
@@ -1802,6 +1953,7 @@ func TestHandleGlobalWirePromotesClassifiedRefreshIntoStoryGraphAndPlatformVText
 	t.Setenv("SOURCECYCLED_API_URL", "")
 
 	_, handler := testAPISetup(t)
+	seedGlobalWireStoryFixture(t, handler, "user-alpha")
 	storiesBeforeW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
 	if storiesBeforeW.Code != http.StatusOK {
 		t.Fatalf("stories before status = %d body=%s", storiesBeforeW.Code, storiesBeforeW.Body.String())
@@ -1891,6 +2043,7 @@ func TestHandleGlobalWirePromotesClassifiedRefreshIntoStoryGraphAndPlatformVText
 
 func TestHandleGlobalWireReconciliationRecordsDecisionWithoutMutatingStoryGraph(t *testing.T) {
 	_, handler := testAPISetup(t)
+	seedGlobalWireStoryFixture(t, handler, "user-alpha")
 
 	storiesBeforeW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-alpha")
 	if storiesBeforeW.Code != http.StatusOK {
