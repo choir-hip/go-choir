@@ -487,6 +487,55 @@ func TestHandleGlobalWirePublicationArtifactApprovalPublishesEditionVText(t *tes
 	}
 }
 
+func TestHandleGlobalWirePublicationArtifactApprovalRequiresArticleForPublicEdition(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	ownerID := "user-edition-missing-article"
+	story := seedGlobalWireStoryFixture(t, handler, ownerID)
+	update, err := handler.rt.Store().CreateGlobalWirePublicationUpdate(ctx, types.GlobalWirePublicationUpdate{
+		ID:                 "publication-update-missing-article",
+		OwnerID:            ownerID,
+		StoryID:            story.ID,
+		ResearchDecisionID: "research-decision-missing-article",
+		EvidenceID:         "research-evidence-missing-article",
+		SourceContentID:    ownerID + "-content-port-authority",
+		Status:             "packaged-for-publication-review",
+		Summary:            "Owner-visible package without an approved Article VText.",
+	})
+	if err != nil {
+		t.Fatalf("create publication update: %v", err)
+	}
+	artifact, err := handler.rt.Store().CreateGlobalWirePublicationArtifact(ctx, types.GlobalWirePublicationArtifact{
+		ID:              "publication-artifact-missing-article",
+		OwnerID:         ownerID,
+		UpdateID:        update.ID,
+		StoryID:         story.ID,
+		StoryVTextDocID: story.StoryVTextDoc,
+		SourceContentID: update.SourceContentID,
+		Channel:         "global-wire-feed",
+		Status:          "publication-review-ready",
+		Title:           "Community Wire public artifact without Article VText",
+		Body:            "This artifact has no approved projection review.",
+		RollbackRefs:    []string{"publication_update:" + update.ID},
+	})
+	if err != nil {
+		t.Fatalf("create publication artifact: %v", err)
+	}
+
+	reviewBody := fmt.Sprintf(`{"artifact_id":%q,"decision":"approve","note":"owner approved public feed artifact without article"}`, artifact.ID)
+	reviewW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-artifact-reviews", reviewBody, ownerID)
+	if reviewW.Code != http.StatusConflict {
+		t.Fatalf("publication artifact approval without article status = %d body=%s", reviewW.Code, reviewW.Body.String())
+	}
+	stored, err := handler.rt.Store().GetGlobalWirePublicationArtifact(ctx, ownerID, artifact.ID)
+	if err != nil {
+		t.Fatalf("reload publication artifact: %v", err)
+	}
+	if stored.Status != "publication-review-ready" {
+		t.Fatalf("public artifact without article should not be approved: %+v", stored)
+	}
+}
+
 func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()

@@ -2952,6 +2952,15 @@ func (h *APIHandler) HandleGlobalWirePublicationArtifactReviews(w http.ResponseW
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "publication artifact review state is already final"})
 		return
 	}
+	if status == "publication-approved" && globalWirePublicationArtifactRequiresEdition(existing.Channel) {
+		if _, _, _, ok, err := h.approvedGlobalWireArticleForArtifact(r, ownerID, existing); err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load approved Article VText"})
+			return
+		} else if !ok {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "approved Article VText is required before Community Wire publication approval"})
+			return
+		}
+	}
 	artifact, err := h.rt.Store().UpdateGlobalWirePublicationArtifactStatus(r.Context(), ownerID, req.ArtifactID, status)
 	if err != nil {
 		if err == store.ErrNotFound {
@@ -2975,6 +2984,15 @@ func (h *APIHandler) HandleGlobalWirePublicationArtifactReviews(w http.ResponseW
 		Decision: req.Decision,
 		Edition:  edition,
 	})
+}
+
+func globalWirePublicationArtifactRequiresEdition(channel string) bool {
+	switch strings.ToLower(strings.TrimSpace(channel)) {
+	case "community-wire", "global-wire-feed", "wire", "front-page":
+		return true
+	default:
+		return false
+	}
 }
 
 // HandleGlobalWirePublicationDeliveries records owner-scoped delivery/
