@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -345,6 +346,7 @@ type globalWirePublicationArtifactReviewResponse struct {
 	Artifact types.GlobalWirePublicationArtifact `json:"artifact"`
 	Status   string                              `json:"status"`
 	Decision string                              `json:"decision"`
+	Edition  *globalWireEditionResponse          `json:"edition,omitempty"`
 }
 
 type globalWirePublicationDeliveryRequest struct {
@@ -2753,10 +2755,19 @@ func (h *APIHandler) HandleGlobalWirePublicationArtifactReviews(w http.ResponseW
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to review publication artifact"})
 		return
 	}
+	var edition *globalWireEditionResponse
+	if artifact.Status == "publication-approved" {
+		edition, err = h.publishGlobalWireArtifactToCommunityEdition(r, ownerID, artifact)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to update Community Wire edition"})
+			return
+		}
+	}
 	writeAPIJSON(w, http.StatusCreated, globalWirePublicationArtifactReviewResponse{
 		Artifact: artifact,
 		Status:   artifact.Status,
 		Decision: req.Decision,
+		Edition:  edition,
 	})
 }
 
@@ -4953,6 +4964,261 @@ func (h *APIHandler) globalWirePublicationFeedItems(r *http.Request, ownerID str
 		})
 	}
 	return items, nil
+}
+
+func (h *APIHandler) publishGlobalWireArtifactToCommunityEdition(r *http.Request, ownerID string, artifact types.GlobalWirePublicationArtifact) (*globalWireEditionResponse, error) {
+	articleDoc, articleRev, review, ok, err := h.approvedGlobalWireArticleForArtifact(r, ownerID, artifact)
+	if err != nil || !ok {
+		return nil, err
+	}
+	platformOwner := sourceMaxxPlatformOwnerID()
+	now := time.Now().UTC()
+	platformDoc, platformRev, err := h.ensureCommunityWirePlatformArticle(r, platformOwner, ownerID, artifact, articleDoc, articleRev, review, now)
+	if err != nil {
+		return nil, err
+	}
+	editionDoc, editionRev, err := h.ensureCommunityWireEditionIncludesArticle(r, platformOwner, platformDoc, platformRev, artifact, now)
+	if err != nil {
+		return nil, err
+	}
+	return &globalWireEditionResponse{
+		DocID:          editionDoc.DocID,
+		RevisionID:     editionRev.RevisionID,
+		SourcePath:     communityWireEditionSourcePath,
+		Title:          editionDoc.Title,
+		IncludedDocIDs: communityWireEditionIncludedDocIDs(editionRev.Content, editionDoc.DocID),
+		UpdatedAt:      editionDoc.UpdatedAt.Format(time.RFC3339Nano),
+	}, nil
+}
+
+func (h *APIHandler) approvedGlobalWireArticleForArtifact(r *http.Request, ownerID string, artifact types.GlobalWirePublicationArtifact) (types.Document, types.Revision, types.GlobalWireProjectionReview, bool, error) {
+	for _, reviewID := range artifact.ProjectionReviewIDs {
+		reviewID = strings.TrimSpace(reviewID)
+		if reviewID == "" {
+			continue
+		}
+		review, err := h.rt.Store().GetGlobalWireProjectionReview(r.Context(), ownerID, reviewID)
+		if err != nil {
+			if err == store.ErrNotFound {
+				continue
+			}
+			return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, false, err
+		}
+		if strings.TrimSpace(review.ApprovedStoryDocID) == "" || strings.TrimSpace(review.ApprovedRevisionID) == "" {
+			continue
+		}
+		doc, err := h.rt.Store().GetDocument(r.Context(), review.ApprovedStoryDocID, ownerID)
+		if err != nil {
+			if err == store.ErrNotFound {
+				continue
+			}
+			return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, false, err
+		}
+		rev, err := h.rt.Store().GetRevision(r.Context(), review.ApprovedRevisionID, ownerID)
+		if err != nil {
+			if err == store.ErrNotFound {
+				continue
+			}
+			return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, false, err
+		}
+		return doc, rev, review, true, nil
+	}
+	return types.Document{}, types.Revision{}, types.GlobalWireProjectionReview{}, false, nil
+}
+
+func (h *APIHandler) ensureCommunityWirePlatformArticle(r *http.Request, platformOwner, approvingOwner string, artifact types.GlobalWirePublicationArtifact, sourceDoc types.Document, sourceRev types.Revision, review types.GlobalWireProjectionReview, now time.Time) (types.Document, types.Revision, error) {
+	sourcePath := "global-wire/articles/" + artifact.ID + ".vtext"
+	if existingDocID, err := h.rt.Store().GetDocumentAlias(r.Context(), platformOwner, sourcePath); err == nil {
+		doc, err := h.rt.Store().GetDocument(r.Context(), existingDocID, platformOwner)
+		if err != nil {
+			return types.Document{}, types.Revision{}, err
+		}
+		if strings.TrimSpace(doc.CurrentRevisionID) == "" {
+			return types.Document{}, types.Revision{}, store.ErrNotFound
+		}
+		rev, err := h.rt.Store().GetRevision(r.Context(), doc.CurrentRevisionID, platformOwner)
+		if err != nil {
+			return types.Document{}, types.Revision{}, err
+		}
+		return doc, rev, nil
+	} else if err != store.ErrNotFound {
+		return types.Document{}, types.Revision{}, err
+	}
+	doc := types.Document{
+		DocID:     uuid.NewString(),
+		OwnerID:   platformOwner,
+		Title:     firstNonEmptyString(artifact.Title, sourceDoc.Title, artifact.StoryID),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := h.rt.Store().CreateDocument(r.Context(), doc); err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	meta, err := communityWirePlatformArticleMetadata(approvingOwner, artifact, sourceDoc, sourceRev, review)
+	if err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	rev := types.Revision{
+		RevisionID:  uuid.NewString(),
+		DocID:       doc.DocID,
+		OwnerID:     platformOwner,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "Community Wire",
+		Content:     strings.TrimSpace(sourceRev.Content),
+		Citations:   sourceRev.Citations,
+		Metadata:    meta,
+		CreatedAt:   now,
+	}
+	if strings.TrimSpace(rev.Content) == "" {
+		rev.Content = "The approved article revision was empty at publication approval time."
+	}
+	if len(rev.Citations) == 0 {
+		rev.Citations = json.RawMessage("[]")
+	}
+	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	if err := h.rt.Store().UpsertDocumentAlias(r.Context(), platformOwner, sourcePath, doc.DocID, now); err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	doc, err = h.rt.Store().GetDocument(r.Context(), doc.DocID, platformOwner)
+	if err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	storedRev, err := h.rt.Store().GetRevision(r.Context(), rev.RevisionID, platformOwner)
+	if err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	return doc, storedRev, nil
+}
+
+func communityWirePlatformArticleMetadata(approvingOwner string, artifact types.GlobalWirePublicationArtifact, sourceDoc types.Document, sourceRev types.Revision, review types.GlobalWireProjectionReview) (json.RawMessage, error) {
+	sourceMeta := decodeRevisionMetadata(sourceRev.Metadata)
+	sourceEntities := sourceMeta["source_entities"]
+	if sourceEntities == nil {
+		sourceEntities = []any{}
+	}
+	selectedStyleTitle := firstNonEmptyString(review.StyleTitle, "Style.vtext: Global Wire")
+	return json.Marshal(map[string]any{
+		"source":                   "edit_vtext",
+		"source_maxx_cycle_id":     "publication-artifact:" + artifact.ID,
+		"source_maxx_request_id":   artifact.UpdateID,
+		"source_maxx_request_kind": "community_wire_publication_approval",
+		"created_from":             "global_wire_publication_artifact_approval",
+		"artifact_kind":            "article_revision",
+		"article_version":          true,
+		"approving_owner_id":       approvingOwner,
+		"publication_artifact_id":  artifact.ID,
+		"publication_update_id":    artifact.UpdateID,
+		"source_owner_doc_id":      sourceDoc.DocID,
+		"source_owner_revision_id": sourceRev.RevisionID,
+		"projection_review":        review.ID,
+		"storygraph_id":            artifact.StoryID,
+		"candidate_id":             artifact.CandidateID,
+		"source_content_id":        artifact.SourceContentID,
+		"selected_style_sources":   []map[string]any{{"title": selectedStyleTitle}},
+		"selected_style_rationale": "Owner-approved Community Wire publication artifact.",
+		"source_entities":          sourceEntities,
+	})
+}
+
+func (h *APIHandler) ensureCommunityWireEditionIncludesArticle(r *http.Request, platformOwner string, articleDoc types.Document, articleRev types.Revision, artifact types.GlobalWirePublicationArtifact, now time.Time) (types.Document, types.Revision, error) {
+	line := fmt.Sprintf("- [%s](vtext:%s)", firstNonEmptyString(articleDoc.Title, artifact.Title, artifact.StoryID), articleDoc.DocID)
+	if editionDocID, err := h.rt.Store().GetDocumentAlias(r.Context(), platformOwner, communityWireEditionSourcePath); err == nil {
+		doc, err := h.rt.Store().GetDocument(r.Context(), editionDocID, platformOwner)
+		if err != nil {
+			return types.Document{}, types.Revision{}, err
+		}
+		currentContent := ""
+		currentRevID := ""
+		if strings.TrimSpace(doc.CurrentRevisionID) != "" {
+			rev, err := h.rt.Store().GetRevision(r.Context(), doc.CurrentRevisionID, platformOwner)
+			if err != nil {
+				return types.Document{}, types.Revision{}, err
+			}
+			currentContent = strings.TrimSpace(rev.Content)
+			currentRevID = rev.RevisionID
+			if slices.Contains(communityWireEditionIncludedDocIDs(currentContent, doc.DocID), articleDoc.DocID) {
+				return doc, rev, nil
+			}
+		}
+		content := currentContent
+		if content == "" {
+			content = "# Wire\n\nCommunity Wire edition."
+		}
+		content = strings.TrimSpace(content) + "\n\n" + line
+		rev, err := h.createCommunityWireEditionRevision(r, platformOwner, doc.DocID, currentRevID, content, artifact, articleDoc, articleRev, now)
+		if err != nil {
+			return types.Document{}, types.Revision{}, err
+		}
+		doc, err = h.rt.Store().GetDocument(r.Context(), doc.DocID, platformOwner)
+		if err != nil {
+			return types.Document{}, types.Revision{}, err
+		}
+		return doc, rev, nil
+	} else if err != store.ErrNotFound {
+		return types.Document{}, types.Revision{}, err
+	}
+	doc := types.Document{
+		DocID:     uuid.NewString(),
+		OwnerID:   platformOwner,
+		Title:     "Wire.vtext",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := h.rt.Store().CreateDocument(r.Context(), doc); err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	content := "# Wire\n\nCommunity Wire edition.\n\n" + line
+	rev, err := h.createCommunityWireEditionRevision(r, platformOwner, doc.DocID, "", content, artifact, articleDoc, articleRev, now)
+	if err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	if err := h.rt.Store().UpsertDocumentAlias(r.Context(), platformOwner, communityWireEditionSourcePath, doc.DocID, now); err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	doc, err = h.rt.Store().GetDocument(r.Context(), doc.DocID, platformOwner)
+	if err != nil {
+		return types.Document{}, types.Revision{}, err
+	}
+	return doc, rev, nil
+}
+
+func (h *APIHandler) createCommunityWireEditionRevision(r *http.Request, platformOwner, docID, parentRevisionID, content string, artifact types.GlobalWirePublicationArtifact, articleDoc types.Document, articleRev types.Revision, now time.Time) (types.Revision, error) {
+	citations, err := json.Marshal([]types.Citation{
+		{ID: "publication-artifact", Type: "global_wire_publication_artifact", Value: artifact.ID, Label: artifact.Title},
+		{ID: "article-vtext", Type: "vtext", Value: articleDoc.DocID, Label: articleDoc.Title},
+		{ID: "article-revision", Type: "vtext_revision", Value: articleRev.RevisionID, Label: "Approved article revision"},
+	})
+	if err != nil {
+		return types.Revision{}, err
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"source":                  "community_wire_edition",
+		"created_from":            "global_wire_publication_artifact_approval",
+		"publication_artifact_id": artifact.ID,
+		"article_doc_id":          articleDoc.DocID,
+		"article_revision_id":     articleRev.RevisionID,
+	})
+	if err != nil {
+		return types.Revision{}, err
+	}
+	rev := types.Revision{
+		RevisionID:       uuid.NewString(),
+		DocID:            docID,
+		OwnerID:          platformOwner,
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "Community Wire",
+		Content:          content,
+		Citations:        citations,
+		Metadata:         metadata,
+		ParentRevisionID: parentRevisionID,
+		CreatedAt:        now,
+	}
+	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+		return types.Revision{}, err
+	}
+	return h.rt.Store().GetRevision(r.Context(), rev.RevisionID, platformOwner)
 }
 
 func (h *APIHandler) createGlobalWirePublicationDelivery(r *http.Request, ownerID string, req globalWirePublicationDeliveryRequest) (types.GlobalWirePublicationDelivery, types.GlobalWirePublicationArtifact, types.GlobalWireStory, error) {

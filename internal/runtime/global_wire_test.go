@@ -347,6 +347,126 @@ func TestHandleGlobalWireStoriesIndexesEditionTranscludedVTextHeads(t *testing.T
 	}
 }
 
+func TestHandleGlobalWirePublicationArtifactApprovalPublishesEditionVText(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	ownerID := "user-edition"
+	story := seedGlobalWireStoryFixture(t, handler, ownerID)
+	review, err := handler.rt.Store().CreateGlobalWireProjectionReview(ctx, types.GlobalWireProjectionReview{
+		ID:               "projection-review-edition-publish",
+		OwnerID:          ownerID,
+		StoryID:          story.ID,
+		CandidateID:      "candidate-edition-publish",
+		PromotionID:      "promotion-edition-publish",
+		SourceContentID:  ownerID + "-content-port-authority",
+		StyleID:          "wire-style",
+		StyleDocID:       story.StyleSources[0].DocID,
+		StyleTitle:       "Style.vtext: Global Wire",
+		ProjectionAction: "rewrite-article",
+		Status:           "projection-review-required",
+		Rationale:        "approve a product-path article VText for edition publication",
+	})
+	if err != nil {
+		t.Fatalf("create projection review: %v", err)
+	}
+	draftBody := fmt.Sprintf(`{"review_id":%q,"action":"draft"}`, review.ID)
+	draftW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/projection-reviews", draftBody, ownerID)
+	if draftW.Code != http.StatusCreated {
+		t.Fatalf("projection draft status = %d body=%s", draftW.Code, draftW.Body.String())
+	}
+	approveBody := fmt.Sprintf(`{"review_id":%q,"action":"approve"}`, review.ID)
+	approveW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/projection-reviews", approveBody, ownerID)
+	if approveW.Code != http.StatusOK {
+		t.Fatalf("projection approve status = %d body=%s", approveW.Code, approveW.Body.String())
+	}
+	var approveResp globalWireProjectionReviewDraftResponse
+	if err := json.NewDecoder(approveW.Body).Decode(&approveResp); err != nil {
+		t.Fatalf("decode projection approve: %v", err)
+	}
+	if approveResp.Review.ApprovedStoryDocID == "" || approveResp.Review.ApprovedRevisionID == "" {
+		t.Fatalf("projection approval missing approved VText refs: %+v", approveResp.Review)
+	}
+	update, err := handler.rt.Store().CreateGlobalWirePublicationUpdate(ctx, types.GlobalWirePublicationUpdate{
+		ID:                  "publication-update-edition-publish",
+		OwnerID:             ownerID,
+		StoryID:             story.ID,
+		CandidateID:         "candidate-edition-publish",
+		ResearchDecisionID:  "research-decision-edition-publish",
+		EvidenceID:          "research-evidence-edition-publish",
+		SourceContentID:     ownerID + "-content-port-authority",
+		ProjectionReviewIDs: []string{review.ID},
+		ProjectionStates:    []string{"approved"},
+		RollbackRefs:        []string{"story:" + story.ID, "projection_review:" + review.ID},
+		Status:              "packaged-for-publication-review",
+		Summary:             "Owner-visible publication package for edition publication.",
+	})
+	if err != nil {
+		t.Fatalf("create publication update: %v", err)
+	}
+	artifact, err := handler.rt.Store().CreateGlobalWirePublicationArtifact(ctx, types.GlobalWirePublicationArtifact{
+		ID:                  "publication-artifact-edition-publish",
+		OwnerID:             ownerID,
+		UpdateID:            update.ID,
+		StoryID:             story.ID,
+		CandidateID:         update.CandidateID,
+		StoryVTextDocID:     story.StoryVTextDoc,
+		SourceContentID:     update.SourceContentID,
+		Channel:             "newsletter",
+		Status:              "publication-review-ready",
+		Title:               "Community edition article: " + story.Headline,
+		Body:                "Publication artifact ready for owner review.",
+		StyleDocIDs:         []string{story.StyleSources[0].DocID},
+		ProjectionReviewIDs: []string{review.ID},
+		CitationRefs:        []string{"projection_review:" + review.ID},
+		RollbackRefs:        []string{"publication_update:" + update.ID},
+	})
+	if err != nil {
+		t.Fatalf("create publication artifact: %v", err)
+	}
+
+	storiesBeforeW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", ownerID)
+	if storiesBeforeW.Code != http.StatusOK {
+		t.Fatalf("stories before approval status = %d body=%s", storiesBeforeW.Code, storiesBeforeW.Body.String())
+	}
+	var storiesBefore globalWireStoriesResponse
+	if err := json.NewDecoder(storiesBeforeW.Body).Decode(&storiesBefore); err != nil {
+		t.Fatalf("decode stories before approval: %v", err)
+	}
+	if storiesBefore.Source != "community-wire-vtext-index" || storiesBefore.Edition != nil {
+		t.Fatalf("unapproved artifact should not populate edition: %+v", storiesBefore)
+	}
+
+	reviewBody := fmt.Sprintf(`{"artifact_id":%q,"decision":"approve","note":"owner approved for Community Wire edition"}`, artifact.ID)
+	reviewW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/global-wire/publication-artifact-reviews", reviewBody, ownerID)
+	if reviewW.Code != http.StatusCreated {
+		t.Fatalf("publication artifact approval status = %d body=%s", reviewW.Code, reviewW.Body.String())
+	}
+	var reviewResp globalWirePublicationArtifactReviewResponse
+	if err := json.NewDecoder(reviewW.Body).Decode(&reviewResp); err != nil {
+		t.Fatalf("decode artifact approval: %v", err)
+	}
+	if reviewResp.Edition == nil || len(reviewResp.Edition.IncludedDocIDs) != 1 {
+		t.Fatalf("artifact approval missing edition update: %+v", reviewResp)
+	}
+
+	storiesW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", ownerID)
+	if storiesW.Code != http.StatusOK {
+		t.Fatalf("stories after approval status = %d body=%s", storiesW.Code, storiesW.Body.String())
+	}
+	var storiesResp globalWireStoriesResponse
+	if err := json.NewDecoder(storiesW.Body).Decode(&storiesResp); err != nil {
+		t.Fatalf("decode stories after approval: %v", err)
+	}
+	if storiesResp.Source != "community-wire-edition-vtext" ||
+		len(storiesResp.Stories) == 0 ||
+		storiesResp.Stories[0].SourceState != "community-wire-edition-vtext" ||
+		!strings.Contains(storiesResp.Stories[0].Headline, "Port backlog recedes") ||
+		storiesResp.Edition == nil ||
+		!slices.Contains(storiesResp.Edition.IncludedDocIDs, reviewResp.Edition.IncludedDocIDs[0]) {
+		t.Fatalf("approved artifact did not render through Community Wire edition: %+v", storiesResp)
+	}
+}
+
 func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()
