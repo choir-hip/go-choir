@@ -1,11 +1,14 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 const (
@@ -24,18 +27,20 @@ func (h *APIHandler) HandleCompactionRecallEvalRoot(w http.ResponseWriter, r *ht
 
 func (h *APIHandler) HandleCompactionRecallEvalDetail(w http.ResponseWriter, r *http.Request) {
 	const prefix = "/api/evals/compaction-recall/runs/"
-	if r.Method != http.MethodGet {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
 	if !strings.HasPrefix(r.URL.Path, prefix) {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "compaction recall eval run not found"})
 		return
 	}
-	runID := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
-	if runID == "" || strings.Contains(runID, "/") {
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	parts := strings.Split(rest, "/")
+	runID := strings.TrimSpace(parts[0])
+	if runID == "" || len(parts) > 2 {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "compaction recall eval run not found"})
 		return
+	}
+	action := ""
+	if len(parts) == 2 {
+		action = strings.TrimSpace(parts[1])
 	}
 	ownerID, err := authenticateUser(r)
 	if err != nil {
@@ -51,7 +56,34 @@ func (h *APIHandler) HandleCompactionRecallEvalDetail(w http.ResponseWriter, r *
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "compaction recall eval run not found"})
 		return
 	}
-	writeAPIJSON(w, http.StatusOK, runStatusFromRecord(rec))
+	switch {
+	case action == "" && r.Method == http.MethodGet:
+		assessment := h.rt.assessCompactionRecallEvalRun(r.Context(), rec)
+		writeAPIJSON(w, http.StatusOK, compactionRecallEvalRunStatusResponse{
+			runStatusResponse: runStatusFromRecord(rec),
+			Assessment:        assessment,
+		})
+	case action == "continue" && r.Method == http.MethodPost:
+		assessment := h.rt.assessCompactionRecallEvalRun(r.Context(), rec)
+		if assessment.Valid {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "compaction recall eval run is already valid"})
+			return
+		}
+		continuation, err := h.rt.startCompactionRecallEvalContinuation(r.Context(), rec, assessment)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusAccepted, compactionRecallEvalRunStatusResponse{
+			runStatusResponse: runStatusFromRecord(rec),
+			Assessment:        assessment,
+			Continuation:      &continuation,
+		})
+	case action == "continue":
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	default:
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "compaction recall eval action not found"})
+	}
 }
 
 func (h *APIHandler) HandleCompactionRecallEvalStart(w http.ResponseWriter, r *http.Request) {
@@ -246,6 +278,144 @@ func buildCompactionRecallEvalPrompt(title string, items []compactionRecallPromp
 		}
 	} else {
 		b.WriteString("Recall questions:\n1. What are the main structures, caveats, and relationships in the corpus?\n2. Name at least three exact selector-local details that would be hard to recover from a vague summary alone.\n")
+	}
+	return b.String()
+}
+
+func (rt *Runtime) assessCompactionRecallEvalRun(ctx context.Context, rec *types.RunRecord) compactionRecallEvalAssessment {
+	assessment := compactionRecallEvalAssessment{
+		Applicable:           rec != nil && metadataStringValue(rec.Metadata, "eval_kind") == compactionRecallEvalKind,
+		MinimumSelectorReads: metadataIntValue(rec.Metadata, "minimum_selector_reads"),
+		AvailableSelectors:   metadataIntValue(rec.Metadata, "available_selector_count"),
+	}
+	if !assessment.Applicable || rt == nil || rt.store == nil || rec == nil {
+		assessment.Valid = false
+		assessment.Reasons = append(assessment.Reasons, "not a compaction recall eval run")
+		return assessment
+	}
+	eventsForRun, err := rt.store.ListEvents(ctx, rec.RunID, 5000)
+	if err != nil {
+		assessment.Reasons = append(assessment.Reasons, "event ledger unavailable")
+		return assessment
+	}
+	for _, ev := range eventsForRun {
+		switch ev.Kind {
+		case types.EventToolResult:
+			payload, ok := decodeToolResultPayload(ev)
+			if !ok {
+				continue
+			}
+			if payload.Tool == "read_content_item_selector" && !payload.IsError {
+				assessment.ActualSelectorReads++
+			}
+			if payload.Tool == "search_sources" || payload.Tool == "web_search" || payload.Tool == "fetch_url" || payload.Tool == "import_document_content" {
+				assessment.SearchAttempts++
+			}
+		case types.EventRunCompactionStarted:
+			assessment.CompactionStarted++
+		case types.EventRunCompactionCompleted:
+			assessment.CompactionCompleted++
+		}
+	}
+	if assessment.MinimumSelectorReads > 0 && assessment.ActualSelectorReads < assessment.MinimumSelectorReads {
+		assessment.Reasons = append(assessment.Reasons, fmt.Sprintf("selector reads %d below minimum %d", assessment.ActualSelectorReads, assessment.MinimumSelectorReads))
+	}
+	if assessment.SearchAttempts > 0 {
+		assessment.Reasons = append(assessment.Reasons, fmt.Sprintf("live/search-like tool attempts observed: %d", assessment.SearchAttempts))
+	}
+	if assessment.CompactionCompleted == 0 {
+		assessment.Reasons = append(assessment.Reasons, "no runtime compaction completion observed")
+	}
+	if compactionRecallResultLooksIncomplete(rec.Result) {
+		assessment.Reasons = append(assessment.Reasons, "final result is not a recall synthesis")
+	}
+	assessment.Valid = rec.State == types.RunCompleted && len(assessment.Reasons) == 0
+	if rec.State != types.RunCompleted {
+		assessment.Reasons = append(assessment.Reasons, "run is not completed")
+		assessment.Valid = false
+	}
+	return assessment
+}
+
+func compactionRecallResultLooksIncomplete(result string) bool {
+	result = strings.ToLower(strings.TrimSpace(result))
+	if result == "" {
+		return true
+	}
+	incompleteSignals := []string{
+		"ready for the concise final synthesis",
+		"ready for final synthesis",
+		"if you want",
+		"i can continue",
+		"cannot produce a valid final",
+		"can't produce a valid final",
+		"selector-read coverage is still incomplete",
+		"minimum is still unmet",
+	}
+	for _, signal := range incompleteSignals {
+		if strings.Contains(result, signal) {
+			return true
+		}
+	}
+	recallSignals := 0
+	for _, signal := range []string{"http", "quic", "tls", "selector", "rfc", "contentitem", "content_id"} {
+		if strings.Contains(result, signal) {
+			recallSignals++
+		}
+	}
+	return recallSignals < 3
+}
+
+func (rt *Runtime) startCompactionRecallEvalContinuation(ctx context.Context, rec *types.RunRecord, assessment compactionRecallEvalAssessment) (types.RunContinuationRecord, error) {
+	if rt == nil || rec == nil {
+		return types.RunContinuationRecord{}, fmt.Errorf("runtime and source run are required")
+	}
+	missing := strings.Join(assessment.Reasons, "; ")
+	if strings.TrimSpace(missing) == "" {
+		missing = "final recall contract was not satisfied"
+	}
+	objective := buildCompactionRecallContinuationObjective(rec, assessment)
+	selected, err := rt.SelectRunContinuation(ctx, rec.RunID, rec.OwnerID, ContinuationProposal{
+		Objective:        objective,
+		Reason:           "compaction recall eval contract failed: " + missing,
+		AuthorityProfile: AgentProfileResearcher,
+		LeaseSeconds:     60 * 60,
+		Details: map[string]any{
+			"selection_source":            "compaction_recall_eval_assessment",
+			"eval_kind":                   compactionRecallEvalKind,
+			"minimum_selector_reads":      assessment.MinimumSelectorReads,
+			"actual_selector_reads":       assessment.ActualSelectorReads,
+			"available_selector_count":    assessment.AvailableSelectors,
+			"compaction_completed":        assessment.CompactionCompleted,
+			"failed_assessment_reasons":   assessment.Reasons,
+			runMetadataLLMPolicyOverlayID: metadataStringValue(rec.Metadata, runMetadataLLMPolicyOverlayID),
+		},
+	})
+	if err != nil {
+		return types.RunContinuationRecord{}, err
+	}
+	if selected.Status == types.RunContinuationStarted {
+		return selected, nil
+	}
+	return rt.StartRunContinuation(ctx, rec.OwnerID, selected.ContinuationID)
+}
+
+func buildCompactionRecallContinuationObjective(rec *types.RunRecord, assessment compactionRecallEvalAssessment) string {
+	var b strings.Builder
+	b.WriteString("Continue the compaction recall eval from the previous run memory and frozen ContentItem handles. ")
+	fmt.Fprintf(&b, "The previous run did not satisfy the final answer contract: %s. ", strings.Join(assessment.Reasons, "; "))
+	if assessment.MinimumSelectorReads > 0 {
+		fmt.Fprintf(&b, "Before final answer, ensure actual read_content_item_selector coverage reaches at least %d selector reads; current assessed coverage was %d. ", assessment.MinimumSelectorReads, assessment.ActualSelectorReads)
+	}
+	if ids := metadataStringSlice(rec.Metadata["content_item_ids"]); len(ids) > 0 {
+		fmt.Fprintf(&b, "Frozen ContentItem ids: %s. ", strings.Join(ids, ", "))
+	}
+	if questions := metadataStringSlice(rec.Metadata["recall_questions"]); len(questions) > 0 {
+		fmt.Fprintf(&b, "Recall questions to answer: %s. ", strings.Join(questions, " | "))
+	}
+	b.WriteString("Use only the frozen owner-scoped ContentItems named here or in the source run metadata. Do not use live web search, source search, URL fetches, or URL imports. Do not ask whether to continue. Produce the final recall synthesis now, comparing HTTP semantics, QUIC/TLS transport, and HTTP/2/HTTP/3 framing; include exact selector-local details from at least four RFCs; and identify an older HTTP/1.1 implementation detail superseded or reframed by the newer HTTP core corpus.")
+	if overlayID := metadataStringValue(rec.Metadata, runMetadataLLMPolicyOverlayID); overlayID != "" {
+		fmt.Fprintf(&b, " Preserve model_policy_overlay_id %s.", overlayID)
 	}
 	return b.String()
 }

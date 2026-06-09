@@ -122,6 +122,24 @@ type compactionRecallEvalStartResponse struct {
 	CreatedAt            string         `json:"created_at"`
 }
 
+type compactionRecallEvalRunStatusResponse struct {
+	runStatusResponse
+	Assessment   compactionRecallEvalAssessment `json:"assessment,omitempty"`
+	Continuation *types.RunContinuationRecord   `json:"continuation,omitempty"`
+}
+
+type compactionRecallEvalAssessment struct {
+	Applicable           bool     `json:"applicable"`
+	Valid                bool     `json:"valid"`
+	Reasons              []string `json:"reasons,omitempty"`
+	ActualSelectorReads  int      `json:"actual_selector_reads,omitempty"`
+	MinimumSelectorReads int      `json:"minimum_selector_reads,omitempty"`
+	AvailableSelectors   int      `json:"available_selector_count,omitempty"`
+	SearchAttempts       int      `json:"search_attempts,omitempty"`
+	CompactionStarted    int      `json:"compaction_started,omitempty"`
+	CompactionCompleted  int      `json:"compaction_completed,omitempty"`
+}
+
 // spawnRequest is the JSON payload for POST /api/agent/spawn.
 // It creates a child run linked to a parent, with an objective and optional
 // constraints (VAL-CHOIR-001).

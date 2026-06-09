@@ -161,6 +161,9 @@ func (rt *Runtime) StartRunContinuation(ctx context.Context, ownerID, continuati
 	if fingerprint := detailStringValue(rec.Details, "objective_fingerprint"); fingerprint != "" {
 		metadata["objective_fingerprint"] = fingerprint
 	}
+	if overlayID := detailStringValue(rec.Details, runMetadataLLMPolicyOverlayID); overlayID != "" {
+		metadata[runMetadataLLMPolicyOverlayID] = overlayID
+	}
 	child, err := rt.StartChildRun(ctx, rec.SourceRunID, rec.Objective, ownerID, metadata)
 	if err != nil {
 		rec.Status = types.RunContinuationBlocked
@@ -326,20 +329,36 @@ func objectiveFingerprint(ownerID, trajectoryID, parentRunID, objective string) 
 }
 
 func normalizeObjectiveText(raw string) string {
+	terms := []string{}
 	var b strings.Builder
 	lastSpace := false
+	flush := func() {
+		token := strings.TrimSpace(b.String())
+		if token == "" {
+			return
+		}
+		switch token {
+		case "world":
+			token = "computer"
+		case "patch":
+			token = "change"
+		}
+		terms = append(terms, token)
+		b.Reset()
+	}
 	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			b.WriteRune(r)
 			lastSpace = false
 			continue
 		}
-		if !lastSpace && b.Len() > 0 {
-			b.WriteByte(' ')
+		if !lastSpace {
+			flush()
 			lastSpace = true
 		}
 	}
-	return strings.TrimSpace(b.String())
+	flush()
+	return strings.Join(terms, " ")
 }
 
 func boundedContinuationProfile(profile string) (string, error) {

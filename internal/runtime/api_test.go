@@ -294,6 +294,139 @@ reasoning = "low"
 	}
 }
 
+func TestCompactionRecallEvalStatusAssessesCoverageAndAnswerContract(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	rec := createCompletedCompactionRecallEvalRunForTest(t, rt, "weak-eval-run", "Ready for final synthesis if you want it.", 3)
+	emitSelectorReadResultsForTest(rt, &rec, 2)
+	rt.emitEvent(context.Background(), &rec, types.EventRunCompactionStarted, events.CauseTaskLifecycle, json.RawMessage(`{}`))
+	rt.emitEvent(context.Background(), &rec, types.EventRunCompactionCompleted, events.CauseTaskLifecycle, json.RawMessage(`{}`))
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/evals/compaction-recall/runs/"+rec.RunID, "", "user-alice")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	var resp compactionRecallEvalRunStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Assessment.Valid {
+		t.Fatalf("assessment unexpectedly valid: %+v", resp.Assessment)
+	}
+	if resp.Assessment.ActualSelectorReads != 2 || resp.Assessment.MinimumSelectorReads != 3 {
+		t.Fatalf("selector assessment = %+v", resp.Assessment)
+	}
+	if !containsReasonSubstring(resp.Assessment.Reasons, "below minimum") ||
+		!containsReasonSubstring(resp.Assessment.Reasons, "not a recall synthesis") {
+		t.Fatalf("assessment reasons = %+v", resp.Assessment.Reasons)
+	}
+}
+
+func TestCompactionRecallEvalContinueStartsResearcherWithOverlay(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	rec := createCompletedCompactionRecallEvalRunForTest(t, rt, "continue-eval-run", "I'm ready for the concise final synthesis if you want it.", 3)
+	emitSelectorReadResultsForTest(rt, &rec, 3)
+	rt.emitEvent(context.Background(), &rec, types.EventRunCompactionStarted, events.CauseTaskLifecycle, json.RawMessage(`{}`))
+	rt.emitEvent(context.Background(), &rec, types.EventRunCompactionCompleted, events.CauseTaskLifecycle, json.RawMessage(`{}`))
+
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/evals/compaction-recall/runs/"+rec.RunID+"/continue", `{}`, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", w.Code, w.Body.String())
+	}
+	var resp compactionRecallEvalRunStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Continuation == nil || resp.Continuation.NextRunID == "" {
+		t.Fatalf("continuation missing: %+v", resp.Continuation)
+	}
+	child, err := rt.GetRun(context.Background(), resp.Continuation.NextRunID, "user-alice")
+	if err != nil {
+		t.Fatalf("load child run: %v", err)
+	}
+	if child.AgentProfile != AgentProfileResearcher || child.AgentRole != AgentProfileResearcher {
+		t.Fatalf("child profile = %q/%q, want researcher", child.AgentProfile, child.AgentRole)
+	}
+	if got := metadataStringValue(child.Metadata, runMetadataLLMPolicyOverlayID); got != "gpt-mini-eval" {
+		t.Fatalf("child overlay = %q, want gpt-mini-eval; metadata=%+v", got, child.Metadata)
+	}
+	if !strings.Contains(child.Prompt, "Do not ask whether to continue") ||
+		!strings.Contains(child.Prompt, "Produce the final recall synthesis now") {
+		t.Fatalf("child prompt missing final-answer continuation contract:\n%s", child.Prompt)
+	}
+	if !strings.Contains(child.Prompt, "Frozen ContentItem ids: content-alpha") ||
+		!strings.Contains(child.Prompt, "Recall questions to answer: What exact marker appears?") {
+		t.Fatalf("child prompt missing explicit frozen eval context:\n%s", child.Prompt)
+	}
+
+	retry := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/evals/compaction-recall/runs/"+rec.RunID+"/continue", `{}`, "user-alice")
+	if retry.Code != http.StatusAccepted {
+		t.Fatalf("retry status = %d, want 202; body=%s", retry.Code, retry.Body.String())
+	}
+	var retryResp compactionRecallEvalRunStatusResponse
+	if err := json.NewDecoder(retry.Body).Decode(&retryResp); err != nil {
+		t.Fatalf("decode retry response: %v", err)
+	}
+	if retryResp.Continuation == nil || retryResp.Continuation.ContinuationID != resp.Continuation.ContinuationID {
+		t.Fatalf("retry continuation = %+v, want existing %+v", retryResp.Continuation, resp.Continuation)
+	}
+	if retryResp.Continuation.NextRunID != resp.Continuation.NextRunID {
+		t.Fatalf("retry next run = %q, want %q", retryResp.Continuation.NextRunID, resp.Continuation.NextRunID)
+	}
+}
+
+func createCompletedCompactionRecallEvalRunForTest(t *testing.T, rt *Runtime, runID, result string, minimumReads int) types.RunRecord {
+	t.Helper()
+	now := time.Now().UTC()
+	rec := types.RunRecord{
+		RunID:        runID,
+		AgentID:      "agent-" + runID,
+		ChannelID:    "channel-" + runID,
+		AgentProfile: AgentProfileResearcher,
+		AgentRole:    AgentProfileResearcher,
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunCompleted,
+		Prompt:       "compaction recall eval prompt",
+		Result:       result,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		FinishedAt:   &now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile:       AgentProfileResearcher,
+			runMetadataAgentRole:          AgentProfileResearcher,
+			runMetadataTrajectoryID:       runID,
+			runMetadataLLMPolicyOverlayID: "gpt-mini-eval",
+			"eval_kind":                   compactionRecallEvalKind,
+			"content_item_ids":            []string{"content-alpha"},
+			"recall_questions":            []string{"What exact marker appears?"},
+			"read_policy":                 "exhaustive_selectors",
+			"minimum_selector_reads":      minimumReads,
+			"available_selector_count":    minimumReads,
+		},
+	}
+	if err := rt.Store().CreateRun(context.Background(), rec); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	rt.emitEvent(context.Background(), &rec, types.EventRunCompleted, events.CauseTaskLifecycle, json.RawMessage(`{}`))
+	return rec
+}
+
+func emitSelectorReadResultsForTest(rt *Runtime, rec *types.RunRecord, count int) {
+	for i := 0; i < count; i++ {
+		payload := json.RawMessage(fmt.Sprintf(`{"tool":"read_content_item_selector","output":"{\"selector\":\"chunk-%d\"}"}`, i+1))
+		rt.emitEvent(context.Background(), rec, types.EventToolResult, events.CauseToolExecution, payload)
+	}
+}
+
+func containsReasonSubstring(reasons []string, want string) bool {
+	for _, reason := range reasons {
+		if strings.Contains(reason, want) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	ctx := context.Background()
