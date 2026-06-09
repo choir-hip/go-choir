@@ -377,15 +377,19 @@ Update after 2026-06-09 staging slices:
   authenticated source-native proof prompt created VText doc
   `3138b6db-3167-417d-a8c9-db0297d2e85b` with
   `data-vtext-initial-loop-id="53580323-5b55-4995-97e1-8a08e916ac2d"`, but
-  after the observation window the owner-visible document remained at v0 with
-  `Writing first draft...` / `Revising...` and no new source search,
+  after the initial observation window the owner-visible document remained at
+  v0 with `Writing first draft...` / `Revising...` and no new source search,
   `product_api_request`, publication, `global-wire/Wire.vtext`, or story API
-  evidence visible in the authenticated product surface. The previous
-  `68f1ed7e...` DeepSeek 402 blocker remained visible only as old activity.
-  The next problem is now prompt/VText execution liveness after provider
-  availability fallback: the deployed run no longer exposes a fresh 402
-  blocker, but it also does not visibly reach the source-native Wire product
-  API path or produce a documented blocker.
+  evidence visible in the authenticated product surface. A longer observation
+  later showed the same fresh doc reporting
+  `tool loop iteration 2: gateway call failed: gateway client: deepseek:
+  status 402 Payment Required (sanitized)`. The operator confirmed DeepSeek
+  credits are exhausted and directed the mission to use Xiaomi MiMo instead:
+  `mimo-v2.5` for conductor, researcher, processor, and VText; reserve
+  `mimo-v2.5-pro` for vsuper, co-super when no multimodal input is needed, and
+  reconciler. The next problem remains deployed model/provider policy: the
+  source-native Wire proof should not route operational proof turns through
+  unavailable DeepSeek models.
 
 ## Homotopy Parameters
 

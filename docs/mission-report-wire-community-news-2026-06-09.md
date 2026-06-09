@@ -637,6 +637,16 @@ what was proven:
   next documented problem before any fix: provider availability fallback is
   deployed, but the owner-visible VText/proof run can stall in draft state
   without surfacing either product API progress or a blocker.
+- Correction from longer observation of the same staging reprobe: the
+  `3138b6db-3167-417d-a8c9-db0297d2e85b` activity feed later reported the
+  fresh blocker
+  `tool loop iteration 2: gateway call failed: gateway client: deepseek:
+  status 402 Payment Required (sanitized)`. The operator confirmed DeepSeek
+  credits are exhausted and directed active policy to Xiaomi MiMo instead:
+  use `mimo-v2.5` for conductor, researcher, processor, and VText, while
+  reserving `mimo-v2.5-pro` for vsuper, co-super when no multimodal input is
+  needed, and reconciler. The next fix should migrate generated/default model
+  policy and runtime fallback away from DeepSeek for these roles.
 
 unproven or partial claims:
 
@@ -689,10 +699,10 @@ unproven or partial claims:
   availability, so no fresh source-native publication/edition visibility proof
   exists after the guard.
 - The provider availability fallback repair is committed, pushed, deployed, and
-  locally verified. The fresh authenticated staging prompt after that repair no
-  longer surfaced a new DeepSeek 402 blocker, but it also did not visibly reach
-  source-native Wire product API orchestration or publish a blocker; the VText
-  document remained in first-draft/revising state.
+  locally verified. Longer staging observation showed the fresh authenticated
+  prompt still surfaced a DeepSeek 402 blocker, so the repair is insufficient
+  while generated/default policy continues to select DeepSeek for foreground
+  proof roles.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -700,9 +710,7 @@ unproven or partial claims:
 
 next step:
 
-- Repair prompt/VText execution liveness and blocker surfacing after provider
-  fallback so foreground source-native proof runs either reach product API
-  orchestration or publish a precise blocker. Then rerun the no-`story_id`
-  source-native route through publication approval and verify the approved
-  article appears through `global-wire/Wire.vtext` and
-  `/api/global-wire/stories`.
+- Move generated/default model policy and runtime fallback to the operator's
+  Xiaomi MiMo allocation, then rerun the no-`story_id` source-native route
+  through publication approval and verify the approved article appears through
+  `global-wire/Wire.vtext` and `/api/global-wire/stories`.
