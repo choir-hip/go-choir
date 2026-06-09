@@ -444,7 +444,7 @@ Likely first goal:
 
 ## Run Checkpoint & Resumption State
 
-status: eval_runner_shipped_pre_matrix
+status: matrix_attempt_incomplete_text_selector_gap
 
 last checkpoint: mission upgraded so the sandbox/user-computer document
 substrate preamble is an explicit prerequisite before any compaction recall
@@ -458,8 +458,14 @@ metadata. A seven-item frozen corpus has been imported under one staging owner.
 The pre-matrix sandbox conformance check was rerun against the NixOS sandbox
 and Playwright worker configurations. The narrow authenticated product-visible
 compaction recall eval runner has shipped and been proven on staging without
-opening `/api/agent/*` to browser-public acceptance. The scored compaction
-matrix has not started.
+opening `/api/agent/*` to browser-public acceptance. A first five-arm matrix
+attempt completed across DeepSeek, Xiaomi, and ChatGPT with live search
+disabled and zero search attempts. It did not satisfy the mission because no
+arm triggered automatic compaction. The root cause observed from the corpus is
+that imported `text/plain` RFC documents stored large text but exposed no
+selector chunks or extraction adapter metadata, so agents could only perform
+bounded whole-ContentItem reads and did not create enough context pressure for
+the 700k-token DeepSeek/Xiaomi compaction threshold.
 
 current artifact state:
 
@@ -679,14 +685,42 @@ what was proven so far:
     `reasoning_effort: low`;
   - status metadata included `eval_kind: compaction_recall` and
     `live_search_disabled: true`.
+- A first deployed product-path matrix attempt ran across all target arms using
+  owner/user id `c8fb7e42-9423-4cd6-b323-6f5a2443b119` and owner email
+  `codex-compaction-matrix-1780964521974@example.test`. It imported 16 public
+  source documents totaling 2,938,957 stored text characters and launched one
+  run per target model through `/api/evals/compaction-recall`:
+  - `deepseek-v4-flash`: run `65fdefe8-68cd-4f6d-acdd-5b000c5281f1`,
+    completed, 7,868 result chars, 38 source-read trace moments, zero search
+    attempts, zero compaction moments;
+  - `deepseek-v4-pro`: run `8ee1d9e6-c5a5-4e5d-8f06-707d6b8350e0`,
+    completed, 6,524 result chars, 40 source-read trace moments, zero search
+    attempts, zero compaction moments;
+  - `mimo-v2.5`: run `c04efee2-93da-44f4-9a2a-d7e575dc614f`,
+    completed, 6,337 result chars, 32 source-read trace moments, zero search
+    attempts, zero compaction moments;
+  - `mimo-v2.5-pro`: run `0c467a65-5b46-43b7-8523-56eeb8c3e89a`,
+    completed, 9,065 result chars, 40 source-read trace moments, zero search
+    attempts, zero compaction moments;
+  - `gpt-5.4-mini`: run `34f3cbc0-3bee-4173-a82f-ebc6bfa9a7fb`,
+    completed, 5,107 result chars, 24 source-read trace moments, zero search
+    attempts, zero compaction moments.
+- Matrix attempt corpus finding: the 15 imported RFC `.txt` documents had
+  `selector_count: 0` and no `extraction_adapter` despite large stored text
+  bodies. The PDF item had `pdf_poppler_pdftotext` and 15 selectors. This is
+  now the blocking substrate gap for natural compaction pressure.
 
 unproven or partial claims:
 
-- frozen-corpus matrix execution without live search;
+- frozen-corpus matrix execution without live search is proven at route/trace
+  level for one attempt, but not yet with automatic compaction;
 - natural post-compaction recall across target models.
 - full automatic-compaction trigger evidence for the new eval runner; route
   launch and metadata are proven, but the model matrix still needs to drive
   enough context pressure to force runtime-owned LLM compaction.
+- `text/plain` URL imports do not yet expose selector chunks, which undermines
+  the eval's ability to walk large frozen public text documents at high source
+  pressure.
 
 belief-state changes:
 
@@ -697,6 +731,8 @@ belief-state changes:
 - the sandbox setup proof is now the entry gate that must remain satisfied
   before every recall-matrix attempt; the next run should not regress to local
   macOS-only extraction or prompt-text model overrides.
+- first matrix attempt proves provider routing and no-search enforcement, but
+  not compaction; source substrate selector quality is now the main loss term.
 
 remaining error field:
 
@@ -706,12 +742,17 @@ remaining error field:
 - eval runner realism: route launch is proven, but the matrix must still prove
   it can run all target arms through normal researcher loops with enough frozen
   corpus pressure to compact.
+- text/plain extraction currently creates no selector graph, so large public
+  text sources are not as walkable as PDFs/DOCX/EPUB/PPTX/HTML.
 
 highest-impact remaining uncertainty:
 
 - can the shipped product-visible eval runner drive all target models into
   automatic compaction and preserve both approximate and exact recall without
   live search or explicit memory-tool prompt steering?
+- will adding text/plain chunk selectors be enough to drive natural source
+  traversal above the compaction threshold without introducing fake eval-only
+  pathways?
 
 latest local proof:
 
@@ -763,17 +804,21 @@ latest staging proof:
   `e9239e9c-8661-4fad-877a-4a3a5fc877b9`; route launch and status retrieval
   succeeded through `/api/evals/compaction-recall` and
   `/api/evals/compaction-recall/runs/{runID}`.
+- deployed matrix attempt evidence artifact
+  `/tmp/choir-compaction-matrix-1780964521974.json`;
+- authenticated staging matrix attempt for owner
+  `c8fb7e42-9423-4cd6-b323-6f5a2443b119`, five completed model arms, zero
+  search attempts, source-read trace moments per run, and zero compaction
+  moments.
 
 next executable probe:
 
-- start the model matrix through the shipped authenticated product-visible
-  compaction recall eval runner. Create scoped overlays for
-  `deepseek-v4-flash`, `deepseek-v4-pro`, `mimo-v2.5`, `mimo-v2.5-pro`, and
-  `gpt-5.4-mini`; use owner-scoped frozen ContentItems; keep live source
-  acquisition disabled during scored runs; drive enough frozen-corpus context
-  pressure to trigger runtime-owned automatic LLM compaction; then score
-  approximate recall, exact recall, natural selector/retrieval use, and
-  post-compaction continuation.
+- fix the shared extraction substrate so imported `text/plain` public documents
+  produce chunk selectors, raw/extracted hash metadata, and an extraction
+  adapter name. Then rerun a compaction-pressure matrix or pilot using large
+  public text ContentItems plus PDF selectors, keeping live source acquisition
+  disabled and proving whether selector walks can cross the automatic
+  compaction threshold.
 
 suggested resume goal string:
 
