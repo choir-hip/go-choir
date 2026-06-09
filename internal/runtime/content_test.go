@@ -100,6 +100,58 @@ func TestContentImportURLCreatesProvenanceRecord(t *testing.T) {
 	}
 }
 
+func TestContentImportURLCreatesPlainTextSelectors(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
+	_, handler := testAPISetup(t)
+	text := strings.Repeat("RFC-style public text evidence for selector chunking and recall pressure.\n", 600)
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte(text))
+	}))
+	defer source.Close()
+
+	body := `{"url":` + strconvQuote(source.URL) + `}`
+	req := authenticatedRequest(http.MethodPost, "/api/content/import-url", body, "user-content")
+	w := httptest.NewRecorder()
+	handler.HandleContentImportURL(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	var item struct {
+		MediaType   string         `json:"media_type"`
+		AppHint     string         `json:"app_hint"`
+		TextContent string         `json:"text_content"`
+		ContentHash string         `json:"content_hash"`
+		Metadata    map[string]any `json:"metadata"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if item.MediaType != "text/plain" {
+		t.Fatalf("media_type = %q, want text/plain", item.MediaType)
+	}
+	if !strings.Contains(item.TextContent, "selector chunking") {
+		t.Fatalf("text_content missing imported text")
+	}
+	if item.Metadata["extraction_adapter"] != "plain_text_decode" {
+		t.Fatalf("extraction_adapter = %#v", item.Metadata["extraction_adapter"])
+	}
+	if item.Metadata["raw_content_hash"] == "" || item.Metadata["extracted_text_hash"] == "" {
+		t.Fatalf("hash metadata missing: %#v", item.Metadata)
+	}
+	if item.ContentHash != strings.TrimPrefix(stringMapValue(item.Metadata, "raw_content_hash"), "sha256:") {
+		t.Fatalf("content_hash = %q, raw metadata = %#v", item.ContentHash, item.Metadata["raw_content_hash"])
+	}
+	if count, _ := item.Metadata["selector_count"].(float64); count < 2 {
+		t.Fatalf("selector_count = %#v, want chunk selectors", item.Metadata["selector_count"])
+	}
+	selectorsRaw, ok := item.Metadata["selectors"].([]any)
+	if !ok || len(selectorsRaw) < 2 {
+		t.Fatalf("selectors missing: %#v", item.Metadata["selectors"])
+	}
+}
+
 func TestContentImportURLCleansReaderChrome(t *testing.T) {
 	allowPrivateSourceFetchForTest(t)
 	_, handler := testAPISetup(t)
