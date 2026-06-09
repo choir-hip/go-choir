@@ -491,12 +491,20 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 			want: "function:edit_vtext",
 		},
 		{
-			name: "mutable product work starts with vtext edit",
+			name: "mutable product work starts with super request",
 			metadata: map[string]any{
 				"type":            "vtext_agent_revision",
 				"original_prompt": "debug and fix the runtime gateway",
 			},
-			want: "function:edit_vtext",
+			want: "function:request_super_execution",
+		},
+		{
+			name: "community wire operational proof starts with super request",
+			metadata: map[string]any{
+				"type":        "vtext_agent_revision",
+				"seed_prompt": "Community Wire staging proof request: run the existing source-refresh/research/projection/publication flow, create or approve an Article VText, update global-wire/Wire.vtext, then leave evidence ids and verifier proof.",
+			},
+			want: "function:request_super_execution",
 		},
 		{
 			name: "creative direct document work edits vtext",

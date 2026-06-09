@@ -49,3 +49,37 @@ func TestHandlePromptBarVTextRouteCompletesConductorSynchronously(t *testing.T) 
 		t.Fatalf("status decision missing materialized vtext route: %+v", status.Decision)
 	}
 }
+
+func TestHandlePromptBarOperationalProofInitialRunRequestsSuperFirst(t *testing.T) {
+	rt, handler := testAPISetup(t)
+
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Community Wire staging proof request: run the existing source-refresh/research/projection/publication flow, create or approve an Article VText, update global-wire/Wire.vtext, then leave evidence ids and verifier proof."}`, "user-alice")
+	w := httptest.NewRecorder()
+	handler.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+
+	var resp promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	conductor, err := rt.GetRun(context.Background(), resp.SubmissionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get conductor: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	if decision.InitialLoopID == "" {
+		t.Fatalf("conductor decision missing initial loop: %+v", decision)
+	}
+	initialRun, err := rt.GetRun(context.Background(), decision.InitialLoopID, "user-alice")
+	if err != nil {
+		t.Fatalf("get initial vtext run: %v", err)
+	}
+	if got := initialVTextToolChoice(initialRun); got != exactRequiredToolChoice("request_super_execution") {
+		t.Fatalf("initial tool choice = %q, want request_super_execution", got)
+	}
+}

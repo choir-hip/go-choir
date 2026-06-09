@@ -241,6 +241,16 @@ instead of filled with seeded stories.
   product proof: page-script fetch primitives were unavailable in that context
   and direct navigation to `/api/global-wire/stories` was blocked by the
   browser profile.
+- Prompt orchestration repair implemented locally: initial VText runs for
+  prompts that clearly require execution, verification, staging proof,
+  product-path proof, source-refresh, or publication-flow work now require
+  `request_super_execution` as the first tool instead of forcing an
+  `edit_vtext` prelude. Ordinary writing and factual prompts still start with
+  `edit_vtext`; scheduled worker-wake runs remain unconstrained.
+- Local verification for the prompt orchestration repair:
+  - `nix develop -c go test ./internal/runtime -run 'TestInitialVTextToolChoiceUsesExactTools|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestHandlePromptBarOperationalProofInitialRunRequestsSuperFirst|TestVTextPromptInitialRevisionUsesSingleWriterLoop'`
+  - `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice)'`
+  - `nix develop -c scripts/go-test-runtime-shards`
 
 ## Run State
 
@@ -286,6 +296,10 @@ what was proven:
   blocker. This is not evidence that the Wire publication chain is impossible;
   it is evidence that the product-level orchestration entry point is wrong or
   under-specified for operational Community Wire proof.
+- The local prompt-bar/VText handoff now classifies that operational proof
+  shape as a super-execution obligation before the first VText edit, preserving
+  VText ownership for ordinary documents while unblocking supervised product
+  mutation/proof requests.
 
 unproven or partial claims:
 
@@ -298,6 +312,8 @@ unproven or partial claims:
 - No product-path owner prompt has yet supervised the source-refresh,
   research-evidence, graph-candidate, projection-review, publication-update,
   publication-artifact, publication-approval sequence to completion on staging.
+- The prompt orchestration repair is only locally verified until it is pushed,
+  deployed, and reprobed through the authenticated staging command prompt.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -305,9 +321,8 @@ unproven or partial claims:
 
 next step:
 
-- Inspect and repair the prompt-bar/conductor/VText handoff for operational
-  Community Wire proof requests so a foreground owner prompt can supervise the
-  product source-to-publication chain instead of becoming a VText draft that
-  fails on the provider boundary. Then create/update `global-wire/Wire.vtext`
+- Land and deploy the prompt-bar/conductor/VText handoff repair, verify that an
+  authenticated staging Community Wire proof prompt requests persistent super
+  execution first, then use that path to create/update `global-wire/Wire.vtext`
   through the product source cycle rather than test fixtures and prove staging
   renders edition-transcluded VText articles.

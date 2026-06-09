@@ -1693,6 +1693,9 @@ func initialVTextToolChoice(rec *types.RunRecord) string {
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""
 	}
+	if vtextPromptNeedsSuperExecution(metadataStringValue(rec.Metadata, "seed_prompt") + " " + metadataStringValue(rec.Metadata, "original_prompt")) {
+		return exactRequiredToolChoice("request_super_execution")
+	}
 	return exactRequiredToolChoice("edit_vtext")
 }
 
@@ -1727,6 +1730,13 @@ func vtextPromptNeedsSuperExecution(prompt string) bool {
 		"debug",
 		"test",
 		"verify",
+		"verifier",
+		"staging proof",
+		"product path",
+		"product-path",
+		"evidence ids",
+		"source-refresh",
+		"publication flow",
 		"benchmark",
 		"artifact",
 		"execution",

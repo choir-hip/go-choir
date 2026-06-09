@@ -206,6 +206,12 @@ Update after 2026-06-09 staging slices:
   created a revision, and then reported a Fireworks 412 gateway blocker instead
   of supervising the operational Wire flow. The immediate uncertainty is now
   prompt-bar/conductor/VText handoff for operational proof requests.
+- Local repair after documenting that blocker: initial VText runs for prompts
+  that clearly require execution, verification, staging proof, product-path
+  proof, source-refresh, or publication-flow work now require
+  `request_super_execution` first. Ordinary writing and factual prompts still
+  start with `edit_vtext`, and scheduled worker-wake turns remain free to
+  choose the next tool.
 
 ## Homotopy Parameters
 
@@ -479,6 +485,10 @@ what was proven:
   fireworks: status 412 Precondition Failed (sanitized)`. Global Wire remained
   at the honest empty state; no deployed positive `Wire.vtext` article
   transclusion was created.
+- Prompt orchestration repair locally verified:
+  `nix develop -c go test ./internal/runtime -run 'TestInitialVTextToolChoiceUsesExactTools|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestHandlePromptBarOperationalProofInitialRunRequestsSuperFirst|TestVTextPromptInitialRevisionUsesSingleWriterLoop'`,
+  `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice)'`,
+  and `nix develop -c scripts/go-test-runtime-shards`.
 
 unproven or partial claims:
 
@@ -493,10 +503,12 @@ unproven or partial claims:
   needs a live owner-prompt orchestration path that supervises the Wire
   source-to-publication sequence rather than routing the request to VText-only
   drafting.
+- The prompt orchestration repair is not yet deployed or reprobed on staging.
 
 next step:
 
-- Inspect and repair the prompt-bar/conductor/VText handoff for operational
-  Community Wire proof requests, then run a staging product-path proof that
+- Land and deploy the prompt-bar/conductor/VText handoff repair, verify the
+  authenticated staging command prompt requests persistent super execution for
+  the Community Wire proof prompt, then run a staging product-path proof that
   creates or approves a real article VText, updates `global-wire/Wire.vtext`,
   and renders the edition-transcluded article in Global Wire.
