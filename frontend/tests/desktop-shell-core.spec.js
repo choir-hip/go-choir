@@ -507,6 +507,7 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
   expect(userRevision.content).toBe(prompt);
   expect(userRevision.metadata.source).toBe('user_prompt');
   expect(userRevision.metadata.vtext_version).toBe('v0');
+  await expect(vtextWindow.locator('[data-vtext-editor]')).toHaveAttribute('data-vtext-initial-loop-id', decision.initial_loop_id);
 
   const trace = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(submitted.submission_id)}`);
   expect((trace.agents || []).some((agent) => agent.profile === 'vtext' && agent.agent_id === `vtext:${decision.doc_id}`)).toBe(true);

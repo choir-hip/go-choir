@@ -431,6 +431,7 @@
       source_path: appContext.sourcePath || '',
       seed_prompt: appContext.seedPrompt || '',
       conductor_loop_id: appContext.conductorLoopId || '',
+      initial_loop_id: appContext.initialLoopId || '',
     };
     if (appContext.sourceUrl) metadata.source_url = appContext.sourceUrl;
     if (appContext.sourceContentId) metadata.source_content_id = appContext.sourceContentId;
@@ -1985,7 +1986,12 @@
   });
 </script>
 
-<div class="vtext-editor" data-vtext-editor data-vtext-doc-id={currentDoc?.doc_id || ''}>
+<div
+  class="vtext-editor"
+  data-vtext-editor
+  data-vtext-doc-id={currentDoc?.doc_id || ''}
+  data-vtext-initial-loop-id={appContext.initialLoopId || undefined}
+>
   {#if showRecent}
     <section class="recent-panel" data-vtext-recent>
       <div class="recent-hero">

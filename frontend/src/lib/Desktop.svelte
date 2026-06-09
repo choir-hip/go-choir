@@ -1220,6 +1220,7 @@
           initialContent: decision.initial_content || decision.seed_prompt || text,
           createInitialVersion: decision.create_initial_version !== false,
           conductorLoopId: conductorSubmissionId,
+          initialLoopId: decision.initial_loop_id || '',
         });
         setTimeout(() => {
           if (promptStatus.startsWith('Opening ')) promptStatus = '';
