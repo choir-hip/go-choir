@@ -97,6 +97,29 @@ type runAcceptanceListResponse struct {
 	Acceptances []types.RunAcceptanceRecord `json:"acceptances"`
 }
 
+type compactionRecallEvalStartRequest struct {
+	Title                string   `json:"title,omitempty"`
+	ModelPolicyOverlayID string   `json:"model_policy_overlay_id"`
+	ContentItemIDs       []string `json:"content_item_ids"`
+	RecallQuestions      []string `json:"recall_questions,omitempty"`
+}
+
+type compactionRecallEvalStartResponse struct {
+	RunID                string         `json:"loop_id"`
+	AgentID              string         `json:"agent_id"`
+	ChannelID            string         `json:"channel_id,omitempty"`
+	State                types.RunState `json:"state"`
+	OwnerID              string         `json:"owner_id"`
+	ModelPolicyOverlayID string         `json:"model_policy_overlay_id"`
+	Provider             string         `json:"provider,omitempty"`
+	Model                string         `json:"model,omitempty"`
+	ReasoningEffort      string         `json:"reasoning_effort,omitempty"`
+	ContentItemIDs       []string       `json:"content_item_ids"`
+	StatusURL            string         `json:"status_url"`
+	Metadata             map[string]any `json:"metadata,omitempty"`
+	CreatedAt            string         `json:"created_at"`
+}
+
 // spawnRequest is the JSON payload for POST /api/agent/spawn.
 // It creates a child run linked to a parent, with an objective and optional
 // constraints (VAL-CHOIR-001).
@@ -1644,6 +1667,8 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/run-acceptances", h.HandleRunAcceptancesRoot)
 	s.HandleFunc("/api/run-acceptances/synthesize", h.HandleRunAcceptanceSynthesize)
 	s.HandleFunc("/api/run-acceptances/", h.HandleRunAcceptanceDetail)
+	s.HandleFunc("/api/evals/compaction-recall", h.HandleCompactionRecallEvalRoot)
+	s.HandleFunc("/api/evals/compaction-recall/runs/", h.HandleCompactionRecallEvalDetail)
 	s.HandleFunc("/internal/runtime/app-change-packages", h.HandleInternalAppChangePackagesRoot)
 	s.HandleFunc("/internal/runtime/app-change-packages/", h.HandleInternalAppChangePackageDetail)
 	s.HandleFunc("/internal/runtime/channel-casts", h.HandleInternalChannelCast)

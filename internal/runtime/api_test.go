@@ -168,6 +168,110 @@ reasoning = "medium"
 	}
 }
 
+func TestHandleCompactionRecallEvalStartsResearcherWithOverlayAndFrozenContent(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	overlayDir := filepath.Join(filepath.Dir(policyPath), "model-policy-overlays")
+	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(policyPath, []byte(`
+[defaults]
+fallback_provider = "deepseek"
+fallback_model = "deepseek-v4-flash"
+
+[roles.researcher]
+provider = "deepseek"
+model = "deepseek-v4-flash"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	if err := os.WriteFile(filepath.Join(overlayDir, "gpt-mini-eval.toml"), []byte(`
+[overlay]
+expires_at = "`+future+`"
+
+[roles.researcher]
+provider = "chatgpt"
+model = "gpt-5.4-mini"
+reasoning = "low"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rt.cfg.ModelPolicyPath = policyPath
+
+	now := time.Now().UTC()
+	metadata, _ := json.Marshal(map[string]any{
+		"extraction_adapter": "pdf_poppler_pdftotext",
+		"selectors": []map[string]any{
+			{"id": "page-1", "kind": "page", "label": "page 1", "text": "Alpha exact marker ZETA-44"},
+		},
+	})
+	provenance, _ := json.Marshal(map[string]any{"hash_algorithm": "sha256"})
+	if err := rt.Store().CreateContentItem(context.Background(), types.ContentItem{
+		ContentID:   "content-alpha",
+		OwnerID:     "user-alice",
+		SourceType:  "extracted_url",
+		MediaType:   "application/pdf",
+		AppHint:     "pdf",
+		Title:       "Alpha PDF",
+		TextContent: "Alpha exact marker ZETA-44",
+		ContentHash: "hash-alpha",
+		Metadata:    metadata,
+		Provenance:  provenance,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); err != nil {
+		t.Fatalf("CreateContentItem: %v", err)
+	}
+
+	body := `{
+		"title":"one arm",
+		"model_policy_overlay_id":"gpt-mini-eval",
+		"content_item_ids":["content-alpha"],
+		"recall_questions":["What exact marker appears on page one?"]
+	}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/evals/compaction-recall", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", w.Code, w.Body.String())
+	}
+	var resp compactionRecallEvalStartResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.RunID == "" || resp.StatusURL != "/api/evals/compaction-recall/runs/"+resp.RunID {
+		t.Fatalf("response handles = %+v", resp)
+	}
+	if resp.Provider != "chatgpt" || resp.Model != "gpt-5.4-mini" || resp.ReasoningEffort != "low" {
+		t.Fatalf("model resolution = %+v", resp)
+	}
+	rec, err := rt.GetRun(context.Background(), resp.RunID, "user-alice")
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if rec.AgentProfile != AgentProfileResearcher || rec.AgentRole != AgentProfileResearcher {
+		t.Fatalf("agent identity = %q/%q", rec.AgentProfile, rec.AgentRole)
+	}
+	if metadataStringValue(rec.Metadata, "eval_kind") != compactionRecallEvalKind {
+		t.Fatalf("metadata eval_kind missing: %+v", rec.Metadata)
+	}
+	if !metadataBoolValue(rec.Metadata, compactionRecallLiveSearchFlag) {
+		t.Fatalf("live search flag missing: %+v", rec.Metadata)
+	}
+	if !strings.Contains(rec.Prompt, "content_id:content-alpha") || !strings.Contains(rec.Prompt, "Do not use live web search") {
+		t.Fatalf("prompt missing frozen corpus contract: %s", rec.Prompt)
+	}
+
+	statusW := registeredRuntimeRequest(t, handler, http.MethodGet, resp.StatusURL, "", "user-alice")
+	if statusW.Code != http.StatusOK {
+		t.Fatalf("status endpoint = %d, want 200; body=%s", statusW.Code, statusW.Body.String())
+	}
+	otherW := registeredRuntimeRequest(t, handler, http.MethodGet, resp.StatusURL, "", "user-bob")
+	if otherW.Code != http.StatusNotFound {
+		t.Fatalf("other owner status = %d, want 404", otherW.Code)
+	}
+}
+
 func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	ctx := context.Background()
