@@ -222,6 +222,16 @@ Update after 2026-06-09 staging slices:
   creates the user prompt VText seed, but execution/proof prompts now cast the
   request directly to persistent super from runtime with VText channel context
   and use the resulting super run as the initial loop.
+- Deployed counter-evidence after deterministic handoff repair: commit
+  `7b7bba73b000d2eb9ab01a1b5d4b88387a989351` passed CI and deployed to
+  staging. The authenticated prompt now produced a visible persistent-super
+  activity blocker (`5bd6de97-3b58-408c-bf89-c42c81b083de`, `Role: super`,
+  `Runtime fallback: Super failed before worker delegation/packa...`), proving
+  the initial handoff moved. The flow still did not create a Wire edition:
+  companion run `44d6fe75-c74b-4597-897b-8d6db9269ab5` reported `tool loop
+  iteration 0: gateway call failed: gateway client: fireworks: status 412
+  Precondition Failed (sanitized)`, Compute Monitor showed `0 running runs`, and
+  Global Wire remained at `0 articles`.
 
 ## Homotopy Parameters
 
@@ -509,6 +519,13 @@ what was proven:
   `nix develop -c go test ./internal/runtime -run 'TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestInitialVTextToolChoiceUsesExactTools|TestRequestSuper|TestVTextRequestSuper'`,
   `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice)'`,
   and `nix develop -c scripts/go-test-runtime-shards`.
+- Deterministic handoff repair deployed and reprobed: commit `7b7bba73` passed
+  CI run `27222135633`; deploy job `80379785630` succeeded; staging `/health`
+  reported proxy and sandbox at
+  `7b7bba73b000d2eb9ab01a1b5d4b88387a989351`, deployed at
+  `2026-06-09T16:58:10Z`. Authenticated Chrome evidence showed a visible
+  `Role: super` blocker for the prompt and a remaining Fireworks 412 VText
+  blocker; Global Wire stayed empty.
 
 unproven or partial claims:
 
@@ -525,13 +542,15 @@ unproven or partial claims:
   drafting.
 - The first prompt orchestration repair was deployed and reprobed on staging,
   but it still depends on a VText provider turn and failed with Fireworks 412.
-- The deterministic handoff repair is not yet deployed or reprobed on staging.
+- The deterministic handoff repair is deployed and reprobed, but the super run
+  fails before worker delegation/package work and the companion VText run still
+  reports Fireworks 412. Positive source-to-edition proof remains blocked.
 
 next step:
 
-- Land and deploy the deterministic runtime persistent-super request for
-  operational proof prompts, verify the authenticated staging command prompt
-  produces a visible super execution handoff for the Community Wire proof
-  prompt, then run a staging product-path proof that creates or approves a real
-  article VText, updates `global-wire/Wire.vtext`, and renders the
-  edition-transcluded article in Global Wire.
+- Investigate and repair the persistent-super runtime fallback/model routing so
+  the authenticated product prompt can delegate the source-to-publication work
+  instead of stopping before worker/package activity, then rerun the staging
+  product-path proof that creates or approves a real article VText, updates
+  `global-wire/Wire.vtext`, and renders the edition-transcluded article in
+  Global Wire.
