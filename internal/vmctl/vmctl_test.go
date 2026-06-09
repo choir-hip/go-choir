@@ -3952,16 +3952,32 @@ func TestOwnershipRegistry_RefreshActiveVMDelegatesToVMManager(t *testing.T) {
 	}
 }
 
-func TestOwnershipRegistry_RefreshRejectsHibernatedVM(t *testing.T) {
+func TestOwnershipRegistry_RefreshAllowsHibernatedVM(t *testing.T) {
+	mock := &mockVMManager{
+		refreshResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9046",
+			Epoch:   101,
+			Healthy: true,
+			State:   "running",
+		},
+	}
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mock)
 	if _, err := reg.ResolveOrAssign("user-refresh-hibernated"); err != nil {
 		t.Fatalf("ResolveOrAssign: %v", err)
 	}
 	if err := reg.HibernateVM("user-refresh-hibernated"); err != nil {
 		t.Fatalf("HibernateVM: %v", err)
 	}
-	if _, err := reg.RefreshVMForDesktop("user-refresh-hibernated", PrimaryDesktopID); err == nil {
-		t.Fatal("expected refresh to reject hibernated VM")
+	own, err := reg.RefreshVMForDesktop("user-refresh-hibernated", PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("RefreshVMForDesktop: %v", err)
+	}
+	if len(mock.refreshes) != 1 {
+		t.Fatalf("expected 1 RefreshVM call, got %d", len(mock.refreshes))
+	}
+	if own.State != VMStateActive || own.StoppedBy != "" {
+		t.Fatalf("refreshed ownership state=%s stopped_by=%q, want active/empty", own.State, own.StoppedBy)
 	}
 }
 

@@ -2340,9 +2340,9 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 	return own, nil
 }
 
-// RefreshVMForDesktop force-reboots a running computer onto the current guest
-// image while preserving persistent user data. This is for deploy-time image
-// refresh, not crash recovery, so active computers are valid targets.
+// RefreshVMForDesktop force-reboots a computer onto the current guest image
+// while preserving persistent user data. This is for deploy-time image refresh
+// and owner-scoped recovery from stale boot artifacts, not crash recovery.
 func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOwnership, error) {
 	var ensureVMID string
 	defer func() {
@@ -2358,7 +2358,12 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
 
-	if own.State != VMStateActive && own.State != VMStateBooting && own.State != VMStateDegraded && own.State != VMStateFailed {
+	if own.State != VMStateActive &&
+		own.State != VMStateBooting &&
+		own.State != VMStateStopped &&
+		own.State != VMStateHibernated &&
+		own.State != VMStateDegraded &&
+		own.State != VMStateFailed {
 		return nil, fmt.Errorf("VM %s is not refreshable (state=%s)", own.VMID, own.State)
 	}
 

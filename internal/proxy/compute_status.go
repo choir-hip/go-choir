@@ -283,7 +283,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 
 		var runtimeStatus *computeRuntimeStatus
 		var current computeComputer
-		if own == nil || own.State == string(vmctl.VMStateStopped) || own.State == string(vmctl.VMStateHibernated) {
+		if own == nil {
 			resolved, resolveErr := h.vmctlClient.ResolveDesktopContext(r.Context(), authResult.UserID, desktopID)
 			if resolveErr != nil {
 				log.Printf("proxy compute recovery: wake current computer desktop=%s: %v", desktopID, resolveErr)
@@ -303,6 +303,44 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 			if resolved.SandboxURL != "" {
 				runtimeStatus = h.probeRuntimeHealthForTarget(resolved.SandboxURL)
 			}
+		} else if own.State == string(vmctl.VMStateStopped) || own.State == string(vmctl.VMStateHibernated) {
+			resolved, resolveErr := h.vmctlClient.ResolveDesktopContext(r.Context(), authResult.UserID, desktopID)
+			if resolveErr == nil {
+				current = computeComputerFromFields(
+					resolved.DesktopID,
+					string(resolved.Kind),
+					resolved.State,
+					resolved.WarmnessClass,
+					resolved.Published,
+					0,
+					"",
+					"",
+				)
+				if resolved.SandboxURL != "" {
+					runtimeStatus = h.probeRuntimeHealthForTarget(resolved.SandboxURL)
+				}
+			} else {
+				log.Printf("proxy compute recovery: wake current computer failed; refreshing stopped desktop=%s: %v", desktopID, resolveErr)
+				refreshed, refreshErr := h.vmctlClient.RefreshDesktopContext(r.Context(), authResult.UserID, desktopID)
+				if refreshErr != nil {
+					log.Printf("proxy compute recovery: refresh stopped current computer desktop=%s: %v", desktopID, refreshErr)
+					writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to recover current computer"})
+					return
+				}
+				current = computeComputerFromFields(
+					refreshed.DesktopID,
+					string(refreshed.Kind),
+					refreshed.State,
+					refreshed.WarmnessClass,
+					refreshed.Published,
+					0,
+					"",
+					"",
+				)
+				if refreshed.SandboxURL != "" {
+					runtimeStatus = h.probeRuntimeHealthForTarget(refreshed.SandboxURL)
+				}
+			}
 		} else {
 			current = computeComputerFromFields(
 				own.DesktopID,
@@ -316,10 +354,11 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 			)
 		}
 
-		if own != nil && own.SandboxURL != "" {
+		ownWasStopped := own != nil && (own.State == string(vmctl.VMStateStopped) || own.State == string(vmctl.VMStateHibernated))
+		if own != nil && !ownWasStopped && own.SandboxURL != "" {
 			runtimeStatus = h.probeRuntimeHealthForTarget(own.SandboxURL)
 		}
-		shouldRefresh := own != nil && (own.SandboxURL == "" ||
+		shouldRefresh := own != nil && !ownWasStopped && (own.SandboxURL == "" ||
 			own.State == string(vmctl.VMStateBooting) ||
 			own.State == string(vmctl.VMStateDegraded) ||
 			own.State == string(vmctl.VMStateFailed) ||

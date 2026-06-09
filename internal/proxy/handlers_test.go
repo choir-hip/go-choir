@@ -3302,6 +3302,101 @@ func TestComputeRecoveryWakeRefreshesCurrentComputerWithoutBlockingResolve(t *te
 	}
 }
 
+func TestComputeRecoveryWakeRefreshesStoppedCurrentComputerWhenResolveFails(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate ed25519 key: %v", err)
+	}
+
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "sandbox"})
+	})
+	sandboxSrv := httptest.NewServer(sandboxMux)
+	t.Cleanup(func() { sandboxSrv.Close() })
+
+	var resolveCalled atomic.Bool
+	var refreshCalled atomic.Bool
+	vmctlMux := http.NewServeMux()
+	vmctlMux.HandleFunc("/internal/vmctl/lookup", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"vm_id":          "vm-stopped-current",
+			"user_id":        "compute-stopped-recovery-user",
+			"desktop_id":     vmctl.PrimaryDesktopID,
+			"kind":           string(vmctl.VMKindInteractive),
+			"warmness_class": "primary",
+			"published":      true,
+			"sandbox_url":    "http://10.203.109.2:8085",
+			"state":          string(vmctl.VMStateStopped),
+			"created_at":     "2026-06-09T20:00:00.000Z",
+			"last_active_at": "2026-06-09T20:30:00.000Z",
+			"epoch":          159,
+			"stopped_by":     "vmctl-restart",
+		})
+	})
+	vmctlMux.HandleFunc("/internal/vmctl/resolve", func(w http.ResponseWriter, r *http.Request) {
+		resolveCalled.Store(true)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "stale resume failed"})
+	})
+	vmctlMux.HandleFunc("/internal/vmctl/refresh", func(w http.ResponseWriter, r *http.Request) {
+		refreshCalled.Store(true)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"vm_id":          "vm-stopped-current",
+			"user_id":        "compute-stopped-recovery-user",
+			"desktop_id":     vmctl.PrimaryDesktopID,
+			"kind":           string(vmctl.VMKindInteractive),
+			"warmness_class": "primary",
+			"published":      true,
+			"sandbox_url":    sandboxSrv.URL,
+			"state":          string(vmctl.VMStateActive),
+		})
+	})
+	vmctlMux.HandleFunc("/internal/vmctl/list", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"ownerships": []any{}})
+	})
+	vmctlSrv := httptest.NewServer(vmctlMux)
+	t.Cleanup(func() { vmctlSrv.Close() })
+
+	cfg := &Config{
+		Port:              "0",
+		SandboxURL:        sandboxSrv.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+		VmctlURL:          vmctlSrv.URL,
+	}
+	handler, err := NewHandler(cfg, pub)
+	if err != nil {
+		t.Fatalf("NewHandler with vmctl: %v", err)
+	}
+
+	token := issueTestAccessJWT(priv, "compute-stopped-recovery-user")
+	req := httptest.NewRequest(http.MethodPost, "/api/compute/recovery", strings.NewReader(`{"action":"wake_current_computer"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	w := httptest.NewRecorder()
+	handler.HandleAPI(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("compute recovery = %d, want 200 body=%s", w.Code, w.Body.String())
+	}
+	if !resolveCalled.Load() {
+		t.Fatal("expected recovery to try normal wake before refresh fallback")
+	}
+	if !refreshCalled.Load() {
+		t.Fatal("expected recovery to refresh stopped current computer after wake failed")
+	}
+
+	var result computeRecoveryResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode recovery response: %v", err)
+	}
+	if result.CurrentComputer.State != string(vmctl.VMStateActive) {
+		t.Fatalf("current computer state = %s, want active", result.CurrentComputer.State)
+	}
+	if result.Runtime == nil || !result.Runtime.Reachable {
+		t.Fatalf("runtime after stopped fallback refresh = %+v, want reachable", result.Runtime)
+	}
+}
+
 func TestProxyHealthReportsRedactedLifecycleAggregates(t *testing.T) {
 	handler, priv, _, _ := testVMctlProxyEnv(t)
 	token := issueTestAccessJWT(priv, "lifecycle-user")
