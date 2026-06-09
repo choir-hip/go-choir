@@ -975,3 +975,87 @@ Additional evidence artifact refs:
 - `/tmp/choir-selector-compaction-1780966282777.json`
 - `/tmp/choir-selector-compaction-1780966438438.json`
 - `/tmp/choir-exhaustive-compaction-1780966715025.json`
+
+## Latest Checkpoint: Continuation Patch Landed, Prompt Pressure Still Too Weak
+
+checkpoint date: 2026-06-09
+
+Behavior commit `e56b650d974457a20c9f4c61a77b875fb6601a79` shipped a
+runtime continuation fix for ordinary provider `stop_reason=max_tokens` turns
+with partial text. The tool loop now persists the partial assistant text, emits
+a `max_tokens_continuation` retry event, asks for a concise continuation without
+adding an explicit max-token request, and preserves the partial text in the
+returned result. The same commit also tightened the compaction eval prompt so
+researchers are told to list selectors, read selector text with
+`max_text_chars:100000`, avoid giant inventories, and avoid claiming selector
+reads that Trace cannot prove.
+
+Local and CI evidence:
+
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopContinuesAfterMaxTokensPartialText|TestRunToolLoopMaxTokensWithoutTextStillFails|TestRunToolLoopRequiredToolTurnRetriesMissingToolWithoutArtificialBudget' -count=1`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestHandleCompactionRecallEvalStartsResearcherWithOverlayAndFrozenContent' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestRuntimeRunMemoryThresholdCompaction|TestRuntimeRunMemoryOverflowRetriesOnceThenCompletes|TestFrozenCorpusEvalDisablesLiveSourceAcquisitionTools|TestRuntimeRejectsExpiredModelPolicyOverlay|TestRunToolLoop' -count=1`
+  passed.
+- GitHub CI run `27177856791` completed successfully for `e56b650d`.
+- FlakeHub publish run `27177856776` completed successfully for `e56b650d`.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `e56b650d974457a20c9f4c61a77b875fb6601a79`.
+
+Deployed pilot evidence:
+
+- Temporary deployed Playwright pilot artifact
+  `/tmp/choir-compaction-continuation-pilot-1780968755221.json`.
+- Owner/user id `d8aac386-2f76-4786-98b5-bf8af0f7e083`, owner email
+  `codex-compaction-continuation-1780968755221@example.test`.
+- Overlay `continuation-compaction-1780968755221-gpt-mini` resolved the
+  researcher to `chatgpt/gpt-5.4-mini` with `low` reasoning.
+- Imported five real frozen-source ContentItems:
+  - RFC 9110 text/plain, ContentItem `f652d187-a78f-4742-9d3f-90141ac03101`,
+    adapter `plain_text_decode`, 26 selectors, 307,198 text chars;
+  - RFC 9000 text/plain, ContentItem `3ed01d24-c9f5-45d6-9956-eca09ef4671a`,
+    adapter `plain_text_decode`, 26 selectors, 307,198 text chars;
+  - RFC 8446 text/plain, ContentItem `168a1fa2-f3d0-4395-9453-ecded2697f5e`,
+    adapter `plain_text_decode`, 26 selectors, 307,199 text chars;
+  - RFC 7540 text/plain, ContentItem `db1ee446-3785-48e0-84fb-b52d2d493046`,
+    adapter `plain_text_decode`, 18 selectors, 209,571 text chars;
+  - Attention PDF, ContentItem `548bf51f-740a-4b93-84cc-49659b5130ee`,
+    adapter `pdf_poppler_pdftotext`, 15 selectors, 61,642 text chars.
+- Eval run `7b24cf27-7b5f-448c-94ab-eb408c3e9fdb` completed in staging.
+- Run metadata recorded `live_search_disabled: true`, `input_tokens: 241771`,
+  `output_tokens: 3121`, and the expected eval route metadata.
+- The result was a plausible recall answer with selector citations, but it
+  admitted only representative reads: RFC 9110 chunks 1/7/13, RFC 9000 chunks
+  1/17, RFC 8446 chunks 1/15, RFC 7540 chunks 1/8, and Attention pages 1/3.
+- The temporary Playwright trace collection failed with browser
+  `TypeError: Failed to fetch` after the run completed, so the artifact lacks a
+  trace summary. The run result and metadata are still reliable product-route
+  evidence that the current prompt route did not force exhaustive source
+  pressure or automatic compaction.
+
+Interpretation:
+
+The continuation fix is deployed, but the next pressure pilot is still
+incomplete. The current compaction eval prompt asks for more source reading but
+does not make the minimum selector-read obligation crisp enough. The model can
+still satisfy the surface wording by reading representative selectors and
+answering before runtime-owned compaction. Provider-reported `input_tokens` is
+cumulative across calls and cannot be used as proof that a single prompt crossed
+the runtime compaction threshold.
+
+Next executable probe:
+
+Before another full matrix attempt, make the eval route accept and record an
+explicit selector pressure contract, for example `read_policy:
+"exhaustive_selectors"` or `minimum_selector_reads`, and have the prompt require
+that number of actual `read_content_item_selector` calls before the final
+answer. Keep this product-visible and trace-verifiable. Also make the deployed
+pilot collect Trace through Playwright's request context or another authenticated
+product route that is less brittle than in-page `fetch`. The pilot is successful
+only when Trace proves enough selector reads, zero live-search attempts, runtime
+compaction events, and post-compaction recall.
+
+Additional evidence artifact refs:
+
+- `/tmp/choir-compaction-continuation-pilot-1780968755221.json`
