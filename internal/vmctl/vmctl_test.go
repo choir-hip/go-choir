@@ -3963,8 +3963,17 @@ func TestOwnershipRegistry_RefreshAllowsHibernatedVM(t *testing.T) {
 	}
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetVMManager(mock)
-	if _, err := reg.ResolveOrAssign("user-refresh-hibernated"); err != nil {
+	initial, err := reg.ResolveOrAssign("user-refresh-hibernated")
+	if err != nil {
 		t.Fatalf("ResolveOrAssign: %v", err)
+	}
+	mock.getVMs = map[string]*VMInstanceInfo{
+		initial.VMID: {
+			HostURL: initial.SandboxURL,
+			Epoch:   initial.Epoch,
+			Healthy: true,
+			State:   "running",
+		},
 	}
 	if err := reg.HibernateVM("user-refresh-hibernated"); err != nil {
 		t.Fatalf("HibernateVM: %v", err)
@@ -3978,6 +3987,47 @@ func TestOwnershipRegistry_RefreshAllowsHibernatedVM(t *testing.T) {
 	}
 	if own.State != VMStateActive || own.StoppedBy != "" {
 		t.Fatalf("refreshed ownership state=%s stopped_by=%q, want active/empty", own.State, own.StoppedBy)
+	}
+}
+
+func TestOwnershipRegistry_RefreshStoppedVMWithoutManagerInstanceBootsFromOwnership(t *testing.T) {
+	mock := &mockVMManager{
+		bootResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9047",
+			Epoch:   102,
+			Healthy: true,
+			State:   "running",
+		},
+	}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mock)
+	if _, err := reg.ResolveOrAssign("user-refresh-stopped-missing"); err != nil {
+		t.Fatalf("ResolveOrAssign: %v", err)
+	}
+	if err := reg.LogoutVM("user-refresh-stopped-missing"); err != nil {
+		t.Fatalf("LogoutVM: %v", err)
+	}
+	bootsBeforeRefresh := len(mock.boots)
+
+	own, err := reg.RefreshVMForDesktop("user-refresh-stopped-missing", PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("RefreshVMForDesktop: %v", err)
+	}
+	if got := len(mock.boots) - bootsBeforeRefresh; got != 1 {
+		t.Fatalf("expected 1 BootVM call for missing manager instance, got %d", got)
+	}
+	if len(mock.refreshes) != 0 {
+		t.Fatalf("expected missing manager instance to avoid RefreshVM, got %d calls", len(mock.refreshes))
+	}
+	bootCfg := mock.boots[len(mock.boots)-1]
+	if bootCfg.ComputerKind != "active" || bootCfg.OwnerID != "user-refresh-stopped-missing" || bootCfg.DesktopID != PrimaryDesktopID {
+		t.Fatalf("boot config identity = %+v, want active ownership identity", bootCfg)
+	}
+	if own.State != VMStateActive || own.StoppedBy != "" {
+		t.Fatalf("booted ownership state=%s stopped_by=%q, want active/empty", own.State, own.StoppedBy)
+	}
+	if own.SandboxURL != "http://127.0.0.1:9047" {
+		t.Fatalf("sandbox URL = %s, want boot response URL", own.SandboxURL)
 	}
 }
 

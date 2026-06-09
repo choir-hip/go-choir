@@ -2368,7 +2368,15 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 	}
 
 	if r.vmManager != nil {
-		info, err := r.vmManager.RefreshVM(own.VMID, vmManagerConfigForOwnership(own, ""))
+		var info *VMInstanceInfo
+		var err error
+		missingStoppedInstance := r.vmManager.GetVM(own.VMID) == nil &&
+			(own.State == VMStateStopped || own.State == VMStateHibernated)
+		if missingStoppedInstance {
+			info, err = r.vmManager.BootVM(vmManagerConfigForOwnership(own, issueGatewayTokenAt(r.gatewayURL, own.VMID)))
+		} else {
+			info, err = r.vmManager.RefreshVM(own.VMID, vmManagerConfigForOwnership(own, ""))
+		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to refresh VM %s: %w", own.VMID, err)
 		}
