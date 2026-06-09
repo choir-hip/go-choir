@@ -454,7 +454,7 @@ Likely first goal:
 
 ## Run Checkpoint & Resumption State
 
-status: checkpoint_incomplete_sandbox_preamble_upgraded_before_eval
+status: checkpoint_incomplete_exhaustive_pressure_max_tokens_gap
 
 last checkpoint: mission upgraded so the sandbox/user-computer document
 substrate preamble is the first active objective before any compaction recall
@@ -875,3 +875,103 @@ suggested resume goal string:
 evidence artifact refs: none yet.
 
 rollback refs: none yet.
+
+## Latest Checkpoint: Sandbox Preamble Accepted, Pressure Route Still Incomplete
+
+checkpoint date: 2026-06-09
+
+This update upgrades the mission state after the sandbox/document setup
+preamble was rechecked and accepted as the first hard gate. The Slides app
+remains explicitly out of scope; PPTX and HTML slides matter here only as
+source documents for extraction and selector reads.
+
+Current cognitive-transform conclusions:
+
+- Substrate before benchmark: compaction recall evidence is invalid unless the
+  run is reading real ContentItems with hashes, adapter metadata, extracted
+  text, and selectors through the shared researcher/VText substrate.
+- Runtime transition over confident prose: a run has not proven compaction
+  unless Trace shows runtime-owned `loop.compaction.started` and
+  `loop.compaction.completed` events followed by continued work.
+- Continuation, not cap tuning: provider `max_tokens` stops should be treated
+  as a continuation/recovery behavior gap, not fixed by adding arbitrary
+  normal-agent max-token caps or hidden model overrides.
+- Slides as source, not app: source extraction for PPTX/HTML remains in this
+  mission; deck playback, desktop icons, presentation controls, and a Slides app
+  are a separate future mission.
+
+Fresh sandbox/document gate evidence:
+
+- `git status --short --branch` reported `## main...origin/main` before this
+  checkpoint edit.
+- `nix eval .#nixosConfigurations.go-choir-sandbox-vm.config.system.build.toplevel.drvPath`
+  returned
+  `/nix/store/hjr05q52q55jnfyncf9c1s08y6xwdhrr-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d.drv`.
+- `nix eval .#nixosConfigurations.go-choir-sandbox-vm-playwright.config.system.build.toplevel.drvPath`
+  returned
+  `/nix/store/6aycih49w2x9lsf8fybv2kdmwnzkkvb5-nixos-system-go-choir-playwright-worker-26.05.20260409.4c1018d.drv`.
+- `nix/sandbox-vm.nix` declares `documentPython` with document packages
+  including `beautifulsoup4`, `ebooklib`, `pdfplumber`, and `python-docx`, and
+  includes `libreoffice`, `pandoc`, and `poppler-utils`.
+- `curl -fsS https://choir.news/health` reported proxy and sandbox deployed at
+  behavior commit `f901ce8277f2e77c6ee8384a812969a935dcfb86`.
+- Focused document substrate tests passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLCreatesPlainTextSelectors|TestContentImportURLCreatesProvenanceRecord|TestContentImportURLCleansReaderChrome|TestContentImportFileCreatesExtractedPPTXContentItem|TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot' -count=1`.
+- Focused eval/runtime tests passed:
+  `nix develop -c go test ./internal/runtime -run 'TestFrozenCorpusEvalDisablesLiveSourceAcquisitionTools|TestRuntimeRejectsExpiredModelPolicyOverlay|TestRunToolLoop' -count=1`.
+
+Fresh product-route eval evidence:
+
+- `/tmp/choir-selector-compaction-1780966124599.json`: imported 16 public
+  documents with real selectors and adapters, including long `text/plain` RFCs
+  through `plain_text_decode` and a PDF through `pdf_poppler_pdftotext`; setup
+  failed before eval launch because the new owner did not yet have
+  `System/model-policy-overlays`.
+- `/tmp/choir-selector-compaction-1780966282777.json`: imported 16 documents
+  with 227 selectors; setup failed before eval launch because the scratch
+  overlay used invalid `[rules]` TOML instead of shipped `[overlay]` plus
+  `[roles.<role>]`.
+- `/tmp/choir-selector-compaction-1780966438438.json`: targeted DeepSeek pilot
+  completed as run `1c6c6fe4-5e54-4704-998d-8b2aec1c50fb` with overlay
+  `selector-compaction-1780966438438-deepseek-v4-flash`, resolved to
+  `deepseek/deepseek-v4-flash` with `medium` reasoning. Trace showed 16
+  selector-list calls, 24 selector-read calls, zero search attempts, and zero
+  compaction events. This proves the route, overlay, frozen-source access, and
+  no-search policy, but not compaction.
+- `/tmp/choir-exhaustive-compaction-1780966715025.json`: exhaustive DeepSeek
+  pressure pilot failed as run `ad012d54-8d51-4665-8461-e0609c6ed4f7` with
+  `tool loop: model stopped at max_tokens (iteration 10)`. The run imported 16
+  items, 227 selectors, and roughly 2.5M extracted characters. Trace showed 16
+  selector-list calls, 60 selector-read calls, zero search attempts, zero
+  compaction events, and two coagent-update calls. The failing provider call
+  recorded `max_tokens: 0`, `max_tokens_requested: false`,
+  `response_text_chars: 26796`, and `stop_reason: max_tokens`.
+
+Interpretation:
+
+The sandbox setup preamble is strong enough to proceed unless a resume discovers
+a regression. The mission is still incomplete because the current
+selector-pressure route did not drive automatic compaction. The exhaustive pilot
+failed on provider output stop before crossing the 0.70 context-window
+threshold, and the targeted pilot completed without enough pressure. Prompt
+claims that all selectors were read are not authoritative; Trace tool-call
+counts are the evidence.
+
+Next executable probe:
+
+Do not launch the full five-arm matrix yet. First document and repair the
+pressure/continuation gap exposed by run
+`ad012d54-8d51-4665-8461-e0609c6ed4f7`. The next pilot must avoid giant final
+inventories, preserve or continue through provider output stops without
+arbitrary max-token config, and produce trace-level evidence of automatic
+`loop.compaction.started`/`loop.compaction.completed` followed by approximate
+and exact recall. Once one pilot arm proves that transition, run the full
+DeepSeek/Xiaomi/gpt-5.4-mini matrix against the same frozen-corpus constraints
+with live search disabled.
+
+Additional evidence artifact refs:
+
+- `/tmp/choir-selector-compaction-1780966124599.json`
+- `/tmp/choir-selector-compaction-1780966282777.json`
+- `/tmp/choir-selector-compaction-1780966438438.json`
+- `/tmp/choir-exhaustive-compaction-1780966715025.json`
