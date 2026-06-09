@@ -204,6 +204,21 @@ instead of filled with seeded stories.
   headlines. The remaining `Port backlog recedes...` text in the full desktop
   DOM came from minimized VText window titles outside the Global Wire front
   page, not from story cards.
+- Source-network metadata cleanup: commit
+  `465c9cffb65548b54f834fd9e84737b52cabbc31` changes fresh Community Wire
+  publication-approved platform article revisions to use `source_network_*`
+  provenance metadata instead of minting new `source_maxx_*` keys. The reader
+  remains backward-compatible with old `source_maxx_*` metadata for existing
+  VText revisions.
+- Local verification for `465c9cffb65548b54f834fd9e84737b52cabbc31`:
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire(PublicationArtifactApprovalPublishesEditionVText|Stories(DoesNotIndexUntranscludedPlatformVTexts|IndexesEditionTranscludedVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest))'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  - `nix develop -c scripts/go-test-runtime-shards`
+- CI/deploy for `465c9cffb65548b54f834fd9e84737b52cabbc31`: CI run
+  `27220546359` succeeded. Deploy job `80374232404` succeeded in 34s. Staging
+  `/health` reported proxy and sandbox commit
+  `465c9cffb65548b54f834fd9e84737b52cabbc31`, deployed at
+  `2026-06-09T16:29:49Z`.
 
 ## Run State
 
@@ -240,6 +255,10 @@ what was proven:
   `02c79907`.
 - Authenticated staging after `02c79907` now renders an honest empty edition
   state for that user instead of stored legacy story rows.
+- Fresh publication-approved Community Wire article revisions will no longer
+  mint new `source_maxx_*` metadata; existing legacy metadata is still accepted
+  as read-only compatibility input while the old records/routes are deleted in
+  later slices.
 
 unproven or partial claims:
 
