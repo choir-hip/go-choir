@@ -679,7 +679,8 @@ func sourceMaxxPlatformOwnerID() string {
 
 func sourceMaxxVTextStoryFromCurrentRevision(ctx context.Context, doc types.Document, rev types.Revision, styleSources []types.GlobalWireStyleSource) (types.GlobalWireStory, bool) {
 	meta := decodeRevisionMetadata(rev.Metadata)
-	if metadataString(meta, "source") != "edit_vtext" || metadataString(meta, "source_maxx_cycle_id") == "" {
+	cycleID := sourceNetworkCycleID(meta)
+	if metadataString(meta, "source") != "edit_vtext" || cycleID == "" {
 		return types.GlobalWireStory{}, false
 	}
 	content := strings.TrimSpace(rev.Content)
@@ -696,8 +697,8 @@ func sourceMaxxVTextStoryFromCurrentRevision(ctx context.Context, doc types.Docu
 		len(manifest.Contrary) == 0 &&
 		len(manifest.Context) == 0 {
 		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
-			ID:       "source-network-cycle:" + metadataString(meta, "source_maxx_cycle_id"),
-			Title:    "Source network cycle " + metadataString(meta, "source_maxx_cycle_id"),
+			ID:       "source-network-cycle:" + cycleID,
+			Title:    "Source network cycle " + cycleID,
 			Standing: "source firehose cycle",
 			Role:     "context",
 		})
@@ -905,7 +906,7 @@ func sourceMaxxSourceEntityManifestStanding(entity vtextSourceEntity) string {
 
 func sourceMaxxManifestFromCycleProvenance(meta map[string]any, headline string) types.GlobalWireSourceManifest {
 	manifest := types.GlobalWireSourceManifest{}
-	cycleID := metadataString(meta, "source_maxx_cycle_id")
+	cycleID := sourceNetworkCycleID(meta)
 	sourceIDs := sourceMaxxMetadataStringSlice(meta["source_item_ids"])
 	switch {
 	case cycleID != "":
@@ -1060,7 +1061,7 @@ func sourceMaxxArticleClaims(content, _ string, meta map[string]any) []string {
 		"Current head is a normal VText article revision owned by the Global Wire platform agent.",
 		"Source and style provenance are carried by the VText revision metadata and citations.",
 	}
-	if cycleID := metadataString(meta, "source_maxx_cycle_id"); cycleID != "" {
+	if cycleID := sourceNetworkCycleID(meta); cycleID != "" {
 		claims = append(claims, "Source network cycle: "+cycleID)
 	}
 	if rationale := metadataString(meta, "selected_style_rationale"); rationale != "" {
@@ -1071,6 +1072,10 @@ func sourceMaxxArticleClaims(content, _ string, meta map[string]any) []string {
 	}
 	_ = content
 	return claims
+}
+
+func sourceNetworkCycleID(meta map[string]any) string {
+	return firstNonEmptyString(metadataString(meta, "source_network_cycle_id"), metadataString(meta, "source_maxx_cycle_id"))
 }
 
 func sourceMaxxFreshness(updatedAt time.Time) string {
@@ -5079,25 +5084,25 @@ func communityWirePlatformArticleMetadata(approvingOwner string, artifact types.
 	}
 	selectedStyleTitle := firstNonEmptyString(review.StyleTitle, "Style.vtext: Global Wire")
 	return json.Marshal(map[string]any{
-		"source":                   "edit_vtext",
-		"source_maxx_cycle_id":     "publication-artifact:" + artifact.ID,
-		"source_maxx_request_id":   artifact.UpdateID,
-		"source_maxx_request_kind": "community_wire_publication_approval",
-		"created_from":             "global_wire_publication_artifact_approval",
-		"artifact_kind":            "article_revision",
-		"article_version":          true,
-		"approving_owner_id":       approvingOwner,
-		"publication_artifact_id":  artifact.ID,
-		"publication_update_id":    artifact.UpdateID,
-		"source_owner_doc_id":      sourceDoc.DocID,
-		"source_owner_revision_id": sourceRev.RevisionID,
-		"projection_review":        review.ID,
-		"storygraph_id":            artifact.StoryID,
-		"candidate_id":             artifact.CandidateID,
-		"source_content_id":        artifact.SourceContentID,
-		"selected_style_sources":   []map[string]any{{"title": selectedStyleTitle}},
-		"selected_style_rationale": "Owner-approved Community Wire publication artifact.",
-		"source_entities":          sourceEntities,
+		"source":                      "edit_vtext",
+		"source_network_cycle_id":     "publication-artifact:" + artifact.ID,
+		"source_network_request_id":   artifact.UpdateID,
+		"source_network_request_kind": "community_wire_publication_approval",
+		"created_from":                "global_wire_publication_artifact_approval",
+		"artifact_kind":               "article_revision",
+		"article_version":             true,
+		"approving_owner_id":          approvingOwner,
+		"publication_artifact_id":     artifact.ID,
+		"publication_update_id":       artifact.UpdateID,
+		"source_owner_doc_id":         sourceDoc.DocID,
+		"source_owner_revision_id":    sourceRev.RevisionID,
+		"projection_review":           review.ID,
+		"storygraph_id":               artifact.StoryID,
+		"candidate_id":                artifact.CandidateID,
+		"source_content_id":           artifact.SourceContentID,
+		"selected_style_sources":      []map[string]any{{"title": selectedStyleTitle}},
+		"selected_style_rationale":    "Owner-approved Community Wire publication artifact.",
+		"source_entities":             sourceEntities,
 	})
 }
 

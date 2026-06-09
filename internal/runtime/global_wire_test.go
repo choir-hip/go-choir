@@ -448,6 +448,25 @@ func TestHandleGlobalWirePublicationArtifactApprovalPublishesEditionVText(t *tes
 	if reviewResp.Edition == nil || len(reviewResp.Edition.IncludedDocIDs) != 1 {
 		t.Fatalf("artifact approval missing edition update: %+v", reviewResp)
 	}
+	platformArticleDoc, err := handler.rt.Store().GetDocument(context.Background(), reviewResp.Edition.IncludedDocIDs[0], sourceMaxxPlatformOwnerID())
+	if err != nil {
+		t.Fatalf("get platform article doc: %v", err)
+	}
+	platformArticleRev, err := handler.rt.Store().GetRevision(context.Background(), platformArticleDoc.CurrentRevisionID, sourceMaxxPlatformOwnerID())
+	if err != nil {
+		t.Fatalf("get platform article revision: %v", err)
+	}
+	platformArticleMeta := decodeRevisionMetadata(platformArticleRev.Metadata)
+	if metadataString(platformArticleMeta, "source_network_cycle_id") != "publication-artifact:"+artifact.ID ||
+		metadataString(platformArticleMeta, "source_network_request_id") != update.ID ||
+		metadataString(platformArticleMeta, "source_network_request_kind") != "community_wire_publication_approval" {
+		t.Fatalf("platform article missing source-network metadata: %+v", platformArticleMeta)
+	}
+	if metadataString(platformArticleMeta, "source_maxx_cycle_id") != "" ||
+		metadataString(platformArticleMeta, "source_maxx_request_id") != "" ||
+		metadataString(platformArticleMeta, "source_maxx_request_kind") != "" {
+		t.Fatalf("platform article should not mint SourceMaxx metadata: %+v", platformArticleMeta)
+	}
 
 	storiesW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", ownerID)
 	if storiesW.Code != http.StatusOK {
