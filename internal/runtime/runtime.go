@@ -1632,6 +1632,43 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	if initialPrompt == "" {
 		initialPrompt = "Create the first useful current-state version of this vtext document."
 	}
+	if vtextPromptNeedsSuperExecution(decision.SeedPrompt + " " + initialPrompt) {
+		requestCtx := WithToolExecutionContext(ctx, &types.RunRecord{
+			RunID:        rec.RunID,
+			AgentID:      "vtext:" + doc.DocID,
+			ChannelID:    doc.DocID,
+			AgentProfile: AgentProfileVText,
+			AgentRole:    AgentProfileVText,
+			OwnerID:      rec.OwnerID,
+			SandboxID:    rec.SandboxID,
+			Metadata:     rec.Metadata,
+		})
+		superResult, err := rt.requestPersistentSuperExecution(requestCtx, rec.OwnerID, doc.DocID, rec.RunID, "vtext:"+doc.DocID, initialPrompt, "")
+		if err != nil {
+			return conductorDecision{}, fmt.Errorf("request initial super execution: %w", err)
+		}
+		if loopID, _ := superResult["loop_id"].(string); strings.TrimSpace(loopID) != "" {
+			decision.InitialLoopID = loopID
+		}
+		decision = fillConductorDecisionFromRun(rec, decision)
+		if rec.Metadata == nil {
+			rec.Metadata = make(map[string]any)
+		}
+		rec.Metadata["doc_id"] = decision.DocID
+		rec.Metadata["user_revision_id"] = decision.UserRevisionID
+		rec.Metadata["initial_revision_id"] = decision.InitialRevisionID
+		rec.Metadata["initial_loop_id"] = decision.InitialLoopID
+		rec.Metadata["initial_handoff"] = "persistent_super"
+		if out, err := json.Marshal(decision); err == nil {
+			rec.Result = string(out)
+		}
+		rec.UpdatedAt = time.Now().UTC()
+
+		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+			return conductorDecision{}, fmt.Errorf("persist conductor route: %w", err)
+		}
+		return decision, nil
+	}
 	initialRun, err := rt.submitVTextAgentRevisionRun(ctx, doc, rec.OwnerID, vtextAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
 		Prompt: initialPrompt,

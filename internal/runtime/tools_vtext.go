@@ -226,78 +226,96 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 			if channelID == "" {
 				channelID = stringFromToolContext(ctx, toolCtxChannelID)
 			}
-			superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+			result, err := rt.requestPersistentSuperExecution(ctx, ownerID, channelID, requesterRunID, requesterAgentID, objective, in.Model)
 			if err != nil {
 				return "", err
-			}
-			if channelID == "" {
-				channelID = superAgent.ChannelID
-			}
-			if model := strings.TrimSpace(in.Model); model != "" {
-				objective += "\n\nRequested model: " + model
-			}
-			rt.superRequestMu.Lock()
-			defer rt.superRequestMu.Unlock()
-			if existing, ok, err := rt.findExistingSuperExecutionRequest(ctx, ownerID, channelID, superAgent.AgentID, requesterRunID, requesterAgentID); err != nil {
-				return "", err
-			} else if ok {
-				superRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
-				if err != nil {
-					return "", err
-				}
-				loopID := ""
-				state := ""
-				if superRun != nil {
-					loopID = superRun.RunID
-					state = string(superRun.State)
-				}
-				result := map[string]any{
-					"agent_id":            superAgent.AgentID,
-					"loop_id":             loopID,
-					"channel_id":          channelID,
-					"cursor":              existing.Seq,
-					"profile":             superAgent.Profile,
-					"role":                superAgent.Role,
-					"requested_by":        requesterAgentID,
-					"requested_by_run_id": requesterRunID,
-					"persistent":          true,
-					"state":               state,
-					"request_source":      "super_inbox",
-					"deduped":             true,
-					"dedupe_reason":       "vtext_run_already_requested_super",
-				}
-				return toolResultJSON(result)
-			}
-			cursor, err := rt.ChannelCast(ctx, channelID, superAgent.AgentID, "", requesterAgentID, AgentProfileVText, objective)
-			if err != nil {
-				return "", err
-			}
-			superRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
-			if err != nil {
-				return "", err
-			}
-			loopID := ""
-			state := ""
-			if superRun != nil {
-				loopID = superRun.RunID
-				state = string(superRun.State)
-			}
-			result := map[string]any{
-				"agent_id":            superAgent.AgentID,
-				"loop_id":             loopID,
-				"channel_id":          channelID,
-				"cursor":              cursor,
-				"profile":             superAgent.Profile,
-				"role":                superAgent.Role,
-				"requested_by":        requesterAgentID,
-				"requested_by_run_id": requesterRunID,
-				"persistent":          true,
-				"state":               state,
-				"request_source":      "super_inbox",
 			}
 			return toolResultJSON(result)
 		},
 	}
+}
+
+func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID, channelID, requesterRunID, requesterAgentID, objective, model string) (map[string]any, error) {
+	objective = strings.TrimSpace(objective)
+	if objective == "" {
+		return nil, fmt.Errorf("objective must not be empty")
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return nil, fmt.Errorf("request_super_execution missing owner context")
+	}
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" {
+		channelID = superAgent.ChannelID
+	}
+	if model := strings.TrimSpace(model); model != "" {
+		objective += "\n\nRequested model: " + model
+	}
+	requesterAgentID = strings.TrimSpace(requesterAgentID)
+	requesterRunID = strings.TrimSpace(requesterRunID)
+
+	rt.superRequestMu.Lock()
+	defer rt.superRequestMu.Unlock()
+	if existing, ok, err := rt.findExistingSuperExecutionRequest(ctx, ownerID, channelID, superAgent.AgentID, requesterRunID, requesterAgentID); err != nil {
+		return nil, err
+	} else if ok {
+		superRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+		if err != nil {
+			return nil, err
+		}
+		loopID := ""
+		state := ""
+		if superRun != nil {
+			loopID = superRun.RunID
+			state = string(superRun.State)
+		}
+		return map[string]any{
+			"agent_id":            superAgent.AgentID,
+			"loop_id":             loopID,
+			"channel_id":          channelID,
+			"cursor":              existing.Seq,
+			"profile":             superAgent.Profile,
+			"role":                superAgent.Role,
+			"requested_by":        requesterAgentID,
+			"requested_by_run_id": requesterRunID,
+			"persistent":          true,
+			"state":               state,
+			"request_source":      "super_inbox",
+			"deduped":             true,
+			"dedupe_reason":       "vtext_run_already_requested_super",
+		}, nil
+	}
+	cursor, err := rt.ChannelCast(ctx, channelID, superAgent.AgentID, "", requesterAgentID, AgentProfileVText, objective)
+	if err != nil {
+		return nil, err
+	}
+	superRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	loopID := ""
+	state := ""
+	if superRun != nil {
+		loopID = superRun.RunID
+		state = string(superRun.State)
+	}
+	return map[string]any{
+		"agent_id":            superAgent.AgentID,
+		"loop_id":             loopID,
+		"channel_id":          channelID,
+		"cursor":              cursor,
+		"profile":             superAgent.Profile,
+		"role":                superAgent.Role,
+		"requested_by":        requesterAgentID,
+		"requested_by_run_id": requesterRunID,
+		"persistent":          true,
+		"state":               state,
+		"request_source":      "super_inbox",
+	}, nil
 }
 
 func (rt *Runtime) findExistingSuperExecutionRequest(ctx context.Context, ownerID, channelID, superAgentID, requesterRunID, requesterAgentID string) (types.ChannelMessage, bool, error) {

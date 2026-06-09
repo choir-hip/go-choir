@@ -50,7 +50,7 @@ func TestHandlePromptBarVTextRouteCompletesConductorSynchronously(t *testing.T) 
 	}
 }
 
-func TestHandlePromptBarOperationalProofInitialRunRequestsSuperFirst(t *testing.T) {
+func TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Community Wire staging proof request: run the existing source-refresh/research/projection/publication flow, create or approve an Article VText, update global-wire/Wire.vtext, then leave evidence ids and verifier proof."}`, "user-alice")
@@ -77,9 +77,15 @@ func TestHandlePromptBarOperationalProofInitialRunRequestsSuperFirst(t *testing.
 	}
 	initialRun, err := rt.GetRun(context.Background(), decision.InitialLoopID, "user-alice")
 	if err != nil {
-		t.Fatalf("get initial vtext run: %v", err)
+		t.Fatalf("get initial loop run: %v", err)
 	}
-	if got := initialVTextToolChoice(initialRun); got != exactRequiredToolChoice("request_super_execution") {
-		t.Fatalf("initial tool choice = %q, want request_super_execution", got)
+	if initialRun.AgentProfile != AgentProfileSuper || initialRun.AgentRole != AgentProfileSuper {
+		t.Fatalf("initial loop profile = %q/%q, want super", initialRun.AgentProfile, initialRun.AgentRole)
+	}
+	if initialRun.ChannelID != decision.DocID {
+		t.Fatalf("initial super channel = %q, want vtext doc %q", initialRun.ChannelID, decision.DocID)
+	}
+	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got != "persistent_super" {
+		t.Fatalf("initial_handoff = %q, want persistent_super", got)
 	}
 }

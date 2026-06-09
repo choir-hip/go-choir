@@ -265,6 +265,16 @@ instead of filled with seeded stories.
   state. The local exact initial tool-choice repair is therefore insufficient
   as a product fix; the operational handoff must not depend on another VText
   provider turn to create the persistent-super request.
+- Deterministic super handoff repair implemented locally: prompt-bar VText
+  materialization still creates the user prompt VText seed, but when the prompt
+  is classified as execution/proof work it now casts the request to persistent
+  super from runtime with VText channel context and uses the resulting super
+  run as the initial loop. The VText provider turn is skipped for this initial
+  operational handoff.
+- Local verification for the deterministic super handoff:
+  - `nix develop -c go test ./internal/runtime -run 'TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestInitialVTextToolChoiceUsesExactTools|TestRequestSuper|TestVTextRequestSuper'`
+  - `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice)'`
+  - `nix develop -c scripts/go-test-runtime-shards`
 
 ## Run State
 
@@ -320,6 +330,9 @@ what was proven:
   deterministically inside the runtime when the prompt is classified as an
   operational execution/proof request, rather than asking the VText model to
   make that handoff.
+- The deterministic handoff repair now exists locally and is covered by
+  focused prompt-bar tests plus all runtime shards. It still needs CI, deploy,
+  and an authenticated staging reprobe.
 
 unproven or partial claims:
 
@@ -335,6 +348,7 @@ unproven or partial claims:
 - The first prompt orchestration repair was pushed and deployed, but
   authenticated staging reprobe still hit the VText Fireworks 412 blocker
   before any visible persistent-super handoff.
+- The deterministic handoff repair is not yet deployed or reprobed on staging.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -342,9 +356,9 @@ unproven or partial claims:
 
 next step:
 
-- Replace provider-steered operational handoff with a deterministic runtime
-  persistent-super request for execution/proof prompts, deploy it, verify that
-  the authenticated staging Community Wire proof prompt produces a visible
-  super execution handoff, then use that path to create/update
-  `global-wire/Wire.vtext` through the product source cycle rather than test
-  fixtures and prove staging renders edition-transcluded VText articles.
+- Land and deploy the deterministic runtime persistent-super request for
+  execution/proof prompts, verify that the authenticated staging Community Wire
+  proof prompt produces a visible super execution handoff, then use that path
+  to create/update `global-wire/Wire.vtext` through the product source cycle
+  rather than test fixtures and prove staging renders edition-transcluded VText
+  articles.

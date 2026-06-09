@@ -218,6 +218,10 @@ Update after 2026-06-09 staging slices:
   a VText document and hit the Fireworks 412 blocker. The next repair should
   create the persistent-super handoff deterministically in runtime for
   operational proof prompts, not depend on another VText provider turn.
+- Local deterministic handoff repair: prompt-bar VText materialization still
+  creates the user prompt VText seed, but execution/proof prompts now cast the
+  request directly to persistent super from runtime with VText channel context
+  and use the resulting super run as the initial loop.
 
 ## Homotopy Parameters
 
@@ -501,6 +505,10 @@ what was proven:
   `cbfd0637ab921947bfd5652fbe47411dca20ef79`. An authenticated `Command
   prompt` reprobe still opened a VText document and reported the same
   Fireworks 412 blocker before any visible persistent-super execution handoff.
+- Deterministic handoff repair locally verified:
+  `nix develop -c go test ./internal/runtime -run 'TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestInitialVTextToolChoiceUsesExactTools|TestRequestSuper|TestVTextRequestSuper'`,
+  `nix develop -c go test ./internal/runtime -run 'Test(VText|HandlePromptBar|InitialVText|RequestSuper|ToolChoice)'`,
+  and `nix develop -c scripts/go-test-runtime-shards`.
 
 unproven or partial claims:
 
@@ -517,13 +525,13 @@ unproven or partial claims:
   drafting.
 - The first prompt orchestration repair was deployed and reprobed on staging,
   but it still depends on a VText provider turn and failed with Fireworks 412.
+- The deterministic handoff repair is not yet deployed or reprobed on staging.
 
 next step:
 
-- Replace provider-steered handoff with a deterministic runtime
-  persistent-super request for operational proof prompts, deploy it, verify the
-  authenticated staging command prompt produces a visible super execution
-  handoff for the Community Wire proof prompt, then run a staging product-path
-  proof that creates or approves a real article VText, updates
-  `global-wire/Wire.vtext`, and renders the edition-transcluded article in
-  Global Wire.
+- Land and deploy the deterministic runtime persistent-super request for
+  operational proof prompts, verify the authenticated staging command prompt
+  produces a visible super execution handoff for the Community Wire proof
+  prompt, then run a staging product-path proof that creates or approves a real
+  article VText, updates `global-wire/Wire.vtext`, and renders the
+  edition-transcluded article in Global Wire.
