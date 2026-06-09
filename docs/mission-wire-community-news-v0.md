@@ -344,23 +344,39 @@ status: checkpoint_incomplete
 last checkpoint:
 
 - Wire/cloud/computer ontology specified.
-- No behavior-changing code has been changed by this mission document.
+- Problem-documentation-first checkpoint committed as `87f7df56`.
+- First behavior slice removed active frontend preview stories and backend
+  read-time story seeding locally.
 
 current artifact state:
 
-- Existing code still contains legacy graph/seeded-story behavior and hardcoded
-  frontend preview stories.
+- The local Wire app/API path no longer invents seeded front-page stories when
+  no VText-owned articles exist.
+- Existing code still contains legacy StoryGraph/SourceMaxx data structures,
+  style-source, source-refresh, publication, autoradio, newsletter, and deeper
+  compatibility behavior that has not yet been deleted.
 - Existing source daemon has broad but shallow source ingestion.
 
 what shipped:
 
-- Mission/spec docs only when this document is committed.
+- Docs-first checkpoint commit `87f7df56`.
+- First behavior slice is implemented locally but not yet committed, pushed, or
+  deployed.
 
 what was proven:
 
 - Code review identified old seeded paths and source-ingestion gaps.
 - Existing docs now distinguish Community Cloud, Private Cloud, platform
   computers, user computers, Wire, and userland personalization.
+- Focused local tests and build proved the first deletion slice:
+  `nix develop -c go test ./internal/store -run 'TestGlobalWireStoriesDoNotSeedFakeFrontPage'`,
+  `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWireStories(ReturnsHonestEmptyState|IndexesSourceNetworkVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest)'`,
+  `nix develop -c go test ./internal/store -run '^$'`,
+  `nix develop -c go test ./internal/runtime -run '^$'`, and
+  `npm run build` in `frontend/`.
+- Local browser proof against `http://127.0.0.1:5173/` showed zero stories,
+  visible empty edition state, no seed text, no `Port backlog recedes`, and
+  `community-wire-vtext-index` as the data source.
 
 unproven or partial claims:
 
@@ -368,3 +384,4 @@ unproven or partial claims:
 - Real VText creation from current source cycles.
 - Telegram API ingestion.
 - Removal of Telegram public preview HTML scraping from the Wire ingestion path.
+- Staging deploy identity and product-path acceptance for this behavior slice.

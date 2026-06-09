@@ -27,7 +27,7 @@ async function applyTheme(page, id) {
   }, { id, name: names[id] });
 }
 
-test('Global Wire renders as a living newspaper surface with every article openable as VText', async ({ page }) => {
+test('Global Wire renders an honest empty edition instead of preview stories', async ({ page }) => {
   await page.goto(BASE_URL);
   await openDeskApp(page, 'global-wire');
 
@@ -36,24 +36,11 @@ test('Global Wire renders as a living newspaper surface with every article opena
   await expect(app.getByRole('heading', { name: 'Global Wire' })).toBeVisible();
   await expect(app.locator('text=SourceMaxx newsroom')).toHaveCount(0);
   await expect(app.locator('text=Living source network')).toBeVisible();
-  await expect(app.locator('[data-global-wire-story]')).toHaveCount(3);
-  await expect(app.locator('[data-global-wire-story-reader]').first()).toContainText('Port congestion indicators eased');
-
-  await expect(app.locator('[data-global-wire-open-vtext]')).toHaveCount(3);
-  await expect(app.locator('[data-global-wire-open-vtext]').first()).not.toContainText('Open in VText');
-  await app.locator('[data-global-wire-open-vtext]').first().click();
-  const vtext = page.locator('[data-vtext-editor]').last();
-  await expect(vtext).toBeVisible();
-  await expect(vtext.locator('[data-vtext-source-ref]').first()).toBeVisible();
-  await expect(vtext.locator('[data-vtext-related-ref]').first()).toBeVisible();
-  await expect(vtext).not.toContainText('Source Manifest');
-  await expect(vtext).not.toContainText('User edits create user-owned versions');
-  await expect(vtext).not.toContainText('The current version keeps');
-
-  await vtext.locator('[data-vtext-related-ref]').first().click();
-  const relatedVText = page.locator('[data-vtext-editor]').last();
-  await expect(relatedVText).toContainText('Grid operators add reserve alerts as heat forecast shifts north');
-  await expect(relatedVText).toContainText('Forecast changes moved stress');
+  await expect(app.locator('[data-global-wire-story]')).toHaveCount(0);
+  await expect(app.locator('[data-global-wire-empty-state]')).toBeVisible();
+  await expect(app.locator('[data-global-wire-empty-state]')).toContainText('No Wire edition articles yet');
+  await expect(app.locator('text=Port backlog recedes')).toHaveCount(0);
+  await expect(app.locator('text=seed source neighborhood')).toHaveCount(0);
 });
 
 test('Global Wire retries authenticated story loads after transient route failure', async ({ browser, authenticatedState }) => {
@@ -92,7 +79,7 @@ test('Global Wire retries authenticated story loads after transient route failur
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ source: 'durable-storygraph+source-network-vtexts', stories: liveStories }),
+        body: JSON.stringify({ source: 'community-wire-vtext-index', stories: liveStories }),
       });
     });
 
@@ -137,15 +124,8 @@ test('Global Wire has no nested dashboard panels, story boxes, theme selector, o
   await expect(app.locator('text=StoryGraph desk')).toHaveCount(0);
   await expect(app.locator('text=StoryGraph news desk')).toHaveCount(0);
 
-  const storyBoxBorder = await app.locator('[data-global-wire-story]').first().evaluate((node) => {
-    const style = getComputedStyle(node);
-    return {
-      borderTopWidth: style.borderTopWidth,
-      overflowY: style.overflowY,
-    };
-  });
-  expect(storyBoxBorder.borderTopWidth).toBe('0px');
-  expect(storyBoxBorder.overflowY).not.toBe('auto');
+  await expect(app.locator('[data-global-wire-story]')).toHaveCount(0);
+  await expect(app.locator('[data-global-wire-empty-state]')).toBeVisible();
 });
 
 test('Global Wire remains a responsive Choir web desktop app across all three themes', async ({ page }) => {
@@ -156,20 +136,20 @@ test('Global Wire remains a responsive Choir web desktop app across all three th
   for (const themeId of ['futuristic-noir', 'carbon-fiber-kintsugi', 'london-salmon']) {
     await applyTheme(page, themeId);
     await expect(page.locator('.app-root')).toHaveAttribute('data-theme-id', themeId);
-    await expect(app.locator('[data-global-wire-story]').first()).toBeVisible();
+    await expect(app.locator('[data-global-wire-empty-state]')).toBeVisible();
   }
 
   await page.setViewportSize({ width: 430, height: 860 });
-  await expect(app.locator('[data-global-wire-story]').first()).toBeVisible();
+  await expect(app.locator('[data-global-wire-empty-state]')).toBeVisible();
 
   const layout = await app.evaluate((node) => {
     const paper = node.querySelector('.wire-paper');
     const columns = node.querySelector('.article-columns');
     return {
       paperDisplay: getComputedStyle(paper).display,
-      columnTracks: getComputedStyle(columns).gridTemplateColumns.split(' ').length,
+      columnTracks: columns ? getComputedStyle(columns).gridTemplateColumns.split(' ').length : 0,
     };
   });
   expect(layout.paperDisplay).toBe('block');
-  expect(layout.columnTracks).toBe(1);
+  expect(layout.columnTracks).toBe(0);
 });

@@ -488,7 +488,8 @@ type globalWireSourceUpdateClassification struct {
 	Rationale            string
 }
 
-// HandleGlobalWireStories returns the authenticated owner's durable StoryGraph.
+// HandleGlobalWireStories returns authenticated Wire stories without inventing
+// seeded front-page content.
 func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -501,17 +502,17 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 	}
 	stories, err := h.rt.Store().ListGlobalWireStories(r.Context(), ownerID)
 	if err != nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load global wire StoryGraph"})
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load Wire articles"})
 		return
 	}
 	styleSources := []types.GlobalWireStyleSource{}
 	if len(stories) > 0 {
 		styleSources = stories[0].StyleSources
 	}
-	source := "durable-storygraph"
+	source := "community-wire-vtext-index"
 	if sourceMaxxStories, err := h.sourceMaxxVTextStories(r.Context(), styleSources, 12); err == nil && len(sourceMaxxStories) > 0 {
 		stories = prependGlobalWireStories(sourceMaxxStories, stories)
-		source = "durable-storygraph+source-network-vtexts"
+		source = "community-wire-vtext-index"
 	} else if err != nil {
 		log.Printf("global wire: source-network vtext index unavailable: %v", err)
 	}

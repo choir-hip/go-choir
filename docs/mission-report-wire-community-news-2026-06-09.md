@@ -90,6 +90,21 @@ instead of filled with seeded stories.
 - Initial worktree state: clean `git status --short`, 2026-06-09.
 - Problem checkpoint evidence: code search and focused file inspection listed
   above.
+- Docs-first checkpoint commit: `87f7df56`.
+- First behavior slice: backend story reads no longer auto-seed fake stories;
+  the authenticated stories endpoint returns `community-wire-vtext-index`; the
+  frontend no longer contains hardcoded preview stories and renders an honest
+  empty edition state when no VText-indexed articles exist.
+- Focused tests:
+  - `nix develop -c go test ./internal/store -run 'TestGlobalWireStoriesDoNotSeedFakeFrontPage'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWireStories(ReturnsHonestEmptyState|IndexesSourceNetworkVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest)'`
+  - `nix develop -c go test ./internal/store -run '^$'`
+  - `nix develop -c go test ./internal/runtime -run '^$'`
+  - `npm run build` in `frontend/`
+- Local browser proof against `http://127.0.0.1:5173/`: Global Wire opened,
+  `storyCount` was `0`, `[data-global-wire-empty-state]` was visible, seed text
+  count was `0`, `Port backlog recedes` count was `0`, and
+  `data-global-wire-data-source` was `community-wire-vtext-index`.
 
 ## Run State
 
@@ -98,19 +113,27 @@ status: checkpoint_incomplete
 current artifact state:
 
 - Problem documented before behavior changes.
-- No behavior-changing code has been changed yet in this run.
+- First deletion slice implemented locally: fake frontend preview stories and
+  backend read-time story seeding are removed from the active app/API path.
+- Existing deeper legacy SourceMaxx, style-source, publication, newsletter, and
+  autoradio compatibility routes remain for later deletion/replacement.
 
 what was proven:
 
 - The legacy fake/seeded front-page behavior remains in active code and tests.
+- The local app can now render an honest empty Community Wire state without
+  seeded preview articles.
+- Focused store/runtime tests and frontend production build pass.
 
 unproven or partial claims:
 
 - No staging acceptance proof yet.
 - No source-cycle proof yet.
 - No VText edition rendering proof yet.
+- No commit/push/deploy proof yet for the first behavior slice.
 
 next step:
 
-- Commit this documentation checkpoint, then make the first behavior-changing
-  deletion slice.
+- Commit the first behavior-changing deletion slice, push, monitor CI/deploy,
+  then verify staging identity and product-path behavior before increasing
+  realism toward edition VText rendering.

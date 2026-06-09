@@ -16,7 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts(t *testing.T) {
+func TestHandleGlobalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	_, handler := testAPISetup(t)
 
 	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-global-wire")
@@ -27,46 +27,14 @@ func TestHandleGlobalWireStoriesSeedsDurableStoryGraphAndVTexts(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "durable-storygraph" {
-		t.Fatalf("source = %q, want durable-storygraph", resp.Source)
+	if resp.Source != "community-wire-vtext-index" {
+		t.Fatalf("source = %q, want community-wire-vtext-index", resp.Source)
 	}
-	if len(resp.Stories) != 3 {
-		t.Fatalf("stories length = %d, want 3", len(resp.Stories))
+	if len(resp.Stories) != 0 {
+		t.Fatalf("stories length = %d, want no seeded stories", len(resp.Stories))
 	}
-	story := resp.Stories[0]
-	if story.StoryVTextDoc == "" {
-		t.Fatalf("story has no linked VText doc: %+v", story)
-	}
-	if story.Freshness != "seed source neighborhood" {
-		t.Fatalf("seed story freshness = %q, want honest seed status", story.Freshness)
-	}
-	if story.ProjectionVTextDocs["claim-audit-style"] == "" {
-		t.Fatalf("story has no claim-audit projection VText doc: %+v", story.ProjectionVTextDocs)
-	}
-	if len(story.Manifest.Lead) == 0 || len(story.Manifest.Supporting) == 0 || len(story.Manifest.Contrary) == 0 || len(story.Manifest.Context) == 0 {
-		t.Fatalf("story manifest is missing required evidence tiers: %+v", story.Manifest)
-	}
-	if story.Manifest.Lead[0].ContentID == "" {
-		t.Fatalf("lead source has no backing content item: %+v", story.Manifest.Lead[0])
-	}
-	if len(resp.StyleSources) != 3 {
-		t.Fatalf("style_sources length = %d, want 3", len(resp.StyleSources))
-	}
-	if resp.StyleSources[0].DocID == "" {
-		t.Fatalf("style source has no citeable VText doc: %+v", resp.StyleSources[0])
-	}
-
-	docW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/vtext/documents/"+story.StoryVTextDoc, "", "user-global-wire")
-	if docW.Code != http.StatusOK {
-		t.Fatalf("get linked story VText status = %d body=%s", docW.Code, docW.Body.String())
-	}
-	projectionW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/vtext/documents/"+story.ProjectionVTextDocs["claim-audit-style"], "", "user-global-wire")
-	if projectionW.Code != http.StatusOK {
-		t.Fatalf("get linked projection VText status = %d body=%s", projectionW.Code, projectionW.Body.String())
-	}
-	sourceW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/content/items/"+story.Manifest.Lead[0].ContentID, "", "user-global-wire")
-	if sourceW.Code != http.StatusOK {
-		t.Fatalf("get linked source content item status = %d body=%s", sourceW.Code, sourceW.Body.String())
+	if len(resp.StyleSources) != 0 {
+		t.Fatalf("style_sources length = %d, want no seeded style sources", len(resp.StyleSources))
 	}
 }
 
@@ -122,11 +90,11 @@ func TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "durable-storygraph+source-network-vtexts" {
+	if resp.Source != "community-wire-vtext-index" {
 		t.Fatalf("source = %q, want source network vtext index", resp.Source)
 	}
-	if len(resp.Stories) < 4 {
-		t.Fatalf("stories length = %d, want source maxx story plus seeded stories", len(resp.Stories))
+	if len(resp.Stories) != 1 {
+		t.Fatalf("stories length = %d, want only source VText story", len(resp.Stories))
 	}
 	story := resp.Stories[0]
 	if story.ID != "source-network-vtext-"+doc.DocID ||

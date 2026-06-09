@@ -151,16 +151,13 @@ var defaultGlobalWireStories = []types.GlobalWireStory{
 	},
 }
 
-// ListGlobalWireStories returns the owner's durable StoryGraph records, seeding
-// the initial source-neighborhood graph if the owner has not opened Global Wire
-// before.
+// ListGlobalWireStories returns the owner's existing Wire story records. It
+// does not create default stories; an empty result is the honest state until
+// VText-owned Wire articles exist.
 func (s *Store) ListGlobalWireStories(ctx context.Context, ownerID string) ([]types.GlobalWireStory, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {
 		return nil, fmt.Errorf("owner_id is required")
-	}
-	if err := s.ensureDefaultGlobalWireStories(ctx, ownerID); err != nil {
-		return nil, err
 	}
 	rows, err := s.readDB.QueryContext(ctx,
 		`SELECT owner_id, story_id, headline, dek, freshness, prominence, tension, change_state,
@@ -187,6 +184,9 @@ func (s *Store) ListGlobalWireStories(ctx context.Context, ownerID string) ([]ty
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate global wire stories: %w", err)
 	}
+	if err := s.ensureExistingGlobalWireArticleVTextRevisions(ctx, ownerID); err != nil {
+		return nil, err
+	}
 	if err := s.attachGlobalWireProjectionRefs(ctx, ownerID, stories); err != nil {
 		return nil, err
 	}
@@ -199,9 +199,6 @@ func (s *Store) GetGlobalWireStory(ctx context.Context, ownerID, storyID string)
 	storyID = strings.TrimSpace(storyID)
 	if ownerID == "" || storyID == "" {
 		return types.GlobalWireStory{}, ErrNotFound
-	}
-	if err := s.ensureDefaultGlobalWireStories(ctx, ownerID); err != nil {
-		return types.GlobalWireStory{}, err
 	}
 	row := s.readDB.QueryRowContext(ctx,
 		`SELECT owner_id, story_id, headline, dek, freshness, prominence, tension, change_state,

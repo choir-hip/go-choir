@@ -6,129 +6,17 @@
 
   const dispatch = createEventDispatcher();
 
-  const previewStories = [
-    {
-      id: 'story-supply-resilience',
-      headline: 'Port backlog recedes as carriers warn of uneven inland recovery',
-      dek: 'Lead port indicators improved this week, while rail dwell and warehouse reports still show regional stress.',
-      freshness: 'seed source neighborhood',
-      prominence: 82,
-      tension: 'qualifying evidence',
-      changeState: 'claim narrowed',
-      nodeTone: 'live',
-      related: ['story-energy-grid', 'story-retail-margins'],
-      manifest: {
-        lead: [
-          { id: 'source-port-authority', title: 'Port authority throughput bulletin', standing: 'official operations bulletin', role: 'lead' },
-          { id: 'source-carrier-note', title: 'Carrier service advisory', standing: 'operator disclosure', role: 'lead' },
-        ],
-        supporting: [
-          { id: 'source-rail-dwell', title: 'Rail dwell dashboard', standing: 'public logistics metric', role: 'supporting' },
-          { id: 'source-warehouse-index', title: 'Warehouse vacancy index', standing: 'industry data', role: 'supporting' },
-        ],
-        contrary: [
-          { id: 'source-regional-exporters', title: 'Regional exporters report delays', standing: 'trade association survey', role: 'contrary' },
-        ],
-        context: [
-          { id: 'source-ambient-brief', title: 'Ambient corpus: shipping and retail filings', standing: 'bounded context packet', role: 'context' },
-        ],
-      },
-      claims: [
-        'Container queue times have improved at the port complex.',
-        'Inland recovery remains uneven and should not be summarized as resolved.',
-        'Retail margin impact depends on regional warehouse exposure.',
-      ],
-      projections: {
-        'wire-style': 'Port congestion indicators eased this week, but the recovery remains uneven once inland rail dwell and warehouse data are included. The current platform story treats the port bulletin as lead evidence and keeps the exporter delay survey visible as qualifying evidence.',
-        'claim-audit-style': 'The strongest supported claim is narrower than the headline risk suggests: vessel queues have improved. A broader claim that supply chains are normal again is not supported because rail dwell, warehouse vacancy, and exporter surveys still show regional delays.',
-        'market-brief-style': 'The market read is mixed. Port improvement lowers near-term shipping pressure, but inland bottlenecks leave margin risk concentrated in retailers with regionally exposed inventories and limited warehouse flexibility.',
-      },
-    },
-    {
-      id: 'story-energy-grid',
-      headline: 'Grid operators add reserve alerts as heat forecast shifts north',
-      dek: 'Forecast changes moved stress from the southern peak window toward northern reserve margins.',
-      freshness: 'seed source neighborhood',
-      prominence: 74,
-      tension: 'forecast changed',
-      changeState: 'timeline updated',
-      nodeTone: 'changed',
-      related: ['story-supply-resilience', 'story-city-air'],
-      manifest: {
-        lead: [
-          { id: 'source-grid-notice', title: 'Regional grid operator reserve notice', standing: 'official grid notice', role: 'lead' },
-          { id: 'source-weather-update', title: 'National forecast update', standing: 'meteorological update', role: 'lead' },
-        ],
-        supporting: [
-          { id: 'source-demand-model', title: 'Demand forecast model', standing: 'operator model packet', role: 'supporting' },
-        ],
-        contrary: [
-          { id: 'source-utility-comment', title: 'Utility says local capacity is adequate', standing: 'utility statement', role: 'contrary' },
-        ],
-        context: [
-          { id: 'source-grid-history', title: 'Prior reserve-alert history', standing: 'timeline context', role: 'context' },
-        ],
-      },
-      claims: [
-        'Reserve concern shifted north with the updated heat forecast.',
-        'The alert is operational risk, not proof of shortage.',
-        'Local utility statements should be read against regional reserve margins.',
-      ],
-      projections: {
-        'wire-style': 'Grid operators issued reserve alerts after the heat forecast moved north. The story is not a shortage call; it is an operational watch with utility statements and prior alert history kept in the evidence neighborhood.',
-        'claim-audit-style': 'The alert supports a risk claim, not a failure claim. The contrary utility statement does not negate the regional notice, but it narrows the geography and should stay attached to the story.',
-        'market-brief-style': 'The exposure is timing-sensitive: reserve alerts can move power prices before any outage occurs. The practical signal is regional load stress and hedging pressure rather than confirmed infrastructure failure.',
-      },
-    },
-    {
-      id: 'story-city-air',
-      headline: 'City air monitors show sharp overnight improvement after smoke plume disperses',
-      dek: 'Monitors improved by morning, but health agencies kept cautions for sensitive groups while plume models update.',
-      freshness: 'seed source neighborhood',
-      prominence: 63,
-      tension: 'public guidance lag',
-      changeState: 'status improved',
-      nodeTone: 'cooling',
-      related: ['story-energy-grid'],
-      manifest: {
-        lead: [
-          { id: 'source-air-monitors', title: 'City air-quality monitor readings', standing: 'public sensor network', role: 'lead' },
-          { id: 'source-health-agency', title: 'Health agency advisory', standing: 'public health guidance', role: 'lead' },
-        ],
-        supporting: [
-          { id: 'source-plume-model', title: 'Smoke plume model update', standing: 'forecast model', role: 'supporting' },
-        ],
-        contrary: [
-          { id: 'source-community-reports', title: 'Community reports of local haze', standing: 'local observations', role: 'contrary' },
-        ],
-        context: [
-          { id: 'source-prior-air-event', title: 'Prior air-quality event timeline', standing: 'historical context', role: 'context' },
-        ],
-      },
-      claims: [
-        'Sensor readings improved materially overnight.',
-        'Sensitive-group caution remains because public-health guidance lags and local haze reports persist.',
-        'The story should track monitor changes over time instead of freezing the morning state.',
-      ],
-      projections: {
-        'wire-style': 'Air-quality readings improved sharply after the smoke plume dispersed overnight. Health guidance remains more cautious for sensitive groups, so the story keeps monitor data, plume models, and local reports in view.',
-        'claim-audit-style': 'The evidence supports improvement, not all-clear. The health advisory and community haze reports qualify the monitor trend and prevent the platform story from flattening a changing condition into a single verdict.',
-        'market-brief-style': 'The operational effect is localized but real: school, transit, and outdoor-work decisions may lag sensor improvement because public guidance and local observations update on different cadences.',
-      },
-    },
-  ];
-
-  let stories = previewStories;
-  let selectedStoryId = stories[0].id;
-  let dataSource = 'preview-source-network';
+  let stories = [];
+  let selectedStoryId = '';
+  let dataSource = 'community-wire-vtext-index';
   let loadError = '';
   let lastSuccessfulLoadKey = '';
   let loadInFlight = false;
   let retryTimer = null;
   let refreshTimer = null;
 
-  $: selectedStory = stories.find((story) => story.id === selectedStoryId) || stories[0];
-  $: ownerLabel = authenticated ? (currentUser?.email || 'owner computer') : 'public preview';
+  $: selectedStory = stories.find((story) => story.id === selectedStoryId) || stories[0] || null;
+  $: ownerLabel = authenticated ? (currentUser?.email || 'owner computer') : 'public reader';
 
   onMount(() => {
     loadGlobalWireVTexts({ force: true });
@@ -151,18 +39,7 @@
     };
   });
 
-  $: if (authenticated) {
-    loadGlobalWireVTexts();
-  } else if (lastSuccessfulLoadKey !== 'preview') {
-    showPreviewStories();
-  }
-
-  function showPreviewStories() {
-    clearTimeout(retryTimer);
-    stories = previewStories;
-    dataSource = 'preview-source-network';
-    lastSuccessfulLoadKey = 'preview';
-  }
+  $: if (authenticated) loadGlobalWireVTexts();
 
   function scheduleAuthenticatedRetry() {
     clearTimeout(retryTimer);
@@ -177,7 +54,10 @@
     if (!force && lastSuccessfulLoadKey === loadKey) return;
     if (!authenticated) {
       loadError = '';
-      showPreviewStories();
+      stories = [];
+      selectedStoryId = '';
+      dataSource = 'community-wire-vtext-index';
+      lastSuccessfulLoadKey = loadKey;
       return;
     }
     loadInFlight = true;
@@ -186,10 +66,11 @@
       const response = await fetch('/api/global-wire/stories', { credentials: 'include' });
       if (!response.ok) throw new Error(`Global Wire load failed: ${response.status}`);
       const payload = await response.json();
-      if (Array.isArray(payload.stories) && payload.stories.length) {
+      if (Array.isArray(payload.stories)) {
         stories = payload.stories;
         dataSource = (payload.source || 'durable-source-network').replaceAll('source-maxx', 'source-network').replaceAll('sourcemaxx', 'source-network');
-        if (!stories.some((story) => story.id === selectedStoryId)) selectedStoryId = stories[0].id;
+        if (stories.length && !stories.some((story) => story.id === selectedStoryId)) selectedStoryId = stories[0].id;
+        if (!stories.length) selectedStoryId = '';
       }
       clearTimeout(retryTimer);
       loadError = '';
@@ -343,6 +224,7 @@
   }
 
   function openStoryVText(story = selectedStory) {
+    if (!story) return;
     selectedStoryId = story.id;
     const projectionDocId = story.story_vtext_doc_id || '';
     const platformOwned = story.owner_id && story.owner_id !== currentUser?.id;
@@ -381,37 +263,44 @@
     <section class="wire-edition" data-global-wire-front-page aria-label="Front page">
       <div class="edition-head">
         <span>Front Page</span>
-        <span>source network ready</span>
+        <span>awaiting edition VTexts</span>
       </div>
 
-      <div class="article-columns">
-        {#each stories as story}
-          <article
-            class="wire-article"
-            data-global-wire-story
-            data-selected={story.id === selectedStory.id ? 'true' : 'false'}
-            data-story-id={story.id}
-            on:mouseenter={() => (selectedStoryId = story.id)}
-            on:focusin={() => (selectedStoryId = story.id)}
-          >
-            <div class="article-tools">
-              <button type="button" aria-label="Open article VText" title="Open article VText" on:click={() => openStoryVText(story)} data-global-wire-open-vtext>V</button>
-            </div>
-            <p class="article-meta">{story.changeState} · {story.freshness} · {story.tension}</p>
-            <h1>{story.headline}</h1>
-            <p class="dek">{story.dek}</p>
-            <p class="projection" data-global-wire-story-reader>{story.projections?.['wire-style']}</p>
-            <p class="source-line">
-              {(story.manifest?.lead || []).length} lead · {(story.manifest?.supporting || []).length} supporting · {(story.manifest?.contrary || []).length} qualifying
-            </p>
-            <div class="claims" data-global-wire-claims>
-              {#each (story.claims || []).slice(0, 2) as claim}
-                <p>{claim}</p>
-              {/each}
-            </div>
-          </article>
-        {/each}
-      </div>
+      {#if stories.length}
+        <div class="article-columns">
+          {#each stories as story}
+            <article
+              class="wire-article"
+              data-global-wire-story
+              data-selected={story.id === selectedStory?.id ? 'true' : 'false'}
+              data-story-id={story.id}
+              on:mouseenter={() => (selectedStoryId = story.id)}
+              on:focusin={() => (selectedStoryId = story.id)}
+            >
+              <div class="article-tools">
+                <button type="button" aria-label="Open article VText" title="Open article VText" on:click={() => openStoryVText(story)} data-global-wire-open-vtext>V</button>
+              </div>
+              <p class="article-meta">{story.changeState} · {story.freshness} · {story.tension}</p>
+              <h1>{story.headline}</h1>
+              <p class="dek">{story.dek}</p>
+              <p class="projection" data-global-wire-story-reader>{story.projections?.['wire-style']}</p>
+              <p class="source-line">
+                {(story.manifest?.lead || []).length} lead · {(story.manifest?.supporting || []).length} supporting · {(story.manifest?.contrary || []).length} qualifying
+              </p>
+              <div class="claims" data-global-wire-claims>
+                {#each (story.claims || []).slice(0, 2) as claim}
+                  <p>{claim}</p>
+                {/each}
+              </div>
+            </article>
+          {/each}
+        </div>
+      {:else}
+        <section class="wire-empty-state" data-global-wire-empty-state>
+          <h1>No Wire edition articles yet</h1>
+          <p>Community Wire will show VText-owned articles here after platform source processing and VText authoring publish an edition.</p>
+        </section>
+      {/if}
     </section>
   </main>
 </section>
@@ -506,6 +395,27 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     column-gap: clamp(28px, 4vw, 48px);
     row-gap: 36px;
+  }
+
+  .wire-empty-state {
+    max-width: 760px;
+    padding: clamp(28px, 5vw, 56px) 0;
+    border-top: 1px solid var(--choir-border-subtle);
+  }
+
+  .wire-empty-state h1 {
+    max-width: 680px;
+    font-family: var(--choir-font-display);
+    font-size: clamp(2rem, 5vw, 4rem);
+    line-height: 0.98;
+    margin-bottom: 16px;
+  }
+
+  .wire-empty-state p {
+    max-width: 620px;
+    color: var(--choir-text-secondary);
+    font-size: 1rem;
+    line-height: 1.55;
   }
 
   .wire-article {
