@@ -662,12 +662,32 @@ what was proven:
   same deployed `/health` response reports `status: degraded` and
   `vmctl_status: unavailable`. This changes the immediate blocker from
   DeepSeek provider policy to staging active-computer route availability.
+- Final MiMo staging proof: after vmctl recovered, a fresh public prompt-bar
+  submission `6cfdf6d6-d1d6-4305-840b-f5960e597f7f` opened VText doc
+  `cdc7d469-041d-4622-94d5-ed43f96542df` and initial loop
+  `7cf44647-c6de-49bc-96bd-d7e017895404`. Trace completed with conductor,
+  super, and VText on `xiaomi/mimo-v2.5`; no DeepSeek call appeared. The
+  foreground product path executed source refresh, projection review, research
+  evidence, publication update, publication artifact, and artifact approval.
+  Evidence ids include source refresh `global-wire-source-refresh-04fc54aa`,
+  projection review `global-wire-projection-review-5fc5beb6`, research
+  evidence `global-wire-research-evidence-afebe39d`, publication update
+  `global-wire-publication-update-adb48a9b`, and publication artifact
+  `global-wire-publication-artifact-e8f417e7-de00-4e94-94a1-254b88462e8d`.
+- Deployed acceptance proof: `GET /api/global-wire/stories` returned one story
+  from `community-wire-edition-vtext`: "The Computer Science Degree Isn't
+  Dead". The story article VText is
+  `b45dc29b-6ff5-4efb-98b3-895a4afd8968`; the edition is
+  `global-wire/Wire.vtext` doc `fb021fa3-16a5-4841-b30c-6e36bd0a10c2`
+  revision `a5af660e-02ae-4b6b-8a9e-e34e611b9391`, whose included doc ids
+  contain that article VText.
 
 unproven or partial claims:
 
-- No source-cycle proof yet.
-- No positive deployed VText edition rendering proof yet; staging currently has
-  no verified `Wire.vtext` edition with article transclusions to render.
+- Source-cycle proof exists for one staging Community Wire article.
+- Positive deployed VText edition rendering exists through
+  `/api/global-wire/stories`, `community-wire-edition-vtext`, and
+  `global-wire/Wire.vtext`.
 - The authenticated stored-story fallback blocker is fixed, but only as an
   honest empty-state proof. It is not yet proof that a real product source
   cycle creates and publishes an article into the edition.
@@ -718,17 +738,19 @@ unproven or partial claims:
   prompt still surfaced a DeepSeek 402 blocker, so the repair is insufficient
   while generated/default policy continues to select DeepSeek for foreground
   proof roles.
-- The MiMo policy migration is committed, pushed, deployed, and locally
-  verified, but a fresh authenticated proof cannot currently start because the
-  staging active-computer bootstrap route returns 502 with vmctl unavailable.
-- No AppChangePackage/adoption or run-acceptance record was created in this
-  slice; the acceptance level remains staging-smoke-level, not promotion-level.
+- The MiMo policy migration is committed, pushed, deployed, locally verified,
+  and positively reprobed through a source-native Wire publication path.
+- No durable `RunAcceptanceRecord` was created. An attempted synthesis from a
+  different freshly registered owner could not see the owner-scoped trajectory;
+  an acceptance-bound retry kept one browser context but auth expired before
+  synthesis and returned `401 authentication required`. This is residual
+  run-acceptance/session debt. The proof level is deployed staging product
+  proof, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
   routes still exist and need replacement or deletion.
 
 next step:
 
-- Investigate and restore staging active-computer route availability, then
-  rerun the no-`story_id` source-native route through publication approval and
-  verify the approved article appears through `global-wire/Wire.vtext` and
-  `/api/global-wire/stories`.
+- Repair durable `RunAcceptanceRecord` synthesis for long-lived staging proof
+  sessions, then synthesize acceptance from the completed source-native Wire
+  trajectory without relying on short-lived Playwright auth state.

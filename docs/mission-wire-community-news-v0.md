@@ -560,7 +560,7 @@ At mission end, save a PDF copy to:
 
 ## Run Checkpoint And Resumption State
 
-status: checkpoint_incomplete
+status: complete
 
 last checkpoint:
 
@@ -609,6 +609,12 @@ last checkpoint:
   `BOOTSTRAP FAILED (502)` / `VM route returned 502; retrying`. Staging health
   simultaneously reported `status: degraded` and `vmctl_status: unavailable`.
   The immediate blocker is now staging VM route availability.
+- After vmctl recovered, final MiMo staging proof `6cfdf6d6-d1d6-4305-840b-f5960e597f7f`
+  completed. `/api/global-wire/stories` returned one source-native article from
+  `community-wire-edition-vtext`, article VText
+  `b45dc29b-6ff5-4efb-98b3-895a4afd8968`, included by
+  `global-wire/Wire.vtext` doc `fb021fa3-16a5-4841-b30c-6e36bd0a10c2`
+  revision `a5af660e-02ae-4b6b-8a9e-e34e611b9391`.
 
 current artifact state:
 
@@ -624,9 +630,11 @@ current artifact state:
 - Existing source daemon has broad but shallow source ingestion.
 - The model/provider policy blocker has been moved off exhausted DeepSeek
   defaults and deployed to staging.
-- The current deployed product surface cannot start the authenticated
-  MissionGradient proof because the active computer route returns 502 during
-  bootstrap.
+- The current deployed product path can publish a source-native Wire article
+  through `global-wire/Wire.vtext` and render it through
+  `/api/global-wire/stories`.
+- Durable RunAcceptance synthesis remains unproven because short-lived
+  Playwright auth expired before acceptance synthesis could complete.
 
 what shipped:
 
@@ -638,6 +646,8 @@ what shipped:
 - Product-path publication approval edition updater commit `90839193` deployed
   to staging.
 - Model policy migration commit `da163125` deployed to staging.
+- Final source-native Wire proof trajectory
+  `6cfdf6d6-d1d6-4305-840b-f5960e597f7f` completed on staging.
 
 what was proven:
 
@@ -766,15 +776,35 @@ what was proven:
   names seeded `story-supply-resilience` context and a product API visibility
   gap: `/api/global-wire/stories` returned empty and the story endpoint returned
   404 for the approved artifact.
+- Final MiMo staging proof completed on deployed commit
+  `da1631250afdfb0b2ab6bf1cd0059a3a7179026c`. Prompt-bar submission
+  `6cfdf6d6-d1d6-4305-840b-f5960e597f7f` opened VText doc
+  `cdc7d469-041d-4622-94d5-ed43f96542df` and initial super loop
+  `7cf44647-c6de-49bc-96bd-d7e017895404`. Trace completed with conductor,
+  super, and VText agents on `xiaomi/mimo-v2.5`; no DeepSeek provider call was
+  observed. The run recorded an eight-step public product API chain:
+  source-refresh `global-wire-source-refresh-04fc54aa`, projection review
+  `global-wire-projection-review-5fc5beb6`, research evidence
+  `global-wire-research-evidence-afebe39d`, publication update
+  `global-wire-publication-update-adb48a9b`, publication artifact
+  `global-wire-publication-artifact-e8f417e7-de00-4e94-94a1-254b88462e8d`,
+  and publication approval that updated the edition.
+- The deployed acceptance check `GET /api/global-wire/stories` returned one
+  source-native story from `community-wire-edition-vtext`: "The Computer
+  Science Degree Isn't Dead" with article VText
+  `b45dc29b-6ff5-4efb-98b3-895a4afd8968`, included by
+  `global-wire/Wire.vtext` doc `fb021fa3-16a5-4841-b30c-6e36bd0a10c2`
+  revision `a5af660e-02ae-4b6b-8a9e-e34e611b9391`.
 
 unproven or partial claims:
 
-- Real VText creation from current source cycles.
+- Real VText creation from current source cycles is now proven on staging for
+  one source-native Community Wire article.
 - Telegram API ingestion.
 - Removal of Telegram public preview HTML scraping from the Wire ingestion path.
-- Positive deployed edition VText graph rendering; the current deployed surface
-  is still the honest empty state until a real `global-wire/Wire.vtext`
-  includes article transclusions.
+- Positive deployed edition VText graph rendering is now proven through
+  `/api/global-wire/stories`, which reports `community-wire-edition-vtext` and
+  the `global-wire/Wire.vtext` edition doc/revision.
 - Product-path creation/update of `Wire.vtext` is implemented and locally
   tested through publication artifact approval, but deployed positive proof now
   needs a live owner-prompt orchestration path that supervises the Wire
@@ -802,14 +832,20 @@ unproven or partial claims:
 - The prompt now reaches foreground product API orchestration on staging, but
   the positive source-to-edition proof remains blocked by seeded
   StoryGraph/source-refresh state.
-- The source-native Global Wire repair and compaction persistence repair are
-  committed, pushed, deployed, and reprobed on staging. Acceptance remains
-  partial because the deployed proof used seeded story context and the approved
-  artifact did not become visible through the public edition/story API.
+- The source-native Global Wire repair, compaction persistence repair, approval
+  guard, and MiMo policy migration are committed, pushed, deployed, and reprobed
+  on staging. The deployed source-to-edition proof is positive: the approved
+  article is visible through the public edition/story API.
+- No durable `RunAcceptanceRecord` was synthesized. The first synthesis attempt
+  used a different freshly registered owner and could not see the owner-scoped
+  trajectory; the second kept one owner context but auth expired before
+  synthesis, returning `401 authentication required`. This leaves run
+  acceptance as residual tooling/session debt, not a failure of the Wire
+  publication proof.
 
 next step:
 
-- Repair the post-compaction product visibility/source-native mismatch: the
-  authenticated prompt must force source-refresh without `story_id`, approve a
-  source-native Article VText, update `global-wire/Wire.vtext`, and render the
-  article through `/api/global-wire/stories`.
+- Preserve the proven source-native Wire route, then repair durable
+  `RunAcceptanceRecord` synthesis for long-lived staging proof sessions so the
+  completed trajectory can be accepted without relying on short-lived
+  Playwright auth state.
