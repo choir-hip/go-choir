@@ -364,6 +364,19 @@ last checkpoint:
 - Edition-gate slice committed as `f6707096`, CI run `27218260845` passed, and
   staging deploy job `80366180237` completed. Staging `/health` reported proxy
   and sandbox at `f6707096cabfdf7e860ceb35483b8335191429f2`.
+- Product-path edition update slice committed as `90839193`: approving a
+  publication artifact with an approved projection VText now creates a
+  platform-owned article VText copy and updates `global-wire/Wire.vtext`.
+  Local focused tests, `TestHandleGlobalWire`, and
+  `scripts/go-test-runtime-shards` passed. CI run `27219131352` and staging
+  deploy job `80369262512` succeeded; staging `/health` reported proxy and
+  sandbox at `90839193d04bfd1321d0424ae86930aac437efd5`.
+- New authenticated staging evidence after `90839193` found that Global Wire
+  can still show three legacy stored seed stories with `seed source
+  neighborhood` metadata while the surface reports `community-wire-vtext-index`
+  and "awaiting edition VTexts". This proves a remaining owner-scoped
+  `GlobalWireStory` fallback still bypasses the edition invariant for
+  authenticated users.
 
 current artifact state:
 
@@ -377,6 +390,9 @@ current artifact state:
   style-source, source-refresh, publication, autoradio, newsletter, and deeper
   compatibility behavior that has not yet been deleted.
 - Existing source daemon has broad but shallow source ingestion.
+- The front-page response still includes authenticated owner-scoped stored
+  `GlobalWireStory` records when no `Wire.vtext` edition exists; this is now
+  the immediate blocker.
 
 what shipped:
 
@@ -385,6 +401,8 @@ what shipped:
 - Explicit fixture repair commit `a89f8a48`.
 - Forced staging deploy for `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`.
 - Edition-gated API slice commit `f6707096` deployed to staging.
+- Product-path publication approval edition updater commit `90839193` deployed
+  to staging.
 
 what was proven:
 
@@ -420,6 +438,9 @@ what was proven:
   Global Wire state with zero legacy seed-text occurrences. The frontend build
   commit stayed at `a89f8a48` because the deploy impact skipped frontend build
   for this backend-only change.
+- Authenticated Chrome proof after `90839193` showed the remaining fallback
+  problem: Global Wire rendered three durable legacy seed stories and visible
+  `seed source neighborhood` metadata despite having no active edition.
 
 unproven or partial claims:
 
@@ -429,5 +450,7 @@ unproven or partial claims:
 - Positive deployed edition VText graph rendering; the current deployed surface
   is still the honest empty state until a real `global-wire/Wire.vtext`
   includes article transclusions.
-- Product-path creation/update of `Wire.vtext`; this slice proves fixture-backed
-  edition indexing only.
+- Product-path creation/update of `Wire.vtext` is implemented and locally
+  tested through publication artifact approval, but deployed positive proof is
+  blocked by the remaining stored-story fallback and still needs a live
+  approved artifact/edition acceptance run.
