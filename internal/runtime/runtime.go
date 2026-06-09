@@ -1053,12 +1053,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	maxOutputTokens := MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
-	platformFallback := LLMSelection{
-		Provider:        rt.cfg.LLMProvider,
-		Model:           rt.cfg.LLMModel,
-		ReasoningEffort: rt.cfg.LLMReasoningEffort,
-		Source:          "runtime_config",
-	}
+	platformFallback := runtimeConfigFallbackSelection(rt.cfg)
 	preconditionFallbacks := providerPreconditionFallbackSelections(llmConfig, platformFallback)
 	if emit != nil {
 		payload, _ := json.Marshal(map[string]any{

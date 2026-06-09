@@ -29,6 +29,8 @@ const (
 	defaultDeepSeekProvider         = "deepseek"
 	defaultFireworksProvider        = "fireworks"
 	defaultXiaomiProvider           = "xiaomi"
+	defaultMimoTextModel            = "mimo-v2.5"
+	defaultMimoProModel             = "mimo-v2.5-pro"
 	defaultConductorModel           = "deepseek-v4-flash"
 	defaultSuperModel               = "deepseek-v4-pro"
 	defaultResearcherVTextModel     = "deepseek-v4-flash"
@@ -112,43 +114,53 @@ fallback_model = %q
 reasoning = "medium"
 
 [roles.conductor]
-provider = "deepseek"
-model = "deepseek-v4-flash"
+provider = "xiaomi"
+model = "mimo-v2.5"
 reasoning = "medium"
 
 [roles.super]
-provider = "deepseek"
-model = "deepseek-v4-pro"
+provider = "xiaomi"
+model = "mimo-v2.5"
 reasoning = "medium"
 
 [roles.vsuper]
-provider = "deepseek"
-model = "deepseek-v4-pro"
+provider = "xiaomi"
+model = "mimo-v2.5-pro"
 
 [roles.co-super]
-provider = "deepseek"
-model = "deepseek-v4-pro"
+provider = "xiaomi"
+model = "mimo-v2.5-pro"
 
 [roles.researcher]
-provider = "deepseek"
-model = "deepseek-v4-flash"
+provider = "xiaomi"
+model = "mimo-v2.5"
 reasoning = "medium"
 
 [roles.vtext]
-provider = "deepseek"
-model = "deepseek-v4-flash"
+provider = "xiaomi"
+model = "mimo-v2.5"
+reasoning = "medium"
+
+[roles.processor]
+provider = "xiaomi"
+model = "mimo-v2.5"
+reasoning = "medium"
+
+[roles.reconciler]
+provider = "xiaomi"
+model = "mimo-v2.5-pro"
 reasoning = "medium"
 
 [roles.verifier]
-provider = "deepseek"
-model = "deepseek-v4-pro"
+provider = "xiaomi"
+model = "mimo-v2.5"
 requires = ["text", "tool_use"]
 
 [roles.verifier_multimodal]
 provider = "xiaomi"
 model = "mimo-v2.5"
 requires = ["image", "tool_use"]
-`, defaultDeepSeekProvider, defaultResearcherVTextModel)
+`, defaultXiaomiProvider, defaultMimoTextModel)
 }
 
 func legacyGeneratedModelPolicyText(cfg Config) string {
@@ -209,21 +221,23 @@ requires = ["image", "tool_use"]
 
 func fallbackModelPolicy(_ Config) ModelPolicy {
 	defaults := LLMSelection{
-		Provider:        defaultDeepSeekProvider,
-		Model:           defaultResearcherVTextModel,
+		Provider:        defaultXiaomiProvider,
+		Model:           defaultMimoTextModel,
 		ReasoningEffort: defaultFlashForegroundReasoning,
 		Source:          "platform_fallback",
 	}
 	return ModelPolicy{
 		Defaults: defaults,
 		Roles: map[string]LLMSelection{
-			AgentProfileConductor:        {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			AgentProfileSuper:            {Provider: defaultDeepSeekProvider, Model: defaultSuperModel, ReasoningEffort: "medium", Source: "platform_fallback"},
-			AgentProfileVSuper:           {Provider: defaultDeepSeekProvider, Model: defaultSuperModel, Source: "platform_fallback"},
-			AgentProfileCoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultSuperModel, Source: "platform_fallback"},
-			AgentProfileResearcher:       {Provider: defaultDeepSeekProvider, Model: defaultResearcherVTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			AgentProfileVText:            {Provider: defaultDeepSeekProvider, Model: defaultResearcherVTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			modelPolicyRoleVerifier:      {Provider: defaultDeepSeekProvider, Model: defaultVerifierModel, Source: "platform_fallback"},
+			AgentProfileConductor:        {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
+			AgentProfileSuper:            {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: "medium", Source: "platform_fallback"},
+			AgentProfileVSuper:           {Provider: defaultXiaomiProvider, Model: defaultMimoProModel, Source: "platform_fallback"},
+			AgentProfileCoSuper:          {Provider: defaultXiaomiProvider, Model: defaultMimoProModel, Source: "platform_fallback"},
+			AgentProfileResearcher:       {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
+			AgentProfileVText:            {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
+			AgentProfileProcessor:        {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
+			AgentProfileReconciler:       {Provider: defaultXiaomiProvider, Model: defaultMimoProModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
+			modelPolicyRoleVerifier:      {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, Source: "platform_fallback"},
 			modelPolicyRoleVerifierMulti: {Provider: defaultXiaomiProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
 		},
 		Source: "platform_fallback",
@@ -542,6 +556,9 @@ func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
 	if hasGeneratedFlashNoneForegroundPolicy(policy) {
 		return true
 	}
+	if hasGeneratedDeepSeekPolicy(policy) {
+		return true
+	}
 	conductor, ok := policy.Roles[AgentProfileConductor]
 	if !ok || !isModelPolicySelection(conductor, "chatgpt", "gpt-5.5", "low") {
 		return hasLegacyChatGPTForegroundPin(policy)
@@ -557,6 +574,35 @@ func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
 	vtext, ok := policy.Roles[AgentProfileVText]
 	if !ok || !isModelPolicySelection(vtext, defaultFireworksProvider, legacyFireworksFlashModel, "") {
 		return false
+	}
+	return true
+}
+
+func hasGeneratedDeepSeekPolicy(policy ModelPolicy) bool {
+	if len(policy.Roles) != 8 {
+		return false
+	}
+	if !isModelPolicySelection(policy.Defaults, defaultDeepSeekProvider, defaultResearcherVTextModel, "medium") {
+		return false
+	}
+	expected := map[string]LLMSelection{
+		AgentProfileConductor:        {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, ReasoningEffort: "medium"},
+		AgentProfileSuper:            {Provider: defaultDeepSeekProvider, Model: defaultSuperModel, ReasoningEffort: "medium"},
+		AgentProfileVSuper:           {Provider: defaultDeepSeekProvider, Model: defaultSuperModel},
+		AgentProfileCoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultSuperModel},
+		AgentProfileResearcher:       {Provider: defaultDeepSeekProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "medium"},
+		AgentProfileVText:            {Provider: defaultDeepSeekProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "medium"},
+		modelPolicyRoleVerifier:      {Provider: defaultDeepSeekProvider, Model: defaultVerifierModel},
+		modelPolicyRoleVerifierMulti: {Provider: defaultXiaomiProvider, Model: defaultMultimodalVerifierModel},
+	}
+	for role, want := range expected {
+		got, ok := policy.Roles[role]
+		if !ok {
+			return false
+		}
+		if !isModelPolicySelection(got, want.Provider, want.Model, want.ReasoningEffort) {
+			return false
+		}
 	}
 	return true
 }
@@ -722,6 +768,24 @@ func ResolvedLLMConfigFromMetadata(metadata map[string]any) LLMSelection {
 		ReasoningEffort: strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMReasoningEffort)),
 		MaxTokens:       metadataIntValue(metadata, runMetadataLLMMaxTokens),
 		Source:          strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMPolicySource)),
+	}
+}
+
+func runtimeConfigFallbackSelection(cfg Config) LLMSelection {
+	provider := strings.TrimSpace(cfg.LLMProvider)
+	model := strings.TrimSpace(cfg.LLMModel)
+	reasoning := strings.TrimSpace(cfg.LLMReasoningEffort)
+	if provider == "" {
+		provider = defaultXiaomiProvider
+	}
+	if model == "" {
+		model = defaultMimoTextModel
+	}
+	return LLMSelection{
+		Provider:        provider,
+		Model:           model,
+		ReasoningEffort: reasoning,
+		Source:          "runtime_config",
 	}
 }
 
