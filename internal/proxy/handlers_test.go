@@ -3216,6 +3216,92 @@ func TestComputeRecoveryWakeRefreshesUnreachableCurrentComputer(t *testing.T) {
 	}
 }
 
+func TestComputeRecoveryWakeRefreshesCurrentComputerWithoutBlockingResolve(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate ed25519 key: %v", err)
+	}
+
+	var refreshed atomic.Bool
+	var resolveCalled atomic.Bool
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if !refreshed.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "boot_pending"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "sandbox"})
+	})
+	sandboxSrv := httptest.NewServer(sandboxMux)
+	t.Cleanup(func() { sandboxSrv.Close() })
+
+	reg := vmctl.NewOwnershipRegistry(sandboxSrv.URL)
+	vmctlHandler := vmctl.NewHandler(reg)
+
+	vmctlMux := http.NewServeMux()
+	vmctlMux.HandleFunc("/internal/vmctl/resolve", func(w http.ResponseWriter, r *http.Request) {
+		resolveCalled.Store(true)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "resolve should not be called"})
+	})
+	vmctlMux.HandleFunc("/internal/vmctl/lookup", vmctlHandler.HandleLookup)
+	vmctlMux.HandleFunc("/internal/vmctl/list", vmctlHandler.HandleList)
+	vmctlMux.HandleFunc("/internal/vmctl/refresh", func(w http.ResponseWriter, r *http.Request) {
+		refreshed.Store(true)
+		vmctlHandler.HandleRefresh(w, r)
+	})
+	vmctlMux.HandleFunc("/health", vmctlHandler.HandleHealth)
+	vmctlSrv := httptest.NewServer(vmctlMux)
+	t.Cleanup(func() { vmctlSrv.Close() })
+	client := vmctl.NewClient(vmctlSrv.URL)
+
+	if _, err := reg.ResolveOrAssignDesktop("compute-lookup-recovery-user", vmctl.PrimaryDesktopID); err != nil {
+		t.Fatalf("precreate ownership: %v", err)
+	}
+	if own, err := client.LookupDesktop("compute-lookup-recovery-user", vmctl.PrimaryDesktopID); err != nil || own == nil {
+		t.Fatalf("precreated ownership lookup = %+v, err=%v", own, err)
+	}
+
+	cfg := &Config{
+		Port:              "0",
+		SandboxURL:        sandboxSrv.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+		VmctlURL:          vmctlSrv.URL,
+	}
+	handler, err := NewHandler(cfg, pub)
+	if err != nil {
+		t.Fatalf("NewHandler with vmctl: %v", err)
+	}
+
+	token := issueTestAccessJWT(priv, "compute-lookup-recovery-user")
+	req := httptest.NewRequest(http.MethodPost, "/api/compute/recovery", strings.NewReader(`{"action":"wake_current_computer"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	w := httptest.NewRecorder()
+	handler.HandleAPI(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("compute recovery = %d, want 200 body=%s", w.Code, w.Body.String())
+	}
+	if resolveCalled.Load() {
+		t.Fatal("recovery called resolve before refreshing an existing current computer")
+	}
+	if !refreshed.Load() {
+		t.Fatal("wake recovery did not refresh from lookup-only current computer")
+	}
+
+	var result computeRecoveryResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode recovery response: %v", err)
+	}
+	if result.Runtime == nil || !result.Runtime.Reachable {
+		t.Fatalf("runtime after lookup-first recovery = %+v, want reachable", result.Runtime)
+	}
+	if result.CurrentComputer.State != string(vmctl.VMStateActive) {
+		t.Fatalf("current computer state = %s, want active", result.CurrentComputer.State)
+	}
+}
+
 func TestProxyHealthReportsRedactedLifecycleAggregates(t *testing.T) {
 	handler, priv, _, _ := testVMctlProxyEnv(t)
 	token := issueTestAccessJWT(priv, "lifecycle-user")

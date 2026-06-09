@@ -116,11 +116,13 @@
   const BOOTSTRAP_STABILITY_DEADLINE_MS = 300_000;
   const BOOTSTRAP_STABILITY_DELAY_MS = 1_000;
   const BOOTSTRAP_PROBE_TIMEOUT_MS = 15_000;
+  const BOOTSTRAP_RECOVERY_AFTER_ATTEMPT = 2;
   const MAX_BOOT_LINES = 9;
   let bootPromptPlaceholder = 'Booting user computer...';
   let bootLines = [];
   let bootLineCounter = 0;
   let bootStartedAt = 0;
+  let bootstrapRecoveryInFlight = false;
   let restoreRecovery = null;
   let restoreRecoveryWindows = [];
   let restoreRecoveryActiveId = '';
@@ -886,6 +888,7 @@
     bootstrapError = '';
     let previousSandboxId = '';
     let attempt = 0;
+    let recoveryRequested = false;
     const deadline = Date.now() + BOOTSTRAP_STABILITY_DEADLINE_MS;
     appendBootLine('Resolving active computer');
 
@@ -905,12 +908,20 @@
             : `Bootstrap probe ${attempt} lost contact; retrying`,
           'warn'
         );
+        if (!recoveryRequested && attempt >= BOOTSTRAP_RECOVERY_AFTER_ATTEMPT) {
+          recoveryRequested = true;
+          requestBootstrapRecovery('bootstrap pending');
+        }
         await delay(BOOTSTRAP_STABILITY_DELAY_MS);
         continue;
       }
       if (!res.ok) {
         bootstrapError = `Bootstrap failed (${res.status})`;
         appendBootLine(`VM route returned ${res.status}; retrying`, 'warn');
+        if (!recoveryRequested && attempt >= BOOTSTRAP_RECOVERY_AFTER_ATTEMPT) {
+          recoveryRequested = true;
+          requestBootstrapRecovery(`bootstrap returned ${res.status}`);
+        }
         await delay(BOOTSTRAP_STABILITY_DELAY_MS);
         continue;
       }
@@ -931,6 +942,31 @@
     }
     bootstrapError = 'Desktop routing is still stabilizing';
     return false;
+  }
+
+  function requestBootstrapRecovery(reason) {
+    if (bootstrapRecoveryInFlight) return;
+    bootstrapRecoveryInFlight = true;
+    appendBootLine('Requesting computer recovery', 'warn');
+    fetchWithRenewal('/api/compute/recovery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'wake_current_computer' }),
+    }).then((res) => {
+      if (res.ok) {
+        appendBootLine('Computer recovery requested');
+      } else {
+        appendBootLine(`Recovery request returned ${res.status}; continuing`, 'warn');
+      }
+    }).catch((err) => {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      appendBootLine(`Recovery request failed; continuing (${reason})`, 'warn');
+    }).finally(() => {
+      bootstrapRecoveryInFlight = false;
+    });
   }
 
   async function fetchBootstrapProbe() {

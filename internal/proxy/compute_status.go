@@ -274,60 +274,73 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 
 	switch action {
 	case "wake_current_computer", "resume_current_computer":
-		own, err := h.vmctlClient.ResolveDesktopContext(r.Context(), authResult.UserID, desktopID)
+		own, err := h.vmctlClient.LookupDesktopContext(r.Context(), authResult.UserID, desktopID)
 		if err != nil {
-			log.Printf("proxy compute recovery: wake current computer desktop=%s: %v", desktopID, err)
-			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to wake current computer"})
+			log.Printf("proxy compute recovery: lookup current computer desktop=%s: %v", desktopID, err)
+			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to inspect current computer"})
 			return
 		}
-		current := computeComputer{
-			DesktopID:        own.DesktopID,
-			Role:             computerRole(own.DesktopID),
-			Current:          true,
-			Kind:             string(own.Kind),
-			State:            own.State,
-			WarmnessClass:    own.WarmnessClass,
-			Published:        own.Published,
-			Protection:       protectionText(own.WarmnessClass),
-			Reclaimable:      reclaimableWarmness(own.WarmnessClass),
-			RecoveryEligible: true,
-			LookupStatus:     "ok",
-		}
-		if current.WarmnessClass == "" {
-			current.WarmnessClass = currentWarmnessFallback(own.DesktopID)
-			current.Protection = protectionText(current.WarmnessClass)
-			current.Reclaimable = reclaimableWarmness(current.WarmnessClass)
-		}
+
 		var runtimeStatus *computeRuntimeStatus
-		if own.SandboxURL != "" {
+		var current computeComputer
+		if own == nil || own.State == string(vmctl.VMStateStopped) || own.State == string(vmctl.VMStateHibernated) {
+			resolved, resolveErr := h.vmctlClient.ResolveDesktopContext(r.Context(), authResult.UserID, desktopID)
+			if resolveErr != nil {
+				log.Printf("proxy compute recovery: wake current computer desktop=%s: %v", desktopID, resolveErr)
+				writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to wake current computer"})
+				return
+			}
+			current = computeComputerFromFields(
+				resolved.DesktopID,
+				string(resolved.Kind),
+				resolved.State,
+				resolved.WarmnessClass,
+				resolved.Published,
+				0,
+				"",
+				"",
+			)
+			if resolved.SandboxURL != "" {
+				runtimeStatus = h.probeRuntimeHealthForTarget(resolved.SandboxURL)
+			}
+		} else {
+			current = computeComputerFromFields(
+				own.DesktopID,
+				string(own.Kind),
+				own.State,
+				own.WarmnessClass,
+				own.Published,
+				own.Epoch,
+				own.StoppedBy,
+				own.LastActiveAt,
+			)
+		}
+
+		if own != nil && own.SandboxURL != "" {
 			runtimeStatus = h.probeRuntimeHealthForTarget(own.SandboxURL)
-			if !runtimeStatus.Reachable {
-				refreshed, refreshErr := h.vmctlClient.RefreshDesktopContext(r.Context(), authResult.UserID, desktopID)
-				if refreshErr != nil {
-					log.Printf("proxy compute recovery: refresh unreachable current computer desktop=%s: %v", desktopID, refreshErr)
-				} else {
-					own = refreshed
-					current = computeComputer{
-						DesktopID:        own.DesktopID,
-						Role:             computerRole(own.DesktopID),
-						Current:          true,
-						Kind:             string(own.Kind),
-						State:            own.State,
-						WarmnessClass:    own.WarmnessClass,
-						Published:        own.Published,
-						Protection:       protectionText(own.WarmnessClass),
-						Reclaimable:      reclaimableWarmness(own.WarmnessClass),
-						RecoveryEligible: true,
-						LookupStatus:     "ok",
-					}
-					if current.WarmnessClass == "" {
-						current.WarmnessClass = currentWarmnessFallback(own.DesktopID)
-						current.Protection = protectionText(current.WarmnessClass)
-						current.Reclaimable = reclaimableWarmness(current.WarmnessClass)
-					}
-					if own.SandboxURL != "" {
-						runtimeStatus = h.probeRuntimeHealthForTarget(own.SandboxURL)
-					}
+		}
+		shouldRefresh := own != nil && (own.SandboxURL == "" ||
+			own.State == string(vmctl.VMStateBooting) ||
+			own.State == string(vmctl.VMStateDegraded) ||
+			own.State == string(vmctl.VMStateFailed) ||
+			(runtimeStatus != nil && !runtimeStatus.Reachable))
+		if shouldRefresh {
+			refreshed, refreshErr := h.vmctlClient.RefreshDesktopContext(r.Context(), authResult.UserID, desktopID)
+			if refreshErr != nil {
+				log.Printf("proxy compute recovery: refresh unreachable current computer desktop=%s: %v", desktopID, refreshErr)
+			} else {
+				current = computeComputerFromFields(
+					refreshed.DesktopID,
+					string(refreshed.Kind),
+					refreshed.State,
+					refreshed.WarmnessClass,
+					refreshed.Published,
+					0,
+					"",
+					"",
+				)
+				if refreshed.SandboxURL != "" {
+					runtimeStatus = h.probeRuntimeHealthForTarget(refreshed.SandboxURL)
 				}
 			}
 		}
@@ -340,6 +353,31 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 	default:
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "unsupported recovery action"})
 	}
+}
+
+func computeComputerFromFields(desktopID, kind, state, warmnessClass string, published bool, epoch int64, stoppedBy, lastActiveAt string) computeComputer {
+	current := computeComputer{
+		DesktopID:        desktopID,
+		Role:             computerRole(desktopID),
+		Current:          true,
+		Kind:             kind,
+		State:            state,
+		WarmnessClass:    warmnessClass,
+		Published:        published,
+		Epoch:            epoch,
+		StoppedBy:        stoppedBy,
+		LastActiveAt:     lastActiveAt,
+		Protection:       protectionText(warmnessClass),
+		Reclaimable:      reclaimableWarmness(warmnessClass),
+		RecoveryEligible: true,
+		LookupStatus:     "ok",
+	}
+	if current.WarmnessClass == "" {
+		current.WarmnessClass = currentWarmnessFallback(desktopID)
+		current.Protection = protectionText(current.WarmnessClass)
+		current.Reclaimable = reclaimableWarmness(current.WarmnessClass)
+	}
+	return current
 }
 
 func (h *Handler) probeRuntimeHealthForTarget(targetURL string) *computeRuntimeStatus {
