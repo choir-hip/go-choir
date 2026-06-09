@@ -183,6 +183,27 @@ instead of filled with seeded stories.
   means old durable `GlobalWireStory` records remain a front-page fallback for
   authenticated users when no edition exists. The problem is documented here
   before the next fix, per Problem Documentation First.
+- Stored-story fallback removal: commit
+  `02c799074c65c1698dfac0c0973effd3b1c400de` removes owner-scoped stored
+  `GlobalWireStory` rows from `/api/global-wire/stories` front-page output.
+  Local verification passed:
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire(PublicationArtifactApprovalPublishesEditionVText|Stories(ReturnsHonestEmptyState|DoesNotIndexUntranscludedPlatformVTexts|IndexesEditionTranscludedVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest))'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  - `nix develop -c scripts/go-test-runtime-shards`
+- CI/deploy for `02c799074c65c1698dfac0c0973effd3b1c400de`: CI run
+  `27219955936` succeeded. Deploy job `80372239235` succeeded in 37s. Staging
+  `/health` reported proxy and sandbox commit
+  `02c799074c65c1698dfac0c0973effd3b1c400de`, deployed at
+  `2026-06-09T16:19:49Z`.
+- Authenticated staging Chrome proof after `02c79907`: opened
+  `https://choir.news/`, activated Global Wire from the dock, and inspected the
+  product DOM. The Global Wire window showed user `yusefnathanson@me.com`,
+  `0 articles`, source `community-wire-vtext-index`, `Front Page`, `awaiting
+  edition VTexts`, and `No Wire edition articles yet`. The Global Wire window
+  contained no `seed source neighborhood` metadata and no grid/city seed
+  headlines. The remaining `Port backlog recedes...` text in the full desktop
+  DOM came from minimized VText window titles outside the Global Wire front
+  page, not from story cards.
 
 ## Run State
 
@@ -213,18 +234,21 @@ what was proven:
 - The deployed story endpoint now requires the canonical `Wire.vtext` edition
   to transclude platform VText articles before they appear in Global Wire.
 - Counter-evidence found on authenticated staging after `90839193`: the
-  endpoint/surface still falls back to owner-scoped stored `GlobalWireStory`
-  rows when no edition exists, exposing legacy seed stories for at least one
-  authenticated user. The edition gate is therefore incomplete until the
-  owner-scoped stored-story fallback is removed from the front-page response.
+  endpoint/surface still fell back to owner-scoped stored `GlobalWireStory`
+  rows when no edition existed, exposing legacy seed stories for at least one
+  authenticated user. That problem was documented first, then fixed by
+  `02c79907`.
+- Authenticated staging after `02c79907` now renders an honest empty edition
+  state for that user instead of stored legacy story rows.
 
 unproven or partial claims:
 
 - No source-cycle proof yet.
 - No positive deployed VText edition rendering proof yet; staging currently has
   no verified `Wire.vtext` edition with article transclusions to render.
-- Authenticated deployed proof found a stronger blocker first: legacy stored
-  seed stories can still render without an edition.
+- The authenticated stored-story fallback blocker is fixed, but only as an
+  honest empty-state proof. It is not yet proof that a real product source
+  cycle creates and publishes an article into the edition.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -235,6 +259,3 @@ next step:
 - Continue toward creating/updating `global-wire/Wire.vtext` through the
   product source cycle rather than test fixtures, then prove staging renders
   edition-transcluded VText articles.
-- First remove the owner-scoped stored-story fallback from the front-page
-  response, then rerun authenticated staging proof and continue toward a
-  positive edition-transclusion proof.

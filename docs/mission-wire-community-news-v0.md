@@ -182,6 +182,22 @@ Highest-impact uncertainty:
   Community Wire edition-VText rendering without preserving fake compatibility
   behavior.
 
+Update after 2026-06-09 staging slices:
+
+- Hardcoded frontend preview stories and read-time store auto-seeding have been
+  removed from the active product path.
+- `/api/global-wire/stories` now indexes platform articles only when the
+  canonical `global-wire/Wire.vtext` edition transcludes them, and publication
+  artifact approval can copy an approved projection VText into platform scope
+  and append it to that edition.
+- Authenticated staging after commit
+  `02c799074c65c1698dfac0c0973effd3b1c400de` shows `0 articles`,
+  `community-wire-vtext-index`, and the empty edition state instead of
+  owner-scoped stored seed stories.
+- Remaining highest-impact uncertainty is now the positive path: prove that a
+  real product source/review/publication cycle, not a test fixture, produces an
+  article VText and updates `global-wire/Wire.vtext` on staging.
+
 ## Homotopy Parameters
 
 Preserve topology while increasing resolution along these axes:
