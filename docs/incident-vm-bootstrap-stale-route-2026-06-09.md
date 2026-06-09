@@ -110,3 +110,32 @@ The current belief is therefore:
 3. Existing active ownership needs a fast lookup-first path for status/recovery,
    and the boot UI needs to request that recovery path after repeated pending
    bootstrap probes instead of only looping on `/api/shell/bootstrap`.
+
+## Third Finding: stopped ownership still routes recovery through stale resume
+
+After deploying `7ebd187e0d05b354c4d7ac3c7808e007e43bc7e4`, the boot UI did
+request recovery after the second pending bootstrap probe, but the owner session
+still did not recover. Node B inspection showed:
+
+- proxy accepted the recovery request and later logged
+  `proxy compute recovery: wake current computer desktop=primary: ... context
+  deadline exceeded (Client.Timeout exceeded while awaiting headers)`.
+- vmctl repeatedly tried to start the same primary VM
+  `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19`.
+- each attempt failed with `guest did not become healthy ... within 2m30s`.
+- the primary ownership for the owner was persisted as:
+  - `state: stopped`
+  - `stopped_by: vmctl-restart`
+  - stale `sandbox_url: http://10.203.109.2:8085`
+  - `epoch: 159`
+
+This explains why lookup-first recovery still failed. The code treated
+`stopped` and `hibernated` ownership as normal wake/resume cases, so it still
+called `ResolveDesktopContext`. In this incident, that means recovery kept
+replaying the stale stopped/resume path instead of forcing the same current-image
+refresh operation that deploy-time active VM refresh uses.
+
+The next prevention step is to let owner-scoped recovery fall back to vmctl
+refresh for stopped or hibernated current computers when wake/resume fails, and
+to allow vmctl refresh to target those states while preserving the persistent
+data image.
