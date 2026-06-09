@@ -301,6 +301,35 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 		var runtimeStatus *computeRuntimeStatus
 		if own.SandboxURL != "" {
 			runtimeStatus = h.probeRuntimeHealthForTarget(own.SandboxURL)
+			if !runtimeStatus.Reachable {
+				refreshed, refreshErr := h.vmctlClient.RefreshDesktopContext(r.Context(), authResult.UserID, desktopID)
+				if refreshErr != nil {
+					log.Printf("proxy compute recovery: refresh unreachable current computer desktop=%s: %v", desktopID, refreshErr)
+				} else {
+					own = refreshed
+					current = computeComputer{
+						DesktopID:        own.DesktopID,
+						Role:             computerRole(own.DesktopID),
+						Current:          true,
+						Kind:             string(own.Kind),
+						State:            own.State,
+						WarmnessClass:    own.WarmnessClass,
+						Published:        own.Published,
+						Protection:       protectionText(own.WarmnessClass),
+						Reclaimable:      reclaimableWarmness(own.WarmnessClass),
+						RecoveryEligible: true,
+						LookupStatus:     "ok",
+					}
+					if current.WarmnessClass == "" {
+						current.WarmnessClass = currentWarmnessFallback(own.DesktopID)
+						current.Protection = protectionText(current.WarmnessClass)
+						current.Reclaimable = reclaimableWarmness(current.WarmnessClass)
+					}
+					if own.SandboxURL != "" {
+						runtimeStatus = h.probeRuntimeHealthForTarget(own.SandboxURL)
+					}
+				}
+			}
 		}
 		writeJSON(w, http.StatusOK, computeRecoveryResponse{
 			OK:              true,

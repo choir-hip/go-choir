@@ -1171,6 +1171,12 @@ func RecoverEndpoint(baseURL string) string {
 	return fmt.Sprintf("%s/internal/vmctl/recover", baseURL)
 }
 
+// RefreshEndpoint returns the full refresh endpoint URL for the vmctl service
+// at the given base URL.
+func RefreshEndpoint(baseURL string) string {
+	return fmt.Sprintf("%s/internal/vmctl/refresh", baseURL)
+}
+
 // LogoutEndpoint returns the full logout endpoint URL for the vmctl
 // service at the given base URL.
 func LogoutEndpoint(baseURL string) string {

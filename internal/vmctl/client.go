@@ -98,6 +98,51 @@ func (c *Client) ResolveDesktopContext(ctx context.Context, userID, desktopID st
 	return &result, nil
 }
 
+// RefreshDesktopContext force-refreshes an existing user/desktop VM while
+// preserving its persistent data image.
+func (c *Client) RefreshDesktopContext(ctx context.Context, userID, desktopID string) (*resolveResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reqBody := resolveRequest{UserID: userID, DesktopID: normalizeDesktopID(desktopID)}
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: marshal refresh request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, RefreshEndpoint(c.baseURL), bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: create refresh request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: refresh call failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: read refresh response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp vmctlErrorResponse
+		if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
+			return nil, fmt.Errorf("vmctl client: refresh failed: %s", errResp.Error)
+		}
+		return nil, fmt.Errorf("vmctl client: refresh failed with status %s", resp.Status)
+	}
+
+	var result resolveResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("vmctl client: decode refresh response: %w", err)
+	}
+	return &result, nil
+}
+
 // ForkDesktop creates or resumes a distinct interactive VM for the target
 // desktop, derived from the source desktop.
 func (c *Client) ForkDesktop(userID, sourceDesktopID, targetDesktopID string) (*resolveResponse, error) {
