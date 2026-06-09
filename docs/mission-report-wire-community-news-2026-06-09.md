@@ -146,6 +146,22 @@ instead of filled with seeded stories.
   - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
   - `nix develop -c go test ./internal/runtime -run '^$'`
   - `npm run build` in `frontend/`
+- Edition-gate landing loop: commit
+  `f6707096cabfdf7e860ceb35483b8335191429f2` pushed to `origin/main`; CI run
+  `27218260845` succeeded; deploy job `80366180237` succeeded in 26s.
+- Staging identity proof after `f6707096`:
+  `curl -fsS https://choir.news/health` returned proxy and sandbox build
+  commit `f6707096cabfdf7e860ceb35483b8335191429f2`, deployed at
+  `2026-06-09T15:50:58Z`.
+- Staging browser proof after `f6707096`: opened Global Wire via the Desk menu.
+  The backend/runtime was `f6707096` by `/health`; the frontend build commit
+  remained `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd` because deploy impact
+  skipped frontend rebuild for a backend-only change. Global Wire still showed
+  zero stories, visible "No Wire edition articles yet", data source
+  `community-wire-vtext-index`, and zero occurrences of `SourceMaxx newsroom`,
+  `seed source neighborhood`, `Port backlog recedes`, and `StoryGraph desk`.
+  Screenshot evidence was written outside the repo at
+  `/tmp/choir-staging-global-wire-edition-gate-proof.png`.
 
 ## Run State
 
@@ -173,14 +189,14 @@ what was proven:
 - Staging health reports both proxy and sandbox at that SHA.
 - The deployed public Global Wire UI renders the honest empty Community Wire
   state and no longer exposes the deleted preview/seed front-page text.
-- Locally, the story endpoint now requires the canonical `Wire.vtext` edition
+- The deployed story endpoint now requires the canonical `Wire.vtext` edition
   to transclude platform VText articles before they appear in Global Wire.
 
 unproven or partial claims:
 
 - No source-cycle proof yet.
-- No deployed VText edition rendering proof yet; the edition gate is locally
-  implemented but not pushed/deployed.
+- No positive deployed VText edition rendering proof yet; staging currently has
+  no verified `Wire.vtext` edition with article transclusions to render.
 - No AppChangePackage/adoption or run-acceptance record was created in this
   slice; the acceptance level remains staging-smoke-level, not promotion-level.
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
@@ -188,6 +204,6 @@ unproven or partial claims:
 
 next step:
 
-- Commit, push, monitor CI/deploy, and run staging acceptance for the
-  edition-gated `Wire.vtext` path. Then continue toward creating/updating the
-  edition VText through the product source cycle rather than test fixtures.
+- Continue toward creating/updating `global-wire/Wire.vtext` through the
+  product source cycle rather than test fixtures, then prove staging renders
+  edition-transcluded VText articles.

@@ -361,12 +361,15 @@ last checkpoint:
   `global-wire/Wire.vtext` as the canonical Community Wire edition alias, and
   platform article VTexts must be transcluded by that edition before they enter
   the front-page story response.
+- Edition-gate slice committed as `f6707096`, CI run `27218260845` passed, and
+  staging deploy job `80366180237` completed. Staging `/health` reported proxy
+  and sandbox at `f6707096cabfdf7e860ceb35483b8335191429f2`.
 
 current artifact state:
 
 - The deployed Wire app/API path no longer invents seeded front-page stories
   when no VText-owned articles exist.
-- The local API path now has an edition gate for platform VText articles:
+- The deployed API path now has an edition gate for platform VText articles:
   untranscluded platform VTexts remain invisible to Global Wire, while
   `vtext:<doc_id>` refs in `global-wire/Wire.vtext` include those article
   VTexts in edition order.
@@ -381,8 +384,7 @@ what shipped:
 - First behavior slice commit `205125c9`.
 - Explicit fixture repair commit `a89f8a48`.
 - Forced staging deploy for `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`.
-- Edition-gated API slice is local only until its own commit/push/deploy loop
-  completes.
+- Edition-gated API slice commit `f6707096` deployed to staging.
 
 what was proven:
 
@@ -411,13 +413,21 @@ what was proven:
   `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`,
   `nix develop -c go test ./internal/runtime -run '^$'`, and
   `npm run build` in `frontend/`.
+- CI run `27218260845` and deploy job `80366180237` succeeded for `f6707096`.
+- Staging `/health` reported proxy and sandbox build commit
+  `f6707096cabfdf7e860ceb35483b8335191429f2`.
+- Staging browser proof after the backend deploy still showed the honest empty
+  Global Wire state with zero legacy seed-text occurrences. The frontend build
+  commit stayed at `a89f8a48` because the deploy impact skipped frontend build
+  for this backend-only change.
 
 unproven or partial claims:
 
 - Real VText creation from current source cycles.
 - Telegram API ingestion.
 - Removal of Telegram public preview HTML scraping from the Wire ingestion path.
-- Deployed edition VText graph rendering; the current deployed surface is still
-  the honest empty state until this local edition-gated slice lands.
+- Positive deployed edition VText graph rendering; the current deployed surface
+  is still the honest empty state until a real `global-wire/Wire.vtext`
+  includes article transclusions.
 - Product-path creation/update of `Wire.vtext`; this slice proves fixture-backed
   edition indexing only.
