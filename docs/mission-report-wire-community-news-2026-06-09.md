@@ -846,23 +846,36 @@ prompt-bar submissions cannot emit ingestion events.
 - Local/CI: `TestPromptBarSubmissionDoesNotActivateIngestionEvent` (comprehensive
   tag), cycle + sourcecycled ingestion tests pass.
 
-**Slice 2 checkpoint (2026-06-10):**
+**Slice 2 landed (2026-06-10):** commits `f23fc7ee` (problem doc), `31e92a56`
+(adapter fixes); CI run `27246591144` success; staging deploy
+`CHOIR_DEPLOYED_COMMIT=31e92a56` at `2026-06-10T01:20:29Z`.
 
-**Problem:** RSS conditional GET cursors are lost on every `sourcecycled` restart
-because startup `SaveSources` overwrites `last_etag`/`last_modified` from JSON;
-`conditional_request_mode` is stored but not honored in `rss.go`. GDELT ingests
-only GKG zips from `lastupdate.txt` (mentions/export ignored). No adapter-level
-readability import or per-class RSS+GDELT curriculum proof test yet.
+**Problem (Slice 2):** RSS conditional GET cursors were lost on every
+`sourcecycled` restart; `conditional_request_mode` was ignored; GDELT ingested
+only GKG zips.
 
-**Fix intent:**
+**Fix:**
 
-1. Persist and reload per-source poll cursors; honor `conditional_request_mode`.
-2. Broaden `gdelt:15min` to GKG + mentions with zip-URL dedup cursors.
-3. Add RSS 304 + RSS/GDELT→ingestion-event curriculum tests.
+1. `ApplySourcePollState` / `SaveSourcePollState`; registry upsert no longer
+   wipes `last_etag`/`last_modified`.
+2. RSS honors `conditional_request_mode`; 304 test added.
+3. GDELT ingests GKG + mentions; zip URLs stored in `last_etag`/`last_modified`
+   for dedup.
+
+**Staging proof (Slice 2):**
+
+- `gdelt:15min` cursors:
+  `...gkg.csv.zip` + `...mentions.CSV.zip` persisted after post-deploy cycle.
+- `rss:hn_best` `last_modified` cursor persisted (`Tue, 09 Jun 2026 21:19:11 GMT`).
+- Local curriculum test: RSS+GDELT items → ingestion events → processor handoff.
+
+**Residual (Slice 2+):** adapter-level readability import (`store_body_policy`);
+GDELT export stream; full Phase A evidence matrix row (processor → VText →
+platformd).
 
 next step:
 
-- Land Slice 2 adapter fixes; staging proof row for RSS + GDELT ingestion chain.
+- Slice 3 dispatch chain (ingestion → processor → researcher/VText → Wire.vtext).
 
 
 ## v1 mission handoff (2026-06-09)
