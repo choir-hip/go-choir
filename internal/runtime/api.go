@@ -18,6 +18,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"os"
 )
 
 // apiError is a JSON error envelope for API responses.
@@ -786,8 +787,7 @@ func (h *APIHandler) HandleRunSubmission(w http.ResponseWriter, r *http.Request)
 		req.Metadata = make(map[string]any)
 	}
 	req.Metadata[runMetadataDesktopID] = requestDesktopID(r)
-
-	rec, err := h.rt.StartRunWithMetadata(r.Context(), req.Prompt, ownerID, req.Metadata)
+		rec, err := h.rt.StartRunWithMetadata(r.Context(), req.Prompt, ownerID, req.Metadata)
 	if err != nil {
 		log.Printf("runtime api: submit run: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit run"})
@@ -910,6 +910,20 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 		req.Metadata["request_source"] = "internal_worker_vm"
 	}
 
+	// Overload guard: reject processor submissions when too many runs are active.
+	// This prevents the platform computer from wedging under concurrent processor load.
+	if profile == AgentProfileProcessor {
+		maxProc := 32
+		if v := os.Getenv("RUNTIME_MAX_PROCESSOR_RUNS"); v != "" {
+			if parsed, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && parsed > 0 {
+				maxProc = parsed
+			}
+		}
+		if h.rt.RunningCount() >= maxProc {
+			writeAPIJSON(w, http.StatusTooManyRequests, apiError{Error: "too many active processor runs; try again later"})
+			return
+		}
+	}
 	rec, err := h.rt.StartRunWithMetadata(r.Context(), req.Prompt, ownerID, req.Metadata)
 	if err != nil {
 		log.Printf("runtime api: submit internal run: %v", err)

@@ -864,6 +864,17 @@ func (s *Storage) CountQueuedProcessorRequests(ctx context.Context) (int, error)
 	return count, err
 }
 
+
+// CountRecentlySubmittedProcessorRequests returns the number of processor requests
+// with status 'submitted' whose updated_at is >= since. This estimates in-flight
+// processor runs that have not yet completed or failed.
+func (s *Storage) CountRecentlySubmittedProcessorRequests(ctx context.Context, since time.Time) (int, error) {
+	var count int
+	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM processor_requests WHERE status = ? AND updated_at >= ?`,
+		"submitted", since.Format(time.RFC3339)).Scan(&count)
+	return count, err
+}
+
 func (s *Storage) ListReconcilerRequests(ctx context.Context, cycleID string, limit int) ([]ReconcilerRequest, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50

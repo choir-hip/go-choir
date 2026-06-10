@@ -27,6 +27,7 @@ const (
 	defaultIngestionRuntimeDispatchRetries = 8
 	defaultIngestionRuntimeRetryDelay      = 2 * time.Second
 	defaultIngestionQueueDrainInterval     = 1 * time.Minute
+	defaultIngestionProcessorInFlightWindow = 15 * time.Minute
 )
 
 type runtimeRunSubmitRequest struct {
@@ -49,6 +50,7 @@ type ingestionRuntimeDispatcher struct {
 	socketPath           string // UDS socket path; if set, uses unix transport and proxy path for sandbox
 	ownerID              string
 	maxProcessorRequests int
+	inFlightWindow        time.Duration
 	client               *http.Client
 	retryAttempts        int
 	retryDelay           time.Duration
@@ -183,6 +185,7 @@ func ingestionRuntimeDispatcherFromEnv() *ingestionRuntimeDispatcher {
 		socketPath:           socketPath,
 		maxProcessorRequests: limit,
 		retryAttempts:        retries,
+		inFlightWindow: time.Duration(parsePositiveInt(firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_INFLIGHT_WINDOW_SECONDS", "SOURCECYCLED_INFLIGHT_WINDOW_SECONDS"), int(defaultIngestionProcessorInFlightWindow/time.Second))) * time.Second,
 		retryDelay:           defaultIngestionRuntimeRetryDelay,
 	}
 	if socketPath != "" {
@@ -523,6 +526,23 @@ func (d *ingestionRuntimeDispatcher) dispatch(ctx context.Context, store *cycle.
 		processorRequests = queued
 		result.ProcessorSkipped += maxInt(0, queuedCount-len(queued))
 	}
+	// Backpressure: count recently submitted (in-flight) processors and limit new submissions
+	inFlight := 0
+	if store != nil {
+		var err error
+		inFlight, err = store.CountRecentlySubmittedProcessorRequests(ctx, time.Now().UTC().Add(-d.inFlightWindow))
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("count in-flight processors: %v", err))
+			// Fall through — conservative: treat as overload and skip remaining
+			result.ProcessorSkipped += len(processorRequests)
+			return result
+		}
+	}
+	submitCap := processorLimit - inFlight
+	if submitCap <= 0 {
+		result.ProcessorSkipped += len(processorRequests)
+		return result
+	}
 	for _, req := range processorRequests {
 		if !cycle.ProcessorRequestEligibleForDispatch(req) {
 			result.ProcessorSkipped++
@@ -557,6 +577,10 @@ func (d *ingestionRuntimeDispatcher) dispatch(ctx context.Context, store *cycle.
 		result.RunIDs = append(result.RunIDs, run.RunID)
 		if store != nil {
 			_ = store.UpdateProcessorRequestRuntimeRun(ctx, req.RequestID, "submitted", run.RunID)
+		}
+		// Enforce per-drain submission cap: stop if we have submitted enough
+		if result.ProcessorSubmitted >= submitCap {
+			break
 		}
 	}
 	// Story-corpus reconciler dispatches from wire publish debounce (runtime), not ingestion.
