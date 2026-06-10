@@ -1,7 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+  cat >&2 <<'EOF'
+deploy-impact-classify reads changed file paths from stdin, not git SHAs.
+
+Usage:
+  git diff --name-only <base>..<head> | .github/scripts/deploy-impact-classify [output-file]
+  git diff --name-only --cached       | .github/scripts/deploy-impact-classify
+
+CI example:
+  printf '%s\n' "${changed[@]}" | .github/scripts/deploy-impact-classify "$GITHUB_OUTPUT"
+EOF
+}
+
+looks_like_git_sha() {
+  [[ "$1" =~ ^[0-9a-f]{7,40}$ ]]
+}
+
+if [[ -t 0 ]]; then
+  usage
+  exit 1
+fi
+
 output_file="${1:-}"
+if [[ -n "$output_file" ]] && looks_like_git_sha "$output_file"; then
+  printf 'error: %q looks like a git SHA; pipe changed paths on stdin instead\n' "$output_file" >&2
+  usage
+  exit 1
+fi
 
 deploy_needed=false
 deploy_host=false
