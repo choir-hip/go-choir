@@ -261,6 +261,7 @@ in
       # Proxy needs to read the auth signing public key.
       ReadWritePaths = [ "/var/lib/go-choir/auth-signing" ];
       Environment = [
+        "SERVER_HOST=0.0.0.0"
         "PROXY_PORT=8082"
         "PROXY_SANDBOX_URL=http://127.0.0.1:8085"
         "PROXY_AUTH_PUBLIC_KEY_PATH=${authSigningDir}/ed25519-key.pub"
