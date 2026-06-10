@@ -870,9 +870,9 @@ only GKG zips.
 - Local curriculum test: RSS+GDELT items → ingestion events → processor handoff.
 
 **Slice 2 completion landed (2026-06-10):** commits `9258ceb7` (problem doc),
-`6f6422b6` (reader import + GDELT export), `TBD` (deploy fix: move readability
-into `internal/sourcefetch` for Nix sandbox src closure). CI/deploy pending
-re-run after deploy fix.
+`6f6422b6` (reader import + GDELT export), `3a060bcb` (deploy fix: readability
+in `internal/sourcefetch` for Nix sandbox closure). CI run `27249680635`
+success; staging deploy job `80471380268` success.
 
 **Problem (Slice 2 completion):** RSS items stopped at feed summaries when
 `store_body_policy` allowed article import; GDELT skipped `export.CSV.zip`; new
