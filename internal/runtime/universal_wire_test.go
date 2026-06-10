@@ -52,6 +52,7 @@ func seedPlatformSourceNetworkVTextFixture(t *testing.T, handler *APIHandler, do
 	}
 	meta, _ := json.Marshal(map[string]any{
 		"source":                   "edit_vtext",
+		"revision_role":            vtextRevisionRoleCanonical,
 		"ingestion_handoff_cycle_id":     "cycle-live",
 		"ingestion_handoff_request_id":   "reconciler-live",
 		"ingestion_handoff_request_kind": "reconciler",
@@ -243,6 +244,7 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 	}
 	meta, _ := json.Marshal(map[string]any{
 		"source":                   "edit_vtext",
+		"revision_role":            vtextRevisionRoleCanonical,
 		"ingestion_handoff_cycle_id":     "cycle-scoped",
 		"ingestion_handoff_request_id":   "reconciler-scoped",
 		"ingestion_handoff_request_kind": "reconciler",

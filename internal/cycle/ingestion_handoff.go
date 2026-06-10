@@ -37,7 +37,6 @@ func BuildIngestionHandoff(cycleID string, items []sources.Item, events []Ingest
 	sort.Strings(keys)
 
 	out := IngestionHandoff{}
-	allItemIDs := orderedSourceItemIDs(items)
 	for _, key := range keys {
 		itemsForKey := batches[key]
 		for batchIndex, batch := range chunkSourceItems(itemsForKey, maxProcessorBatchItems) {
@@ -65,21 +64,6 @@ func BuildIngestionHandoff(cycleID string, items []sources.Item, events []Ingest
 		}
 	}
 
-	processorIDs := make([]string, 0, len(out.ProcessorRequests))
-	for _, req := range out.ProcessorRequests {
-		processorIDs = append(processorIDs, req.RequestID)
-	}
-	out.ReconcilerRequests = append(out.ReconcilerRequests, ReconcilerRequest{
-		RequestID:           stableRequestID("reconciler", cycleID, "story-corpus", strings.Join(processorIDs, ",")),
-		CycleID:             cycleID,
-		Status:              "queued",
-		Scope:               "story-corpus",
-		SourceItemIDs:       allItemIDs,
-		ProcessorRequestIDs: processorIDs,
-		Prompt:              reconcilerHandoffPrompt(len(items), len(out.ProcessorRequests)),
-		CreatedAt:           now,
-		UpdatedAt:           now,
-	})
 	return out
 }
 
@@ -164,11 +148,7 @@ func sortedItemStrings(items []sources.Item, value func(sources.Item) string) []
 }
 
 func processorHandoffPrompt(key string, items []sources.Item) string {
-	return fmt.Sprintf("Processor %s: ingest %d SourceItems by handle, update live understanding, preserve unresolved questions/watch items, request existing researcher or VText agents only when evidence or publication need requires it.", key, len(items))
-}
-
-func reconcilerHandoffPrompt(sourceCount, processorCount int) string {
-	return fmt.Sprintf("Reconciler story-corpus: review existing story VTexts against %d new SourceItems and %d processor handoffs; note consensus, contradictions, drift, research needs, and candidate VText updates without mutating platform stories.", sourceCount, processorCount)
+	return fmt.Sprintf("Processor %s: ingest %d SourceItems by handle, update live understanding, preserve unresolved questions/watch items, and spawn VText agents when a story should be opened or revised.", key, len(items))
 }
 
 func safeKeyPart(value string) string {

@@ -107,7 +107,7 @@ func TestFallbackModelPolicyUsesGeneratedMimoDefaults(t *testing.T) {
 		t.Fatalf("processor selection = %+v", processor)
 	}
 	reconciler := policy.Resolve(AgentProfileReconciler)
-	if reconciler.Provider != "xiaomi" || reconciler.Model != "mimo-v2.5-pro" || reconciler.ReasoningEffort != "medium" {
+	if reconciler.Provider != "xiaomi" || reconciler.Model != "mimo-v2.5" || reconciler.ReasoningEffort != "medium" {
 		t.Fatalf("reconciler selection = %+v", reconciler)
 	}
 	vsuper := policy.Resolve(AgentProfileVSuper)
@@ -327,7 +327,7 @@ requires = ["image", "tool_use"]
 	if got := policy.Resolve(AgentProfileVSuper); got.Provider != "xiaomi" || got.Model != "mimo-v2.5-pro" {
 		t.Fatalf("migrated vsuper selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileReconciler); got.Provider != "xiaomi" || got.Model != "mimo-v2.5-pro" {
+	if got := policy.Resolve(AgentProfileReconciler); got.Provider != "xiaomi" || got.Model != "mimo-v2.5" {
 		t.Fatalf("migrated reconciler selection = %+v", got)
 	}
 }

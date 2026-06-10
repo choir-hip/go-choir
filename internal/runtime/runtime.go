@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -40,6 +41,11 @@ type Runtime struct {
 	vtextWakeMu      sync.Mutex
 	vtextWakePending map[string]pendingVTextWake
 	vtextWakeAfter   func(time.Duration, func()) vtextWakeTimer
+
+	wirePublishDebounceMu sync.Mutex
+	wirePublishDebouncer  *wirePublishDebouncer
+	wirePublishTimer      vtextWakeTimer
+	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*platform.PublishVTextResponse, error)
 	vtextEditMu      sync.Mutex
 	superRequestMu   sync.Mutex
 	childSpawnMu     sync.Mutex
@@ -1579,6 +1585,8 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		runMetadataOwnerEmail: metadataString(rec.Metadata, runMetadataOwnerEmail),
 		"created_from":        "conductor",
 		"source":              "user_prompt",
+		"revision_role":       vtextRevisionRoleInput,
+		"input_origin":        vtextInputOriginUserPrompt,
 		"vtext_version":       "v0",
 	})
 	userRev := types.Revision{
@@ -2017,7 +2025,8 @@ var durableMetadataKeys = []string{
 	"media_source_research_required",
 	"source_entities",
 	"artifact_kind",
-	"article_version",
+	"revision_role",
+	"input_origin",
 	"vtext_version_stage",
 	"source_network_cycle_id",
 	"source_network_request_id",
@@ -2066,7 +2075,7 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 	}
 	if isWireArticleRevisionRun(rec) {
 		meta["artifact_kind"] = "article_revision"
-		meta["article_version"] = true
+		meta["revision_role"] = vtextRevisionRoleCanonical
 		meta["vtext_version_stage"] = "article_revision"
 	}
 	workerUpdateMeta := rt.workerUpdateRevisionMetadata(ctx, ownerID, doc.DocID, mutation)

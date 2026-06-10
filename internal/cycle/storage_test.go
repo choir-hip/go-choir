@@ -388,7 +388,7 @@ func TestStorageSupersedesQueuedProcessorContinuityAndDependentReconcilers(t *te
 	}
 }
 
-func TestBuildIngestionHandoffRoutesSourceItemsToProcessorsAndReconciler(t *testing.T) {
+func TestBuildIngestionHandoffRoutesSourceItemsToProcessorsOnly(t *testing.T) {
 	now := time.Date(2026, 6, 7, 10, 30, 0, 0, time.UTC)
 	items := []sources.Item{
 		{
@@ -421,8 +421,8 @@ func TestBuildIngestionHandoffRoutesSourceItemsToProcessorsAndReconciler(t *test
 	if len(handoff.ProcessorRequests) != 3 {
 		t.Fatalf("processor requests = %d, want one per source-class route: %+v", len(handoff.ProcessorRequests), handoff.ProcessorRequests)
 	}
-	if len(handoff.ReconcilerRequests) != 1 {
-		t.Fatalf("reconciler requests = %d, want 1", len(handoff.ReconcilerRequests))
+	if len(handoff.ReconcilerRequests) != 0 {
+		t.Fatalf("reconciler requests = %d, want 0 (publish-debounced, not per-cycle)", len(handoff.ReconcilerRequests))
 	}
 	for _, req := range handoff.ProcessorRequests {
 		if req.Status != "queued" || req.CycleID != "cycle_ingestion_handoff" || req.ContinuityRef == "" {
@@ -440,10 +440,6 @@ func TestBuildIngestionHandoffRoutesSourceItemsToProcessorsAndReconciler(t *test
 	}
 	if !foundGDELT {
 		t.Fatalf("GDELT route missing global firehose processor: %+v", handoff.ProcessorRequests)
-	}
-	reconciler := handoff.ReconcilerRequests[0]
-	if reconciler.Scope != "story-corpus" || len(reconciler.SourceItemIDs) != 3 || len(reconciler.ProcessorRequestIDs) != len(handoff.ProcessorRequests) {
-		t.Fatalf("unexpected reconciler request: %+v", reconciler)
 	}
 }
 
@@ -476,9 +472,6 @@ func TestStoragePersistsIngestionHandoffsAndLatestCycleSummary(t *testing.T) {
 	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
 		t.Fatalf("save processor requests: %v", err)
 	}
-	if err := store.SaveReconcilerRequests(ctx, handoff.ReconcilerRequests); err != nil {
-		t.Fatalf("save reconciler requests: %v", err)
-	}
 	fetch := sources.NewFetchRecord(sources.Source{ID: "rss:ai_policy", Type: sources.SourceTypeRSS, URL: "https://example.test/feed"}, "https://example.test/feed", now)
 	fetch.Status = "ok"
 	fetch.StatusCode = 200
@@ -507,18 +500,15 @@ func TestStoragePersistsIngestionHandoffsAndLatestCycleSummary(t *testing.T) {
 	if err := store.UpdateProcessorRequestRuntimeRun(ctx, summary.ProcessorRequests[0].RequestID, "submitted", "processor-run-1"); err != nil {
 		t.Fatalf("update processor runtime run: %v", err)
 	}
-	if len(summary.ReconcilerRequests) != 1 || summary.ReconcilerRequests[0].Scope != "story-corpus" {
+	if len(summary.ReconcilerRequests) != 0 {
 		t.Fatalf("unexpected reconciler summary: %+v", summary.ReconcilerRequests)
-	}
-	if err := store.UpdateReconcilerRequestRuntimeRun(ctx, summary.ReconcilerRequests[0].RequestID, "submitted", "reconciler-run-1"); err != nil {
-		t.Fatalf("update reconciler runtime run: %v", err)
 	}
 	summary, err = store.LatestCycleSummary(ctx)
 	if err != nil {
 		t.Fatalf("latest cycle summary after runtime run ids: %v", err)
 	}
-	if summary.ProcessorRequests[0].RuntimeRunID != "processor-run-1" || summary.ReconcilerRequests[0].RuntimeRunID != "reconciler-run-1" {
-		t.Fatalf("runtime run ids not persisted: processors=%+v reconcilers=%+v", summary.ProcessorRequests, summary.ReconcilerRequests)
+	if summary.ProcessorRequests[0].RuntimeRunID != "processor-run-1" {
+		t.Fatalf("runtime run ids not persisted: processors=%+v", summary.ProcessorRequests)
 	}
 }
 

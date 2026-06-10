@@ -51,6 +51,7 @@ type WireStory struct {
 	StyleSources        []WireStyleSource `json:"style_sources,omitempty"`
 	StoryVTextDoc       string           `json:"story_vtext_doc_id,omitempty"`
 	VTextContent        string           `json:"vtext_content,omitempty"`
+	PlatformRoutePath   string           `json:"platform_route_path,omitempty"`
 	SourceState         string           `json:"source_state"`
 	CreatedAt           time.Time        `json:"created_at,omitempty"`
 	UpdatedAt           time.Time        `json:"updated_at,omitempty"`

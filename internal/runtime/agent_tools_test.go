@@ -169,8 +169,8 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s missing spawn_agent", profile)
 		}
-		if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 2 || got[0] != AgentProfileResearcher || got[1] != AgentProfileVText {
-			t.Fatalf("%s spawn_agent role enum = %#v, want researcher/vtext", profile, got)
+		if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 1 || got[0] != AgentProfileVText {
+			t.Fatalf("%s spawn_agent role enum = %#v, want only vtext", profile, got)
 		}
 	}
 	for _, name := range []string{"spawn_agent", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "read_evidence", "edit_vtext", "request_super_execution"} {
@@ -2111,7 +2111,7 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	}
 }
 
-func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVText(t *testing.T) {
+func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -2160,22 +2160,11 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	}
 
 	processorRegistry := rt.ToolRegistryForProfile(AgentProfileProcessor)
-	spawnResearchRaw, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
+	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"verify the strongest claims in this source batch",
 		"role":"researcher"
-	}`))
-	if err != nil {
-		t.Fatalf("processor spawn researcher: %v", err)
-	}
-	var researchSpawn struct {
-		Profile string `json:"profile"`
-		Role    string `json:"role"`
-	}
-	if err := json.Unmarshal([]byte(spawnResearchRaw), &researchSpawn); err != nil {
-		t.Fatalf("decode processor research spawn: %v", err)
-	}
-	if researchSpawn.Profile != AgentProfileResearcher || researchSpawn.Role != AgentProfileResearcher {
-		t.Fatalf("processor research spawn = %+v, want researcher/researcher", researchSpawn)
+	}`)); err == nil {
+		t.Fatal("processor should not be allowed to spawn researcher")
 	}
 
 	spawnVTextRaw, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
@@ -2230,8 +2219,12 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	if metadataString(seedMeta, "artifact_kind") != "source_brief" || metadataString(seedMeta, "vtext_version") == "v0" {
 		t.Fatalf("processor seed should be a non-article source brief, metadata=%+v", seedMeta)
 	}
-	if articleVersion, ok := seedMeta["article_version"].(bool); !ok || articleVersion {
-		t.Fatalf("processor seed should not mark article_version true: %+v", seedMeta)
+	if metadataString(seedMeta, "revision_role") != vtextRevisionRoleInput ||
+		metadataString(seedMeta, "input_origin") != vtextInputOriginProcessorHandoff {
+		t.Fatalf("processor seed should be input/processor_handoff: %+v", seedMeta)
+	}
+	if _, ok := seedMeta["article_version"]; ok {
+		t.Fatalf("processor seed should not write article_version: %+v", seedMeta)
 	}
 	sourceEntities := decodeVTextSourceEntities(seedMeta["source_entities"])
 	if len(sourceEntities) != 1 || sourceEntities[0].Target.ContentID != sourceItem.ContentID {
@@ -2310,8 +2303,10 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 		t.Fatalf("article revision content/lineage invalid: %+v", articleRev)
 	}
 	articleMeta := decodeRevisionMetadata(articleRev.Metadata)
-	if metadataString(articleMeta, "artifact_kind") != "article_revision" || articleMeta["article_version"] != true || metadataString(articleMeta, "vtext_version_stage") != "article_revision" {
-		t.Fatalf("vtext-owned article revision kept pre-article metadata: %#v", articleMeta)
+	if metadataString(articleMeta, "artifact_kind") != "article_revision" ||
+		metadataString(articleMeta, "revision_role") != vtextRevisionRoleCanonical ||
+		metadataString(articleMeta, "vtext_version_stage") != "article_revision" {
+		t.Fatalf("vtext-owned article revision metadata invalid: %#v", articleMeta)
 	}
 	if len(decodeVTextSourceEntities(articleMeta["source_entities"])) != 1 ||
 		metadataString(articleMeta, "source_network_cycle_id") != "cycle-test" ||
@@ -2375,6 +2370,18 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	}
 	if reconcilerVTextRun.AgentID != "vtext:"+vtextSpawn.DocID || reconcilerVTextRun.ChannelID != vtextSpawn.DocID || metadataString(reconcilerVTextRun.Metadata, "type") != "vtext_agent_revision" {
 		t.Fatalf("reconciler vtext run is not a vtext revision run: %+v", reconcilerVTextRun)
+	}
+	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
+		"objective":"verify claims independently",
+		"role":"researcher"
+	}`)); err == nil {
+		t.Fatal("reconciler should not be allowed to spawn researcher")
+	}
+	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
+		"objective":"draft a corpus-wide new article without a target doc",
+		"role":"vtext"
+	}`)); err == nil {
+		t.Fatal("reconciler corpus_wake should require existing channel_id")
 	}
 	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
 		"objective":"privileged mutation",

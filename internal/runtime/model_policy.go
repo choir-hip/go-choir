@@ -148,7 +148,7 @@ reasoning = "medium"
 
 [roles.reconciler]
 provider = "xiaomi"
-model = "mimo-v2.5-pro"
+model = "mimo-v2.5"
 reasoning = "medium"
 
 [roles.verifier]
@@ -236,7 +236,7 @@ func fallbackModelPolicy(_ Config) ModelPolicy {
 			AgentProfileResearcher:       {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
 			AgentProfileVText:            {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
 			AgentProfileProcessor:        {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			AgentProfileReconciler:       {Provider: defaultXiaomiProvider, Model: defaultMimoProModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
+			AgentProfileReconciler:       {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
 			modelPolicyRoleVerifier:      {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, Source: "platform_fallback"},
 			modelPolicyRoleVerifierMulti: {Provider: defaultXiaomiProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
 		},

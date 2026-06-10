@@ -460,6 +460,7 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 	})
 	rt.emitVTextAgentEvent(ctx, rec, types.EventVTextAgentRevisionCompleted,
 		events.CauseToolExecution, completedPayload)
+	rt.maybeAutonomousPublishWireArticle(ctx, doc, storedRev, rec)
 	return storedRev, nil
 }
 

@@ -271,6 +271,9 @@ EOF
           choir.maild_url=*)
             echo "RUNTIME_MAILD_URL=''${param#choir.maild_url=}" >> "$ENV_FILE"
             ;;
+          choir.wire_publish_url=*)
+            echo "RUNTIME_WIRE_PUBLISH_URL=''${param#choir.wire_publish_url=}" >> "$ENV_FILE"
+            ;;
           choir.source_service_url=*)
             echo "SOURCE_SERVICE_BASE_URL=''${param#choir.source_service_url=}" >> "$ENV_FILE"
             ;;
@@ -308,6 +311,13 @@ EOF
         vmctl_url="$(sed -n 's/^RUNTIME_VMCTL_URL=//p' "$ENV_FILE" | tail -n1)"
         if [ -n "$vmctl_url" ]; then
           printf 'RUNTIME_MAILD_URL=%s\n' "$(printf '%s' "$vmctl_url" | sed 's/:8083$/:8087/')" >> "$ENV_FILE"
+        fi
+      fi
+
+      if ! grep -q '^RUNTIME_WIRE_PUBLISH_URL=' "$ENV_FILE"; then
+        vmctl_url="$(sed -n 's/^RUNTIME_VMCTL_URL=//p' "$ENV_FILE" | tail -n1)"
+        if [ -n "$vmctl_url" ]; then
+          printf 'RUNTIME_WIRE_PUBLISH_URL=%s\n' "$(printf '%s' "$vmctl_url" | sed 's/:8083$/:8082/')" >> "$ENV_FILE"
         fi
       fi
 

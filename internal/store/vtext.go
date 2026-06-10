@@ -667,6 +667,57 @@ func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
 	return nil
 }
 
+// PatchRevisionMetadata merges patch into an existing revision's metadata_json.
+// Revisions are otherwise immutable; publication refs use this narrow update path.
+func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID string, patch map[string]any) error {
+	if s == nil {
+		return fmt.Errorf("store unavailable")
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	revisionID = strings.TrimSpace(revisionID)
+	if ownerID == "" || revisionID == "" {
+		return fmt.Errorf("owner_id and revision_id are required")
+	}
+	if len(patch) == 0 {
+		return nil
+	}
+	rev, err := s.GetRevision(ctx, revisionID, ownerID)
+	if err != nil {
+		return err
+	}
+	meta := map[string]any{}
+	if len(rev.Metadata) > 0 {
+		if err := json.Unmarshal(rev.Metadata, &meta); err != nil {
+			return fmt.Errorf("decode revision metadata: %w", err)
+		}
+	}
+	for key, value := range patch {
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		meta[key] = value
+	}
+	merged, err := json.Marshal(meta)
+	if err != nil {
+		return fmt.Errorf("marshal revision metadata: %w", err)
+	}
+	result, err := s.vtextHandle().ExecContext(ctx,
+		`UPDATE vtext_revisions SET metadata_json = ? WHERE revision_id = ? AND owner_id = ?`,
+		string(merged), revisionID, ownerID,
+	)
+	if err != nil {
+		return fmt.Errorf("patch revision metadata: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check patched revision rows: %w", err)
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // GetRevision returns the revision with the given revision ID, scoped to
 // the given owner.
 func (s *Store) GetRevision(ctx context.Context, revisionID, ownerID string) (types.Revision, error) {

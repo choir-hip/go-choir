@@ -174,7 +174,7 @@ func universalWirePlatformOwnerID() string {
 func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Document, rev types.Revision, styleSources []types.WireStyleSource) (types.WireStory, bool) {
 	meta := decodeRevisionMetadata(rev.Metadata)
 	cycleID := sourceNetworkCycleID(meta)
-	if metadataString(meta, "source") != "edit_vtext" || cycleID == "" {
+	if metadataString(meta, "source") != "edit_vtext" || cycleID == "" || !wireRevisionIsCanonicalArticle(meta) {
 		return types.WireStory{}, false
 	}
 	content := strings.TrimSpace(rev.Content)
@@ -201,6 +201,11 @@ func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Doc
 	if styleID != "wire-style" {
 		projections["wire-style"] = projection
 	}
+	platformRoute := wirePlatformRoutePath(meta)
+	changeState := "vtext published"
+	if platformRoute != "" {
+		changeState = "platform published"
+	}
 	return types.WireStory{
 		ID:                  "source-network-vtext-" + doc.DocID,
 		OwnerID:             doc.OwnerID,
@@ -209,7 +214,8 @@ func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Doc
 		Freshness:           wireArticleFreshness(doc.UpdatedAt),
 		Prominence:          90,
 		Tension:             "source-network article",
-		ChangeState:         "vtext published",
+		ChangeState:         changeState,
+		PlatformRoutePath:   platformRoute,
 		NodeTone:            "live",
 		Related:             []string{},
 		Manifest:            manifest,
@@ -569,6 +575,16 @@ func wireArticleArticleClaims(content, _ string, meta map[string]any) []string {
 
 func sourceNetworkCycleID(meta map[string]any) string {
 	return firstNonEmptyString(metadataString(meta, "source_network_cycle_id"), metadataString(meta, "ingestion_handoff_cycle_id"))
+}
+
+func wirePlatformRoutePath(meta map[string]any) string {
+	if route := metadataString(meta, "platformd_route_path"); route != "" {
+		return route
+	}
+	if ref, ok := meta["platformd_publication_ref"].(map[string]any); ok {
+		return metadataString(ref, "route_path")
+	}
+	return ""
 }
 
 func wireArticleFreshness(updatedAt time.Time) string {

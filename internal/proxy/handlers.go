@@ -959,4 +959,5 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	// vmctl control endpoints are internal-only; they must not be
 	// exposed as public browser-facing routes.
 	s.HandleFunc("/internal/vmctl/", h.HandleVMctlDeny)
+	s.HandleFunc("/internal/wire/platform/publications/vtext", h.HandleInternalWirePlatformPublish)
 }

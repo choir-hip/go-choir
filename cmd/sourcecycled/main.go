@@ -541,48 +541,7 @@ func (d *ingestionRuntimeDispatcher) dispatch(ctx context.Context, store *cycle.
 			_ = store.UpdateProcessorRequestRuntimeRun(ctx, req.RequestID, "submitted", run.RunID)
 		}
 	}
-	reconcilerRequests := handoff.ReconcilerRequests
-	if store != nil {
-		queued, err := store.ListQueuedReconcilerRequests(ctx, 50)
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("list queued reconcilers: %v", err))
-			result.ReconcilerSkipped += len(handoff.ReconcilerRequests)
-			return result
-		}
-		reconcilerRequests = queued
-	}
-	for _, req := range reconcilerRequests {
-		if store != nil {
-			ready, err := store.ProcessorRequestsSubmitted(ctx, req.ProcessorRequestIDs)
-			if err != nil {
-				result.ReconcilerFailed++
-				result.Errors = append(result.Errors, fmt.Sprintf("%s: check processor readiness: %v", req.RequestID, err))
-				continue
-			}
-			if !ready {
-				result.ReconcilerSkipped++
-				continue
-			}
-		}
-		run, err := d.submitReconciler(ctx, req)
-		if err != nil {
-			if isTransientRuntimeSubmitError(err) {
-				result.Errors = append(result.Errors, fmt.Sprintf("%s: transient runtime unavailable: %v", req.RequestID, err))
-				break
-			}
-			result.ReconcilerFailed++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", req.RequestID, err))
-			if store != nil {
-				_ = store.UpdateReconcilerRequestStatus(ctx, req.RequestID, "dispatch_failed")
-			}
-			continue
-		}
-		result.ReconcilerSubmitted++
-		result.RunIDs = append(result.RunIDs, run.RunID)
-		if store != nil {
-			_ = store.UpdateReconcilerRequestRuntimeRun(ctx, req.RequestID, "submitted", run.RunID)
-		}
-	}
+	// Story-corpus reconciler dispatches from wire publish debounce (runtime), not ingestion.
 	return result
 }
 
@@ -599,7 +558,7 @@ func (d *ingestionRuntimeDispatcher) submitProcessor(ctx context.Context, req cy
 		"\nProcessor key: " + req.ProcessorKey +
 		"\nContinuity ref: " + req.ContinuityRef +
 		"\nSource item handles: " + strings.Join(req.SourceItemIDs, ", ") +
-		"\nDo not paste source bodies into the checkpoint. Use source_search/fetch_url by handle or URL when needed, preserve source handles, and delegate to existing researcher or VText agents when the brief needs evidence or publication."
+		"\nDo not paste source bodies into the checkpoint. Use source_search/fetch_url by handle or URL when needed, preserve source handles, and spawn VText agents when a story should be opened or revised."
 	return d.submit(ctx, runtimeRunSubmitRequest{
 		OwnerID: d.ownerID,
 		Prompt:  prompt,

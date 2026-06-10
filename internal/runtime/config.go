@@ -114,6 +114,15 @@ type Config struct {
 	// must not expose raw send authority to runtime agents.
 	MaildURL string
 
+	// WirePublishURL is the host-mediated proxy route for autonomous Universal
+	// Wire platform publication. Platform VM sandboxes call this instead of
+	// platformd directly.
+	WirePublishURL string
+
+	// PlatformdURL is an optional direct platformd endpoint for local publish
+	// tests or host-colocated sandboxes when WirePublishURL is unset.
+	PlatformdURL string
+
 	// LLMProvider is the explicitly selected provider for runtime LLM calls.
 	// Empty means no provider is selected by this runtime config.
 	LLMProvider string
@@ -184,6 +193,8 @@ func LoadConfig() Config {
 		VTextWakeDebounce:   durationOr("RUNTIME_VTEXT_WAKE_DEBOUNCE", DefaultVTextWakeDebounce),
 		VmctlURL:            envOr("RUNTIME_VMCTL_URL", os.Getenv("PROXY_VMCTL_URL")),
 		MaildURL:            os.Getenv("RUNTIME_MAILD_URL"),
+		WirePublishURL:      os.Getenv("RUNTIME_WIRE_PUBLISH_URL"),
+		PlatformdURL:        envOr("RUNTIME_PLATFORMD_URL", os.Getenv("PROXY_PLATFORMD_URL")),
 		LLMProvider:         os.Getenv("RUNTIME_LLM_PROVIDER"),
 		LLMModel:            os.Getenv("RUNTIME_LLM_MODEL"),
 		LLMReasoningEffort:  os.Getenv("RUNTIME_LLM_REASONING_EFFORT"),

@@ -113,40 +113,9 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			if overlayID := strings.TrimSpace(in.ModelPolicyOverlayID); overlayID != "" {
 				constraints[runMetadataLLMPolicyOverlayID] = overlayID
 			}
-			if callerProfile == AgentProfileConductor && profile == AgentProfileVText {
-				parentRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
-				if parentRec == nil {
-					parentRec = &types.RunRecord{
-						RunID:        parentID,
-						OwnerID:      ownerID,
-						AgentProfile: callerProfile,
-					}
-				}
-				decision, err := rt.ensureConductorVTextRoute(ctx, parentRec, in.Objective, in.InitialContent)
-				if err != nil {
-					return "", err
-				}
-				return toolResultJSON(map[string]any{
-					"action":                 decision.Action,
-					"app":                    decision.App,
-					"title":                  decision.Title,
-					"seed_prompt":            decision.SeedPrompt,
-					"initial_content":        decision.InitialContent,
-					"create_initial_version": decision.CreateInitialVersion != nil && *decision.CreateInitialVersion,
-					"agent_id":               "vtext:" + decision.DocID,
-					"doc_id":                 decision.DocID,
-					"user_revision_id":       decision.UserRevisionID,
-					"framing_revision_id":    decision.FramingRevisionID,
-					"initial_revision_id":    decision.InitialRevisionID,
-					"initial_loop_id":        decision.InitialLoopID,
-					"loop_id":                decision.InitialLoopID,
-					"channel_id":             decision.DocID,
-					"role":                   role,
-					"profile":                profile,
-					"state":                  "open",
-				})
-			}
-			if (callerProfile == AgentProfileProcessor || callerProfile == AgentProfileReconciler) && profile == AgentProfileVText {
+			if (callerProfile == AgentProfileConductor ||
+				callerProfile == AgentProfileProcessor ||
+				callerProfile == AgentProfileReconciler) && profile == AgentProfileVText {
 				parentRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
 				if parentRec == nil {
 					parentRec = &types.RunRecord{
@@ -158,10 +127,10 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 						ChannelID:    stringFromToolContext(ctx, toolCtxChannelID),
 					}
 				}
-				decision, err := rt.ensureCoagentVTextRevisionRoute(ctx, parentRec, coagentVTextRouteRequest{
+				kind := vtextHandoffKindForCaller(callerProfile)
+				decision, err := rt.ensureVTextHandoff(ctx, parentRec, vtextHandoffRequest{
+					Kind:           kind,
 					CallerProfile:  callerProfile,
-					Role:           role,
-					Profile:        profile,
 					Objective:      in.Objective,
 					Title:          in.Title,
 					ChannelID:      in.ChannelID,
@@ -169,6 +138,29 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 				})
 				if err != nil {
 					return "", err
+				}
+				if kind == vtextHandoffKindUserPrompt {
+					conductor := decision.Conductor
+					return toolResultJSON(map[string]any{
+						"action":                 conductor.Action,
+						"app":                    conductor.App,
+						"title":                  conductor.Title,
+						"seed_prompt":            conductor.SeedPrompt,
+						"initial_content":        conductor.InitialContent,
+						"create_initial_version": conductor.CreateInitialVersion != nil && *conductor.CreateInitialVersion,
+						"agent_id":               "vtext:" + decision.DocID,
+						"doc_id":                 decision.DocID,
+						"user_revision_id":       decision.UserRevisionID,
+						"framing_revision_id":    conductor.FramingRevisionID,
+						"initial_revision_id":    conductor.InitialRevisionID,
+						"initial_loop_id":        decision.InitialLoopID,
+						"loop_id":                decision.RevisionRunID,
+						"channel_id":             decision.DocID,
+						"role":                   role,
+						"profile":                profile,
+						"state":                  "open",
+						"handoff_kind":           string(kind),
+					})
 				}
 				return toolResultJSON(map[string]any{
 					"agent_id":             "vtext:" + decision.DocID,
@@ -183,6 +175,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 					"title":                decision.Title,
 					"created_document":     decision.CreatedDocument,
 					"revised_existing_doc": !decision.CreatedDocument,
+					"handoff_kind":         string(kind),
 				})
 			}
 			child, err := rt.StartChildRun(ctx, parentID, in.Objective, ownerID, constraints)
@@ -314,7 +307,8 @@ func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *ty
 	seedMetaMap := map[string]any{
 		"source":                      "coagent_vtext_seed",
 		"artifact_kind":               "source_brief",
-		"article_version":             false,
+		"revision_role":               vtextRevisionRoleInput,
+		"input_origin":                vtextInputOriginForCaller(req.CallerProfile),
 		"vtext_version_stage":         "pre_article_brief",
 		"created_from":                canonicalAgentProfile(req.CallerProfile),
 		"parent_loop_id":              parentRec.RunID,

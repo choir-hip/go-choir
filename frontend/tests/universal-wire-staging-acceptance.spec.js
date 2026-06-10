@@ -64,6 +64,22 @@ test('deployed Universal Wire rename: stories API and app surface', async ({ bro
     if (stories.source === 'universal-wire-edition-vtext') {
       expect(stories.stories.length).toBeGreaterThan(0);
       expect(stories.stories[0].headline).toBeTruthy();
+      const published = stories.stories.find((story) => story.platform_route_path);
+      if (published) {
+        expect(published.changeState).toBe('platform published');
+        const resolved = await page.evaluate(async (routePath) => {
+          const res = await fetch(
+            `/api/platform/publications/resolve?route=${encodeURIComponent(routePath)}`,
+            { credentials: 'include' },
+          );
+          const body = await res.text();
+          if (!res.ok) {
+            throw new Error(`resolve failed: ${res.status} ${body}`);
+          }
+          return body ? JSON.parse(body) : null;
+        }, published.platform_route_path);
+        expect(resolved?.route?.path || resolved?.publication?.route_path).toBeTruthy();
+      }
     }
 
     await openDeskApp(page, 'universal-wire');
