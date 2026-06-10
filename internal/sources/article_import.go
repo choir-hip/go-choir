@@ -7,7 +7,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/yusefmosiah/go-choir/internal/htmlextract"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 )
 
@@ -57,7 +56,7 @@ func enrichItemWithReaderSnapshot(ctx context.Context, client *http.Client, user
 	if err != nil {
 		return
 	}
-	_, text := htmlextract.ExtractReadableHTML(body)
+	_, text := sourcefetch.ExtractReadableHTML(body)
 	text = strings.TrimSpace(text)
 	if utf8.RuneCountInString(text) < minReaderSnapshotRunes {
 		return

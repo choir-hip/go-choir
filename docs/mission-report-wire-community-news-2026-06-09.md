@@ -869,24 +869,48 @@ only GKG zips.
 - `rss:hn_best` `last_modified` cursor persisted (`Tue, 09 Jun 2026 21:19:11 GMT`).
 - Local curriculum test: RSS+GDELT items → ingestion events → processor handoff.
 
-**Slice 2 completion checkpoint (2026-06-10):**
+**Slice 2 completion landed (2026-06-10):** commits `9258ceb7` (problem doc),
+`6f6422b6` (reader import + GDELT export), `TBD` (deploy fix: move readability
+into `internal/sourcefetch` for Nix sandbox src closure). CI/deploy pending
+re-run after deploy fix.
 
-**Problem:** Slice 2 landed conditional GET and GDELT GKG+mentions but not the
-full curriculum bar: RSS items still stop at feed summaries when
-`store_body_policy` allows article import, and GDELT still skips
-`export.CSV.zip`.
+**Problem (Slice 2 completion):** RSS items stopped at feed summaries when
+`store_body_policy` allowed article import; GDELT skipped `export.CSV.zip`; new
+`internal/htmlextract` package was outside the Nix sandbox `internalDirs`
+filter and blocked Node B deploy.
 
-**Fix intent:**
+**Fix:**
 
 1. Adapter-level reader import for RSS when policy is `bounded_text`,
-   `bounded_release_text`, or `bounded_abstract`.
-2. Ingest GDELT export events; persist export zip URL cursor alongside GKG and
-   mentions.
-3. Tests for reader snapshot classification and export parse.
+   `bounded_release_text`, or `bounded_abstract` (`article_import.go`).
+2. GDELT export stream + `last_aux_cursor` poll state.
+3. Shared readability extraction in `internal/sourcefetch` (already in sandbox
+   and sourcecycled Nix closures).
+
+**Slice 3 checkpoint (2026-06-10):**
+
+**Problem:** Ingestion events and processor dispatch exist (Slice 1), and
+adapters now emit richer source artifacts (Slice 2), but there is no proven
+staging path where a `sourcecycled` cycle alone produces Article VTexts with
+native source transclusions and updates `global-wire/Wire.vtext`. Prior proof
+used prompt-bar orchestration (`super` foreground), not
+`activation_origin=ingestion_event` processor runs. `coagentVTextRevisionRoute`
+exists for processor/reconciler callers, but processor handoff prompts are
+generic and do not require edition publication; reconciler prompts explicitly
+forbid mutating platform stories.
+
+**Fix intent (Slice 3):**
+
+1. Tighten processor/reconciler contracts so ingestion-activated runs request
+   VText agents with source-handle transclusions when publication criteria met.
+2. Wire edition update (`global-wire/Wire.vtext` transclusion) into the
+   reconciler or dedicated edition step after article VText approval.
+3. Local + staging proof: post-cycle processor run → Article VText → edition
+   graph visible on `/api/global-wire/stories` without prompt-bar activation.
 
 next step:
 
-- Land Slice 2 completion; then Slice 3 dispatch chain.
+- Confirm Slice 2 deploy at fixed SHA; then implement Slice 3 problem fix chain.
 
 
 ## v1 mission handoff (2026-06-09)

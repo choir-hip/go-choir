@@ -21,7 +21,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/htmlextract"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -1893,7 +1892,7 @@ func statusForText(text string) string {
 }
 
 func extractReadableHTML(data []byte) (string, string) {
-	return htmlextract.ExtractReadableHTML(data)
+	return sourcefetch.ExtractReadableHTML(data)
 }
 
 func extractRSSFeedTitle(data []byte) string {

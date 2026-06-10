@@ -1,4 +1,4 @@
-package htmlextract
+package sourcefetch
 
 import (
 	"bytes"
