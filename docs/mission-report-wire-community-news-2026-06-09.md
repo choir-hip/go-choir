@@ -846,9 +846,23 @@ prompt-bar submissions cannot emit ingestion events.
 - Local/CI: `TestPromptBarSubmissionDoesNotActivateIngestionEvent` (comprehensive
   tag), cycle + sourcecycled ingestion tests pass.
 
+**Slice 2 checkpoint (2026-06-10):**
+
+**Problem:** RSS conditional GET cursors are lost on every `sourcecycled` restart
+because startup `SaveSources` overwrites `last_etag`/`last_modified` from JSON;
+`conditional_request_mode` is stored but not honored in `rss.go`. GDELT ingests
+only GKG zips from `lastupdate.txt` (mentions/export ignored). No adapter-level
+readability import or per-class RSS+GDELT curriculum proof test yet.
+
+**Fix intent:**
+
+1. Persist and reload per-source poll cursors; honor `conditional_request_mode`.
+2. Broaden `gdelt:15min` to GKG + mentions with zip-URL dedup cursors.
+3. Add RSS 304 + RSS/GDELT→ingestion-event curriculum tests.
+
 next step:
 
-- Slice 2 RSS/GDELT curriculum (same artifact + event shape).
+- Land Slice 2 adapter fixes; staging proof row for RSS + GDELT ingestion chain.
 
 
 ## v1 mission handoff (2026-06-09)
