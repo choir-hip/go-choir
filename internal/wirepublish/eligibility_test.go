@@ -134,3 +134,27 @@ func TestEligibleForAutonomousPublishRejectsSeedBrief(t *testing.T) {
 		t.Fatal("seed heuristic should match fixture content")
 	}
 }
+
+
+func TestEligibleForAutonomousPublishAcceptsRevisionLineageWithoutRunMetadata(t *testing.T) {
+	owner := PlatformOwnerID()
+	meta, _ := json.Marshal(map[string]any{
+		"source":                      "edit_vtext",
+		"revision_role":               RevisionRoleCanonical,
+		"vtext_edit_kind":             "vtext_edit",
+		"source_network_cycle_id":     "cycle-live-1",
+		"source_network_request_kind": "processor",
+	})
+	rev := types.Revision{
+		RevisionID: "rev-live",
+		DocID:      "doc-live",
+		OwnerID:    owner,
+		Content:    "# Story\n\nReal publishable article body.",
+		Metadata:   meta,
+	}
+	doc := types.Document{DocID: rev.DocID, OwnerID: owner, Title: "Live.vtext"}
+	rec := &types.RunRecord{OwnerID: owner, Metadata: map[string]any{"request_intent": "integrate_worker_findings"}}
+	if !EligibleForAutonomousPublish(doc, rev, rec, owner) {
+		t.Fatal("revision lineage should make live worker-integration article publishable")
+	}
+}

@@ -24,16 +24,10 @@ func PlatformOwnerID() string {
 // EligibleForAutonomousPublish reports whether a re-loaded revision may enter the
 // wire publication-policy choke point (proxy re-reads revision metadata here).
 func EligibleForAutonomousPublish(doc types.Document, rev types.Revision, rec *types.RunRecord, platformOwnerID string) bool {
-	if rec == nil || strings.TrimSpace(doc.DocID) == "" {
-		return false
-	}
-	if strings.TrimSpace(rec.OwnerID) != strings.TrimSpace(platformOwnerID) {
+	if strings.TrimSpace(doc.DocID) == "" {
 		return false
 	}
 	if strings.TrimSpace(doc.OwnerID) != strings.TrimSpace(platformOwnerID) {
-		return false
-	}
-	if !IsWireArticleRevisionRun(rec) {
 		return false
 	}
 	meta := decodeMetadata(rev.Metadata)
@@ -41,6 +35,16 @@ func EligibleForAutonomousPublish(doc types.Document, rev types.Revision, rec *t
 		return false
 	}
 	if sourceNetworkCycleID(meta) == "" || !RevisionIsPublishableWireArticle(meta) {
+		return false
+	}
+	if rec != nil {
+		if strings.TrimSpace(rec.OwnerID) != strings.TrimSpace(platformOwnerID) {
+			return false
+		}
+		if !IsWireArticleRevisionRun(rec) && !revisionCarriesWireLineage(meta) {
+			return false
+		}
+	} else if !revisionCarriesWireLineage(meta) {
 		return false
 	}
 	content := strings.TrimSpace(rev.Content)
@@ -101,6 +105,17 @@ func sourceNetworkCycleID(meta map[string]any) string {
 		metadataString(meta, "source_network_cycle_id"),
 		metadataString(meta, "ingestion_handoff_cycle_id"),
 	)
+}
+
+func revisionCarriesWireLineage(meta map[string]any) bool {
+	if sourceNetworkCycleID(meta) == "" {
+		return false
+	}
+	kind := metadataString(meta, "source_network_request_kind")
+	if kind == "" {
+		kind = metadataString(meta, "ingestion_handoff_request_kind")
+	}
+	return kind == "processor" || kind == "reconciler"
 }
 
 func articleContentLooksLikeSeed(content string) bool {
