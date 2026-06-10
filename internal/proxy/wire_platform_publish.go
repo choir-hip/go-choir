@@ -9,6 +9,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
@@ -52,7 +53,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		return
 	}
 
-	desktopID := requestDesktopID(r)
+	desktopID := vmctl.UniversalWirePlatformDesktopID
 	sandboxURL, err := h.resolveSandboxURL(r.Context(), platformOwner, desktopID)
 	if err != nil {
 		log.Printf("proxy: wire publish failed to resolve sandbox for %s: %v", platformOwner, err)
