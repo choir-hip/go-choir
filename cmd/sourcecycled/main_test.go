@@ -16,7 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
 
-func TestGlobalWireSourceRegistryConfigKeepsBroadUntieredCoverage(t *testing.T) {
+func TestUniversalWireSourceRegistryConfigKeepsBroadUntieredCoverage(t *testing.T) {
 	path := filepath.Join("..", "..", "configs", "sources.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -442,7 +442,7 @@ func TestIngestionRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *test
 
 	dispatcher := &ingestionRuntimeDispatcher{
 		baseURL:              runtimeServer.URL,
-		ownerID:              "owner-global-wire",
+		ownerID:              "owner-universal-wire",
 		maxProcessorRequests: 1,
 		client:               runtimeServer.Client(),
 	}
@@ -456,7 +456,7 @@ func TestIngestionRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *test
 	if len(submissions) != 1 {
 		t.Fatalf("runtime submissions = %d, want one processor before all processor handoffs are submitted", len(submissions))
 	}
-	if submissions[0].OwnerID != "owner-global-wire" || submissions[0].Metadata["agent_profile"] != "processor" || submissions[0].Metadata["processor_key"] == "" {
+	if submissions[0].OwnerID != "owner-universal-wire" || submissions[0].Metadata["agent_profile"] != "processor" || submissions[0].Metadata["processor_key"] == "" {
 		t.Fatalf("unexpected processor submission: %+v", submissions[0])
 	}
 	if !strings.Contains(submissions[0].Prompt, "Source item handles:") || !strings.Contains(submissions[0].Prompt, "Do not paste source bodies") {
@@ -543,7 +543,7 @@ func TestIngestionRuntimeDispatcherSkipsProcessorWithoutIngestionEvents(t *testi
 
 	dispatcher := &ingestionRuntimeDispatcher{
 		baseURL:              "http://127.0.0.1:1",
-		ownerID:              "global-wire-platform",
+		ownerID:              "universal-wire-platform",
 		maxProcessorRequests: 1,
 		client:               http.DefaultClient,
 	}
@@ -588,7 +588,7 @@ func TestIngestionRuntimeDispatcherRetriesTransientRuntimeUnavailable(t *testing
 
 	dispatcher := &ingestionRuntimeDispatcher{
 		baseURL:       runtimeServer.URL,
-		ownerID:       "owner-global-wire",
+		ownerID:       "owner-universal-wire",
 		client:        runtimeServer.Client(),
 		retryAttempts: 4,
 		retryDelay:    time.Millisecond,
@@ -653,7 +653,7 @@ func TestIngestionRuntimeDispatcherKeepsQueuedRequestOnTransientRuntimeFailure(t
 
 	dispatcher := &ingestionRuntimeDispatcher{
 		baseURL:              runtimeServer.URL,
-		ownerID:              "owner-global-wire",
+		ownerID:              "owner-universal-wire",
 		maxProcessorRequests: 1,
 		client:               runtimeServer.Client(),
 		retryAttempts:        1,

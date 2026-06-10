@@ -236,7 +236,7 @@ other partial Slides app scaffolding.
 - ContentItem remains the owner-scoped document/source substrate.
 - VText owns canonical document revisions; researcher tools do not write
   canonical VText prose.
-- VText import, researcher reads, Global Wire sources, and future document apps
+- VText import, researcher reads, Universal Wire sources, and future document apps
   should share the same extraction substrate instead of separate format hacks.
 - Sandbox/user-computer tooling must be declared in NixOS image config, not
   assumed from local macOS or Node B host PATH.
@@ -1551,7 +1551,7 @@ what was proven: normal product-path imports, no-live-search frozen corpus,
   and normal researcher continuation after invalid eval completion
 remaining error field: promote proof harness into a stable regression and use
   full trace message details for assertions
-next product mission: return to Global Wire source ingestion and article
+next product mission: return to Universal Wire source ingestion and article
   production, now that DeepSeek/Xiaomi/GPT mini provider and compaction behavior
   are usable for long-running agents
 rollback refs: docs commit 786df962 and behavior commit 4738e311

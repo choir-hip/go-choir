@@ -1,11 +1,11 @@
 # Choir-in-Choir Deletion Bias Eval Note
 
 **Date:** 2026-06-08  
-**Context:** next Choir-in-Choir overnight mission for Global Wire source truthfulness.
+**Context:** next Choir-in-Choir overnight mission for Universal Wire source truthfulness.
 
 ## Owner Preference
 
-The owner wants the current Global Wire "Sources Chronology" / source-ledger
+The owner wants the current Universal Wire "Sources Chronology" / source-ledger
 search surface deleted.
 
 This is not merely a request to "evaluate whether deletion is appropriate." The

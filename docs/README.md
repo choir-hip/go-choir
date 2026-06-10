@@ -68,13 +68,13 @@ Use these buckets when reading or editing docs:
   source_search, VText source-service refs, News app gaps, and rough future
   directions; do not treat its improvement list as accepted mission scope.
 - `docs/choir-wire-source-to-vtext-spec-2026-06-09.md` - current Wire
-  requirements contract: Community Wire, Private Wire reuse, platform/user
+  requirements contract: Universal Wire, Private Wire reuse, platform/user
   computer authority, VText ownership, source artifacts, and deletion of legacy
   graph/source-maxxing behavior.
 - `docs/mission-wire-community-news-v0.md` - current MissionGradient for landing
-  the public Community Wire news product on the corrected ontology.
-- `docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md` -
-  historical product/architecture spec for the superseded Global Wire +
+  the public Universal Wire news product on the corrected ontology.
+- `docs/choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md` -
+  historical product/architecture spec for the superseded Universal Wire +
   StoryGraph/VText framing. Do not use it as current ontology.
 - `docs/vtext-styleguide-system-research-2026-06-06.md` - research synthesis
   for VText-native `Style.vtext` support, client corpus ingestion, learned style
@@ -111,8 +111,8 @@ Use these buckets when reading or editing docs:
 - `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.
 - `docs/mission-run-memory-v0.md` - run-memory/compaction mission.
 - `docs/mission-web-surface-rationalization-v0.md` - Obscura/browser surface rationalization mission.
-- `docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md` -
-  historical draft MissionGradient for the superseded Global Wire / Style.vtext
+- `docs/mission-universal-wire-style-vtext-collaborative-storygraph-v0.md` -
+  historical draft MissionGradient for the superseded Universal Wire / Style.vtext
   collaborative StoryGraph trajectory. Do not use it as current ontology.
 
 Read the current Campaign Compiler mission first. Older promotion-queue mission

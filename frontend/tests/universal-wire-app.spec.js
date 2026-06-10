@@ -27,23 +27,23 @@ async function applyTheme(page, id) {
   }, { id, name: names[id] });
 }
 
-test('Global Wire renders an honest empty edition instead of preview stories', async ({ page }) => {
+test('Universal Wire renders an honest empty edition instead of preview stories', async ({ page }) => {
   await page.goto(BASE_URL);
-  await openDeskApp(page, 'global-wire');
+  await openDeskApp(page, 'universal-wire');
 
-  const app = page.locator('[data-global-wire-app]');
+  const app = page.locator('[data-universal-wire-app]');
   await expect(app).toBeVisible();
-  await expect(app.getByRole('heading', { name: 'Global Wire' })).toBeVisible();
+  await expect(app.getByRole('heading', { name: 'Universal Wire' })).toBeVisible();
   await expect(app.locator('text=SourceMaxx newsroom')).toHaveCount(0);
   await expect(app.locator('text=Living source network')).toBeVisible();
-  await expect(app.locator('[data-global-wire-story]')).toHaveCount(0);
-  await expect(app.locator('[data-global-wire-empty-state]')).toBeVisible();
-  await expect(app.locator('[data-global-wire-empty-state]')).toContainText('No Wire edition articles yet');
+  await expect(app.locator('[data-universal-wire-story]')).toHaveCount(0);
+  await expect(app.locator('[data-universal-wire-empty-state]')).toBeVisible();
+  await expect(app.locator('[data-universal-wire-empty-state]')).toContainText('No Wire edition articles yet');
   await expect(app.locator('text=Port backlog recedes')).toHaveCount(0);
   await expect(app.locator('text=seed source neighborhood')).toHaveCount(0);
 });
 
-test('Global Wire retries authenticated story loads after transient route failure', async ({ browser, authenticatedState }) => {
+test('Universal Wire retries authenticated story loads after transient route failure', async ({ browser, authenticatedState }) => {
   const context = await browser.newContext({
     storageState: authenticatedState.storageStatePath,
   });
@@ -52,7 +52,7 @@ test('Global Wire retries authenticated story loads after transient route failur
   const liveStories = Array.from({ length: 4 }, (_, index) => ({
     id: `source-network-vtext-${index + 1}`,
     headline: `Live source-network article ${index + 1}`,
-    dek: 'A real source-network VText article reached the Global Wire front page.',
+    dek: 'A real source-network VText article reached the Universal Wire front page.',
     freshness: 'updated 2 min ago',
     prominence: 90 - index,
     tension: 'source-network update',
@@ -62,11 +62,11 @@ test('Global Wire retries authenticated story loads after transient route failur
     manifest: { lead: [], supporting: [], contrary: [], context: [] },
     claims: ['The live source network has more than preview seed stories.'],
     projections: {
-      'wire-style': 'The live article body is rendered from the authenticated Global Wire story API after retry.',
+      'wire-style': 'The live article body is rendered from the authenticated Universal Wire story API after retry.',
     },
   }));
   try {
-    await page.route('**/api/global-wire/stories', async (route) => {
+    await page.route('**/api/universal-wire/stories', async (route) => {
       storyFetches += 1;
       if (storyFetches === 1) {
         await route.fulfill({
@@ -79,16 +79,16 @@ test('Global Wire retries authenticated story loads after transient route failur
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ source: 'community-wire-vtext-index', stories: liveStories }),
+        body: JSON.stringify({ source: 'universal-wire-vtext-index', stories: liveStories }),
       });
     });
 
     await page.goto(authenticatedState.baseURL);
-    await openDeskApp(page, 'global-wire');
-    const app = page.locator('[data-global-wire-app]');
+    await openDeskApp(page, 'universal-wire');
+    const app = page.locator('[data-universal-wire-app]');
     await expect(app).toBeVisible();
-    await expect(app.locator('[data-global-wire-story]')).toHaveCount(4, { timeout: 7000 });
-    await expect(app.locator('[data-global-wire-story]').first()).toContainText('Live source-network article 1');
+    await expect(app.locator('[data-universal-wire-story]')).toHaveCount(4, { timeout: 7000 });
+    await expect(app.locator('[data-universal-wire-story]').first()).toContainText('Live source-network article 1');
     await expect(app.locator('text=Port backlog recedes')).toHaveCount(0);
     expect(storyFetches).toBeGreaterThanOrEqual(2);
   } finally {
@@ -96,51 +96,51 @@ test('Global Wire retries authenticated story loads after transient route failur
   }
 });
 
-test('Global Wire deletes detritus source chronology and bespoke style controls', async ({ page }) => {
+test('Universal Wire deletes detritus source chronology and bespoke style controls', async ({ page }) => {
   await page.goto(BASE_URL);
-  await openDeskApp(page, 'global-wire');
+  await openDeskApp(page, 'universal-wire');
 
-  const app = page.locator('[data-global-wire-app]');
-  await expect(app.locator('[data-global-wire-evidence]')).toHaveCount(0);
-  await expect(app.locator('[data-global-wire-style-switcher]')).toHaveCount(0);
-  await expect(app.locator('[data-global-wire-source-search]')).toHaveCount(0);
-  await expect(app.locator('[data-global-wire-fetch-cycle]')).toHaveCount(0);
-  await expect(app.locator('[data-global-wire-open-style]')).toHaveCount(0);
-  await expect(app.locator('[data-global-wire-compose-style]')).toHaveCount(0);
-  await expect(app.locator('[data-global-wire-replace-style]')).toHaveCount(0);
-  await expect(app.locator('[data-global-wire-ask-choir]')).toHaveCount(0);
+  const app = page.locator('[data-universal-wire-app]');
+  await expect(app.locator('[data-universal-wire-evidence]')).toHaveCount(0);
+  await expect(app.locator('[data-universal-wire-style-switcher]')).toHaveCount(0);
+  await expect(app.locator('[data-universal-wire-source-search]')).toHaveCount(0);
+  await expect(app.locator('[data-universal-wire-fetch-cycle]')).toHaveCount(0);
+  await expect(app.locator('[data-universal-wire-open-style]')).toHaveCount(0);
+  await expect(app.locator('[data-universal-wire-compose-style]')).toHaveCount(0);
+  await expect(app.locator('[data-universal-wire-replace-style]')).toHaveCount(0);
+  await expect(app.locator('[data-universal-wire-ask-choir]')).toHaveCount(0);
   await expect(app.locator('text=Chronology')).toHaveCount(0);
   await expect(app.locator('text=Style.vtext')).toHaveCount(0);
 });
 
-test('Global Wire has no nested dashboard panels, story boxes, theme selector, or Autoradio surface', async ({ page }) => {
+test('Universal Wire has no nested dashboard panels, story boxes, theme selector, or Autoradio surface', async ({ page }) => {
   await page.goto(BASE_URL);
-  await openDeskApp(page, 'global-wire');
+  await openDeskApp(page, 'universal-wire');
 
-  const app = page.locator('[data-global-wire-app]');
+  const app = page.locator('[data-universal-wire-app]');
   await expect(app.locator('text=Theme')).toHaveCount(0);
   await expect(app.locator('text=Autoradio')).toHaveCount(0);
   await expect(app.locator('text=Contribute')).toHaveCount(0);
   await expect(app.locator('text=StoryGraph desk')).toHaveCount(0);
   await expect(app.locator('text=StoryGraph news desk')).toHaveCount(0);
 
-  await expect(app.locator('[data-global-wire-story]')).toHaveCount(0);
-  await expect(app.locator('[data-global-wire-empty-state]')).toBeVisible();
+  await expect(app.locator('[data-universal-wire-story]')).toHaveCount(0);
+  await expect(app.locator('[data-universal-wire-empty-state]')).toBeVisible();
 });
 
-test('Global Wire remains a responsive Choir web desktop app across all three themes', async ({ page }) => {
+test('Universal Wire remains a responsive Choir web desktop app across all three themes', async ({ page }) => {
   await page.goto(BASE_URL);
-  await openDeskApp(page, 'global-wire');
-  const app = page.locator('[data-global-wire-app]');
+  await openDeskApp(page, 'universal-wire');
+  const app = page.locator('[data-universal-wire-app]');
 
   for (const themeId of ['futuristic-noir', 'carbon-fiber-kintsugi', 'london-salmon']) {
     await applyTheme(page, themeId);
     await expect(page.locator('.app-root')).toHaveAttribute('data-theme-id', themeId);
-    await expect(app.locator('[data-global-wire-empty-state]')).toBeVisible();
+    await expect(app.locator('[data-universal-wire-empty-state]')).toBeVisible();
   }
 
   await page.setViewportSize({ width: 430, height: 860 });
-  await expect(app.locator('[data-global-wire-empty-state]')).toBeVisible();
+  await expect(app.locator('[data-universal-wire-empty-state]')).toBeVisible();
 
   const layout = await app.evaluate((node) => {
     const paper = node.querySelector('.wire-paper');

@@ -2,8 +2,8 @@
 
 **Status:** design language reference for app and shell work.  
 **Related:** [Theme System Contract v0](./theme-system-contract-v0.md),
-[Global Wire SourceMaxx spec](./choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md).  
-**Scope:** Choir desktop shell, VText, Global Wire, and app surfaces across
+[Universal Wire SourceMaxx spec](./choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md).  
+**Scope:** Choir desktop shell, VText, Universal Wire, and app surfaces across
 Futuristic Noir, Carbon Fiber Kintsugi, and London Salmon.
 
 ## Purpose
@@ -151,7 +151,7 @@ Choir supports two typographic modes:
   dense but scannable rows.
 
 VText readers lean editorial. Settings, source lists, controls, and operational
-apps lean sans. Mixed surfaces such as Global Wire should use editorial type for
+apps lean sans. Mixed surfaces such as Universal Wire should use editorial type for
 article content and quieter sans metadata for source counts, freshness, filters,
 and controls.
 
@@ -175,16 +175,16 @@ Surface roles:
 For content-heavy apps, avoid card walls. Use typography, whitespace, and
 subtle rules before boxes.
 
-## Global Wire UI Direction
+## Universal Wire UI Direction
 
-Global Wire should adapt this design language as a newspaper-like VText
+Universal Wire should adapt this design language as a newspaper-like VText
 collection surface.
 
 Reference direction mockups:
 
-![Global Wire desktop mockup across Futuristic Noir, London Salmon, and Carbon Fiber Kintsugi](./assets/design-language/global-wire-desktop-three-themes-2026-06-07.png)
+![Universal Wire desktop mockup across Futuristic Noir, London Salmon, and Carbon Fiber Kintsugi](./assets/design-language/universal-wire-desktop-three-themes-2026-06-07.png)
 
-![Global Wire mobile mockup across Futuristic Noir, London Salmon, and Carbon Fiber Kintsugi](./assets/design-language/global-wire-mobile-three-themes-2026-06-07.png)
+![Universal Wire mobile mockup across Futuristic Noir, London Salmon, and Carbon Fiber Kintsugi](./assets/design-language/universal-wire-mobile-three-themes-2026-06-07.png)
 
 These mockups are visual direction, not product proof. The implementation must
 still use the real theme tokens, real app shell, product-path data, and browser
@@ -222,11 +222,11 @@ Mobile:
 
 Theme behavior:
 
-- Futuristic Noir Global Wire: dark wire desk with cyan used sparingly for live
+- Futuristic Noir Universal Wire: dark wire desk with cyan used sparingly for live
   source freshness and citation markers.
-- London Salmon Global Wire: warm broadsheet with wine text and restrained teal
+- London Salmon Universal Wire: warm broadsheet with wine text and restrained teal
   evidence/source accents.
-- Carbon Fiber Kintsugi Global Wire: black/ivory newspaper with gold source/freshness
+- Carbon Fiber Kintsugi Universal Wire: black/ivory newspaper with gold source/freshness
   signals and minimal chrome.
 
 ## Source And Provenance Display

@@ -3,7 +3,7 @@
 **Date:** 2026-05-31  
 **Primary context source:** OMP / oh-my-pi session from 2026-05-30  
 **Primary branch reviewed:** `origin/sourcecycled`  
-**Primary branch commit:** `0c04a33 feat(wire): add Choir Global Wire V0 -- autonomous multilingual news ingestion & synthesis`  
+**Primary branch commit:** `0c04a33 feat(wire): add Choir Universal Wire V0 -- autonomous multilingual news ingestion & synthesis`  
 **Primary repo:** `go-choir`  
 **Purpose:** preserve the valuable OMP context on `sourcecycled`, the Global
 Wire demo, source ingestion architecture, OSINT/data-source learnings, and the
@@ -56,7 +56,7 @@ research packet in `/Users/wiz/.moshi/uploads`.
 The central conclusion is:
 
 ```text
-Global Wire is not primarily a website.
+Universal Wire is not primarily a website.
 It is a 15-minute cycle over a source ledger.
 ```
 
@@ -217,7 +217,7 @@ The research packet is:
 /Users/wiz/.moshi/uploads/Choir Source Ingestion Manifesto.md
 /Users/wiz/.moshi/uploads/Comprehensive Research Report: Global Source Ingestion System for Choir.md
 /Users/wiz/.moshi/uploads/Global South & Multilingual Source Ingestion: Expanding Choir's Planetary Coverage.md
-/Users/wiz/.moshi/uploads/MISSION-AUTOMATIC-NEWSPAPER.md: The Choir Global Wire.md
+/Users/wiz/.moshi/uploads/MISSION-AUTOMATIC-NEWSPAPER.md: The Choir Universal Wire.md
 /Users/wiz/.moshi/uploads/Technical Audit: Environmental, Sub-National Government, and Uncovered Public Signal Categories.md
 /Users/wiz/.moshi/uploads/Technical Audit: Maritime, Financial, Sports, Legal, and Real Estate Public Data Access.md
 /Users/wiz/.moshi/uploads/Technical Data Source Audit: Ingestion Constraints, Rate Limits, & Protocols for Choir.md
@@ -228,7 +228,7 @@ The research packet is:
 `origin/sourcecycled` contains one sourcecycled commit:
 
 ```text
-0c04a33 feat(wire): add Choir Global Wire V0 -- autonomous multilingual news ingestion & synthesis
+0c04a33 feat(wire): add Choir Universal Wire V0 -- autonomous multilingual news ingestion & synthesis
 ```
 
 Diff from its base:
@@ -473,7 +473,7 @@ synthesis, verifier passes, issue manifests, and cycle metrics.
 
 ### L3: Publication
 
-Global Wire page, markdown issue, VText draft, public archive, citation table,
+Universal Wire page, markdown issue, VText draft, public archive, citation table,
 story layout, and reader-facing exploration.
 
 The key inversion:
@@ -1113,7 +1113,7 @@ OMP's verdict:
 Suggested post-consolidation PR title from OMP:
 
 ```text
-feat(wire): unified global wire cycle with provenanced issues (V0)
+feat(wire): unified universal wire cycle with provenanced issues (V0)
 ```
 
 ## 17. Recommended Consolidation Plan
@@ -1275,7 +1275,7 @@ V1 should not be accepted because it has 48 feeds. It should be accepted when:
 The recovered OMP session is valuable because it names the category error:
 
 ```text
-Do not treat Global Wire as a website.
+Do not treat Universal Wire as a website.
 Treat it as a cycle over a source ledger.
 ```
 

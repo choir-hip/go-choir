@@ -1,5 +1,5 @@
 {
-  "user_agent": "ChoirGlobalWire/0.1 (+https://choir.news)",
+  "user_agent": "ChoirUniversalWire/0.1 (+https://choir.news)",
   "sources": [
     {
       "id": "gdelt:15min",

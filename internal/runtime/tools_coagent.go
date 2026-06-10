@@ -268,7 +268,7 @@ func (rt *Runtime) ensureCoagentVTextRevisionRoute(ctx context.Context, parentRe
 
 	prompt := buildCoagentVTextRevisionPrompt(parentRec, req, doc, created, sourceEntities)
 	rec, err := rt.submitVTextAgentRevisionRun(ctx, doc, ownerID, vtextAgentRevisionRequest{
-		Intent: "global_wire_" + callerProfile + "_article_revision",
+		Intent: "universal_wire_" + callerProfile + "_article_revision",
 		Prompt: prompt,
 	}, parentRec.RunID, 0)
 	if err != nil {
@@ -379,7 +379,7 @@ func coagentVTextTitle(req coagentVTextRouteRequest) string {
 	}
 	text = strings.Trim(text, " .\n\t")
 	if text == "" {
-		text = "Global Wire article"
+		text = "Universal Wire article"
 	}
 	if len(text) > 96 {
 		text = strings.TrimSpace(text[:96])
@@ -598,7 +598,7 @@ func metadataStringSlice(value any) []string {
 
 func coagentDefaultStyleCatalog() []types.WireStyleSource {
 	return []types.WireStyleSource{
-		{ID: "wire-style", Title: "Style.vtext: Global Wire", Label: "Wire", SourcePath: "styles/global-wire.style.vtext"},
+		{ID: "wire-style", Title: "Style.vtext: Universal Wire", Label: "Wire", SourcePath: "styles/universal-wire.style.vtext"},
 		{ID: "claim-audit-style", Title: "Style.vtext: Claim Audit", Label: "Audit", SourcePath: "styles/claim-audit.style.vtext"},
 		{ID: "market-brief-style", Title: "Style.vtext: Market Brief", Label: "Market", SourcePath: "styles/market-brief.style.vtext"},
 	}
@@ -619,7 +619,7 @@ func coagentVTextSelectedStyles(req coagentVTextRouteRequest) ([]types.WireStyle
 	auditTerms := []string{"correction", "correcting", "misinformation", "contradiction", "claim", "denied", "disputed", "uncertain", "unverified", "alleged", "propaganda", "false", "audit"}
 	hasMarket := textContainsAny(text, marketTerms)
 	hasAudit := textContainsAny(text, auditTerms)
-	wire := addSummary(byID["wire-style"], "Fast, readable global-wire treatment: direct headline, clear nut graf, source-rich context, visible uncertainty.")
+	wire := addSummary(byID["wire-style"], "Fast, readable universal-wire treatment: direct headline, clear nut graf, source-rich context, visible uncertainty.")
 	audit := addSummary(byID["claim-audit-style"], "Claim-audit treatment: foreground what is verified, what is disputed, who says so, and what evidence would change the story.")
 	market := addSummary(byID["market-brief-style"], "Market-brief treatment: explain price, policy, institutional, and second-order effects without hiding uncertainty.")
 	switch {
@@ -630,7 +630,7 @@ func coagentVTextSelectedStyles(req coagentVTextRouteRequest) ([]types.WireStyle
 	case hasAudit:
 		return []types.WireStyleSource{audit}, "The brief centers correction, contradiction, disputed claims, or verification risk, so Claim Audit is the fitting Style.vtext."
 	default:
-		return []types.WireStyleSource{wire}, "The brief is a general news article request, so Global Wire is the fitting Style.vtext."
+		return []types.WireStyleSource{wire}, "The brief is a general news article request, so Universal Wire is the fitting Style.vtext."
 	}
 }
 

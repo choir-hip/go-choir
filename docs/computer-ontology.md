@@ -24,7 +24,7 @@ source systems, policy, and publication/subscription boundaries.
 Use these terms:
 
 - **Choir Community Cloud**: the public/shared Choir deployment, including
-  `choir.news`, Community Wire, public publication surfaces, public user
+  `choir.news`, Universal Wire, public publication surfaces, public user
   computers, and Community Cloud platform computers.
 - **Private Choir Cloud**: a customer-controlled deployment with its own NixOS
   host or host cluster, platform computer(s), many user computers, candidate

@@ -50,15 +50,15 @@
   let sessionCheckSeq = 0;
   let lastPrewarmStartedAt = 0;
   let publicRoutePath = '';
-  let globalWirePublicToken = '';
-  let globalWirePublicLink = null;
-  let globalWirePublicStatus = '';
-  let globalWirePublicError = '';
+  let universalWirePublicToken = '';
+  let universalWirePublicLink = null;
+  let universalWirePublicStatus = '';
+  let universalWirePublicError = '';
   const THEME_BOOT_CACHE_KEY = 'choir.theme.boot.v2';
 
   $: isAuthenticated = authState === 'signed_in';
   $: authIntentMessage = getAuthIntentMessage(pendingAuthIntent);
-  $: isGlobalWirePublicReader = !!globalWirePublicToken;
+  $: isUniversalWirePublicReader = !!universalWirePublicToken;
 
   function startAuthenticatedPrewarm() {
     const now = Date.now();
@@ -223,17 +223,17 @@
     return null;
   }
 
-  function globalWirePublicTokenFromPath(pathname) {
-    const prefix = '/global-wire/publications/';
+  function universalWirePublicTokenFromPath(pathname) {
+    const prefix = '/universal-wire/publications/';
     if (!pathname.startsWith(prefix)) return '';
     return decodeURIComponent(pathname.slice(prefix.length).split('/')[0] || '').trim();
   }
 
-  async function loadGlobalWirePublicLink(token) {
+  async function loadUniversalWirePublicLink(token) {
     if (!token) return;
-    globalWirePublicStatus = 'error';
-    globalWirePublicError = 'Legacy publication links were removed. Community Wire will publish through platformd after auto-publish lands.';
-    globalWirePublicLink = null;
+    universalWirePublicStatus = 'error';
+    universalWirePublicError = 'Legacy publication links were removed. Universal Wire will publish through platformd after auto-publish lands.';
+    universalWirePublicLink = null;
   }
 
   function clearConsumedAppIntentFromURL(intent = null) {
@@ -369,10 +369,10 @@
   import { onMount } from 'svelte';
   onMount(() => {
     publicRoutePath = window.location.pathname.startsWith('/pub/vtext/') ? window.location.pathname : '';
-    globalWirePublicToken = globalWirePublicTokenFromPath(window.location.pathname);
+    universalWirePublicToken = universalWirePublicTokenFromPath(window.location.pathname);
     applyTheme(loadThemeBootCache(), false);
-    if (globalWirePublicToken) {
-      void loadGlobalWirePublicLink(globalWirePublicToken);
+    if (universalWirePublicToken) {
+      void loadUniversalWirePublicLink(universalWirePublicToken);
     }
     const initialIntent = initialAppIntentFromURL();
     checkSession().then((session) => {
@@ -430,60 +430,60 @@
 </script>
 
 <div class="app-root" data-theme-id={currentTheme.id} data-auth-state={authState}>
-  {#if isGlobalWirePublicReader}
-    <main class="global-wire-public-reader" data-global-wire-public-reader>
+  {#if isUniversalWirePublicReader}
+    <main class="universal-wire-public-reader" data-universal-wire-public-reader>
       <header>
-        <a class="reader-brand" href="/">Choir Global Wire</a>
+        <a class="reader-brand" href="/">Choir Universal Wire</a>
         <button
           type="button"
           on:click={() => {
             pendingAuthIntent = {
               kind: 'app_launch',
-              appId: 'global-wire',
-              appName: 'Global Wire',
-              appContext: { windowTitle: 'Global Wire' },
+              appId: 'universal-wire',
+              appName: 'Universal Wire',
+              appContext: { windowTitle: 'Universal Wire' },
             };
             authOverlayOpen = true;
           }}
-          data-global-wire-public-sign-in
+          data-universal-wire-public-sign-in
         >
           Sign in
         </button>
       </header>
-      {#if globalWirePublicStatus === 'loading' || !globalWirePublicStatus}
-        <section class="global-wire-public-panel">
-          <p data-global-wire-public-status>Loading publication...</p>
+      {#if universalWirePublicStatus === 'loading' || !universalWirePublicStatus}
+        <section class="universal-wire-public-panel">
+          <p data-universal-wire-public-status>Loading publication...</p>
         </section>
-      {:else if globalWirePublicError}
-        <section class="global-wire-public-panel">
-          <p data-global-wire-public-error>{globalWirePublicError}</p>
+      {:else if universalWirePublicError}
+        <section class="universal-wire-public-panel">
+          <p data-universal-wire-public-error>{universalWirePublicError}</p>
         </section>
-      {:else if globalWirePublicLink}
-        <article class="global-wire-public-panel" data-global-wire-public-publication>
+      {:else if universalWirePublicLink}
+        <article class="universal-wire-public-panel" data-universal-wire-public-publication>
           <div class="reader-kicker">
-            <span>{globalWirePublicLink.status}</span>
-            <span>{globalWirePublicLink.route_path}</span>
-            {#if globalWirePublicLink.feed_path}
-              <a href={globalWirePublicLink.feed_path} data-global-wire-public-feed>RSS</a>
+            <span>{universalWirePublicLink.status}</span>
+            <span>{universalWirePublicLink.route_path}</span>
+            {#if universalWirePublicLink.feed_path}
+              <a href={universalWirePublicLink.feed_path} data-universal-wire-public-feed>RSS</a>
             {/if}
           </div>
-          <h1>{globalWirePublicLink.title}</h1>
-          <pre>{globalWirePublicLink.export_body}</pre>
-          <div class="reader-provenance" data-global-wire-public-provenance>
+          <h1>{universalWirePublicLink.title}</h1>
+          <pre>{universalWirePublicLink.export_body}</pre>
+          <div class="reader-provenance" data-universal-wire-public-provenance>
             <strong>Provenance</strong>
-            <span>citations: {globalWirePublicLink.citation_count}</span>
-            <span>rollback refs: {globalWirePublicLink.rollback_count}</span>
-            <span>export: {globalWirePublicLink.export_id}</span>
-            <span>delivery: {globalWirePublicLink.delivery_id}</span>
+            <span>citations: {universalWirePublicLink.citation_count}</span>
+            <span>rollback refs: {universalWirePublicLink.rollback_count}</span>
+            <span>export: {universalWirePublicLink.export_id}</span>
+            <span>delivery: {universalWirePublicLink.delivery_id}</span>
           </div>
           <div class="reader-refs">
-            <section data-global-wire-public-citations>
+            <section data-universal-wire-public-citations>
               <h2>Citations</h2>
-              <p>{(globalWirePublicLink.citation_refs || []).join(' · ')}</p>
+              <p>{(universalWirePublicLink.citation_refs || []).join(' · ')}</p>
             </section>
-            <section data-global-wire-public-rollback>
+            <section data-universal-wire-public-rollback>
               <h2>Rollback Refs</h2>
-              <p>{(globalWirePublicLink.rollback_refs || []).join(' · ')}</p>
+              <p>{(universalWirePublicLink.rollback_refs || []).join(' · ')}</p>
             </section>
           </div>
         </article>
@@ -584,7 +584,7 @@
     color: var(--choir-fg);
   }
 
-  .global-wire-public-reader {
+  .universal-wire-public-reader {
     width: 100%;
     min-height: 100%;
     overflow: auto;
@@ -592,7 +592,7 @@
     color: var(--choir-fg);
   }
 
-  .global-wire-public-reader header {
+  .universal-wire-public-reader header {
     position: sticky;
     top: 0;
     z-index: 2;
@@ -615,7 +615,7 @@
     overflow-wrap: anywhere;
   }
 
-  .global-wire-public-reader button {
+  .universal-wire-public-reader button {
     min-height: 2rem;
     padding: 0.35rem 0.65rem;
     border: 1px solid var(--choir-border);
@@ -628,7 +628,7 @@
     cursor: pointer;
   }
 
-  .global-wire-public-panel {
+  .universal-wire-public-panel {
     width: min(920px, calc(100% - 2rem));
     margin: 1rem auto 2rem;
     padding: clamp(1rem, 3vw, 2rem);
@@ -648,7 +648,7 @@
     overflow-wrap: anywhere;
   }
 
-  .global-wire-public-panel h1 {
+  .universal-wire-public-panel h1 {
     margin: 0.75rem 0 1rem;
     color: var(--choir-text-primary);
     font-size: clamp(1.65rem, 3vw, 2.6rem);
@@ -656,7 +656,7 @@
     overflow-wrap: anywhere;
   }
 
-  .global-wire-public-panel pre {
+  .universal-wire-public-panel pre {
     margin: 0;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -705,7 +705,7 @@
       grid-template-columns: 1fr;
     }
 
-    .global-wire-public-reader header {
+    .universal-wire-public-reader header {
       align-items: flex-start;
       flex-direction: column;
     }

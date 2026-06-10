@@ -502,7 +502,7 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 			name: "community wire operational proof starts with super request",
 			metadata: map[string]any{
 				"type":        "vtext_agent_revision",
-				"seed_prompt": "Community Wire staging proof request: run the existing source-refresh/research/projection/publication flow, create or approve an Article VText, update global-wire/Wire.vtext, then leave evidence ids and verifier proof.",
+				"seed_prompt": "Universal Wire staging proof request: run the existing source-refresh/research/projection/publication flow, create or approve an Article VText, update universal-wire/Wire.vtext, then leave evidence ids and verifier proof.",
 			},
 			want: "function:request_super_execution",
 		},

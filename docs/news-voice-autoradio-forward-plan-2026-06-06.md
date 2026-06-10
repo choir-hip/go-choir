@@ -199,7 +199,7 @@ source registry
 ```
 
 The News app should feel like a working front page, not a source-admin table,
-but it must avoid the oracle model. Choir Global Wire should not merely
+but it must avoid the oracle model. Choir Universal Wire should not merely
 pronounce the synthesized truth. Its core story unit should expose the range of
 claims, positions, evidence, uncertainty, and changes over time.
 

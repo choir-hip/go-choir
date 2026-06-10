@@ -35,7 +35,7 @@ func (s *Synthesizer) Synthesize(ctx context.Context, clusters [][]sources.Item)
 
 	// Prepare the prompt
 	var sb strings.Builder
-	sb.WriteString("You are the lead editor for the Choir Global Wire, the Automatic Newspaper of Record for Planet Earth.\n")
+	sb.WriteString("You are the lead editor for the Choir Universal Wire, the Automatic Newspaper of Record for Planet Earth.\n")
 	sb.WriteString("Your mission is to synthesize high-signal global information into a deeply contextualized, multilingual news issue.\n\n")
 	sb.WriteString("CORE INSTRUCTIONS:\n")
 	sb.WriteString("1. VOLUME: Produce approximately 4,000 words across 5-10 distinct, deeply researched stories.\n")
@@ -55,7 +55,7 @@ func (s *Synthesizer) Synthesize(ctx context.Context, clusters [][]sources.Item)
 
 	req := provider.LLMRequest{
 		Model:  s.Model,
-		System: "You are the Choir Global Wire synthesis engine. Output high-fidelity, source-backed global news.",
+		System: "You are the Choir Universal Wire synthesis engine. Output high-fidelity, source-backed global news.",
 		Messages: []provider.Message{
 			{
 				Role: "user",

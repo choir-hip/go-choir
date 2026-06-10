@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	ownerID := "global-wire-platform"
+	ownerID := "universal-wire-platform"
 	if len(os.Args) > 1 {
 		ownerID = os.Args[1]
 	}

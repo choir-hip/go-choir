@@ -2089,7 +2089,7 @@ func isWireArticleRevisionRun(rec *types.RunRecord) bool {
 		return false
 	}
 	intent := metadataStringValue(rec.Metadata, "request_intent")
-	return strings.HasPrefix(intent, "global_wire_") && strings.HasSuffix(intent, "_article_revision")
+	return strings.HasPrefix(intent, "universal_wire_") && strings.HasSuffix(intent, "_article_revision")
 }
 
 func vtextWorkerUpdateMetadataHasRole(value any, role string) bool {

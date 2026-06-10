@@ -12,7 +12,7 @@ criteria before implementation.
 
 ## Product Constraint: Not An Oracle
 
-Choir Global Wire should not present itself as an oracle that declares "what is
+Choir Universal Wire should not present itself as an oracle that declares "what is
 true" from above. The product target is multiperspectival coverage:
 
 - represent claims, counterclaims, uncertainty, source standing, and missing

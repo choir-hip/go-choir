@@ -23,7 +23,7 @@ automatic computer -> automatic newspaper -> automatic radio -> automatic capita
 
 The current concrete language for the newspaper/source layer is **Wire**: a
 reusable source-to-VText substrate that runs in the Choir Community Cloud and in
-Private Choir Clouds. Community Wire produces public source-backed VTexts and
+Private Choir Clouds. Universal Wire produces public source-backed VTexts and
 editions. Private Wire instances run over private sources and subscribed public
 sources. User computers personalize by creating user-owned editions, forks,
 briefings, and alerts.

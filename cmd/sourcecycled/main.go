@@ -65,7 +65,7 @@ type ingestionDispatchResult struct {
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Println("Starting Choir Global Wire sourcecycled daemon (V0)")
+	log.Println("Starting Choir Universal Wire sourcecycled daemon (V0)")
 
 	// 1. Load Configuration
 	configPath := sourceServiceConfigPath()
@@ -175,7 +175,7 @@ func ingestionRuntimeDispatcherFromEnv() *ingestionRuntimeDispatcher {
 	}
 	ownerID := strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID"))
 	if ownerID == "" {
-		ownerID = "global-wire-platform"
+		ownerID = "universal-wire-platform"
 	}
 	limit := parsePositiveInt(firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS", "SOURCECYCLED_AGENT_DISPATCH_MAX_PROCESSORS"), defaultIngestionProcessorDispatchLimit)
 	retries := parsePositiveInt(firstEnv("SOURCE_SERVICE_RUNTIME_DISPATCH_RETRIES", "SOURCECYCLED_RUNTIME_DISPATCH_RETRIES"), defaultIngestionRuntimeDispatchRetries)

@@ -11,21 +11,21 @@ import (
 )
 
 const (
-	CommunityWirePlatformOwnerID   = "global-wire-platform"
-	CommunityWirePlatformDesktopID = "platform"
-	CommunityWirePlatformVMID      = "vm-global-wire-platform"
+	UniversalWirePlatformOwnerID   = "universal-wire-platform"
+	UniversalWirePlatformDesktopID = "platform"
+	UniversalWirePlatformVMID      = "vm-universal-wire-platform"
 )
 
-// CommunityWirePlatformRuntimeEnv holds host-side dispatch binding for the
-// always-on Community Wire platform computer sandbox.
-type CommunityWirePlatformRuntimeEnv struct {
+// UniversalWirePlatformRuntimeEnv holds host-side dispatch binding for the
+// always-on Universal Wire platform computer sandbox.
+type UniversalWirePlatformRuntimeEnv struct {
 	RuntimeBaseURL string
 	OwnerID        string
 }
 
-// WriteCommunityWirePlatformRuntimeEnv atomically writes sourcecycled dispatch
+// WriteUniversalWirePlatformRuntimeEnv atomically writes sourcecycled dispatch
 // binding for the platform computer sandbox URL.
-func WriteCommunityWirePlatformRuntimeEnv(path string, env CommunityWirePlatformRuntimeEnv) error {
+func WriteUniversalWirePlatformRuntimeEnv(path string, env UniversalWirePlatformRuntimeEnv) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return fmt.Errorf("platform runtime env path is required")
@@ -36,7 +36,7 @@ func WriteCommunityWirePlatformRuntimeEnv(path string, env CommunityWirePlatform
 	}
 	ownerID := strings.TrimSpace(env.OwnerID)
 	if ownerID == "" {
-		ownerID = CommunityWirePlatformOwnerID
+		ownerID = UniversalWirePlatformOwnerID
 	}
 	content := fmt.Sprintf(
 		"SOURCE_SERVICE_RUNTIME_BASE_URL=%s\nSOURCE_SERVICE_RUNTIME_OWNER_ID=%s\n",
@@ -57,30 +57,30 @@ func WriteCommunityWirePlatformRuntimeEnv(path string, env CommunityWirePlatform
 	return nil
 }
 
-// EnsureCommunityWirePlatformComputer boots or resumes the always-on platform
+// EnsureUniversalWirePlatformComputer boots or resumes the always-on platform
 // computer and returns the host-reachable sandbox URL for sourcecycled dispatch.
-func (r *OwnershipRegistry) EnsureCommunityWirePlatformComputer(ctx context.Context) (CommunityWirePlatformRuntimeEnv, error) {
+func (r *OwnershipRegistry) EnsureUniversalWirePlatformComputer(ctx context.Context) (UniversalWirePlatformRuntimeEnv, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	own, err := r.ensureCommunityWirePlatformOwnership(ctx)
+	own, err := r.ensureUniversalWirePlatformOwnership(ctx)
 	if err != nil {
-		return CommunityWirePlatformRuntimeEnv{}, err
+		return UniversalWirePlatformRuntimeEnv{}, err
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(own.SandboxURL), "/")
 	if baseURL == "" {
-		return CommunityWirePlatformRuntimeEnv{}, fmt.Errorf("platform computer %s has empty sandbox URL", own.VMID)
+		return UniversalWirePlatformRuntimeEnv{}, fmt.Errorf("platform computer %s has empty sandbox URL", own.VMID)
 	}
-	return CommunityWirePlatformRuntimeEnv{
+	return UniversalWirePlatformRuntimeEnv{
 		RuntimeBaseURL: baseURL,
-		OwnerID:        CommunityWirePlatformOwnerID,
+		OwnerID:        UniversalWirePlatformOwnerID,
 	}, nil
 }
 
-// WarmCommunityWirePlatformComputer resumes a stopped platform computer during
+// WarmUniversalWirePlatformComputer resumes a stopped platform computer during
 // the idle sweeper loop. It does not create a new ownership on its own.
-func (r *OwnershipRegistry) WarmCommunityWirePlatformComputer() int {
-	key := ownershipKey(CommunityWirePlatformOwnerID, CommunityWirePlatformDesktopID)
+func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer() int {
+	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
 	r.mu.RLock()
 	own := r.ownerships[key]
 	r.mu.RUnlock()
@@ -90,7 +90,7 @@ func (r *OwnershipRegistry) WarmCommunityWirePlatformComputer() int {
 	if own.State != VMStateStopped && own.State != VMStateHibernated {
 		return 0
 	}
-	resumed, err := r.ResumeVMForDesktop(CommunityWirePlatformOwnerID, CommunityWirePlatformDesktopID)
+	resumed, err := r.ResumeVMForDesktop(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
 	if err != nil {
 		log.Printf("vmctl: warmness policy failed to resume platform computer vm=%s: %v", own.VMID, err)
 		return 0
@@ -101,8 +101,8 @@ func (r *OwnershipRegistry) WarmCommunityWirePlatformComputer() int {
 	return 0
 }
 
-func (r *OwnershipRegistry) ensureCommunityWirePlatformOwnership(ctx context.Context) (*VMOwnership, error) {
-	key := ownershipKey(CommunityWirePlatformOwnerID, CommunityWirePlatformDesktopID)
+func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Context) (*VMOwnership, error) {
+	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
 
 	r.mu.Lock()
 	if own, ok := r.ownerships[key]; ok {
@@ -120,7 +120,7 @@ func (r *OwnershipRegistry) ensureCommunityWirePlatformOwnership(ctx context.Con
 				current := r.ownerships[key]
 				if current == nil {
 					r.mu.Unlock()
-					return r.ensureCommunityWirePlatformOwnership(ctx)
+					return r.ensureUniversalWirePlatformOwnership(ctx)
 				}
 				if info != nil {
 					current.SandboxURL = info.HostURL
@@ -177,22 +177,22 @@ func (r *OwnershipRegistry) ensureCommunityWirePlatformOwnership(ctx context.Con
 			return own, nil
 		case own.State == VMStateBooting:
 			if waiters, ok := r.pendingWaiters[key]; ok {
-				return r.waitForPendingAssignmentLocked(ctx, key, CommunityWirePlatformOwnerID, CommunityWirePlatformDesktopID, waiters)
+				return r.waitForPendingAssignmentLocked(ctx, key, UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID, waiters)
 			}
 		}
 		delete(r.vmByID, own.VMID)
 		delete(r.ownerships, key)
 	}
 	if waiters, ok := r.pendingWaiters[key]; ok {
-		return r.waitForPendingAssignmentLocked(ctx, key, CommunityWirePlatformOwnerID, CommunityWirePlatformDesktopID, waiters)
+		return r.waitForPendingAssignmentLocked(ctx, key, UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID, waiters)
 	}
 
-	vmID := CommunityWirePlatformVMID
+	vmID := UniversalWirePlatformVMID
 	epoch := r.nextEpoch()
 	own := &VMOwnership{
 		VMID:          vmID,
-		UserID:        CommunityWirePlatformOwnerID,
-		DesktopID:     CommunityWirePlatformDesktopID,
+		UserID:        UniversalWirePlatformOwnerID,
+		DesktopID:     UniversalWirePlatformDesktopID,
 		Kind:          VMKindInteractive,
 		WarmnessClass: WarmnessClassPublicPlatform,
 		SandboxURL:    r.sandboxURLForVM(vmID),
@@ -220,8 +220,8 @@ func (r *OwnershipRegistry) ensureCommunityWirePlatformOwnership(ctx context.Con
 		MachineMemSizeMib: interactiveVMMemSizeMib,
 		GatewayToken:      gwToken,
 		ComputerKind:      "platform",
-		OwnerID:           CommunityWirePlatformOwnerID,
-		DesktopID:         CommunityWirePlatformDesktopID,
+		OwnerID:           UniversalWirePlatformOwnerID,
+		DesktopID:         UniversalWirePlatformDesktopID,
 	})
 	if err != nil {
 		r.mu.Lock()

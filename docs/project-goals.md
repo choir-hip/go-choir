@@ -29,7 +29,7 @@ The current concrete product language is:
 private AI cloud -> Wire -> radio -> later capital/economic surfaces
 ```
 
-Wire is the reusable source-to-VText substrate. Community Wire is the public
+Wire is the reusable source-to-VText substrate. Universal Wire is the public
 Choir Community Cloud instance. Private Choir Clouds run their own Wire
 instances on client-controlled NixOS hosts with private platform computers, many
 user computers, private sources, and publication/subscription boundaries.
@@ -199,7 +199,7 @@ After the `vtext` loop is reliable, add ingestion and publication pressure:
 
 Wire should be treated as reusable infrastructure, not a bespoke news app:
 
-- Community Wire ingests public sources and publishes public source-backed
+- Universal Wire ingests public sources and publishes public source-backed
   VTexts and editions.
 - Private Wire instances ingest private and subscribed public sources for
   firm, matter, research, market, and executive briefings.

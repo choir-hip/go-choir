@@ -14,7 +14,7 @@ a dashboard, a source list, or a legacy graph object.
 The news system failed because we kept improving surfaces while the ownership
 boundary was wrong.
 
-We were building "Global Wire" as if it were a user-level app with a background
+We were building "Universal Wire" as if it were a user-level app with a background
 source pipeline. The clearer object is **Wire**: a reusable source-to-VText
 substrate. The public news product is the Community Cloud's platform-level Wire
 instance. Private Choir Clouds run the same substrate over private and public
@@ -25,7 +25,7 @@ personalization, producing user-owned VTexts.
 
 ### 1. Three Stories Looked Like Progress
 
-The first Global Wire surface displayed three story-like items with seed source
+The first Universal Wire surface displayed three story-like items with seed source
 labels. This gave a first visual object, but it was not a real newsroom:
 
 - story count was tiny;
@@ -86,7 +86,7 @@ forks; they are not a separate embedded section inside a platform article.
 
 ### 5. The UI Was Revealing The Ontology Bug
 
-The busy Global Wire UI was not merely ugly. It exposed a confused model:
+The busy Universal Wire UI was not merely ugly. It exposed a confused model:
 
 - cards and panels repeated the same small data;
 - source chronology and search had no clear job;
@@ -122,14 +122,14 @@ private policy, and publication boundaries.
 
 Use **Wire** for the reusable substrate.
 
-Use **Community Wire** when disambiguating the public Choir Community Cloud
+Use **Universal Wire** when disambiguating the public Choir Community Cloud
 instance.
 
 Use **Private Wire** or a domain name such as Firm Wire, Matter Wire, Research
 Wire, Science Wire, or Market Wire for private-cloud instances and editions.
 
-Do not use "Global Wire" as the architecture name. If old code or docs still
-say Global Wire, treat that as transitional or historical vocabulary to migrate.
+Do not use "Universal Wire" as the architecture name. If old code or docs still
+say Universal Wire, treat that as transitional or historical vocabulary to migrate.
 
 ## Current Architecture Shape
 

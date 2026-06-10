@@ -520,7 +520,7 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	}
 }
 
-func TestSystemPromptForGlobalWireProfilesLoadsSharedHarnessPrompts(t *testing.T) {
+func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testing.T) {
 	rt := testPromptRuntime(t)
 
 	for _, tc := range []struct {
@@ -532,7 +532,7 @@ func TestSystemPromptForGlobalWireProfilesLoadsSharedHarnessPrompts(t *testing.T
 			name:    "processor",
 			profile: AgentProfileProcessor,
 			want: []string{
-				"Global Wire source-understanding agent",
+				"Universal Wire source-understanding agent",
 				"SourceItem batches",
 				"Reuse existing researcher agents",
 				"Reuse existing VText agents",
@@ -544,7 +544,7 @@ func TestSystemPromptForGlobalWireProfilesLoadsSharedHarnessPrompts(t *testing.T
 			name:    "reconciler",
 			profile: AgentProfileReconciler,
 			want: []string{
-				"corpus-level Global Wire story agent",
+				"corpus-level Universal Wire story agent",
 				"existing published VTexts",
 				"Reuse existing researcher agents",
 				"Reuse existing VText agents",
@@ -556,12 +556,12 @@ func TestSystemPromptForGlobalWireProfilesLoadsSharedHarnessPrompts(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			rec := &types.RunRecord{
 				RunID:        "run-" + tc.name,
-				AgentID:      tc.name + ":global-wire",
-				ChannelID:    "global-wire-channel",
-				OwnerID:      "global-wire-platform",
+				AgentID:      tc.name + ":universal-wire",
+				ChannelID:    "universal-wire-channel",
+				OwnerID:      "universal-wire-platform",
 				AgentProfile: tc.profile,
 				AgentRole:    tc.profile,
-				Prompt:       "Process Global Wire handoff.",
+				Prompt:       "Process Universal Wire handoff.",
 			}
 			prompt, err := rt.systemPromptForRun(rec)
 			if err != nil {
@@ -576,31 +576,31 @@ func TestSystemPromptForGlobalWireProfilesLoadsSharedHarnessPrompts(t *testing.T
 	}
 }
 
-func TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead(t *testing.T) {
+func TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead(t *testing.T) {
 	rt := testPromptRuntime(t)
 
-	globalWireRec := &types.RunRecord{
-		RunID:        "run-global-wire-vtext",
-		AgentID:      "vtext:doc-global-wire",
-		ChannelID:    "doc-global-wire",
-		OwnerID:      "global-wire-platform",
+	universalWireRec := &types.RunRecord{
+		RunID:        "run-universal-wire-vtext",
+		AgentID:      "vtext:doc-universal-wire",
+		ChannelID:    "doc-universal-wire",
+		OwnerID:      "universal-wire-platform",
 		AgentProfile: AgentProfileVText,
 		AgentRole:    AgentProfileVText,
 		Prompt:       "Write the first publication-quality article revision for this VText document.",
 		Metadata: map[string]any{
 			"type":                    "vtext_agent_revision",
-			"doc_id":                  "doc-global-wire",
+			"doc_id":                  "doc-universal-wire",
 			"source_network_cycle_id": "cycle-test",
-			"request_intent":          "global_wire_reconciler_article_revision",
-			"selected_style_sources":  []map[string]any{{"title": "Style.vtext: Global Wire"}},
+			"request_intent":          "universal_wire_reconciler_article_revision",
+			"selected_style_sources":  []map[string]any{{"title": "Style.vtext: Universal Wire"}},
 		},
 	}
-	prompt, err := rt.systemPromptForRun(globalWireRec)
+	prompt, err := rt.systemPromptForRun(universalWireRec)
 	if err != nil {
-		t.Fatalf("systemPromptForRun Global Wire VText: %v", err)
+		t.Fatalf("systemPromptForRun Universal Wire VText: %v", err)
 	}
 	for _, want := range []string{
-		"For Global Wire article revision runs",
+		"For Universal Wire article revision runs",
 		"processor or reconciler handoff is newsroom source context",
 		"first edit_vtext call must write a publishable article",
 		"not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder",
@@ -612,11 +612,11 @@ func TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead(t *testing.T) {
 		"do not end the run with the document head still at a brief or status checkpoint",
 	} {
 		if !strings.Contains(prompt, want) {
-			t.Fatalf("Global Wire VText prompt missing %q in %q", want, prompt)
+			t.Fatalf("Universal Wire VText prompt missing %q in %q", want, prompt)
 		}
 	}
 	if strings.Contains(prompt, "first call edit_vtext with a short owner-readable working response") {
-		t.Fatalf("Global Wire VText prompt should not use generic working-response rule: %q", prompt)
+		t.Fatalf("Universal Wire VText prompt should not use generic working-response rule: %q", prompt)
 	}
 
 	ordinaryRec := &types.RunRecord{
@@ -640,7 +640,7 @@ func TestSystemPromptForGlobalWireVTextRunsRequiresArticleHead(t *testing.T) {
 		t.Fatalf("ordinary VText prompt should preserve generic working-response rule: %q", ordinaryPrompt)
 	}
 	if strings.Contains(ordinaryPrompt, "processor or reconciler handoff is newsroom source context") {
-		t.Fatalf("ordinary VText prompt should not get Global Wire article-head rule: %q", ordinaryPrompt)
+		t.Fatalf("ordinary VText prompt should not get Universal Wire article-head rule: %q", ordinaryPrompt)
 	}
 }
 

@@ -4,7 +4,7 @@
 
 Replace Choir's current cave-man deterministic run-memory checkpointing with a
 simple, reliable LLM compaction layer that is good enough to unblock the
-DeepSeek/Xiaomi provider/config upgrade and return attention to Global Wire.
+DeepSeek/Xiaomi provider/config upgrade and return attention to Universal Wire.
 This mission owns the remaining provider-conformance blocker: when it completes,
 it must also update `docs/mission-provider-config-conformance-v0.md` with the
 compaction evidence and final provider readiness conclusion.
@@ -48,7 +48,7 @@ primitive:
 
 But the actual checkpoint is still a deterministic text block assembled from
 truncated message descriptions. That is not sufficient for long-running
-providers, Global Wire processors/reconcilers, or self-development work.
+providers, Universal Wire processors/reconcilers, or self-development work.
 
 We need real LLM compaction: a structured continuation artifact that preserves
 objective, constraints, decisions, obligations, failures, evidence handles,
@@ -308,7 +308,7 @@ Avoid:
 - building vector memory or graph memory now;
 - adding a new agent role just to compact;
 - letting agents decide when to compact;
-- making compaction depend on Global Wire-specific ontology;
+- making compaction depend on Universal Wire-specific ontology;
 - claiming readiness from local-only proof;
 - using old deterministic summaries as the normal path.
 
@@ -351,7 +351,7 @@ Required before declaring provider/config upgrade ready:
 - final report distinguishes diagnostic 160k proof from 70%-threshold readiness
   proof.
 - `docs/mission-provider-config-conformance-v0.md` is updated with the
-  compaction evidence, remaining provider caveats, and explicit Global Wire
+  compaction evidence, remaining provider caveats, and explicit Universal Wire
   readiness conclusion.
 
 ## Anti-Goodhart Constraints
@@ -365,7 +365,7 @@ Required before declaring provider/config upgrade ready:
 - Do not add arbitrary normal-agent output token caps to make tests cheap.
 - Do not treat `get_run_memory_entry` as optional in the proof; exact retrieval
   is part of the safety story.
-- Do not build Global Wire news fixes during this mission except to write the
+- Do not build Universal Wire news fixes during this mission except to write the
   final provider/config readiness conclusion that unlocks that work.
 
 ## Rollback Policy
@@ -406,7 +406,7 @@ The mission is complete only when all are true:
   and exact retrieval.
 - Provider/config mission checkpoint is updated with the compaction result and
   a clear conclusion about whether the model/provider/config upgrade is ready
-  to unblock Global Wire.
+  to unblock Universal Wire.
 - If the provider/config stopping conditions are satisfied after compaction,
   `docs/mission-provider-config-conformance-v0.md` is marked complete; if not,
   it remains `checkpoint_incomplete` with only the precise residual provider
@@ -530,18 +530,18 @@ belief-state changes:
   VText run retrieved exact compacted content through `get_run_memory_entry`.
 remaining error field:
   No compaction mission blocker remains. The remaining work belongs to the next
-  Global Wire mission: use the now-ready provider/config substrate to replace
+  Universal Wire mission: use the now-ready provider/config substrate to replace
   hardwired/stub news behavior with real source ingestion and article ownership.
 highest-impact remaining uncertainty:
   For compaction, the highest-impact uncertainty has been retired. For future
   scale work, the next uncertainty is cost/latency behavior near the true 700k
   threshold under long-running production workloads.
 next executable probe:
-  Resume Global Wire hard cutover: delete old mock/detritus surfaces, ingest
+  Resume Universal Wire hard cutover: delete old mock/detritus surfaces, ingest
   real sources at volume, route source packets through processors/reconcilers,
   and have VText agents own publication-quality article versions.
 suggested resume goal string:
-  /goal Run docs/mission-global-wire-hard-cutover-real-newsroom-v0.md as MissionGradient; replace Global Wire mocks with real source ingestion and VText-owned articles.
+  /goal Run docs/mission-universal-wire-hard-cutover-real-newsroom-v0.md as MissionGradient; replace Universal Wire mocks with real source ingestion and VText-owned articles.
 evidence artifact refs:
   Provider/config context: docs/mission-provider-config-conformance-v0.md
   Staging proof: docs/evidence/llm-run-memory-compaction-staging-2026-06-08.md

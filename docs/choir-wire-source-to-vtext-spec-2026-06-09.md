@@ -4,7 +4,7 @@ Date: 2026-06-09 (amended same day: explicit activation model, invariant 21)
 
 Status: current requirements contract for Wire/news work
 
-This spec supersedes the legacy Global Wire, StoryGraph, source-manifest, and
+This spec supersedes the legacy Universal Wire, StoryGraph, source-manifest, and
 source-maxxing ontology for active work.
 
 ## Core Object
@@ -34,7 +34,7 @@ Wire is always scoped to a cloud and computer.
 Choir Community Cloud
   NixOS Host(s)
   Community Platform Computer(s)
-    Community Wire
+    Universal Wire
       public source artifacts
       platform processors/reconcilers/researchers
       public VText agents
@@ -60,7 +60,7 @@ Private Choir Cloud
   Candidate Computers
 ```
 
-The public news product is Community Wire. It is platform-level work inside the
+The public news product is Universal Wire. It is platform-level work inside the
 Choir Community Cloud, not a user-level feature inside one user's computer.
 
 Private Choir Clouds reuse the same substrate on their own NixOS host or host
@@ -70,7 +70,7 @@ private sources, model/search policy, and publication/subscription boundaries.
 ## Invariants
 
 1. Wire is reusable public/private infrastructure, not a bespoke news dashboard.
-2. Community Wire is owned by a Choir Community Cloud platform computer.
+2. Universal Wire is owned by a Choir Community Cloud platform computer.
 3. Private Wire instances are owned by Private Choir Cloud platform computers.
 4. Personalization runs in user computers and creates user-owned VTexts,
    forks, alerts, notes, preferences, and style.vtexts.
@@ -121,12 +121,12 @@ private sources, model/search policy, and publication/subscription boundaries.
 
 Source quantity and depth are load-bearing.
 
-Community Wire should ingest copious, multilingual, mixed-authority public
+Universal Wire should ingest copious, multilingual, mixed-authority public
 sources faster than the current 15-minute baseline where source APIs allow it.
 The target shape is hundreds of items per cycle, with growth toward
 live/as-they-arrive ingestion.
 
-Required Community Wire source classes:
+Required Universal Wire source classes:
 
 - RSS/Atom feeds with full article/readability import where allowed;
 - GDELT global feeds/APIs as broad multilingual discovery and event/signal
@@ -143,7 +143,7 @@ Private Wire source classes may include:
 - private documents, PDFs, DOCX, slide decks, EPUBs, datasets, images, audio,
   video, transcripts, emails, and internal databases;
 - private RSS/Atom or monitored websites;
-- subscribed Community Wire VTexts/source artifacts;
+- subscribed Universal Wire VTexts/source artifacts;
 - public web/source APIs allowed by the private cloud's policy.
 
 Public source artifacts and private source artifacts use the same mechanics but
@@ -245,7 +245,7 @@ regional, source-type-based, event-based, or load-balanced; it is not
 necessarily a vertical.
 
 User processors personalize by querying, filtering, and researching across the
-user's accessible corpus: Community Wire subscriptions, Private Wire artifacts,
+user's accessible corpus: Universal Wire subscriptions, Private Wire artifacts,
 user files, user VTexts, and user preferences. They are not deterministic
 subscription matchers.
 
@@ -318,8 +318,8 @@ Examples:
 
 - `Wire.vtext`: Universal Wire public front page (`universal-wire/Wire.vtext`
   on Community Cloud after migration);
-- `Wire-Tech.vtext`: Community Wire tech/open-source edition;
-- `Wire-Science.vtext`: Community Wire science edition;
+- `Wire-Tech.vtext`: Universal Wire tech/open-source edition;
+- `Wire-Science.vtext`: Universal Wire science edition;
 - `FirmMorningBrief.vtext`: Private Cloud firm-wide morning edition;
 - `MatterRiskWire.vtext`: matter-specific private edition;
 - `YusefMorningWire.vtext`: user-owned personalized edition;

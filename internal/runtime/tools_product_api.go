@@ -27,7 +27,7 @@ func newProductAPIRequestTool(rt *Runtime) Tool {
 		Description: "Call an allowed authenticated product API route in the current runtime using the run owner as the authenticated user. This is for foreground super product-path orchestration; it refuses internal, test, agent, prompt-config, and raw event mutation routes.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"method": map[string]any{"type": "string", "enum": []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete}},
-			"path":   map[string]any{"type": "string", "description": "Absolute API path, optionally with query string, such as /api/global-wire/stories."},
+			"path":   map[string]any{"type": "string", "description": "Absolute API path, optionally with query string, such as /api/universal-wire/stories."},
 			"body":   map[string]any{"type": "object", "description": "Optional JSON body for POST/PUT requests."},
 		}, []string{"method", "path"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -158,7 +158,7 @@ func validateProductAPIToolRoute(method, requestURI string) error {
 	}
 	for _, allowed := range []string{
 		"/api/prompt-bar",
-		"/api/global-wire/",
+		"/api/universal-wire/",
 		"/api/vtext/",
 		"/api/trace/",
 		"/api/app-change-packages",

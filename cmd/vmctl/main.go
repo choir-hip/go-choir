@@ -116,7 +116,7 @@ func main() {
 		log.Printf("vmctl: idle sweeper interval set to %s", idleSweepInterval)
 	}
 
-	startCommunityWirePlatformComputer(registry)
+	startUniversalWirePlatformComputer(registry)
 
 	handler := vmctl.NewHandler(registry)
 	if dir := strings.TrimSpace(os.Getenv("VMCTL_SANDBOX_PACKAGE_DIR")); dir != "" {
@@ -424,7 +424,7 @@ func envBool(key string, fallback bool) bool {
 	}
 }
 
-func startCommunityWirePlatformComputer(registry *vmctl.OwnershipRegistry) {
+func startUniversalWirePlatformComputer(registry *vmctl.OwnershipRegistry) {
 	if !envBool("VMCTL_PLATFORM_WIRE_ENABLED", false) {
 		return
 	}
@@ -442,16 +442,16 @@ func startCommunityWirePlatformComputer(registry *vmctl.OwnershipRegistry) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		env, err := registry.EnsureCommunityWirePlatformComputer(ctx)
+		env, err := registry.EnsureUniversalWirePlatformComputer(ctx)
 		if err != nil {
-			log.Printf("vmctl: community wire platform computer: %v", err)
+			log.Printf("vmctl: universal wire platform computer: %v", err)
 			return
 		}
-		if err := vmctl.WriteCommunityWirePlatformRuntimeEnv(envPath, env); err != nil {
-			log.Printf("vmctl: write community wire platform runtime env: %v", err)
+		if err := vmctl.WriteUniversalWirePlatformRuntimeEnv(envPath, env); err != nil {
+			log.Printf("vmctl: write universal wire platform runtime env: %v", err)
 			return
 		}
-		log.Printf("vmctl: community wire platform runtime env written (%s -> %s)", envPath, env.RuntimeBaseURL)
+		log.Printf("vmctl: universal wire platform runtime env written (%s -> %s)", envPath, env.RuntimeBaseURL)
 		if sourceServiceUnit != "" {
 			if err := exec.Command("systemctl", "try-restart", sourceServiceUnit).Run(); err != nil {
 				log.Printf("vmctl: restart %s after platform runtime env update: %v", sourceServiceUnit, err)

@@ -5,7 +5,7 @@ Date: 2026-06-09
 ## Mission Goal And Artifact
 
 Run `docs/mission-wire-community-news-v0.md` as MissionGradient and move
-Community Wire toward the public source-to-VText news instance of the Choir
+Universal Wire toward the public source-to-VText news instance of the Choir
 Community Cloud.
 
 The real artifact is:
@@ -36,7 +36,7 @@ Initial `git status --short` was clean.
 
 Problem:
 
-The active Wire product still contains legacy Global Wire / StoryGraph /
+The active Wire product still contains legacy Universal Wire / StoryGraph /
 SourceMaxx behavior that can present seeded or compatibility data as product
 truth. This violates the current Wire requirements contract because the app
 must render VText-owned articles and an edition VText over real source
@@ -45,17 +45,17 @@ manifest stand-ins, or renamed compatibility shims.
 
 Evidence from code inspection on 2026-06-09:
 
-- `frontend/src/lib/GlobalWireApp.svelte` initializes three hardcoded preview
+- `frontend/src/lib/UniversalWireApp.svelte` initializes three hardcoded preview
   stories and unauthenticated preview mode uses them as the front page.
-- `internal/store/global_wire.go` contains `defaultGlobalWireStories`,
-  `globalWireSeedState = "seeded-source-neighborhood"`, and
-  `ensureDefaultGlobalWireStories`, which auto-seeds owner-scoped story graph
+- `internal/store/universal_wire.go` contains `defaultUniversalWireStories`,
+  `universalWireSeedState = "seeded-source-neighborhood"`, and
+  `ensureDefaultUniversalWireStories`, which auto-seeds owner-scoped story graph
   records, seed source ContentItems, style VTexts, and projection VTexts.
-- `internal/runtime/global_wire.go` reports story responses as
+- `internal/runtime/universal_wire.go` reports story responses as
   `durable-storygraph` or `durable-storygraph+source-network-vtexts`,
   combining seeded graph records with indexed VTexts.
-- `internal/store/global_wire_test.go`, `internal/runtime/global_wire_test.go`,
-  and `frontend/tests/global-wire-app.spec.js` still assert old seed, preview,
+- `internal/store/universal_wire_test.go`, `internal/runtime/universal_wire_test.go`,
+  and `frontend/tests/universal-wire-app.spec.js` still assert old seed, preview,
   SourceMaxx/source-network, and StoryGraph-derived behavior.
 - `cmd/sourcecycled/main.go`, `internal/cycle/sourcemaxx.go`,
   `internal/sourceapi/types.go`, and `cmd/sourcecycled/main_test.go` still
@@ -70,8 +70,8 @@ artifact topology: VTexts and source artifacts are real; seeded stories are not.
 
 Remaining error field:
 
-- The runtime still needs a Community Wire edition-VText truth path.
-- The current `/api/global-wire/stories` route is a compatibility story-list
+- The runtime still needs a Universal Wire edition-VText truth path.
+- The current `/api/universal-wire/stories` route is a compatibility story-list
   shape, not an edition VText graph.
 - Source daemon terminology and dispatch types still use SourceMaxx.
 - Telegram ingestion still requires a proper API path; preview HTML scraping
@@ -92,19 +92,19 @@ instead of filled with seeded stories.
   above.
 - Docs-first checkpoint commit: `87f7df56`.
 - First behavior slice: backend story reads no longer auto-seed fake stories;
-  the authenticated stories endpoint returns `community-wire-vtext-index`; the
+  the authenticated stories endpoint returns `universal-wire-vtext-index`; the
   frontend no longer contains hardcoded preview stories and renders an honest
   empty edition state when no VText-indexed articles exist.
 - Focused tests:
-  - `nix develop -c go test ./internal/store -run 'TestGlobalWireStoriesDoNotSeedFakeFrontPage'`
-  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWireStories(ReturnsHonestEmptyState|IndexesSourceNetworkVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest)'`
+  - `nix develop -c go test ./internal/store -run 'TestUniversalWireStoriesDoNotSeedFakeFrontPage'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories(ReturnsHonestEmptyState|IndexesSourceNetworkVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest)'`
   - `nix develop -c go test ./internal/store -run '^$'`
   - `nix develop -c go test ./internal/runtime -run '^$'`
   - `npm run build` in `frontend/`
-- Local browser proof against `http://127.0.0.1:5173/`: Global Wire opened,
-  `storyCount` was `0`, `[data-global-wire-empty-state]` was visible, seed text
+- Local browser proof against `http://127.0.0.1:5173/`: Universal Wire opened,
+  `storyCount` was `0`, `[data-universal-wire-empty-state]` was visible, seed text
   count was `0`, `Port backlog recedes` count was `0`, and
-  `data-global-wire-data-source` was `community-wire-vtext-index`.
+  `data-universal-wire-data-source` was `universal-wire-vtext-index`.
 - First pushed CI run for `205125c9596fc62ff4dd196fa0e48a1e80362b3b`
   (`27216692179`) failed runtime shards because legacy route tests still
   assumed implicit `story-supply-resilience` seeding. Root cause: tests were
@@ -114,7 +114,7 @@ instead of filled with seeded stories.
   source, style, article, and projection fixtures. This preserves the new
   product invariant while keeping older route tests meaningful.
 - Local verification after CI fix:
-  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire(StyleSourcesComposeAndReplace|SourceRefreshCreatesCandidateWithoutMutatingStoryGraph|FetchCycleCreatesRegistryAndRefreshEvidence|SourceRefreshClassifiesNoVisibleChangeWithoutCandidate|PromotesClassifiedRefreshIntoStoryGraphAndPlatformVText|ReconciliationRecordsDecisionWithoutMutatingStoryGraph)'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWire(StyleSourcesComposeAndReplace|SourceRefreshCreatesCandidateWithoutMutatingStoryGraph|FetchCycleCreatesRegistryAndRefreshEvidence|SourceRefreshClassifiesNoVisibleChangeWithoutCandidate|PromotesClassifiedRefreshIntoStoryGraphAndPlatformVText|ReconciliationRecordsDecisionWithoutMutatingStoryGraph)'`
   - `nix develop -c scripts/go-test-runtime-shards`
 - Fixture repair commit: `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`.
 - Replacement CI for `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`:
@@ -126,24 +126,24 @@ instead of filled with seeded stories.
   `curl -fsS https://choir.news/health` returned proxy and sandbox build
   commit `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`, deployed at
   `2026-06-09T15:34:43Z`.
-- Staging browser proof against `https://choir.news/`: opened Global Wire via
+- Staging browser proof against `https://choir.news/`: opened Universal Wire via
   the Desk menu. The frontend build commit was
-  `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`; `[data-global-wire-app]` was
-  visible; story count was `0`; `[data-global-wire-empty-state]` was visible
+  `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`; `[data-universal-wire-app]` was
+  visible; story count was `0`; `[data-universal-wire-empty-state]` was visible
   with "No Wire edition articles yet"; app data source was
-  `community-wire-vtext-index`; counts for `SourceMaxx newsroom`,
+  `universal-wire-vtext-index`; counts for `SourceMaxx newsroom`,
   `seed source neighborhood`, `Port backlog recedes`, and `StoryGraph desk`
   were all `0`. Screenshot evidence was written outside the repo at
-  `/tmp/choir-staging-global-wire-open-proof.png`.
-- Second behavior slice: `/api/global-wire/stories` now recognizes the
-  canonical Community Wire edition alias `global-wire/Wire.vtext`. Platform
+  `/tmp/choir-staging-universal-wire-open-proof.png`.
+- Second behavior slice: `/api/universal-wire/stories` now recognizes the
+  canonical Universal Wire edition alias `universal-wire/Wire.vtext`. Platform
   VText articles are no longer indexed merely because they are recent platform
   documents; they must be transcluded by that edition VText through a
   `vtext:<doc_id>` reference. The response reports
-  `community-wire-edition-vtext` and edition metadata when an edition exists.
+  `universal-wire-edition-vtext` and edition metadata when an edition exists.
 - Focused verification for the edition gate:
-  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWireStories(ReturnsHonestEmptyState|DoesNotIndexUntranscludedPlatformVTexts|IndexesEditionTranscludedVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest)'`
-  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories(ReturnsHonestEmptyState|DoesNotIndexUntranscludedPlatformVTexts|IndexesEditionTranscludedVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest)'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWire'`
   - `nix develop -c go test ./internal/runtime -run '^$'`
   - `npm run build` in `frontend/`
 - Edition-gate landing loop: commit
@@ -153,42 +153,42 @@ instead of filled with seeded stories.
   `curl -fsS https://choir.news/health` returned proxy and sandbox build
   commit `f6707096cabfdf7e860ceb35483b8335191429f2`, deployed at
   `2026-06-09T15:50:58Z`.
-- Staging browser proof after `f6707096`: opened Global Wire via the Desk menu.
+- Staging browser proof after `f6707096`: opened Universal Wire via the Desk menu.
   The backend/runtime was `f6707096` by `/health`; the frontend build commit
   remained `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd` because deploy impact
-  skipped frontend rebuild for a backend-only change. Global Wire still showed
+  skipped frontend rebuild for a backend-only change. Universal Wire still showed
   zero stories, visible "No Wire edition articles yet", data source
-  `community-wire-vtext-index`, and zero occurrences of `SourceMaxx newsroom`,
+  `universal-wire-vtext-index`, and zero occurrences of `SourceMaxx newsroom`,
   `seed source neighborhood`, `Port backlog recedes`, and `StoryGraph desk`.
   Screenshot evidence was written outside the repo at
-  `/tmp/choir-staging-global-wire-edition-gate-proof.png`.
+  `/tmp/choir-staging-universal-wire-edition-gate-proof.png`.
 - Product-path edition update slice: commit
   `90839193d04bfd1321d0424ae86930aac437efd5` adds a publication approval path
   that copies an approved projection VText into the platform owner and updates
-  `global-wire/Wire.vtext` with a `vtext:<doc_id>` transclusion. Local focused
-  tests, `TestHandleGlobalWire`, and `scripts/go-test-runtime-shards` passed.
+  `universal-wire/Wire.vtext` with a `vtext:<doc_id>` transclusion. Local focused
+  tests, `TestHandleUniversalWire`, and `scripts/go-test-runtime-shards` passed.
 - CI/deploy for `90839193d04bfd1321d0424ae86930aac437efd5`: CI run
   `27219131352` succeeded. Deploy job `80369262512` succeeded in 24s. Staging
   `/health` reported proxy and sandbox commit
   `90839193d04bfd1321d0424ae86930aac437efd5`, deployed at
   `2026-06-09T16:05:13Z`.
 - New staging problem discovered after deploy: authenticated Chrome proof
-  opened `https://choir.news/`, activated Global Wire from the dock, and saw
+  opened `https://choir.news/`, activated Universal Wire from the dock, and saw
   three legacy front-page articles even though the surface label said
-  `community-wire-vtext-index` and "awaiting edition VTexts". The visible
+  `universal-wire-vtext-index` and "awaiting edition VTexts". The visible
   articles included `Port backlog recedes as carriers warn of uneven inland
   recovery`, `Grid operators add reserve alerts as heat forecast shifts north`,
   and `City air monitors show sharp overnight improvement after smoke plume
   disperses`; their metadata still included `seed source neighborhood`. This
-  means old durable `GlobalWireStory` records remain a front-page fallback for
+  means old durable `UniversalWireStory` records remain a front-page fallback for
   authenticated users when no edition exists. The problem is documented here
   before the next fix, per Problem Documentation First.
 - Stored-story fallback removal: commit
   `02c799074c65c1698dfac0c0973effd3b1c400de` removes owner-scoped stored
-  `GlobalWireStory` rows from `/api/global-wire/stories` front-page output.
+  `UniversalWireStory` rows from `/api/universal-wire/stories` front-page output.
   Local verification passed:
-  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire(PublicationArtifactApprovalPublishesEditionVText|Stories(ReturnsHonestEmptyState|DoesNotIndexUntranscludedPlatformVTexts|IndexesEditionTranscludedVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest))'`
-  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWire(PublicationArtifactApprovalPublishesEditionVText|Stories(ReturnsHonestEmptyState|DoesNotIndexUntranscludedPlatformVTexts|IndexesEditionTranscludedVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest))'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWire'`
   - `nix develop -c scripts/go-test-runtime-shards`
 - CI/deploy for `02c799074c65c1698dfac0c0973effd3b1c400de`: CI run
   `27219955936` succeeded. Deploy job `80372239235` succeeded in 37s. Staging
@@ -196,23 +196,23 @@ instead of filled with seeded stories.
   `02c799074c65c1698dfac0c0973effd3b1c400de`, deployed at
   `2026-06-09T16:19:49Z`.
 - Authenticated staging Chrome proof after `02c79907`: opened
-  `https://choir.news/`, activated Global Wire from the dock, and inspected the
-  product DOM. The Global Wire window showed user `yusefnathanson@me.com`,
-  `0 articles`, source `community-wire-vtext-index`, `Front Page`, `awaiting
-  edition VTexts`, and `No Wire edition articles yet`. The Global Wire window
+  `https://choir.news/`, activated Universal Wire from the dock, and inspected the
+  product DOM. The Universal Wire window showed user `yusefnathanson@me.com`,
+  `0 articles`, source `universal-wire-vtext-index`, `Front Page`, `awaiting
+  edition VTexts`, and `No Wire edition articles yet`. The Universal Wire window
   contained no `seed source neighborhood` metadata and no grid/city seed
   headlines. The remaining `Port backlog recedes...` text in the full desktop
-  DOM came from minimized VText window titles outside the Global Wire front
+  DOM came from minimized VText window titles outside the Universal Wire front
   page, not from story cards.
 - Source-network metadata cleanup: commit
-  `465c9cffb65548b54f834fd9e84737b52cabbc31` changes fresh Community Wire
+  `465c9cffb65548b54f834fd9e84737b52cabbc31` changes fresh Universal Wire
   publication-approved platform article revisions to use `source_network_*`
   provenance metadata instead of minting new `source_maxx_*` keys. The reader
   remains backward-compatible with old `source_maxx_*` metadata for existing
   VText revisions.
 - Local verification for `465c9cffb65548b54f834fd9e84737b52cabbc31`:
-  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire(PublicationArtifactApprovalPublishesEditionVText|Stories(DoesNotIndexUntranscludedPlatformVTexts|IndexesEditionTranscludedVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest))'`
-  - `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWire'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWire(PublicationArtifactApprovalPublishesEditionVText|Stories(DoesNotIndexUntranscludedPlatformVTexts|IndexesEditionTranscludedVTextHeads|UsesVisibleSourceEntitiesForSourceNetworkManifest))'`
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWire'`
   - `nix develop -c scripts/go-test-runtime-shards`
 - CI/deploy for `465c9cffb65548b54f834fd9e84737b52cabbc31`: CI run
   `27220546359` succeeded. Deploy job `80374232404` succeeded in 34s. Staging
@@ -223,9 +223,9 @@ instead of filled with seeded stories.
   `b91754952aa404343f974b0f42f90202e66243a5` records the `465c9cff`
   deployment and source-network metadata cleanup proof.
 - New staging problem discovered after the `465c9cff` deploy: an authenticated
-  owner prompt submitted through the live `Command prompt` asked Community Wire
+  owner prompt submitted through the live `Command prompt` asked Universal Wire
   to run the existing source-refresh/research/projection/publication flow,
-  create or approve an Article VText, update `global-wire/Wire.vtext`, and
+  create or approve an Article VText, update `universal-wire/Wire.vtext`, and
   leave evidence IDs without using test/internal routes or seed stories. The
   product path opened a VText document for that prompt, created a VText
   revision, and then reported a blocker:
@@ -235,11 +235,11 @@ instead of filled with seeded stories.
   the request was routed into VText/document drafting and failed at the VText
   provider boundary instead of being supervised as an operational Wire
   source-to-publication run.
-- Same staging probe confirmed the Global Wire surface stayed at the honest
+- Same staging probe confirmed the Universal Wire surface stayed at the honest
   empty state while this positive path failed. A direct browser-public API
   attempt through the Chrome automation context was not a usable substitute for
   product proof: page-script fetch primitives were unavailable in that context
-  and direct navigation to `/api/global-wire/stories` was blocked by the
+  and direct navigation to `/api/universal-wire/stories` was blocked by the
   browser profile.
 - Prompt orchestration repair implemented locally: initial VText runs for
   prompts that clearly require execution, verification, staging proof,
@@ -257,11 +257,11 @@ instead of filled with seeded stories.
   sandbox commit `cbfd0637ab921947bfd5652fbe47411dca20ef79`, deployed at
   `2026-06-09T16:45:15Z`.
 - Counter-evidence after `cbfd0637`: the authenticated staging `Command
-  prompt` was reprobed with the same Community Wire product-path proof request.
+  prompt` was reprobed with the same Universal Wire product-path proof request.
   The product still opened a VText document for the prompt and reported
   `tool loop iteration 2: gateway call failed: gateway client: fireworks:
-  status 412 Precondition Failed (sanitized)`. Global Wire remained at
-  `0 articles`, `community-wire-vtext-index`, and the honest empty edition
+  status 412 Precondition Failed (sanitized)`. Universal Wire remained at
+  `0 articles`, `universal-wire-vtext-index`, and the honest empty edition
   state. The local exact initial tool-choice repair is therefore insufficient
   as a product fix; the operational handoff must not depend on another VText
   provider turn to create the persistent-super request.
@@ -289,8 +289,8 @@ instead of filled with seeded stories.
   another run `44d6fe75-c74b-4597-897b-8d6db9269ab5` reported `tool loop
   iteration 0: gateway call failed: gateway client: fireworks: status 412
   Precondition Failed (sanitized)`, the VText window remained in a failed or
-  drafting state, Compute Monitor showed `0 running runs`, and Global Wire
-  remained at `0 articles` with `community-wire-vtext-index`.
+  drafting state, Compute Monitor showed `0 running runs`, and Universal Wire
+  remained at `0 articles` with `universal-wire-vtext-index`.
 - Local root-cause repair for the super blocker: provider precondition fallback
   in the tool loop was only attempted when a `tool_choice` was present.
   Persistent-super inbox runs do not use an initial tool choice, so a Fireworks
@@ -339,12 +339,12 @@ instead of filled with seeded stories.
   `2026-06-09T17:18:17Z`.
 - Authenticated staging reprobe after `4cf18f6d`: the same product prompt
   reached a real worker run and produced a more precise VText dashboard:
-  `Community Wire Staging Proof -- Dashboard`, super run
+  `Universal Wire Staging Proof -- Dashboard`, super run
   `da234dfc-91d1-47b3-9216-3d61150bb16a`, worker run
   `bf18da24-002b-4875-9535-a227a83c7175`, state `cancelled`, and
   `AppChangePackages: 0`. The dashboard names a critical unresolved
   authentication blocker: deployed `choir.news` is live, but the worker VM
-  cannot authenticate to Global Wire and VText product APIs because
+  cannot authenticate to Universal Wire and VText product APIs because
   `X-Authenticated-User` is a trusted proxy header and the worker's gateway
   token is not a user identity. The worker spawned co-super
   `3e5e6046-1526-4966-a05e-d5ea74d86611`, but it remained pending with zero
@@ -354,7 +354,7 @@ instead of filled with seeded stories.
   `bf18da24-002b-4875-9535-a227a83c7175` is the primary blocker evidence.
 - Problem checkpoint after `4cf18f6d`: product-path worker delegation now
   reaches a worker, but the worker lacks a sanctioned authenticated product API
-  path for owner/platform-scoped Global Wire and VText operations on staging.
+  path for owner/platform-scoped Universal Wire and VText operations on staging.
   Do not fix this before documenting it: the next behavior change must define
   or repair the worker/candidate authentication contract rather than asking the
   worker to spoof trusted proxy headers or use internal/test routes.
@@ -370,7 +370,7 @@ instead of filled with seeded stories.
   still delegates to worker VMs.
 - Local verification for the product API tool repair:
   - `nix develop -c go test ./internal/runtime -run 'TestProductAPIRequestTool|TestSuperSystemPromptIncludesDelegationPolicy|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|TestDefaultAgentToolRegistryByRole'`
-  - `nix develop -c go test ./internal/runtime -run 'Test(ProductAPIRequestTool|HandlePromptBar|InitialVText|RequestSuper|GlobalWire|VText|WorkerDelegation|DelegateWorker|SuperFailure|DefaultAgentToolRegistry|SuperSystemPrompt|CoagentUpdate)'`
+  - `nix develop -c go test ./internal/runtime -run 'Test(ProductAPIRequestTool|HandlePromptBar|InitialVText|RequestSuper|UniversalWire|VText|WorkerDelegation|DelegateWorker|SuperFailure|DefaultAgentToolRegistry|SuperSystemPrompt|CoagentUpdate)'`
   - `nix develop -c scripts/go-test-runtime-shards`
 - Foreground-super product API repair deploy: commit
   `8e9ff96bb3d01f9cf69ca73b184921f09878ea05` passed CI run
@@ -379,7 +379,7 @@ instead of filled with seeded stories.
   `8e9ff96bb3d01f9cf69ca73b184921f09878ea05`, deployed at
   `2026-06-09T17:33:55Z`.
 - New staging problem discovered after the `8e9ff96b` deploy: authenticated
-  Chrome proof submitted the Community Wire proof prompt through the live
+  Chrome proof submitted the Universal Wire proof prompt through the live
   `Command prompt`. Two variants created prompt VText documents instead of
   surfacing a new persistent-super/product-api orchestration run within the
   observation window:
@@ -388,7 +388,7 @@ instead of filled with seeded stories.
   operational proof wording covered by the local prompt-bar handoff test. After
   a 90-second deployed observation window, the desktop still showed the prompts
   as VText documents with no visible new super handoff or active worker. The
-  visible Community Wire dashboard still carried the earlier worker-auth
+  visible Universal Wire dashboard still carried the earlier worker-auth
   blocker and StoryGraph-source-refresh blocker; no Wire edition was created.
   The external verifier also confirmed that direct `curl` with a spoofed
   `X-Authenticated-User` header receives `401`, preserving the proxy trust
@@ -412,7 +412,7 @@ instead of filled with seeded stories.
   `2026-06-09T17:51:13Z`.
 - Authenticated staging reprobe after `a42e1afc`: the live `Command prompt`
   created VText doc `532ffcab-9d0d-4b2e-a364-15b983f4fb90` for the same
-  Community Wire proof request. The VText root exposed
+  Universal Wire proof request. The VText root exposed
   `data-vtext-initial-loop-id="a69ea9f3-32a4-4d49-acd7-974148b8a1e4"`,
   proving the conductor decision carried a persistent-super handoff id into the
   product surface. After an additional 60-second observation window, the
@@ -433,7 +433,7 @@ instead of filled with seeded stories.
   `80392089714` succeeded in 32s. Staging `/health` reported proxy and sandbox
   commit `f78e5519d6ce9db843017f33796829cbaf18f6c3`, deployed at
   `2026-06-09T18:01:08Z`.
-- Authenticated staging reprobe after `f78e5519`: the same Community Wire proof
+- Authenticated staging reprobe after `f78e5519`: the same Universal Wire proof
   prompt created VText doc `2b7ffa7a-58a1-48be-b6f3-cbe5cd5d3d24` with
   `data-vtext-initial-loop-id="ca50cf79-9fef-413b-a15f-6e4507edc639"`. The
   live activity feed then showed foreground super calling `product_api_request`,
@@ -442,23 +442,23 @@ instead of filled with seeded stories.
   instead of stopping at worker browser authentication or a blocked stale super
   loop.
 - New staging blocker from the `f78e5519` reprobe: the super's coagent update
-  summarized the evidence as `Global Wire staging proof: StoryGraph is seeded
+  summarized the evidence as `Universal Wire staging proof: StoryGraph is seeded
   (3 dossiers...)`. The positive source-to-edition proof still did not create a
-  visible `global-wire/Wire.vtext` edition update or rendered article. The next
+  visible `universal-wire/Wire.vtext` edition update or rendered article. The next
   problem has moved again: foreground product API orchestration works, but the
-  underlying Global Wire source-refresh/reconciliation path is still tied to
-  seeded StoryGraph dossier state rather than the Community Wire
+  underlying Universal Wire source-refresh/reconciliation path is still tied to
+  seeded StoryGraph dossier state rather than the Universal Wire
   source-artifact -> VText-edition topology.
-- Source-native Global Wire repair deploy: commit
+- Source-native Universal Wire repair deploy: commit
   `e75697b77b7422414df7f6653c29fb8b31325401` passed CI run `27226620966`;
   deploy job `80395758795` succeeded. Staging `/health` reported proxy and
   sandbox commit `e75697b77b7422414df7f6653c29fb8b31325401`, deployed at
   `2026-06-09T18:20:11Z`.
 - Authenticated staging reprobe after `e75697b`: the live `Command prompt`
-  submitted a source-native Community Wire proof request that explicitly asked
-  for `/api/global-wire/source-refresh` without a seeded `story_id`, research
+  submitted a source-native Universal Wire proof request that explicitly asked
+  for `/api/universal-wire/source-refresh` without a seeded `story_id`, research
   evidence completion, Article VText draft/approval, publication update and
-  artifact approval, and `global-wire/Wire.vtext` inclusion using only public
+  artifact approval, and `universal-wire/Wire.vtext` inclusion using only public
   authenticated product APIs. The product opened VText doc
   `2d097c76-e179-4655-b6e4-c32ffa8c70ec` with
   `data-vtext-initial-loop-id="ce6a3e77-332b-4fb5-af06-c695d136b4cb"`, and
@@ -490,16 +490,16 @@ instead of filled with seeded stories.
 - Authenticated staging reprobe after `d4b24de8`: the prior source-native proof
   VText progressed past the compaction blocker and recorded a partial-pass
   pipeline in run `11d7cfe2-db39-4e4f-b6a4-2c805cfb24f9`, with verification
-  ref `global-wire-verification-853a2c65`. The evidence chain includes
-  `source_content:global-wire-source-service-7a63fa2f-f0b1-5ffb-8275-a20b6df813f1`,
-  `refresh_run:global-wire-source-refresh-47387144-46d6-4eb2-8204-f3defbd2f620`,
-  `research_evidence:global-wire-research-evidence-414eabbd-4bbb-4243-a97f-c8f98b8e12a7`,
-  `research_decision:global-wire-research-decision-d246e8ab-f50c-4abe-98fa-3200038859e2`,
-  `publication_update:global-wire-publication-update-1e2cb8c8-22b9-4a91-9568-30fd63fd5608`,
-  and `publication_artifact:global-wire-publication-artifact-fec7e799-90bc-492d-8450-03b0a893f042`.
+  ref `universal-wire-verification-853a2c65`. The evidence chain includes
+  `source_content:universal-wire-source-service-7a63fa2f-f0b1-5ffb-8275-a20b6df813f1`,
+  `refresh_run:universal-wire-source-refresh-47387144-46d6-4eb2-8204-f3defbd2f620`,
+  `research_evidence:universal-wire-research-evidence-414eabbd-4bbb-4243-a97f-c8f98b8e12a7`,
+  `research_decision:universal-wire-research-decision-d246e8ab-f50c-4abe-98fa-3200038859e2`,
+  `publication_update:universal-wire-publication-update-1e2cb8c8-22b9-4a91-9568-30fd63fd5608`,
+  and `publication_artifact:universal-wire-publication-artifact-fec7e799-90bc-492d-8450-03b0a893f042`.
   The proof is not acceptance: the VText reports `Story ID:
   story-supply-resilience` despite the prompt requesting no seeded `story_id`,
-  and the verifier says `/api/global-wire/stories` returns empty while the story
+  and the verifier says `/api/universal-wire/stories` returns empty while the story
   endpoint returns 404 for the approved artifact. This documents the next
   problem before any fix: the orchestration can now get past compaction and
   produce internally linked publication records, but it can still fall back to
@@ -523,25 +523,25 @@ current artifact state:
 what was proven:
 
 - The legacy fake/seeded front-page behavior remains in active code and tests.
-- The local app can now render an honest empty Community Wire state without
+- The local app can now render an honest empty Universal Wire state without
   seeded preview articles.
 - Focused store/runtime tests and frontend production build pass.
 - Full local runtime shard script passes after explicit fixture repair.
 - GitHub CI and a forced staging deploy succeeded for
   `a89f8a48807d0f79f05b97e42f08f5ff4c698cfd`.
 - Staging health reports both proxy and sandbox at that SHA.
-- The deployed public Global Wire UI renders the honest empty Community Wire
+- The deployed public Universal Wire UI renders the honest empty Universal Wire
   state and no longer exposes the deleted preview/seed front-page text.
 - The deployed story endpoint now requires the canonical `Wire.vtext` edition
-  to transclude platform VText articles before they appear in Global Wire.
+  to transclude platform VText articles before they appear in Universal Wire.
 - Counter-evidence found on authenticated staging after `90839193`: the
-  endpoint/surface still fell back to owner-scoped stored `GlobalWireStory`
+  endpoint/surface still fell back to owner-scoped stored `UniversalWireStory`
   rows when no edition existed, exposing legacy seed stories for at least one
   authenticated user. That problem was documented first, then fixed by
   `02c79907`.
 - Authenticated staging after `02c79907` now renders an honest empty edition
   state for that user instead of stored legacy story rows.
-- Fresh publication-approved Community Wire article revisions will no longer
+- Fresh publication-approved Universal Wire article revisions will no longer
   mint new `source_maxx_*` metadata; existing legacy metadata is still accepted
   as read-only compatibility input while the old records/routes are deleted in
   later slices.
@@ -549,7 +549,7 @@ what was proven:
   proof request into VText drafting and exposes a Fireworks 412 provider
   blocker. This is not evidence that the Wire publication chain is impossible;
   it is evidence that the product-level orchestration entry point is wrong or
-  under-specified for operational Community Wire proof.
+  under-specified for operational Universal Wire proof.
 - The local prompt-bar/VText handoff now classifies that operational proof
   shape as a super-execution obligation before the first VText edit, preserving
   VText ownership for ordinary documents while unblocking supervised product
@@ -582,18 +582,18 @@ what was proven:
 - Local foreground-super product API repair now gives the active super a typed
   owner-context product API path, avoiding both worker browser impersonation
   and model-controlled trusted-header spoofing.
-- Local source-native Global Wire repair now lets authenticated
-  `/api/global-wire/source-refresh` omit `story_id`, import the Source Service
+- Local source-native Universal Wire repair now lets authenticated
+  `/api/universal-wire/source-refresh` omit `story_id`, import the Source Service
   top result as a deterministic `source-native-*` review context, create
   claim/research/extraction/projection-review artifacts without persisting a
-  seeded `GlobalWireStory`, approve article VText, package a publication
-  artifact, and update `global-wire/Wire.vtext` through the existing
+  seeded `UniversalWireStory`, approve article VText, package a publication
+  artifact, and update `universal-wire/Wire.vtext` through the existing
   publication artifact approval path.
 - Local verification passed for the source-native path:
-  `nix develop -c go test ./internal/runtime -run TestHandleGlobalWireSourceNativeRefreshPublishesEditionVText -count=1`,
-  the neighboring seeded-story Global Wire tests, and
+  `nix develop -c go test ./internal/runtime -run TestHandleUniversalWireSourceNativeRefreshPublishesEditionVText -count=1`,
+  the neighboring seeded-story Universal Wire tests, and
   `nix develop -c scripts/go-test-local`.
-- The source-native Global Wire repair is deployed at `e75697b`, and staging
+- The source-native Universal Wire repair is deployed at `e75697b`, and staging
   health confirms that commit. The first authenticated product-path reprobe got
   as far as source search and foreground product API calls, then hit a
   run-memory compaction encoding blocker before publication evidence could be
@@ -605,11 +605,11 @@ what was proven:
 - The public publication approval guard is deployed at
   `d0ad4ed264a6f256a0e4b979397c24883ac7d3d7`, CI run `27228093837` passed,
   staging deploy job `80400949898` passed, and staging health confirms proxy
-  and sandbox at that SHA. The guard prevents public Community Wire artifacts
+  and sandbox at that SHA. The guard prevents public Universal Wire artifacts
   from being marked `publication-approved` unless an approved Article VText is
   available for edition publication.
 - A fresh authenticated staging proof prompt after `d0ad4ed2` reached the live
-  foreground proof path but failed before Global Wire source-native API
+  foreground proof path but failed before Universal Wire source-native API
   orchestration. Activity run `68f1ed7e-882e-432e-884a-c6ab5bba559a` reported
   `tool loop iteration 2: gateway call failed: gateway client: deepseek:
   status 402 Payment Required (sanitized)`. This is the next documented
@@ -624,13 +624,13 @@ what was proven:
   `eba8bd05c5d3ec08662cfdd758e4466e4f5f102c`, deployed at
   `2026-06-09T18:57:53Z`.
 - Authenticated staging reprobe after `eba8bd05`: a fresh source-native
-  Community Wire proof prompt created VText doc
+  Universal Wire proof prompt created VText doc
   `3138b6db-3167-417d-a8c9-db0297d2e85b` with
   `data-vtext-initial-loop-id="53580323-5b55-4995-97e1-8a08e916ac2d"`. After
   an additional observation window, the document still showed v0,
   `Writing first draft...`, and `Revising...`. The authenticated product
   surface showed no fresh source search, foreground `product_api_request`,
-  publication update/artifact, `global-wire/Wire.vtext` inclusion, rendered
+  publication update/artifact, `universal-wire/Wire.vtext` inclusion, rendered
   story, or precise new blocker for that loop. The old
   `68f1ed7e...` DeepSeek 402 blocker remained visible as historical activity,
   but no fresh 402 blocker was observed for the `eba8bd05` prompt. This is the
@@ -669,25 +669,25 @@ what was proven:
   super, and VText on `xiaomi/mimo-v2.5`; no DeepSeek call appeared. The
   foreground product path executed source refresh, projection review, research
   evidence, publication update, publication artifact, and artifact approval.
-  Evidence ids include source refresh `global-wire-source-refresh-04fc54aa`,
-  projection review `global-wire-projection-review-5fc5beb6`, research
-  evidence `global-wire-research-evidence-afebe39d`, publication update
-  `global-wire-publication-update-adb48a9b`, and publication artifact
-  `global-wire-publication-artifact-e8f417e7-de00-4e94-94a1-254b88462e8d`.
-- Deployed acceptance proof: `GET /api/global-wire/stories` returned one story
-  from `community-wire-edition-vtext`: "The Computer Science Degree Isn't
+  Evidence ids include source refresh `universal-wire-source-refresh-04fc54aa`,
+  projection review `universal-wire-projection-review-5fc5beb6`, research
+  evidence `universal-wire-research-evidence-afebe39d`, publication update
+  `universal-wire-publication-update-adb48a9b`, and publication artifact
+  `universal-wire-publication-artifact-e8f417e7-de00-4e94-94a1-254b88462e8d`.
+- Deployed acceptance proof: `GET /api/universal-wire/stories` returned one story
+  from `universal-wire-edition-vtext`: "The Computer Science Degree Isn't
   Dead". The story article VText is
   `b45dc29b-6ff5-4efb-98b3-895a4afd8968`; the edition is
-  `global-wire/Wire.vtext` doc `fb021fa3-16a5-4841-b30c-6e36bd0a10c2`
+  `universal-wire/Wire.vtext` doc `fb021fa3-16a5-4841-b30c-6e36bd0a10c2`
   revision `a5af660e-02ae-4b6b-8a9e-e34e611b9391`, whose included doc ids
   contain that article VText.
 
 unproven or partial claims:
 
-- Source-cycle proof exists for one staging Community Wire article.
+- Source-cycle proof exists for one staging Universal Wire article.
 - Positive deployed VText edition rendering exists through
-  `/api/global-wire/stories`, `community-wire-edition-vtext`, and
-  `global-wire/Wire.vtext`.
+  `/api/universal-wire/stories`, `universal-wire-edition-vtext`, and
+  `universal-wire/Wire.vtext`.
 - The authenticated stored-story fallback blocker is fixed, but only as an
   honest empty-state proof. It is not yet proof that a real product source
   cycle creates and publishes an article into the edition.
@@ -722,11 +722,11 @@ unproven or partial claims:
   coagent evidence. Positive edition proof remains blocked by seeded
   StoryGraph/source-refresh state, not by prompt routing, worker auth, or
   foreground product API access.
-- The source-native Global Wire repair is committed, pushed, deployed, and
+- The source-native Universal Wire repair is committed, pushed, deployed, and
   locally verified, and the compaction persistence blocker is repaired and
   deployed. The authenticated staging prompt still has not completed acceptance
   because the post-fix proof used seeded `story-supply-resilience` context and
-  the approved artifact was not visible through `/api/global-wire/stories` or
+  the approved artifact was not visible through `/api/universal-wire/stories` or
   the story endpoint.
 - The approval guard for that false-positive public artifact state is
   committed, pushed, deployed, and locally verified. The next authenticated
@@ -752,16 +752,16 @@ unproven or partial claims:
 ## Slice 0 excision (2026-06-09)
 
 Problem: legacy StoryGraph/SourceMaxx/publication routes, seed constructors, and
-432 prompt-initiated `global-wire-platform` VTexts on staging contaminated the
+432 prompt-initiated `universal-wire-platform` VTexts on staging contaminated the
 edition path before auto-publish.
 
 Code excision (commit pending push):
 
-- Removed all `/api/global-wire/*` routes except `/api/global-wire/stories`.
-- Truncated `internal/runtime/global_wire.go` to edition-VText index handlers only
+- Removed all `/api/universal-wire/*` routes except `/api/universal-wire/stories`.
+- Truncated `internal/runtime/universal_wire.go` to edition-VText index handlers only
   (~640 lines from ~7400).
-- Dropped `defaultGlobalWireStories`, `ensureDefaultGlobalWireStories`, and seed
-  helpers from `internal/store/global_wire.go`.
+- Dropped `defaultUniversalWireStories`, `ensureDefaultUniversalWireStories`, and seed
+  helpers from `internal/store/universal_wire.go`.
 - Kept five focused runtime tests for honest-empty and edition-transclusion
   behavior; deleted legacy route tests.
 - Removed frontend SourceMaxx/source-network read shim; legacy publication-link
@@ -770,7 +770,7 @@ Code excision (commit pending push):
   `cmd/purge-vtext-owner-aliases` for owner-scoped alias maintenance.
 
 Deletion Ledger grep (product code): clean for `graph-candidates`,
-`sourcemaxx-status`, `defaultGlobalWireStories`, `ensureDefaultGlobalWireStories`,
+`sourcemaxx-status`, `defaultUniversalWireStories`, `ensureDefaultUniversalWireStories`,
 `story-supply-resilience`, `seeded-source-neighborhood`. SourceMaxx naming
 remains in `sourcecycled` internal dispatch (Slice 0.5+ rename).
 
@@ -780,16 +780,16 @@ Staging purge (2026-06-09, Node B):
 - Deleted 432 documents via sandbox API; deleted 424 orphan aliases via embedded
   Dolt maintenance tool (host CLI was read-only while sandbox held the lock).
 - Verified counts: `vtext_documents=0`, `vtext_revisions=0`,
-  `vtext_document_aliases=0` for `global-wire-platform`.
+  `vtext_document_aliases=0` for `universal-wire-platform`.
 
 Focused tests:
 
-- `nix develop -c go test ./internal/store -run TestGlobalWireStoriesDoNotSeedFakeFrontPage`
-- `nix develop -c go test ./internal/runtime -run TestHandleGlobalWireStories`
+- `nix develop -c go test ./internal/store -run TestUniversalWireStoriesDoNotSeedFakeFrontPage`
+- `nix develop -c go test ./internal/runtime -run TestHandleUniversalWireStories`
 
 ## Slice 0.5 checkpoint (2026-06-10)
 
-**Problem:** Community Wire dispatch and Dolt owner binding still target host
+**Problem:** Universal Wire dispatch and Dolt owner binding still target host
 `sandbox-m1` (`SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085`). Slice 0
 purged legacy graph rows from that host sandbox, but the platform computer is
 not yet an always-on Firecracker VM with its own embedded Dolt.
@@ -797,7 +797,7 @@ not yet an always-on Firecracker VM with its own embedded Dolt.
 **Evidence (pre-fix staging):**
 
 - `nix/node-b.nix` binds `go-choir-sourcecycled` and host `go-choir-sandbox` to
-  `127.0.0.1:8085` with `SOURCE_SERVICE_RUNTIME_OWNER_ID=global-wire-platform`.
+  `127.0.0.1:8085` with `SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform`.
 - Guest kernel params pointed `choir.source_service_runtime_url` at the host tap
   IP instead of the guest-local sandbox (`127.0.0.1:8085`).
 - `WarmnessClassPublicPlatform` existed but had no boot/warm loop and was not
@@ -805,8 +805,8 @@ not yet an always-on Firecracker VM with its own embedded Dolt.
 
 **Slice 0.5 fix intent:**
 
-1. Boot/resume stable VM `vm-global-wire-platform` for owner
-   `global-wire-platform` / desktop `platform`.
+1. Boot/resume stable VM `vm-universal-wire-platform` for owner
+   `universal-wire-platform` / desktop `platform`.
 2. Write `/var/lib/go-choir/platform-wire-runtime.env` with the platform VM
    `HostURL`; repoint `sourcecycled` dispatch off host `sandbox-m1`.
 3. Guest runtime URL → `127.0.0.1:8085`; protect `public_platform` from idle
@@ -814,11 +814,11 @@ not yet an always-on Firecracker VM with its own embedded Dolt.
 
 **Remaining error field after Slice 0 landing:**
 
-- Deployed honest-empty `/api/global-wire/stories` at `fd675252`; platform VM
+- Deployed honest-empty `/api/universal-wire/stories` at `fd675252`; platform VM
   migration not yet proven on staging.
 
 **Slice 0.5 landed (2026-06-10):** commit `e9c4bd9e`; platform VM
-`vm-global-wire-platform` at `http://10.203.98.2:8085`; sourcecycled dispatch
+`vm-universal-wire-platform` at `http://10.203.98.2:8085`; sourcecycled dispatch
 repointed via `/var/lib/go-choir/platform-wire-runtime.env`.
 
 **Slice 1 landed (2026-06-10):** commit `ba20d938`; CI run `27245509571`
@@ -896,7 +896,7 @@ researcher/VText and reconciler edition writes; adversarial review corrected
 the model: **processor → VText only**; VText owns researcher/super loop;
 **reconciler emits wake requests only** (never `edit_vtext`); publish is
 **autonomous** on Universal Wire (Community Cloud). Product rename: **Universal
-Wire** (`universal-wire/Wire.vtext`), not a shim over `global-wire`.
+Wire** (`universal-wire/Wire.vtext`), not a shim over `universal-wire`.
 
 **Evidence:** docs-only checkpoint —
 [universal-wire-activation-topology-2026-06-10.md](universal-wire-activation-topology-2026-06-10.md);
@@ -908,7 +908,7 @@ mission v1 and spec Activation section amended same date.
 |-------------|--------|
 | (a) Architecture checkpoint | **Done** (docs) |
 | (b) Deletion Ledger | **Done** — StoryGraph store/types deleted; ingestion spine neutral; Go grep clean |
-| (c) Universal Wire rename | **Not started** — blocked on (b) |
+| (c) Universal Wire rename | **Done** (code) — staging alias/VM migration pending deploy |
 | (d) Activation graph (Slice 3) | **Not started** — blocked on (b),(c) |
 | (e) Staging acceptance | **Not started** |
 
@@ -917,7 +917,7 @@ mission v1 and spec Activation section amended same date.
 1. **(b)** Replace `BuildSourceMaxxHandoff` / dispatcher with neutral ingestion
    vocabulary; grep-clean delete legacy symbols; purge staging seeds.
 2. **(c)** Rename user-visible surfaces and API routes; migrate edition alias;
-   delete `global-wire/Wire.vtext` with zero-ref proof (no redirects).
+   delete `universal-wire/Wire.vtext` with zero-ref proof (no redirects).
 3. **(d)** Remove per-cycle reconciler from handoff; processor vtext-only
    outbound; reconciler on publish debounce + schedule + corpus-change only;
    negative proofs in CI/staging.
@@ -927,7 +927,7 @@ mission v1 and spec Activation section amended same date.
    response citing user version. Slice 4 Phase A matrix + prompt-bar negative.
 
 **Supersedes:** Slice 3 checkpoint draft (2026-06-10 morning) that proposed
-reconciler edition writes and `global-wire/Wire.vtext` without rename policy.
+reconciler edition writes and `universal-wire/Wire.vtext` without rename policy.
 
 **Workstream (b) checkpoint — ingestion spine replacement (2026-06-10):**
 
@@ -950,23 +950,44 @@ constructors — deleted ontology still on disk and in schema.
 `global_wire_*` DDL and column migrations from `internal/store/store.go`;
 replaced `internal/types/global_wire.go` with minimal `internal/types/wire.go`
 (`WireStory`, `WireStyleSource`, `WireSourceManifest`, `WireSourceItem` only).
-Runtime edition index (`/api/global-wire/stories`) now projects VText only — no
-store-backed StoryGraph reads.
+Runtime edition index now projects VText only — no store-backed StoryGraph reads.
 
 **Evidence:** `go build ./...` and `go test ./internal/store ./internal/runtime
 ./cmd/sourcecycled ./internal/cycle ./internal/types` pass. Go grep for
 `StoryGraph`, `SourceMaxx`, `source_maxx`, `sourcemaxx`, `ListGlobalWire`,
 `UpsertGlobalWire`, `global_wire_story_graph` is empty.
 
-**Residual (not (b)):** User-visible `global-wire` API/edition alias and
-`global_wire_*` request_intent metadata remain until Workstream **(c)** Universal
-Wire rename. `source-network` VText provenance labels are intentional ingestion
-index vocabulary, not StoryGraph store ontology.
+**Workstream (c) completion — Universal Wire full rename (2026-06-10):**
+
+**Problem:** Product and infra still used `global-wire` / `global_wire` /
+`CommunityWire` vocabulary after deletion ledger (b), including platform owner
+`global-wire-platform`, VM id `vm-global-wire-platform`, API
+`/api/global-wire/stories`, edition alias `global-wire/Wire.vtext`, and frontend
+`GlobalWireApp`.
+
+**Fix:** Hard cutover — no route aliases or redirects.
+
+- Edition alias: `universal-wire/Wire.vtext`
+- API: `/api/universal-wire/stories` (`HandleUniversalWireStories`)
+- Platform owner: `universal-wire-platform`; VM: `vm-universal-wire-platform`
+- `CommunityWire*` vmctl symbols → `UniversalWire*`
+- Frontend app id `universal-wire`, `UniversalWireApp.svelte`, Playwright
+  `universal-wire-app.spec.js`
+- Runtime files: `universal_wire.go` / tests; `universal_wire_*` request intents
+- `nix/node-b.nix`, `configs/sources.json` user agent `ChoirUniversalWire`
+
+**Evidence:** `go build ./...`; `go test ./internal/runtime ./internal/vmctl
+./cmd/sourcecycled` pass. Active-code grep for `global-wire`, `global_wire`,
+`GlobalWire`, `CommunityWire` is empty.
+
+**Staging migration (post-deploy):** Re-bind edition alias
+`universal-wire/Wire.vtext` for owner `universal-wire-platform` (copy from prior
+`global-wire/Wire.vtext` doc if needed). Platform VM may need re-provision under
+`vm-universal-wire-platform` or ownership registry update — no automatic redirect.
 
 next step:
 
-- **(c)** Universal Wire rename (`universal-wire/Wire.vtext`, API routes, frontend);
-  then **(d)** activation graph; **(e)** staging acceptance.
+- **(d)** Activation graph (processor vtext-only, debounced reconciler); **(e)** staging acceptance with migrated edition alias.
 
 
 ## v1 mission handoff (2026-06-09)
@@ -979,7 +1000,7 @@ Active mission document:
 v1 corrections applied after external doc review:
 
 - Frontend hardcoded preview stories were removed in v0; legacy StoryGraph seeding
-  in `internal/store/global_wire.go` was deleted 2026-06-10 — invariant 23 Deletion
+  in `internal/store/universal_wire.go` was deleted 2026-06-10 — invariant 23 Deletion
   Ledger is the bar, not front-page suppression alone.
 - HN ingests today via RSS (`rss:hn_best`); Phase A requires per-class proof,
   not assumption from registry presence.

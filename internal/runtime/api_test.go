@@ -98,7 +98,7 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 func TestPromptBarSubmissionDoesNotActivateIngestionEvent(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
-	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Write a Community Wire story about AI policy"}`, "user-alice")
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Write a Universal Wire story about AI policy"}`, "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandlePromptBar(w, req)
 	if w.Code != http.StatusAccepted {

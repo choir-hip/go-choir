@@ -2,7 +2,7 @@
 
 **Status:** ready MissionGradient mission  
 **Created:** 2026-06-08  
-**Primary payload:** Global Wire source truthfulness  
+**Primary payload:** Universal Wire source truthfulness  
 **Meta-goal:** prove Choir-in-Choir can accelerate platform work by producing
 reviewable PR/package artifacts without owning platform promotion.
 
@@ -21,7 +21,7 @@ The mission has one real object with two inseparable faces:
 1. **Self-development face:** Choir-in-Choir must produce a reviewable platform
    artifact through the product path.
 2. **News-system face:** the artifact must reduce uncertainty or improve
-   behavior for Global Wire source truthfulness.
+   behavior for Universal Wire source truthfulness.
 
 The intended loop is:
 
@@ -40,7 +40,7 @@ owner intent
 Choir-in-Choir may produce candidate platform work. It does not get to silently
 merge `main`, deploy Node B, or claim platform promotion.
 
-If the run improves Global Wire only through Codex edits, it did useful work
+If the run improves Universal Wire only through Codex edits, it did useful work
 but did not satisfy this mission. If the run proves Choir-in-Choir only on a
 toy change, it did not satisfy this mission. The value is in the combined
 artifact: a real news-system candidate produced through the self-development
@@ -54,7 +54,7 @@ and token budget. Choir-in-Choir should absorb more investigation, candidate
 implementation, QA, and evidence packaging while keeping platform merge
 authority outside the candidate system until the promotion path earns trust.
 
-Global Wire is a good payload because it has live complexity, real source
+Universal Wire is a good payload because it has live complexity, real source
 cycles, processor/reconciler failures, VText articles, browser-visible UI, and
 high demand for repeated iteration.
 
@@ -82,7 +82,7 @@ Highest-impact uncertainty:
 
 ```text
 Can a visible product-path Choir run produce a reviewable platform candidate
-artifact for Global Wire source truthfulness, with enough evidence that Codex
+artifact for Universal Wire source truthfulness, with enough evidence that Codex
 can review instead of rediscovering the work?
 ```
 
@@ -118,7 +118,7 @@ autonomous completion theater.
 
 ### 4. News-Truthfulness Transform
 
-The visible defect is not "Global Wire needs polish." The defect is that the
+The visible defect is not "Universal Wire needs polish." The defect is that the
 product may be presenting placeholders and stale story ordering as if they were
 live source-grounded news.
 
@@ -167,9 +167,9 @@ Prompt bar mission
 -> if rejected, mission VText records review findings and next worker action
 ```
 
-## Payload: Global Wire Source Truthfulness
+## Payload: Universal Wire Source Truthfulness
 
-The candidate should start from the latest deployed Global Wire behavior and
+The candidate should start from the latest deployed Universal Wire behavior and
 answer these in order.
 
 ### A. Source-Body Integrity
@@ -205,7 +205,7 @@ answer these in order.
 
 ### D. Delete Detritus Source Ledger Surfaces
 
-- The Global Wire "Sources Chronology" list and search surface currently
+- The Universal Wire "Sources Chronology" list and search surface currently
   appears to be detritus: seed-looking repeated records, unclear user purpose,
   and a search box that does not provide an intelligible source exploration
   workflow.
@@ -219,21 +219,21 @@ answer these in order.
   the real job: browse/filter full ingested articles by time, language, topic,
   feed/channel, and source body availability. That is not the current surface.
 
-### E. Delete Bespoke Style.vtext Controls From Global Wire
+### E. Delete Bespoke Style.vtext Controls From Universal Wire
 
-- The Global Wire Style.vtext panel with radio-button-like choices, "S",
+- The Universal Wire Style.vtext panel with radio-button-like choices, "S",
   "Compose", "Replace", and "Ask" is not a coherent news app surface.
 - Style.vtexts are ordinary VTexts and citeable source artifacts. They should
   be selected, composed, replaced, or customized through the VText agent/source
-  workflow, not through a special Global Wire control panel.
+  workflow, not through a special Universal Wire control panel.
 - Styles should be example-rich VTexts written in their own style. Examples
   matter more than rule bullets. A style artifact should demonstrate the voice,
   structure, pacing, citation treatment, and editorial stance it wants future
   articles to learn from.
-- Global Wire may show that an article cites or was influenced by a style
+- Universal Wire may show that an article cites or was influenced by a style
   source when relevant, but it should not expose bespoke style-selection UI in
   the news collection view.
-- Treat the current Style.vtext Global Wire section as a deletion candidate.
+- Treat the current Style.vtext Universal Wire section as a deletion candidate.
 
 ### F. Processor/Reconciler Failure Context
 
@@ -243,7 +243,7 @@ answer these in order.
   source-batch overload, VText edit failure, researcher handoff failure,
   timeout, cancellation, or bad source handle?
 - Are failures retriable, resumable, or expected degradation?
-- What owner-facing status should Global Wire show?
+- What owner-facing status should Universal Wire show?
 
 Allowed candidate fixes include:
 
@@ -254,14 +254,14 @@ Allowed candidate fixes include:
 - fixing mobile source-open behavior to use web-safe routes;
 - deleting the current Sources Chronology/search surface if it is not a real
   full-article source exploration workflow;
-- deleting the current bespoke Style.vtext controls from Global Wire;
+- deleting the current bespoke Style.vtext controls from Universal Wire;
 - improving owner-facing status for failed/degraded source cycles;
 - adding tests around any of the above.
 
 Disallowed overnight detours:
 
 - building Autoradio;
-- redesigning Global Wire UI broadly;
+- redesigning Universal Wire UI broadly;
 - preserving the current source chronology/search surface by default;
 - preserving the current bespoke Style.vtext panel by default;
 - introducing embeddings/clustering;
@@ -273,7 +273,7 @@ Disallowed overnight detours:
 
 Owner-observed staging/mobile behavior on 2026-06-08 before mission start:
 
-- Global Wire showed "211 live sources" and "543 source items", but front-page
+- Universal Wire showed "211 live sources" and "543 source items", but front-page
   stories still looked like old seed stories and did not obviously reflect the
   most prominent or novel current events.
 - The first stories claimed recent update ages while appearing unchanged for
@@ -291,7 +291,7 @@ Owner-observed staging/mobile behavior on 2026-06-08 before mission start:
   seed/source-neighborhood records, unclear user purpose, and no useful search
   workflow. The mission should allow deleting this surface rather than
   improving it incrementally.
-- The Global Wire Style.vtext panel appeared incoherent: radio-button-like
+- The Universal Wire Style.vtext panel appeared incoherent: radio-button-like
   choices, "S", "Compose", "Replace", and "Ask" controls inside the news app.
   Style.vtexts should be ordinary VTexts/sources, and style artifacts should be
   example-rich articles in their own style rather than bullet-point rule cards.
@@ -302,7 +302,7 @@ Pre-mission fix state:
 Theme hydration and VText toolbar responsive fixes landed in commit 0610a87a.
 If staging evidence shows those problems persist, document the regression and
 decide whether it blocks the run. Otherwise, keep the overnight mission focused
-on Choir-in-Choir plus Global Wire source truthfulness.
+on Choir-in-Choir plus Universal Wire source truthfulness.
 ```
 
 ## Authority Boundaries
@@ -371,7 +371,7 @@ Required evidence for readiness:
 
 Minimum acceptable source-truthfulness evidence:
 
-- at least one current staging screenshot or API observation of Global Wire
+- at least one current staging screenshot or API observation of Universal Wire
   front page;
 - at least one source-reader observation proving whether a displayed source has
   real body text or placeholder seed text;
@@ -381,7 +381,7 @@ Minimum acceptable source-truthfulness evidence:
 - code path identifying source-open URL/action generation;
 - code path identifying the Sources Chronology/search surface, with a deletion
   recommendation if it is not backed by full article source exploration;
-- code path identifying the bespoke Style.vtext Global Wire controls, with a
+- code path identifying the bespoke Style.vtext Universal Wire controls, with a
   deletion recommendation unless they are required for a real VText
   source-selection workflow;
 - test or precise blocker for each attempted fix.
@@ -408,7 +408,7 @@ Operate in short intervals:
 3. **Source-transfer probe:** verify the worker can produce a reviewable source
    artifact: AppChangePackage, branch, or PR. If this fails, root-cause before
    attempting the news fix.
-4. **News truthfulness probe:** inspect Global Wire source-body integrity,
+4. **News truthfulness probe:** inspect Universal Wire source-body integrity,
    front-page ranking, mobile source opening, source chronology/search deletion,
    Style.vtext panel deletion, and processor/reconciler failures in that order.
 5. **Candidate fix probe:** if root cause is inside scope, worker produces a
@@ -442,7 +442,7 @@ Do not accept:
 - "fresh" when a timestamp is recomputed while story content is unchanged;
 - "source chronology fixed" when the noisy surface remains without a clear
   full-article browsing job;
-- "Style.vtext integrated" when Global Wire keeps bespoke style controls
+- "Style.vtext integrated" when Universal Wire keeps bespoke style controls
   instead of treating styles as ordinary VText source artifacts;
 - "Choir-in-Choir succeeded" when Codex had to rediscover the investigation.
 
@@ -452,7 +452,7 @@ Do not accept:
 
 The mission is complete only if:
 
-- Choir-in-Choir produces a reviewable platform artifact for the Global Wire
+- Choir-in-Choir produces a reviewable platform artifact for the Universal Wire
   source-truthfulness payload;
 - Codex can review it without reconstructing the investigation from scratch;
 - the mission VText records evidence and review state;
@@ -499,7 +499,7 @@ Likely route:
 2. Start a product-path self-development prompt.
 3. Have `super` create/update a mission VText.
 4. Lease `worker-medium`.
-5. Ask worker to inspect Global Wire in this order:
+5. Ask worker to inspect Universal Wire in this order:
    - source cards and article transclusions for full body vs placeholder text;
    - front-page story ordering and stale timestamp behavior;
    - source-open behavior on mobile/web routes;
@@ -527,7 +527,7 @@ current artifact state:
   commit 0610a87a. The Choir-in-Choir mission created owner-readable VText
   mission narratives and proved that Super can request worker-medium leases,
   but the delegated worker run never started. No AppChangePackage, branch, PR,
-  candidate tests, worker proof, or Global Wire source-truthfulness fix exists.
+  candidate tests, worker proof, or Universal Wire source-truthfulness fix exists.
 what shipped:
   Pre-mission fixes in 0610a87a: local theme boot cache, VText toolbar
   right-aligned Revise action, no R/S/P narrow fallback, responsive toolbar
@@ -542,7 +542,7 @@ what was proven:
   - That Super run inspected repo context, corrected the false assumption that
     the repo was private `choir-ai/go-choir`, identified the public repo
     `https://github.com/choir-hip/go-choir.git`, read the mission doc, found
-    relevant Global Wire code paths, and requested worker-medium
+    relevant Universal Wire code paths, and requested worker-medium
     worker-438463b747b3d37e / vm-5a3a26451d862c67cd2c228ae3373555.
   - A second product-path prompt-bar trajectory
     8243f21a-d37b-4b9f-a580-b71a55b001ca created concise mission VText
@@ -555,7 +555,7 @@ what was proven:
 unproven or partial claims:
   worker-medium leasing is proven, but worker delegation start is not.
   worker-playwright availability, PR/package source transfer for platform work,
-  Codex review loop integration, Global Wire source-body integrity, front-page
+  Codex review loop integration, Universal Wire source-body integrity, front-page
   ranking truthfulness, mobile source-open behavior, source chronology/search
   deletion, Style.vtext panel deletion, and processor/reconciler failure
   root-cause remain unproven.
@@ -569,7 +569,7 @@ belief-state changes:
 remaining error field:
   The platform can currently be changed reliably by Codex through git/CI/deploy,
   but Choir-in-Choir cannot yet start the delegated worker after a successful
-  worker lease through the product path. Global Wire may still be presenting
+  worker lease through the product path. Universal Wire may still be presenting
   seed placeholders and stale ordering as live news. The owner preference to
   delete the Sources Chronology/search surface is recorded separately in
   docs/choir-in-choir-deletion-bias-eval-note-2026-06-08.md.
@@ -614,12 +614,12 @@ current artifact state:
 what the worker did well:
   The worker passed the deletion-bias eval at the intent level. It did not
   merely recommend deletion; it removed the Sources Chronology/search surface,
-  removed the bespoke Style.vtext control panel, updated Global Wire tests to
+  removed the bespoke Style.vtext control panel, updated Universal Wire tests to
   assert their absence, committed candidate SHA
   e9b8ff8e0cc216c9d6d478c72ab4671339e50470, and published an AppChangePackage.
 review failure:
   Codex rejected the package before landing. The package patch appears to
-  change the first line of `frontend/src/lib/GlobalWireApp.svelte` from
+  change the first line of `frontend/src/lib/UniversalWireApp.svelte` from
   `<script>` to `\<script\>`, which would break Svelte parsing if applied as
   source. The worker also claimed "build passed", but trace event 66 for the
   implementation co-super shows `go build ./...` timed out after two minutes.
@@ -636,7 +636,7 @@ remaining error field:
   The candidate must be corrected or requeued with explicit review findings:
   preserve the deletion intent, repair malformed Svelte markup, run the real
   frontend build/test path, and provide browser or Playwright evidence for
-  Global Wire after the deletion. Do not land package 5365bcb7 as-is.
+  Universal Wire after the deletion. Do not land package 5365bcb7 as-is.
 next executable probe:
   Feed the Codex review failure back into the mission VText/Super loop or have
   Codex salvage the intended deletion in a normal branch. Any accepted fix must
@@ -659,29 +659,29 @@ last checkpoint: 2026-06-08T05:50Z Codex salvaged and landed the deletion
   payload after rejecting the malformed Choir-in-Choir package.
 current artifact state:
   Commit aa5bef5bee595d13fe95a22cbf9a52089e3d75c7 is on origin/main and
-  deployed to staging. It removes the Global Wire Sources Chronology/search
+  deployed to staging. It removes the Universal Wire Sources Chronology/search
   surface and bespoke Style.vtext controls from the shipped app while
   preserving article columns, per-article VText open buttons, source entity
   transclusions, and related VText transclusions.
 what shipped:
-  - `frontend/src/lib/GlobalWireApp.svelte`: deleted the source chronology
+  - `frontend/src/lib/UniversalWireApp.svelte`: deleted the source chronology
     sidebar, source search/fetch/schedule controls, bespoke style selector,
     style compose/replace controls, Ask button, and all associated state,
     fetches, helper functions, and CSS.
-  - `frontend/tests/global-wire-app.spec.js`: now asserts the detritus source
+  - `frontend/tests/universal-wire-app.spec.js`: now asserts the detritus source
     and style surfaces are absent and that every article remains openable as a
     VText.
 what was proven:
   - Local `npm run build` passed without Svelte warnings after cleanup.
   - Local focused Playwright passed:
-    `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm run e2e -- tests/global-wire-app.spec.js`.
+    `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm run e2e -- tests/universal-wire-app.spec.js`.
   - CI run 27118442072 passed, including frontend build and staging deploy.
   - FlakeHub run 27118442058 passed.
   - Staging `/health` reports proxy and sandbox deployed commit
     aa5bef5bee595d13fe95a22cbf9a52089e3d75c7 with
     `deployed_at=2026-06-08T05:46:34Z`.
   - Deployed focused Playwright passed:
-    `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- tests/global-wire-app.spec.js`.
+    `PLAYWRIGHT_BASE_URL=https://choir.news npm run e2e -- tests/universal-wire-app.spec.js`.
 unproven or partial claims:
   This is a shipped product cleanup and a partial Choir-in-Choir proof, not a
   complete news-system delivery. Source-body integrity, front-page ranking
@@ -712,7 +712,7 @@ evidence artifact refs:
   27118442058; rejected package 5365bcb7-a51c-4f49-9a06-d10c465c8a7b; product
   trajectory f2330486-99e4-4a7b-a283-a9eaf1625dbc.
 rollback refs:
-  Revert aa5bef5b to restore the deleted Global Wire surfaces, though product
+  Revert aa5bef5b to restore the deleted Universal Wire surfaces, though product
   direction says they should stay deleted. Rejected package 5365bcb7 was never
   adopted.
 ```
@@ -759,7 +759,7 @@ last checkpoint: 2026-06-08T06:18Z live source-network VTexts present, but
   source entity labels are still too opaque for a reader-facing news surface.
 current artifact state:
   Staging commit aa5bef5bee595d13fe95a22cbf9a52089e3d75c7 now returns
-  `durable-storygraph+source-network-vtexts` from `/api/global-wire/stories`.
+  `durable-storygraph+source-network-vtexts` from `/api/universal-wire/stories`.
   The latest source cycle `cycle_13e2fd38f4867e98bb71b31f` completed with 211
   configured source fetches, 564 handoff items in the runtime status surface,
   7 completed processor runs, 1 completed reconciler run, and VText child runs.
@@ -777,7 +777,7 @@ new evidence:
   real title, canonical URL, source id `rss:zerohedge`, published timestamp,
   content hash, and a body of roughly 4.9k characters.
 belief-state changes:
-  The earlier suspicion that Global Wire was still only indexing seed stories
+  The earlier suspicion that Universal Wire was still only indexing seed stories
   is no longer true on staging. The higher-value source-truth issue has moved
   one layer inward: source bodies exist in the local Source Service, but VText
   source entities created from `source_service_item:<id>` handles are sometimes
@@ -795,16 +795,16 @@ next executable probe:
   are enriched from the local Source Service API when available, with a fast
   bounded fallback to the existing handle label. Add a regression test proving
   a researcher handoff containing only `source_service_item:<id>` yields a
-  VText source entity and Global Wire manifest with the resolved article title.
+  VText source entity and Universal Wire manifest with the resolved article title.
 ```
 
 ```text
 status: shipped_partial
 last checkpoint: 2026-06-08T06:38Z source-service item handles now resolve
-  into reader-facing Global Wire source metadata.
+  into reader-facing Universal Wire source metadata.
 current artifact state:
   Commit 2c6690633091aa30af234aa24b1cdaa0ec652eef is on origin/main and
-  deployed to staging. Global Wire still reads ordinary VText article revisions
+  deployed to staging. Universal Wire still reads ordinary VText article revisions
   and native source entities; the fix does not reintroduce a source ledger UI
   and does not flatten source bodies into article prose.
 what shipped:
@@ -814,15 +814,15 @@ what shipped:
     from worker/researcher handles are enriched from local Source Service item
     records when available, with a short bounded timeout and existing fallback
     labels when unavailable.
-  - `internal/runtime/global_wire.go`: Global Wire manifest projection enriches
+  - `internal/runtime/universal_wire.go`: Universal Wire manifest projection enriches
     only the cited source entities that will be shown in the story source
     neighborhood, so already-created VText articles can render real source
     titles/URLs without mutating stored VText metadata.
-  - `internal/types/global_wire.go`: source manifest items now carry optional
+  - `internal/types/universal_wire.go`: source manifest items now carry optional
     `source_id` and `fetch_id` fields alongside `canonical_url`.
 what was proven:
   - Focused local Go test passed:
-    `nix develop -c go test ./internal/runtime -run 'TestVTextPromptDerivesSourceServiceEntitiesFromResearcherUpdates|TestVTextSourceServiceEntitiesResolveItemTitles|TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestHandleGlobalWireStoriesIndexesSourceNetworkVTextHeads'`.
+    `nix develop -c go test ./internal/runtime -run 'TestVTextPromptDerivesSourceServiceEntitiesFromResearcherUpdates|TestVTextSourceServiceEntitiesResolveItemTitles|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestHandleUniversalWireStoriesIndexesSourceNetworkVTextHeads'`.
   - CI run 27120207895 passed for commit
     2c6690633091aa30af234aa24b1cdaa0ec652eef, including runtime shards, build,
     and staging deploy.
@@ -831,7 +831,7 @@ what was proven:
     deployed commit 2c6690633091aa30af234aa24b1cdaa0ec652eef with
     `deployed_at=2026-06-08T06:34:50Z`.
   - Deployed staging API proof against Node B
-    `/api/global-wire/stories` returned
+    `/api/universal-wire/stories` returned
     `durable-storygraph+source-network-vtexts`; the first live story's manifest
     lead sources included resolved titles such as "Telegram Post from
     Slavyangrad Telegram" and Euronews article titles, plus `source_id`,
@@ -848,7 +848,7 @@ belief-state changes:
   The next realism gap is not "sources do not exist"; it is source-body quality,
   normalization, and how article agents choose and cite the best source mix.
 remaining error field:
-  Continue toward publication-quality Global Wire by improving source body
+  Continue toward publication-quality Universal Wire by improving source body
   normalization/readability, ranking/prominence/novelty, and source-open
   behavior. Preserve the deletion of detritus ledger/style controls.
 rollback refs:
@@ -909,7 +909,7 @@ last checkpoint: 2026-06-08T07:05Z source reader links can expose app-only
   source URLs as browser links on mobile.
 current artifact state:
   Commit 1fd56a2924eeb5dd6c49a1c7cbe0101574f7a776 is deployed to staging.
-  Global Wire source transclusions open an internal Source Viewer window, but
+  Universal Wire source transclusions open an internal Source Viewer window, but
   that Source Viewer renders `sourceUrl` as a normal external anchor whenever a
   source URL is present.
 new evidence:
@@ -917,8 +917,8 @@ new evidence:
   triggers Safari's "Open in Choir?" deep-link prompt and then goes nowhere in
   the web app context. Code inspection shows `frontend/src/lib/ContentViewer.svelte`
   unconditionally renders `<a href={sourceUrl}>` for any source URL. Seed
-  Global Wire source items still use app-only canonical URLs of the form
-  `choir://global-wire/source/<id>` in `internal/store/global_wire.go`, so the
+  Universal Wire source items still use app-only canonical URLs of the form
+  `choir://universal-wire/source/<id>` in `internal/store/universal_wire.go`, so the
   source reader can expose a non-web URL to Safari.
 belief-state changes:
   Opening a source inside Choir and opening the original web URL are separate
@@ -951,7 +951,7 @@ what shipped:
     accepts only `http:` and `https:` source URLs for external browser opening.
   - `frontend/src/lib/ContentViewer.svelte`: uses the classifier before
     rendering `.source-link`, so app-only URLs such as
-    `choir://global-wire/source/<id>` are not exposed to Safari as deep links.
+    `choir://universal-wire/source/<id>` are not exposed to Safari as deep links.
   - `frontend/tests/vtext-source-entities.spec.js`: regression coverage proves
     `https://` and `http://` remain browser-openable while `choir://`,
     `source_service_item:*`, and relative internal paths are not.
@@ -970,7 +970,7 @@ what was proven:
     436ef202a385273bec5924d179b8e452c215562b with
     `deployed_at=2026-06-08T07:04:12Z`.
   - A live staging Playwright probe created a VText with a
-    `choir://global-wire/source/source-port-authority` source entity, opened it
+    `choir://universal-wire/source/source-port-authority` source entity, opened it
     through the normal VText source button, verified Source Viewer reader mode,
     and verified `.source-link` count was zero.
   - Deployed focused Playwright passed:
@@ -987,7 +987,7 @@ belief-state changes:
   the internal Source Viewer; only web URLs become browser/open-original
   anchors. App-only source identifiers remain internal product references.
 remaining error field:
-  Continue the Global Wire source-truth mission on ranking freshness,
+  Continue the Universal Wire source-truth mission on ranking freshness,
   processor/reconciler queue pressure, source body extraction quality, and
   eventual removal of remaining seed/demo source records from reader-facing
   news flows.
@@ -1174,7 +1174,7 @@ belief-state changes:
   move is not only more concurrency; it is continuity-aware processor state,
   compaction/supersession rules, and real article/VText ownership.
 remaining error field:
-  Do not call Global Wire source processing ship-worthy while 2,045 queued
+  Do not call Universal Wire source processing ship-worthy while 2,045 queued
   processor requests remain and latest-cycle APIs still obscure global backlog.
   The next realism axis should expose queue/backlog health productively and add
   supersession/compaction semantics so processors do not spend all capacity on
@@ -1289,7 +1289,7 @@ belief-state changes:
   continuity ref is active, older unsubmitted snapshots become historical
   evidence, and submitted historical work remains intact.
 retrieval note:
-  The user wants the old Global Wire Sources Chronology/search/source-ledger
+  The user wants the old Universal Wire Sources Chronology/search/source-ledger
   surface deleted, not cautiously retained behind "maybe" language. The same is
   true of bespoke Style.vtext controls such as radio buttons, `S`, Compose,
   Replace, and Ask. Styles are VTexts/sources and should be visible through
@@ -1297,7 +1297,7 @@ retrieval note:
   not restore those detritus surfaces while claiming source exploration or style
   handling has improved.
 remaining error field:
-  This does not make Global Wire ship-worthy. The source system is ingesting
+  This does not make Universal Wire ship-worthy. The source system is ingesting
   large volumes, but product quality still needs real full-article source
   bodies where available, front-page ranking by prominence/importance/novelty,
   VText-agent-owned publication-quality articles with native source
@@ -1389,7 +1389,7 @@ what shipped:
   - Source Service search/resolve API results expose `body_kind`,
     `body_length`, and explicit `reader_snapshot: false` when no reader/full
     snapshot exists.
-  - Researcher source-search projections and Global Wire Source Service
+  - Researcher source-search projections and Universal Wire Source Service
     content-item metadata carry the same classification.
   - VText source entities enriched from Source Service items now include body
     classification and an uncertainty note when the body is only a feed
@@ -1398,7 +1398,7 @@ what was proven:
   - Local `git diff --check` passed.
   - Local `nix develop -c go test ./internal/sourceapi ./internal/sourcecontract ./internal/sources ./internal/cycle ./cmd/sourcecycled`
     passed.
-  - Local `nix develop -c go test ./internal/runtime -run 'TestResearcherSourceSearchCallsSourceServiceAPI|TestVText|TestGlobalWire'`
+  - Local `nix develop -c go test ./internal/runtime -run 'TestResearcherSourceSearchCallsSourceServiceAPI|TestVText|TestUniversalWire'`
     passed.
   - Follow-up local `nix develop -c go test ./cmd/sourcecycled ./internal/sourceapi`
     and `nix develop -c go test ./internal/runtime -run 'TestResearcherSourceSearchCallsSourceServiceAPI'`
@@ -1427,7 +1427,7 @@ belief-state changes:
   silently treating feed summaries and metadata packets as equivalent to
   reader snapshots.
 remaining error field:
-  Global Wire is still not ship-worthy. The next source-body realism axis is a
+  Universal Wire is still not ship-worthy. The next source-body realism axis is a
   second-stage reader/full-article extraction path for URLs where policy allows
   it, with clear failure states and no dead mobile deep links. Separate
   remaining axes are front-page ranking by prominence/novelty/freshness and
@@ -1449,10 +1449,10 @@ current artifact state:
   classification slice from 55ddce3f1c61fdac8b6d50840f7e24a03f8bb501 unless a
   newer deploy has landed externally.
 new evidence:
-  Code inspection found that `ensureGlobalWireSourceServiceContentItem` in
-  `internal/runtime/global_wire.go` still creates the article-attached source
+  Code inspection found that `ensureUniversalWireSourceServiceContentItem` in
+  `internal/runtime/universal_wire.go` still creates the article-attached source
   ContentItem from `result["body"]` alone. When a Source Service result is an
-  RSS feed summary, empty feed item, or GDELT metadata packet, Global Wire
+  RSS feed summary, empty feed item, or GDELT metadata packet, Universal Wire
   stores that weak body as the source item text even though the source may have
   an HTTP URL that could yield a reader snapshot.
 
@@ -1466,12 +1466,12 @@ new evidence:
   `sources` table (`tos_class`, `robots_policy`, `auth_policy`,
   `store_body_policy`). However `SearchItems`, `GetItem`, and
   `sourceAPIItemResult` currently return item body classification but not the
-  source policy fields. As a result, Global Wire cannot make a policy-aware
+  source policy fields. As a result, Universal Wire cannot make a policy-aware
   decision about whether a second-stage reader import is allowed for a given
   source result.
 belief-state changes:
   The next source realism step is not "fetch everything." The safe topology is
-  to expose source policy at the Source Service boundary, then let Global Wire
+  to expose source policy at the Source Service boundary, then let Universal Wire
   attempt bounded reader-snapshot import only for policy-compatible URL source
   results and only when the existing body is not already a reader/source body.
 remaining error field:
@@ -1482,7 +1482,7 @@ remaining error field:
   than silently overclaiming source richness.
 next executable probe:
   Add source policy fields to Source Service item results by joining item rows
-  to their source rows. Then add bounded Global Wire source conversion logic
+  to their source rows. Then add bounded Universal Wire source conversion logic
   that reuses `ImportURLContent` for allowed URL sources, records
   `reader_snapshot_status`, and preserves explicit skip/failure metadata for
   disallowed or failed imports.
@@ -1502,14 +1502,14 @@ what shipped:
     exposes `source_tos_class`, `source_robots_policy`,
     `source_auth_policy`, and `store_body_policy`.
   - Researcher/runtime source-search projections carry the same policy fields.
-  - Global Wire source-service ContentItem conversion now records source policy
+  - Universal Wire source-service ContentItem conversion now records source policy
     fields in metadata.
   - When a Source Service result is not already a reader snapshot and has
     weak body kind (`empty` or `feed_summary`) plus an allowed store-body
-    policy (`bounded_text` or `bounded_release_text`), Global Wire attempts a
+    policy (`bounded_text` or `bounded_release_text`), Universal Wire attempts a
     direct, bounded `ImportURLContent` reader import with a 12 second context
     timeout and no SearXNG fallback query.
-  - Successful reader imports replace the deterministic Global Wire
+  - Successful reader imports replace the deterministic Universal Wire
     source-service item body with extracted reader text and record
     `reader_snapshot=true`, `body_kind=reader_snapshot`,
     `reader_snapshot_status=imported`, and the imported reader content id.
@@ -1521,9 +1521,9 @@ what was proven:
   - Local `git diff --check` passed.
   - Local `nix develop -c go test ./internal/cycle ./cmd/sourcecycled ./internal/sourceapi ./internal/sources`
     passed.
-  - Local `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWireSourceSearchImports|TestHandleGlobalWireSourceSearchImportsAllowedReaderSnapshot|TestResearcherSourceSearchCallsSourceServiceAPI'`
+  - Local `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireSourceSearchImports|TestHandleUniversalWireSourceSearchImportsAllowedReaderSnapshot|TestResearcherSourceSearchCallsSourceServiceAPI'`
     passed.
-  - Local `nix develop -c go test ./internal/runtime -run 'TestGlobalWire|TestHandleGlobalWire|TestVTextSourceService'`
+  - Local `nix develop -c go test ./internal/runtime -run 'TestUniversalWire|TestHandleUniversalWire|TestVTextSourceService'`
     passed.
   - Local `nix develop -c go test ./cmd/sourcecycled ./internal/cycle` passed.
   - CI run 27126653731 passed for commit
@@ -1542,10 +1542,10 @@ what was proven:
     `source_robots_policy=feed_allowed`; GDELT results had
     `store_body_policy=bounded_metadata` and `source_robots_policy=dataset_feed`.
   - Authenticated deployed product-path call to
-    `POST https://choir.news/api/global-wire/source-search` with query
+    `POST https://choir.news/api/universal-wire/source-search` with query
     `technology` and `max_results=1` returned status 200 and converted the
     live `rss:finextra` result into ContentItem
-    `global-wire-source-service-3d83dde8-9a75-5429-8dcf-db6b7fd36087`.
+    `universal-wire-source-service-3d83dde8-9a75-5429-8dcf-db6b7fd36087`.
     Because the original article URL returned HTTP 403, the stored metadata
     recorded `reader_snapshot_status=fetch_failed`,
     `reader_snapshot_error="URL import failed: direct_http returned status 403 Forbidden"`,
@@ -1555,7 +1555,7 @@ what was proven:
     attempts eligible imports and preserves honest failure state rather than
     silently overclaiming a feed summary as a full source body.
 belief-state changes:
-  Global Wire source conversion is now policy-aware and has explicit
+  Universal Wire source conversion is now policy-aware and has explicit
   reader-snapshot attempt/skip/failure state. The system still does not
   guarantee full article bodies for all source types, but it no longer has to
   collapse source-body weakness into an unlabelled text item.
@@ -1563,7 +1563,7 @@ unproven or partial claims:
   - Staging proof saw an eligible live source fail with HTTP 403; successful
     live reader import was not found in the quick deployed probe. Successful
     import is covered by local runtime test using a real HTTP reader server.
-  - Existing deterministic Global Wire source-service ContentItems are not
+  - Existing deterministic Universal Wire source-service ContentItems are not
     backfilled or updated if they were created before this commit; the new path
     affects new source conversions.
   - GDELT article URLs remain metadata packets because the GDELT source policy
@@ -1590,14 +1590,14 @@ current artifact state:
   Latest origin/main is docs checkpoint
   8ff6f049c92c2a1612b88616e9721f4067453b3d.
 new evidence:
-  Code inspection found that the seeded Global Wire stories in
-  `internal/store/global_wire.go` still store literal freshness copy such as
+  Code inspection found that the seeded Universal Wire stories in
+  `internal/store/universal_wire.go` still store literal freshness copy such as
   `updated 18 min ago`, `updated 41 min ago`, and `updated 1 hr ago`.
-  The frontend fallback data in `frontend/src/lib/GlobalWireApp.svelte` repeats
+  The frontend fallback data in `frontend/src/lib/UniversalWireApp.svelte` repeats
   the same hardcoded strings. This matches the user-observed failure: the top
   stories can sit on screen for hours while still claiming minute-scale updates.
 
-  `ListGlobalWireStories` orders durable stories by `prominence DESC,
+  `ListUniversalWireStories` orders durable stories by `prominence DESC,
   updated_at DESC`. That is not a full importance/novelty ranking model, but it
   is at least a stable current ordering primitive. The more immediate product
   bug is that seed/story freshness is copy, not state. Runtime source-network
@@ -1614,7 +1614,7 @@ remaining error field:
   model. It only removes a misleading time signal and prevents fallback UI from
   showing stale minute-copy. The larger ranking problem remains open.
 next executable probe:
-  Normalize Global Wire story presentation at the API boundary: for seeded
+  Normalize Universal Wire story presentation at the API boundary: for seeded
   stories, replace hardcoded `updated ... ago` freshness with an explicit seed
   status; for non-seeded stories whose freshness is empty or update-like,
   derive relative freshness from `UpdatedAt`. Update frontend fallback copy and
@@ -1631,18 +1631,18 @@ current artifact state:
   9fef8eb163835927b3e8d6f1a32708a6b525cd7, which recorded the stale/fake
   freshness problem before the behavior change.
 what shipped:
-  - Seed Global Wire stories no longer store hardcoded freshness strings like
+  - Seed Universal Wire stories no longer store hardcoded freshness strings like
     `updated 18 min ago`, `updated 41 min ago`, or `updated 1 hr ago`.
   - Frontend fallback story data no longer repeats those fake minute labels.
-  - `/api/global-wire/stories` now normalizes story presentation before
+  - `/api/universal-wire/stories` now normalizes story presentation before
     response: seeded source neighborhoods with auto/update-like freshness show
     `seed source neighborhood`, while non-seeded stories with update-like
     freshness derive relative freshness from actual `UpdatedAt`.
 what was proven:
   - Local `git diff --check` passed.
-  - Local `nix develop -c go test ./internal/runtime -run 'TestHandleGlobalWireStories'`
+  - Local `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories'`
     passed.
-  - Local `nix develop -c go test ./internal/store -run 'TestGlobalWire'`
+  - Local `nix develop -c go test ./internal/store -run 'TestUniversalWire'`
     passed.
   - Local `cd frontend && npm run build` passed.
   - CI run 27127523355 passed for commit
@@ -1653,13 +1653,13 @@ what was proven:
     fca07803a56606fa00500a76c36dffaa78d27fbb with
     `deployed_at=2026-06-08T09:13:29Z`.
   - Authenticated deployed product-path call to
-    `GET https://choir.news/api/global-wire/stories` returned status 200 and
+    `GET https://choir.news/api/universal-wire/stories` returned status 200 and
     the three seeded stories with `freshness=seed source neighborhood`,
     `source_state=seeded-source-neighborhood`, and prominence values 82, 74,
     and 63. No `updated 18 min ago`, `updated 41 min ago`, or `updated 1 hr
     ago` labels remained in the API response.
 belief-state changes:
-  Global Wire no longer falsely claims that seeded placeholder stories were
+  Universal Wire no longer falsely claims that seeded placeholder stories were
   updated minutes ago. The front page is still not a real editorial ranking
   engine, but its freshness signal is now honest about seed state versus live
   update state.
@@ -1686,22 +1686,22 @@ current artifact state:
   fca07803a56606fa00500a76c36dffaa78d27fbb. Codex submitted a new
   authenticated prompt-bar/VText continuation through Comet, asking Choir to
   run this mission as a MissionGradient continuation focused on the remaining
-  Global Wire front-page article population/ranking axis. The visible mission
+  Universal Wire front-page article population/ranking axis. The visible mission
   VText id in the app was `1bd1038e-b...d733c3`, and the VText run shown in
   the UI was `296c079b-ac0d-4781-8d8c-d905a3e0f50b`. The VText created a
   structured problem statement and called `request_super_execution`.
 new evidence:
   Comet/browser product-path observation before the raw-API navigation showed
-  the signed-in Global Wire app rendering `3 articles`, with the deleted
+  the signed-in Universal Wire app rendering `3 articles`, with the deleted
   Sources Chronology/search surface and bespoke Style.vtext controls still
   absent. The three visible articles were the seeded source-neighborhood
   stories.
 
   A Node B internal diagnostic against the active sandbox service at
-  `http://127.0.0.1:8085/api/global-wire/stories`, with the same visible owner
+  `http://127.0.0.1:8085/api/universal-wire/stories`, with the same visible owner
   id injected by the proxy header, returned 15 stories:
 
-  - 12 `source-network-vtext-*` live articles owned by `global-wire-platform`,
+  - 12 `source-network-vtext-*` live articles owned by `universal-wire-platform`,
     including Iran regional infrastructure risk, Iran missile interceptions,
     Xi in Pyongyang, ERCOT/data-center grid risk, Kashmir clashes,
     Israel/Iran escalation, Ukraine/Crimea supply lines, DRC Ebola, ISS leak,
@@ -1717,12 +1717,12 @@ new evidence:
     preview/stale route even while showing owner-looking labels;
   - the public proxy/session path used by the SPA differs from the active
     sandbox service queried internally;
-  - the Global Wire component loaded before the live stories were available
+  - the Universal Wire component loaded before the live stories were available
     and does not refresh after source-network updates;
   - the app window remained mounted with stale state while the backend had
     already advanced.
 
-  Direct Comet navigation to `https://choir.news/api/global-wire/stories`
+  Direct Comet navigation to `https://choir.news/api/universal-wire/stories`
   returned `401 authentication required`, and navigating back degraded the
   tab to signed-out preview. Treat this as a browser/session diagnostic, not
   proof that the SPA fetch itself is unauthenticated.
@@ -1744,7 +1744,7 @@ next executable probe:
   publishes an AppChangePackage, review the package diff and evidence before
   landing. If it does not, root-cause whether `request_super_execution`
   failed, worker lease/delegation failed, or the worker reported only a VText
-  checkpoint. In parallel, inspect the Global Wire frontend load/refresh logic
+  checkpoint. In parallel, inspect the Universal Wire frontend load/refresh logic
   and candidate-route/proxy session behavior for why a backend response with
   15 stories can render as a 3-story front page.
 rollback refs:
@@ -1754,7 +1754,7 @@ rollback refs:
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: 2026-06-08T09:57Z Global Wire mounted-window story-load retry
+last checkpoint: 2026-06-08T09:57Z Universal Wire mounted-window story-load retry
   fix landed and was proved on staging.
 current artifact state:
   Commit 24c589ca88fb3ab715b6a616bf5092e357868a29 is on origin/main and
@@ -1762,11 +1762,11 @@ current artifact state:
   32601389f63d0c267900f8d4f4796d3a55038bd6, which narrowed the front-page
   population problem before the behavior change.
 what shipped:
-  - `GlobalWireApp.svelte` no longer treats an authenticated Global Wire story
+  - `UniversalWireApp.svelte` no longer treats an authenticated Universal Wire story
     load as complete before the fetch succeeds.
-  - A transient authenticated `/api/global-wire/stories` failure no longer
+  - A transient authenticated `/api/universal-wire/stories` failure no longer
     pins the mounted window to the three-story preview/seed state forever.
-  - Authenticated Global Wire windows retry after transient failure, refresh
+  - Authenticated Universal Wire windows retry after transient failure, refresh
     periodically, and refresh when the window regains focus or the page becomes
     visible.
   - The old Sources Chronology/search ledger and bespoke Style.vtext controls
@@ -1775,9 +1775,9 @@ what was proven:
   - Local `git diff --check` passed.
   - Local `cd frontend && npm run build` passed.
   - Local `cd frontend && PLAYWRIGHT_BASE_URL=http://localhost:4173 npm run e2e
-    -- global-wire-app.spec.js` passed after running the local service harness
+    -- universal-wire-app.spec.js` passed after running the local service harness
     in the repo Nix dev shell. The new regression proves an authenticated
-    Global Wire window whose first `/api/global-wire/stories` request returns
+    Universal Wire window whose first `/api/universal-wire/stories` request returns
     503 retries and renders four live source-network stories instead of
     staying on the three preview stories.
   - CI run 27129723868 passed for commit
@@ -1787,18 +1787,18 @@ what was proven:
   - Public staging `/health` reported proxy and sandbox deployed commit
     24c589ca88fb3ab715b6a616bf5092e357868a29 with
     `deployed_at=2026-06-08T09:54:49Z`.
-  - Deployed frontend index referenced `GlobalWireApp-D9OMYV56.js`, and that
+  - Deployed frontend index referenced `UniversalWireApp-D9OMYV56.js`, and that
     deployed chunk contained the new authenticated retry/refresh code
     (`setInterval(... force: true, silent: true ...)` and
     `visibilitychange`).
   - Authenticated deployed sandbox API proof for owner
-    `5bd6de97-3b58-408c-bf89-c42c81b083de` returned 15 Global Wire stories
+    `5bd6de97-3b58-408c-bf89-c42c81b083de` returned 15 Universal Wire stories
     from `durable-storygraph+source-network-vtexts`; the first three were live
     `source-network-vtext-*` platform-owned VText articles with real headlines
     and `updated just now` freshness.
 belief-state changes:
   The specific 3-story visible state is now plausibly explained by a mounted
-  Global Wire window caching preview/failure state after a transient
+  Universal Wire window caching preview/failure state after a transient
   authenticated route failure. The backend article index was not empty; it was
   already capable of returning live source-network VText articles. The shipped
   frontend now keeps the mounted window connected to that advancing backend
@@ -1813,7 +1813,7 @@ unproven or partial claims:
     Codex landed the frontend retry fix directly after the prior docs
     checkpoint.
 remaining error field:
-  Global Wire still needs the larger news mission: processors and reconcilers
+  Universal Wire still needs the larger news mission: processors and reconcilers
   should keep producing publication-quality VText-agent-owned articles from
   many source bodies, front-page ordering should reflect source-network
   prominence/novelty/freshness/contradiction/update pressure rather than flat
@@ -1835,7 +1835,7 @@ next executable probe:
   produced only a VText checkpoint. Then either fix the handoff/package path
   with documentation-first discipline or record the exact blocker.
 rollback refs:
-  Revert 24c589ca to restore the previous one-shot authenticated Global Wire
+  Revert 24c589ca to restore the previous one-shot authenticated Universal Wire
   load behavior. Revert 32601389 only if the problem checkpoint should be
   removed from mission history.
 ```
@@ -1847,7 +1847,7 @@ last checkpoint: 2026-06-08T10:08Z Choir-in-Choir continuation reached Super
 current artifact state:
   Staging behavior commit is 24c589ca88fb3ab715b6a616bf5092e357868a29. The
   owner-routed desktop is active at VM vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19
-  with sandbox URL http://10.202.180.2:8085. No new Global Wire
+  with sandbox URL http://10.202.180.2:8085. No new Universal Wire
   AppChangePackage is visible in that routed desktop; the only listed package
   is the old unrelated RBO package 84c12250-2d0b-43f3-b5ed-90f8e051634e.
 new evidence:
@@ -2074,7 +2074,7 @@ remaining error field:
 next executable probe:
   Rerun the overnight mission with a tighter initial worker objective that
   names one implementation target and terminal artifact, then inspect whether
-  the worker deletes the Global Wire detritus source ledger surface as recorded
+  the worker deletes the Universal Wire detritus source ledger surface as recorded
   in `docs/choir-in-choir-deletion-bias-eval-note-2026-06-08.md`.
 rollback refs:
   Revert d487b2090f543af7fda6531c14a203af4a82d808 to remove the stale-target
@@ -2099,7 +2099,7 @@ new evidence:
 
   The continuation asked VText to create/update the mission narrative and then
   ask Super to lease worker-medium for the first implementation target:
-  deleting the current Global Wire Sources Chronology/search/source-ledger
+  deleting the current Universal Wire Sources Chronology/search/source-ledger
   surface, while preserving article-attached source transclusion/source-reader
   access.
 
@@ -2351,7 +2351,7 @@ remaining error field:
   terminal-blocker path that updates the VText through runtime-owned failure
   handling when the appagent cannot make its first provider turn. The desired
   continuation proof remains: VText mission narrative exists, Super delegation
-  is requested, and the worker either deletes the Global Wire Sources
+  is requested, and the worker either deletes the Universal Wire Sources
   Chronology/search/source-ledger surface or reports the exact product-path
   blocker and code path.
 next executable probe:

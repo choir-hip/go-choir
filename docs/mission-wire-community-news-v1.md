@@ -1,7 +1,7 @@
 # MissionGradient: Universal Wire (Wire Community News)
 
 Date: 2026-06-09 (v1; supersedes v0 after the first run). **Product name
-(2026-06-10):** **Universal Wire** — formerly Global Wire / Community Wire in
+(2026-06-10):** **Universal Wire** — formerly Universal Wire / Universal Wire in
 user-facing copy. See
 [universal-wire-activation-topology-2026-06-10.md](universal-wire-activation-topology-2026-06-10.md).
 
@@ -14,7 +14,7 @@ user-facing copy. See
 ## Objective
 
 Land **Universal Wire** as the public source-to-VText news instance of the Choir
-Community Cloud (Community Wire deployment).
+Community Cloud (Universal Wire deployment).
 
 Requirements contract:
 [choir-wire-source-to-vtext-spec-2026-06-09.md](choir-wire-source-to-vtext-spec-2026-06-09.md).
@@ -38,7 +38,7 @@ Requirements contract:
   agent are **tabled**, not v1 scope.
 - **Canonical mission doc:** `mission-wire-community-news-v1.md` (autonomous-
   ingestion v1 is archived; see `mission-wire-autonomous-ingestion-v1.md`).
-- **Platform computer uptime:** Community Wire platform computer is **always-on**
+- **Platform computer uptime:** Universal Wire platform computer is **always-on**
   (100% uptime target); scale out to multiple or larger VMs later.
 - **Cutover policy:** hard cutovers acceptable — no external users; negotiate
   boundaries explicitly between platform computer Dolt, platformd, and future
@@ -59,7 +59,7 @@ sourcecycled (host) — SQLite sourcecycled.db
   WHAT: source registry mirror, poll cursors, fetch/item ledger, adapter ops
   NOT: edition graph, article prose, publication routes
 
-platform computer VM — embedded Dolt (global-wire-platform)
+platform computer VM — embedded Dolt (universal-wire-platform)
   WHAT: Wire.vtext, Article/*.vtext, agent notebooks, processor evidence,
         transclusion refs to source items (by ID via sourcecycled API)
   NOT: raw RSS bodies as canonical truth without artifact rows; public routes
@@ -105,7 +105,7 @@ Selected transforms:
    Verifier must include negative prompt check **and** Deletion Ledger grep-clean.
 4. **Failure mode (always-on platform VM)** — operator PROBLEM 0 is disk-full on
    a user computer; platform computer needs its own disk budget, reclaim policy,
-   and monitoring so Community Wire does not repeat the same failure mode.
+   and monitoring so Universal Wire does not repeat the same failure mode.
 5. **Value of information / curriculum** — highest-information Phase A proof is
    **one RSS (+ GDELT) end-to-end chain** with full IDs before parallel adapter
    work. Telegram/MTProto is post-core, not a Phase A gate.
@@ -169,7 +169,7 @@ Required context reads:
 - [mission-report-wire-community-news-2026-06-09.md](mission-report-wire-community-news-2026-06-09.md)
   for v0 evidence ledger and honest remaining-error field.
 
-Do not treat old Global Wire, StoryGraph, source-maxxing, source-ledger, or
+Do not treat old Universal Wire, StoryGraph, source-maxxing, source-ledger, or
 Style.vtext-control documents as current requirements unless this mission or the
 Wire spec explicitly mines them as historical failure evidence.
 
@@ -197,7 +197,7 @@ This mission tables newsletter/email delivery, Autoradio, TTS/STT, Qdrant
 
 ## Platform Computer Requirements
 
-Community Wire platform computer (`global-wire-platform`):
+Universal Wire platform computer (`universal-wire-platform`):
 
 - **Warmness:** always-on (100% uptime target); not hibernated like typical user
   primaries. Scale to multiple or larger VMs later.
@@ -208,8 +208,8 @@ Community Wire platform computer (`global-wire-platform`):
 
 ## Deployment Scope
 
-Community Wire runs on an **always-on Community Cloud platform computer**
-(`global-wire-platform`). Hard cutover from v0 paths is acceptable.
+Universal Wire runs on an **always-on Community Cloud platform computer**
+(`universal-wire-platform`). Hard cutover from v0 paths is acceptable.
 
 Document and execute migration for:
 
@@ -277,7 +277,7 @@ The standard is:
 ## Hard Invariants
 
 1. Wire is reusable source-to-VText infrastructure.
-2. Community Wire is platform-level work owned by a Choir Community Cloud
+2. Universal Wire is platform-level work owned by a Choir Community Cloud
    platform computer, not a user-computer feature.
 3. Private Wire reuse must remain possible; do not build one-off public-news
    code that cannot run in a Private Choir Cloud over private sources.
@@ -367,13 +367,13 @@ Current codebase (post-v0, pre-v1):
 
 - `configs/sources.json` contains 211 configured sources: 137 RSS, 73 Telegram,
   1 GDELT.
-- `frontend/src/lib/GlobalWireApp.svelte` no longer hardcodes preview stories;
-  it fetches `/api/global-wire/stories` and renders honest empty state when
+- `frontend/src/lib/UniversalWireApp.svelte` no longer hardcodes preview stories;
+  it fetches `/api/universal-wire/stories` and renders honest empty state when
   the edition index is empty.
-- `internal/store/global_wire.go` still contains `defaultGlobalWireStories`,
-  `globalWireSeedState`, and `ensureDefaultGlobalWireStories` (used by tests
+- `internal/store/universal_wire.go` still contains `defaultUniversalWireStories`,
+  `universalWireSeedState`, and `ensureDefaultUniversalWireStories` (used by tests
   and legacy paths, not the v0-honest front-page read path).
-- `internal/runtime/global_wire.go` still mixes edition-VText index responses
+- `internal/runtime/universal_wire.go` still mixes edition-VText index responses
   with legacy graph/fallback behavior on some routes.
 - RSS ingestion stores feed summaries/excerpts, not consistently full article
   bodies.
@@ -391,7 +391,7 @@ Highest-impact uncertainty:
 
 - Platform-internal auto-publish path (platform computer → platformd) is not
   proven to exist; user JWT proxy publish is a different topology.
-- Where Community Wire platform-computer authority lands in the current
+- Where Universal Wire platform-computer authority lands in the current
   deployment (see Deployment Scope).
 - The cleanest hard cutover from legacy graph/fallback to edition-VText truth
   without preserving fake compatibility behavior.
@@ -421,7 +421,7 @@ start (c) before (b) is grep-clean, etc. Full matrix:
    symbol, drop types/routes with tests, purge staging seed rows and
    **prompt-initiated edition articles**, remove read-compat shims after purge.
    **Workstream (b).**
-2. **Slice 0.5 (platform VM):** always-on `global-wire-platform` computer;
+2. **Slice 0.5 (platform VM):** always-on `universal-wire-platform` computer;
    repoint `SOURCE_SERVICE_RUNTIME_BASE_URL` to platform-computer sandbox;
    evidence row: dispatch + Dolt owner binding, not host `sandbox-m1`.
 3. **Slice 1:** Ingestion event contract; processor dispatch only from ingestion
@@ -544,7 +544,7 @@ what shipped (v0):
 unproven:
 
 - Deletion Ledger grep-clean (Workstream **b**).
-- Universal Wire rename with zero `global-wire` references (Workstream **c**).
+- Universal Wire rename with zero `universal-wire` references (Workstream **c**).
 - Feed-forward activation graph and negative proofs (Workstream **d**).
 - Staging proofs: ingestion chain + fork/claim loop + Slice 4 matrix (**e**).
 - Platform-computer deployment binding documented and proven (Slice 0.5).

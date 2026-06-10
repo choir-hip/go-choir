@@ -13,14 +13,14 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-type globalWireStoriesResponse struct {
+type universalWireStoriesResponse struct {
 	Stories      []types.WireStory       `json:"stories"`
 	StyleSources []types.WireStyleSource `json:"style_sources"`
 	Source       string                        `json:"source"`
-	Edition      *globalWireEditionResponse    `json:"edition,omitempty"`
+	Edition      *universalWireEditionResponse    `json:"edition,omitempty"`
 }
 
-type globalWireEditionResponse struct {
+type universalWireEditionResponse struct {
 	DocID          string   `json:"doc_id"`
 	RevisionID     string   `json:"revision_id"`
 	SourcePath     string   `json:"source_path"`
@@ -29,11 +29,11 @@ type globalWireEditionResponse struct {
 	UpdatedAt      string   `json:"updated_at,omitempty"`
 }
 
-const communityWireEditionSourcePath = "global-wire/Wire.vtext"
+const universalWireEditionSourcePath = "universal-wire/Wire.vtext"
 
 var vtextTransclusionRefRE = regexp.MustCompile(`vtext:([A-Za-z0-9_.:-]{1,160})`)
 
-func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -45,23 +45,23 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 	}
 	stories := []types.WireStory{}
 	styleSources := []types.WireStyleSource{}
-	source := "community-wire-vtext-index"
-	var edition *globalWireEditionResponse
-	if editionStories, editionResp, err := h.communityWireEditionVTextStories(r.Context(), styleSources, 12); err == nil {
+	source := "universal-wire-vtext-index"
+	var edition *universalWireEditionResponse
+	if editionStories, editionResp, err := h.universalWireEditionVTextStories(r.Context(), styleSources, 12); err == nil {
 		edition = editionResp
 		if len(editionStories) > 0 {
 			stories = editionStories
-			source = "community-wire-edition-vtext"
+			source = "universal-wire-edition-vtext"
 		} else if editionResp != nil {
-			source = "community-wire-edition-vtext"
+			source = "universal-wire-edition-vtext"
 		}
 	} else if err != nil {
-		log.Printf("global wire: community wire edition unavailable: %v", err)
+		log.Printf("universal wire: edition unavailable: %v", err)
 	}
 	for i := range stories {
 		stories[i] = normalizeWireStoryPresentation(stories[i])
 	}
-	writeAPIJSON(w, http.StatusOK, globalWireStoriesResponse{
+	writeAPIJSON(w, http.StatusOK, universalWireStoriesResponse{
 		Stories:      stories,
 		StyleSources: styleSources,
 		Source:       source,
@@ -69,12 +69,12 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-func (h *APIHandler) communityWireEditionVTextStories(ctx context.Context, styleSources []types.WireStyleSource, limit int) ([]types.WireStory, *globalWireEditionResponse, error) {
+func (h *APIHandler) universalWireEditionVTextStories(ctx context.Context, styleSources []types.WireStyleSource, limit int) ([]types.WireStory, *universalWireEditionResponse, error) {
 	if h == nil || h.rt == nil || h.rt.Store() == nil {
 		return nil, nil, nil
 	}
-	platformOwner := communityWirePlatformOwnerID()
-	editionDocID, err := h.rt.Store().GetDocumentAlias(ctx, platformOwner, communityWireEditionSourcePath)
+	platformOwner := universalWirePlatformOwnerID()
+	editionDocID, err := h.rt.Store().GetDocumentAlias(ctx, platformOwner, universalWireEditionSourcePath)
 	if err != nil {
 		if err == store.ErrNotFound {
 			return nil, nil, nil
@@ -89,9 +89,9 @@ func (h *APIHandler) communityWireEditionVTextStories(ctx context.Context, style
 		return nil, nil, err
 	}
 	if strings.TrimSpace(editionDoc.CurrentRevisionID) == "" {
-		return nil, &globalWireEditionResponse{
+		return nil, &universalWireEditionResponse{
 			DocID:      editionDoc.DocID,
-			SourcePath: communityWireEditionSourcePath,
+			SourcePath: universalWireEditionSourcePath,
 			Title:      editionDoc.Title,
 			UpdatedAt:  editionDoc.UpdatedAt.Format(time.RFC3339Nano),
 		}, nil
@@ -103,11 +103,11 @@ func (h *APIHandler) communityWireEditionVTextStories(ctx context.Context, style
 		}
 		return nil, nil, err
 	}
-	includedDocIDs := communityWireEditionIncludedDocIDs(editionRev.Content, editionDoc.DocID)
-	edition := &globalWireEditionResponse{
+	includedDocIDs := universalWireEditionIncludedDocIDs(editionRev.Content, editionDoc.DocID)
+	edition := &universalWireEditionResponse{
 		DocID:          editionDoc.DocID,
 		RevisionID:     editionRev.RevisionID,
-		SourcePath:     communityWireEditionSourcePath,
+		SourcePath:     universalWireEditionSourcePath,
 		Title:          editionDoc.Title,
 		IncludedDocIDs: includedDocIDs,
 		UpdatedAt:      editionDoc.UpdatedAt.Format(time.RFC3339Nano),
@@ -139,13 +139,13 @@ func (h *APIHandler) communityWireEditionVTextStories(ctx context.Context, style
 			continue
 		}
 		story.Prominence = 100 - len(stories)
-		story.SourceState = "community-wire-edition-vtext"
+		story.SourceState = "universal-wire-edition-vtext"
 		stories = append(stories, story)
 	}
 	return stories, edition, nil
 }
 
-func communityWireEditionIncludedDocIDs(content, editionDocID string) []string {
+func universalWireEditionIncludedDocIDs(content, editionDocID string) []string {
 	seen := map[string]bool{}
 	editionDocID = strings.TrimSpace(editionDocID)
 	out := []string{}
@@ -163,10 +163,10 @@ func communityWireEditionIncludedDocIDs(content, editionDocID string) []string {
 	return out
 }
 
-func communityWirePlatformOwnerID() string {
+func universalWirePlatformOwnerID() string {
 	ownerID := strings.TrimSpace(getenvFirst("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID"))
 	if ownerID == "" {
-		ownerID = "global-wire-platform"
+		ownerID = "universal-wire-platform"
 	}
 	return ownerID
 }
@@ -232,7 +232,7 @@ func wireArticleContentLooksLikeSeed(content string) bool {
 }
 
 func wireArticleSelectedStyle(meta map[string]any, styles []types.WireStyleSource) (string, string) {
-	title := "Style.vtext: Global Wire"
+	title := "Style.vtext: Universal Wire"
 	if selected, ok := meta["selected_style_sources"].([]any); ok && len(selected) > 0 {
 		if first, ok := selected[0].(map[string]any); ok {
 			if raw := strings.TrimSpace(stringValue(first["title"])); raw != "" {
@@ -416,7 +416,7 @@ func wireArticleManifestFromCycleProvenance(meta map[string]any, headline string
 	case strings.TrimSpace(headline) != "":
 		manifest.Context = append(manifest.Context, types.WireSourceItem{
 			ID:       "source-network-vtext:" + headline,
-			Title:    "Global Wire VText article head",
+			Title:    "Universal Wire VText article head",
 			Standing: "platform VText current revision",
 			Role:     "context",
 		})
@@ -441,14 +441,14 @@ func wireArticleArticleHeadline(title, content string) string {
 			return truncateRunes(line, 120)
 		}
 	}
-	return "Global Wire article"
+	return "Universal Wire article"
 }
 
 func wireArticleArticleDek(content string) string {
 	for _, paragraph := range wireArticleArticleParagraphs(content) {
 		return truncateRunes(paragraph, 220)
 	}
-	return "Global Wire VText article with source and style provenance on its current revision."
+	return "Universal Wire VText article with source and style provenance on its current revision."
 }
 
 func wireArticleArticleProjection(content string) string {
@@ -551,7 +551,7 @@ func wireArticleArticleLineStartsInventorySection(line string) bool {
 
 func wireArticleArticleClaims(content, _ string, meta map[string]any) []string {
 	claims := []string{
-		"Current head is a normal VText article revision owned by the Global Wire platform agent.",
+		"Current head is a normal VText article revision owned by the Universal Wire platform agent.",
 		"Source and style provenance are carried by the VText revision metadata and citations.",
 	}
 	if cycleID := sourceNetworkCycleID(meta); cycleID != "" {
@@ -592,13 +592,13 @@ func wireArticleFreshness(updatedAt time.Time) string {
 }
 
 func normalizeWireStoryPresentation(story types.WireStory) types.WireStory {
-	if globalWireStoryFreshnessLooksAuto(story.Freshness) {
+	if universalWireStoryFreshnessLooksAuto(story.Freshness) {
 		story.Freshness = wireArticleFreshness(story.UpdatedAt)
 	}
 	return story
 }
 
-func globalWireStoryFreshnessLooksAuto(freshness string) bool {
+func universalWireStoryFreshnessLooksAuto(freshness string) bool {
 	freshness = strings.TrimSpace(strings.ToLower(freshness))
 	return freshness == "" || strings.HasPrefix(freshness, "updated ")
 }

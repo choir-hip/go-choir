@@ -37,13 +37,13 @@ Wire is not only public news. Public news is the Community Cloud instance of
 Wire. Private Choir Clouds run the same substrate over private sources,
 subscribed public sources, and domain-specific corpora.
 
-### Community Wire
+### Universal Wire
 
 The public Choir Community Cloud instance of Wire. It owns public source
 artifacts, platform-level processors/reconcilers/researchers, public article or
 report VTexts, public edition VTexts, and public indexes.
 
-Use "Community Wire" in architecture docs when disambiguating from private Wire
+Use "Universal Wire" in architecture docs when disambiguating from private Wire
 instances. User-facing copy may simply say "Wire" when the context is clear.
 
 ### Private Wire
@@ -87,7 +87,7 @@ tenant table.
 ### Choir Community Cloud
 
 The public/shared Choir deployment. It includes `choir.news`, public
-publication surfaces, Community Wire, public package/artifact surfaces, public
+publication surfaces, Universal Wire, public package/artifact surfaces, public
 user accounts, Community Cloud platform computers, and user computers hosted
 inside the public deployment.
 
@@ -110,7 +110,7 @@ product/runtime object owned by a platform or user inside a cloud.
 
 A persistent computer owned by a cloud itself rather than an individual user.
 It runs platform-level agents and owns platform-level semantic state such as
-Community Wire source artifacts, public article/edition VTexts, platform agent
+Universal Wire source artifacts, public article/edition VTexts, platform agent
 notebooks, publication queues, and cloud-level indexes.
 
 A Private Choir Cloud can also have platform computers: firm-wide source

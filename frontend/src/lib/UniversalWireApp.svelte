@@ -8,7 +8,7 @@
 
   let stories = [];
   let selectedStoryId = '';
-  let dataSource = 'community-wire-vtext-index';
+  let dataSource = 'universal-wire-vtext-index';
   let loadError = '';
   let lastSuccessfulLoadKey = '';
   let loadInFlight = false;
@@ -19,15 +19,15 @@
   $: ownerLabel = authenticated ? (currentUser?.email || 'owner computer') : 'public reader';
 
   onMount(() => {
-    loadGlobalWireVTexts({ force: true });
+    loadUniversalWireVTexts({ force: true });
     refreshTimer = setInterval(() => {
-      if (authenticated) loadGlobalWireVTexts({ force: true, silent: true });
+      if (authenticated) loadUniversalWireVTexts({ force: true, silent: true });
     }, 30000);
     const handleFocus = () => {
-      if (authenticated) loadGlobalWireVTexts({ force: true, silent: true });
+      if (authenticated) loadUniversalWireVTexts({ force: true, silent: true });
     };
     const handleVisibility = () => {
-      if (!document.hidden && authenticated) loadGlobalWireVTexts({ force: true, silent: true });
+      if (!document.hidden && authenticated) loadUniversalWireVTexts({ force: true, silent: true });
     };
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibility);
@@ -39,16 +39,16 @@
     };
   });
 
-  $: if (authenticated) loadGlobalWireVTexts();
+  $: if (authenticated) loadUniversalWireVTexts();
 
   function scheduleAuthenticatedRetry() {
     clearTimeout(retryTimer);
     retryTimer = setTimeout(() => {
-      if (authenticated) loadGlobalWireVTexts({ force: true, silent: true });
+      if (authenticated) loadUniversalWireVTexts({ force: true, silent: true });
     }, 3000);
   }
 
-  async function loadGlobalWireVTexts({ force = false, silent = false } = {}) {
+  async function loadUniversalWireVTexts({ force = false, silent = false } = {}) {
     const loadKey = authenticated ? 'authenticated' : 'preview';
     if (loadInFlight) return;
     if (!force && lastSuccessfulLoadKey === loadKey) return;
@@ -56,19 +56,19 @@
       loadError = '';
       stories = [];
       selectedStoryId = '';
-      dataSource = 'community-wire-vtext-index';
+      dataSource = 'universal-wire-vtext-index';
       lastSuccessfulLoadKey = loadKey;
       return;
     }
     loadInFlight = true;
     if (!silent) loadError = '';
     try {
-      const response = await fetch('/api/global-wire/stories', { credentials: 'include' });
-      if (!response.ok) throw new Error(`Global Wire load failed: ${response.status}`);
+      const response = await fetch('/api/universal-wire/stories', { credentials: 'include' });
+      if (!response.ok) throw new Error(`Universal Wire load failed: ${response.status}`);
       const payload = await response.json();
       if (Array.isArray(payload.stories)) {
         stories = payload.stories;
-        dataSource = payload.source || 'community-wire-vtext-index';
+        dataSource = payload.source || 'universal-wire-vtext-index';
         if (stories.length && !stories.some((story) => story.id === selectedStoryId)) selectedStoryId = stories[0].id;
         if (!stories.length) selectedStoryId = '';
       }
@@ -76,7 +76,7 @@
       loadError = '';
       lastSuccessfulLoadKey = loadKey;
     } catch (error) {
-      if (!silent) loadError = error?.message || 'Global Wire load failed';
+      if (!silent) loadError = error?.message || 'Universal Wire load failed';
       scheduleAuthenticatedRetry();
     } finally {
       loadInFlight = false;
@@ -131,7 +131,7 @@
             relation: item.role || 'context',
           },
           provenance: {
-            created_by: 'global_wire',
+            created_by: 'universal_wire',
             rights_scope: 'private_user_source',
             untrusted_source_text: true,
           },
@@ -159,8 +159,8 @@
             relation: 'related_story',
           },
           provenance: {
-            created_by: 'global_wire',
-            source: 'global_wire_related_story_index',
+            created_by: 'universal_wire',
+            source: 'universal_wire_related_story_index',
           },
         };
       })
@@ -199,7 +199,7 @@
         ? `This article transcludes the related ${related.join(related.length === 2 ? ' and ' : ', ')} VTexts so reconcilers can review cross-story updates without flattening the relationship into a list.`
         : '',
       '',
-      'This is a living Global Wire VText. Later processor and reconciler updates should revise this article as ordinary VText versions, with corrections treated as progress rather than as a separate product surface.',
+      'This is a living Universal Wire VText. Later processor and reconciler updates should revise this article as ordinary VText versions, with corrections treated as progress rather than as a separate product surface.',
     ].join('\n');
   }
 
@@ -217,7 +217,7 @@
         sourcePath,
         sourceEntities,
         relatedVTexts,
-        appHint: 'global-wire',
+        appHint: 'universal-wire',
         allowMultiple: true,
       },
     });
@@ -232,8 +232,8 @@
     launchVText({
       title: story.headline,
       content: story.vtext_content || storyVTextContent(story),
-      createdFrom: 'global_wire_story_projection',
-      sourcePath: `global-wire/${story.id}.story.vtext`,
+      createdFrom: 'universal_wire_story_projection',
+      sourcePath: `universal-wire/${story.id}.story.vtext`,
       docId: openDocId,
       createInitialVersion: !openDocId && !story.owner_id,
       sourceEntities: storySourceEntities(story),
@@ -242,13 +242,13 @@
   }
 </script>
 
-<section class="global-wire" data-global-wire-app data-global-wire-data-source={dataSource}>
+<section class="universal-wire" data-universal-wire-app data-universal-wire-data-source={dataSource}>
   <header class="wire-masthead">
     <div>
       <p class="kicker">Living source network</p>
-      <h2>Global Wire</h2>
+      <h2>Universal Wire</h2>
     </div>
-    <div class="wire-state" data-global-wire-state>
+    <div class="wire-state" data-universal-wire-state>
       <span>{ownerLabel}</span>
       <strong>{stories.length.toLocaleString()} article{stories.length === 1 ? '' : 's'}</strong>
       <small>{dataSource}</small>
@@ -260,7 +260,7 @@
   {/if}
 
   <main class="wire-paper">
-    <section class="wire-edition" data-global-wire-front-page aria-label="Front page">
+    <section class="wire-edition" data-universal-wire-front-page aria-label="Front page">
       <div class="edition-head">
         <span>Front Page</span>
         <span>awaiting edition VTexts</span>
@@ -271,23 +271,23 @@
           {#each stories as story}
             <article
               class="wire-article"
-              data-global-wire-story
+              data-universal-wire-story
               data-selected={story.id === selectedStory?.id ? 'true' : 'false'}
               data-story-id={story.id}
               on:mouseenter={() => (selectedStoryId = story.id)}
               on:focusin={() => (selectedStoryId = story.id)}
             >
               <div class="article-tools">
-                <button type="button" aria-label="Open article VText" title="Open article VText" on:click={() => openStoryVText(story)} data-global-wire-open-vtext>V</button>
+                <button type="button" aria-label="Open article VText" title="Open article VText" on:click={() => openStoryVText(story)} data-universal-wire-open-vtext>V</button>
               </div>
               <p class="article-meta">{story.changeState} · {story.freshness} · {story.tension}</p>
               <h1>{story.headline}</h1>
               <p class="dek">{story.dek}</p>
-              <p class="projection" data-global-wire-story-reader>{story.projections?.['wire-style']}</p>
+              <p class="projection" data-universal-wire-story-reader>{story.projections?.['wire-style']}</p>
               <p class="source-line">
                 {(story.manifest?.lead || []).length} lead · {(story.manifest?.supporting || []).length} supporting · {(story.manifest?.contrary || []).length} qualifying
               </p>
-              <div class="claims" data-global-wire-claims>
+              <div class="claims" data-universal-wire-claims>
                 {#each (story.claims || []).slice(0, 2) as claim}
                   <p>{claim}</p>
                 {/each}
@@ -296,9 +296,9 @@
           {/each}
         </div>
       {:else}
-        <section class="wire-empty-state" data-global-wire-empty-state>
+        <section class="wire-empty-state" data-universal-wire-empty-state>
           <h1>No Wire edition articles yet</h1>
-          <p>Community Wire will show VText-owned articles here after platform source processing and VText authoring publish an edition.</p>
+          <p>Universal Wire will show VText-owned articles here after platform source processing and VText authoring publish an edition.</p>
         </section>
       {/if}
     </section>
@@ -306,11 +306,11 @@
 </section>
 
 <style>
-  :global(.global-wire-content) {
+  :global(.universal-wire-content) {
     overflow: auto;
   }
 
-  .global-wire {
+  .universal-wire {
     min-height: 100%;
     color: var(--choir-text-primary);
     background: var(--choir-surface-app);
@@ -516,7 +516,7 @@
     font-size: 1rem;
   }
 
-  :global(:root[data-theme-id='london-salmon']) .global-wire {
+  :global(:root[data-theme-id='london-salmon']) .universal-wire {
     background: var(--choir-surface-document);
   }
 
@@ -544,7 +544,7 @@
   }
 
   @media (max-width: 820px) {
-    .global-wire {
+    .universal-wire {
       padding: 18px;
     }
 

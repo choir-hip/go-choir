@@ -75,7 +75,7 @@ func TestProductAPIRequestToolRefusesInternalAndNonSuperCalls(t *testing.T) {
 	}
 	if _, err := tool.Func(WithToolExecutionContext(context.Background(), workerRun), json.RawMessage(`{
 		"method":"GET",
-		"path":"/api/global-wire/stories"
+		"path":"/api/universal-wire/stories"
 	}`)); err == nil || !strings.Contains(err.Error(), "only available to foreground super") {
 		t.Fatalf("non-super error = %v, want profile refusal", err)
 	}

@@ -24,11 +24,11 @@ user-facing copy). This is a product decision, not a compatibility shim.
 
 | Surface | Rule |
 |---------|------|
-| User-visible copy, app name, mission/docs | Rename to Universal Wire **now** (Workstream naming commit) |
+| User-visible copy, app name, mission/docs | **Universal Wire** (Workstream c — landed 2026-06-10) |
 | Canonical edition alias | `universal-wire/Wire.vtext` replaces `global-wire/Wire.vtext` |
 | Old edition alias | **Deleted** after one-time migration (migration run id + zero-references proof); no redirect |
-| API routes | Renamed in the same commit that deletes old routes and their tests; **no route aliases** |
-| Infra ids (e.g. `global-wire-platform` VM) | May remain immutable infra identifiers; document the split in migration runbook |
+| API routes | `/api/universal-wire/*` replaces `/api/global-wire/*`; **no route aliases** |
+| Infra ids | `universal-wire-platform` owner, `vm-universal-wire-platform` VM — renamed with product (no `global-wire-*` infra ids) |
 | SourceMaxx / source-maxx symbols | **Not renamed** — deleted per Workstream 1 (Deletion Ledger) |
 
 ---
@@ -116,7 +116,7 @@ next step, not parallel authors.
 - reconciler → `edit_vtext` or direct edition mutation
 - per-cycle reconciler queued on ingestion handoff (current code violation)
 - user edit on published **platform** canon → in-place canonical mutation
-- `global-wire` routes, aliases, or user-visible strings after Universal Wire migration
+- `universal-wire` routes, aliases, or user-visible strings after Universal Wire migration
 
 ---
 
@@ -214,7 +214,7 @@ deleted, stop and document evidence — do not shim.
 
 **Named symbols (non-exhaustive; see mission v1 invariant 15):**
 
-- `GlobalWireStory` types and stored seed rows
+- `UniversalWireStory` types and stored seed rows
 - StoryGraph authority
 - all `SourceMaxx` / `source_maxx` / `source-maxx` forms including
   `BuildSourceMaxxHandoff`, `sourceMaxxRuntimeDispatcher`, `source-network` shims
@@ -223,7 +223,7 @@ deleted, stop and document evidence — do not shim.
 ### (c) Universal Wire rename/migration
 
 After (b). User-visible copy, app name, docs; API route cutover; edition alias
-migration; delete `global-wire/Wire.vtext` alias with zero-references proof.
+migration; delete `universal-wire/Wire.vtext` alias with zero-references proof.
 
 ### (d) Workstream 2 — Activation graph
 
@@ -269,7 +269,7 @@ Plus Phase A negative proofs (prompt bar cannot create Wire stories) per Slice 4
 | Reconciler per-cycle on handoff | **Removed** — violates feed-forward |
 | Spec: processor requests researchers | **Request via VText wake brief**, not processor spawn |
 | Slice 0 marked done while SourceMaxx active | **False** — Workstream 1 reopens Slice 0 until grep-clean |
-| `global-wire/Wire.vtext` | **`universal-wire/Wire.vtext`** after migration (c) |
+| `universal-wire/Wire.vtext` | **`universal-wire/Wire.vtext`** after migration (c) |
 
 ---
 

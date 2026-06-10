@@ -6,7 +6,7 @@ Build Choir's provider substrate until DeepSeek and Xiaomi can be trusted as
 first-class runtime providers for real agent work, not just isolated text calls.
 
 This is not a provider-adapter slice. It is the full provider configuration and
-conformance object needed before returning to Global Wire:
+conformance object needed before returning to Universal Wire:
 
 - direct DeepSeek and Xiaomi credentials are platform-owned and deployable
   without leaking secrets;
@@ -65,7 +65,7 @@ preserve provider semantics under tool pressure, hidden reasoning pressure,
 multimodal pressure, and compaction pressure.
 
 Operational implication: build a conformance matrix and product-path proof
-before resuming Global Wire.
+before resuming Universal Wire.
 
 ### Invariant Projection
 
@@ -87,11 +87,11 @@ compaction/recall tests, not only happy-path completions.
 
 ### Readiness As Downstream Capability
 
-The provider substrate is "done" only when Global Wire can safely depend on it.
+The provider substrate is "done" only when Universal Wire can safely depend on it.
 Direct curl success is insufficient.
 
 Operational implication: stopping condition includes a real Choir run that uses
-DeepSeek and Xiaomi together, plus an explicit readiness report for Global Wire
+DeepSeek and Xiaomi together, plus an explicit readiness report for Universal Wire
 processors/reconcilers/researchers/VText article agents.
 
 ## Hard Invariants
@@ -149,7 +149,7 @@ The provider substrate gets better when:
 - compaction keeps enough durable handles for agents to resume accurately;
 - product-path traces show the configured provider/model actually handled the
   turn;
-- Global Wire can launch processors, reconcilers, researchers, and VText article
+- Universal Wire can launch processors, reconcilers, researchers, and VText article
   agents without provider uncertainty dominating the mission.
 
 ## Quality Bar
@@ -220,7 +220,7 @@ Increase resolution along these axes without changing the object:
 7. **Deployment pressure:** local env -> Node B gateway provider env -> staging
    health identity -> staging product proof -> rollback proof.
 8. **News readiness:** generic agent loop -> researcher loop -> VText article
-   loop -> processor/reconciler toolsets -> Global Wire readiness report.
+   loop -> processor/reconciler toolsets -> Universal Wire readiness report.
 
 ## Expected Implementation Routes
 
@@ -343,9 +343,9 @@ Selection criteria:
 - distinctive facts that make recall testable;
 - no need for paywalled scraping.
 
-## Product Readiness For Global Wire
+## Product Readiness For Universal Wire
 
-Before returning to Global Wire, produce a readiness report answering:
+Before returning to Universal Wire, produce a readiness report answering:
 
 - Which provider/protocol/model should run processors?
 - Which provider/protocol/model should run reconcilers?
@@ -358,7 +358,7 @@ Before returning to Global Wire, produce a readiness report answering:
 - What provider combinations remain forbidden?
 - What tests must be rerun before any future provider default change?
 
-Global Wire is not ready to resume if this report cannot name a provider path
+Universal Wire is not ready to resume if this report cannot name a provider path
 for VText article generation and source/research tooling.
 
 ## Anti-Goodhart Constraints
@@ -373,7 +373,7 @@ for VText article generation and source/research tooling.
 - Do not claim reasoning support unless reasoning-content passback is tested or
   reasoning is explicitly disabled for that path.
 - Do not claim compaction safety from a short conversation that never compacted.
-- Do not claim Global Wire readiness while VText article generation still fails
+- Do not claim Universal Wire readiness while VText article generation still fails
   on the chosen provider path.
 - Do not hide provider failures behind fallback provider success.
 - Do not leave old Fireworks DeepSeek defaults as a quiet fallback.
@@ -425,9 +425,9 @@ If direct providers destabilize VText product behavior, do not restore broken
 Fireworks DeepSeek defaults as a success claim. Either select a known-good
 provider path or record the blocker.
 
-## Global Wire Provider Readiness Report
+## Universal Wire Provider Readiness Report
 
-Status: ready enough to unblock the next Global Wire hard cutover mission.
+Status: ready enough to unblock the next Universal Wire hard cutover mission.
 
 Recommended provider paths:
 
@@ -483,7 +483,7 @@ Residual caveats:
   that would be an intentionally expensive stress probe; local runtime tests
   cover automatic triggering and staging artifacts record the selected 700k
   threshold.
-- The next Global Wire mission should spend its budget on deleting mock news
+- The next Universal Wire mission should spend its budget on deleting mock news
   surfaces and ingesting real source volume, not on rediscovering provider
   basics.
 
@@ -505,7 +505,7 @@ The mission is complete only when all are true:
   the selected provider path.
 - Compaction/recall proof passes or a narrower provider-specific compaction
   blocker is documented after root-cause probes.
-- Global Wire readiness report names provider paths for processors,
+- Universal Wire readiness report names provider paths for processors,
   reconcilers, researchers, VText article agents, and multimodal verification.
 - Mission doc has final checkpoint/resumption state.
 
@@ -531,7 +531,7 @@ problem.
 ```text
 status: complete
 last checkpoint: 2026-06-08T20:20Z LLM compaction and exact retrieval proof
-  deployed at `aa8bee5fe5500d48841cef054b9ab8b449929e4e`, and the Global Wire
+  deployed at `aa8bee5fe5500d48841cef054b9ab8b449929e4e`, and the Universal Wire
   provider readiness report now names provider paths for processors,
   reconcilers, researchers, VText article agents, multimodal verification, and
   Anthropic-compatible fallback routes.
@@ -832,7 +832,7 @@ what was proven:
   long-context proof.
 unproven or partial claims:
   Product-path coverage for every provider/protocol matrix cell remains broader
-  than necessary for the next Global Wire mission; env-gated live conformance
+  than necessary for the next Universal Wire mission; env-gated live conformance
   covers the matrix and product-path evidence covers the selected default paths.
   Arbitrary external image URLs remain unreliable for Xiaomi multimodal
   verification; use source-resolved/base64 media or known-accessible URLs. The
@@ -858,25 +858,25 @@ belief-state changes:
   evidence: a DeepSeek VText loop generated an LLM checkpoint with exact raw
   entry handles and a later VText loop retrieved exact compacted content by
   `get_run_memory_entry`. Provider readiness is now sufficient to unblock
-  Global Wire hard cutover.
+  Universal Wire hard cutover.
 remaining error field:
-  No provider/config blocker remains for Global Wire. The next error field is
-  Global Wire itself: delete mock/detritus surfaces, ingest real high-volume
+  No provider/config blocker remains for Universal Wire. The next error field is
+  Universal Wire itself: delete mock/detritus surfaces, ingest real high-volume
   sources, and route source packets through processors, reconcilers, researchers,
   and VText article agents.
 highest-impact remaining uncertainty:
-  Whether the Global Wire architecture can turn the now-ready provider substrate
+  Whether the Universal Wire architecture can turn the now-ready provider substrate
   into real high-volume ingestion and publication-quality VText articles without
   preserving old mock surfaces.
 next executable probe:
-  Run the Global Wire hard-cutover mission against staging: remove legacy mock
+  Run the Universal Wire hard-cutover mission against staging: remove legacy mock
   news surfaces, prove real source ingestion volume, and have VText agents own
   real article versions with embedded/transcluded source evidence.
 suggested resume goal string:
-  /goal Run docs/mission-global-wire-hard-cutover-real-newsroom-v0.md as MissionGradient; replace Global Wire mocks with real source ingestion and VText-owned articles.
+  /goal Run docs/mission-universal-wire-hard-cutover-real-newsroom-v0.md as MissionGradient; replace Universal Wire mocks with real source ingestion and VText-owned articles.
 evidence artifact refs:
   Prior mission evidence lives in
-  `docs/mission-global-wire-hard-cutover-real-newsroom-v0.md`.
+  `docs/mission-universal-wire-hard-cutover-real-newsroom-v0.md`.
   LLM compaction staging evidence:
   `docs/evidence/llm-run-memory-compaction-staging-2026-06-08.md`.
 rollback refs:

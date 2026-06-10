@@ -1335,7 +1335,7 @@ func sourceServiceRuntimeOwnerID(cfg VMConfig) string {
 	if ownerID := strings.TrimSpace(cfg.OwnerID); ownerID != "" {
 		return ownerID
 	}
-	return "global-wire-platform"
+	return "universal-wire-platform"
 }
 
 func guestIdentityKernelParams(cfg VMConfig) []string {

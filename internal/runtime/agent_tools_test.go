@@ -1104,7 +1104,7 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 		t.Fatalf("start vtext run: %v", err)
 	}
 	raw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(context.Background(), vtextRun), "request_super_execution", json.RawMessage(`{
-		"objective":"Process the fresh Community Wire product API handoff.",
+		"objective":"Process the fresh Universal Wire product API handoff.",
 		"channel_id":"doc-fresh-super"
 	}`))
 	if err != nil {
@@ -1123,7 +1123,7 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 	if err != nil {
 		t.Fatalf("get fresh super run: %v", err)
 	}
-	if fresh.AgentID != superAgent.AgentID || !strings.Contains(fresh.Prompt, "fresh Community Wire product API handoff") {
+	if fresh.AgentID != superAgent.AgentID || !strings.Contains(fresh.Prompt, "fresh Universal Wire product API handoff") {
 		t.Fatalf("fresh super run did not own new delivery: %+v", fresh)
 	}
 	if pending := pendingDeliveriesForAgent(t, s, "user-alice", superAgent.AgentID); len(pending) != 0 {
@@ -2181,7 +2181,7 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	spawnVTextRaw, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"write a source-grounded article from this processor brief about Fed rates and inflation",
 		"role":"vtext",
-		"channel_id":"global-wire-story-candidate"
+		"channel_id":"universal-wire-story-candidate"
 	}`))
 	if err != nil {
 		t.Fatalf("processor spawn vtext: %v", err)
@@ -2253,7 +2253,7 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 	if metadataString(vtextRun.Metadata, "source_network_cycle_id") != "cycle-test" || metadataString(vtextRun.Metadata, "processor_key") != "processor:global_firehose:global:gdelt" {
 		t.Fatalf("processor vtext run did not preserve source-network metadata: %+v", vtextRun.Metadata)
 	}
-	if metadataString(vtextRun.Metadata, "request_intent") != "global_wire_processor_article_revision" {
+	if metadataString(vtextRun.Metadata, "request_intent") != "universal_wire_processor_article_revision" {
 		t.Fatalf("processor vtext run request_intent = %q", metadataString(vtextRun.Metadata, "request_intent"))
 	}
 	runSourceEntities := decodeVTextSourceEntities(vtextRun.Metadata["source_entities"])
@@ -2284,7 +2284,7 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 		"base_revision_id": vtextSpawn.SeedRevisionID,
 		"operation":        "replace_all",
 		"content":          articleContent,
-		"rationale":        "Create the first Global Wire article revision from the processor brief.",
+		"rationale":        "Create the first Universal Wire article revision from the processor brief.",
 	})
 	if err != nil {
 		t.Fatalf("marshal vtext edit args: %v", err)

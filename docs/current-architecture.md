@@ -90,7 +90,7 @@ The current cloud vocabulary matters for source/news work:
   with platform computer(s), many user computers, candidate computers, private
   source systems, and optional publication/subscription links;
 - **Wire** is the reusable source-to-VText substrate;
-- **Community Wire** is platform-level work in the Community Cloud, not a
+- **Universal Wire** is platform-level work in the Community Cloud, not a
   user-computer feature;
 - personalization is user-computer work over accessible public/private corpora.
 
@@ -141,7 +141,7 @@ Important boundary rules:
 - The per-user computer runtime is where private conductor, VText, appagent,
   Trace, run memory, app state, source metadata, and candidate-control product
   state live.
-- Platform-level semantic work, such as Community Wire article/edition VTexts
+- Platform-level semantic work, such as Universal Wire article/edition VTexts
   and public source synthesis, should be scoped to platform computer authority
   even when host daemons perform serving, lifecycle, or adapter work.
 - Provider secrets stay in the gateway/platform boundary. Per-computer model

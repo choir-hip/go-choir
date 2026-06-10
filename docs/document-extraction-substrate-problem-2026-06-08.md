@@ -23,7 +23,7 @@ Current evidence from the codebase:
 - `internal/runtime/vtext_import.go` has VText-private DOCX/PDF projection
   logic instead of shared ContentItem extraction;
 - the PDF path is `pdf_literal_text_projection`, a best-effort regex over PDF
-  literal strings, which is not adequate for research, VText import, Global Wire
+  literal strings, which is not adequate for research, VText import, Universal Wire
   source grounding, or compaction recall evaluation;
 - PPTX/HTML slide decks are not represented as source documents with per-slide
   selectors, even though they matter for research and future Slides app work.
@@ -35,7 +35,7 @@ automatic compaction. If document extraction is weak, the eval instead measures
 whether the input corpus was unreadable or truncated before the model ever saw
 it. That would burn model budget and produce misleading evidence.
 
-Global Wire also needs the same capability: sources must be real full articles,
+Universal Wire also needs the same capability: sources must be real full articles,
 documents, filings, reports, decks, and social/media artifacts with provenance,
 not headline stubs or lossy snippets.
 

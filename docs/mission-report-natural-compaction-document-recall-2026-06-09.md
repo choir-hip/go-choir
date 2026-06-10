@@ -43,7 +43,7 @@ docs shipped: yes
 staging proven: yes
 matrix proven: yes, with GPT mini completed through repaired continuation
 remaining work: promote the temporary proof harness into a stable regression;
-  return to Global Wire source ingestion and article production
+  return to Universal Wire source ingestion and article production
 ```
 
 ## What Shipped
@@ -421,7 +421,7 @@ run completes invalid
   -> child finishes the work
 ```
 
-That pattern is directly relevant to future Global Wire and Choir-in-Choir
+That pattern is directly relevant to future Universal Wire and Choir-in-Choir
 missions.
 
 ### 6. Trace summaries are not sufficient for proof assertions.
@@ -458,9 +458,9 @@ EPUB, PPTX, HTML slides, tables, images, and citations.
 PPTX/HTML slide extraction is source-document work. A real Slides app remains a
 separate mission and should not be conflated with this eval.
 
-## Readiness For Global Wire
+## Readiness For Universal Wire
 
-This mission unblocks the next Global Wire push in a narrow but important way.
+This mission unblocks the next Universal Wire push in a narrow but important way.
 
 Useful capabilities now available:
 
@@ -471,7 +471,7 @@ Useful capabilities now available:
 - invalid completed work can be detected and continued;
 - selector-cited source recall can survive compaction.
 
-This does not solve Global Wire itself. The news system still needs a hard
+This does not solve Universal Wire itself. The news system still needs a hard
 cutover away from mocked/stubbed sources and old StoryGraph/source-ledger
 surfaces. But the provider/compaction substrate is now good enough to use for
 long-running processors, reconcilers, researchers, and VText article owners.
@@ -479,7 +479,7 @@ long-running processors, reconcilers, researchers, and VText article owners.
 Recommended next mission:
 
 ```text
-/goal Run the Global Wire real-news cutover mission: delete obsolete StoryGraph/source-ledger/style-control cruft, ingest many real RSS/GDELT/Telegram/HN/international/industry sources, create full ContentItem-backed source artifacts, have processors/reconcilers/researchers feed VText article owners, and ship readable newspaper-column Global Wire views with real articles and native source transclusions.
+/goal Run the Universal Wire real-news cutover mission: delete obsolete StoryGraph/source-ledger/style-control cruft, ingest many real RSS/GDELT/Telegram/HN/international/industry sources, create full ContentItem-backed source artifacts, have processors/reconcilers/researchers feed VText article owners, and ship readable newspaper-column Universal Wire views with real articles and native source transclusions.
 ```
 
 ## Final State

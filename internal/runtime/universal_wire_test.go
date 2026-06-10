@@ -14,19 +14,19 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-func TestHandleGlobalWireStoriesReturnsHonestEmptyState(t *testing.T) {
+func TestHandleUniversalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	_, handler := testAPISetup(t)
 
-	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-global-wire")
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
 	if w.Code != http.StatusOK {
-		t.Fatalf("GET /api/global-wire/stories status = %d body=%s", w.Code, w.Body.String())
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp globalWireStoriesResponse
+	var resp universalWireStoriesResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "community-wire-vtext-index" {
-		t.Fatalf("source = %q, want community-wire-vtext-index", resp.Source)
+	if resp.Source != "universal-wire-vtext-index" {
+		t.Fatalf("source = %q, want universal-wire-vtext-index", resp.Source)
 	}
 	if len(resp.Stories) != 0 {
 		t.Fatalf("stories length = %d, want no seeded stories", len(resp.Stories))
@@ -42,7 +42,7 @@ func seedPlatformSourceNetworkVTextFixture(t *testing.T, handler *APIHandler, do
 	now := time.Now().UTC()
 	doc := types.Document{
 		DocID:     docID,
-		OwnerID:   "global-wire-platform",
+		OwnerID:   "universal-wire-platform",
 		Title:     "Madrid dispatch.vtext",
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -55,8 +55,8 @@ func seedPlatformSourceNetworkVTextFixture(t *testing.T, handler *APIHandler, do
 		"ingestion_handoff_cycle_id":     "cycle-live",
 		"ingestion_handoff_request_id":   "reconciler-live",
 		"ingestion_handoff_request_kind": "reconciler",
-		"selected_style_sources":   []map[string]any{{"title": "Style.vtext: Global Wire"}},
-		"selected_style_rationale": "Global Wire style fits a fast sourced dispatch.",
+		"selected_style_sources":   []map[string]any{{"title": "Style.vtext: Universal Wire"}},
+		"selected_style_rationale": "Universal Wire style fits a fast sourced dispatch.",
 		"source_item_ids":          []string{"srcitem_live_1", "srcitem_live_2"},
 	})
 	rev := types.Revision{
@@ -82,87 +82,87 @@ func seedPlatformSourceNetworkVTextFixture(t *testing.T, handler *APIHandler, do
 	return doc
 }
 
-func seedCommunityWireEditionFixture(t *testing.T, handler *APIHandler, includedDocIDs ...string) types.Document {
+func seedUniversalWireEditionFixture(t *testing.T, handler *APIHandler, includedDocIDs ...string) types.Document {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
 	doc := types.Document{
-		DocID:     "doc-community-wire-edition",
-		OwnerID:   "global-wire-platform",
+		DocID:     "doc-universal-wire-edition",
+		OwnerID:   "universal-wire-platform",
 		Title:     "Wire.vtext",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
 	if err := handler.rt.Store().CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("create Community Wire edition doc: %v", err)
+		t.Fatalf("create Universal Wire edition doc: %v", err)
 	}
-	lines := []string{"# Wire", "", "Community Wire edition."}
+	lines := []string{"# Wire", "", "Universal Wire edition."}
 	for _, docID := range includedDocIDs {
 		lines = append(lines, "", fmt.Sprintf("- [Article](vtext:%s)", docID))
 	}
 	if err := handler.rt.Store().CreateRevision(ctx, types.Revision{
-		RevisionID:  "rev-community-wire-edition",
+		RevisionID:  "rev-universal-wire-edition",
 		DocID:       doc.DocID,
 		OwnerID:     doc.OwnerID,
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: "vtext:" + doc.DocID,
 		Content:     strings.Join(lines, "\n"),
 		Citations:   json.RawMessage("[]"),
-		Metadata:    json.RawMessage(`{"source":"community_wire_edition"}`),
+		Metadata:    json.RawMessage(`{"source":"universal_wire_edition"}`),
 		CreatedAt:   now,
 	}); err != nil {
-		t.Fatalf("create Community Wire edition revision: %v", err)
+		t.Fatalf("create Universal Wire edition revision: %v", err)
 	}
-	if err := handler.rt.Store().UpsertDocumentAlias(ctx, doc.OwnerID, communityWireEditionSourcePath, doc.DocID, now); err != nil {
-		t.Fatalf("upsert Community Wire edition alias: %v", err)
+	if err := handler.rt.Store().UpsertDocumentAlias(ctx, doc.OwnerID, universalWireEditionSourcePath, doc.DocID, now); err != nil {
+		t.Fatalf("upsert Universal Wire edition alias: %v", err)
 	}
 	return doc
 }
 
-func TestHandleGlobalWireStoriesDoesNotIndexUntranscludedPlatformVTexts(t *testing.T) {
+func TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformVTexts(t *testing.T) {
 	_, handler := testAPISetup(t)
 	doc := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-source-network-live")
 
-	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-global-wire")
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
 	if w.Code != http.StatusOK {
-		t.Fatalf("GET /api/global-wire/stories status = %d body=%s", w.Code, w.Body.String())
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp globalWireStoriesResponse
+	var resp universalWireStoriesResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "community-wire-vtext-index" {
+	if resp.Source != "universal-wire-vtext-index" {
 		t.Fatalf("source = %q, want source network vtext index", resp.Source)
 	}
 	if len(resp.Stories) != 0 {
 		t.Fatalf("stories length = %d, want no untranscluded platform VTexts: %+v", len(resp.Stories), resp.Stories)
 	}
 	if resp.Edition != nil {
-		t.Fatalf("edition = %+v, want no edition without %s alias", resp.Edition, communityWireEditionSourcePath)
+		t.Fatalf("edition = %+v, want no edition without %s alias", resp.Edition, universalWireEditionSourcePath)
 	}
 	if doc.DocID == "" {
 		t.Fatal("fixture doc id should not be empty")
 	}
 }
 
-func TestHandleGlobalWireStoriesIndexesEditionTranscludedVTextHeads(t *testing.T) {
+func TestHandleUniversalWireStoriesIndexesEditionTranscludedVTextHeads(t *testing.T) {
 	_, handler := testAPISetup(t)
 	doc := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-source-network-live")
-	edition := seedCommunityWireEditionFixture(t, handler, doc.DocID)
+	edition := seedUniversalWireEditionFixture(t, handler, doc.DocID)
 
-	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-global-wire")
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
 	if w.Code != http.StatusOK {
-		t.Fatalf("GET /api/global-wire/stories status = %d body=%s", w.Code, w.Body.String())
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp globalWireStoriesResponse
+	var resp universalWireStoriesResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "community-wire-edition-vtext" {
+	if resp.Source != "universal-wire-edition-vtext" {
 		t.Fatalf("source = %q, want edition VText index", resp.Source)
 	}
-	if resp.Edition == nil || resp.Edition.DocID != edition.DocID || resp.Edition.SourcePath != communityWireEditionSourcePath {
-		t.Fatalf("edition = %+v, want %s", resp.Edition, communityWireEditionSourcePath)
+	if resp.Edition == nil || resp.Edition.DocID != edition.DocID || resp.Edition.SourcePath != universalWireEditionSourcePath {
+		t.Fatalf("edition = %+v, want %s", resp.Edition, universalWireEditionSourcePath)
 	}
 	if !slices.Equal(resp.Edition.IncludedDocIDs, []string{doc.DocID}) {
 		t.Fatalf("edition included docs = %+v, want %s", resp.Edition.IncludedDocIDs, doc.DocID)
@@ -172,7 +172,7 @@ func TestHandleGlobalWireStoriesIndexesEditionTranscludedVTextHeads(t *testing.T
 	}
 	story := resp.Stories[0]
 	if story.ID != "source-network-vtext-"+doc.DocID ||
-		story.OwnerID != "global-wire-platform" ||
+		story.OwnerID != "universal-wire-platform" ||
 		story.StoryVTextDoc != doc.DocID ||
 		story.VTextContent == "" {
 		t.Fatalf("first story is not the indexed source-network VText: %+v", story)
@@ -183,7 +183,7 @@ func TestHandleGlobalWireStoriesIndexesEditionTranscludedVTextHeads(t *testing.T
 	if story.Freshness != "updated just now" {
 		t.Fatalf("source-network story freshness = %q, want relative update time", story.Freshness)
 	}
-	if story.SourceState != "community-wire-edition-vtext" {
+	if story.SourceState != "universal-wire-edition-vtext" {
 		t.Fatalf("source state = %q, want edition VText state", story.SourceState)
 	}
 	if len(story.Manifest.Lead) != 0 || len(story.Manifest.Context) != 1 ||
@@ -192,12 +192,12 @@ func TestHandleGlobalWireStoriesIndexesEditionTranscludedVTextHeads(t *testing.T
 		t.Fatalf("indexed source-network story should expose bounded cycle provenance, got %+v", story.Manifest)
 	}
 	claimText := strings.Join(story.Claims, "\n")
-	if strings.Contains(claimText, "Style.vtext: Global Wire") ||
+	if strings.Contains(claimText, "Style.vtext: Universal Wire") ||
 		!strings.Contains(claimText, "Source and style provenance are carried by the VText revision metadata and citations") {
 		t.Fatalf("indexed source-network story claims did not preserve provenance/body separation: %+v", story.Claims)
 	}
 }
-func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest(t *testing.T) {
+func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -233,7 +233,7 @@ func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifes
 	t.Setenv("SOURCECYCLED_API_URL", "")
 	doc := types.Document{
 		DocID:     "doc-source-network-scoped-sources",
-		OwnerID:   "global-wire-platform",
+		OwnerID:   "universal-wire-platform",
 		Title:     "Scoped sources.vtext",
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -246,7 +246,7 @@ func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifes
 		"ingestion_handoff_cycle_id":     "cycle-scoped",
 		"ingestion_handoff_request_id":   "reconciler-scoped",
 		"ingestion_handoff_request_kind": "reconciler",
-		"selected_style_sources":   []map[string]any{{"title": "Style.vtext: Global Wire"}},
+		"selected_style_sources":   []map[string]any{{"title": "Style.vtext: Universal Wire"}},
 		"source_item_ids":          []string{"srcitem_cycle_1", "srcitem_cycle_2", "srcitem_cycle_3", "srcitem_cycle_4"},
 		"source_entities": []map[string]any{
 			{
@@ -290,7 +290,7 @@ func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifes
 			"",
 			"## Style.vtext Source",
 			"",
-			"Selection rationale: Global Wire style.",
+			"Selection rationale: Universal Wire style.",
 		}, "\n"),
 		Citations: json.RawMessage("[]"),
 		Metadata:  meta,
@@ -299,18 +299,18 @@ func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifes
 	if err := handler.rt.Store().CreateRevision(ctx, rev); err != nil {
 		t.Fatalf("create platform source-network revision: %v", err)
 	}
-	seedCommunityWireEditionFixture(t, handler, doc.DocID)
+	seedUniversalWireEditionFixture(t, handler, doc.DocID)
 
-	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-global-wire")
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
 	if w.Code != http.StatusOK {
-		t.Fatalf("GET /api/global-wire/stories status = %d body=%s", w.Code, w.Body.String())
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp globalWireStoriesResponse
+	var resp universalWireStoriesResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "community-wire-edition-vtext" || resp.Edition == nil {
-		t.Fatalf("response did not use Community Wire edition: source=%q edition=%+v", resp.Source, resp.Edition)
+	if resp.Source != "universal-wire-edition-vtext" || resp.Edition == nil {
+		t.Fatalf("response did not use Universal Wire edition: source=%q edition=%+v", resp.Source, resp.Edition)
 	}
 	if len(resp.Stories) != 1 {
 		t.Fatalf("stories length = %d, want edition-transcluded VText story: %+v", len(resp.Stories), resp.Stories)
@@ -334,10 +334,10 @@ func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifes
 		t.Fatalf("manifest did not resolve source-service item metadata: %+v", story.Manifest.Lead[0])
 	}
 }
-func TestHandleGlobalWireStoriesRequiresAuth(t *testing.T) {
+func TestHandleUniversalWireStoriesRequiresAuth(t *testing.T) {
 	_, handler := testAPISetup(t)
 
-	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "")
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "")
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("unauth story status = %d body=%s", w.Code, w.Body.String())
 	}

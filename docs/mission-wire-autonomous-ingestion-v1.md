@@ -23,7 +23,7 @@ HN as a separate class, operator approval gates).
 ## Lessons retained (now encoded in community-news v1)
 
 1. Wire stories are triggered only by **ingestion events**, never the prompt bar.
-2. **Community Wire** is platform-computer authority (`global-wire-platform`),
+2. **Universal Wire** is platform-computer authority (`universal-wire-platform`),
    always-on, with hard cutover off host `sandbox-m1` stubs.
 3. **Fetch ledger** may stay host SQLite for v1; **semantic truth** lives in
    platform-computer embedded Dolt; **public read surface** is platformd

@@ -53,7 +53,7 @@ func TestHandlePromptBarVTextRouteCompletesConductorSynchronously(t *testing.T) 
 func TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
-	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Community Wire staging proof request: using product paths only, run the existing Global Wire source-refresh/research/projection/publication flow, create or approve an Article VText, update global-wire/Wire.vtext, then leave evidence ids and verifier proof. Do not use test-only routes."}`, "user-alice")
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Universal Wire staging proof request: using product paths only, run the existing Universal Wire source-refresh/research/projection/publication flow, create or approve an Article VText, update universal-wire/Wire.vtext, then leave evidence ids and verifier proof. Do not use test-only routes."}`, "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandlePromptBar(w, req)
 	if w.Code != http.StatusAccepted {

@@ -7,15 +7,15 @@ import (
 	"testing"
 )
 
-func TestWriteCommunityWirePlatformRuntimeEnv(t *testing.T) {
+func TestWriteUniversalWirePlatformRuntimeEnv(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "platform-wire-runtime.env")
-	env := CommunityWirePlatformRuntimeEnv{
+	env := UniversalWirePlatformRuntimeEnv{
 		RuntimeBaseURL: "http://10.200.3.2:8085",
-		OwnerID:        CommunityWirePlatformOwnerID,
+		OwnerID:        UniversalWirePlatformOwnerID,
 	}
-	if err := WriteCommunityWirePlatformRuntimeEnv(path, env); err != nil {
-		t.Fatalf("WriteCommunityWirePlatformRuntimeEnv: %v", err)
+	if err := WriteUniversalWirePlatformRuntimeEnv(path, env); err != nil {
+		t.Fatalf("WriteUniversalWirePlatformRuntimeEnv: %v", err)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -24,7 +24,7 @@ func TestWriteCommunityWirePlatformRuntimeEnv(t *testing.T) {
 	content := string(raw)
 	for _, want := range []string{
 		"SOURCE_SERVICE_RUNTIME_BASE_URL=http://10.200.3.2:8085",
-		"SOURCE_SERVICE_RUNTIME_OWNER_ID=global-wire-platform",
+		"SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform",
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("expected %q in %q", want, content)
@@ -34,8 +34,8 @@ func TestWriteCommunityWirePlatformRuntimeEnv(t *testing.T) {
 
 func TestComputerKindForOwnershipPlatform(t *testing.T) {
 	own := &VMOwnership{
-		UserID:        CommunityWirePlatformOwnerID,
-		DesktopID:     CommunityWirePlatformDesktopID,
+		UserID:        UniversalWirePlatformOwnerID,
+		DesktopID:     UniversalWirePlatformDesktopID,
 		WarmnessClass: WarmnessClassPublicPlatform,
 	}
 	if got := computerKindForOwnership(own); got != "platform" {
@@ -49,7 +49,7 @@ func TestWarmnessClassProtectedIncludesPublicPlatform(t *testing.T) {
 	}
 }
 
-func TestEnsureCommunityWirePlatformComputerBootsStableVM(t *testing.T) {
+func TestEnsureUniversalWirePlatformComputerBootsStableVM(t *testing.T) {
 	mgr := &mockVMManager{
 		bootResponse: &VMInstanceInfo{
 			HostURL: "http://10.200.9.2:8085",
@@ -61,9 +61,9 @@ func TestEnsureCommunityWirePlatformComputerBootsStableVM(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetVMManager(mgr)
 
-	env, err := reg.EnsureCommunityWirePlatformComputer(t.Context())
+	env, err := reg.EnsureUniversalWirePlatformComputer(t.Context())
 	if err != nil {
-		t.Fatalf("EnsureCommunityWirePlatformComputer: %v", err)
+		t.Fatalf("EnsureUniversalWirePlatformComputer: %v", err)
 	}
 	if env.RuntimeBaseURL != "http://10.200.9.2:8085" {
 		t.Fatalf("RuntimeBaseURL = %q", env.RuntimeBaseURL)
@@ -71,13 +71,13 @@ func TestEnsureCommunityWirePlatformComputerBootsStableVM(t *testing.T) {
 	if len(mgr.boots) != 1 {
 		t.Fatalf("expected one boot, got %d", len(mgr.boots))
 	}
-	if mgr.boots[0].VMID != CommunityWirePlatformVMID {
-		t.Fatalf("boot VMID = %q, want %q", mgr.boots[0].VMID, CommunityWirePlatformVMID)
+	if mgr.boots[0].VMID != UniversalWirePlatformVMID {
+		t.Fatalf("boot VMID = %q, want %q", mgr.boots[0].VMID, UniversalWirePlatformVMID)
 	}
 	if mgr.boots[0].ComputerKind != "platform" {
 		t.Fatalf("ComputerKind = %q, want platform", mgr.boots[0].ComputerKind)
 	}
-	key := ownershipKey(CommunityWirePlatformOwnerID, CommunityWirePlatformDesktopID)
+	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
 	own := reg.ownerships[key]
 	if own == nil || own.WarmnessClass != WarmnessClassPublicPlatform {
 		t.Fatalf("expected public_platform ownership, got %#v", own)
