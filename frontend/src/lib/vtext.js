@@ -31,6 +31,38 @@
 import { fetchWithRenewal } from './auth.js';
 import { withDesktopSelector } from './desktop-selector.js';
 
+export const WIRE_PLATFORM_READ_OWNER = 'universal-wire-platform';
+
+const readOwnerStack = [];
+
+function activeReadOwner() {
+  for (let index = readOwnerStack.length - 1; index >= 0; index -= 1) {
+    const owner = String(readOwnerStack[index] || '').trim();
+    if (owner) return owner;
+  }
+  return '';
+}
+
+export function pushVTextReadOwner(ownerId = '') {
+  const owner = String(ownerId || '').trim();
+  if (!owner) return;
+  readOwnerStack.push(owner);
+}
+
+export function popVTextReadOwner() {
+  if (!readOwnerStack.length) return;
+  readOwnerStack.pop();
+}
+
+function withReadOwnerQuery(path, { method = 'GET' } = {}) {
+  const owner = activeReadOwner();
+  if (!owner || (method !== 'GET' && method !== 'HEAD')) {
+    return path;
+  }
+  const join = path.includes('?') ? '&' : '?';
+  return `${path}${join}read_owner=${encodeURIComponent(owner)}`;
+}
+
 function vtextPath(path) {
   return `/api/vtext${path}`;
 }
@@ -93,7 +125,7 @@ export async function listDocuments() {
 }
 
 export async function getDocument(docId) {
-  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}`), {
+  const res = await fetchWithRenewal(withReadOwnerQuery(vtextPath(`/documents/${encodeURIComponent(docId)}`)), {
     method: 'GET',
   });
 
@@ -180,7 +212,7 @@ export async function listRevisions(docId, { limit = 10000 } = {}) {
     params.set('limit', String(limit));
   }
   const query = params.toString();
-  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/revisions${query ? `?${query}` : ''}`), {
+  const res = await fetchWithRenewal(withReadOwnerQuery(vtextPath(`/documents/${encodeURIComponent(docId)}/revisions${query ? `?${query}` : ''}`)), {
     method: 'GET',
   });
 
@@ -192,7 +224,7 @@ export async function listRevisions(docId, { limit = 10000 } = {}) {
 }
 
 export async function getRevision(revisionId) {
-  const res = await fetchWithRenewal(vtextPath(`/revisions/${encodeURIComponent(revisionId)}`), {
+  const res = await fetchWithRenewal(withReadOwnerQuery(vtextPath(`/revisions/${encodeURIComponent(revisionId)}`)), {
     method: 'GET',
   });
 
@@ -204,7 +236,7 @@ export async function getRevision(revisionId) {
 }
 
 export async function getHistory(docId) {
-  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/history`), {
+  const res = await fetchWithRenewal(withReadOwnerQuery(vtextPath(`/documents/${encodeURIComponent(docId)}/history`)), {
     method: 'GET',
   });
 
@@ -236,7 +268,7 @@ export async function semanticCompareVText(docId, { sourceRevisionId, targetRevi
     source: sourceRevisionId || '',
     target: targetRevisionId || '',
   });
-  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/compare?${params.toString()}`), {
+  const res = await fetchWithRenewal(withReadOwnerQuery(vtextPath(`/documents/${encodeURIComponent(docId)}/compare?${params.toString()}`)), {
     method: 'GET',
   });
 
@@ -422,7 +454,7 @@ export async function cancelAgentRevision(docId) {
 }
 
 export function openDocumentStream(docId, { onEvent, onError } = {}) {
-  const source = new EventSource(withDesktopSelector(vtextPath(`/documents/${encodeURIComponent(docId)}/stream`)));
+  const source = new EventSource(withDesktopSelector(withReadOwnerQuery(vtextPath(`/documents/${encodeURIComponent(docId)}/stream`))));
 
   source.onmessage = (event) => {
     if (!onEvent) return;

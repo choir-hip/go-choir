@@ -201,6 +201,121 @@ func (h *Handler) HandleInternalProposalDeliveryState(w http.ResponseWriter, r *
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) HandleInternalSyncVTextDocument(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if r.Header.Get("X-Internal-Caller") != "true" {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	var req SyncVTextDocumentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	resp, err := h.service.SyncVTextDocument(r.Context(), req)
+	if err != nil {
+		log.Printf("platformd: sync vtext document: %v", err)
+		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HandleInternalGetVTextDocument(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if r.Header.Get("X-Internal-Caller") != "true" {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	docID := strings.TrimPrefix(r.URL.Path, "/internal/platform/vtext/documents/")
+	if docID == r.URL.Path {
+		docID = strings.TrimPrefix(r.URL.Path, "/internal/platform/vtext/documents")
+	}
+	docID = strings.TrimSuffix(docID, "/revisions")
+	docID = strings.Trim(docID, "/")
+	docID = strings.TrimSpace(docID)
+	if docID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	doc, err := h.service.GetPlatformVTextDocument(r.Context(), docID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		log.Printf("platformd: get vtext document %s: %v", docID, err)
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get vtext document"})
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
+}
+
+func (h *Handler) HandleInternalListVTextRevisions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if r.Header.Get("X-Internal-Caller") != "true" {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	if !strings.HasSuffix(r.URL.Path, "/revisions") {
+		h.HandleInternalGetVTextDocument(w, r)
+		return
+	}
+	path := strings.TrimPrefix(r.URL.Path, "/internal/platform/vtext/documents/")
+	docID := strings.TrimSuffix(path, "/revisions")
+	docID = strings.Trim(docID, "/")
+	docID = strings.TrimSpace(docID)
+	if docID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	revisions, err := h.service.ListPlatformVTextRevisions(r.Context(), docID)
+	if err != nil {
+		log.Printf("platformd: list vtext revisions %s: %v", docID, err)
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list vtext revisions"})
+		return
+	}
+	writeJSON(w, http.StatusOK, revisions)
+}
+
+func (h *Handler) HandleInternalGetVTextRevision(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if r.Header.Get("X-Internal-Caller") != "true" {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	revisionID := strings.TrimPrefix(r.URL.Path, "/internal/platform/vtext/revisions/")
+	revisionID = strings.Trim(revisionID, "/")
+	revisionID = strings.TrimSpace(revisionID)
+	if revisionID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	rev, err := h.service.GetPlatformVTextRevision(r.Context(), revisionID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		log.Printf("platformd: get vtext revision %s: %v", revisionID, err)
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get vtext revision"})
+		return
+	}
+	writeJSON(w, http.StatusOK, rev)
+}
+
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/internal/platform/publications/vtext", h.HandleInternalPublishVText)
@@ -209,6 +324,10 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)
 	s.HandleFunc("/internal/platform/proposal-deliveries/state", h.HandleInternalProposalDeliveryState)
 	s.HandleFunc("/internal/platform/publications/", h.HandleInternalPublicationProposal)
+	s.HandleFunc("/internal/platform/vtext/sync", h.HandleInternalSyncVTextDocument)
+	s.HandleFunc("/internal/platform/vtext/revisions/", h.HandleInternalGetVTextRevision)
+	s.HandleFunc("/internal/platform/vtext/documents/", h.HandleInternalListVTextRevisions)
+	s.HandleFunc("/internal/platform/vtext/documents", h.HandleInternalGetVTextDocument)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

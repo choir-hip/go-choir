@@ -139,5 +139,86 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		writeJSON(w, status, platformResp)
 		return
 	}
+
+	// Sync the full VText (all revisions) to platformd so published articles
+	// carry their complete revision history.
+	go h.syncVTextToPlatformd(r, sandboxURL, platformOwner, req.DocID, doc.Title)
+
 	writeJSON(w, status, platformResp)
+}
+
+// sandboxRevisionEntry matches the sandbox /api/vtext/revisions list item shape.
+type sandboxRevisionEntry struct {
+	RevisionID       string          `json:"revision_id"`
+	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
+	AuthorKind       string          `json:"author_kind,omitempty"`
+	AuthorLabel      string          `json:"author_label,omitempty"`
+	Content          string          `json:"content"`
+	Citations        json.RawMessage `json:"citations"`
+	Metadata         json.RawMessage `json:"metadata"`
+}
+
+// syncVTextToPlatformd fetches all revisions of a VText document from the
+// platform sandbox and syncs them to platformd's DoltDB. This runs
+// asynchronously after a successful publication so the publish response is
+// not delayed.
+func (h *Handler) syncVTextToPlatformd(r *http.Request, sandboxURL, ownerID, docID, title string) {
+	ctx := r.Context()
+
+	var revisions []sandboxRevisionEntry
+	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/vtext/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &revisions); err != nil {
+		log.Printf("proxy: sync vtext to platformd: fetch revisions for %s: %v", docID, err)
+		return
+	}
+	if len(revisions) == 0 {
+		log.Printf("proxy: sync vtext to platformd: no revisions for %s", docID)
+		return
+	}
+
+	syncReq := platform.SyncVTextDocumentRequest{
+		DocID:   docID,
+		OwnerID: ownerID,
+		Title:   title,
+	}
+	for _, rev := range revisions {
+		syncReq.Revisions = append(syncReq.Revisions, platform.SyncVTextRevision{
+			RevisionID:       rev.RevisionID,
+			ParentRevisionID: rev.ParentRevisionID,
+			AuthorKind:       rev.AuthorKind,
+			AuthorLabel:      rev.AuthorLabel,
+			Content:          rev.Content,
+			Citations:        rev.Citations,
+			Metadata:         rev.Metadata,
+		})
+	}
+
+	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/vtext/sync")
+	if err != nil {
+		log.Printf("proxy: sync vtext to platformd: build URL: %v", err)
+		return
+	}
+	data, err := json.Marshal(syncReq)
+	if err != nil {
+		log.Printf("proxy: sync vtext to platformd: marshal: %v", err)
+		return
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(string(data)))
+	if err != nil {
+		log.Printf("proxy: sync vtext to platformd: build request: %v", err)
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Internal-Caller", "true")
+
+	resp, err := h.platformd.Do(httpReq)
+	if err != nil {
+		log.Printf("proxy: sync vtext to platformd: call: %v", err)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Printf("proxy: sync vtext to platformd: status %d for doc %s", resp.StatusCode, docID)
+		return
+	}
+	log.Printf("proxy: synced %d revisions for doc %s to platformd", len(revisions), docID)
 }

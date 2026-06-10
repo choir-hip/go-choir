@@ -123,6 +123,7 @@
         sourcePath,
         relatedVTexts,
         appHint: 'universal-wire',
+        platformRead: true,
         allowMultiple: true,
       },
     });

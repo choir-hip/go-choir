@@ -2913,7 +2913,7 @@ func TestVMctlRouting_SameUserPinnedToSameVM(t *testing.T) {
 }
 
 func TestProtectedAPIResolveTarget_UniversalWireStoriesUsePlatformComputer(t *testing.T) {
-	ownerID, desktopID := protectedAPIResolveTarget("/api/universal-wire/stories", "user-alice", vmctl.PrimaryDesktopID)
+	ownerID, desktopID := protectedAPIResolveTarget(httptest.NewRequest(http.MethodGet, "/api/universal-wire/stories", nil), "user-alice", vmctl.PrimaryDesktopID)
 	if ownerID != vmctl.UniversalWirePlatformOwnerID {
 		t.Fatalf("ownerID = %q, want %q", ownerID, vmctl.UniversalWirePlatformOwnerID)
 	}
@@ -2921,7 +2921,7 @@ func TestProtectedAPIResolveTarget_UniversalWireStoriesUsePlatformComputer(t *te
 		t.Fatalf("desktopID = %q, want %q", desktopID, vmctl.UniversalWirePlatformDesktopID)
 	}
 
-	ownerID, desktopID = protectedAPIResolveTarget("/api/prompt-bar", "user-alice", vmctl.PrimaryDesktopID)
+	ownerID, desktopID = protectedAPIResolveTarget(httptest.NewRequest(http.MethodPost, "/api/prompt-bar", nil), "user-alice", vmctl.PrimaryDesktopID)
 	if ownerID != "user-alice" || desktopID != vmctl.PrimaryDesktopID {
 		t.Fatalf("prompt-bar resolve = (%q, %q), want caller desktop", ownerID, desktopID)
 	}
@@ -2929,6 +2929,54 @@ func TestProtectedAPIResolveTarget_UniversalWireStoriesUsePlatformComputer(t *te
 
 // TestVMctlRouting_ProtectedAPIThroughVM tests that runtime API routes also
 // resolve through vmctl ownership (VAL-VM-002).
+
+func TestProtectedAPIResolveTarget_VTextReadsNotRoutedThroughSandbox(t *testing.T) {
+	// VText reads with read_owner=universal-wire-platform are intercepted
+	// by isPlatformVTextReadRequest in HandleAPI and served from platformd.
+	// They should NOT route through protectedAPIResolveTarget to the sandbox.
+	req := httptest.NewRequest(http.MethodGet, "/api/vtext/documents/doc-wire-1?read_owner="+vmctl.UniversalWirePlatformOwnerID, nil)
+	ownerID, desktopID := protectedAPIResolveTarget(req, "user-alice", vmctl.PrimaryDesktopID)
+	if ownerID != "user-alice" {
+		t.Fatalf("ownerID = %q, want %q (platformd intercepts before this)", ownerID, "user-alice")
+	}
+	if desktopID != vmctl.PrimaryDesktopID {
+		t.Fatalf("desktopID = %q, want %q", desktopID, vmctl.PrimaryDesktopID)
+	}
+
+	// Plain VText reads without read_owner still go to caller sandbox.
+	req = httptest.NewRequest(http.MethodGet, "/api/vtext/documents/doc-wire-1", nil)
+	ownerID, desktopID = protectedAPIResolveTarget(req, "user-alice", vmctl.PrimaryDesktopID)
+	if ownerID != "user-alice" || desktopID != vmctl.PrimaryDesktopID {
+		t.Fatalf("plain vtext read resolve = (%q, %q), want caller desktop", ownerID, desktopID)
+	}
+}
+
+func TestIsPlatformVTextReadRequest(t *testing.T) {
+	// Positive cases — read-only VText reads with read_owner param.
+	cases := []struct{
+		method string
+		path   string
+		want   bool
+	}{
+		{http.MethodGet, "/api/vtext/documents/doc-1?read_owner=universal-wire-platform", true},
+		{http.MethodGet, "/api/vtext/documents/doc-1/revisions?read_owner=universal-wire-platform", true},
+		{http.MethodGet, "/api/vtext/revisions/rev-1?read_owner=universal-wire-platform", true},
+		{http.MethodHead, "/api/vtext/documents/doc-1?read_owner=universal-wire-platform", true},
+		// Negative cases.
+		{http.MethodGet, "/api/vtext/documents/doc-1", false},
+		{http.MethodGet, "/api/vtext/documents/doc-1?read_owner=other-user", false},
+		{http.MethodPost, "/api/vtext/documents/doc-1?read_owner=universal-wire-platform", false},
+		{http.MethodGet, "/api/universal-wire/stories?read_owner=universal-wire-platform", false},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		got := isPlatformVTextReadRequest(req)
+		if got != tc.want {
+			t.Errorf("isPlatformVTextReadRequest(%s %s) = %v, want %v", tc.method, tc.path, got, tc.want)
+		}
+	}
+}
+
 func TestVMctlRouting_ProtectedAPIThroughVM(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
 	_ = vmctlSrv

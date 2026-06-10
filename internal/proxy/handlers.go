@@ -364,7 +364,7 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 	// Resolve the sandbox URL for this user. Universal Wire stories read the
 	// platform computer's embedded store, not the caller's personal computer.
 	desktopID := requestDesktopID(r)
-	resolveOwnerID, resolveDesktopID := protectedAPIResolveTarget(r.URL.Path, authResult.UserID, desktopID)
+	resolveOwnerID, resolveDesktopID := protectedAPIResolveTarget(r, authResult.UserID, desktopID)
 	resolveStarted := time.Now()
 	sandboxURL, err := h.resolveSandboxURL(r.Context(), resolveOwnerID, resolveDesktopID)
 	if err != nil {
@@ -456,6 +456,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	case strings.HasPrefix(path, "/api/notifications/"):
 		h.HandleNotificationAPI(w, r)
+		return
+	case isPlatformVTextReadRequest(r):
+		h.HandlePlatformVTextRead(w, r)
 		return
 	case strings.HasPrefix(path, "/api/"):
 		// All HTTP /api/* routes are auth-gated at the proxy level and
@@ -685,12 +688,17 @@ func sandboxWSURLForBase(baseURL, rawQuery string) string {
 // protectedAPIResolveTarget chooses which computer sandbox should serve an
 // authenticated /api/* request. Universal Wire edition state lives on the
 // always-on platform computer.
-func protectedAPIResolveTarget(path, userID, desktopID string) (ownerID, resolvedDesktopID string) {
+func protectedAPIResolveTarget(r *http.Request, userID, desktopID string) (ownerID, resolvedDesktopID string) {
+	if r == nil || r.URL == nil {
+		return userID, desktopID
+	}
+	path := r.URL.Path
 	if path == "/api/universal-wire/stories" {
 		return vmctl.UniversalWirePlatformOwnerID, vmctl.UniversalWirePlatformDesktopID
 	}
 	return userID, desktopID
 }
+
 
 // resolveSandboxURL resolves the sandbox URL for an authenticated user.
 // When vmctl routing is enabled, it consults the vmctl ownership registry
@@ -945,6 +953,93 @@ func (h *Handler) HandleVMctlDeny(w http.ResponseWriter, r *http.Request) {
 // The proxy /health handler is registered via SetHealthHandler to
 // override the default server health handler with one that reports
 // upstream sandbox reachability.
+// HandlePlatformVTextRead serves published VText document and revision reads
+// from platformd's DoltDB for Universal Wire articles. Published articles
+// carry their full revision history in platformd, not the platform sandbox.
+func (h *Handler) HandlePlatformVTextRead(w http.ResponseWriter, r *http.Request) {
+	authResult, err := h.validateAccessJWT(r)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return
+	}
+	_ = authResult
+
+	path := r.URL.Path
+	var platformdPath string
+	switch {
+	case strings.HasPrefix(path, "/api/vtext/documents/") && strings.HasSuffix(path, "/revisions"):
+		docID := strings.TrimPrefix(path, "/api/vtext/documents/")
+		docID = strings.TrimSuffix(docID, "/revisions")
+		platformdPath = "/internal/platform/vtext/documents/" + url.PathEscape(docID) + "/revisions"
+	case strings.HasPrefix(path, "/api/vtext/documents/") && strings.HasSuffix(path, "/history"):
+		docID := strings.TrimPrefix(path, "/api/vtext/documents/")
+		docID = strings.TrimSuffix(docID, "/history")
+		platformdPath = "/internal/platform/vtext/documents/" + url.PathEscape(docID) + "/revisions"
+	case strings.HasPrefix(path, "/api/vtext/documents/") && strings.HasSuffix(path, "/stream"):
+		// Published articles don't need live SSE; return empty event stream
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.WriteHeader(http.StatusOK)
+		return
+	case strings.HasPrefix(path, "/api/vtext/documents/"):
+		docID := strings.TrimPrefix(path, "/api/vtext/documents/")
+		platformdPath = "/internal/platform/vtext/documents/" + url.PathEscape(docID)
+	case strings.HasPrefix(path, "/api/vtext/revisions/"):
+		revisionID := strings.TrimPrefix(path, "/api/vtext/revisions/")
+		platformdPath = "/internal/platform/vtext/revisions/" + url.PathEscape(revisionID)
+	default:
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+		return
+	}
+
+	target, err := joinBasePath(h.cfg.PlatformdURL, platformdPath)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platformd URL"})
+		return
+	}
+
+	httpReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platformd request"})
+		return
+	}
+	httpReq.Header.Set("X-Internal-Caller", "true")
+
+	resp, err := h.platformd.Do(httpReq)
+	if err != nil {
+		log.Printf("proxy: platformd vtext read: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read from platformd"})
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("proxy: platformd vtext read copy: %v", err)
+	}
+}
+
+// isPlatformVTextReadRequest returns true for read-only VText requests that
+// should be served from platformd's published store rather than the sandbox.
+func isPlatformVTextReadRequest(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	if strings.TrimSpace(r.URL.Query().Get("read_owner")) != vmctl.UniversalWirePlatformOwnerID {
+		return false
+	}
+	path := r.URL.Path
+	if strings.HasPrefix(path, "/api/vtext/documents/") {
+		return true
+	}
+	return strings.HasPrefix(path, "/api/vtext/revisions/")
+}
+
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/shell/bootstrap", h.HandleBootstrap)

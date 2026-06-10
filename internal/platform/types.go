@@ -246,3 +246,45 @@ type UpdateProposalDeliveryStateResponse struct {
 	DeliveryID    string `json:"delivery_id"`
 	DeliveryState string `json:"delivery_state"`
 }
+
+type SyncVTextDocumentRequest struct {
+	DocID     string              `json:"doc_id"`
+	OwnerID   string              `json:"owner_id"`
+	Title     string              `json:"title"`
+	Revisions []SyncVTextRevision `json:"revisions"`
+}
+
+type SyncVTextRevision struct {
+	RevisionID       string          `json:"revision_id"`
+	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
+	AuthorKind       string          `json:"author_kind,omitempty"`
+	AuthorLabel      string          `json:"author_label,omitempty"`
+	Content          string          `json:"content"`
+	Citations        json.RawMessage `json:"citations,omitempty"`
+	Metadata         json.RawMessage `json:"metadata,omitempty"`
+	CreatedAt        time.Time       `json:"created_at,omitempty"`
+}
+
+type SyncVTextDocumentResponse struct {
+	DocID         string `json:"doc_id"`
+	RevisionCount int    `json:"revision_count"`
+}
+
+type PlatformVTextDocument struct {
+	DocID   string `json:"doc_id"`
+	OwnerID string `json:"owner_id"`
+	Title   string `json:"title"`
+}
+
+type PlatformVTextRevision struct {
+	RevisionID       string          `json:"revision_id"`
+	DocID            string          `json:"doc_id"`
+	OwnerID          string          `json:"owner_id"`
+	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
+	AuthorKind       string          `json:"author_kind,omitempty"`
+	AuthorLabel      string          `json:"author_label,omitempty"`
+	Content          string          `json:"content"`
+	Citations        json.RawMessage `json:"citations"`
+	Metadata         json.RawMessage `json:"metadata"`
+	CreatedAt        time.Time       `json:"created_at"`
+}

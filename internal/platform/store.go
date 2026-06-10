@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -309,6 +310,30 @@ CREATE TABLE IF NOT EXISTS rollback_refs (
 	expires_at DATETIME,
 	created_at DATETIME NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS platform_vtext_documents (
+	doc_id VARCHAR(255) NOT NULL,
+	owner_id VARCHAR(255) NOT NULL,
+	title LONGTEXT NOT NULL,
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	PRIMARY KEY (doc_id)
+);
+
+CREATE TABLE IF NOT EXISTS platform_vtext_revisions (
+	revision_id VARCHAR(255) NOT NULL,
+	doc_id VARCHAR(255) NOT NULL,
+	owner_id VARCHAR(255) NOT NULL,
+	parent_revision_id VARCHAR(255) NOT NULL DEFAULT '',
+	author_kind VARCHAR(64) NOT NULL DEFAULT '',
+	author_label VARCHAR(255) NOT NULL DEFAULT '',
+	content LONGTEXT NOT NULL,
+	citations LONGTEXT NOT NULL DEFAULT '[]',
+	metadata LONGTEXT NOT NULL DEFAULT '{}',
+	created_at DATETIME NOT NULL,
+	PRIMARY KEY (revision_id),
+	INDEX idx_platform_vtext_revisions_doc (doc_id, created_at)
+);
 `
 
 func OpenStore(dsn string) (*Store, error) {
@@ -378,4 +403,73 @@ func (s *Store) commitDolt(ctx context.Context, message string) error {
 		return fmt.Errorf("platform store: dolt commit: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) UpsertVTextDocument(ctx context.Context, docID, ownerID, title string) error {
+	now := time.Now().UTC()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO platform_vtext_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE title=VALUES(title), updated_at=VALUES(updated_at)`,
+		docID, ownerID, title, now, now)
+	return err
+}
+
+func (s *Store) UpsertVTextRevision(ctx context.Context, rev PlatformVTextRevision) error {
+	now := time.Now().UTC()
+	if rev.CreatedAt.IsZero() {
+		rev.CreatedAt = now
+	}
+	if rev.Citations == nil {
+		rev.Citations = json.RawMessage("[]")
+	}
+	if rev.Metadata == nil {
+		rev.Metadata = json.RawMessage("{}")
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO platform_vtext_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE content=VALUES(content), citations=VALUES(citations), metadata=VALUES(metadata)`,
+		rev.RevisionID, rev.DocID, rev.OwnerID, rev.ParentRevisionID, rev.AuthorKind, rev.AuthorLabel, rev.Content, string(rev.Citations), string(rev.Metadata), rev.CreatedAt)
+	return err
+}
+
+func (s *Store) GetVTextDocument(ctx context.Context, docID string) (*PlatformVTextDocument, error) {
+	var doc PlatformVTextDocument
+	err := s.db.QueryRowContext(ctx,
+		`SELECT doc_id, owner_id, title FROM platform_vtext_documents WHERE doc_id = ?`, docID).Scan(&doc.DocID, &doc.OwnerID, &doc.Title)
+	if err != nil {
+		return nil, err
+	}
+	return &doc, nil
+}
+
+func (s *Store) ListVTextRevisions(ctx context.Context, docID string) ([]PlatformVTextRevision, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at FROM platform_vtext_revisions WHERE doc_id = ? ORDER BY created_at ASC`, docID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var revisions []PlatformVTextRevision
+	for rows.Next() {
+		var rev PlatformVTextRevision
+		var citationsStr, metadataStr string
+		if err := rows.Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.ParentRevisionID, &rev.AuthorKind, &rev.AuthorLabel, &rev.Content, &citationsStr, &metadataStr, &rev.CreatedAt); err != nil {
+			return nil, err
+		}
+		rev.Citations = json.RawMessage(citationsStr)
+		rev.Metadata = json.RawMessage(metadataStr)
+		revisions = append(revisions, rev)
+	}
+	return revisions, rows.Err()
+}
+
+func (s *Store) GetVTextRevision(ctx context.Context, revisionID string) (*PlatformVTextRevision, error) {
+	var rev PlatformVTextRevision
+	var citationsStr, metadataStr string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at FROM platform_vtext_revisions WHERE revision_id = ?`, revisionID).Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.ParentRevisionID, &rev.AuthorKind, &rev.AuthorLabel, &rev.Content, &citationsStr, &metadataStr, &rev.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	rev.Citations = json.RawMessage(citationsStr)
+	rev.Metadata = json.RawMessage(metadataStr)
+	return &rev, nil
 }

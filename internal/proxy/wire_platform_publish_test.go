@@ -44,31 +44,40 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 				Content:    "# Proxy story\n\nMADRID -- Officials confirmed the route change.",
 				Metadata:   meta,
 			})
+		case "/api/vtext/documents/doc-wire-proxy/revisions":
+			_ = json.NewEncoder(w).Encode([]sandboxVTextRevision{{RevisionID: "rev-wire-proxy", DocID: "doc-wire-proxy", OwnerID: platformOwner, Content: "# Proxy story", Metadata: meta}})
 		default:
-			t.Fatalf("unexpected sandbox path %s", r.URL.Path)
+			// Async sync goroutine may hit unexpected paths; log instead of fatal.
+			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	defer sandbox.Close()
 
 	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/internal/platform/publications/vtext" {
+		switch r.URL.Path {
+		case "/internal/platform/publications/vtext":
+			if r.Header.Get("X-Internal-Caller") != "true" {
+				t.Fatalf("platformd internal header missing")
+			}
+			var req platform.PublishVTextRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode platform request: %v", err)
+			}
+			if req.OwnerID != platformOwner || req.RequestedBy != wirepublish.RequestedByWirePolicy {
+				t.Fatalf("platform request = %+v", req)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
+				PublicationID: "pub-proxy",
+				RoutePath:     "wire/proxy-story",
+			})
+		case "/internal/platform/vtext/sync":
+			// Async sync of all revisions — just accept it.
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"doc_id": "test", "revision_count": 0})
+		default:
 			t.Fatalf("platformd path = %s", r.URL.Path)
 		}
-		if r.Header.Get("X-Internal-Caller") != "true" {
-			t.Fatalf("platformd internal header missing")
-		}
-		var req platform.PublishVTextRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode platform request: %v", err)
-		}
-		if req.OwnerID != platformOwner || req.RequestedBy != wirepublish.RequestedByWirePolicy {
-			t.Fatalf("platform request = %+v", req)
-		}
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
-			PublicationID: "pub-proxy",
-			RoutePath:     "wire/proxy-story",
-		})
 	}))
 	defer platformd.Close()
 

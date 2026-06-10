@@ -53,6 +53,79 @@ func (s *Service) Health(ctx context.Context) error {
 	return s.store.Ping(ctx)
 }
 
+func (s *Service) SyncVTextDocument(ctx context.Context, req SyncVTextDocumentRequest) (*SyncVTextDocumentResponse, error) {
+	if s == nil || s.store == nil {
+		return nil, fmt.Errorf("platform service unavailable")
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	req.DocID = strings.TrimSpace(req.DocID)
+	req.OwnerID = strings.TrimSpace(req.OwnerID)
+	req.Title = strings.TrimSpace(req.Title)
+	if req.DocID == "" {
+		return nil, fmt.Errorf("doc_id is required")
+	}
+	if req.OwnerID == "" {
+		return nil, fmt.Errorf("owner_id is required")
+	}
+
+	if err := s.store.UpsertVTextDocument(ctx, req.DocID, req.OwnerID, req.Title); err != nil {
+		return nil, fmt.Errorf("platform sync vtext: upsert document: %w", err)
+	}
+
+	for _, rev := range req.Revisions {
+		platformRev := PlatformVTextRevision{
+			RevisionID:       strings.TrimSpace(rev.RevisionID),
+			DocID:            req.DocID,
+			OwnerID:          req.OwnerID,
+			ParentRevisionID: strings.TrimSpace(rev.ParentRevisionID),
+			AuthorKind:       strings.TrimSpace(rev.AuthorKind),
+			AuthorLabel:      strings.TrimSpace(rev.AuthorLabel),
+			Content:          rev.Content,
+			Citations:        rev.Citations,
+			Metadata:         rev.Metadata,
+			CreatedAt:        rev.CreatedAt,
+		}
+		if platformRev.RevisionID == "" {
+			continue
+		}
+		if err := s.store.UpsertVTextRevision(ctx, platformRev); err != nil {
+			return nil, fmt.Errorf("platform sync vtext: upsert revision %s: %w", platformRev.RevisionID, err)
+		}
+	}
+
+	if err := s.store.commitDolt(ctx, "sync vtext document "+req.DocID+" with "+fmt.Sprintf("%d", len(req.Revisions))+" revisions"); err != nil {
+		return nil, err
+	}
+
+	return &SyncVTextDocumentResponse{
+		DocID:         req.DocID,
+		RevisionCount: len(req.Revisions),
+	}, nil
+}
+
+func (s *Service) GetPlatformVTextDocument(ctx context.Context, docID string) (*PlatformVTextDocument, error) {
+	if s == nil || s.store == nil {
+		return nil, fmt.Errorf("platform service unavailable")
+	}
+	return s.store.GetVTextDocument(ctx, docID)
+}
+
+func (s *Service) ListPlatformVTextRevisions(ctx context.Context, docID string) ([]PlatformVTextRevision, error) {
+	if s == nil || s.store == nil {
+		return nil, fmt.Errorf("platform service unavailable")
+	}
+	return s.store.ListVTextRevisions(ctx, docID)
+}
+
+func (s *Service) GetPlatformVTextRevision(ctx context.Context, revisionID string) (*PlatformVTextRevision, error) {
+	if s == nil || s.store == nil {
+		return nil, fmt.Errorf("platform service unavailable")
+	}
+	return s.store.GetVTextRevision(ctx, revisionID)
+}
+
 func (s *Service) PublishVText(ctx context.Context, req PublishVTextRequest) (*PublishVTextResponse, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")

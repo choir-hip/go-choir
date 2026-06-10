@@ -29,6 +29,9 @@
     semanticCompareVText,
     submitAgentRevision,
     submitPublicationProposal,
+    pushVTextReadOwner,
+    popVTextReadOwner,
+    WIRE_PLATFORM_READ_OWNER,
   } from './vtext.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
   import { previewVTextDocument } from './public-preview-data';
@@ -165,6 +168,7 @@
   let relatedOpenPointerHandledAt = 0;
   let relatedOpenPointerHandledDocID = '';
   let removeLiveListener = () => {};
+  let platformReadScoped = false;
 
   const AUTOSAVE_DELAY_MS = 900;
   const TOOLBAR_HIDE_SCROLL_DELTA = 8;
@@ -811,6 +815,27 @@
     }
   }
 
+
+  function wantsPlatformReadScope(ctx = appContext) {
+    return !!(ctx?.platformRead || ctx?.createdFrom === 'universal_wire_article');
+  }
+
+  function applyPlatformReadScope(ctx = appContext) {
+    const wants = wantsPlatformReadScope(ctx);
+    if (wants && !platformReadScoped) {
+      pushVTextReadOwner(WIRE_PLATFORM_READ_OWNER);
+      platformReadScoped = true;
+    } else if (!wants && platformReadScoped) {
+      popVTextReadOwner();
+      platformReadScoped = false;
+    }
+  }
+
+  function clearPlatformReadScope() {
+    if (!platformReadScoped) return;
+    popVTextReadOwner();
+    platformReadScoped = false;
+  }
   async function loadContext() {
     loading = true;
     submitting = false;
@@ -854,6 +879,7 @@
     clearAutosaveTimer();
     clearNewVersionIndicator();
     closeDocumentStream();
+    applyPlatformReadScope();
 
     try {
       publishedBundle = null;
@@ -1984,6 +2010,7 @@
   });
 
   onDestroy(() => {
+    clearPlatformReadScope();
     clearAutosaveTimer();
     cancelSourceDiagnosis();
     closeDocumentStream();

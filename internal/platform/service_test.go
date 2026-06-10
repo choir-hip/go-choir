@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	embedded "github.com/dolthub/driver"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
@@ -195,6 +196,82 @@ type publicationSourceContractCase struct {
 	wantEvidenceState string
 	quote             string
 	contentHash       string
+}
+
+func TestSyncVTextDocumentPersistsDocumentAndRevisions(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	svc := NewService(store, filepath.Join(root, "artifacts"))
+
+	createdAt := time.Date(2026, time.June, 10, 11, 0, 0, 0, time.UTC)
+	req := SyncVTextDocumentRequest{
+		DocID:   "doc-123",
+		OwnerID: "user-1",
+		Title:   "Platform Draft",
+		Revisions: []SyncVTextRevision{
+			{
+				RevisionID: "rev-1",
+				Content:    "first revision",
+				CreatedAt:  createdAt,
+			},
+			{
+				RevisionID:       "rev-2",
+				ParentRevisionID: "rev-1",
+				AuthorKind:       "human",
+				AuthorLabel:      "Wiz",
+				Content:          "second revision",
+				Citations:        json.RawMessage(`[{"kind":"url","value":"https://example.com"}]`),
+				Metadata:         json.RawMessage(`{"source":"test"}`),
+				CreatedAt:        createdAt.Add(time.Minute),
+			},
+		},
+	}
+
+	resp, err := svc.SyncVTextDocument(context.Background(), req)
+	if err != nil {
+		t.Fatalf("SyncVTextDocument: %v", err)
+	}
+	if resp.DocID != req.DocID {
+		t.Fatalf("doc id: got %q want %q", resp.DocID, req.DocID)
+	}
+	if resp.RevisionCount != len(req.Revisions) {
+		t.Fatalf("revision count: got %d want %d", resp.RevisionCount, len(req.Revisions))
+	}
+
+	doc, err := svc.GetPlatformVTextDocument(context.Background(), req.DocID)
+	if err != nil {
+		t.Fatalf("GetPlatformVTextDocument: %v", err)
+	}
+	if doc.OwnerID != req.OwnerID || doc.Title != req.Title {
+		t.Fatalf("document mismatch: %#v", doc)
+	}
+
+	revisions, err := svc.ListPlatformVTextRevisions(context.Background(), req.DocID)
+	if err != nil {
+		t.Fatalf("ListPlatformVTextRevisions: %v", err)
+	}
+	if len(revisions) != 2 {
+		t.Fatalf("revision len: got %d want 2", len(revisions))
+	}
+	if revisions[0].RevisionID != "rev-1" || revisions[1].RevisionID != "rev-2" {
+		t.Fatalf("revision order mismatch: %#v", revisions)
+	}
+	if string(revisions[0].Citations) != "[]" || string(revisions[0].Metadata) != "{}" {
+		t.Fatalf("revision defaults mismatch: citations=%s metadata=%s", revisions[0].Citations, revisions[0].Metadata)
+	}
+
+	rev, err := svc.GetPlatformVTextRevision(context.Background(), "rev-2")
+	if err != nil {
+		t.Fatalf("GetPlatformVTextRevision: %v", err)
+	}
+	if rev.ParentRevisionID != "rev-1" || rev.AuthorKind != "human" || rev.AuthorLabel != "Wiz" {
+		t.Fatalf("revision metadata mismatch: %#v", rev)
+	}
+	if string(rev.Citations) != `[{"kind":"url","value":"https://example.com"}]` {
+		t.Fatalf("revision citations mismatch: %s", rev.Citations)
+	}
+	if string(rev.Metadata) != `{"source":"test"}` {
+		t.Fatalf("revision metadata mismatch: %s", rev.Metadata)
+	}
 }
 
 func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
