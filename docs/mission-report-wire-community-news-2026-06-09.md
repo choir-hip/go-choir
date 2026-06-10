@@ -869,13 +869,24 @@ only GKG zips.
 - `rss:hn_best` `last_modified` cursor persisted (`Tue, 09 Jun 2026 21:19:11 GMT`).
 - Local curriculum test: RSS+GDELT items → ingestion events → processor handoff.
 
-**Residual (Slice 2+):** adapter-level readability import (`store_body_policy`);
-GDELT export stream; full Phase A evidence matrix row (processor → VText →
-platformd).
+**Slice 2 completion checkpoint (2026-06-10):**
+
+**Problem:** Slice 2 landed conditional GET and GDELT GKG+mentions but not the
+full curriculum bar: RSS items still stop at feed summaries when
+`store_body_policy` allows article import, and GDELT still skips
+`export.CSV.zip`.
+
+**Fix intent:**
+
+1. Adapter-level reader import for RSS when policy is `bounded_text`,
+   `bounded_release_text`, or `bounded_abstract`.
+2. Ingest GDELT export events; persist export zip URL cursor alongside GKG and
+   mentions.
+3. Tests for reader snapshot classification and export parse.
 
 next step:
 
-- Slice 3 dispatch chain (ingestion → processor → researcher/VText → Wire.vtext).
+- Land Slice 2 completion; then Slice 3 dispatch chain.
 
 
 ## v1 mission handoff (2026-06-09)
