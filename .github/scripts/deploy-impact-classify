@@ -173,6 +173,12 @@ for path in "${changed[@]}"; do
       add_host_service "proxy"
       add_explanation "$path -> platform/proxy shared dependency"
       ;;
+    internal/wirepublish/*)
+      add_host_service "platformd"
+      add_host_service "proxy"
+      add_host_service "sandbox"
+      add_explanation "$path -> wire autonomous publish: platformd/proxy choke point + sandbox runtime"
+      ;;
     internal/sourcecontract/*)
       add_host_service "gateway"
       add_host_service "platformd"

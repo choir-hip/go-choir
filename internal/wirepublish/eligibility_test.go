@@ -77,6 +77,34 @@ func TestEligibleForAutonomousPublishAcceptsWorkerIntegrationArticleEdit(t *test
 	}
 }
 
+func TestEligibleForAutonomousPublishStagingRevisionFixture(t *testing.T) {
+	owner := PlatformOwnerID()
+	meta, _ := json.Marshal(map[string]any{
+		"source":                     "edit_vtext",
+		"revision_role":              RevisionRoleInput,
+		"artifact_kind":              "source_brief",
+		"vtext_edit_kind":            "vtext_edit",
+		"ingestion_handoff_cycle_id": "cycle_b692f2803101f30af0a1bcbb",
+	})
+	rev := types.Revision{
+		RevisionID: "7cdd5c3e-43e4-4ed7-bff7-e32b80188349",
+		DocID:      "15f7405a-108b-4b44-acc5-3f3be11ff4e6",
+		OwnerID:    owner,
+		Content:    "# Nuclear and Natural Gas Are Teaming Up to Power the AI Data Center Boom\n\nThe electricity demands",
+		Metadata:   meta,
+	}
+	doc := types.Document{DocID: rev.DocID, OwnerID: owner, Title: "Nuclear.vtext"}
+	rec := &types.RunRecord{
+		OwnerID: owner,
+		Metadata: map[string]any{
+			"request_intent": "universal_wire_processor_article_revision",
+		},
+	}
+	if !EligibleForAutonomousPublish(doc, rev, rec, owner) {
+		t.Fatal("staging fixture revision should be eligible after worker-integration fix")
+	}
+}
+
 func TestEligibleForAutonomousPublishRejectsSeedBrief(t *testing.T) {
 	owner := PlatformOwnerID()
 	meta, _ := json.Marshal(map[string]any{
