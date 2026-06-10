@@ -14,10 +14,14 @@ import (
 )
 
 type wirePlatformPublishRequest struct {
-	DocID         string `json:"doc_id"`
-	RevisionID    string `json:"revision_id"`
-	RunID         string `json:"run_id,omitempty"`
-	RequestIntent string `json:"request_intent,omitempty"`
+	DocID         string          `json:"doc_id"`
+	RevisionID    string          `json:"revision_id"`
+	Title         string          `json:"title,omitempty"`
+	Content       string          `json:"content,omitempty"`
+	Citations     json.RawMessage `json:"citations,omitempty"`
+	Metadata      json.RawMessage `json:"metadata,omitempty"`
+	RunID         string          `json:"run_id,omitempty"`
+	RequestIntent string          `json:"request_intent,omitempty"`
 }
 
 // HandleInternalWirePlatformPublish is the host-mediated choke point for autonomous
@@ -62,25 +66,29 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 	}
 
 	var doc sandboxVTextDocument
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/vtext/documents/"+url.PathEscape(req.DocID), platformOwner, &doc); err != nil {
-		log.Printf("proxy: wire publish fetch document: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load wire document"})
-		return
-	}
-	if doc.OwnerID != platformOwner || doc.DocID != req.DocID {
-		writeJSON(w, http.StatusForbidden, errorResponse{Error: "document does not belong to platform owner"})
-		return
-	}
-
 	var rev sandboxVTextRevision
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/vtext/revisions/"+url.PathEscape(req.RevisionID), platformOwner, &rev); err != nil {
-		log.Printf("proxy: wire publish fetch revision: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load wire revision"})
-		return
-	}
-	if rev.OwnerID != platformOwner || rev.DocID != req.DocID || rev.RevisionID != req.RevisionID {
-		writeJSON(w, http.StatusForbidden, errorResponse{Error: "revision does not belong to wire document"})
-		return
+	if strings.TrimSpace(req.Title) != "" || strings.TrimSpace(req.Content) != "" || len(req.Metadata) > 0 || len(req.Citations) > 0 {
+		doc = sandboxVTextDocument{DocID: req.DocID, OwnerID: platformOwner, Title: strings.TrimSpace(req.Title)}
+		rev = sandboxVTextRevision{RevisionID: req.RevisionID, DocID: req.DocID, OwnerID: platformOwner, Content: req.Content, Citations: req.Citations, Metadata: req.Metadata}
+	} else {
+		if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/vtext/documents/"+url.PathEscape(req.DocID), platformOwner, &doc); err != nil {
+			log.Printf("proxy: wire publish fetch document: %v", err)
+			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load wire document"})
+			return
+		}
+		if doc.OwnerID != platformOwner || doc.DocID != req.DocID {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: "document does not belong to platform owner"})
+			return
+		}
+		if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/vtext/revisions/"+url.PathEscape(req.RevisionID), platformOwner, &rev); err != nil {
+			log.Printf("proxy: wire publish fetch revision: %v", err)
+			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load wire revision"})
+			return
+		}
+		if rev.OwnerID != platformOwner || rev.DocID != req.DocID || rev.RevisionID != req.RevisionID {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: "revision does not belong to wire document"})
+			return
+		}
 	}
 
 	rec := &types.RunRecord{

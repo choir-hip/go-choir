@@ -16,10 +16,14 @@ import (
 )
 
 type wirePlatformPublishRequest struct {
-	DocID         string `json:"doc_id"`
-	RevisionID    string `json:"revision_id"`
-	RunID         string `json:"run_id,omitempty"`
-	RequestIntent string `json:"request_intent,omitempty"`
+	DocID         string          `json:"doc_id"`
+	RevisionID    string          `json:"revision_id"`
+	Title         string          `json:"title,omitempty"`
+	Content       string          `json:"content,omitempty"`
+	Citations     json.RawMessage `json:"citations,omitempty"`
+	Metadata      json.RawMessage `json:"metadata,omitempty"`
+	RunID         string          `json:"run_id,omitempty"`
+	RequestIntent string          `json:"request_intent,omitempty"`
 }
 
 func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
@@ -93,6 +97,10 @@ func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc
 	payload := wirePlatformPublishRequest{
 		DocID:      doc.DocID,
 		RevisionID: rev.RevisionID,
+		Title:      doc.Title,
+		Content:    rev.Content,
+		Citations:  rev.Citations,
+		Metadata:   rev.Metadata,
 	}
 	if rec != nil {
 		payload.RunID = strings.TrimSpace(rec.RunID)
