@@ -857,6 +857,105 @@ func (h *APIHandler) HandleVTextListDocuments(w http.ResponseWriter, r *http.Req
 }
 
 // HandleVTextDocument handles GET/PUT/DELETE /api/vtext/documents/{id}.
+
+func internalVTextDocumentIDFromPath(path string) string {
+	const prefix = "/internal/vtext/documents/"
+	if !strings.HasPrefix(path, prefix) {
+		return ""
+	}
+	id := strings.TrimSpace(strings.TrimPrefix(path, prefix))
+	if id == "" || strings.Contains(id, "/") {
+		return ""
+	}
+	return id
+}
+
+func internalVTextRevisionIDFromPath(path string) string {
+	const prefix = "/internal/vtext/revisions/"
+	if !strings.HasPrefix(path, prefix) {
+		return ""
+	}
+	id := strings.TrimSpace(strings.TrimPrefix(path, prefix))
+	if id == "" || strings.Contains(id, "/") {
+		return ""
+	}
+	return id
+}
+
+func (h *APIHandler) HandleInternalVTextDocument(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
+		return
+	}
+	ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
+	if ownerID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "authenticated user is required"})
+		return
+	}
+	docID := internalVTextDocumentIDFromPath(r.URL.Path)
+	if docID == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
+	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, sandboxVTextDocumentResponseFromRecord(doc))
+}
+
+func (h *APIHandler) HandleInternalVTextRevision(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
+		return
+	}
+	ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
+	if ownerID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "authenticated user is required"})
+		return
+	}
+	revisionID := internalVTextRevisionIDFromPath(r.URL.Path)
+	if revisionID == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
+		return
+	}
+	rev, err := h.rt.Store().GetRevision(r.Context(), revisionID, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, sandboxVTextRevisionResponseFromRecord(rev))
+}
+
+func sandboxVTextDocumentResponseFromRecord(doc types.Document) map[string]any {
+	return map[string]any{
+		"doc_id":              doc.DocID,
+		"owner_id":            doc.OwnerID,
+		"title":               doc.Title,
+		"current_revision_id": doc.CurrentRevisionID,
+	}
+}
+
+func sandboxVTextRevisionResponseFromRecord(rev types.Revision) map[string]any {
+	return map[string]any{
+		"revision_id": rev.RevisionID,
+		"doc_id":      rev.DocID,
+		"owner_id":    rev.OwnerID,
+		"content":     rev.Content,
+		"citations":   rev.Citations,
+		"metadata":    rev.Metadata,
+	}
+}
+
 func (h *APIHandler) HandleVTextDocument(w http.ResponseWriter, r *http.Request) {
 	docID := extractDocID(r.URL.Path)
 	if docID == "" {

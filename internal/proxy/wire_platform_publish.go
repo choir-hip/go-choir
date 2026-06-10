@@ -62,7 +62,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 	}
 
 	var doc sandboxVTextDocument
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/vtext/documents/"+url.PathEscape(req.DocID), platformOwner, &doc); err != nil {
+	if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/vtext/documents/"+url.PathEscape(req.DocID), platformOwner, &doc); err != nil {
 		log.Printf("proxy: wire publish fetch document: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load wire document"})
 		return
@@ -73,7 +73,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 	}
 
 	var rev sandboxVTextRevision
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/vtext/revisions/"+url.PathEscape(req.RevisionID), platformOwner, &rev); err != nil {
+	if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/vtext/revisions/"+url.PathEscape(req.RevisionID), platformOwner, &rev); err != nil {
 		log.Printf("proxy: wire publish fetch revision: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load wire revision"})
 		return
