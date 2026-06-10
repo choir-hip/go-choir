@@ -842,7 +842,7 @@ func (s *Storage) ListQueuedProcessorRequests(ctx context.Context, limit int) ([
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids,
 		ingestion_event_ids_json, source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
-		FROM processor_requests WHERE status = 'queued' ORDER BY created_at ASC, request_id ASC LIMIT ?`, limit)
+		FROM processor_requests WHERE status = 'queued' AND ingestion_event_ids_json != '[]' ORDER BY created_at ASC, request_id ASC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -860,7 +860,7 @@ func (s *Storage) ListQueuedProcessorRequests(ctx context.Context, limit int) ([
 
 func (s *Storage) CountQueuedProcessorRequests(ctx context.Context) (int, error) {
 	var count int
-	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM processor_requests WHERE status = 'queued'`).Scan(&count)
+	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM processor_requests WHERE status = 'queued' AND ingestion_event_ids_json != '[]'`).Scan(&count)
 	return count, err
 }
 
