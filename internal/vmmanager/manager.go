@@ -2099,6 +2099,7 @@ func tapHostServiceInputRuleSpec(tapName, port, comment string) []string {
 
 func tapReachableHostServicePorts() []string {
 	return []string{
+		"8082", // proxy / platform publish path
 		"8083", // vmctl
 		"8084", // gateway
 		"8085", // host sandbox runtime lifecycle evidence
