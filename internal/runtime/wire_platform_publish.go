@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -29,6 +30,9 @@ func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.D
 		return rt.wirePlatformPublisher(ctx, doc, rev, rec)
 	}
 	wireURL := strings.TrimRight(strings.TrimSpace(rt.cfg.WirePublishURL), "/")
+	if wireURL == "" {
+		wireURL = fallbackWirePublishURLFromEnv()
+	}
 	if wireURL != "" {
 		return rt.postWirePublishProxy(ctx, wireURL, doc, rev, rec)
 	}
@@ -38,6 +42,22 @@ func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.D
 		return wirepublish.PostPlatformPublication(ctx, nil, platformdURL, req)
 	}
 	return nil, fmt.Errorf("wire publish is not configured")
+}
+
+
+func fallbackWirePublishURLFromEnv() string {
+	for _, key := range []string{"RUNTIME_VMCTL_URL", "PROXY_VMCTL_URL", "RUNTIME_GATEWAY_URL", "RUNTIME_MAILD_URL"} {
+		base := strings.TrimRight(strings.TrimSpace(os.Getenv(key)), "/")
+		if base == "" {
+			continue
+		}
+		for _, suffix := range []string{":8083", ":8084", ":8087"} {
+			if strings.HasSuffix(base, suffix) {
+				return strings.TrimSuffix(base, suffix) + ":8082"
+			}
+		}
+	}
+	return ""
 }
 
 func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
