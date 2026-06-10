@@ -119,17 +119,17 @@ model = "mimo-v2.5"
 reasoning = "medium"
 
 [roles.super]
-provider = "xiaomi"
-model = "mimo-v2.5"
+provider = "deepseek"
+model = "deepseek-v4-flash"
 reasoning = "medium"
 
 [roles.vsuper]
-provider = "xiaomi"
-model = "mimo-v2.5-pro"
+provider = "deepseek"
+model = "deepseek-v4-flash"
 
 [roles.co-super]
-provider = "xiaomi"
-model = "mimo-v2.5-pro"
+provider = "deepseek"
+model = "deepseek-v4-flash"
 
 [roles.researcher]
 provider = "xiaomi"
@@ -147,20 +147,20 @@ model = "mimo-v2.5"
 reasoning = "medium"
 
 [roles.reconciler]
-provider = "xiaomi"
-model = "mimo-v2.5"
+provider = "deepseek"
+model = "deepseek-v4-flash"
 reasoning = "medium"
 
 [roles.verifier]
-provider = "xiaomi"
-model = "mimo-v2.5"
+provider = "deepseek"
+model = "deepseek-v4-flash"
 requires = ["text", "tool_use"]
 
 [roles.verifier_multimodal]
 provider = "xiaomi"
 model = "mimo-v2.5"
 requires = ["image", "tool_use"]
-`, defaultXiaomiProvider, defaultMimoTextModel)
+`, defaultDeepSeekProvider, defaultConductorModel)
 }
 
 func legacyGeneratedModelPolicyText(cfg Config) string {
@@ -221,6 +221,18 @@ requires = ["image", "tool_use"]
 
 func fallbackModelPolicy(_ Config) ModelPolicy {
 	defaults := LLMSelection{
+		Provider:        defaultDeepSeekProvider,
+		Model:           defaultConductorModel,
+		ReasoningEffort: defaultFlashForegroundReasoning,
+		Source:          "platform_fallback",
+	}
+	flashDeepSeek := LLMSelection{
+		Provider:        defaultDeepSeekProvider,
+		Model:           defaultConductorModel,
+		ReasoningEffort: defaultFlashForegroundReasoning,
+		Source:          "platform_fallback",
+	}
+	flashXiaomi := LLMSelection{
 		Provider:        defaultXiaomiProvider,
 		Model:           defaultMimoTextModel,
 		ReasoningEffort: defaultFlashForegroundReasoning,
@@ -229,15 +241,15 @@ func fallbackModelPolicy(_ Config) ModelPolicy {
 	return ModelPolicy{
 		Defaults: defaults,
 		Roles: map[string]LLMSelection{
-			AgentProfileConductor:        {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			AgentProfileSuper:            {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: "medium", Source: "platform_fallback"},
-			AgentProfileVSuper:           {Provider: defaultXiaomiProvider, Model: defaultMimoProModel, Source: "platform_fallback"},
-			AgentProfileCoSuper:          {Provider: defaultXiaomiProvider, Model: defaultMimoProModel, Source: "platform_fallback"},
-			AgentProfileResearcher:       {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			AgentProfileVText:            {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			AgentProfileProcessor:        {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			AgentProfileReconciler:       {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
-			modelPolicyRoleVerifier:      {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, Source: "platform_fallback"},
+			AgentProfileConductor:        flashXiaomi,
+			AgentProfileSuper:            flashDeepSeek,
+			AgentProfileVSuper:           {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
+			AgentProfileCoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
+			AgentProfileResearcher:       flashXiaomi,
+			AgentProfileVText:            flashXiaomi,
+			AgentProfileProcessor:        flashXiaomi,
+			AgentProfileReconciler:       flashDeepSeek,
+			modelPolicyRoleVerifier:      {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			modelPolicyRoleVerifierMulti: {Provider: defaultXiaomiProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
 		},
 		Source: "platform_fallback",
@@ -559,6 +571,9 @@ func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
 	if hasGeneratedDeepSeekPolicy(policy) {
 		return true
 	}
+	if policyNeedsFlashDualProviderUpgrade(policy) {
+		return true
+	}
 	conductor, ok := policy.Roles[AgentProfileConductor]
 	if !ok || !isModelPolicySelection(conductor, "chatgpt", "gpt-5.5", "low") {
 		return hasLegacyChatGPTForegroundPin(policy)
@@ -652,6 +667,49 @@ func hasLegacyChatGPTForegroundPin(policy ModelPolicy) bool {
 
 func hasLegacyChatGPTFallback(policy ModelPolicy) bool {
 	return isModelPolicySelection(policy.Defaults, "chatgpt", "gpt-5.5", "")
+}
+
+func policyNeedsFlashDualProviderUpgrade(policy ModelPolicy) bool {
+	if selectionUsesFireworksRouting(policy.Defaults) || selectionUsesProTierModel(policy.Defaults) {
+		return true
+	}
+	for _, sel := range policy.Roles {
+		if selectionUsesFireworksRouting(sel) || selectionUsesProTierModel(sel) {
+			return true
+		}
+	}
+	return policyUsesSingleFlashProvider(policy)
+}
+
+func policyUsesSingleFlashProvider(policy ModelPolicy) bool {
+	providers := map[string]struct{}{}
+	for _, sel := range policy.Roles {
+		provider := strings.TrimSpace(sel.Provider)
+		if provider == "" {
+			continue
+		}
+		if provider != defaultXiaomiProvider && provider != defaultDeepSeekProvider {
+			return false
+		}
+		providers[provider] = struct{}{}
+	}
+	return len(providers) == 1
+}
+
+func selectionUsesFireworksRouting(sel LLMSelection) bool {
+	provider := strings.ToLower(strings.TrimSpace(sel.Provider))
+	model := strings.ToLower(strings.TrimSpace(sel.Model))
+	return provider == defaultFireworksProvider || strings.Contains(model, "accounts/fireworks/")
+}
+
+func selectionUsesProTierModel(sel LLMSelection) bool {
+	model := strings.ToLower(strings.TrimSpace(sel.Model))
+	switch model {
+	case defaultMimoProModel, defaultSuperModel, legacyFireworksProModel:
+		return true
+	default:
+		return strings.Contains(model, "deepseek-v4-pro")
+	}
 }
 
 func isModelPolicySelection(sel LLMSelection, provider, model, reasoning string) bool {
@@ -790,50 +848,53 @@ func runtimeConfigFallbackSelection(cfg Config) LLMSelection {
 }
 
 func providerPreconditionFallbackSelections(sel, platformFallback LLMSelection) []LLMSelection {
-	provider := strings.ToLower(strings.TrimSpace(sel.Provider))
-	model := strings.TrimSpace(sel.Model)
-	if model == "" {
+	if strings.TrimSpace(sel.Model) == "" {
 		return nil
 	}
-	fallbacks := make([]LLMSelection, 0, 2)
+	fallbacks := make([]LLMSelection, 0, 3)
+	for _, candidate := range flashPreconditionFallbackSelections(sel) {
+		fallbacks = appendUniqueProviderModelFallback(fallbacks, candidate)
+	}
+	return appendProviderPreconditionPlatformFallback(fallbacks, sel, platformFallback)
+}
+
+func flashPreconditionFallbackSelections(sel LLMSelection) []LLMSelection {
+	provider := strings.ToLower(strings.TrimSpace(sel.Provider))
+	model := strings.TrimSpace(sel.Model)
+	reasoning := firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), defaultFlashForegroundReasoning)
+	flashXiaomi := LLMSelection{
+		Provider:        defaultXiaomiProvider,
+		Model:           defaultMimoTextModel,
+		ReasoningEffort: reasoning,
+		Source:          "provider_precondition_fallback",
+	}
+	flashDeepSeek := LLMSelection{
+		Provider:        defaultDeepSeekProvider,
+		Model:           defaultConductorModel,
+		ReasoningEffort: reasoning,
+		Source:          "provider_precondition_fallback",
+	}
 	switch {
-	case provider == defaultDeepSeekProvider && model == defaultSuperModel:
-		fallbacks = appendProviderPreconditionPlatformFallback(fallbacks, sel, platformFallback)
-		return fallbacks
-	case provider == defaultDeepSeekProvider && model == defaultConductorModel:
-		fallbacks = append(fallbacks, LLMSelection{
-			Provider:        defaultDeepSeekProvider,
-			Model:           defaultSuperModel,
-			ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
-			Source:          "provider_precondition_fallback",
-		})
-	case provider == defaultFireworksProvider && model == "accounts/fireworks/models/deepseek-v4-flash":
-		fallbacks = append(fallbacks, LLMSelection{
-			Provider:        defaultFireworksProvider,
-			Model:           "accounts/fireworks/models/deepseek-v4-pro",
-			ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
-			Source:          "provider_precondition_fallback",
-		})
-		fallbacks = append(fallbacks, LLMSelection{
-			Provider:        defaultDeepSeekProvider,
-			Model:           defaultSuperModel,
-			ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
-			Source:          "provider_precondition_fallback",
-		})
-	case provider == defaultFireworksProvider && model == "accounts/fireworks/models/deepseek-v4-pro":
-		fallbacks = append(fallbacks, LLMSelection{
-			Provider:        defaultDeepSeekProvider,
-			Model:           defaultSuperModel,
-			ReasoningEffort: firstNonEmpty(strings.TrimSpace(sel.ReasoningEffort), "medium"),
-			Source:          "provider_precondition_fallback",
-		})
-		fallbacks = appendProviderPreconditionPlatformFallback(fallbacks, sel, platformFallback)
-		return fallbacks
+	case provider == defaultFireworksProvider && model == legacyFireworksFlashModel:
+		return []LLMSelection{flashXiaomi, flashDeepSeek}
+	case provider == defaultFireworksProvider && model == legacyFireworksProModel:
+		return []LLMSelection{flashDeepSeek, flashXiaomi}
+	case provider == defaultDeepSeekProvider && (model == defaultConductorModel || model == defaultSuperModel):
+		return []LLMSelection{flashXiaomi}
+	case provider == defaultXiaomiProvider && (model == defaultMimoTextModel || model == defaultMimoProModel):
+		return []LLMSelection{flashDeepSeek}
 	default:
 		return nil
 	}
-	fallbacks = appendProviderPreconditionPlatformFallback(fallbacks, sel, platformFallback)
-	return fallbacks
+}
+
+func appendUniqueProviderModelFallback(fallbacks []LLMSelection, candidate LLMSelection) []LLMSelection {
+	for _, fallback := range fallbacks {
+		if sameProviderModelSelection(fallback, candidate) {
+			return fallbacks
+		}
+	}
+	return append(fallbacks, candidate)
 }
 
 func appendProviderPreconditionPlatformFallback(fallbacks []LLMSelection, active, platformFallback LLMSelection) []LLMSelection {

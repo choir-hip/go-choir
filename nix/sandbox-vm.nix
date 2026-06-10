@@ -422,9 +422,9 @@ EOF
       CHOIR_ZOT_PATH = "${goChoirPackages.zot}/bin/zot";
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
-      RUNTIME_LLM_PROVIDER = "fireworks";
-      RUNTIME_LLM_MODEL = "accounts/fireworks/models/deepseek-v4-flash";
-      RUNTIME_LLM_REASONING_EFFORT = "low";
+      RUNTIME_LLM_PROVIDER = "deepseek";
+      RUNTIME_LLM_MODEL = "deepseek-v4-flash";
+      RUNTIME_LLM_REASONING_EFFORT = "medium";
     } // lib.optionalAttrs includePlaywright {
       CHOIR_WORKER_BROWSER_CLASS = "playwright";
       CHOIR_PLAYWRIGHT_BIN = "${playwrightTools}/bin/playwright";
