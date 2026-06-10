@@ -36,7 +36,7 @@ func TestHandleUniversalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	}
 }
 
-func seedPlatformSourceNetworkVTextFixture(t *testing.T, handler *APIHandler, docID string) types.Document {
+func seedPlatformSourceNetworkVTextFixtureWithPublishState(t *testing.T, handler *APIHandler, docID string, published bool) types.Document {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -50,16 +50,20 @@ func seedPlatformSourceNetworkVTextFixture(t *testing.T, handler *APIHandler, do
 	if err := handler.rt.Store().CreateDocument(ctx, doc); err != nil {
 		t.Fatalf("create platform source maxx doc: %v", err)
 	}
-	meta, _ := json.Marshal(map[string]any{
-		"source":                   "edit_vtext",
-		"revision_role":            vtextRevisionRoleCanonical,
-		"ingestion_handoff_cycle_id":     "cycle-live",
-		"ingestion_handoff_request_id":   "reconciler-live",
+	metaMap := map[string]any{
+		"source":                        "edit_vtext",
+		"revision_role":                 vtextRevisionRoleCanonical,
+		"ingestion_handoff_cycle_id":    "cycle-live",
+		"ingestion_handoff_request_id":  "reconciler-live",
 		"ingestion_handoff_request_kind": "reconciler",
-		"selected_style_sources":   []map[string]any{{"title": "Style.vtext: Universal Wire"}},
-		"selected_style_rationale": "Universal Wire style fits a fast sourced dispatch.",
-		"source_item_ids":          []string{"srcitem_live_1", "srcitem_live_2"},
-	})
+		"selected_style_sources":        []map[string]any{{"title": "Style.vtext: Universal Wire"}},
+		"selected_style_rationale":      "Universal Wire style fits a fast sourced dispatch.",
+		"source_item_ids":               []string{"srcitem_live_1", "srcitem_live_2"},
+	}
+	if published {
+		metaMap["platformd_route_path"] = "/pub/vtext/madrid-dispatch"
+	}
+	meta, _ := json.Marshal(metaMap)
 	rev := types.Revision{
 		RevisionID:  "rev-" + docID,
 		DocID:       doc.DocID,
@@ -81,6 +85,10 @@ func seedPlatformSourceNetworkVTextFixture(t *testing.T, handler *APIHandler, do
 		t.Fatalf("create platform source maxx revision: %v", err)
 	}
 	return doc
+}
+
+func seedPlatformSourceNetworkVTextFixture(t *testing.T, handler *APIHandler, docID string) types.Document {
+	return seedPlatformSourceNetworkVTextFixtureWithPublishState(t, handler, docID, true)
 }
 
 func seedUniversalWireEditionFixture(t *testing.T, handler *APIHandler, includedDocIDs ...string) types.Document {
@@ -249,6 +257,7 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 		"ingestion_handoff_request_id":   "reconciler-scoped",
 		"ingestion_handoff_request_kind": "reconciler",
 		"selected_style_sources":   []map[string]any{{"title": "Style.vtext: Universal Wire"}},
+		"platformd_route_path":     "/pub/vtext/scoped-sources",
 		"source_item_ids":          []string{"srcitem_cycle_1", "srcitem_cycle_2", "srcitem_cycle_3", "srcitem_cycle_4"},
 		"source_entities": []map[string]any{
 			{
@@ -336,6 +345,27 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 		t.Fatalf("manifest did not resolve source-service item metadata: %+v", story.Manifest.Lead[0])
 	}
 }
+func TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformVTexts(t *testing.T) {
+	_, handler := testAPISetup(t)
+	doc := seedPlatformSourceNetworkVTextFixtureWithPublishState(t, handler, "doc-source-network-unpublished", false)
+	seedUniversalWireEditionFixture(t, handler, doc.DocID)
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp universalWireStoriesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Stories) != 0 {
+		t.Fatalf("stories len = %d, want 0 for unpublished transcluded doc", len(resp.Stories))
+	}
+	if resp.Source != "universal-wire-edition-vtext" {
+		t.Fatalf("source = %q, want edition source", resp.Source)
+	}
+}
+
 func TestHandleUniversalWireStoriesRequiresAuth(t *testing.T) {
 	_, handler := testAPISetup(t)
 

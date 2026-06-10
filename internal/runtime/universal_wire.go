@@ -255,10 +255,10 @@ func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Doc
 		projections["wire-style"] = projection
 	}
 	platformRoute := wirePlatformRoutePath(meta)
-	changeState := "vtext published"
-	if platformRoute != "" {
-		changeState = "platform published"
+	if platformRoute == "" {
+		return types.WireStory{}, false
 	}
+	changeState := "platform published"
 	return types.WireStory{
 		ID:                  "source-network-vtext-" + doc.DocID,
 		OwnerID:             doc.OwnerID,
