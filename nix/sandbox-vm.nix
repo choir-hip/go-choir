@@ -153,6 +153,21 @@ let
         . /mnt/persistent/runtime/sandbox/choir-runtime.env
         set +a
       fi
+      if [ -z "''${RUNTIME_WIRE_PUBLISH_URL:-}" ]; then
+        for param in $(cat /proc/cmdline); do
+          case "$param" in
+            choir.wire_publish_url=*)
+              export RUNTIME_WIRE_PUBLISH_URL="''${param#choir.wire_publish_url=}"
+              ;;
+            choir.vmctl_url=*)
+              vmctl_url="''${param#choir.vmctl_url=}"
+              if [ -n "$vmctl_url" ]; then
+                export RUNTIME_WIRE_PUBLISH_URL="$(printf '%s' "$vmctl_url" | sed 's/:8083$/:8082/')"
+              fi
+              ;;
+          esac
+        done
+      fi
       export RUNTIME_SKILLS_ROOT="/mnt/persistent/runtime/sandbox/share/go-choir/skills"
       exec "$dynamic" "$@"
     fi
