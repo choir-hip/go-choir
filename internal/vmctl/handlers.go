@@ -949,7 +949,7 @@ func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	if err := writeRuntimePackageTar(tw, root, buildinfo.Snapshot("vmctl")); err != nil {
+	if err := writeRuntimePackageTar(tw, root, buildinfo.Snapshot("vmctl"), runtimePackageServiceEnv(r)); err != nil {
 		log.Printf("vmctl: stream runtime package from %s: %v", root, err)
 		return
 	}
@@ -1013,7 +1013,25 @@ func (h *Handler) HandleSandboxProxy(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-func writeRuntimePackageTar(tw *tar.Writer, root string, snapshot buildinfo.Info) error {
+
+func runtimePackageServiceEnv(r *http.Request) map[string]string {
+	out := make(map[string]string)
+	host := strings.TrimSpace(r.Host)
+	if host == "" {
+		return out
+	}
+	wireHost := host
+	if h, _, err := net.SplitHostPort(host); err == nil && h != "" {
+		wireHost = net.JoinHostPort(h, "8082")
+	} else if !strings.Contains(host, ":") {
+		wireHost = net.JoinHostPort(host, "8082")
+	}
+	out["RUNTIME_WIRE_PUBLISH_URL"] = "http://" + wireHost
+	out["RUNTIME_PLATFORMD_URL"] = "http://" + wireHost
+	return out
+}
+
+func writeRuntimePackageTar(tw *tar.Writer, root string, snapshot buildinfo.Info, serviceEnv map[string]string) error {
 	root = filepath.Clean(root)
 	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -1079,6 +1097,11 @@ func writeRuntimePackageTar(tw *tar.Writer, root string, snapshot buildinfo.Info
 	env := fmt.Sprintf("CHOIR_DEPLOYED_COMMIT=%s\nRUNTIME_WORKER_REPO_BASE_SHA=%s\n", shellEnvValue(commit), shellEnvValue(commit))
 	if deployedAt != "" {
 		env += fmt.Sprintf("CHOIR_DEPLOYED_AT=%s\n", shellEnvValue(deployedAt))
+	}
+	for _, key := range []string{"RUNTIME_WIRE_PUBLISH_URL", "RUNTIME_PLATFORMD_URL"} {
+		if value := strings.TrimSpace(serviceEnv[key]); value != "" {
+			env += fmt.Sprintf("%s=%s\n", key, shellEnvValue(value))
+		}
 	}
 	hdr := &tar.Header{
 		Name: "choir-runtime.env",

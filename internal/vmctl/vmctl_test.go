@@ -796,6 +796,7 @@ func TestHandler_RuntimePackageStreamsSandboxPackage(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/sandbox", nil)
 	req.Header.Set("X-Internal-Caller", "true")
+	req.Host = "10.203.154.1:8083"
 	rr := httptest.NewRecorder()
 	handler.HandleRuntimePackage(rr, req)
 	if rr.Code != http.StatusOK {
@@ -829,8 +830,11 @@ func TestHandler_RuntimePackageStreamsSandboxPackage(t *testing.T) {
 	if entries["share/go-choir/skills/SKILL.md"] != "skill" {
 		t.Fatalf("skills entry = %q", entries["share/go-choir/skills/SKILL.md"])
 	}
-	if env := entries["choir-runtime.env"]; !strings.Contains(env, "RUNTIME_WORKER_REPO_BASE_SHA=") || !strings.Contains(env, "CHOIR_DEPLOYED_COMMIT=") {
-		t.Fatalf("runtime env missing deployment refs: %q", env)
+	if env := entries["choir-runtime.env"]; !strings.Contains(env, "RUNTIME_WORKER_REPO_BASE_SHA=") ||
+		!strings.Contains(env, "CHOIR_DEPLOYED_COMMIT=") ||
+		!strings.Contains(env, "RUNTIME_WIRE_PUBLISH_URL=http://10.203.154.1:8082") ||
+		!strings.Contains(env, "RUNTIME_PLATFORMD_URL=http://10.203.154.1:8082") {
+		t.Fatalf("runtime env missing deployment/service refs: %q", env)
 	}
 }
 
