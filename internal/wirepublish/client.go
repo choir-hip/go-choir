@@ -10,11 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/platform"
 )
 
 // PostPlatformPublication calls platformd's internal publish endpoint.
-func PostPlatformPublication(ctx context.Context, client *http.Client, platformdURL string, req platform.PublishVTextRequest) (*platform.PublishVTextResponse, error) {
+func PostPlatformPublication(ctx context.Context, client *http.Client, platformdURL string, req PublishVTextRequest) (*PublishVTextResponse, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
@@ -50,7 +49,7 @@ func PostPlatformPublication(ctx context.Context, client *http.Client, platformd
 		}
 		return nil, fmt.Errorf("%s", apiErr.Error)
 	}
-	var out platform.PublishVTextResponse
+	var out PublishVTextResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("decode platformd response: %w", err)
 	}

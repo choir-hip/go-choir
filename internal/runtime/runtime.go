@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -45,7 +45,7 @@ type Runtime struct {
 	wirePublishDebounceMu sync.Mutex
 	wirePublishDebouncer  *wirePublishDebouncer
 	wirePublishTimer      vtextWakeTimer
-	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*platform.PublishVTextResponse, error)
+	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishVTextResponse, error)
 	vtextEditMu      sync.Mutex
 	superRequestMu   sync.Mutex
 	childSpawnMu     sync.Mutex

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
@@ -113,7 +114,21 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		return
 	}
 
-	platformReq := wirepublish.BuildAutonomousPublishRequest(docType, revType, rec, enrichedMetadata)
+	wireReq := wirepublish.BuildAutonomousPublishRequest(docType, revType, rec, enrichedMetadata)
+	platformReq := platform.PublishVTextRequest{
+		OwnerID:          wireReq.OwnerID,
+		SourceDocID:      wireReq.SourceDocID,
+		SourceRevisionID: wireReq.SourceRevisionID,
+		Title:            wireReq.Title,
+		Content:          wireReq.Content,
+		Citations:        wireReq.Citations,
+		Metadata:         wireReq.Metadata,
+		Slug:             wireReq.Slug,
+		AccessPolicy:     wireReq.AccessPolicy,
+		ExportPolicy:     wireReq.ExportPolicy,
+		SourceTraceID:    wireReq.SourceTraceID,
+		RequestedBy:      wireReq.RequestedBy,
+	}
 	platformResp, status, err := h.postPlatformPublication(r, platformReq)
 	if err != nil {
 		log.Printf("proxy: wire publish post platformd: %v", err)

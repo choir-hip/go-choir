@@ -221,6 +221,7 @@
             "internal/sourcecontract"
             "internal/types"
             "internal/vmctl"
+            "internal/wirepublish"
           ];
         };
         maild = mkGoService {
@@ -329,6 +330,7 @@
             "internal/store"
             "internal/types"
             "internal/vmctl"
+            "internal/wirepublish"
             "internal/zot"
           ];
           includeSkills = true;

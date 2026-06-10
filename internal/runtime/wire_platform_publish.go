@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
@@ -22,7 +21,7 @@ type wirePlatformPublishRequest struct {
 	RequestIntent string `json:"request_intent,omitempty"`
 }
 
-func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*platform.PublishVTextResponse, error) {
+func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
 	if rt == nil {
 		return nil, fmt.Errorf("runtime unavailable")
 	}
@@ -41,7 +40,7 @@ func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.D
 	return nil, fmt.Errorf("wire publish is not configured")
 }
 
-func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc types.Document, rev types.Revision, rec *types.RunRecord) (*platform.PublishVTextResponse, error) {
+func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
 	payload := wirePlatformPublishRequest{
 		DocID:      doc.DocID,
 		RevisionID: rev.RevisionID,
@@ -85,14 +84,14 @@ func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc
 		}
 		return nil, fmt.Errorf("%s", apiErr.Error)
 	}
-	var out platform.PublishVTextResponse
+	var out wirepublish.PublishVTextResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("decode wire publish response: %w", err)
 	}
 	return &out, nil
 }
 
-func (rt *Runtime) persistWirePlatformPublicationRef(ctx context.Context, ownerID string, rev types.Revision, pub *platform.PublishVTextResponse) error {
+func (rt *Runtime) persistWirePlatformPublicationRef(ctx context.Context, ownerID string, rev types.Revision, pub *wirepublish.PublishVTextResponse) error {
 	if rt == nil || rt.store == nil || pub == nil {
 		return fmt.Errorf("persist wire publication ref: unavailable")
 	}

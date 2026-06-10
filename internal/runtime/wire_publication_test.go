@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
 func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
@@ -34,8 +34,8 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 			"request_intent": "universal_wire_processor_article_revision",
 		},
 	}
-	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*platform.PublishVTextResponse, error) {
-		return &platform.PublishVTextResponse{
+	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
+		return &wirepublish.PublishVTextResponse{
 			PublicationID:        "pub-wire-test",
 			PublicationVersionID: "pubver-wire-test",
 			RoutePath:            "wire/madrid-dispatch",
@@ -100,7 +100,7 @@ func TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails(t *testi
 			"request_intent": "universal_wire_processor_article_revision",
 		},
 	}
-	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*platform.PublishVTextResponse, error) {
+	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
 		return nil, context.Canceled
 	}
 	handler.rt.maybeAutonomousPublishWireArticle(ctx, story, rev, rec)

@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // BuildAutonomousPublishRequest shapes a platformd publish request from re-loaded
 // Dolt state. Access and export policies are forced server-side.
-func BuildAutonomousPublishRequest(doc types.Document, rev types.Revision, rec *types.RunRecord, enrichedMetadata json.RawMessage) platform.PublishVTextRequest {
+func BuildAutonomousPublishRequest(doc types.Document, rev types.Revision, rec *types.RunRecord, enrichedMetadata json.RawMessage) PublishVTextRequest {
 	meta := decodeMetadata(enrichedMetadata)
 	meta["publication_kind"] = PublicationKind
 	meta["revision_role"] = RevisionRoleCanonical
@@ -35,7 +34,7 @@ func BuildAutonomousPublishRequest(doc types.Document, rev types.Revision, rec *
 		traceID = strings.TrimSpace(rec.RunID) + ":" + strings.TrimSpace(rev.RevisionID)
 	}
 
-	return platform.PublishVTextRequest{
+	return PublishVTextRequest{
 		OwnerID:          PlatformOwnerID(),
 		SourceDocID:      doc.DocID,
 		SourceRevisionID: rev.RevisionID,
