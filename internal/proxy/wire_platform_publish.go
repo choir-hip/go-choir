@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -22,6 +23,7 @@ type wirePlatformPublishRequest struct {
 	Metadata      json.RawMessage `json:"metadata,omitempty"`
 	RunID         string          `json:"run_id,omitempty"`
 	RequestIntent string          `json:"request_intent,omitempty"`
+	RunMetadata   json.RawMessage `json:"run_metadata,omitempty"`
 }
 
 // HandleInternalWirePlatformPublish is the host-mediated choke point for autonomous
@@ -91,12 +93,17 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		}
 	}
 
+	recMeta := map[string]any{}
+	if len(req.RunMetadata) > 0 {
+		_ = json.Unmarshal(req.RunMetadata, &recMeta)
+	}
+	if strings.TrimSpace(req.RequestIntent) != "" && strings.TrimSpace(fmt.Sprint(recMeta["request_intent"])) == "" {
+		recMeta["request_intent"] = strings.TrimSpace(req.RequestIntent)
+	}
 	rec := &types.RunRecord{
-		OwnerID: platformOwner,
-		RunID:   strings.TrimSpace(req.RunID),
-		Metadata: map[string]any{
-			"request_intent": strings.TrimSpace(req.RequestIntent),
-		},
+		OwnerID:  platformOwner,
+		RunID:    strings.TrimSpace(req.RunID),
+		Metadata: recMeta,
 	}
 	docType := types.Document{
 		DocID:   doc.DocID,

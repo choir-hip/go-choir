@@ -24,6 +24,7 @@ type wirePlatformPublishRequest struct {
 	Metadata      json.RawMessage `json:"metadata,omitempty"`
 	RunID         string          `json:"run_id,omitempty"`
 	RequestIntent string          `json:"request_intent,omitempty"`
+	RunMetadata   json.RawMessage `json:"run_metadata,omitempty"`
 }
 
 func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
@@ -105,6 +106,11 @@ func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc
 	if rec != nil {
 		payload.RunID = strings.TrimSpace(rec.RunID)
 		payload.RequestIntent = metadataStringValue(rec.Metadata, "request_intent")
+	if len(rec.Metadata) > 0 {
+		if raw, err := json.Marshal(rec.Metadata); err == nil {
+			payload.RunMetadata = raw
+		}
+	}
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
