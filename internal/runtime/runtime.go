@@ -919,6 +919,22 @@ func (rt *Runtime) RunningCount() int {
 }
 
 // ToolRegistry returns the runtime's tool registry, or nil if none is configured.
+func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) int {
+	runs, err := rt.store.ListRunsByState(ctx, types.RunRunning, 1000)
+	if err != nil {
+		log.Printf("runtime: count running %s runs: %v", profile, err)
+		return rt.RunningCount()
+	}
+	profile = canonicalAgentProfile(profile)
+	count := 0
+	for i := range runs {
+		if canonicalAgentProfile(runs[i].AgentProfile) == profile {
+			count++
+		}
+	}
+	return count
+}
+
 func (rt *Runtime) ToolRegistry() *ToolRegistry {
 	return rt.toolRegistry
 }

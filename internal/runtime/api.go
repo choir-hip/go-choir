@@ -919,7 +919,7 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 				maxProc = parsed
 			}
 		}
-		if h.rt.RunningCount() >= maxProc {
+		if h.rt.RunningCountByProfile(r.Context(), AgentProfileProcessor) >= maxProc {
 			writeAPIJSON(w, http.StatusTooManyRequests, apiError{Error: "too many active processor runs; try again later"})
 			return
 		}
