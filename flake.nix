@@ -301,6 +301,7 @@
             "internal/events"
             "internal/markdownstructure"
             "internal/modelcatalog"
+            "internal/persistentdisk"
             "internal/provider"
             "internal/runtime"
             "internal/sandbox"
