@@ -117,8 +117,8 @@ func TestVerifyModelCapabilityUsesPolicyForTextOnlyVerifier(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify_model_capability: %v", err)
 	}
-	if provider.req.Provider != "xiaomi" || provider.req.Model != "mimo-v2.5" {
-		t.Fatalf("request provider/model = %s/%s", provider.req.Provider, provider.req.Model)
+	if provider.req.Provider != "deepseek" || provider.req.Model != "deepseek-v4-flash" {
+		t.Fatalf("request provider/model = %s/%s, want deepseek/deepseek-v4-flash", provider.req.Provider, provider.req.Model)
 	}
 	if strings.Contains(string(provider.req.Messages[0]), `"type":"image"`) {
 		t.Fatalf("text-only verifier message unexpectedly includes image: %s", string(provider.req.Messages[0]))
