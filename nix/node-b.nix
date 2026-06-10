@@ -423,7 +423,7 @@ in
         # fetch the current sandbox service package from this host-side pointer
         # and execute it from their writable data disk, so ordinary runtime code
         # deploys do not have to rebuild the whole microVM image.
-        "VMCTL_SANDBOX_PACKAGE_DIR=/var/lib/go-choir/services/sandbox"
+        "VMCTL_SANDBOX_PACKAGE_DIR=${goChoirPackages.sandbox}"
         # Firecracker VM configuration (VAL-VM-010):
         # Guest images are built from the repo via `nix build .#guest-image`.
         # The microvm.nix approach produces:
