@@ -881,7 +881,7 @@ func TestReserveHostURLLockedPreservesReattachedNetworkSlots(t *testing.T) {
 
 func TestTapReachableHostServicePortsIncludeHostPrivateServices(t *testing.T) {
 	ports := tapReachableHostServicePorts()
-	for _, want := range []string{"8082", "8083", "8084", "8085", "8087", "8787"} {
+	for _, want := range []string{"8082", "8083", "8084", "8085", "8086", "8087", "8787"} {
 		if !containsString(ports, want) {
 			t.Fatalf("tapReachableHostServicePorts() = %#v, missing %s", ports, want)
 		}

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -139,11 +141,95 @@ func (h *APIHandler) universalWireEditionVTextStories(ctx context.Context, style
 		if !ok {
 			continue
 		}
+		if h.platformdStoryVerificationEnabled() && !h.platformdHasPublishedVText(ctx, story.StoryVTextDoc, doc.CurrentRevisionID) {
+			continue
+		}
 		story.Prominence = 100 - len(stories)
 		story.SourceState = "universal-wire-edition-vtext"
 		stories = append(stories, story)
 	}
 	return stories, edition, nil
+}
+
+
+func (h *APIHandler) platformdStoryVerificationEnabled() bool {
+	if h == nil || h.rt == nil {
+		return false
+	}
+	return strings.TrimSpace(platformdReadBaseURL()) != ""
+}
+
+func (h *APIHandler) platformdHasPublishedVText(ctx context.Context, docID, revisionID string) bool {
+	base := strings.TrimRight(strings.TrimSpace(platformdReadBaseURL()), "/")
+	if base == "" || strings.TrimSpace(docID) == "" {
+		return false
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	for _, path := range []string{
+		"/internal/platform/vtext/documents/" + url.PathEscape(strings.TrimSpace(docID)),
+		"/internal/platform/vtext/revisions/" + url.PathEscape(strings.TrimSpace(revisionID)),
+	} {
+		target := base + path
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+		if err != nil {
+			return false
+		}
+		req.Header.Set("X-Internal-Caller", "true")
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return false
+		}
+	}
+	return true
+}
+
+func platformdReadBaseURL() string {
+	bases := []string{
+		strings.TrimSpace(getenvFirst("RUNTIME_PLATFORMD_URL", "PROXY_PLATFORMD_URL")),
+		strings.TrimSpace(getenvFirst("RUNTIME_VMCTL_URL", "PROXY_VMCTL_URL")),
+		strings.TrimSpace(getenvFirst("RUNTIME_GATEWAY_URL")),
+		strings.TrimSpace(getenvFirst("RUNTIME_MAILD_URL")),
+	}
+	if url := rewriteHostServicePort(bases, ":8086"); url != "" {
+		return url
+	}
+	if data, err := os.ReadFile("/proc/cmdline"); err == nil {
+		fields := strings.Fields(string(data))
+		var cmdBases []string
+		for _, field := range fields {
+			switch {
+			case strings.HasPrefix(field, "choir.vmctl_url="):
+				cmdBases = append(cmdBases, strings.TrimPrefix(field, "choir.vmctl_url="))
+			case strings.HasPrefix(field, "choir.gateway_url="):
+				cmdBases = append(cmdBases, strings.TrimPrefix(field, "choir.gateway_url="))
+			case strings.HasPrefix(field, "choir.maild_url="):
+				cmdBases = append(cmdBases, strings.TrimPrefix(field, "choir.maild_url="))
+			}
+		}
+		if url := rewriteHostServicePort(cmdBases, ":8086"); url != "" {
+			return url
+		}
+	}
+	return ""
+}
+
+func rewriteHostServicePort(bases []string, wantPort string) string {
+	for _, raw := range bases {
+		base := strings.TrimRight(strings.TrimSpace(raw), "/")
+		if base == "" {
+			continue
+		}
+		for _, suffix := range []string{":8082", ":8083", ":8084", ":8087"} {
+			if strings.HasSuffix(base, suffix) {
+				return strings.TrimSuffix(base, suffix) + wantPort
+			}
+		}
+	}
+	return ""
 }
 
 func universalWireEditionIncludedDocIDs(content, editionDocID string) []string {

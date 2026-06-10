@@ -337,6 +337,7 @@ in
       StateDirectory = "go-choir/platform-artifacts";
       ReadWritePaths = [ platformArtifactsDir ];
       Environment = [
+        "SERVER_HOST=0.0.0.0"
         "PLATFORMD_PORT=8086"
         "PLATFORMD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "PLATFORMD_ARTIFACTS_ROOT=${platformArtifactsDir}"
