@@ -250,7 +250,7 @@ func TestSourceServiceAPIHealthReportsLedgerCounts(t *testing.T) {
 	}
 }
 
-func TestSourceServiceAPISourceMaxxLatestReportsAgentHandoffs(t *testing.T) {
+func TestSourceServiceAPIIngestionHandoffLatestReportsAgentHandoffs(t *testing.T) {
 	ctx := context.Background()
 	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
 	if err != nil {
@@ -264,10 +264,10 @@ func TestSourceServiceAPISourceMaxxLatestReportsAgentHandoffs(t *testing.T) {
 	}
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 	items := []sources.Item{{
-		ID:         "srcitem_source_maxx",
+		ID:         "srcitem_ingestion_handoff",
 		SourceID:   "gdelt:15min",
 		SourceType: sources.SourceTypeGDELT,
-		Title:      "SourceMaxx event",
+		Title:      "Ingestion handoff event",
 		Verticals:  []string{"supply_chain"},
 		Region:     "global",
 	}}
@@ -275,7 +275,7 @@ func TestSourceServiceAPISourceMaxxLatestReportsAgentHandoffs(t *testing.T) {
 	if err := store.SaveIngestionEvents(ctx, events); err != nil {
 		t.Fatalf("save ingestion events: %v", err)
 	}
-	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, events, now)
+	handoff := cycle.BuildIngestionHandoff(cycleID, items, events, now)
 	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
 		t.Fatalf("save processors: %v", err)
 	}
@@ -286,20 +286,20 @@ func TestSourceServiceAPISourceMaxxLatestReportsAgentHandoffs(t *testing.T) {
 		t.Fatalf("finish cycle: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/internal/source-service/sourcemaxx/latest", nil)
+	req := httptest.NewRequest(http.MethodGet, "/internal/source-service/ingestion-handoff/latest", nil)
 	rec := httptest.NewRecorder()
-	handleSourceServiceSourceMaxxLatest(store).ServeHTTP(rec, req)
+	handleSourceServiceIngestionHandoffLatest(store).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("sourcemaxx latest status = %d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("ingestion handoff latest status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var resp sourceapi.SourceMaxxResponse
+	var resp sourceapi.IngestionHandoffResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode sourcemaxx latest: %v", err)
+		t.Fatalf("decode ingestion handoff latest: %v", err)
 	}
 	if resp.Provider != sourceapi.ProviderName || resp.Cycle.CycleID != cycleID {
-		t.Fatalf("unexpected sourcemaxx identity: %+v", resp)
+		t.Fatalf("unexpected ingestion handoff identity: %+v", resp)
 	}
-	if len(resp.ProcessorRequests) != 1 || resp.ProcessorRequests[0].SourceItemIDs[0] != "srcitem_source_maxx" {
+	if len(resp.ProcessorRequests) != 1 || resp.ProcessorRequests[0].SourceItemIDs[0] != "srcitem_ingestion_handoff" {
 		t.Fatalf("unexpected processor requests: %+v", resp.ProcessorRequests)
 	}
 	if len(resp.ReconcilerRequests) != 1 || len(resp.ReconcilerRequests[0].ProcessorRequestIDs) != 1 {
@@ -310,7 +310,7 @@ func TestSourceServiceAPISourceMaxxLatestReportsAgentHandoffs(t *testing.T) {
 	}
 }
 
-func TestSourceServiceAPISourceMaxxLatestTreatsNotModifiedAsSuccessfulFetch(t *testing.T) {
+func TestSourceServiceAPIIngestionHandoffLatestTreatsNotModifiedAsSuccessfulFetch(t *testing.T) {
 	ctx := context.Background()
 	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
 	if err != nil {
@@ -366,11 +366,11 @@ func TestSourceServiceAPISourceMaxxLatestTreatsNotModifiedAsSuccessfulFetch(t *t
 
 	req := httptest.NewRequest(http.MethodGet, "/internal/source-service/global-wire/latest", nil)
 	rec := httptest.NewRecorder()
-	handleSourceServiceSourceMaxxLatest(store).ServeHTTP(rec, req)
+	handleSourceServiceIngestionHandoffLatest(store).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("latest status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var resp sourceapi.SourceMaxxResponse
+	var resp sourceapi.IngestionHandoffResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode latest: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestSourceServiceAPISourceMaxxLatestTreatsNotModifiedAsSuccessfulFetch(t *t
 	}
 }
 
-func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *testing.T) {
+func TestIngestionRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *testing.T) {
 	ctx := context.Background()
 	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
 	if err != nil {
@@ -408,7 +408,7 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 	if err := store.SaveIngestionEvents(ctx, events); err != nil {
 		t.Fatalf("save ingestion events: %v", err)
 	}
-	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, events, now)
+	handoff := cycle.BuildIngestionHandoff(cycleID, items, events, now)
 	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
 		t.Fatalf("save processors: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 		submissions = append(submissions, req)
 		profile, _ := req.Metadata["agent_profile"].(string)
 		writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{
-			RunID:        "run-" + profile + "-" + strings.TrimSpace(req.Metadata["source_maxx_request_id"].(string)),
+			RunID:        "run-" + profile + "-" + strings.TrimSpace(req.Metadata["ingestion_handoff_request_id"].(string)),
 			AgentID:      profile + ":agent",
 			AgentProfile: profile,
 			AgentRole:    profile,
@@ -440,7 +440,7 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 	}))
 	defer runtimeServer.Close()
 
-	dispatcher := &sourceMaxxRuntimeDispatcher{
+	dispatcher := &ingestionRuntimeDispatcher{
 		baseURL:              runtimeServer.URL,
 		ownerID:              "owner-global-wire",
 		maxProcessorRequests: 1,
@@ -493,7 +493,7 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 	}
 
 	dispatcher.maxProcessorRequests = 10
-	secondResult := dispatcher.dispatch(ctx, store, cycle.SourceMaxxHandoff{})
+	secondResult := dispatcher.dispatch(ctx, store, cycle.IngestionHandoff{})
 	if secondResult.ProcessorSubmitted != len(handoff.ProcessorRequests)-1 || secondResult.ProcessorSkipped != 0 || secondResult.ReconcilerSubmitted != 1 || secondResult.ReconcilerSkipped != 0 {
 		t.Fatalf("unexpected second dispatch result: %+v", secondResult)
 	}
@@ -513,7 +513,7 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 	}
 }
 
-func TestSourceMaxxRuntimeDispatcherSkipsProcessorWithoutIngestionEvents(t *testing.T) {
+func TestIngestionRuntimeDispatcherSkipsProcessorWithoutIngestionEvents(t *testing.T) {
 	ctx := context.Background()
 	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
 	if err != nil {
@@ -541,19 +541,19 @@ func TestSourceMaxxRuntimeDispatcherSkipsProcessorWithoutIngestionEvents(t *test
 		t.Fatalf("save processor request: %v", err)
 	}
 
-	dispatcher := &sourceMaxxRuntimeDispatcher{
+	dispatcher := &ingestionRuntimeDispatcher{
 		baseURL:              "http://127.0.0.1:1",
 		ownerID:              "global-wire-platform",
 		maxProcessorRequests: 1,
 		client:               http.DefaultClient,
 	}
-	result := dispatcher.dispatch(ctx, store, cycle.SourceMaxxHandoff{})
+	result := dispatcher.dispatch(ctx, store, cycle.IngestionHandoff{})
 	if result.ProcessorSubmitted != 0 || result.ProcessorSkipped != 1 {
 		t.Fatalf("unexpected dispatch result: %+v", result)
 	}
 }
 
-func TestSourceMaxxRuntimeDispatcherRetriesTransientRuntimeUnavailable(t *testing.T) {
+func TestIngestionRuntimeDispatcherRetriesTransientRuntimeUnavailable(t *testing.T) {
 	ctx := context.Background()
 	req := cycle.ProcessorRequest{
 		RequestID:     "processor_retry",
@@ -586,7 +586,7 @@ func TestSourceMaxxRuntimeDispatcherRetriesTransientRuntimeUnavailable(t *testin
 	}))
 	defer runtimeServer.Close()
 
-	dispatcher := &sourceMaxxRuntimeDispatcher{
+	dispatcher := &ingestionRuntimeDispatcher{
 		baseURL:       runtimeServer.URL,
 		ownerID:       "owner-global-wire",
 		client:        runtimeServer.Client(),
@@ -605,7 +605,7 @@ func TestSourceMaxxRuntimeDispatcherRetriesTransientRuntimeUnavailable(t *testin
 	}
 }
 
-func TestSourceMaxxRuntimeDispatcherKeepsQueuedRequestOnTransientRuntimeFailure(t *testing.T) {
+func TestIngestionRuntimeDispatcherKeepsQueuedRequestOnTransientRuntimeFailure(t *testing.T) {
 	ctx := context.Background()
 	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
 	if err != nil {
@@ -651,7 +651,7 @@ func TestSourceMaxxRuntimeDispatcherKeepsQueuedRequestOnTransientRuntimeFailure(
 	}))
 	defer runtimeServer.Close()
 
-	dispatcher := &sourceMaxxRuntimeDispatcher{
+	dispatcher := &ingestionRuntimeDispatcher{
 		baseURL:              runtimeServer.URL,
 		ownerID:              "owner-global-wire",
 		maxProcessorRequests: 1,
@@ -659,7 +659,7 @@ func TestSourceMaxxRuntimeDispatcherKeepsQueuedRequestOnTransientRuntimeFailure(
 		retryAttempts:        1,
 		retryDelay:           time.Millisecond,
 	}
-	result := dispatcher.dispatch(ctx, store, cycle.SourceMaxxHandoff{})
+	result := dispatcher.dispatch(ctx, store, cycle.IngestionHandoff{})
 	if result.ProcessorSubmitted != 0 || result.ProcessorFailed != 0 || len(result.Errors) != 1 {
 		t.Fatalf("unexpected transient dispatch result: %+v", result)
 	}

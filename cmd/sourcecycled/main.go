@@ -22,10 +22,10 @@ import (
 )
 
 const (
-	defaultSourceMaxxProcessorDispatchLimit = 32
-	defaultSourceMaxxRuntimeDispatchRetries = 8
-	defaultSourceMaxxRuntimeRetryDelay      = 2 * time.Second
-	defaultSourceMaxxQueueDrainInterval     = 1 * time.Minute
+	defaultIngestionProcessorDispatchLimit = 32
+	defaultIngestionRuntimeDispatchRetries = 8
+	defaultIngestionRuntimeRetryDelay      = 2 * time.Second
+	defaultIngestionQueueDrainInterval     = 1 * time.Minute
 )
 
 type runtimeRunSubmitRequest struct {
@@ -43,7 +43,7 @@ type runtimeRunStatusResponse struct {
 	State        string `json:"state,omitempty"`
 }
 
-type sourceMaxxRuntimeDispatcher struct {
+type ingestionRuntimeDispatcher struct {
 	baseURL              string
 	ownerID              string
 	maxProcessorRequests int
@@ -52,7 +52,7 @@ type sourceMaxxRuntimeDispatcher struct {
 	retryDelay           time.Duration
 }
 
-type sourceMaxxDispatchResult struct {
+type ingestionDispatchResult struct {
 	ProcessorSubmitted  int
 	ProcessorFailed     int
 	ProcessorSkipped    int
@@ -109,7 +109,7 @@ func main() {
 	// 3. Main Ingestion Loop (15-minute source cycle plus queue drain)
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
-	drainTicker := time.NewTicker(sourceMaxxQueueDrainIntervalFromEnv())
+	drainTicker := time.NewTicker(ingestionQueueDrainIntervalFromEnv())
 	defer drainTicker.Stop()
 	defer func() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -132,8 +132,8 @@ func main() {
 			log.Println("Initiating scheduled cycle...")
 			runCycle(ctx, &registry, store)
 		case <-drainTicker.C:
-			log.Println("Initiating queued SourceMaxx dispatch drain...")
-			dispatchQueuedSourceMaxx(ctx, store)
+			log.Println("Initiating queued ingestion handoff dispatch drain...")
+			dispatchQueuedIngestionHandoffs(ctx, store)
 		}
 	}
 }
@@ -168,7 +168,7 @@ func sourceServiceConfigPath() string {
 	return filepath.Join("configs", "sources.json")
 }
 
-func sourceMaxxRuntimeDispatcherFromEnv() *sourceMaxxRuntimeDispatcher {
+func ingestionRuntimeDispatcherFromEnv() *ingestionRuntimeDispatcher {
 	baseURL := strings.TrimRight(strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_BASE_URL", "SOURCECYCLED_RUNTIME_BASE_URL")), "/")
 	if baseURL == "" {
 		return nil
@@ -177,21 +177,21 @@ func sourceMaxxRuntimeDispatcherFromEnv() *sourceMaxxRuntimeDispatcher {
 	if ownerID == "" {
 		ownerID = "global-wire-platform"
 	}
-	limit := parsePositiveInt(firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS", "SOURCECYCLED_AGENT_DISPATCH_MAX_PROCESSORS"), defaultSourceMaxxProcessorDispatchLimit)
-	retries := parsePositiveInt(firstEnv("SOURCE_SERVICE_RUNTIME_DISPATCH_RETRIES", "SOURCECYCLED_RUNTIME_DISPATCH_RETRIES"), defaultSourceMaxxRuntimeDispatchRetries)
-	return &sourceMaxxRuntimeDispatcher{
+	limit := parsePositiveInt(firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS", "SOURCECYCLED_AGENT_DISPATCH_MAX_PROCESSORS"), defaultIngestionProcessorDispatchLimit)
+	retries := parsePositiveInt(firstEnv("SOURCE_SERVICE_RUNTIME_DISPATCH_RETRIES", "SOURCECYCLED_RUNTIME_DISPATCH_RETRIES"), defaultIngestionRuntimeDispatchRetries)
+	return &ingestionRuntimeDispatcher{
 		baseURL:              baseURL,
 		ownerID:              ownerID,
 		maxProcessorRequests: limit,
 		client:               &http.Client{Timeout: 20 * time.Second},
 		retryAttempts:        retries,
-		retryDelay:           defaultSourceMaxxRuntimeRetryDelay,
+		retryDelay:           defaultIngestionRuntimeRetryDelay,
 	}
 }
 
-func sourceMaxxQueueDrainIntervalFromEnv() time.Duration {
+func ingestionQueueDrainIntervalFromEnv() time.Duration {
 	raw := firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS", "SOURCECYCLED_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS")
-	seconds := parsePositiveInt(raw, int(defaultSourceMaxxQueueDrainInterval/time.Second))
+	seconds := parsePositiveInt(raw, int(defaultIngestionQueueDrainInterval/time.Second))
 	if seconds < 10 {
 		seconds = 10
 	}
@@ -211,8 +211,7 @@ func startSourceServiceAPI(ctx context.Context, store *cycle.Storage) *http.Serv
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/source-service/health", handleSourceServiceHealth(store))
 	mux.HandleFunc("/internal/source-service/search", handleSourceServiceSearch(store))
-	mux.HandleFunc("/internal/source-service/global-wire/latest", handleSourceServiceSourceMaxxLatest(store))
-	mux.HandleFunc("/internal/source-service/sourcemaxx/latest", handleSourceServiceSourceMaxxLatest(store))
+	mux.HandleFunc("/internal/source-service/ingestion-handoff/latest", handleSourceServiceIngestionHandoffLatest(store))
 	mux.HandleFunc("/internal/source-service/items/", handleSourceServiceItem(store))
 	server := &http.Server{
 		Addr:              sourceServiceAddr(),
@@ -283,7 +282,7 @@ func handleSourceServiceSearch(store *cycle.Storage) http.HandlerFunc {
 	}
 }
 
-func handleSourceServiceSourceMaxxLatest(store *cycle.Storage) http.HandlerFunc {
+func handleSourceServiceIngestionHandoffLatest(store *cycle.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -291,16 +290,16 @@ func handleSourceServiceSourceMaxxLatest(store *cycle.Storage) http.HandlerFunc 
 		}
 		summary, err := store.LatestCycleSummary(r.Context())
 		if err != nil {
-			http.Error(w, "latest sourcemaxx cycle: "+err.Error(), http.StatusNotFound)
+			http.Error(w, "latest ingestion handoff cycle: "+err.Error(), http.StatusNotFound)
 			return
 		}
-		writeSourceServiceJSON(w, http.StatusOK, sourceapi.SourceMaxxResponse{
+		writeSourceServiceJSON(w, http.StatusOK, sourceapi.IngestionHandoffResponse{
 			Provider:           sourceapi.ProviderName,
 			Cycle:              sourceAPICycleSummary(summary),
 			SourceHealth:       sourceAPISourceHealth(summary),
 			ProcessorRequests:  sourceAPIProcessorRequests(summary.ProcessorRequests),
 			ReconcilerRequests: sourceAPIReconcilerRequests(summary.ReconcilerRequests),
-			Metadata: sourceapi.SourceMaxxMetadata{
+			Metadata: sourceapi.IngestionHandoffMetadata{
 				Topology:      "source-items -> processor-handoffs -> corpus-reconciler-handoff",
 				AuthorityRule: "source and version provenance stay in source items and VText; handoffs are queues, not publication authority",
 			},
@@ -479,15 +478,15 @@ func writeSourceServiceJSON(w http.ResponseWriter, status int, value any) {
 	}
 }
 
-func (d *sourceMaxxRuntimeDispatcher) dispatch(ctx context.Context, store *cycle.Storage, handoff cycle.SourceMaxxHandoff) sourceMaxxDispatchResult {
-	var result sourceMaxxDispatchResult
+func (d *ingestionRuntimeDispatcher) dispatch(ctx context.Context, store *cycle.Storage, handoff cycle.IngestionHandoff) ingestionDispatchResult {
+	var result ingestionDispatchResult
 	if d == nil || strings.TrimSpace(d.baseURL) == "" {
 		result.ProcessorSkipped = len(handoff.ProcessorRequests)
 		return result
 	}
 	processorLimit := d.maxProcessorRequests
 	if processorLimit <= 0 {
-		processorLimit = defaultSourceMaxxProcessorDispatchLimit
+		processorLimit = defaultIngestionProcessorDispatchLimit
 	}
 	processorRequests := handoff.ProcessorRequests
 	if store != nil {
@@ -594,8 +593,8 @@ func maxInt(a, b int) int {
 	return b
 }
 
-func (d *sourceMaxxRuntimeDispatcher) submitProcessor(ctx context.Context, req cycle.ProcessorRequest) (runtimeRunStatusResponse, error) {
-	prompt := req.Prompt + "\n\nSourceMaxx processor request: " + req.RequestID +
+func (d *ingestionRuntimeDispatcher) submitProcessor(ctx context.Context, req cycle.ProcessorRequest) (runtimeRunStatusResponse, error) {
+	prompt := req.Prompt + "\n\nIngestion processor request: " + req.RequestID +
 		"\nCycle: " + req.CycleID +
 		"\nProcessor key: " + req.ProcessorKey +
 		"\nContinuity ref: " + req.ContinuityRef +
@@ -610,9 +609,9 @@ func (d *sourceMaxxRuntimeDispatcher) submitProcessor(ctx context.Context, req c
 			"request_source":           "sourcecycled",
 			"activation_origin":        "ingestion_event",
 			"ingestion_event_ids":      req.IngestionEventIDs,
-			"source_maxx_request_kind": "processor",
-			"source_maxx_request_id":   req.RequestID,
-			"source_maxx_cycle_id":     req.CycleID,
+			"ingestion_handoff_request_kind": "processor",
+			"ingestion_handoff_request_id":   req.RequestID,
+			"ingestion_handoff_cycle_id":     req.CycleID,
 			"processor_key":            req.ProcessorKey,
 			"source_item_ids":          req.SourceItemIDs,
 			"source_count":             req.SourceCount,
@@ -624,8 +623,8 @@ func (d *sourceMaxxRuntimeDispatcher) submitProcessor(ctx context.Context, req c
 	})
 }
 
-func (d *sourceMaxxRuntimeDispatcher) submitReconciler(ctx context.Context, req cycle.ReconcilerRequest) (runtimeRunStatusResponse, error) {
-	prompt := req.Prompt + "\n\nSourceMaxx reconciler request: " + req.RequestID +
+func (d *ingestionRuntimeDispatcher) submitReconciler(ctx context.Context, req cycle.ReconcilerRequest) (runtimeRunStatusResponse, error) {
+	prompt := req.Prompt + "\n\nIngestion reconciler request: " + req.RequestID +
 		"\nCycle: " + req.CycleID +
 		"\nScope: " + req.Scope +
 		"\nProcessor request handles: " + strings.Join(req.ProcessorRequestIDs, ", ") +
@@ -638,9 +637,9 @@ func (d *sourceMaxxRuntimeDispatcher) submitReconciler(ctx context.Context, req 
 			"agent_profile":            "reconciler",
 			"agent_role":               "reconciler",
 			"request_source":           "sourcecycled",
-			"source_maxx_request_kind": "reconciler",
-			"source_maxx_request_id":   req.RequestID,
-			"source_maxx_cycle_id":     req.CycleID,
+			"ingestion_handoff_request_kind": "reconciler",
+			"ingestion_handoff_request_id":   req.RequestID,
+			"ingestion_handoff_cycle_id":     req.CycleID,
 			"reconciler_scope":         req.Scope,
 			"source_item_ids":          req.SourceItemIDs,
 			"processor_request_ids":    req.ProcessorRequestIDs,
@@ -648,17 +647,17 @@ func (d *sourceMaxxRuntimeDispatcher) submitReconciler(ctx context.Context, req 
 	})
 }
 
-func (d *sourceMaxxRuntimeDispatcher) submit(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {
+func (d *ingestionRuntimeDispatcher) submit(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {
 	if d == nil || d.client == nil {
 		return runtimeRunStatusResponse{}, fmt.Errorf("runtime dispatcher is not configured")
 	}
 	attempts := d.retryAttempts
 	if attempts <= 0 {
-		attempts = defaultSourceMaxxRuntimeDispatchRetries
+		attempts = defaultIngestionRuntimeDispatchRetries
 	}
 	delay := d.retryDelay
 	if delay <= 0 {
-		delay = defaultSourceMaxxRuntimeRetryDelay
+		delay = defaultIngestionRuntimeRetryDelay
 	}
 	var lastErr error
 	for attempt := 1; attempt <= attempts; attempt++ {
@@ -670,7 +669,7 @@ func (d *sourceMaxxRuntimeDispatcher) submit(ctx context.Context, payload runtim
 		if !isTransientRuntimeSubmitError(err) || attempt == attempts {
 			break
 		}
-		log.Printf("SourceMaxx runtime dispatch attempt %d/%d failed transiently: %v", attempt, attempts, err)
+		log.Printf("Ingestion runtime dispatch attempt %d/%d failed transiently: %v", attempt, attempts, err)
 		select {
 		case <-ctx.Done():
 			return runtimeRunStatusResponse{}, ctx.Err()
@@ -680,7 +679,7 @@ func (d *sourceMaxxRuntimeDispatcher) submit(ctx context.Context, payload runtim
 	return runtimeRunStatusResponse{}, lastErr
 }
 
-func (d *sourceMaxxRuntimeDispatcher) submitOnce(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {
+func (d *ingestionRuntimeDispatcher) submitOnce(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return runtimeRunStatusResponse{}, fmt.Errorf("marshal runtime run request: %w", err)
@@ -737,7 +736,7 @@ func isTransientRuntimeSubmitError(err error) bool {
 	return true
 }
 
-func sourceMaxxDispatchResultHasActivity(result sourceMaxxDispatchResult) bool {
+func ingestionDispatchResultHasActivity(result ingestionDispatchResult) bool {
 	return result.ProcessorSubmitted > 0 ||
 		result.ReconcilerSubmitted > 0 ||
 		result.ProcessorFailed > 0 ||
@@ -797,9 +796,9 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 	if len(items) == 0 {
 		log.Println("No new items found in this cycle. Skipping synthesis.")
 		_ = store.RecordCycleEvent(ctx, cycleID, "", "cycle_completed_empty", "no new items found", map[string]any{"fetch_count": len(pollResult.Fetches)})
-		dispatchResult := sourceMaxxRuntimeDispatcherFromEnv().dispatch(ctx, store, cycle.SourceMaxxHandoff{})
-		if sourceMaxxDispatchResultHasActivity(dispatchResult) {
-			_ = store.RecordCycleEvent(ctx, cycleID, "", "sourcemaxx_agent_queue_drain", "queued source handoffs drained during empty source cycle", map[string]any{
+		dispatchResult := ingestionRuntimeDispatcherFromEnv().dispatch(ctx, store, cycle.IngestionHandoff{})
+		if ingestionDispatchResultHasActivity(dispatchResult) {
+			_ = store.RecordCycleEvent(ctx, cycleID, "", "ingestion_handoff_queue_drain", "queued ingestion handoffs drained during empty source cycle", map[string]any{
 				"processor_submitted":  dispatchResult.ProcessorSubmitted,
 				"processor_failed":     dispatchResult.ProcessorFailed,
 				"processor_skipped":    dispatchResult.ProcessorSkipped,
@@ -832,7 +831,7 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 		"item_count":            len(items),
 	})
 
-	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, ingestionEvents, now)
+	handoff := cycle.BuildIngestionHandoff(cycleID, items, ingestionEvents, now)
 	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
 		log.Printf("Failed to save processor requests: %v", err)
 		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
@@ -855,7 +854,7 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
 		return
 	}
-	_ = store.RecordCycleEvent(ctx, cycleID, "", "sourcemaxx_handoffs_queued", "source items routed to processor and reconciler handoffs", map[string]any{
+	_ = store.RecordCycleEvent(ctx, cycleID, "", "ingestion_handoffs_queued", "source items routed to processor and reconciler handoffs", map[string]any{
 		"processor_request_count":      len(handoff.ProcessorRequests),
 		"reconciler_request_count":     len(handoff.ReconcilerRequests),
 		"source_item_count":            len(items),
@@ -863,9 +862,9 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 		"superseded_reconciler_count":  supersededReconcilers,
 		"processor_continuity_refresh": supersededProcessors > 0,
 	})
-	dispatchResult := sourceMaxxRuntimeDispatcherFromEnv().dispatch(ctx, store, handoff)
-	if sourceMaxxDispatchResultHasActivity(dispatchResult) {
-		_ = store.RecordCycleEvent(ctx, cycleID, "", "sourcemaxx_agent_runs_dispatched", "source handoffs submitted to processor/reconciler agent profiles", map[string]any{
+	dispatchResult := ingestionRuntimeDispatcherFromEnv().dispatch(ctx, store, handoff)
+	if ingestionDispatchResultHasActivity(dispatchResult) {
+		_ = store.RecordCycleEvent(ctx, cycleID, "", "ingestion_handoff_runs_dispatched", "ingestion handoffs submitted to processor/reconciler agent profiles", map[string]any{
 			"processor_submitted":  dispatchResult.ProcessorSubmitted,
 			"processor_failed":     dispatchResult.ProcessorFailed,
 			"processor_skipped":    dispatchResult.ProcessorSkipped,
@@ -884,21 +883,21 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 	log.Printf("Queued %d processor request(s) and %d reconciler request(s)", len(handoff.ProcessorRequests), len(handoff.ReconcilerRequests))
 }
 
-func dispatchQueuedSourceMaxx(ctx context.Context, store *cycle.Storage) {
+func dispatchQueuedIngestionHandoffs(ctx context.Context, store *cycle.Storage) {
 	if store == nil {
 		return
 	}
-	dispatcher := sourceMaxxRuntimeDispatcherFromEnv()
+	dispatcher := ingestionRuntimeDispatcherFromEnv()
 	if dispatcher == nil {
-		log.Println("Queued SourceMaxx dispatch drain skipped: runtime dispatcher is not configured")
+		log.Println("Queued ingestion handoff dispatch drain skipped: runtime dispatcher is not configured")
 		return
 	}
-	result := dispatcher.dispatch(ctx, store, cycle.SourceMaxxHandoff{})
-	if !sourceMaxxDispatchResultHasActivity(result) {
-		log.Println("Queued SourceMaxx dispatch drain found no dispatchable work")
+	result := dispatcher.dispatch(ctx, store, cycle.IngestionHandoff{})
+	if !ingestionDispatchResultHasActivity(result) {
+		log.Println("Queued ingestion handoff dispatch drain found no dispatchable work")
 		return
 	}
-	log.Printf("Queued SourceMaxx dispatch drain: processor_submitted=%d processor_failed=%d processor_skipped=%d reconciler_submitted=%d reconciler_failed=%d reconciler_skipped=%d errors=%d",
+	log.Printf("Queued ingestion handoff dispatch drain: processor_submitted=%d processor_failed=%d processor_skipped=%d reconciler_submitted=%d reconciler_failed=%d reconciler_skipped=%d errors=%d",
 		result.ProcessorSubmitted,
 		result.ProcessorFailed,
 		result.ProcessorSkipped,
@@ -908,6 +907,6 @@ func dispatchQueuedSourceMaxx(ctx context.Context, store *cycle.Storage) {
 		len(result.Errors),
 	)
 	for _, errText := range result.Errors {
-		log.Printf("Queued SourceMaxx dispatch drain error: %s", errText)
+		log.Printf("Queued ingestion handoff dispatch drain error: %s", errText)
 	}
 }

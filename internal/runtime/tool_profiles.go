@@ -296,9 +296,9 @@ func canonicalAgentProfile(profile string) string {
 		return AgentProfileVSuper
 	case "vtext", "vtext-agent", "document-agent":
 		return AgentProfileVText
-	case "processor", "news-processor", "source-processor", "sourcemaxx-processor", "global-wire-processor":
+	case "processor", "news-processor", "source-processor", "global-wire-processor":
 		return AgentProfileProcessor
-	case "reconciler", "news-reconciler", "story-reconciler", "corpus-reconciler", "sourcemaxx-reconciler", "global-wire-reconciler":
+	case "reconciler", "news-reconciler", "story-reconciler", "corpus-reconciler", "global-wire-reconciler":
 		return AgentProfileReconciler
 	case "email", "email-agent", "email-appagent", "mail", "mail-agent":
 		return AgentProfileEmail
@@ -386,9 +386,9 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	if profile == AgentProfileVText {
 		isGlobalWireVText := metadataString(rec.Metadata, "source_network_cycle_id") != "" ||
-			metadataString(rec.Metadata, "source_maxx_cycle_id") != "" ||
+			metadataString(rec.Metadata, "ingestion_handoff_cycle_id") != "" ||
 			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "global_wire_") ||
-			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "source_maxx_")
+			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "ingestion_handoff_")
 		b.WriteString("\n\nVText is a durable document owner, not a one-shot answerer.")
 		b.WriteString("\nCanonical document versions are created only when you call edit_vtext. Your final text is run output only and is never stored as document content.")
 		b.WriteString("\nWhen the document should change, call edit_vtext with the exact current base_revision_id. Use apply_edits by default for ordinary line, paragraph, section, citation, or metadata changes. Use replace_all only for explicit whole-document rewrites and include a clear rationale.")

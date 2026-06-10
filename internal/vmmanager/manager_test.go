@@ -1209,7 +1209,7 @@ func TestGuestInitScript_NoProviderCredentials(t *testing.T) {
 	//   - RUNTIME_MAILD_URL (tap-subnet draft persistence only)
 	//   - SOURCE_SERVICE_BASE_URL (tap-subnet source retrieval only)
 	//   - SOURCE_SERVICE_RUNTIME_BASE_URL / SOURCE_SERVICE_RUNTIME_OWNER_ID
-	//     (tap-subnet SourceMaxx lifecycle evidence only)
+	//     (tap-subnet ingestion handoff lifecycle evidence only)
 	//   - RUNTIME_STORE_PATH (local persistent path)
 	//
 	// No provider credentials or host-side secret paths are set.

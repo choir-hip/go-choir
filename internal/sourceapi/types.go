@@ -14,13 +14,13 @@ type HealthResponse struct {
 	CheckedAt  time.Time `json:"checked_at"`
 }
 
-type SourceMaxxResponse struct {
-	Provider           string              `json:"provider"`
-	Cycle              CycleSummary        `json:"cycle"`
-	SourceHealth       SourceHealth        `json:"source_health,omitempty"`
-	ProcessorRequests  []ProcessorRequest  `json:"processor_requests"`
-	ReconcilerRequests []ReconcilerRequest `json:"reconciler_requests"`
-	Metadata           SourceMaxxMetadata  `json:"metadata,omitempty"`
+type IngestionHandoffResponse struct {
+	Provider           string                  `json:"provider"`
+	Cycle              CycleSummary            `json:"cycle"`
+	SourceHealth       SourceHealth            `json:"source_health,omitempty"`
+	ProcessorRequests  []ProcessorRequest      `json:"processor_requests"`
+	ReconcilerRequests []ReconcilerRequest     `json:"reconciler_requests"`
+	Metadata           IngestionHandoffMetadata `json:"metadata,omitempty"`
 }
 
 type SourceHealth struct {
@@ -87,7 +87,7 @@ type ReconcilerRequest struct {
 	UpdatedAt           string   `json:"updated_at,omitempty"`
 }
 
-type SourceMaxxMetadata struct {
+type IngestionHandoffMetadata struct {
 	Topology      string `json:"topology,omitempty"`
 	AuthorityRule string `json:"authority_rule,omitempty"`
 }

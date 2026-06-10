@@ -29,7 +29,7 @@ func TestSaveIngestionEventsRejectsPromptBarOrigin(t *testing.T) {
 	}
 }
 
-func TestBuildSourceMaxxHandoffRequiresIngestionEvents(t *testing.T) {
+func TestBuildIngestionHandoffRequiresIngestionEvents(t *testing.T) {
 	now := time.Date(2026, 6, 10, 8, 0, 0, 0, time.UTC)
 	items := []sources.Item{{
 		ID:         "srcitem_rss_1",
@@ -38,12 +38,12 @@ func TestBuildSourceMaxxHandoffRequiresIngestionEvents(t *testing.T) {
 		Title:      "Story",
 		Region:     "global",
 	}}
-	handoff := BuildSourceMaxxHandoff("cycle_1", items, nil, now)
+	handoff := BuildIngestionHandoff("cycle_1", items, nil, now)
 	if len(handoff.ProcessorRequests) != 0 {
 		t.Fatalf("expected no processor requests without ingestion events, got %+v", handoff.ProcessorRequests)
 	}
 	events := BuildIngestionEventsFromItems("cycle_1", items, now)
-	handoff = BuildSourceMaxxHandoff("cycle_1", items, events, now)
+	handoff = BuildIngestionHandoff("cycle_1", items, events, now)
 	if len(handoff.ProcessorRequests) != 1 || len(handoff.ProcessorRequests[0].IngestionEventIDs) != 1 {
 		t.Fatalf("expected processor request with ingestion event ids, got %+v", handoff.ProcessorRequests)
 	}
@@ -114,7 +114,7 @@ func TestRSSGDELTCurriculumEmitsIngestionEventsAndProcessorHandoff(t *testing.T)
 	if err := store.SaveIngestionEvents(ctx, events); err != nil {
 		t.Fatalf("save ingestion events: %v", err)
 	}
-	handoff := BuildSourceMaxxHandoff(cycleID, items, events, now)
+	handoff := BuildIngestionHandoff(cycleID, items, events, now)
 	if len(handoff.ProcessorRequests) != 2 {
 		t.Fatalf("processor requests = %d, want rss + gdelt routes", len(handoff.ProcessorRequests))
 	}

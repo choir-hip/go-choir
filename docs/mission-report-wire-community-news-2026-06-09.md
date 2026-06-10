@@ -907,7 +907,7 @@ mission v1 and spec Activation section amended same date.
 | Deliverable | Status |
 |-------------|--------|
 | (a) Architecture checkpoint | **Done** (docs) |
-| (b) Deletion Ledger | **Not started** — SourceMaxx symbols active |
+| (b) Deletion Ledger | **In progress** — ingestion spine renamed; StoryGraph store/routes remain |
 | (c) Universal Wire rename | **Not started** — blocked on (b) |
 | (d) Activation graph (Slice 3) | **Not started** — blocked on (b),(c) |
 | (e) Staging acceptance | **Not started** |
@@ -929,9 +929,21 @@ mission v1 and spec Activation section amended same date.
 **Supersedes:** Slice 3 checkpoint draft (2026-06-10 morning) that proposed
 reconciler edition writes and `global-wire/Wire.vtext` without rename policy.
 
+**Workstream (b) checkpoint — ingestion spine replacement (2026-06-10):**
+
+**Problem:** Active ingestion path still used `BuildSourceMaxxHandoff`,
+`source_maxx_*` metadata, and `/sourcemaxx/latest` API — deletion-ledger
+violation blocking rename (c) and activation graph (d).
+
+**Fix:** Neutral vocabulary — `BuildIngestionHandoff`, `ingestion_handoff_*`
+metadata, `/internal/source-service/ingestion-handoff/latest`, renamed dispatcher
+types in `cmd/sourcecycled`. Go grep for `SourceMaxx` / `source_maxx` /
+`sourcemaxx` is clean. **Remaining (b):** StoryGraph store helpers, legacy
+publication/newsletter routes, `GlobalWireStory` seed paths, staging purge.
+
 next step:
 
-- Land docs checkpoint commit; begin Workstream **(b) Deletion Ledger**.
+- Finish Deletion Ledger (StoryGraph routes/types/store); then **(c)** Universal Wire rename.
 
 
 ## v1 mission handoff (2026-06-09)

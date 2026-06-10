@@ -52,9 +52,9 @@ func seedPlatformSourceNetworkVTextFixture(t *testing.T, handler *APIHandler, do
 	}
 	meta, _ := json.Marshal(map[string]any{
 		"source":                   "edit_vtext",
-		"source_maxx_cycle_id":     "cycle-live",
-		"source_maxx_request_id":   "reconciler-live",
-		"source_maxx_request_kind": "reconciler",
+		"ingestion_handoff_cycle_id":     "cycle-live",
+		"ingestion_handoff_request_id":   "reconciler-live",
+		"ingestion_handoff_request_kind": "reconciler",
 		"selected_style_sources":   []map[string]any{{"title": "Style.vtext: Global Wire"}},
 		"selected_style_rationale": "Global Wire style fits a fast sourced dispatch.",
 		"source_item_ids":          []string{"srcitem_live_1", "srcitem_live_2"},
@@ -121,7 +121,7 @@ func seedCommunityWireEditionFixture(t *testing.T, handler *APIHandler, included
 
 func TestHandleGlobalWireStoriesDoesNotIndexUntranscludedPlatformVTexts(t *testing.T) {
 	_, handler := testAPISetup(t)
-	doc := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-source-maxx-live")
+	doc := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-source-network-live")
 
 	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-global-wire")
 	if w.Code != http.StatusOK {
@@ -147,7 +147,7 @@ func TestHandleGlobalWireStoriesDoesNotIndexUntranscludedPlatformVTexts(t *testi
 
 func TestHandleGlobalWireStoriesIndexesEditionTranscludedVTextHeads(t *testing.T) {
 	_, handler := testAPISetup(t)
-	doc := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-source-maxx-live")
+	doc := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-source-network-live")
 	edition := seedCommunityWireEditionFixture(t, handler, doc.DocID)
 
 	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/global-wire/stories", "", "user-global-wire")
@@ -243,9 +243,9 @@ func TestHandleGlobalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifes
 	}
 	meta, _ := json.Marshal(map[string]any{
 		"source":                   "edit_vtext",
-		"source_maxx_cycle_id":     "cycle-scoped",
-		"source_maxx_request_id":   "reconciler-scoped",
-		"source_maxx_request_kind": "reconciler",
+		"ingestion_handoff_cycle_id":     "cycle-scoped",
+		"ingestion_handoff_request_id":   "reconciler-scoped",
+		"ingestion_handoff_request_kind": "reconciler",
 		"selected_style_sources":   []map[string]any{{"title": "Style.vtext: Global Wire"}},
 		"source_item_ids":          []string{"srcitem_cycle_1", "srcitem_cycle_2", "srcitem_cycle_3", "srcitem_cycle_4"},
 		"source_entities": []map[string]any{

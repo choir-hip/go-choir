@@ -322,12 +322,12 @@ func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *ty
 		"parent_channel_id":           strings.TrimSpace(parentRec.ChannelID),
 		"requested_channel_id":        strings.TrimSpace(req.ChannelID),
 		"seed_prompt":                 strings.TrimSpace(req.Objective),
-		"source_network_cycle_id":     firstNonEmpty(metadataString(parentRec.Metadata, "source_network_cycle_id"), metadataString(parentRec.Metadata, "source_maxx_cycle_id")),
-		"source_network_request_id":   firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_id"), metadataString(parentRec.Metadata, "source_maxx_request_id")),
-		"source_network_request_kind": firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_kind"), metadataString(parentRec.Metadata, "source_maxx_request_kind")),
-		"source_maxx_cycle_id":        metadataString(parentRec.Metadata, "source_maxx_cycle_id"),
-		"source_maxx_request_id":      metadataString(parentRec.Metadata, "source_maxx_request_id"),
-		"source_maxx_request_kind":    metadataString(parentRec.Metadata, "source_maxx_request_kind"),
+		"source_network_cycle_id":       firstNonEmpty(metadataString(parentRec.Metadata, "source_network_cycle_id"), metadataString(parentRec.Metadata, "ingestion_handoff_cycle_id")),
+		"source_network_request_id":     firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_id"), metadataString(parentRec.Metadata, "ingestion_handoff_request_id")),
+		"source_network_request_kind":   firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_kind"), metadataString(parentRec.Metadata, "ingestion_handoff_request_kind")),
+		"ingestion_handoff_cycle_id":    metadataString(parentRec.Metadata, "ingestion_handoff_cycle_id"),
+		"ingestion_handoff_request_id":  metadataString(parentRec.Metadata, "ingestion_handoff_request_id"),
+		"ingestion_handoff_request_kind": metadataString(parentRec.Metadata, "ingestion_handoff_request_kind"),
 		"source_item_ids":             parentRec.Metadata["source_item_ids"],
 		"processor_key":               metadataString(parentRec.Metadata, runMetadataProcessorKey),
 		"reconciler_scope":            metadataString(parentRec.Metadata, runMetadataReconcilerScope),
@@ -508,7 +508,7 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 	b.WriteString(doc.Title)
 	b.WriteString("\nParent loop: ")
 	b.WriteString(strings.TrimSpace(parentRec.RunID))
-	if cycleID := firstNonEmpty(metadataString(parentRec.Metadata, "source_network_cycle_id"), metadataString(parentRec.Metadata, "source_maxx_cycle_id")); cycleID != "" {
+	if cycleID := firstNonEmpty(metadataString(parentRec.Metadata, "source_network_cycle_id"), metadataString(parentRec.Metadata, "ingestion_handoff_cycle_id")); cycleID != "" {
 		b.WriteString("\nSource network cycle: ")
 		b.WriteString(cycleID)
 	}

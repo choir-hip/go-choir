@@ -11,15 +11,15 @@ import (
 
 const maxProcessorBatchItems = 50
 
-type SourceMaxxHandoff struct {
+type IngestionHandoff struct {
 	ProcessorRequests  []ProcessorRequest
 	ReconcilerRequests []ReconcilerRequest
 }
 
-func BuildSourceMaxxHandoff(cycleID string, items []sources.Item, events []IngestionEvent, now time.Time) SourceMaxxHandoff {
+func BuildIngestionHandoff(cycleID string, items []sources.Item, events []IngestionEvent, now time.Time) IngestionHandoff {
 	cycleID = strings.TrimSpace(cycleID)
 	if cycleID == "" || len(items) == 0 || len(events) == 0 {
-		return SourceMaxxHandoff{}
+		return IngestionHandoff{}
 	}
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -36,7 +36,7 @@ func BuildSourceMaxxHandoff(cycleID string, items []sources.Item, events []Inges
 	}
 	sort.Strings(keys)
 
-	out := SourceMaxxHandoff{}
+	out := IngestionHandoff{}
 	allItemIDs := orderedSourceItemIDs(items)
 	for _, key := range keys {
 		itemsForKey := batches[key]

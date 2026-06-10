@@ -2141,9 +2141,9 @@ func TestProcessorAndReconcilerProfilesShareHarnessAndDelegateToResearcherOrVTex
 		"source_network_cycle_id":     "cycle-test",
 		"source_network_request_id":   "processor-test",
 		"source_network_request_kind": "processor",
-		"source_maxx_cycle_id":        "cycle-test",
-		"source_maxx_request_id":      "processor-test",
-		"source_maxx_request_kind":    "processor",
+		"ingestion_handoff_cycle_id":        "cycle-test",
+		"ingestion_handoff_request_id":      "processor-test",
+		"ingestion_handoff_request_kind":    "processor",
 		"source_item_ids":             []string{sourceItem.ContentID},
 	})
 	if err != nil {

@@ -39,8 +39,8 @@ type sourceItemResolveClient interface {
 	ResolveSourceItem(ctx context.Context, itemID string) (*sourceapi.ItemResult, error)
 }
 
-type sourceMaxxStatusClient interface {
-	SourceMaxxLatest(ctx context.Context) (*sourceapi.SourceMaxxResponse, error)
+type ingestionHandoffStatusClient interface {
+	IngestionHandoffLatest(ctx context.Context) (*sourceapi.IngestionHandoffResponse, error)
 }
 
 type sourceSearchResponse struct {
@@ -129,31 +129,31 @@ func (c *httpSourceSearchClient) SearchSources(ctx context.Context, query string
 	}, nil
 }
 
-func (c *httpSourceSearchClient) SourceMaxxLatest(ctx context.Context) (*sourceapi.SourceMaxxResponse, error) {
+func (c *httpSourceSearchClient) IngestionHandoffLatest(ctx context.Context) (*sourceapi.IngestionHandoffResponse, error) {
 	if c == nil || strings.TrimSpace(c.baseURL) == "" {
 		return nil, fmt.Errorf("source search client not configured")
 	}
-	endpoint, err := url.Parse(c.baseURL + "/internal/source-service/sourcemaxx/latest")
+	endpoint, err := url.Parse(c.baseURL + "/internal/source-service/ingestion-handoff/latest")
 	if err != nil {
-		return nil, fmt.Errorf("parse source service sourcemaxx URL: %w", err)
+		return nil, fmt.Errorf("parse source service ingestion handoff URL: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("create source service sourcemaxx request: %w", err)
+		return nil, fmt.Errorf("create source service ingestion handoff request: %w", err)
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("call source service sourcemaxx: %w", err)
+		return nil, fmt.Errorf("call source service ingestion handoff: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("source service sourcemaxx returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("source service ingestion handoff returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
-	var apiResp sourceapi.SourceMaxxResponse
+	var apiResp sourceapi.IngestionHandoffResponse
 	err = json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&apiResp)
 	if err != nil {
-		return nil, fmt.Errorf("decode source service sourcemaxx response: %w", err)
+		return nil, fmt.Errorf("decode source service ingestion handoff response: %w", err)
 	}
 	return &apiResp, nil
 }

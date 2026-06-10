@@ -388,7 +388,7 @@ func TestStorageSupersedesQueuedProcessorContinuityAndDependentReconcilers(t *te
 	}
 }
 
-func TestBuildSourceMaxxHandoffRoutesSourceItemsToProcessorsAndReconciler(t *testing.T) {
+func TestBuildIngestionHandoffRoutesSourceItemsToProcessorsAndReconciler(t *testing.T) {
 	now := time.Date(2026, 6, 7, 10, 30, 0, 0, time.UTC)
 	items := []sources.Item{
 		{
@@ -417,7 +417,7 @@ func TestBuildSourceMaxxHandoffRoutesSourceItemsToProcessorsAndReconciler(t *tes
 		},
 	}
 
-	handoff := BuildSourceMaxxHandoff("cycle_source_maxx", items, BuildIngestionEventsFromItems("cycle_source_maxx", items, now), now)
+	handoff := BuildIngestionHandoff("cycle_ingestion_handoff", items, BuildIngestionEventsFromItems("cycle_ingestion_handoff", items, now), now)
 	if len(handoff.ProcessorRequests) != 3 {
 		t.Fatalf("processor requests = %d, want one per source-class route: %+v", len(handoff.ProcessorRequests), handoff.ProcessorRequests)
 	}
@@ -425,7 +425,7 @@ func TestBuildSourceMaxxHandoffRoutesSourceItemsToProcessorsAndReconciler(t *tes
 		t.Fatalf("reconciler requests = %d, want 1", len(handoff.ReconcilerRequests))
 	}
 	for _, req := range handoff.ProcessorRequests {
-		if req.Status != "queued" || req.CycleID != "cycle_source_maxx" || req.ContinuityRef == "" {
+		if req.Status != "queued" || req.CycleID != "cycle_ingestion_handoff" || req.ContinuityRef == "" {
 			t.Fatalf("processor request missing durable handoff fields: %+v", req)
 		}
 		if len(req.SourceItemIDs) == 0 || req.Prompt == "" {
@@ -447,7 +447,7 @@ func TestBuildSourceMaxxHandoffRoutesSourceItemsToProcessorsAndReconciler(t *tes
 	}
 }
 
-func TestStoragePersistsSourceMaxxHandoffsAndLatestCycleSummary(t *testing.T) {
+func TestStoragePersistsIngestionHandoffsAndLatestCycleSummary(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
 	if err != nil {
@@ -472,7 +472,7 @@ func TestStoragePersistsSourceMaxxHandoffsAndLatestCycleSummary(t *testing.T) {
 	if err := store.SaveIngestionEvents(ctx, events); err != nil {
 		t.Fatalf("save ingestion events: %v", err)
 	}
-	handoff := BuildSourceMaxxHandoff(cycleID, []sources.Item{item}, events, now)
+	handoff := BuildIngestionHandoff(cycleID, []sources.Item{item}, events, now)
 	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
 		t.Fatalf("save processor requests: %v", err)
 	}

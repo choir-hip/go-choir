@@ -134,7 +134,7 @@ func (h *APIHandler) communityWireEditionVTextStories(ctx context.Context, style
 			}
 			return nil, nil, err
 		}
-		story, ok := sourceMaxxVTextStoryFromCurrentRevision(ctx, doc, rev, styleSources)
+		story, ok := wireArticleVTextStoryFromCurrentRevision(ctx, doc, rev, styleSources)
 		if !ok {
 			continue
 		}
@@ -171,21 +171,21 @@ func communityWirePlatformOwnerID() string {
 	return ownerID
 }
 
-func sourceMaxxVTextStoryFromCurrentRevision(ctx context.Context, doc types.Document, rev types.Revision, styleSources []types.GlobalWireStyleSource) (types.GlobalWireStory, bool) {
+func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Document, rev types.Revision, styleSources []types.GlobalWireStyleSource) (types.GlobalWireStory, bool) {
 	meta := decodeRevisionMetadata(rev.Metadata)
 	cycleID := sourceNetworkCycleID(meta)
 	if metadataString(meta, "source") != "edit_vtext" || cycleID == "" {
 		return types.GlobalWireStory{}, false
 	}
 	content := strings.TrimSpace(rev.Content)
-	if content == "" || sourceMaxxContentLooksLikeSeed(content) {
+	if content == "" || wireArticleContentLooksLikeSeed(content) {
 		return types.GlobalWireStory{}, false
 	}
-	styleID, styleTitle := sourceMaxxSelectedStyle(meta, styleSources)
-	headline := sourceMaxxArticleHeadline(doc.Title, content)
-	dek := sourceMaxxArticleDek(content)
-	projection := sourceMaxxArticleProjection(content)
-	manifest := sourceMaxxManifestFromRevision(ctx, meta, content, headline)
+	styleID, styleTitle := wireArticleSelectedStyle(meta, styleSources)
+	headline := wireArticleArticleHeadline(doc.Title, content)
+	dek := wireArticleArticleDek(content)
+	projection := wireArticleArticleProjection(content)
+	manifest := wireArticleManifestFromRevision(ctx, meta, content, headline)
 	if len(manifest.Lead) == 0 &&
 		len(manifest.Supporting) == 0 &&
 		len(manifest.Contrary) == 0 &&
@@ -206,14 +206,14 @@ func sourceMaxxVTextStoryFromCurrentRevision(ctx context.Context, doc types.Docu
 		OwnerID:             doc.OwnerID,
 		Headline:            headline,
 		Dek:                 dek,
-		Freshness:           sourceMaxxFreshness(doc.UpdatedAt),
+		Freshness:           wireArticleFreshness(doc.UpdatedAt),
 		Prominence:          90,
 		Tension:             "source-network article",
 		ChangeState:         "vtext published",
 		NodeTone:            "live",
 		Related:             []string{},
 		Manifest:            manifest,
-		Claims:              sourceMaxxArticleClaims(content, styleTitle, meta),
+		Claims:              wireArticleArticleClaims(content, styleTitle, meta),
 		Projections:         projections,
 		ProjectionVTextDocs: map[string]string{styleID: doc.DocID},
 		StyleSources:        styleSources,
@@ -225,14 +225,13 @@ func sourceMaxxVTextStoryFromCurrentRevision(ctx context.Context, doc types.Docu
 	}, true
 }
 
-func sourceMaxxContentLooksLikeSeed(content string) bool {
+func wireArticleContentLooksLikeSeed(content string) bool {
 	return strings.Contains(content, "## Source Brief") ||
-		strings.Contains(content, "## SourceMaxx Brief") ||
 		strings.Contains(content, "## Evidence Gathering") ||
 		strings.Contains(content, "## Working Revision")
 }
 
-func sourceMaxxSelectedStyle(meta map[string]any, styles []types.GlobalWireStyleSource) (string, string) {
+func wireArticleSelectedStyle(meta map[string]any, styles []types.GlobalWireStyleSource) (string, string) {
 	title := "Style.vtext: Global Wire"
 	if selected, ok := meta["selected_style_sources"].([]any); ok && len(selected) > 0 {
 		if first, ok := selected[0].(map[string]any); ok {
@@ -249,7 +248,7 @@ func sourceMaxxSelectedStyle(meta map[string]any, styles []types.GlobalWireStyle
 	return "wire-style", title
 }
 
-func sourceMaxxMetadataStringSlice(value any) []string {
+func wireArticleMetadataStringSlice(value any) []string {
 	out := []string{}
 	switch typed := value.(type) {
 	case []any:
@@ -268,20 +267,20 @@ func sourceMaxxMetadataStringSlice(value any) []string {
 	return out
 }
 
-func sourceMaxxManifestFromRevision(ctx context.Context, meta map[string]any, content, headline string) types.GlobalWireSourceManifest {
-	entities := sourceMaxxVisibleSourceEntities(ctx, meta, content)
+func wireArticleManifestFromRevision(ctx context.Context, meta map[string]any, content, headline string) types.GlobalWireSourceManifest {
+	entities := wireArticleVisibleSourceEntities(ctx, meta, content)
 	if len(entities) > 0 {
-		return sourceMaxxManifestFromSourceEntities(entities)
+		return wireArticleManifestFromSourceEntities(entities)
 	}
-	return sourceMaxxManifestFromCycleProvenance(meta, headline)
+	return wireArticleManifestFromCycleProvenance(meta, headline)
 }
 
-func sourceMaxxVisibleSourceEntities(ctx context.Context, meta map[string]any, content string) []vtextSourceEntity {
+func wireArticleVisibleSourceEntities(ctx context.Context, meta map[string]any, content string) []vtextSourceEntity {
 	entities := decodeVTextSourceEntities(meta["source_entities"])
 	if len(entities) == 0 {
 		return nil
 	}
-	refs := sourceMaxxInlineSourceRefs(sourceMaxxArticleProseForSourceRefs(content))
+	refs := wireArticleInlineSourceRefs(wireArticleArticleProseForSourceRefs(content))
 	if len(refs) == 0 {
 		return nil
 	}
@@ -299,11 +298,11 @@ func sourceMaxxVisibleSourceEntities(ctx context.Context, meta map[string]any, c
 	return out
 }
 
-func sourceMaxxArticleProseForSourceRefs(content string) string {
+func wireArticleArticleProseForSourceRefs(content string) string {
 	var b strings.Builder
 	for _, raw := range strings.Split(content, "\n") {
 		line := strings.TrimSpace(raw)
-		if sourceMaxxArticleLineStartsInventorySection(line) {
+		if wireArticleArticleLineStartsInventorySection(line) {
 			break
 		}
 		b.WriteString(raw)
@@ -312,7 +311,7 @@ func sourceMaxxArticleProseForSourceRefs(content string) string {
 	return b.String()
 }
 
-func sourceMaxxInlineSourceRefs(content string) map[string]bool {
+func wireArticleInlineSourceRefs(content string) map[string]bool {
 	out := map[string]bool{}
 	rest := content
 	for {
@@ -351,17 +350,17 @@ func sourceMaxxInlineSourceRefs(content string) map[string]bool {
 	return out
 }
 
-func sourceMaxxManifestFromSourceEntities(entities []vtextSourceEntity) types.GlobalWireSourceManifest {
+func wireArticleManifestFromSourceEntities(entities []vtextSourceEntity) types.GlobalWireSourceManifest {
 	manifest := types.GlobalWireSourceManifest{}
 	for i, entity := range entities {
-		id := sourceMaxxSourceEntityManifestID(entity)
+		id := wireArticleSourceEntityManifestID(entity)
 		if id == "" {
 			continue
 		}
 		item := types.GlobalWireSourceItem{
 			ID:           id,
-			Title:        sourceMaxxSourceEntityManifestTitle(entity),
-			Standing:     sourceMaxxSourceEntityManifestStanding(entity),
+			Title:        wireArticleSourceEntityManifestTitle(entity),
+			Standing:     wireArticleSourceEntityManifestStanding(entity),
 			Role:         "lead",
 			SourceID:     strings.TrimSpace(entity.Target.SourceID),
 			FetchID:      strings.TrimSpace(entity.Target.FetchID),
@@ -377,15 +376,15 @@ func sourceMaxxManifestFromSourceEntities(entities []vtextSourceEntity) types.Gl
 	return manifest
 }
 
-func sourceMaxxSourceEntityManifestID(entity vtextSourceEntity) string {
+func wireArticleSourceEntityManifestID(entity vtextSourceEntity) string {
 	return firstNonEmpty(entity.Target.ItemID, entity.Target.ContentID, entity.Target.DocID, entity.EntityID)
 }
 
-func sourceMaxxSourceEntityManifestTitle(entity vtextSourceEntity) string {
-	return firstNonEmpty(entity.Label, entity.Target.CanonicalURL, entity.Target.URL, sourceMaxxSourceEntityManifestID(entity))
+func wireArticleSourceEntityManifestTitle(entity vtextSourceEntity) string {
+	return firstNonEmpty(entity.Label, entity.Target.CanonicalURL, entity.Target.URL, wireArticleSourceEntityManifestID(entity))
 }
 
-func sourceMaxxSourceEntityManifestStanding(entity vtextSourceEntity) string {
+func wireArticleSourceEntityManifestStanding(entity vtextSourceEntity) string {
 	switch strings.TrimSpace(entity.Kind) {
 	case "content_item":
 		return "embedded source"
@@ -398,10 +397,10 @@ func sourceMaxxSourceEntityManifestStanding(entity vtextSourceEntity) string {
 	}
 }
 
-func sourceMaxxManifestFromCycleProvenance(meta map[string]any, headline string) types.GlobalWireSourceManifest {
+func wireArticleManifestFromCycleProvenance(meta map[string]any, headline string) types.GlobalWireSourceManifest {
 	manifest := types.GlobalWireSourceManifest{}
 	cycleID := sourceNetworkCycleID(meta)
-	sourceIDs := sourceMaxxMetadataStringSlice(meta["source_item_ids"])
+	sourceIDs := wireArticleMetadataStringSlice(meta["source_item_ids"])
 	switch {
 	case cycleID != "":
 		standing := "source firehose cycle"
@@ -425,7 +424,7 @@ func sourceMaxxManifestFromCycleProvenance(meta map[string]any, headline string)
 	return manifest
 }
 
-func sourceMaxxArticleHeadline(title, content string) string {
+func wireArticleArticleHeadline(title, content string) string {
 	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "# ") {
@@ -445,22 +444,22 @@ func sourceMaxxArticleHeadline(title, content string) string {
 	return "Global Wire article"
 }
 
-func sourceMaxxArticleDek(content string) string {
-	for _, paragraph := range sourceMaxxArticleParagraphs(content) {
+func wireArticleArticleDek(content string) string {
+	for _, paragraph := range wireArticleArticleParagraphs(content) {
 		return truncateRunes(paragraph, 220)
 	}
 	return "Global Wire VText article with source and style provenance on its current revision."
 }
 
-func sourceMaxxArticleProjection(content string) string {
-	paragraphs := sourceMaxxArticleParagraphs(content)
+func wireArticleArticleProjection(content string) string {
+	paragraphs := wireArticleArticleParagraphs(content)
 	if len(paragraphs) == 0 {
 		return truncateRunes(content, 520)
 	}
 	return truncateRunes(strings.Join(paragraphs, "\n\n"), 900)
 }
 
-func sourceMaxxArticleParagraphs(content string) []string {
+func wireArticleArticleParagraphs(content string) []string {
 	out := []string{}
 	var current []string
 	flush := func() {
@@ -479,7 +478,7 @@ func sourceMaxxArticleParagraphs(content string) []string {
 			flush()
 			continue
 		}
-		if sourceMaxxArticleLineIsScaffold(line) {
+		if wireArticleArticleLineIsScaffold(line) {
 			flush()
 			continue
 		}
@@ -496,7 +495,7 @@ func sourceMaxxArticleParagraphs(content string) []string {
 	return out
 }
 
-func sourceMaxxArticleLineIsScaffold(line string) bool {
+func wireArticleArticleLineIsScaffold(line string) bool {
 	trimmed := strings.TrimSpace(line)
 	plain := strings.Trim(trimmed, "*_ \t")
 	lower := strings.ToLower(plain)
@@ -528,10 +527,10 @@ func sourceMaxxArticleLineIsScaffold(line string) bool {
 		strings.HasPrefix(normalized, "source:") {
 		return true
 	}
-	return sourceMaxxArticleLineStartsInventorySection(trimmed)
+	return wireArticleArticleLineStartsInventorySection(trimmed)
 }
 
-func sourceMaxxArticleLineStartsInventorySection(line string) bool {
+func wireArticleArticleLineStartsInventorySection(line string) bool {
 	plain := strings.TrimSpace(strings.TrimLeft(line, "#*_ \t"))
 	lower := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(plain, "**", ""), "__", "")))
 	if lower == "source handles" ||
@@ -550,7 +549,7 @@ func sourceMaxxArticleLineStartsInventorySection(line string) bool {
 	return false
 }
 
-func sourceMaxxArticleClaims(content, _ string, meta map[string]any) []string {
+func wireArticleArticleClaims(content, _ string, meta map[string]any) []string {
 	claims := []string{
 		"Current head is a normal VText article revision owned by the Global Wire platform agent.",
 		"Source and style provenance are carried by the VText revision metadata and citations.",
@@ -569,10 +568,10 @@ func sourceMaxxArticleClaims(content, _ string, meta map[string]any) []string {
 }
 
 func sourceNetworkCycleID(meta map[string]any) string {
-	return firstNonEmptyString(metadataString(meta, "source_network_cycle_id"), metadataString(meta, "source_maxx_cycle_id"))
+	return firstNonEmptyString(metadataString(meta, "source_network_cycle_id"), metadataString(meta, "ingestion_handoff_cycle_id"))
 }
 
-func sourceMaxxFreshness(updatedAt time.Time) string {
+func wireArticleFreshness(updatedAt time.Time) string {
 	if updatedAt.IsZero() {
 		return "source-network current"
 	}
@@ -594,7 +593,7 @@ func sourceMaxxFreshness(updatedAt time.Time) string {
 
 func normalizeGlobalWireStoryPresentation(story types.GlobalWireStory) types.GlobalWireStory {
 	if globalWireStoryFreshnessLooksAuto(story.Freshness) {
-		story.Freshness = sourceMaxxFreshness(story.UpdatedAt)
+		story.Freshness = wireArticleFreshness(story.UpdatedAt)
 	}
 	return story
 }
