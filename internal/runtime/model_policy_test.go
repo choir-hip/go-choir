@@ -941,13 +941,9 @@ func TestProviderPreconditionFallbackSelectionsUseCrossProviderFlash(t *testing.
 		Provider:        "deepseek",
 		Model:           "deepseek-v4-flash",
 		ReasoningEffort: "medium",
-	}, LLMSelection{
-		Provider:        "chatgpt",
-		Model:           "gpt-5.5",
-		ReasoningEffort: "low",
 	})
 	if len(fallbacks) != 2 {
-		t.Fatalf("fallbacks = %+v, want Xiaomi flash plus platform fallback", fallbacks)
+		t.Fatalf("fallbacks = %+v, want Xiaomi flash then gpt-5.4-mini", fallbacks)
 	}
 	if got := fallbacks[0]; got.Provider != "xiaomi" ||
 		got.Model != "mimo-v2.5" ||
@@ -956,45 +952,41 @@ func TestProviderPreconditionFallbackSelectionsUseCrossProviderFlash(t *testing.
 		t.Fatalf("fallback = %+v", got)
 	}
 	if got := fallbacks[1]; got.Provider != "chatgpt" ||
-		got.Model != "gpt-5.5" ||
+		got.Model != "gpt-5.4-mini" ||
 		got.ReasoningEffort != "low" ||
-		got.Source != "provider_precondition_platform_fallback" {
-		t.Fatalf("platform fallback = %+v", got)
+		got.Source != "provider_precondition_terminal_fallback" {
+		t.Fatalf("terminal fallback = %+v", got)
 	}
 
 	xiaomiFallbacks := providerPreconditionFallbackSelections(LLMSelection{
 		Provider: "xiaomi",
 		Model:    "mimo-v2.5",
-	}, LLMSelection{
-		Provider: "chatgpt",
-		Model:    "gpt-5.5",
 	})
 	if len(xiaomiFallbacks) != 2 ||
 		xiaomiFallbacks[0].Provider != "deepseek" ||
-		xiaomiFallbacks[0].Model != "deepseek-v4-flash" {
-		t.Fatalf("xiaomi fallbacks = %+v, want deepseek flash then platform fallback", xiaomiFallbacks)
+		xiaomiFallbacks[0].Model != "deepseek-v4-flash" ||
+		xiaomiFallbacks[1].Provider != "chatgpt" ||
+		xiaomiFallbacks[1].Model != "gpt-5.4-mini" {
+		t.Fatalf("xiaomi fallbacks = %+v, want deepseek flash then gpt-5.4-mini", xiaomiFallbacks)
 	}
 
 	if got := providerPreconditionFallbackSelections(LLMSelection{
 		Provider: "deepseek",
 		Model:    "deepseek-v4-pro",
-	}, LLMSelection{
-		Provider: "chatgpt",
-		Model:    "gpt-5.5",
-	}); len(got) != 2 || got[0].Provider != "xiaomi" || got[0].Model != "mimo-v2.5" {
-		t.Fatalf("pro fallbacks = %+v, want xiaomi flash then platform fallback", got)
+	}); len(got) != 2 || got[0].Provider != "xiaomi" || got[0].Model != "mimo-v2.5" ||
+		got[1].Provider != "chatgpt" || got[1].Model != "gpt-5.4-mini" {
+		t.Fatalf("pro fallbacks = %+v, want xiaomi flash then gpt-5.4-mini", got)
 	}
 
 	fireworksFlashFallbacks := providerPreconditionFallbackSelections(LLMSelection{
 		Provider: "fireworks",
 		Model:    "accounts/fireworks/models/deepseek-v4-flash",
-	}, LLMSelection{
-		Provider: "chatgpt",
-		Model:    "gpt-5.5",
 	})
 	if len(fireworksFlashFallbacks) != 3 ||
 		fireworksFlashFallbacks[0].Provider != "xiaomi" ||
-		fireworksFlashFallbacks[1].Provider != "deepseek" {
-		t.Fatalf("fireworks flash fallbacks = %+v, want xiaomi then deepseek flash", fireworksFlashFallbacks)
+		fireworksFlashFallbacks[1].Provider != "deepseek" ||
+		fireworksFlashFallbacks[2].Provider != "chatgpt" ||
+		fireworksFlashFallbacks[2].Model != "gpt-5.4-mini" {
+		t.Fatalf("fireworks flash fallbacks = %+v, want xiaomi, deepseek flash, then gpt-5.4-mini", fireworksFlashFallbacks)
 	}
 }

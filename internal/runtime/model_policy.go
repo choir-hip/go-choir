@@ -37,6 +37,9 @@ const (
 	defaultFlashForegroundReasoning = "medium"
 	defaultVerifierModel            = "deepseek-v4-pro"
 	defaultMultimodalVerifierModel  = "mimo-v2.5"
+	defaultChatGPTProvider          = "chatgpt"
+	defaultTerminalFallbackModel    = "gpt-5.4-mini"
+	defaultTerminalFallbackReasoning = "low"
 	legacyFireworksFlashModel       = "accounts/fireworks/models/deepseek-v4-flash"
 	legacyFireworksProModel         = "accounts/fireworks/models/deepseek-v4-pro"
 	legacyFireworksKimiModel        = "accounts/fireworks/models/kimi-k2p6"
@@ -847,7 +850,16 @@ func runtimeConfigFallbackSelection(cfg Config) LLMSelection {
 	}
 }
 
-func providerPreconditionFallbackSelections(sel, platformFallback LLMSelection) []LLMSelection {
+func terminalProviderFallbackSelection() LLMSelection {
+	return LLMSelection{
+		Provider:        defaultChatGPTProvider,
+		Model:           defaultTerminalFallbackModel,
+		ReasoningEffort: defaultTerminalFallbackReasoning,
+		Source:          "provider_precondition_terminal_fallback",
+	}
+}
+
+func providerPreconditionFallbackSelections(sel LLMSelection) []LLMSelection {
 	if strings.TrimSpace(sel.Model) == "" {
 		return nil
 	}
@@ -855,7 +867,7 @@ func providerPreconditionFallbackSelections(sel, platformFallback LLMSelection) 
 	for _, candidate := range flashPreconditionFallbackSelections(sel) {
 		fallbacks = appendUniqueProviderModelFallback(fallbacks, candidate)
 	}
-	return appendProviderPreconditionPlatformFallback(fallbacks, sel, platformFallback)
+	return appendProviderPreconditionPlatformFallback(fallbacks, sel, terminalProviderFallbackSelection())
 }
 
 func flashPreconditionFallbackSelections(sel LLMSelection) []LLMSelection {
@@ -903,12 +915,16 @@ func appendProviderPreconditionPlatformFallback(fallbacks []LLMSelection, active
 	if provider == "" || model == "" {
 		return fallbacks
 	}
+	source := strings.TrimSpace(platformFallback.Source)
+	if source == "" {
+		source = "provider_precondition_platform_fallback"
+	}
 	candidate := LLMSelection{
 		Provider:        provider,
 		Model:           model,
 		ReasoningEffort: strings.TrimSpace(platformFallback.ReasoningEffort),
 		MaxTokens:       platformFallback.MaxTokens,
-		Source:          "provider_precondition_platform_fallback",
+		Source:          source,
 	}
 	if sameProviderModelSelection(active, candidate) {
 		return fallbacks

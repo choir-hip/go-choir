@@ -1059,17 +1059,17 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	maxOutputTokens := MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
-	platformFallback := runtimeConfigFallbackSelection(rt.cfg)
-	preconditionFallbacks := providerPreconditionFallbackSelections(llmConfig, platformFallback)
+	terminalFallback := terminalProviderFallbackSelection()
+	preconditionFallbacks := providerPreconditionFallbackSelections(llmConfig)
 	if emit != nil {
 		payload, _ := json.Marshal(map[string]any{
-			"phase":                     "tool_loop_fallbacks_configured",
-			"llm_provider":              llmConfig.Provider,
-			"llm_model":                 llmConfig.Model,
-			"runtime_fallback_provider": platformFallback.Provider,
-			"runtime_fallback_model":    platformFallback.Model,
-			"fallback_count":            len(preconditionFallbacks),
-			"fallbacks":                 preconditionFallbacks,
+			"phase":                      "tool_loop_fallbacks_configured",
+			"llm_provider":               llmConfig.Provider,
+			"llm_model":                  llmConfig.Model,
+			"terminal_fallback_provider": terminalFallback.Provider,
+			"terminal_fallback_model":    terminalFallback.Model,
+			"fallback_count":             len(preconditionFallbacks),
+			"fallbacks":                  preconditionFallbacks,
 		})
 		emit(types.EventRunProgress, "tool_loop_fallbacks_configured", payload)
 	}
