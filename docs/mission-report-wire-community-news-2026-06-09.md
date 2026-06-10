@@ -749,8 +749,122 @@ unproven or partial claims:
 - Deeper SourceMaxx, style-source, newsletter, and autoradio compatibility
   routes still exist and need replacement or deletion.
 
+## Slice 0 excision (2026-06-09)
+
+Problem: legacy StoryGraph/SourceMaxx/publication routes, seed constructors, and
+432 prompt-initiated `global-wire-platform` VTexts on staging contaminated the
+edition path before auto-publish.
+
+Code excision (commit pending push):
+
+- Removed all `/api/global-wire/*` routes except `/api/global-wire/stories`.
+- Truncated `internal/runtime/global_wire.go` to edition-VText index handlers only
+  (~640 lines from ~7400).
+- Dropped `defaultGlobalWireStories`, `ensureDefaultGlobalWireStories`, and seed
+  helpers from `internal/store/global_wire.go`.
+- Kept five focused runtime tests for honest-empty and edition-transclusion
+  behavior; deleted legacy route tests.
+- Removed frontend SourceMaxx/source-network read shim; legacy publication-link
+  reader now shows an explicit retired message.
+- `DeleteDocument` now removes matching `vtext_document_aliases`; added
+  `cmd/purge-vtext-owner-aliases` for owner-scoped alias maintenance.
+
+Deletion Ledger grep (product code): clean for `graph-candidates`,
+`sourcemaxx-status`, `defaultGlobalWireStories`, `ensureDefaultGlobalWireStories`,
+`story-supply-resilience`, `seeded-source-neighborhood`. SourceMaxx naming
+remains in `sourcecycled` internal dispatch (Slice 0.5+ rename).
+
+Staging purge (2026-06-09, Node B):
+
+- Archived 432 platform VTexts to operator `~/go-choir-misc/wire-platform-archive-2026-06-09.tar.gz`.
+- Deleted 432 documents via sandbox API; deleted 424 orphan aliases via embedded
+  Dolt maintenance tool (host CLI was read-only while sandbox held the lock).
+- Verified counts: `vtext_documents=0`, `vtext_revisions=0`,
+  `vtext_document_aliases=0` for `global-wire-platform`.
+
+Focused tests:
+
+- `nix develop -c go test ./internal/store -run TestGlobalWireStoriesDoNotSeedFakeFrontPage`
+- `nix develop -c go test ./internal/runtime -run TestHandleGlobalWireStories`
+
 next step:
 
-- Repair durable `RunAcceptanceRecord` synthesis for long-lived staging proof
-  sessions, then synthesize acceptance from the completed source-native Wire
-  trajectory without relying on short-lived Playwright auth state.
+- Push/deploy this slice; staging acceptance: honest-empty `/api/global-wire/stories`,
+  Deletion Ledger grep on deployed commit.
+- Slice 0.5 per [mission-wire-community-news-v1.md](mission-wire-community-news-v1.md):
+  always-on platform computer VM + repoint dispatch off host `sandbox-m1`.
+
+## v1 mission handoff (2026-06-09)
+
+Active mission document:
+[mission-wire-community-news-v1.md](mission-wire-community-news-v1.md)
+(supersedes v0). Spec amended with invariant 21 / Activation section in
+[choir-wire-source-to-vtext-spec-2026-06-09.md](choir-wire-source-to-vtext-spec-2026-06-09.md).
+
+v1 corrections applied after external doc review:
+
+- Frontend hardcoded preview stories were removed in v0; legacy seeding remains
+  in `internal/store/global_wire.go` and routes/tests — invariant 23 Deletion
+  Ledger is the bar, not front-page suppression alone.
+- HN ingests today via RSS (`rss:hn_best`); Phase A requires per-class proof,
+  not assumption from registry presence.
+- The v0 "Computer Science Degree" article is prompt-initiated proof, not
+  ingestion acceptance; provenance audit required before v1 completion.
+- Platform-computer deployment binding documented; Slice 0.5 adds evidence row
+  (always-on VM, repoint dispatch off host `sandbox-m1`).
+- Cognitive transform review (2026-06-09): platform-internal auto-publish is a
+  missing slice; Telegram/MTProto post-core; Phase A = RSS/GDELT/HN-via-RSS only.
+
+## Cognitive Transform Review (2026-06-09)
+
+See full analysis in
+[mission-wire-community-news-v1.md](mission-wire-community-news-v1.md)
+(Cognitive Transform Review section). Summary of route changes:
+
+| Insight | Action |
+|---|---|
+| Auto-publish ≠ removing approval UI | Build platform-internal publish to platformd; provenance is the verifier |
+| User JWT proxy publish ≠ Wire newspaper | Slice 3b: platform computer → platformd without prompt/proxy |
+| SQLite OK for v1 if API boundary holds | Invariant 24: no direct SQLite reads from platform runtime |
+| Always-on platform VM shares disk failure class with operator | Platform VM needs disk headroom + reclaim policy |
+| Phase A curriculum | One RSS+GDELT chain before Telegram/MTProto/Qdrant |
+
+Belief-state update after operator decisions + transforms:
+
+- Fetch ledger: SQLite on host for v1; Qdrant post-core for embeddings only.
+- Telegram HTML scraping forbidden long-term; Telegram proof deferred post-core.
+- Hard cutovers acceptable; three-store boundaries (SQLite / platform Dolt /
+  platformd) are load-bearing.
+
+## Incident: operator primary computer boot blocked (2026-06-09)
+
+**Status:** diagnosis complete; recovery in progress.
+
+**Symptom:** operator session (`5bd6de97-3b58-408c-bf89-c42c81b083de`,
+`vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19`) hangs at BIOS
+`COMPUTER BOOT IS STILL PENDING` with bootstrap probe retries and stalled
+recovery. Staging `/health` at commit `41aee833` (deployed `21:34:39Z`) shows
+`vmctl_status: unavailable` and only `resolve_error` lifecycle stats.
+
+**Class test:** single-computer fault. Deploy refresh at `21:35Z` succeeded for
+four other active primaries; journal resolve failures since then are exclusively
+the operator user.
+
+**Root-cause hypothesis:** concurrent bootstrap `resolve` calls for a `stopped`
+primary replay `startExistingVM` (resume/recover) into a firecracker
+start/kill race (`state=failed`, duplicate-process kill), saturating vmctl;
+product refresh path never serializes because mutex is held by stacked resolves.
+
+**Four prior fix attempts:** documented in incident doc findings 1–4; none
+address stopped-ownership resolve using resume/recover instead of refresh, or
+vmctl saturation from 15s client probes vs 150s server boot waits.
+
+**Recovery plan (data-preserving):** stop retry storm → restart vmctl (clear
+in-flight state, preserve `data.img`) → single `POST /internal/vmctl/refresh`
+→ verify bootstrap, VText history, `/health`, BIOS clean boot.
+
+**Sixth finding (2026-06-09):** serialized refresh still fails because guest
+disk is full (~7.8G/7.8G). Sandbox install logs `No space left on device` at
+`/mnt/persistent/runtime/.sandbox-next`. Compare blank account `a@b.com`
+(`vm-d067e51c…`, 327M, sandbox `ready`) on same deploy. Full detail in
+`docs/incident-vm-bootstrap-stale-route-2026-06-09.md`.

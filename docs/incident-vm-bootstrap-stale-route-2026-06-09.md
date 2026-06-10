@@ -163,3 +163,187 @@ longer had an instance to refresh. Accepting `stopped` in `RefreshVMForDesktop`
 is therefore not sufficient. Refresh must also handle a missing manager
 instance by booting from ownership-derived current deploy config, preserving the
 data image and issuing a gateway credential as `startExistingVM` already does.
+
+## Fifth Finding: operator primary VM crash-loop saturates vmctl (2026-06-09 21:45Z)
+
+### Symptom timeline
+
+- Deploy `41aee833` landed at `2026-06-09T21:34:39Z`. Deploy-time active-VM
+  refresh rebooted four interactive computers (`vm-301125…`, `vm-61ab545…`,
+  `vm-cd22ad17…`, `vm-d067e51c…`) but not the operator primary, which was
+  already `state: stopped` / `stopped_by: vmctl-restart`.
+- Staging `/health` at `21:45Z` reports `status: degraded`,
+  `vmctl_status: unavailable`, and exclusively `bootstrap.resolve` /
+  `api.resolve` `resolve_error` (~13–15s bootstrap, ~180s API).
+- Operator BIOS shows `COMPUTER BOOT IS STILL PENDING`, bootstrap probes 1–3
+  retrying, and `Requesting computer recovery` stalling.
+- Node B `curl http://127.0.0.1:8083/health` times out; lookup/refresh also
+  time out while resolve retries continue.
+
+### Class test (rule 5)
+
+Journal since `21:35Z` shows **only** user `5bd6de97-3b58-408c-bf89-c42c81b083de`
+(operator) failing resolve (14 failures, no other users). Deploy refresh
+succeeded for other active primaries. **Fault is single-computer, not platform
+class**, though operator browser retries saturate vmctl globally.
+
+### Bottom-up diagnosis
+
+| Layer | Status | Evidence |
+|-------|--------|----------|
+| Host resources | Healthy | `/` 75% used (120G free), 15Gi RAM available, 1341 open FDs |
+| vmctl daemon | Process up, API saturated | PID 1121315 listening `:8083`; `/health` hangs; threads in `do_wait` |
+| Operator VM lifecycle | Crash-loop | `vm-5b0c1bef…` ownership `stopped` epoch 159; fc-config epoch 298; no stable firecracker; tap `vm-vm-5b0c1-tap` DOWN |
+| Bootstrap probe target | Never reached | Resolve never returns route; probes abort at 15s |
+| Proxy route | Symptom only | `resolve_error` / canceled / 180s timeout |
+
+vmctl logs (operator user) repeat:
+
+```text
+start existing VM vm-5b0c1bef… failed: cannot be resumed (state=failed);
+recovery also failed: guest did not become healthy at http://10.203.*.2:8085 within 2m30s
+vmmanager: killing duplicate Firecracker process for VM vm-5b0c1bef… (pid=…)
+vmmanager: firecracker process … exited with error: signal: killed
+```
+
+### What the four code fix attempts changed (and why they failed here)
+
+1. `678d2df` — proxy refresh after wake when runtime probe fails. **Failed**
+   because failure is inside vmctl resolve (no route returned).
+2. `7ebd187` — lookup-first recovery + boot UI recovery after pending probes.
+   **Failed** because recovery still calls resolve/refresh behind the same
+   blocked vmctl mutex and the same `startExistingVM` resume/recover path.
+3. `6ce8526` — refresh stopped ownership on recovery. **Failed** because
+   refresh never completes: concurrent resolve attempts hold the registry lock
+   for 2m30s health waits and stack firecracker start/kill races.
+4. `41aee833` — `RefreshVMForDesktop` boots stopped VM when vmmanager instance
+   missing. **Not reached** on the product path: `/api/shell/bootstrap` resolve
+   still uses `startExistingVM` (resume → recover) for `stopped` ownership, not
+   refresh.
+
+### Falsifiable hypothesis
+
+> Operator browser bootstrap retries issue concurrent `resolve` calls for a
+> `stopped` primary whose vmmanager instance is `failed`. Each resolve runs
+> `startExistingVM` → `RecoverVM`, starts firecracker, then kills it as
+> duplicate when another concurrent resolve cleans up. Guest health never
+> succeeds; vmctl registry mutex saturates; `/health` reports unavailable and
+> all operator bootstrap probes show `resolve_error`.
+
+**Expected observation if true:** after stopping retry traffic, a single
+`POST /internal/vmctl/refresh` for user `5bd6de97…` desktop `primary` returns
+200 within one guest-ready window, sets ownership `active` with new
+`sandbox_url`, and subsequent bootstrap resolves succeed without probe retries.
+
+**Expected observation if false:** refresh returns error or guest health still
+fails on a single serialized attempt → inspect guest kernel log / sandbox boot
+inside VM (data image corruption or guest image regression).
+
+### Remediation attempt (operator recovery, data-preserving)
+
+vmctl was restarted at `22:00Z`; `/health` returned ok again. A single
+serialized `POST /internal/vmctl/refresh` for user `5bd6de97…` desktop
+`primary` still failed: guest ping succeeded but `:8085/health` never returned
+`ready` within 2m30s.
+
+## Sixth Finding: operator data disk full — sandbox cannot start (2026-06-09 22:10Z)
+
+### Root cause (guest serial console)
+
+Firecracker serial log for `vm-5b0c1bef…` during refresh at `22:02:58Z`:
+
+```text
+Starting go-choir Sandbox Runtime (VM guest)...
+mkdir: cannot create directory '/mnt/persistent/runtime/.sandbox-next': No space left on device
+[FAILED] Failed to start go-choir Sandbox Runtime (VM guest).
+```
+
+Guest network comes up; sandbox install/update fails because the mutable data
+disk is full. This explains the `:8085` health timeout without data corruption
+or routing failure.
+
+### Disk evidence (host read-only mount of `data.img`)
+
+| Path inside guest | Size | Notes |
+|-------------------|------|-------|
+| Total `data.img` | 7.8G used / 7.8G (100%) | `dataImageSizeMB = 8192` sparse cap |
+| `files/` | 3.0G | includes `.choir-tool-cache` (go mod/build caches) |
+| `state.vtext/` | 2.5G | Dolt `noms/` is the bulk; possible compaction debt |
+| `go/pkg/mod/` | 1.7G | module cache inside persistent disk |
+| `go-build-cache/` | 512M | |
+| `runtime/` | 231M | current + previous sandbox binaries |
+
+User data (VTexts, mission files) is present and mountable; the failure is
+capacity, not missing `data.img`.
+
+### Class comparison: blank account `a@b.com` vs operator
+
+| Field | `a@b.com` (`0e5c45ab…`) | `yusefnathanson@me.com` (`5bd6de97…`) |
+|-------|-------------------------|---------------------------------------|
+| Created | `2026-06-09T20:33:54Z` | `2026-05-26T08:58:23Z` |
+| Published primary VM | `vm-d067e51c…` | `vm-5b0c1bef…` |
+| `data.img` size | 327M | 7.9G (100% full) |
+| Ownership state | `active` epoch 5 | `stopped` epoch 159 |
+| Guest `:8085/health` | `ready` | unreachable (sandbox service failed) |
+
+Blank account boots on the same staging deploy (`41aee833`). Operator failure
+is **single-computer disk exhaustion**, not a platform-class regression.
+
+### Belief-state update
+
+The crash-loop / vmctl-saturation hypothesis (Fifth Finding) remains partially
+true for concurrent retries, but the **terminal blocker** for operator recovery
+is guest disk full. Expanding `data.img`, pruning guest caches (tool-cache,
+`go/pkg/mod`, build caches), and/or Dolt maintenance are the realistic recovery
+axes. Snapshot `data.img` before any mutation.
+
+### Remaining error field
+
+- ~~Operator computer still not booting; acceptance criteria not met.~~
+- ~~No `data.img` snapshot taken yet.~~
+- Dolt 2.5G bloat may be a separate compaction bug; deprioritized until disk
+  headroom exists — headroom now restored (see Seventh Finding).
+
+## Seventh Finding: operator disk pruned — boot recovered (2026-06-09 22:47Z)
+
+### Actions taken (data-preserving)
+
+1. Snapshot copy:
+   `data.img.pre-prune-20260609T224644Z` (8.0G) beside live image.
+2. Guest ext4 recovered with `e2fsck -fy` on loop mount.
+3. Pruned **rebuildable caches only** (VText/Dolt untouched):
+   - `files/.choir-tool-cache` (~2.9G)
+   - `go/pkg/mod` (~1.7G)
+   - `go-build-cache` (~512M)
+4. Guest disk after prune: **2.8G used / 4.7G free** (37% utilization).
+   `state.vtext/` remained ~2.5G.
+
+### Recovery proof
+
+Serialized refresh:
+
+```bash
+POST http://127.0.0.1:8083/internal/vmctl/refresh
+{"user_id":"5bd6de97-3b58-408c-bf89-c42c81b083de","desktop_id":"primary"}
+```
+
+Response (22:47Z):
+
+```json
+{"vm_id":"vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19","state":"active","sandbox_url":"http://10.203.139.2:8085"}
+```
+
+Guest health:
+
+```json
+{"status":"ready","service":"sandbox","sandbox_id":"vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19","runtime_health":"ready"}
+```
+
+Deploy identity on guest: commit `41aee833`.
+
+### Belief-state update
+
+PROBLEM 0 **resolved** for boot/sandbox readiness. Operator primary computer
+runs again with VText store intact. Follow-on missions: Dolt compaction,
+proactive `data.img` growth alerts, platform VM disk policy (see community-news
+v1 Platform Computer Requirements).

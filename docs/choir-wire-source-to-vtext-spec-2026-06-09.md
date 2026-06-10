@@ -1,6 +1,6 @@
 # Choir Wire Source-To-VText Spec
 
-Date: 2026-06-09
+Date: 2026-06-09 (amended same day: explicit activation model, invariant 21)
 
 Status: current requirements contract for Wire/news work
 
@@ -109,6 +109,13 @@ private sources, model/search policy, and publication/subscription boundaries.
     controls. Examples matter more than rule bullets.
 20. Wire app views must work in Future Noir, Carbon Kintsugi, and London Salmon
     through the shared OS-wide theme system.
+21. Wire story work is activated by source ingestion, never by human input
+    surfaces. Source arrival dispatches processor runs; processors request
+    researchers and VText agents; editions update through the approval path.
+    The prompt bar, Command prompt, and any other human input surface never
+    creates, triggers, or supplies a Wire story. Their only roles near Wire
+    are editorial supervision (approve, correct, retract, annotate) and
+    explicitly marked debugging harnesses excluded from the product path.
 
 ## Source System
 
@@ -169,6 +176,30 @@ provenance refs
 The shared agent harness remains uniform. Role prompts and capability policy
 shape behavior; the core loop should not fork by role unless a
 correctness/security/resource invariant requires it.
+
+### Activation
+
+Activation is explicit. Nothing in this section is initiated by the prompt bar.
+
+```text
+source daemon fetch
+  -> source artifact persisted with fetch provenance
+  -> ingestion event (artifact id, source id, fetch provenance,
+     content hash, dedupe key)
+  -> platform processor run dispatched on the event
+       (batched per cycle or per slice; live per-arrival as ingestion
+        cadence improves)
+  -> processor notes/requests
+  -> researcher runs dispatched on processor/reconciler requests
+  -> VText agent runs dispatched on processor/reconciler requests
+  -> reconciler runs dispatched on schedule and on corpus-change signals
+  -> edition update through the existing approval path
+```
+
+The ingestion event is the only entry point for story creation. Human input
+surfaces dispatch editorial-supervision work only. Scheduled reconciliation and
+operator-approved promotion are the other lawful dispatch causes; both operate
+on work that ingestion originated.
 
 The processor/reconciler split is direction of motion:
 

@@ -68,7 +68,7 @@
       const payload = await response.json();
       if (Array.isArray(payload.stories)) {
         stories = payload.stories;
-        dataSource = (payload.source || 'durable-source-network').replaceAll('source-maxx', 'source-network').replaceAll('sourcemaxx', 'source-network');
+        dataSource = payload.source || 'community-wire-vtext-index';
         if (stories.length && !stories.some((story) => story.id === selectedStoryId)) selectedStoryId = stories[0].id;
         if (!stories.length) selectedStoryId = '';
       }

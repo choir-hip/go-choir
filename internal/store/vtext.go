@@ -527,6 +527,10 @@ func (s *Store) DeleteDocument(ctx context.Context, docID, ownerID string) error
 		`DELETE FROM vtext_revisions WHERE doc_id = ? AND owner_id = ?`,
 		docID, ownerID,
 	)
+	_, _ = s.vtextHandle().ExecContext(ctx,
+		`DELETE FROM vtext_document_aliases WHERE doc_id = ? AND owner_id = ?`,
+		docID, ownerID,
+	)
 
 	result, err := s.vtextHandle().ExecContext(ctx,
 		`DELETE FROM vtext_documents WHERE doc_id = ? AND owner_id = ?`,
@@ -543,6 +547,22 @@ func (s *Store) DeleteDocument(ctx context.Context, docID, ownerID string) error
 		return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, docID, ownerID)
 	}
 	return nil
+}
+
+// DeleteVTextAliasesByOwner removes all source-path aliases for an owner.
+func (s *Store) DeleteVTextAliasesByOwner(ctx context.Context, ownerID string) (int64, error) {
+	result, err := s.vtextHandle().ExecContext(ctx,
+		`DELETE FROM vtext_document_aliases WHERE owner_id = ?`,
+		ownerID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("delete vtext aliases: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("check deleted alias rows: %w", err)
+	}
+	return rows, nil
 }
 
 // ----- Revision CRUD -----

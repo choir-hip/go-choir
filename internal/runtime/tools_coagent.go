@@ -596,8 +596,16 @@ func metadataStringSlice(value any) []string {
 	}
 }
 
+func coagentDefaultStyleCatalog() []types.GlobalWireStyleSource {
+	return []types.GlobalWireStyleSource{
+		{ID: "wire-style", Title: "Style.vtext: Global Wire", Label: "Wire", SourcePath: "styles/global-wire.style.vtext"},
+		{ID: "claim-audit-style", Title: "Style.vtext: Claim Audit", Label: "Audit", SourcePath: "styles/claim-audit.style.vtext"},
+		{ID: "market-brief-style", Title: "Style.vtext: Market Brief", Label: "Market", SourcePath: "styles/market-brief.style.vtext"},
+	}
+}
+
 func coagentVTextSelectedStyles(req coagentVTextRouteRequest) ([]types.GlobalWireStyleSource, string) {
-	styles := defaultGlobalWireStyleSourcesForRuntime()
+	styles := coagentDefaultStyleCatalog()
 	byID := map[string]types.GlobalWireStyleSource{}
 	for _, style := range styles {
 		byID[style.ID] = style

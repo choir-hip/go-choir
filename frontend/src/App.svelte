@@ -231,20 +231,9 @@
 
   async function loadGlobalWirePublicLink(token) {
     if (!token) return;
-    globalWirePublicStatus = 'loading';
-    globalWirePublicError = '';
+    globalWirePublicStatus = 'error';
+    globalWirePublicError = 'Legacy publication links were removed. Community Wire will publish through platformd after auto-publish lands.';
     globalWirePublicLink = null;
-    try {
-      const response = await fetch(`/api/global-wire/publication-public-links/${encodeURIComponent(token)}`);
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.error || `Publication load failed: ${response.status}`);
-      globalWirePublicLink = payload.public_link || null;
-      globalWirePublicStatus = globalWirePublicLink ? 'ready' : 'missing';
-      if (!globalWirePublicLink) globalWirePublicError = 'Publication link not found';
-    } catch (err) {
-      globalWirePublicStatus = 'error';
-      globalWirePublicError = err?.message || 'Publication link failed';
-    }
   }
 
   function clearConsumedAppIntentFromURL(intent = null) {
