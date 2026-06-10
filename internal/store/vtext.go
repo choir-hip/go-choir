@@ -428,6 +428,148 @@ func (s *Store) ListAllDocuments(ctx context.Context, limit int) ([]types.Docume
 	return docs, nil
 }
 
+// SearchResult is a document match from corpus search.
+type SearchResult struct {
+	DocID         string    `json:"doc_id"`
+	Title         string    `json:"title"`
+	OwnerID       string    `json:"owner_id"`
+	UpdatedAt     time.Time `json:"updated_at"`
+	Snippet       string    `json:"snippet,omitempty"`
+	MatchSource   string    `json:"match_source"` // "title" or "content"
+}
+
+// SearchDocuments searches the VText corpus by title and revision content.
+// It returns documents matching the query terms, ordered by relevance.
+// Searches across all owners when ownerID is empty.
+func (s *Store) SearchDocuments(ctx context.Context, query string, ownerID string, limit int) ([]SearchResult, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+
+	// Split query into terms for multi-term LIKE matching.
+	terms := strings.Fields(strings.ToLower(query))
+	if len(terms) == 0 {
+		return nil, nil
+	}
+	if len(terms) > 8 {
+		terms = terms[:8]
+	}
+
+	// Build LIKE conditions for title matching.
+	var titleConds []string
+	var args []any
+	for _, term := range terms {
+		likeVal := "%" + term + "%"
+		titleConds = append(titleConds, "LOWER(d.title) LIKE ?")
+		args = append(args, likeVal)
+	}
+	titleWhere := strings.Join(titleConds, " AND ")
+
+	// Query documents matching title terms.
+	ownerClause := ""
+	if strings.TrimSpace(ownerID) != "" {
+		ownerClause = " AND d.owner_id = ?"
+		args = append(args, ownerID)
+	}
+	titleArgs := append([]any(nil), args...)
+	titleSQL := fmt.Sprintf(
+		`SELECT d.doc_id, d.title, d.owner_id, d.updated_at, 'title' as match_source
+		   FROM vtext_documents d
+		  WHERE %s%s
+		  ORDER BY d.updated_at DESC
+		  LIMIT ?`, titleWhere, ownerClause)
+	titleArgs = append(titleArgs, limit)
+
+	rows, err := s.vtextHandle().QueryContext(ctx, titleSQL, titleArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("search vtext documents by title: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	seen := map[string]bool{}
+	var results []SearchResult
+	for rows.Next() {
+		var r SearchResult
+		if err := rows.Scan(&r.DocID, &r.Title, &r.OwnerID, &r.UpdatedAt, &r.MatchSource); err != nil {
+			return nil, err
+		}
+		if !seen[r.DocID] {
+			seen[r.DocID] = true
+			results = append(results, r)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate title search: %w", err)
+	}
+
+	// If we have enough title matches, skip content search.
+	if len(results) >= limit {
+		return results[:limit], nil
+	}
+
+	// Search revision content for remaining capacity.
+	remaining := limit - len(results)
+	var contentConds []string
+	var contentArgs []any
+	for _, term := range terms {
+		likeVal := "%" + term + "%"
+		contentConds = append(contentConds, "LOWER(r.content) LIKE ?")
+		contentArgs = append(contentArgs, likeVal)
+	}
+	contentWhere := strings.Join(contentConds, " AND ")
+	contentOwnerClause := ""
+	if strings.TrimSpace(ownerID) != "" {
+		contentOwnerClause = " AND d.owner_id = ?"
+		contentArgs = append(contentArgs, ownerID)
+	}
+	// Exclude already-found docs.
+	excludeClause := ""
+	if len(seen) > 0 {
+		exclusions := make([]string, 0, len(seen))
+		for docID := range seen {
+			exclusions = append(exclusions, "'"+docID+"'")
+		}
+		excludeClause = " AND d.doc_id NOT IN (" + strings.Join(exclusions, ",") + ")"
+	}
+	contentSQL := fmt.Sprintf(
+		`SELECT DISTINCT d.doc_id, d.title, d.owner_id, d.updated_at, SUBSTRING(r.content, 1, 200) as snippet, 'content' as match_source
+		   FROM vtext_documents d
+		   JOIN vtext_revisions r ON r.doc_id = d.doc_id AND r.revision_id = d.current_revision_id
+		  WHERE %s%s%s
+		  ORDER BY d.updated_at DESC
+		  LIMIT ?`, contentWhere, contentOwnerClause, excludeClause)
+	contentArgs = append(contentArgs, remaining)
+
+	rows2, err := s.vtextHandle().QueryContext(ctx, contentSQL, contentArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("search vtext documents by content: %w", err)
+	}
+	defer func() { _ = rows2.Close() }()
+	for rows2.Next() {
+		var r SearchResult
+		var snippet sql.NullString
+		if err := rows2.Scan(&r.DocID, &r.Title, &r.OwnerID, &r.UpdatedAt, &snippet, &r.MatchSource); err != nil {
+			return nil, err
+		}
+		if snippet.Valid {
+			r.Snippet = snippet.String
+		}
+		if !seen[r.DocID] {
+			seen[r.DocID] = true
+			results = append(results, r)
+		}
+	}
+	if err := rows2.Err(); err != nil {
+		return nil, fmt.Errorf("iterate content search: %w", err)
+	}
+
+	return results, nil
+}
+
 // UpdateDocument updates an existing document record.
 func (s *Store) UpdateDocument(ctx context.Context, doc types.Document) error {
 	result, err := s.vtextHandle().ExecContext(ctx,
