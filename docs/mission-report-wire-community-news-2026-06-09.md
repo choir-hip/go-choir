@@ -908,9 +908,9 @@ mission v1 and spec Activation section amended same date.
 |-------------|--------|
 | (a) Architecture checkpoint | **Done** (docs) |
 | (b) Deletion Ledger | **Done** — StoryGraph store/types deleted; ingestion spine neutral; Go grep clean |
-| (c) Universal Wire rename | **Done** (code) — staging alias/VM migration pending deploy |
-| (d) Activation graph (Slice 3) | **Not started** — blocked on (b),(c) |
-| (e) Staging acceptance | **Not started** |
+| (c) Universal Wire rename | **Done** — code + Node B runbook ops + proxy + Playwright |
+| (d) Activation graph (Slice 3) | **In progress** — debounce N=10 / T=300s; vtext handoff normalization; see topology doc |
+| (e) Staging acceptance | **Partial** — rename acceptance done; ingestion-chain proof pending (d) |
 
 **Fix intent (sequential workstreams — no code until (b) begins):**
 
@@ -980,6 +980,12 @@ Runtime edition index now projects VText only — no store-backed StoryGraph rea
 ./cmd/sourcecycled` pass. Active-code grep for `global-wire`, `global_wire`,
 `GlobalWire`, `CommunityWire` is empty.
 
+**Node B imperative ops runbook:** step-by-step SSH mutations (disk cutover,
+Dolt owner migration, edition alias, `global_wire_*` drop, ownership prune,
+recovery) are documented in
+[runbook-node-b-universal-wire-migration-2026-06-10.md](runbook-node-b-universal-wire-migration-2026-06-10.md).
+The bullets below are the evidence summary; use the runbook for replay.
+
 **Staging migration (post-deploy) — completed (2026-06-10):**
 
 - Node B Dolt on `vm-universal-wire-platform/data.img`: bulk `owner_id`
@@ -994,11 +1000,32 @@ Runtime edition index now projects VText only — no store-backed StoryGraph rea
   despite platform edition state on `vm-universal-wire-platform`.
 - **Fix:** proxy routes `/api/universal-wire/stories` to
   `universal-wire-platform` / `platform` computer via vmctl (not user desktop).
+  Commit `eb9cb93c`; CI `27254188556`; staging `/health` deployed
+  `eb9cb93cee6e92c525d464598c09f9dc65b78f21` at `2026-06-10T04:57:45Z`.
+
+**Rename-complete acceptance (2026-06-10):**
+
+- **Platform VM:** `systemctl restart go-choir-vmctl` brought
+  `vm-universal-wire-platform` back to `state=active`; ownership
+  `sandbox_url=http://10.203.102.2:8085` (prior stale `10.203.99.2` caused
+  proxy 502 while ownership still read `active`).
+- **Deployed stories API (authenticated via product path):**
+  `source=universal-wire-edition-vtext`, edition
+  `universal-wire/Wire.vtext`, doc `5f75737f-c373-4031-81e7-21acd5b661c1`,
+  `12` stories indexed from transcluded article VTexts.
+- **Playwright:** `frontend/tests/universal-wire-staging-acceptance.spec.js`
+  with `GO_CHOIR_RUN_UNIVERSAL_WIRE_STAGING=1` — **1 passed** (~10s); verifies
+  stories API, desk app `universal-wire`, heading "Universal Wire", no "Global
+  Wire" / "SourceMaxx newsroom" copy, story cards when edition non-empty.
+- **Active-code legacy grep:** no `global-wire` / `GlobalWire` in Go/Svelte/TS
+  (only negative assertion in staging spec).
+
+**Workstream (c) status:** complete. Rename + staging migration + proxy routing +
+  authenticated acceptance proof landed.
 
 next step:
 
-- **(d)** Activation graph (processor vtext-only, debounced reconciler); deploy +
-  run `GO_CHOIR_RUN_UNIVERSAL_WIRE_STAGING=1` acceptance after proxy fix lands.
+- **(d)** Activation graph (processor vtext-only, debounced reconciler).
 
 
 ## v1 mission handoff (2026-06-09)

@@ -2,7 +2,7 @@
 
 Date: 2026-06-10
 
-Status: **architecture checkpoint before Slice 3 code** (problem-documentation-first).
+Status: **Workstream (d) in progress** — activation graph implementation (2026-06-10).
 
 Requirements contract:
 [choir-wire-source-to-vtext-spec-2026-06-09.md](choir-wire-source-to-vtext-spec-2026-06-09.md)
@@ -131,8 +131,10 @@ next step, not parallel authors.
 | `corpus_change` | publish; user fork/edit on published platform doc; promotion | reconciler (debounced) | Idempotent reconciler key TBD in implementation |
 | `reconciler_sweep` | scheduler | reconciler | Periodic corpus review |
 
-**Reconciler debounce:** configurable `N` publishes or `T` seconds. Never on
-processor submit, never on in-flight drafts, never per ingestion cycle.
+**Reconciler debounce (approved defaults):** **10** eligible platform publishes
+**or** **300** seconds since the last reconciler dispatch — whichever comes
+first. Never on processor submit, never on in-flight drafts, never per ingestion
+cycle.
 
 **Processor low-signal path:** watch-lists and `submit_coagent_update`
 checkpoints only; do not open a VText per noise item.
@@ -151,6 +153,89 @@ Load-bearing guards (must be verified in acceptance, not assumed):
 - no edition inclusion without eligible article VText (programmatic guard — not anthropomorphic “approval”)
 - fidelity checks on publish projection
 - update-awareness rendering for corrections (publish-then-correct is intended behavior)
+
+### What publishes (not every VText revision)
+
+Publication is a **platform policy hook** after `edit_vtext`, not a VText agent
+tool and not “every revision automatically.”
+
+| Revision | Publishes? |
+|----------|------------|
+| `revision_role: input` (conductor user prompt, processor handoff, reconciler brief) | **Never** |
+| VText `edit_vtext` on user-owned docs | Per-deployment policy (user/proxy path) |
+| VText `edit_vtext` on platform wire article runs | **Autonomous** when eligibility passes |
+
+```text
+edit_vtext completes on platform computer
+  -> runtime evaluates publication policy (owner + revision metadata + content)
+  -> if eligible: platform-internal publish (Dolt -> platformd projection)
+  -> emit publish event -> debounced reconciler (N=10 or T=300s)
+```
+
+**Eligible wire canonical revision** (replaces `article_version` booleans on new
+writes):
+
+- `revision_role: canonical`
+- `source: edit_vtext`
+- wire provenance present (e.g. `source_network_cycle_id` / processor handoff lineage)
+- content passes guards (non-empty; not input/brief heuristics)
+
+Multiple publishes per doc are allowed (publish-then-correct). Reconciler
+debounce batches **publish events**, not every VText run that did not publish.
+
+No VText-only `publish` tool — avoids harness branching; Community Cloud Wire
+news is public by policy.
+
+---
+
+## Unified VText handoff (one primitive, three kinds)
+
+Every role wakes VText the same way: **open/target doc → persist input revision
+→ wake VText agent → VText authors canonical prose via `edit_vtext`**.
+
+| Kind | Caller | Trigger | Doc | Input author |
+|------|--------|---------|-----|--------------|
+| `user_prompt` | conductor | prompt bar | usually new | `AuthorUser` |
+| `source_open` | processor | `ingestion_event` | usually new | handoff (`AuthorAppAgent`) |
+| `corpus_wake` | reconciler | publish debounce / sweep / corpus-change | **existing** `doc_id` | handoff (`AuthorAppAgent`) |
+
+**Input revision metadata** (replaces `article_version: false` on new writes):
+
+```json
+{ "revision_role": "input", "input_origin": "user_prompt|processor_handoff|reconciler_handoff" }
+```
+
+**Canonical wire revision:**
+
+```json
+{ "revision_role": "canonical", "source": "edit_vtext", "artifact_kind": "article_revision" }
+```
+
+Remove `article_version` from new writes; drop from durable metadata
+carry-forward. Legacy revisions may still carry the old fields during transition.
+
+**Implementation target:** `ensureVTextHandoff(req)` replaces
+`ensureConductorVTextRoute` and `ensureCoagentVTextRevisionRoute`. Do **not**
+normalize reconciler as an ingestion peer — `corpus_wake` dispatches only from
+publish debounce, sweep, or corpus-change.
+
+**Verticals:** pass as batch hints in reconciler run metadata/prompt only; one
+reconciler identity (`reconciler:story-corpus`). No per-vertical reconciler
+fleet until embeddings (Qdrant) justify similarity-based sharding.
+
+---
+
+## Wire news model policy (cost)
+
+Universal Wire processor, reconciler, and VText runs should use the **lowest
+price** models that meet turn requirements:
+
+- **Primary:** `mimo-v2.5` (non-pro) via Xiaomi provider
+- **Future:** `deepseek-v4-flash` when DeepSeek credits are available
+
+Do not branch the harness per role beyond per-computer model policy. Orchestration
+roles that today default to pro variants should align to the same cost floor unless
+a turn requires capabilities only pro models declare.
 
 ---
 
@@ -186,10 +271,10 @@ Execute **sequentially**. Do not start later workstreams until the prior
 deliverable evidence is recorded in the mission report.
 
 ```text
-(a) This architecture checkpoint + mission doc amendments (docs only)     <- NOW
-(b) Workstream 1 — Deletion Ledger
-(c) Workstream naming — Universal Wire rename/migration
-(d) Workstream 2 — Activation graph (Slice 3 dispatch + negative proofs)
+(a) Architecture checkpoint + mission doc amendments (docs only)     <- done
+(b) Workstream 1 — Deletion Ledger                                   <- done
+(c) Workstream naming — Universal Wire rename/migration              <- done
+(d) Workstream 2 — Activation graph (Slice 3 dispatch + negative proofs) <- NOW
 (e) Staging acceptance (two proofs)
 ```
 
@@ -220,18 +305,29 @@ deleted, stop and document evidence — do not shim.
   `BuildSourceMaxxHandoff`, `sourceMaxxRuntimeDispatcher`, `source-network` shims
 - seeding helpers; legacy style-source / publication / newsletter / autoradio routes
 
-### (c) Universal Wire rename/migration
+### (c) Universal Wire rename/migration — **done (2026-06-10)**
 
 After (b). User-visible copy, app name, docs; API route cutover; edition alias
-migration; delete `universal-wire/Wire.vtext` alias with zero-references proof.
+migration; delete `global-wire/Wire.vtext` alias with zero-references proof.
+Node B imperative SSH steps:
+[runbook-node-b-universal-wire-migration-2026-06-10.md](runbook-node-b-universal-wire-migration-2026-06-10.md).
 
 ### (d) Workstream 2 — Activation graph
 
-- Remove per-cycle reconciler from ingestion handoff dispatch
-- Processor inbound ingestion-only; outbound vtext-only; harden generic run API
-- Reconciler on publish debounce + schedule + corpus-change only
-- Reconciler emits `vtext_wake_request`, never holds pen
-- Negative proofs (item 7 in mission checkpoint)
+**Order:**
+
+1. Remove per-cycle reconciler from `BuildIngestionHandoff` and ingestion dispatch
+2. Processor outbound **vtext-only** (no researcher/super spawn); update negative tests
+3. Reconciler outbound **vtext-only**; dispatch from publish debounce (N=10, T=300s),
+   sweep, corpus-change — not ingestion
+4. `ensureVTextHandoff` normalization (conductor + processor first; reconciler as
+   `corpus_wake` on debouncer)
+5. `revision_role` metadata; retire `article_version` on new writes
+6. Publication policy hook on eligible wire `edit_vtext` → publish event → debouncer
+7. Negative proofs in CI
+
+**Non-goals for (d):** VText `publish` tool; per-vertical reconciler fleet; Qdrant;
+Telegram proof.
 
 ### (e) Staging acceptance
 
