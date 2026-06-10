@@ -2895,6 +2895,21 @@ func TestVMctlRouting_SameUserPinnedToSameVM(t *testing.T) {
 	}
 }
 
+func TestProtectedAPIResolveTarget_UniversalWireStoriesUsePlatformComputer(t *testing.T) {
+	ownerID, desktopID := protectedAPIResolveTarget("/api/universal-wire/stories", "user-alice", vmctl.PrimaryDesktopID)
+	if ownerID != vmctl.UniversalWirePlatformOwnerID {
+		t.Fatalf("ownerID = %q, want %q", ownerID, vmctl.UniversalWirePlatformOwnerID)
+	}
+	if desktopID != vmctl.UniversalWirePlatformDesktopID {
+		t.Fatalf("desktopID = %q, want %q", desktopID, vmctl.UniversalWirePlatformDesktopID)
+	}
+
+	ownerID, desktopID = protectedAPIResolveTarget("/api/prompt-bar", "user-alice", vmctl.PrimaryDesktopID)
+	if ownerID != "user-alice" || desktopID != vmctl.PrimaryDesktopID {
+		t.Fatalf("prompt-bar resolve = (%q, %q), want caller desktop", ownerID, desktopID)
+	}
+}
+
 // TestVMctlRouting_ProtectedAPIThroughVM tests that runtime API routes also
 // resolve through vmctl ownership (VAL-VM-002).
 func TestVMctlRouting_ProtectedAPIThroughVM(t *testing.T) {

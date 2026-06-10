@@ -980,14 +980,25 @@ Runtime edition index now projects VText only — no store-backed StoryGraph rea
 ./cmd/sourcecycled` pass. Active-code grep for `global-wire`, `global_wire`,
 `GlobalWire`, `CommunityWire` is empty.
 
-**Staging migration (post-deploy):** Re-bind edition alias
-`universal-wire/Wire.vtext` for owner `universal-wire-platform` (copy from prior
-`global-wire/Wire.vtext` doc if needed). Platform VM may need re-provision under
-`vm-universal-wire-platform` or ownership registry update — no automatic redirect.
+**Staging migration (post-deploy) — completed (2026-06-10):**
+
+- Node B Dolt on `vm-universal-wire-platform/data.img`: bulk `owner_id`
+  `global-wire-platform` → `universal-wire-platform` (14 tables); dropped 28
+  legacy `global_wire_*` tables; dolt commit `pr0pf4grqgiboibc8i68qkft95pvtp7j`.
+- Created edition alias `universal-wire/Wire.vtext` → doc
+  `5f75737f-c373-4031-81e7-21acd5b661c1` transcluding 12 article VTexts.
+- Pruned stale `vm-global-wire-platform` ownership; `platform-wire-runtime.env`
+  points at live platform sandbox (`http://10.203.99.2:8085` at last verify).
+- **Problem (post-rename):** `/api/universal-wire/stories` still resolved to the
+  caller's personal computer, so authenticated users saw honest-empty responses
+  despite platform edition state on `vm-universal-wire-platform`.
+- **Fix:** proxy routes `/api/universal-wire/stories` to
+  `universal-wire-platform` / `platform` computer via vmctl (not user desktop).
 
 next step:
 
-- **(d)** Activation graph (processor vtext-only, debounced reconciler); **(e)** staging acceptance with migrated edition alias.
+- **(d)** Activation graph (processor vtext-only, debounced reconciler); deploy +
+  run `GO_CHOIR_RUN_UNIVERSAL_WIRE_STAGING=1` acceptance after proxy fix lands.
 
 
 ## v1 mission handoff (2026-06-09)

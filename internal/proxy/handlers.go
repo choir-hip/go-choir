@@ -361,12 +361,14 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	h.lifecycle.record(stagePrefix+".auth", "ok", time.Since(authStarted))
 
-	// Resolve the sandbox URL for this user.
+	// Resolve the sandbox URL for this user. Universal Wire stories read the
+	// platform computer's embedded store, not the caller's personal computer.
 	desktopID := requestDesktopID(r)
+	resolveOwnerID, resolveDesktopID := protectedAPIResolveTarget(r.URL.Path, authResult.UserID, desktopID)
 	resolveStarted := time.Now()
-	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
+	sandboxURL, err := h.resolveSandboxURL(r.Context(), resolveOwnerID, resolveDesktopID)
 	if err != nil {
-		log.Printf("proxy: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
+		log.Printf("proxy: failed to resolve sandbox for owner %s desktop %s (caller %s): %v", resolveOwnerID, resolveDesktopID, authResult.UserID, err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})
 		h.lifecycle.record(stagePrefix+".resolve", "error", time.Since(resolveStarted))
 		h.lifecycle.record(stagePrefix+".total", "resolve_error", time.Since(started))
@@ -678,6 +680,16 @@ func sandboxWSURLForBase(baseURL, rawQuery string) string {
 	u.Path = "/api/ws"
 	u.RawQuery = rawQuery
 	return u.String()
+}
+
+// protectedAPIResolveTarget chooses which computer sandbox should serve an
+// authenticated /api/* request. Universal Wire edition state lives on the
+// always-on platform computer.
+func protectedAPIResolveTarget(path, userID, desktopID string) (ownerID, resolvedDesktopID string) {
+	if path == "/api/universal-wire/stories" {
+		return vmctl.UniversalWirePlatformOwnerID, vmctl.UniversalWirePlatformDesktopID
+	}
+	return userID, desktopID
 }
 
 // resolveSandboxURL resolves the sandbox URL for an authenticated user.
