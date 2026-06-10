@@ -91,7 +91,7 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 func TestFallbackModelPolicyUsesGeneratedMimoDefaults(t *testing.T) {
 	policy := fallbackModelPolicy(Config{})
 	conductor := policy.Resolve(AgentProfileConductor)
-	if conductor.Provider != "xiaomi" || conductor.Model != "mimo-v2.5" || conductor.ReasoningEffort != "medium" {
+	if conductor.Provider != "deepseek" || conductor.Model != "deepseek-v4-flash" || conductor.ReasoningEffort != "medium" {
 		t.Fatalf("conductor selection = %+v", conductor)
 	}
 	super := policy.Resolve(AgentProfileSuper)
@@ -161,7 +161,7 @@ func TestEnsureDefaultModelPolicyMigratesLegacyGeneratedPolicy(t *testing.T) {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
 	conductor := policy.Resolve(AgentProfileConductor)
-	if conductor.Provider != "xiaomi" || conductor.Model != "mimo-v2.5" {
+	if conductor.Provider != "deepseek" || conductor.Model != "deepseek-v4-flash" {
 		t.Fatalf("migrated conductor selection = %+v", conductor)
 	}
 }
@@ -175,7 +175,7 @@ func TestDefaultModelPolicyIgnoresChatGPTProcessFallback(t *testing.T) {
 	if got := policy.Resolve("unknown-role"); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
 		t.Fatalf("generated fallback selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "xiaomi" || got.Model != "mimo-v2.5" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("generated conductor selection = %+v", got)
 	}
 	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
@@ -250,11 +250,15 @@ requires = ["image", "tool_use"]
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	for _, role := range []string{AgentProfileConductor, AgentProfileResearcher, AgentProfileVText} {
+	for _, role := range []string{AgentProfileConductor, AgentProfileResearcher} {
 		got := policy.Resolve(role)
-		if got.Provider != "xiaomi" || got.Model != "mimo-v2.5" || got.ReasoningEffort != "medium" {
+		if got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 			t.Fatalf("migrated %s selection = %+v", role, got)
 		}
+	}
+	got := policy.Resolve(AgentProfileVText)
+	if got.Provider != "xiaomi" || got.Model != "mimo-v2.5" || got.ReasoningEffort != "medium" {
+		t.Fatalf("migrated vtext selection = %+v", got)
 	}
 }
 
@@ -324,7 +328,7 @@ requires = ["image", "tool_use"]
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "xiaomi" || got.Model != "mimo-v2.5" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
 		t.Fatalf("migrated conductor selection = %+v", got)
 	}
 	if got := policy.Resolve(AgentProfileVSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
@@ -421,7 +425,7 @@ reasoning = "medium"
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "xiaomi" || got.Model != "mimo-v2.5" {
+	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
 		t.Fatalf("migrated researcher selection = %+v", got)
 	}
 	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
@@ -470,7 +474,7 @@ reasoning = "none"
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "xiaomi" || got.Model != "mimo-v2.5" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("migrated conductor selection = %+v", got)
 	}
 	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
@@ -511,10 +515,10 @@ reasoning = "none"
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "xiaomi" || got.Model != "mimo-v2.5" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("migrated conductor selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "xiaomi" || got.Model != "mimo-v2.5" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("migrated researcher selection = %+v", got)
 	}
 }
@@ -557,7 +561,7 @@ model = "accounts/fireworks/models/deepseek-v4-pro"
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "xiaomi" || got.Model != "mimo-v2.5" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
 		t.Fatalf("migrated conductor selection = %+v", got)
 	}
 	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
@@ -603,7 +607,7 @@ reasoning = "medium"
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "xiaomi" || got.Model != "mimo-v2.5" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
 		t.Fatalf("migrated conductor selection = %+v", got)
 	}
 	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
