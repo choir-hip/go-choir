@@ -821,13 +821,15 @@ not yet an always-on Firecracker VM with its own embedded Dolt.
 `vm-global-wire-platform` at `http://10.203.98.2:8085`; sourcecycled dispatch
 repointed via `/var/lib/go-choir/platform-wire-runtime.env`.
 
-**Slice 1 checkpoint (2026-06-10):**
+**Slice 1 landed (2026-06-10):** commit `ba20d938`; CI run `27245509571`
+success; staging deploy `CHOIR_DEPLOYED_COMMIT=ba20d938` at
+`2026-06-10T00:49:40Z`.
 
-**Problem:** Processor dispatch could queue from saved source items without a
-typed ingestion-event activation record, and nothing enforced that prompt-bar
-submissions cannot emit ingestion events.
+**Problem (Slice 1):** Processor dispatch could queue from saved source items
+without a typed ingestion-event activation record, and nothing enforced that
+prompt-bar submissions cannot emit ingestion events.
 
-**Fix intent:**
+**Fix:**
 
 1. Persist `ingestion_events` with fetch provenance for each newly saved item.
 2. Attach `ingestion_event_ids` to processor requests; dispatch skips requests
@@ -835,12 +837,18 @@ submissions cannot emit ingestion events.
 3. Reject `prompt_bar` origin at the storage boundary; runtime test proves
    prompt-bar runs do not carry ingestion activation metadata.
 
+**Staging proof (Slice 1):**
+
+- Post-deploy cycle `cycle_f8e2ddcbb9e426939560ef86` saved 5056 items and 5056
+  `ingestion_events`; `cycle_events` includes `ingestion_events_emitted`.
+- Processor rows carry non-empty `ingestion_event_ids_json`; dispatch sets
+  `activation_origin=ingestion_event` on submitted runtime runs.
+- Local/CI: `TestPromptBarSubmissionDoesNotActivateIngestionEvent` (comprehensive
+  tag), cycle + sourcecycled ingestion tests pass.
+
 next step:
 
-- Land Slice 1; staging proof: source cycle emits ingestion events, processor
-  dispatch metadata includes `activation_origin=ingestion_event`, prompt-bar
-  negative test passes.
-- Slice 2 RSS/GDELT curriculum.
+- Slice 2 RSS/GDELT curriculum (same artifact + event shape).
 
 
 ## v1 mission handoff (2026-06-09)
