@@ -274,6 +274,7 @@
             "internal/store"
             "internal/types"
             "internal/vmctl"
+            "internal/wirepublish"
           ];
         };
         platformd = mkGoService {
@@ -309,6 +310,7 @@
             "internal/store"
             "internal/types"
             "internal/vmctl"
+            "internal/wirepublish"
           ];
         };
         sandbox = mkGoService {
