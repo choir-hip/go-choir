@@ -13,6 +13,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
 func RegisterVTextTools(registry *ToolRegistry, rt *Runtime) error {
@@ -467,7 +468,7 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 var bareVTextSourceRefRE = regexp.MustCompile(`\[source:([A-Za-z0-9_.:-]{1,160})\]`)
 
 func normalizeWireArticleBareSourceRefs(content string, metadata json.RawMessage, rec *types.RunRecord) (string, int) {
-	if !isWireArticleRevisionRun(rec) {
+	if !wirepublish.IsWireArticleRevisionRun(rec) {
 		return content, 0
 	}
 	meta := decodeRevisionMetadata(metadata)

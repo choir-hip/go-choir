@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
 const (
@@ -127,27 +128,7 @@ func (d *wirePublishDebouncer) fireLocked(now time.Time) wirePublishBatch {
 }
 
 func wireCanonicalRevisionEligibleForDebouncedReconciler(doc types.Document, rev types.Revision, rec *types.RunRecord) bool {
-	if rec == nil || strings.TrimSpace(doc.DocID) == "" {
-		return false
-	}
-	if strings.TrimSpace(rec.OwnerID) != universalWirePlatformOwnerID() {
-		return false
-	}
-	if !isWireArticleRevisionRun(rec) {
-		return false
-	}
-	meta := decodeRevisionMetadata(rev.Metadata)
-	if metadataString(meta, "source") != "edit_vtext" {
-		return false
-	}
-	if sourceNetworkCycleID(meta) == "" || wireRevisionIsInput(meta) || !wireRevisionIsCanonicalArticle(meta) {
-		return false
-	}
-	content := strings.TrimSpace(rev.Content)
-	if content == "" || wireArticleContentLooksLikeSeed(content) {
-		return false
-	}
-	return true
+	return wirepublish.EligibleForAutonomousPublish(doc, rev, rec, universalWirePlatformOwnerID())
 }
 
 func (rt *Runtime) noteWireEligiblePublish(ctx context.Context, docID, revisionID string) {

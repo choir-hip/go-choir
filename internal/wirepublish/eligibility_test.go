@@ -42,7 +42,38 @@ func TestEligibleForAutonomousPublishRequiresCanonicalArticleRevision(t *testing
 	inputRev := rev
 	inputRev.Metadata = inputMeta
 	if EligibleForAutonomousPublish(doc, inputRev, rec, owner) {
-		t.Fatal("input revisions must not be eligible")
+		t.Fatal("seed-brief input revisions must not be eligible")
+	}
+}
+
+func TestEligibleForAutonomousPublishAcceptsWorkerIntegrationArticleEdit(t *testing.T) {
+	owner := PlatformOwnerID()
+	meta, _ := json.Marshal(map[string]any{
+		"source":                     "edit_vtext",
+		"revision_role":              RevisionRoleInput,
+		"artifact_kind":              "source_brief",
+		"vtext_edit_kind":            "vtext_edit",
+		"ingestion_handoff_cycle_id": "cycle-worker-1",
+	})
+	rev := types.Revision{
+		RevisionID: "rev-worker",
+		DocID:      "doc-worker",
+		OwnerID:    owner,
+		Content:    "# Story\n\nMADRID -- Officials confirmed the route change.",
+		Metadata:   meta,
+	}
+	doc := types.Document{DocID: "doc-worker", OwnerID: owner, Title: "Story.vtext"}
+	rec := &types.RunRecord{
+		OwnerID: owner,
+		RunID:   "run-worker",
+		Metadata: map[string]any{
+			"type":                       "vtext_agent_revision",
+			"request_intent":             "integrate_worker_findings",
+			"ingestion_handoff_cycle_id": "cycle-worker-1",
+		},
+	}
+	if !EligibleForAutonomousPublish(doc, rev, rec, owner) {
+		t.Fatal("worker-integration article edits with ingestion lineage should be eligible")
 	}
 }
 

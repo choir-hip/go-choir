@@ -33,14 +33,14 @@ func EligibleForAutonomousPublish(doc types.Document, rev types.Revision, rec *t
 	if strings.TrimSpace(doc.OwnerID) != strings.TrimSpace(platformOwnerID) {
 		return false
 	}
-	if !isWireArticleRevisionRun(rec) {
+	if !IsWireArticleRevisionRun(rec) {
 		return false
 	}
 	meta := decodeMetadata(rev.Metadata)
 	if metadataString(meta, "source") != "edit_vtext" {
 		return false
 	}
-	if sourceNetworkCycleID(meta) == "" || revisionIsInput(meta) || !revisionIsCanonicalArticle(meta) {
+	if sourceNetworkCycleID(meta) == "" || !RevisionIsPublishableWireArticle(meta) {
 		return false
 	}
 	content := strings.TrimSpace(rev.Content)
@@ -50,12 +50,36 @@ func EligibleForAutonomousPublish(doc types.Document, rev types.Revision, rec *t
 	return true
 }
 
-func isWireArticleRevisionRun(rec *types.RunRecord) bool {
+// IsWireArticleRevisionRun reports whether a VText run is part of the Universal
+// Wire article pipeline. Processor/reconciler handoffs use universal_wire_* intents;
+// worker-integration child runs inherit ingestion lineage without that intent.
+func IsWireArticleRevisionRun(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
 	intent := metadataString(rec.Metadata, "request_intent")
-	return strings.HasPrefix(intent, "universal_wire_") && strings.HasSuffix(intent, "_article_revision")
+	if strings.HasPrefix(intent, "universal_wire_") && strings.HasSuffix(intent, "_article_revision") {
+		return true
+	}
+	if metadataString(rec.Metadata, "type") != "vtext_agent_revision" {
+		return false
+	}
+	return sourceNetworkCycleID(rec.Metadata) != ""
+}
+
+// RevisionIsPublishableWireArticle reports whether revision metadata describes a
+// reader-facing wire article (not a seed brief), including worker-integration
+// edits that failed to promote revision_role to canonical.
+func RevisionIsPublishableWireArticle(meta map[string]any) bool {
+	if revisionIsCanonicalArticle(meta) && !revisionIsInput(meta) {
+		return true
+	}
+	if metadataString(meta, "source") == "edit_vtext" &&
+		sourceNetworkCycleID(meta) != "" &&
+		metadataString(meta, "vtext_edit_kind") == "vtext_edit" {
+		return true
+	}
+	return false
 }
 
 func revisionIsCanonicalArticle(meta map[string]any) bool {

@@ -2073,7 +2073,7 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 			}
 		}
 	}
-	if isWireArticleRevisionRun(rec) {
+	if wirepublish.IsWireArticleRevisionRun(rec) {
 		meta["artifact_kind"] = "article_revision"
 		meta["revision_role"] = vtextRevisionRoleCanonical
 		meta["vtext_version_stage"] = "article_revision"
@@ -2091,14 +2091,6 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 		return json.RawMessage(`{"source":"edit_vtext","loop_id":"` + rec.RunID + `"}`)
 	}
 	return data
-}
-
-func isWireArticleRevisionRun(rec *types.RunRecord) bool {
-	if rec == nil {
-		return false
-	}
-	intent := metadataStringValue(rec.Metadata, "request_intent")
-	return strings.HasPrefix(intent, "universal_wire_") && strings.HasSuffix(intent, "_article_revision")
 }
 
 func vtextWorkerUpdateMetadataHasRole(value any, role string) bool {
