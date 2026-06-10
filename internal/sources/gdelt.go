@@ -26,7 +26,14 @@ func NewGDELTFetcher(userAgent string) *GDELTFetcher {
 	}
 }
 
-func parseGDELTLastUpdate(body string) (gkgURL, mentionsURL string) {
+type gdeltLastUpdateURLs struct {
+	GKG       string
+	Mentions  string
+	Export    string
+}
+
+func parseGDELTLastUpdate(body string) gdeltLastUpdateURLs {
+	var out gdeltLastUpdateURLs
 	for _, line := range strings.Split(body, "\n") {
 		lower := strings.ToLower(strings.TrimSpace(line))
 		if lower == "" {
@@ -39,12 +46,27 @@ func parseGDELTLastUpdate(body string) (gkgURL, mentionsURL string) {
 		url := parts[len(parts)-1]
 		switch {
 		case strings.Contains(lower, "gkg.csv.zip"):
-			gkgURL = url
+			out.GKG = url
 		case strings.Contains(lower, "mentions.csv.zip"):
-			mentionsURL = url
+			out.Mentions = url
+		case strings.Contains(lower, "export.csv.zip"):
+			out.Export = url
 		}
 	}
-	return gkgURL, mentionsURL
+	return out
+}
+
+func gdeltStreamsUpToDate(urls gdeltLastUpdateURLs, source *Source) bool {
+	if urls.GKG != "" && urls.GKG != strings.TrimSpace(source.LastETag) {
+		return false
+	}
+	if urls.Mentions != "" && urls.Mentions != strings.TrimSpace(source.LastModified) {
+		return false
+	}
+	if urls.Export != "" && urls.Export != strings.TrimSpace(source.LastAuxCursor) {
+		return false
+	}
+	return urls.GKG != "" || urls.Mentions != "" || urls.Export != ""
 }
 
 func (f *GDELTFetcher) Poll(ctx context.Context, source *Source) (PollResult, error) {
@@ -78,16 +100,14 @@ func (f *GDELTFetcher) Poll(ctx context.Context, source *Source) (PollResult, er
 		return PollResult{Fetch: fetch}, err
 	}
 
-	gkgURL, mentionsURL := parseGDELTLastUpdate(string(body))
-	if gkgURL == "" && mentionsURL == "" {
-		err := fmt.Errorf("no GDELT GKG or mentions URL in lastupdate")
+	urls := parseGDELTLastUpdate(string(body))
+	if urls.GKG == "" && urls.Mentions == "" && urls.Export == "" {
+		err := fmt.Errorf("no GDELT GKG, mentions, or export URL in lastupdate")
 		fetch = FinishFetch(fetch, resp.StatusCode, body, err)
 		return PollResult{Fetch: fetch}, err
 	}
 
-	skipGKG := gkgURL != "" && gkgURL == strings.TrimSpace(source.LastETag)
-	skipMentions := mentionsURL != "" && mentionsURL == strings.TrimSpace(source.LastModified)
-	if skipGKG && skipMentions {
+	if gdeltStreamsUpToDate(urls, source) {
 		fetch = FinishFetch(fetch, http.StatusNotModified, body, nil)
 		source.LastPolled = time.Now().UTC()
 		return PollResult{Fetch: fetch}, nil
@@ -97,32 +117,46 @@ func (f *GDELTFetcher) Poll(ctx context.Context, source *Source) (PollResult, er
 	var payload []byte
 	payload = append(payload, body...)
 
-	if gkgURL != "" && !skipGKG {
-		gkgItems, gkgBody, err := f.fetchGKG(ctx, gkgURL, source, fetch.FetchID)
+	if urls.GKG != "" && urls.GKG != strings.TrimSpace(source.LastETag) {
+		gkgItems, gkgBody, err := f.fetchGKG(ctx, urls.GKG, source, fetch.FetchID)
 		if err != nil {
 			fetch = FinishFetch(fetch, resp.StatusCode, body, err)
 			return PollResult{Fetch: fetch}, err
 		}
 		items = append(items, gkgItems...)
 		payload = append(payload, gkgBody...)
-		source.LastETag = gkgURL
+		source.LastETag = urls.GKG
 	}
 
-	if mentionsURL != "" && !skipMentions {
-		mentionItems, mentionBody, err := f.fetchMentions(ctx, mentionsURL, source, fetch.FetchID)
+	if urls.Mentions != "" && urls.Mentions != strings.TrimSpace(source.LastModified) {
+		mentionItems, mentionBody, err := f.fetchMentions(ctx, urls.Mentions, source, fetch.FetchID)
 		if err != nil {
 			fetch = FinishFetch(fetch, resp.StatusCode, body, err)
 			return PollResult{Fetch: fetch}, err
 		}
 		items = append(items, mentionItems...)
 		payload = append(payload, mentionBody...)
-		source.LastModified = mentionsURL
+		source.LastModified = urls.Mentions
+	}
+
+	if urls.Export != "" && urls.Export != strings.TrimSpace(source.LastAuxCursor) {
+		exportItems, exportBody, err := f.fetchExport(ctx, urls.Export, source, fetch.FetchID)
+		if err != nil {
+			fetch = FinishFetch(fetch, resp.StatusCode, body, err)
+			return PollResult{Fetch: fetch}, err
+		}
+		items = append(items, exportItems...)
+		payload = append(payload, exportBody...)
+		source.LastAuxCursor = urls.Export
 	}
 
 	source.LastPolled = time.Now().UTC()
-	canonical := gkgURL
+	canonical := urls.GKG
 	if canonical == "" {
-		canonical = mentionsURL
+		canonical = urls.Mentions
+	}
+	if canonical == "" {
+		canonical = urls.Export
 	}
 	fetch.CanonicalURL = NormalizeURL(canonical)
 	fetch = FinishFetch(fetch, resp.StatusCode, payload, nil)
@@ -241,6 +275,82 @@ func (f *GDELTFetcher) fetchMentions(ctx context.Context, url string, source *So
 				Body:          body,
 				URL:           docID,
 				CanonicalURL:  NormalizeURL(docID),
+				Published:     published.UTC(),
+				FetchedAt:     time.Now().UTC(),
+				Verticals:     source.Verticals,
+				Language:      firstString(source.Languages),
+				Region:        firstString(source.Regions),
+				BodyKind:      BodyKindMetadataPacket,
+				BodyLength:    len([]rune(strings.TrimSpace(body))),
+				EvidenceLevel: "source_feed",
+			}
+			item.ContentHash = ContentHash(item.Title, item.Body, item.CanonicalURL)
+			items = append(items, item)
+			remaining--
+			if remaining <= 0 {
+				rc.Close()
+				break
+			}
+		}
+	}
+	return items, zipData.raw, nil
+}
+
+func (f *GDELTFetcher) fetchExport(ctx context.Context, url string, source *Source, fetchID string) ([]Item, []byte, error) {
+	zipData, err := f.downloadZip(ctx, url)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var items []Item
+	maxItems := source.EffectiveMaxItemsPerPoll(500)
+	remaining := maxItems
+	for _, file := range zipData.files {
+		if !strings.HasSuffix(file.Name, ".csv") || remaining <= 0 {
+			continue
+		}
+		rc, err := file.Open()
+		if err != nil {
+			return nil, zipData.raw, err
+		}
+		reader := csv.NewReader(rc)
+		reader.Comma = '\t'
+		reader.LazyQuotes = true
+
+		for {
+			record, err := reader.Read()
+			if err == io.EOF {
+				rc.Close()
+				break
+			}
+			if err != nil || len(record) < 7 {
+				continue
+			}
+			published, _ := time.Parse("20060102", record[1])
+			actor1 := record[6]
+			actor2 := ""
+			if len(record) > 16 {
+				actor2 = record[16]
+			}
+			location := ""
+			if len(record) > 52 {
+				location = record[52]
+			}
+			sourceURL := ""
+			if len(record) > 59 {
+				sourceURL = record[59]
+			}
+			body := fmt.Sprintf("Actor1: %s\nActor2: %s\nLocation: %s", actor1, actor2, location)
+			item := Item{
+				ID:            StableItemID(*source, "export:"+record[0], sourceURL, actor1, actor2),
+				SourceID:      source.ID,
+				SourceType:    source.Type,
+				FetchID:       fetchID,
+				OriginalID:    record[0],
+				Title:         fmt.Sprintf("GDELT Export: %s → %s", actor1, actor2),
+				Body:          body,
+				URL:           sourceURL,
+				CanonicalURL:  NormalizeURL(sourceURL),
 				Published:     published.UTC(),
 				FetchedAt:     time.Now().UTC(),
 				Verticals:     source.Verticals,

@@ -68,6 +68,7 @@ func createTables(db *sql.DB) error {
 			last_polled                TEXT NOT NULL DEFAULT '',
 			last_etag                  TEXT NOT NULL DEFAULT '',
 			last_modified              TEXT NOT NULL DEFAULT '',
+			last_aux_cursor            TEXT NOT NULL DEFAULT '',
 			updated_at                 TEXT NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS fetches (
@@ -233,6 +234,7 @@ func migrateTables(db *sql.DB) error {
 		`ALTER TABLE issues ADD COLUMN citation_map_json TEXT NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE processor_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE processor_requests ADD COLUMN ingestion_event_ids_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE sources ADD COLUMN last_aux_cursor TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE reconciler_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE fetches ADD COLUMN cycle_id TEXT NOT NULL DEFAULT ''`,
 	}
@@ -354,26 +356,28 @@ func (s *Storage) ApplySourcePollState(registry *sources.Registry) error {
 	if registry == nil {
 		return nil
 	}
-	rows, err := s.DB.Query(`SELECT id, last_polled, last_etag, last_modified FROM sources`)
+	rows, err := s.DB.Query(`SELECT id, last_polled, last_etag, last_modified, last_aux_cursor FROM sources`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	type pollState struct {
-		lastPolled   time.Time
-		lastETag     string
-		lastModified string
+		lastPolled     time.Time
+		lastETag       string
+		lastModified   string
+		lastAuxCursor  string
 	}
 	byID := map[string]pollState{}
 	for rows.Next() {
-		var id, lastPolled, lastETag, lastModified string
-		if err := rows.Scan(&id, &lastPolled, &lastETag, &lastModified); err != nil {
+		var id, lastPolled, lastETag, lastModified, lastAuxCursor string
+		if err := rows.Scan(&id, &lastPolled, &lastETag, &lastModified, &lastAuxCursor); err != nil {
 			return err
 		}
 		byID[id] = pollState{
-			lastPolled:   parseStoredTime(lastPolled),
-			lastETag:     lastETag,
-			lastModified: lastModified,
+			lastPolled:    parseStoredTime(lastPolled),
+			lastETag:      lastETag,
+			lastModified:  lastModified,
+			lastAuxCursor: lastAuxCursor,
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -387,6 +391,7 @@ func (s *Storage) ApplySourcePollState(registry *sources.Registry) error {
 		registry.Sources[i].LastPolled = state.lastPolled
 		registry.Sources[i].LastETag = state.lastETag
 		registry.Sources[i].LastModified = state.lastModified
+		registry.Sources[i].LastAuxCursor = state.lastAuxCursor
 	}
 	return nil
 }
@@ -401,7 +406,7 @@ func (s *Storage) SaveSourcePollState(registry *sources.Registry) error {
 		return err
 	}
 	defer tx.Rollback()
-	stmt, err := tx.Prepare(`UPDATE sources SET last_polled = ?, last_etag = ?, last_modified = ?, updated_at = ? WHERE id = ?`)
+	stmt, err := tx.Prepare(`UPDATE sources SET last_polled = ?, last_etag = ?, last_modified = ?, last_aux_cursor = ?, updated_at = ? WHERE id = ?`)
 	if err != nil {
 		return err
 	}
@@ -411,7 +416,7 @@ func (s *Storage) SaveSourcePollState(registry *sources.Registry) error {
 		if strings.TrimSpace(source.ID) == "" {
 			continue
 		}
-		if _, err := stmt.Exec(formatTime(source.LastPolled), source.LastETag, source.LastModified, now, source.ID); err != nil {
+		if _, err := stmt.Exec(formatTime(source.LastPolled), source.LastETag, source.LastModified, source.LastAuxCursor, now, source.ID); err != nil {
 			return err
 		}
 	}

@@ -144,6 +144,70 @@ func TestRSSPollerSkipsConditionalHeadersWhenModeNone(t *testing.T) {
 	}
 }
 
+func TestRSSPollerImportsReaderSnapshotWhenPolicyAllows(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
+	articleBody := strings.Repeat("This is a long article paragraph about policy and markets. ", 12)
+	articleServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<!doctype html><html><head><title>Article</title></head><body><article><p>` + articleBody + `</p></article></body></html>`))
+	}))
+	defer articleServer.Close()
+
+	feedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<?xml version="1.0"?><rss version="2.0"><channel><item><title>Story</title><link>` + articleServer.URL + `</link><description>Short feed excerpt.</description></item></channel></rss>`))
+	}))
+	defer feedServer.Close()
+
+	source := Source{
+		ID:              "rss:reader-import",
+		Type:            SourceTypeRSS,
+		URL:             feedServer.URL,
+		StoreBodyPolicy: "bounded_text",
+	}
+	poller := NewRSSPoller("ChoirTest/1.0")
+	result, err := poller.Poll(context.Background(), &source)
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(result.Items))
+	}
+	item := result.Items[0]
+	if !item.ReaderSnapshot || item.BodyKind != BodyKindReaderSnapshot {
+		t.Fatalf("item = %+v, want reader_snapshot classification", item)
+	}
+	if item.BodyLength < minReaderSnapshotRunes {
+		t.Fatalf("body length = %d, want at least %d", item.BodyLength, minReaderSnapshotRunes)
+	}
+}
+
+func TestRSSPollerSkipsReaderImportForExcerptOnlyPolicy(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
+	articleServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("article fetch should not run for excerpt_only policy")
+	}))
+	defer articleServer.Close()
+
+	feedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<?xml version="1.0"?><rss version="2.0"><channel><item><title>Story</title><link>` + articleServer.URL + `</link><description>Short feed excerpt.</description></item></channel></rss>`))
+	}))
+	defer feedServer.Close()
+
+	source := Source{
+		ID:              "rss:excerpt-only",
+		Type:            SourceTypeRSS,
+		URL:             feedServer.URL,
+		StoreBodyPolicy: "excerpt_only",
+	}
+	poller := NewRSSPoller("ChoirTest/1.0")
+	result, err := poller.Poll(context.Background(), &source)
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if len(result.Items) != 1 || result.Items[0].ReaderSnapshot {
+		t.Fatalf("item = %+v, want feed summary without reader snapshot", result.Items)
+	}
+}
+
 func TestRSSPollerCleansHTMLDescriptionsForSourceBody(t *testing.T) {
 	allowPrivateSourceFetchForTest(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

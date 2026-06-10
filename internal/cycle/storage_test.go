@@ -543,12 +543,14 @@ func TestApplySourcePollStatePreservesCursorsAcrossUpsert(t *testing.T) {
 	}
 	registry.Sources[0].LastETag = "etag-persisted"
 	registry.Sources[0].LastModified = "Thu, 01 Jan 2026 00:00:00 GMT"
+	registry.Sources[0].LastAuxCursor = "http://example.test/export.csv.zip"
 	registry.Sources[0].LastPolled = time.Date(2026, 6, 10, 1, 0, 0, 0, time.UTC)
 	if err := store.SaveSourcePollState(registry); err != nil {
 		t.Fatalf("save poll state: %v", err)
 	}
 	registry.Sources[0].LastETag = ""
 	registry.Sources[0].LastModified = ""
+	registry.Sources[0].LastAuxCursor = ""
 	registry.Sources[0].LastPolled = time.Time{}
 	if err := store.SaveSources(registry); err != nil {
 		t.Fatalf("upsert sources: %v", err)
@@ -561,6 +563,9 @@ func TestApplySourcePollStatePreservesCursorsAcrossUpsert(t *testing.T) {
 	}
 	if registry.Sources[0].LastModified != "Thu, 01 Jan 2026 00:00:00 GMT" {
 		t.Fatalf("LastModified = %q", registry.Sources[0].LastModified)
+	}
+	if registry.Sources[0].LastAuxCursor != "http://example.test/export.csv.zip" {
+		t.Fatalf("LastAuxCursor = %q", registry.Sources[0].LastAuxCursor)
 	}
 	if registry.Sources[0].LastPolled.IsZero() {
 		t.Fatal("LastPolled should be restored from storage")

@@ -120,6 +120,7 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 			EvidenceLevel: "source_feed",
 		}
 		item.ContentHash = ContentHash(item.Title, item.Body, item.CanonicalURL)
+		enrichItemWithReaderSnapshot(ctx, p.Client, p.UserAgent, source, &item)
 		items = append(items, item)
 	}
 	fetch = FinishFetch(fetch, resp.StatusCode, body, nil)

@@ -45,6 +45,7 @@ type Source struct {
 	LastPolled          time.Time  `json:"last_polled,omitempty"`
 	LastETag            string     `json:"last_etag,omitempty"`
 	LastModified        string     `json:"last_modified,omitempty"`
+	LastAuxCursor       string     `json:"last_aux_cursor,omitempty"`
 }
 
 func (s Source) AllowsConditionalGET() bool {
