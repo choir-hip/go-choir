@@ -350,8 +350,8 @@ in
   systemd.services.go-choir-sourcecycled = {
     description = "go-choir Source Service Ingestion Daemon";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
+    after = [ "network-online.target" "go-choir-vmctl.service" ];
+    wants = [ "network-online.target" "go-choir-vmctl.service" ];
     path = with pkgs; [ bash coreutils ];
     serviceConfig = commonServiceHardening // {
       ExecStart = "${serviceExec "sourcecycled" goChoirPackages.sourcecycled}";
@@ -359,12 +359,14 @@ in
       RestartSec = 10;
       StateDirectory = "go-choir/source-service";
       ReadWritePaths = [ sourceServiceDir ];
-      EnvironmentFile = "-/var/lib/go-choir/deploy.env";
+      EnvironmentFile = [
+        "-/var/lib/go-choir/deploy.env"
+        "-/var/lib/go-choir/platform-wire-runtime.env"
+      ];
       Environment = [
         "SOURCE_SERVICE_ADDR=0.0.0.0:8787"
         "SOURCE_SERVICE_DB_PATH=${sourceServiceDir}/sourcecycled.db"
         "SOURCE_SERVICE_CONFIG_PATH=/opt/go-choir/configs/sources.json"
-        "SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085"
         "SOURCE_SERVICE_RUNTIME_OWNER_ID=global-wire-platform"
         "SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=32"
         "SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS=60"
@@ -405,7 +407,7 @@ in
       # cycles (VAL-CROSS-116). Provider credentials are NEVER written here
       # (VAL-VM-011).
       StateDirectory = "go-choir/vm-state";
-      ReadWritePaths = [ "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" "/var/lib/go-choir/guest-playwright" ];
+      ReadWritePaths = [ "/var/lib/go-choir" "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" "/var/lib/go-choir/guest-playwright" ];
       ReadOnlyPaths = [ "/var/lib/go-choir/auth" ];
       # Optional runtime priority overrides. This is intentionally outside the
       # repo-tracked Nix closure so operators can add paid/real-user always-on
@@ -483,6 +485,10 @@ in
         # vmctl calls this endpoint to get a token before booting each VM.
         "VMCTL_GATEWAY_URL=http://127.0.0.1:8084"
         "VMCTL_ALLOW_HOST_PROCESS=false"
+        "VMCTL_PLATFORM_WIRE_ENABLED=true"
+        "VMCTL_PLATFORM_WIRE_RUNTIME_ENV_PATH=/var/lib/go-choir/platform-wire-runtime.env"
+        "VMCTL_PLATFORM_WIRE_SOURCE_SERVICE_UNIT=go-choir-sourcecycled.service"
+        "VMCTL_PLATFORM_WIRE_BOOT_TIMEOUT=10m"
         # Path to system binaries (ip, iptables, mkfs.ext4) for network/disk setup.
         "PATH=/run/current-system/sw/bin:/bin:/usr/bin"
       ];
@@ -623,8 +629,6 @@ in
         "SANDBOX_FILES_ROOT=${sandboxFilesDir}"
         "RUNTIME_STORE_PATH=${sandboxRuntimeDir}/runtime.db"
         "SOURCE_SERVICE_BASE_URL=http://127.0.0.1:8787"
-        "SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085"
-        "SOURCE_SERVICE_RUNTIME_OWNER_ID=global-wire-platform"
         "RUNTIME_SKILLS_ROOT=${goChoirPackages.sandbox}/share/go-choir/skills"
         "RUNTIME_WORKER_REPO_REMOTE=${sourceRepoRemote}"
         "RUNTIME_WORKER_REPO_BASE_SHA=${buildCommit}"

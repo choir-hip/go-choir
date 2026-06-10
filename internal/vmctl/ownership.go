@@ -706,6 +706,9 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 		if warmed := r.WarmAlwaysOnDesktops(); warmed > 0 {
 			log.Printf("vmctl: warmness policy resumed %d always-on desktop VM(s)", warmed)
 		}
+		if warmed := r.WarmCommunityWirePlatformComputer(); warmed > 0 {
+			log.Printf("vmctl: warmness policy resumed %d community wire platform computer(s)", warmed)
+		}
 		if plan := r.PressureReclaimPlan(); plan.Mode == PressureReclaimModeDryRun {
 			log.Printf("vmctl: pressure reclaim dry-run decision=%s reason=%q active=%d eligible=%d protected=%d pressure=%v",
 				plan.Decision, plan.Reason, plan.Inventory.Active, plan.Inventory.Eligible, plan.Inventory.Protected, plan.Pressure.Pressure)
@@ -856,6 +859,10 @@ func computerKindForOwnership(own *VMOwnership) string {
 	}
 	if own.Kind == VMKindWorker {
 		return "worker"
+	}
+	if own.WarmnessClass == WarmnessClassPublicPlatform ||
+		(own.UserID == CommunityWirePlatformOwnerID && normalizeDesktopID(own.DesktopID) == CommunityWirePlatformDesktopID) {
+		return "platform"
 	}
 	if own.ParentVMID != "" || own.ParentDesktopID != "" || normalizeDesktopID(own.DesktopID) != PrimaryDesktopID || own.WarmnessClass == WarmnessClassCandidate {
 		return "candidate"

@@ -787,12 +787,42 @@ Focused tests:
 - `nix develop -c go test ./internal/store -run TestGlobalWireStoriesDoNotSeedFakeFrontPage`
 - `nix develop -c go test ./internal/runtime -run TestHandleGlobalWireStories`
 
+## Slice 0.5 checkpoint (2026-06-10)
+
+**Problem:** Community Wire dispatch and Dolt owner binding still target host
+`sandbox-m1` (`SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085`). Slice 0
+purged legacy graph rows from that host sandbox, but the platform computer is
+not yet an always-on Firecracker VM with its own embedded Dolt.
+
+**Evidence (pre-fix staging):**
+
+- `nix/node-b.nix` binds `go-choir-sourcecycled` and host `go-choir-sandbox` to
+  `127.0.0.1:8085` with `SOURCE_SERVICE_RUNTIME_OWNER_ID=global-wire-platform`.
+- Guest kernel params pointed `choir.source_service_runtime_url` at the host tap
+  IP instead of the guest-local sandbox (`127.0.0.1:8085`).
+- `WarmnessClassPublicPlatform` existed but had no boot/warm loop and was not
+  protected from idle reclaim.
+
+**Slice 0.5 fix intent:**
+
+1. Boot/resume stable VM `vm-global-wire-platform` for owner
+   `global-wire-platform` / desktop `platform`.
+2. Write `/var/lib/go-choir/platform-wire-runtime.env` with the platform VM
+   `HostURL`; repoint `sourcecycled` dispatch off host `sandbox-m1`.
+3. Guest runtime URL → `127.0.0.1:8085`; protect `public_platform` from idle
+   reclaim.
+
+**Remaining error field after Slice 0 landing:**
+
+- Deployed honest-empty `/api/global-wire/stories` at `fd675252`; platform VM
+  migration not yet proven on staging.
+
 next step:
 
-- Push/deploy this slice; staging acceptance: honest-empty `/api/global-wire/stories`,
-  Deletion Ledger grep on deployed commit.
-- Slice 0.5 per [mission-wire-community-news-v1.md](mission-wire-community-news-v1.md):
-  always-on platform computer VM + repoint dispatch off host `sandbox-m1`.
+- Land Slice 0.5 code + Nix binding; staging proof: platform VM healthy,
+  `platform-wire-runtime.env` points at guest tap URL, sourcecycled dispatch
+  hits platform sandbox Dolt owner binding (not host `sandbox-m1`).
+
 
 ## v1 mission handoff (2026-06-09)
 

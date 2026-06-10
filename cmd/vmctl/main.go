@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -114,6 +115,8 @@ func main() {
 		registry.StartIdleSweeper(context.Background(), idleSweepInterval)
 		log.Printf("vmctl: idle sweeper interval set to %s", idleSweepInterval)
 	}
+
+	startCommunityWirePlatformComputer(registry)
 
 	handler := vmctl.NewHandler(registry)
 	if dir := strings.TrimSpace(os.Getenv("VMCTL_SANDBOX_PACKAGE_DIR")); dir != "" {
@@ -419,4 +422,40 @@ func envBool(key string, fallback bool) bool {
 	default:
 		return fallback
 	}
+}
+
+func startCommunityWirePlatformComputer(registry *vmctl.OwnershipRegistry) {
+	if !envBool("VMCTL_PLATFORM_WIRE_ENABLED", false) {
+		return
+	}
+	envPath := strings.TrimSpace(os.Getenv("VMCTL_PLATFORM_WIRE_RUNTIME_ENV_PATH"))
+	if envPath == "" {
+		envPath = "/var/lib/go-choir/platform-wire-runtime.env"
+	}
+	sourceServiceUnit := strings.TrimSpace(os.Getenv("VMCTL_PLATFORM_WIRE_SOURCE_SERVICE_UNIT"))
+	go func() {
+		timeout := 10 * time.Minute
+		if raw := strings.TrimSpace(os.Getenv("VMCTL_PLATFORM_WIRE_BOOT_TIMEOUT")); raw != "" {
+			if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+				timeout = d
+			}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		env, err := registry.EnsureCommunityWirePlatformComputer(ctx)
+		if err != nil {
+			log.Printf("vmctl: community wire platform computer: %v", err)
+			return
+		}
+		if err := vmctl.WriteCommunityWirePlatformRuntimeEnv(envPath, env); err != nil {
+			log.Printf("vmctl: write community wire platform runtime env: %v", err)
+			return
+		}
+		log.Printf("vmctl: community wire platform runtime env written (%s -> %s)", envPath, env.RuntimeBaseURL)
+		if sourceServiceUnit != "" {
+			if err := exec.Command("systemctl", "try-restart", sourceServiceUnit).Run(); err != nil {
+				log.Printf("vmctl: restart %s after platform runtime env update: %v", sourceServiceUnit, err)
+			}
+		}
+	}()
 }

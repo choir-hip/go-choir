@@ -133,7 +133,9 @@ func warmnessPriority(class WarmnessClass) int {
 }
 
 func warmnessClassProtected(class WarmnessClass) bool {
-	return class == WarmnessClassPremiumAlwaysOn || class == WarmnessClassCriticalProtected
+	return class == WarmnessClassPublicPlatform ||
+		class == WarmnessClassPremiumAlwaysOn ||
+		class == WarmnessClassCriticalProtected
 }
 
 func warmnessSummary(cfg WarmnessPolicyConfig, ownerships []*VMOwnership, idleEligible []*VMOwnership) WarmnessHealthSummary {

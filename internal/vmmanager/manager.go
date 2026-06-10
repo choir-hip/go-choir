@@ -1271,8 +1271,8 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.vmctl_url=http://%s:8083", hostIP),
 			fmt.Sprintf("choir.maild_url=http://%s:8087", hostIP),
 			fmt.Sprintf("choir.source_service_url=http://%s:8787", hostIP),
-			fmt.Sprintf("choir.source_service_runtime_url=http://%s:8085", hostIP),
-			"choir.source_service_runtime_owner_id=global-wire-platform",
+			fmt.Sprintf("choir.source_service_runtime_url=http://127.0.0.1:%d", cfg.GuestPort),
+			fmt.Sprintf("choir.source_service_runtime_owner_id=%s", kernelParamValue(sourceServiceRuntimeOwnerID(cfg))),
 			fmt.Sprintf("ip=%s::%s:255.255.255.252::eth0:off", guestIP, hostIP),
 		}
 		runtimeArgs = append(runtimeArgs, guestIdentityKernelParams(cfg)...)
@@ -1329,6 +1329,13 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	}
 
 	return fcConfig
+}
+
+func sourceServiceRuntimeOwnerID(cfg VMConfig) string {
+	if ownerID := strings.TrimSpace(cfg.OwnerID); ownerID != "" {
+		return ownerID
+	}
+	return "global-wire-platform"
 }
 
 func guestIdentityKernelParams(cfg VMConfig) []string {
