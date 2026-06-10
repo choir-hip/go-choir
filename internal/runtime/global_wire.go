@@ -14,8 +14,8 @@ import (
 )
 
 type globalWireStoriesResponse struct {
-	Stories      []types.GlobalWireStory       `json:"stories"`
-	StyleSources []types.GlobalWireStyleSource `json:"style_sources"`
+	Stories      []types.WireStory       `json:"stories"`
+	StyleSources []types.WireStyleSource `json:"style_sources"`
 	Source       string                        `json:"source"`
 	Edition      *globalWireEditionResponse    `json:"edition,omitempty"`
 }
@@ -43,8 +43,8 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	stories := []types.GlobalWireStory{}
-	styleSources := []types.GlobalWireStyleSource{}
+	stories := []types.WireStory{}
+	styleSources := []types.WireStyleSource{}
 	source := "community-wire-vtext-index"
 	var edition *globalWireEditionResponse
 	if editionStories, editionResp, err := h.communityWireEditionVTextStories(r.Context(), styleSources, 12); err == nil {
@@ -59,7 +59,7 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 		log.Printf("global wire: community wire edition unavailable: %v", err)
 	}
 	for i := range stories {
-		stories[i] = normalizeGlobalWireStoryPresentation(stories[i])
+		stories[i] = normalizeWireStoryPresentation(stories[i])
 	}
 	writeAPIJSON(w, http.StatusOK, globalWireStoriesResponse{
 		Stories:      stories,
@@ -69,7 +69,7 @@ func (h *APIHandler) HandleGlobalWireStories(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-func (h *APIHandler) communityWireEditionVTextStories(ctx context.Context, styleSources []types.GlobalWireStyleSource, limit int) ([]types.GlobalWireStory, *globalWireEditionResponse, error) {
+func (h *APIHandler) communityWireEditionVTextStories(ctx context.Context, styleSources []types.WireStyleSource, limit int) ([]types.WireStory, *globalWireEditionResponse, error) {
 	if h == nil || h.rt == nil || h.rt.Store() == nil {
 		return nil, nil, nil
 	}
@@ -112,7 +112,7 @@ func (h *APIHandler) communityWireEditionVTextStories(ctx context.Context, style
 		IncludedDocIDs: includedDocIDs,
 		UpdatedAt:      editionDoc.UpdatedAt.Format(time.RFC3339Nano),
 	}
-	stories := make([]types.GlobalWireStory, 0, min(len(includedDocIDs), limit))
+	stories := make([]types.WireStory, 0, min(len(includedDocIDs), limit))
 	for _, docID := range includedDocIDs {
 		if limit > 0 && len(stories) >= limit {
 			break
@@ -171,15 +171,15 @@ func communityWirePlatformOwnerID() string {
 	return ownerID
 }
 
-func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Document, rev types.Revision, styleSources []types.GlobalWireStyleSource) (types.GlobalWireStory, bool) {
+func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Document, rev types.Revision, styleSources []types.WireStyleSource) (types.WireStory, bool) {
 	meta := decodeRevisionMetadata(rev.Metadata)
 	cycleID := sourceNetworkCycleID(meta)
 	if metadataString(meta, "source") != "edit_vtext" || cycleID == "" {
-		return types.GlobalWireStory{}, false
+		return types.WireStory{}, false
 	}
 	content := strings.TrimSpace(rev.Content)
 	if content == "" || wireArticleContentLooksLikeSeed(content) {
-		return types.GlobalWireStory{}, false
+		return types.WireStory{}, false
 	}
 	styleID, styleTitle := wireArticleSelectedStyle(meta, styleSources)
 	headline := wireArticleArticleHeadline(doc.Title, content)
@@ -190,7 +190,7 @@ func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Doc
 		len(manifest.Supporting) == 0 &&
 		len(manifest.Contrary) == 0 &&
 		len(manifest.Context) == 0 {
-		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
+		manifest.Context = append(manifest.Context, types.WireSourceItem{
 			ID:       "source-network-cycle:" + cycleID,
 			Title:    "Source network cycle " + cycleID,
 			Standing: "source firehose cycle",
@@ -201,7 +201,7 @@ func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Doc
 	if styleID != "wire-style" {
 		projections["wire-style"] = projection
 	}
-	return types.GlobalWireStory{
+	return types.WireStory{
 		ID:                  "source-network-vtext-" + doc.DocID,
 		OwnerID:             doc.OwnerID,
 		Headline:            headline,
@@ -231,7 +231,7 @@ func wireArticleContentLooksLikeSeed(content string) bool {
 		strings.Contains(content, "## Working Revision")
 }
 
-func wireArticleSelectedStyle(meta map[string]any, styles []types.GlobalWireStyleSource) (string, string) {
+func wireArticleSelectedStyle(meta map[string]any, styles []types.WireStyleSource) (string, string) {
 	title := "Style.vtext: Global Wire"
 	if selected, ok := meta["selected_style_sources"].([]any); ok && len(selected) > 0 {
 		if first, ok := selected[0].(map[string]any); ok {
@@ -267,7 +267,7 @@ func wireArticleMetadataStringSlice(value any) []string {
 	return out
 }
 
-func wireArticleManifestFromRevision(ctx context.Context, meta map[string]any, content, headline string) types.GlobalWireSourceManifest {
+func wireArticleManifestFromRevision(ctx context.Context, meta map[string]any, content, headline string) types.WireSourceManifest {
 	entities := wireArticleVisibleSourceEntities(ctx, meta, content)
 	if len(entities) > 0 {
 		return wireArticleManifestFromSourceEntities(entities)
@@ -350,14 +350,14 @@ func wireArticleInlineSourceRefs(content string) map[string]bool {
 	return out
 }
 
-func wireArticleManifestFromSourceEntities(entities []vtextSourceEntity) types.GlobalWireSourceManifest {
-	manifest := types.GlobalWireSourceManifest{}
+func wireArticleManifestFromSourceEntities(entities []vtextSourceEntity) types.WireSourceManifest {
+	manifest := types.WireSourceManifest{}
 	for i, entity := range entities {
 		id := wireArticleSourceEntityManifestID(entity)
 		if id == "" {
 			continue
 		}
-		item := types.GlobalWireSourceItem{
+		item := types.WireSourceItem{
 			ID:           id,
 			Title:        wireArticleSourceEntityManifestTitle(entity),
 			Standing:     wireArticleSourceEntityManifestStanding(entity),
@@ -397,8 +397,8 @@ func wireArticleSourceEntityManifestStanding(entity vtextSourceEntity) string {
 	}
 }
 
-func wireArticleManifestFromCycleProvenance(meta map[string]any, headline string) types.GlobalWireSourceManifest {
-	manifest := types.GlobalWireSourceManifest{}
+func wireArticleManifestFromCycleProvenance(meta map[string]any, headline string) types.WireSourceManifest {
+	manifest := types.WireSourceManifest{}
 	cycleID := sourceNetworkCycleID(meta)
 	sourceIDs := wireArticleMetadataStringSlice(meta["source_item_ids"])
 	switch {
@@ -407,14 +407,14 @@ func wireArticleManifestFromCycleProvenance(meta map[string]any, headline string
 		if len(sourceIDs) > 0 {
 			standing = fmt.Sprintf("source firehose cycle; %d source handles retained in revision provenance", len(sourceIDs))
 		}
-		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
+		manifest.Context = append(manifest.Context, types.WireSourceItem{
 			ID:       "source-network-cycle:" + cycleID,
 			Title:    "Source network cycle " + cycleID,
 			Standing: standing,
 			Role:     "context",
 		})
 	case strings.TrimSpace(headline) != "":
-		manifest.Context = append(manifest.Context, types.GlobalWireSourceItem{
+		manifest.Context = append(manifest.Context, types.WireSourceItem{
 			ID:       "source-network-vtext:" + headline,
 			Title:    "Global Wire VText article head",
 			Standing: "platform VText current revision",
@@ -591,7 +591,7 @@ func wireArticleFreshness(updatedAt time.Time) string {
 	}
 }
 
-func normalizeGlobalWireStoryPresentation(story types.GlobalWireStory) types.GlobalWireStory {
+func normalizeWireStoryPresentation(story types.WireStory) types.WireStory {
 	if globalWireStoryFreshnessLooksAuto(story.Freshness) {
 		story.Freshness = wireArticleFreshness(story.UpdatedAt)
 	}

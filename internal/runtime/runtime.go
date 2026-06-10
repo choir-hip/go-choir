@@ -2064,7 +2064,7 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 			}
 		}
 	}
-	if isGlobalWireArticleRevisionRun(rec) {
+	if isWireArticleRevisionRun(rec) {
 		meta["artifact_kind"] = "article_revision"
 		meta["article_version"] = true
 		meta["vtext_version_stage"] = "article_revision"
@@ -2084,7 +2084,7 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 	return data
 }
 
-func isGlobalWireArticleRevisionRun(rec *types.RunRecord) bool {
+func isWireArticleRevisionRun(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}

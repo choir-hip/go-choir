@@ -907,7 +907,7 @@ mission v1 and spec Activation section amended same date.
 | Deliverable | Status |
 |-------------|--------|
 | (a) Architecture checkpoint | **Done** (docs) |
-| (b) Deletion Ledger | **In progress** — ingestion spine renamed; StoryGraph store/routes remain |
+| (b) Deletion Ledger | **Done** — StoryGraph store/types deleted; ingestion spine neutral; Go grep clean |
 | (c) Universal Wire rename | **Not started** — blocked on (b) |
 | (d) Activation graph (Slice 3) | **Not started** — blocked on (b),(c) |
 | (e) Staging acceptance | **Not started** |
@@ -938,12 +938,35 @@ violation blocking rename (c) and activation graph (d).
 **Fix:** Neutral vocabulary — `BuildIngestionHandoff`, `ingestion_handoff_*`
 metadata, `/internal/source-service/ingestion-handoff/latest`, renamed dispatcher
 types in `cmd/sourcecycled`. Go grep for `SourceMaxx` / `source_maxx` /
-`sourcemaxx` is clean. **Remaining (b):** StoryGraph store helpers, legacy
-publication/newsletter routes, `GlobalWireStory` seed paths, staging purge.
+`sourcemaxx` is clean.
+
+**Workstream (b) completion — StoryGraph store deletion (2026-06-10):**
+
+**Problem:** `internal/store/global_wire.go` (~4.5k lines) persisted StoryGraph
+contributions, reconciliation, publication, newsletter, autoradio, and seed
+constructors — deleted ontology still on disk and in schema.
+
+**Fix:** Deleted `internal/store/global_wire.go` and tests; removed all
+`global_wire_*` DDL and column migrations from `internal/store/store.go`;
+replaced `internal/types/global_wire.go` with minimal `internal/types/wire.go`
+(`WireStory`, `WireStyleSource`, `WireSourceManifest`, `WireSourceItem` only).
+Runtime edition index (`/api/global-wire/stories`) now projects VText only — no
+store-backed StoryGraph reads.
+
+**Evidence:** `go build ./...` and `go test ./internal/store ./internal/runtime
+./cmd/sourcecycled ./internal/cycle ./internal/types` pass. Go grep for
+`StoryGraph`, `SourceMaxx`, `source_maxx`, `sourcemaxx`, `ListGlobalWire`,
+`UpsertGlobalWire`, `global_wire_story_graph` is empty.
+
+**Residual (not (b)):** User-visible `global-wire` API/edition alias and
+`global_wire_*` request_intent metadata remain until Workstream **(c)** Universal
+Wire rename. `source-network` VText provenance labels are intentional ingestion
+index vocabulary, not StoryGraph store ontology.
 
 next step:
 
-- Finish Deletion Ledger (StoryGraph routes/types/store); then **(c)** Universal Wire rename.
+- **(c)** Universal Wire rename (`universal-wire/Wire.vtext`, API routes, frontend);
+  then **(d)** activation graph; **(e)** staging acceptance.
 
 
 ## v1 mission handoff (2026-06-09)
@@ -955,8 +978,8 @@ Active mission document:
 
 v1 corrections applied after external doc review:
 
-- Frontend hardcoded preview stories were removed in v0; legacy seeding remains
-  in `internal/store/global_wire.go` and routes/tests — invariant 23 Deletion
+- Frontend hardcoded preview stories were removed in v0; legacy StoryGraph seeding
+  in `internal/store/global_wire.go` was deleted 2026-06-10 — invariant 23 Deletion
   Ledger is the bar, not front-page suppression alone.
 - HN ingests today via RSS (`rss:hn_best`); Phase A requires per-class proof,
   not assumption from registry presence.

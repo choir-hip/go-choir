@@ -596,22 +596,22 @@ func metadataStringSlice(value any) []string {
 	}
 }
 
-func coagentDefaultStyleCatalog() []types.GlobalWireStyleSource {
-	return []types.GlobalWireStyleSource{
+func coagentDefaultStyleCatalog() []types.WireStyleSource {
+	return []types.WireStyleSource{
 		{ID: "wire-style", Title: "Style.vtext: Global Wire", Label: "Wire", SourcePath: "styles/global-wire.style.vtext"},
 		{ID: "claim-audit-style", Title: "Style.vtext: Claim Audit", Label: "Audit", SourcePath: "styles/claim-audit.style.vtext"},
 		{ID: "market-brief-style", Title: "Style.vtext: Market Brief", Label: "Market", SourcePath: "styles/market-brief.style.vtext"},
 	}
 }
 
-func coagentVTextSelectedStyles(req coagentVTextRouteRequest) ([]types.GlobalWireStyleSource, string) {
+func coagentVTextSelectedStyles(req coagentVTextRouteRequest) ([]types.WireStyleSource, string) {
 	styles := coagentDefaultStyleCatalog()
-	byID := map[string]types.GlobalWireStyleSource{}
+	byID := map[string]types.WireStyleSource{}
 	for _, style := range styles {
 		byID[style.ID] = style
 	}
 	text := strings.ToLower(strings.Join([]string{req.Title, req.Objective, req.InitialContent}, "\n"))
-	addSummary := func(style types.GlobalWireStyleSource, summary string) types.GlobalWireStyleSource {
+	addSummary := func(style types.WireStyleSource, summary string) types.WireStyleSource {
 		style.Summary = summary
 		return style
 	}
@@ -624,13 +624,13 @@ func coagentVTextSelectedStyles(req coagentVTextRouteRequest) ([]types.GlobalWir
 	market := addSummary(byID["market-brief-style"], "Market-brief treatment: explain price, policy, institutional, and second-order effects without hiding uncertainty.")
 	switch {
 	case hasMarket && hasAudit:
-		return []types.GlobalWireStyleSource{market, audit}, "The brief mixes market/policy mechanics with contested or uncertain claims, so use Market Brief as primary style with Claim Audit as a secondary constraint."
+		return []types.WireStyleSource{market, audit}, "The brief mixes market/policy mechanics with contested or uncertain claims, so use Market Brief as primary style with Claim Audit as a secondary constraint."
 	case hasMarket:
-		return []types.GlobalWireStyleSource{market}, "The brief centers market, policy, inflation, rates, or financial transmission, so Market Brief is the fitting Style.vtext."
+		return []types.WireStyleSource{market}, "The brief centers market, policy, inflation, rates, or financial transmission, so Market Brief is the fitting Style.vtext."
 	case hasAudit:
-		return []types.GlobalWireStyleSource{audit}, "The brief centers correction, contradiction, disputed claims, or verification risk, so Claim Audit is the fitting Style.vtext."
+		return []types.WireStyleSource{audit}, "The brief centers correction, contradiction, disputed claims, or verification risk, so Claim Audit is the fitting Style.vtext."
 	default:
-		return []types.GlobalWireStyleSource{wire}, "The brief is a general news article request, so Global Wire is the fitting Style.vtext."
+		return []types.WireStyleSource{wire}, "The brief is a general news article request, so Global Wire is the fitting Style.vtext."
 	}
 }
 

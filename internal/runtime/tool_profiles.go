@@ -385,7 +385,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		}
 	}
 	if profile == AgentProfileVText {
-		isGlobalWireVText := metadataString(rec.Metadata, "source_network_cycle_id") != "" ||
+		isWireVText := metadataString(rec.Metadata, "source_network_cycle_id") != "" ||
 			metadataString(rec.Metadata, "ingestion_handoff_cycle_id") != "" ||
 			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "global_wire_") ||
 			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "ingestion_handoff_")
@@ -395,7 +395,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nAfter edit_vtext succeeds, do not call edit_vtext again in the same revision run. If the request needs help, send the next durable co-agent message with spawn_agent, request_super_execution, or request_email_draft; otherwise end the turn.")
 		b.WriteString("\nDo not write knowledge or coding content from model priors. Depend on researcher messages for factual/current knowledge and super messages for coding, artifacts, execution, and verification.")
 		b.WriteString("\nConductor may create only the user prompt seed. VText owns the first useful document revision.")
-		if isGlobalWireVText {
+		if isWireVText {
 			b.WriteString("\nFor Global Wire article revision runs, the processor or reconciler handoff is newsroom source context. Your first edit_vtext call must write a publishable article or explicit correction/update draft from that handoff and the current VText, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 			b.WriteString("\nUse uncertainty and native source handles in reader-facing article prose. When source_entities are present, cite a bounded set of distinct listed handles with [label](source:ENTITY_ID); source refs only in source inventories or metadata sections do not count.")
 			b.WriteString("\nUse selected Style.vtext sources to shape voice, structure, and editorial judgment, but do not name the selected Style.vtext, style rationale, source inventory, or handoff mechanics in reader-facing prose unless that is genuinely part of the story.")

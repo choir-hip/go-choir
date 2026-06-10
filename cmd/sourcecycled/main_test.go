@@ -364,7 +364,7 @@ func TestSourceServiceAPIIngestionHandoffLatestTreatsNotModifiedAsSuccessfulFetc
 		t.Fatalf("finish cycle: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/internal/source-service/global-wire/latest", nil)
+	req := httptest.NewRequest(http.MethodGet, "/internal/source-service/ingestion-handoff/latest", nil)
 	rec := httptest.NewRecorder()
 	handleSourceServiceIngestionHandoffLatest(store).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

@@ -401,7 +401,7 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 		return types.Revision{}, fmt.Errorf("ensure canonical vtext projection path: %w", err)
 	}
 	revMeta := addVTextEditRevisionMetadata(rt.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation), materialized, rec)
-	if normalizedContent, normalizedCount := normalizeGlobalWireArticleBareSourceRefs(materialized.Content, revMeta, rec); normalizedCount > 0 {
+	if normalizedContent, normalizedCount := normalizeWireArticleBareSourceRefs(materialized.Content, revMeta, rec); normalizedCount > 0 {
 		materialized.Content = normalizedContent
 		revMeta = mergeVTextRevisionMetadata(revMeta, map[string]any{
 			"source_ref_normalization": map[string]any{
@@ -465,8 +465,8 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 
 var bareVTextSourceRefRE = regexp.MustCompile(`\[source:([A-Za-z0-9_.:-]{1,160})\]`)
 
-func normalizeGlobalWireArticleBareSourceRefs(content string, metadata json.RawMessage, rec *types.RunRecord) (string, int) {
-	if !isGlobalWireArticleRevisionRun(rec) {
+func normalizeWireArticleBareSourceRefs(content string, metadata json.RawMessage, rec *types.RunRecord) (string, int) {
+	if !isWireArticleRevisionRun(rec) {
 		return content, 0
 	}
 	meta := decodeRevisionMetadata(metadata)
