@@ -78,3 +78,53 @@ func TestValidateProcessorRequestIngestionEvents(t *testing.T) {
 		t.Fatalf("ValidateProcessorRequestIngestionEvents(missing ids) = %v, %v", ok, err)
 	}
 }
+
+func TestRSSGDELTCurriculumEmitsIngestionEventsAndProcessorHandoff(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Date(2026, 6, 10, 9, 0, 0, 0, time.UTC)
+	cycleID := "cycle_curriculum"
+	items := []sources.Item{
+		{
+			ID:         "srcitem_rss_hn",
+			SourceID:   "rss:hn_best",
+			SourceType: sources.SourceTypeRSS,
+			FetchID:    "fetch_rss_1",
+			Title:      "HN story",
+			Region:     "global",
+		},
+		{
+			ID:         "srcitem_gdelt_1",
+			SourceID:   "gdelt:15min",
+			SourceType: sources.SourceTypeGDELT,
+			FetchID:    "fetch_gdelt_1",
+			Title:      "GDELT mention",
+			Region:     "global",
+		},
+	}
+	events := BuildIngestionEventsFromItems(cycleID, items, now)
+	if len(events) != 2 {
+		t.Fatalf("ingestion events = %d, want 2", len(events))
+	}
+	if err := store.SaveIngestionEvents(ctx, events); err != nil {
+		t.Fatalf("save ingestion events: %v", err)
+	}
+	handoff := BuildSourceMaxxHandoff(cycleID, items, events, now)
+	if len(handoff.ProcessorRequests) != 2 {
+		t.Fatalf("processor requests = %d, want rss + gdelt routes", len(handoff.ProcessorRequests))
+	}
+	for _, req := range handoff.ProcessorRequests {
+		if len(req.IngestionEventIDs) == 0 {
+			t.Fatalf("processor request missing ingestion refs: %+v", req)
+		}
+		ok, err := store.ValidateProcessorRequestIngestionEvents(ctx, req)
+		if err != nil || !ok {
+			t.Fatalf("validate processor request %+v: ok=%v err=%v", req, ok, err)
+		}
+	}
+}

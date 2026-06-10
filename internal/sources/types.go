@@ -47,6 +47,15 @@ type Source struct {
 	LastModified        string     `json:"last_modified,omitempty"`
 }
 
+func (s Source) AllowsConditionalGET() bool {
+	switch strings.TrimSpace(s.ConditionalMode) {
+	case "none":
+		return false
+	default:
+		return true
+	}
+}
+
 func (s Source) EffectiveMaxItemsPerPoll(fallback int) int {
 	if s.MaxItemsPerPoll > 0 {
 		return s.MaxItemsPerPoll

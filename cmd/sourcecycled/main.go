@@ -88,6 +88,9 @@ func main() {
 	if err := store.SaveSources(&registry); err != nil {
 		log.Fatalf("Failed to save source registry: %v", err)
 	}
+	if err := store.ApplySourcePollState(&registry); err != nil {
+		log.Fatalf("Failed to load source poll state: %v", err)
+	}
 
 	// 2. Setup Context and Graceful Shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -780,6 +783,9 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 
 	// Phase 1 & 2: Source Polling & Deduplication
 	pollResult := engine.PollAll(ctx)
+	if err := store.SaveSourcePollState(registry); err != nil {
+		log.Printf("Failed to save source poll state: %v", err)
+	}
 	items := pollResult.Items
 	if err := store.SaveCycleFetches(cycleID, pollResult.Fetches); err != nil {
 		log.Printf("Failed to save fetch records: %v", err)

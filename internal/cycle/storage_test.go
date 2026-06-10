@@ -521,3 +521,48 @@ func TestStoragePersistsSourceMaxxHandoffsAndLatestCycleSummary(t *testing.T) {
 		t.Fatalf("runtime run ids not persisted: processors=%+v reconcilers=%+v", summary.ProcessorRequests, summary.ReconcilerRequests)
 	}
 }
+
+func TestApplySourcePollStatePreservesCursorsAcrossUpsert(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "poll-state.db")
+	registry := &sources.Registry{
+		UserAgent: "ChoirTest/1.0",
+		Sources: []sources.Source{{
+			ID:              "rss:cursor-test",
+			Type:            sources.SourceTypeRSS,
+			Name:            "Cursor Test",
+			URL:             "https://example.test/feed",
+			ConditionalMode: "etag_last_modified",
+		}},
+	}
+	store, err := NewStorage(dbPath)
+	if err != nil {
+		t.Fatalf("open storage: %v", err)
+	}
+	if err := store.SaveSources(registry); err != nil {
+		t.Fatalf("save sources: %v", err)
+	}
+	registry.Sources[0].LastETag = "etag-persisted"
+	registry.Sources[0].LastModified = "Thu, 01 Jan 2026 00:00:00 GMT"
+	registry.Sources[0].LastPolled = time.Date(2026, 6, 10, 1, 0, 0, 0, time.UTC)
+	if err := store.SaveSourcePollState(registry); err != nil {
+		t.Fatalf("save poll state: %v", err)
+	}
+	registry.Sources[0].LastETag = ""
+	registry.Sources[0].LastModified = ""
+	registry.Sources[0].LastPolled = time.Time{}
+	if err := store.SaveSources(registry); err != nil {
+		t.Fatalf("upsert sources: %v", err)
+	}
+	if err := store.ApplySourcePollState(registry); err != nil {
+		t.Fatalf("apply poll state: %v", err)
+	}
+	if registry.Sources[0].LastETag != "etag-persisted" {
+		t.Fatalf("LastETag = %q, want etag-persisted", registry.Sources[0].LastETag)
+	}
+	if registry.Sources[0].LastModified != "Thu, 01 Jan 2026 00:00:00 GMT" {
+		t.Fatalf("LastModified = %q", registry.Sources[0].LastModified)
+	}
+	if registry.Sources[0].LastPolled.IsZero() {
+		t.Fatal("LastPolled should be restored from storage")
+	}
+}

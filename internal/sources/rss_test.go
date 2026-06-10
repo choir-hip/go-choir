@@ -78,6 +78,72 @@ func TestRSSPollerReturnsFetchRecordAndStableItem(t *testing.T) {
 	}
 }
 
+func TestRSSPollerReturnsNotModifiedOnSecondPoll(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 1 {
+			w.Header().Set("ETag", "etag-conditional")
+			_, _ = w.Write([]byte(`<?xml version="1.0"?><rss version="2.0"><channel><item><title>One</title><link>https://example.test/one</link><description>Body</description></item></channel></rss>`))
+			return
+		}
+		if r.Header.Get("If-None-Match") != "etag-conditional" {
+			t.Fatalf("If-None-Match = %q, want etag-conditional", r.Header.Get("If-None-Match"))
+		}
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	defer server.Close()
+
+	source := Source{
+		ID:              "rss:conditional",
+		Type:            SourceTypeRSS,
+		URL:             server.URL,
+		ConditionalMode: "etag_last_modified",
+	}
+	poller := NewRSSPoller("ChoirTest/1.0")
+	first, err := poller.Poll(context.Background(), &source)
+	if err != nil {
+		t.Fatalf("poll first: %v", err)
+	}
+	if source.LastETag != "etag-conditional" {
+		t.Fatalf("LastETag = %q, want etag-conditional", source.LastETag)
+	}
+	second, err := poller.Poll(context.Background(), &source)
+	if err != nil {
+		t.Fatalf("poll second: %v", err)
+	}
+	if first.Fetch.Status != "ok" || second.Fetch.Status != "not_modified" {
+		t.Fatalf("fetch statuses = %q/%q, want ok/not_modified", first.Fetch.Status, second.Fetch.Status)
+	}
+	if len(second.Items) != 0 {
+		t.Fatalf("second poll items = %d, want 0", len(second.Items))
+	}
+}
+
+func TestRSSPollerSkipsConditionalHeadersWhenModeNone(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") != "" {
+			t.Fatalf("unexpected If-None-Match when conditional mode is none")
+		}
+		_, _ = w.Write([]byte(`<?xml version="1.0"?><rss version="2.0"><channel><item><title>One</title><link>https://example.test/one</link><description>Body</description></item></channel></rss>`))
+	}))
+	defer server.Close()
+
+	source := Source{
+		ID:              "rss:no-conditional",
+		Type:            SourceTypeRSS,
+		URL:             server.URL,
+		ConditionalMode: "none",
+		LastETag:        "stale-etag",
+	}
+	poller := NewRSSPoller("ChoirTest/1.0")
+	if _, err := poller.Poll(context.Background(), &source); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+}
+
 func TestRSSPollerCleansHTMLDescriptionsForSourceBody(t *testing.T) {
 	allowPrivateSourceFetchForTest(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

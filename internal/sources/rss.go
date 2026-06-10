@@ -42,11 +42,13 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 	}
 
 	req.Header.Set("User-Agent", p.UserAgent)
-	if source.LastETag != "" {
-		req.Header.Set("If-None-Match", source.LastETag)
-	}
-	if source.LastModified != "" {
-		req.Header.Set("If-Modified-Since", source.LastModified)
+	if source.AllowsConditionalGET() {
+		if source.LastETag != "" {
+			req.Header.Set("If-None-Match", source.LastETag)
+		}
+		if source.LastModified != "" {
+			req.Header.Set("If-Modified-Since", source.LastModified)
+		}
 	}
 
 	resp, err := p.Client.Do(req)

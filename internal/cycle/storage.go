@@ -320,8 +320,7 @@ func (s *Storage) SaveSources(registry *sources.Registry) error {
 		robots_policy=excluded.robots_policy, auth_policy=excluded.auth_policy,
 		store_body_policy=excluded.store_body_policy, retention_days=excluded.retention_days,
 		official=excluded.official, source_standing=excluded.source_standing,
-		status=excluded.status, last_polled=excluded.last_polled,
-		last_etag=excluded.last_etag, last_modified=excluded.last_modified,
+		status=excluded.status,
 		updated_at=excluded.updated_at`)
 	if err != nil {
 		return err
@@ -344,6 +343,75 @@ func (s *Storage) SaveSources(registry *sources.Registry) error {
 			source.AuthPolicy, source.StoreBodyPolicy, source.RetentionDays, boolInt(source.Official),
 			source.SourceStanding, status, formatTime(source.LastPolled), source.LastETag, source.LastModified, now,
 		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ApplySourcePollState overlays durable poll cursors from SQLite onto the in-memory registry.
+func (s *Storage) ApplySourcePollState(registry *sources.Registry) error {
+	if registry == nil {
+		return nil
+	}
+	rows, err := s.DB.Query(`SELECT id, last_polled, last_etag, last_modified FROM sources`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type pollState struct {
+		lastPolled   time.Time
+		lastETag     string
+		lastModified string
+	}
+	byID := map[string]pollState{}
+	for rows.Next() {
+		var id, lastPolled, lastETag, lastModified string
+		if err := rows.Scan(&id, &lastPolled, &lastETag, &lastModified); err != nil {
+			return err
+		}
+		byID[id] = pollState{
+			lastPolled:   parseStoredTime(lastPolled),
+			lastETag:     lastETag,
+			lastModified: lastModified,
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range registry.Sources {
+		state, ok := byID[registry.Sources[i].ID]
+		if !ok {
+			continue
+		}
+		registry.Sources[i].LastPolled = state.lastPolled
+		registry.Sources[i].LastETag = state.lastETag
+		registry.Sources[i].LastModified = state.lastModified
+	}
+	return nil
+}
+
+// SaveSourcePollState persists per-source poll cursors after a fetch cycle.
+func (s *Storage) SaveSourcePollState(registry *sources.Registry) error {
+	if registry == nil {
+		return nil
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.Prepare(`UPDATE sources SET last_polled = ?, last_etag = ?, last_modified = ?, updated_at = ? WHERE id = ?`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, source := range registry.Sources {
+		if strings.TrimSpace(source.ID) == "" {
+			continue
+		}
+		if _, err := stmt.Exec(formatTime(source.LastPolled), source.LastETag, source.LastModified, now, source.ID); err != nil {
 			return err
 		}
 	}
