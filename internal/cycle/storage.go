@@ -875,6 +875,24 @@ func (s *Storage) CountRecentlySubmittedProcessorRequests(ctx context.Context, s
 	return count, err
 }
 
+// ResetStaleSubmittedProcessorRequests marks processor requests with status 'submitted'
+// and updated_at before the cutoff as 'queued' (clearing runtime_run_id) so they can be
+// retried. This recovers from platform VM restarts that orphan previously submitted runs.
+func (s *Storage) ResetStaleSubmittedProcessorRequests(ctx context.Context, cutoff time.Time) (int, error) {
+	result, err := s.DB.ExecContext(ctx,
+		`UPDATE processor_requests SET status = 'queued', runtime_run_id = '', updated_at = ? WHERE status = 'submitted' AND updated_at < ?`,
+		time.Now().UTC().Format(time.RFC3339), cutoff.Format(time.RFC3339))
+	if err != nil {
+		return 0, fmt.Errorf("reset stale submitted processor requests: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(affected), nil
+}
+
+
 func (s *Storage) ListReconcilerRequests(ctx context.Context, cycleID string, limit int) ([]ReconcilerRequest, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50

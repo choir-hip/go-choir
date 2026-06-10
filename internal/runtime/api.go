@@ -913,7 +913,7 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 	// Overload guard: reject processor submissions when too many runs are active.
 	// This prevents the platform computer from wedging under concurrent processor load.
 	if profile == AgentProfileProcessor {
-		maxProc := 32
+		maxProc := 4
 		if v := os.Getenv("RUNTIME_MAX_PROCESSOR_RUNS"); v != "" {
 			if parsed, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && parsed > 0 {
 				maxProc = parsed

@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	defaultIngestionProcessorDispatchLimit = 32
+	defaultIngestionProcessorDispatchLimit = 4
 	defaultIngestionRuntimeDispatchRetries = 8
 	defaultIngestionRuntimeRetryDelay      = 2 * time.Second
 	defaultIngestionQueueDrainInterval     = 1 * time.Minute
@@ -102,6 +102,18 @@ func main() {
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	// Clean up stale submitted processor requests on startup.
+	// Runs submitted before restart are orphaned when the platform VM recycles.
+	inFlightWindow := time.Duration(parsePositiveInt(
+		firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_INFLIGHT_WINDOW_SECONDS", "SOURCECYCLED_INFLIGHT_WINDOW_SECONDS"),
+		int(defaultIngestionProcessorInFlightWindow/time.Second),
+	)) * time.Second
+	cutoff := time.Now().UTC().Add(-inFlightWindow)
+	if cleaned, err := store.ResetStaleSubmittedProcessorRequests(ctx, cutoff); err != nil {
+		log.Printf("Warning: failed to clean stale submitted processor requests: %v", err)
+	} else if cleaned > 0 {
+		log.Printf("Cleaned %d stale submitted processor requests (cutoff %s)", cleaned, cutoff.Format(time.RFC3339))
+	}
 	go func() {
 		<-sigChan
 		log.Println("Received shutdown signal, terminating...")
