@@ -244,11 +244,11 @@ func fallbackModelPolicy(_ Config) ModelPolicy {
 	return ModelPolicy{
 		Defaults: defaults,
 		Roles: map[string]LLMSelection{
-			AgentProfileConductor:        flashXiaomi,
+			AgentProfileConductor:        flashDeepSeek,
 			AgentProfileSuper:            flashDeepSeek,
 			AgentProfileVSuper:           {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			AgentProfileCoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
-			AgentProfileResearcher:       flashXiaomi,
+			AgentProfileResearcher:       flashDeepSeek,
 			AgentProfileVText:            flashXiaomi,
 			AgentProfileProcessor:        flashXiaomi,
 			AgentProfileReconciler:       flashDeepSeek,
