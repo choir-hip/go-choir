@@ -8,6 +8,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -953,6 +955,64 @@ func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleSandboxProxy resolves the live sandbox URL and reverse-proxies the request.
+// Path format: /internal/vmctl/sandbox-proxy/{owner-id}/{...remaining-path}
+func (h *Handler) HandleSandboxProxy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "sandbox proxy is not publicly accessible"})
+		return
+	}
+
+	// Extract owner from path: /internal/vmctl/sandbox-proxy/{owner}/{...rest}
+	const prefix = "/internal/vmctl/sandbox-proxy/"
+	path := strings.TrimPrefix(r.URL.Path, prefix)
+	if path == "" || path == r.URL.Path {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "missing owner in proxy path"})
+		return
+	}
+
+	// Split into owner and remaining path.
+	slashIdx := strings.Index(path, "/")
+	var ownerID, remainingPath string
+	if slashIdx < 0 {
+		ownerID = path
+		remainingPath = "/"
+	} else {
+		ownerID = path[:slashIdx]
+		remainingPath = path[slashIdx:]
+	}
+
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "empty owner in proxy path"})
+		return
+	}
+
+	// Resolve live sandbox URL.
+	sandboxURL, err := h.registry.LiveSandboxURL(ownerID, "platform")
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: fmt.Sprintf("resolve sandbox for %s: %v", ownerID, err)})
+		return
+	}
+
+	target, err := url.Parse(sandboxURL)
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: fmt.Sprintf("invalid sandbox URL: %v", err)})
+		return
+	}
+
+	// Rewrite the request path to the remaining path.
+	r.URL.Path = remainingPath
+	r.URL.RawPath = ""
+
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.ServeHTTP(w, r)
+}
+
 func writeRuntimePackageTar(tw *tar.Writer, root string, snapshot buildinfo.Info) error {
 	root = filepath.Clean(root)
 	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
@@ -1103,6 +1163,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/retention-plan", h.HandleRetentionPlan)
 	s.HandleFunc("/internal/vmctl/prune", h.HandlePrune)
 	s.HandleFunc("/internal/vmctl/runtime-package/sandbox", h.HandleRuntimePackage)
+	s.HandleFunc("/internal/vmctl/sandbox-proxy/", h.HandleSandboxProxy)
 }
 
 // ResolveEndpoint returns the full resolve endpoint URL for the vmctl

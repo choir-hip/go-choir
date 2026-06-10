@@ -1783,6 +1783,27 @@ func (r *OwnershipRegistry) GetOwnershipForDesktop(userID, desktopID string) *VM
 	return r.ownerships[ownershipKey(userID, desktopID)]
 }
 
+// LiveSandboxURL returns the live sandbox URL for the given user/desktop pair.
+// It prefers the VM manager's live HostURL over the cached ownership record.
+// Returns an error if the ownership does not exist and no live VM is found.
+func (r *OwnershipRegistry) LiveSandboxURL(userID, desktopID string) (string, error) {
+	r.mu.RLock()
+	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
+	r.mu.RUnlock()
+	if ok && own != nil {
+		// Prefer live VM manager URL if available.
+		if r.vmManager != nil {
+			if info := r.vmManager.GetVM(own.VMID); info != nil && strings.TrimSpace(info.HostURL) != "" {
+				return info.HostURL, nil
+			}
+		}
+		if strings.TrimSpace(own.SandboxURL) != "" {
+			return own.SandboxURL, nil
+		}
+	}
+	return "", fmt.Errorf("no live sandbox URL for %s/%s", userID, desktopID)
+}
+
 // GetOwnershipByVMID returns the ownership for a specific VM ID, or nil.
 func (r *OwnershipRegistry) GetOwnershipByVMID(vmID string) *VMOwnership {
 	r.mu.RLock()

@@ -361,7 +361,6 @@ in
       ReadWritePaths = [ sourceServiceDir ];
       EnvironmentFile = [
         "-/var/lib/go-choir/deploy.env"
-        "-/var/lib/go-choir/platform-wire-runtime.env"
       ];
       Environment = [
         "SOURCE_SERVICE_ADDR=0.0.0.0:8787"
@@ -370,6 +369,7 @@ in
         "SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform"
         "SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=32"
         "SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS=60"
+        "VMCTL_SANDBOX_PROXY_SOCK=/run/go-choir/vmctl.sock"
       ];
     };
   };
@@ -382,6 +382,8 @@ in
     serviceConfig = commonServiceHardening // {
       ExecStart = "${serviceExec "vmctl" goChoirPackages.vmctl}";
       Restart = "on-failure";
+      RuntimeDirectory = "go-choir";
+      RuntimeDirectoryMode = "0700";
       RestartSec = 3;
       # Firecracker needs access to /dev/kvm for VM hardware acceleration.
       # We must allow KVM device access while keeping other hardening.
@@ -486,9 +488,7 @@ in
         "VMCTL_GATEWAY_URL=http://127.0.0.1:8084"
         "VMCTL_ALLOW_HOST_PROCESS=false"
         "VMCTL_PLATFORM_WIRE_ENABLED=true"
-        "VMCTL_PLATFORM_WIRE_RUNTIME_ENV_PATH=/var/lib/go-choir/platform-wire-runtime.env"
-        "VMCTL_PLATFORM_WIRE_SOURCE_SERVICE_UNIT=go-choir-sourcecycled.service"
-        "VMCTL_PLATFORM_WIRE_BOOT_TIMEOUT=10m"
+        "VMCTL_SANDBOX_PROXY_SOCK=/run/go-choir/vmctl.sock"
         # Path to system binaries (ip, iptables, mkfs.ext4) for network/disk setup.
         "PATH=/run/current-system/sw/bin:/bin:/usr/bin"
       ];

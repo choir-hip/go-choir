@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -31,6 +32,7 @@ type Server struct {
 	mux             *http.ServeMux
 	addr            string
 	listener        net.Listener
+	udsListener     net.Listener
 	once            sync.Once
 	done            chan struct{}
 	healthHandler   http.HandlerFunc
@@ -103,6 +105,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
 }
 
+// SetUnixSocket configures an additional Unix domain socket listener.
+// The socket file is created with 0600 permissions inside a 0700 directory.
+// This must be called before Start.
+func (s *Server) SetUnixSocket(path string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create unix socket directory: %w", err)
+	}
+	// Remove stale socket file if present.
+	os.Remove(path)
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		return fmt.Errorf("listen on unix socket %s: %w", path, err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		ln.Close()
+		return fmt.Errorf("chmod unix socket %s: %w", path, err)
+	}
+	s.udsListener = ln
+	return nil
+}
+
 // defaultHealthHandler is the default HTTP handler for the /health endpoint.
 // It returns a simple "ok" status with the service name and listening address.
 func (s *Server) defaultHealthHandler(w http.ResponseWriter, r *http.Request) {
@@ -127,8 +151,8 @@ func (s *Server) Addr() string {
 	return ""
 }
 
-// Start starts the HTTP server and blocks until the server is shut down.
-// It listens for SIGTERM and SIGINT signals and performs graceful shutdown.
+// Start starts the HTTP server on TCP and optionally on a Unix domain socket.
+// It blocks until the server is shut down via SIGTERM or SIGINT.
 func (s *Server) Start() {
 	// Set up signal channel for graceful shutdown
 	quit := make(chan os.Signal, 1)
@@ -140,6 +164,15 @@ func (s *Server) Start() {
 		log.Printf("%s: received %s, shutting down gracefully", s.serviceName, sig)
 		s.Shutdown()
 	}()
+
+	if s.udsListener != nil {
+		go func() {
+			log.Printf("%s: starting unix socket listener on %s", s.serviceName, s.udsListener.Addr())
+			if err := s.httpServer.Serve(s.udsListener); err != http.ErrServerClosed {
+				log.Printf("%s: unix socket server error: %v", s.serviceName, err)
+			}
+		}()
+	}
 
 	log.Printf("%s: starting server on %s", s.serviceName, s.addr)
 
@@ -163,7 +196,10 @@ func (s *Server) Shutdown() {
 	if err := s.httpServer.Shutdown(ctx); err != nil {
 		log.Printf("%s: shutdown error: %v", s.serviceName, err)
 	}
-	s.once.Do(func() { close(s.done) })
+	select {
+	case s.done <- struct{}{}:
+	default:
+	}
 	log.Printf("%s: server stopped", s.serviceName)
 }
 
@@ -188,10 +224,13 @@ func BindHostFromEnv() string {
 
 // ShutdownTimeoutFromEnv reads SERVER_SHUTDOWN_TIMEOUT as a Go duration.
 func ShutdownTimeoutFromEnv() time.Duration {
-	if v := os.Getenv("SERVER_SHUTDOWN_TIMEOUT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			return d
-		}
+	raw := os.Getenv("SERVER_SHUTDOWN_TIMEOUT")
+	if raw == "" {
+		return defaultShutdownTimeout
 	}
-	return defaultShutdownTimeout
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return defaultShutdownTimeout
+	}
+	return d
 }

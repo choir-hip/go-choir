@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"net"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -45,6 +46,7 @@ type runtimeRunStatusResponse struct {
 
 type ingestionRuntimeDispatcher struct {
 	baseURL              string
+	socketPath           string // UDS socket path; if set, uses unix transport and proxy path for sandbox
 	ownerID              string
 	maxProcessorRequests int
 	client               *http.Client
@@ -169,24 +171,40 @@ func sourceServiceConfigPath() string {
 }
 
 func ingestionRuntimeDispatcherFromEnv() *ingestionRuntimeDispatcher {
-	baseURL := strings.TrimRight(strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_BASE_URL", "SOURCECYCLED_RUNTIME_BASE_URL")), "/")
-	if baseURL == "" {
-		return nil
-	}
+	socketPath := strings.TrimSpace(firstEnv("SOURCECYCLED_VMCTL_PROXY_SOCK", "VMCTL_SANDBOX_PROXY_SOCK"))
 	ownerID := strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID"))
 	if ownerID == "" {
 		ownerID = "universal-wire-platform"
 	}
 	limit := parsePositiveInt(firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS", "SOURCECYCLED_AGENT_DISPATCH_MAX_PROCESSORS"), defaultIngestionProcessorDispatchLimit)
 	retries := parsePositiveInt(firstEnv("SOURCE_SERVICE_RUNTIME_DISPATCH_RETRIES", "SOURCECYCLED_RUNTIME_DISPATCH_RETRIES"), defaultIngestionRuntimeDispatchRetries)
-	return &ingestionRuntimeDispatcher{
-		baseURL:              baseURL,
+	d := &ingestionRuntimeDispatcher{
 		ownerID:              ownerID,
+		socketPath:           socketPath,
 		maxProcessorRequests: limit,
-		client:               &http.Client{Timeout: 20 * time.Second},
 		retryAttempts:        retries,
 		retryDelay:           defaultIngestionRuntimeRetryDelay,
 	}
+	if socketPath != "" {
+		d.client = &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+					var d net.Dialer
+					return d.DialContext(ctx, "unix", socketPath)
+				},
+			},
+			Timeout: 5 * time.Minute,
+		}
+		d.baseURL = "http://unix" // host part is ignored by UDS dialer
+	} else {
+		baseURL := strings.TrimRight(strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_BASE_URL", "SOURCECYCLED_RUNTIME_BASE_URL")), "/")
+		if baseURL == "" {
+			return nil
+		}
+		d.baseURL = baseURL
+		d.client = &http.Client{Timeout: 20 * time.Second}
+	}
+	return d
 }
 
 func ingestionQueueDrainIntervalFromEnv() time.Duration {
@@ -638,12 +656,20 @@ func (d *ingestionRuntimeDispatcher) submit(ctx context.Context, payload runtime
 	return runtimeRunStatusResponse{}, lastErr
 }
 
+func (d *ingestionRuntimeDispatcher) runtimeRunsEndpoint() string {
+	if d.socketPath != "" {
+		return d.baseURL + "/internal/vmctl/sandbox-proxy/" + d.ownerID + "/internal/runtime/runs"
+	}
+	return d.baseURL + "/internal/runtime/runs"
+}
+
+
 func (d *ingestionRuntimeDispatcher) submitOnce(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return runtimeRunStatusResponse{}, fmt.Errorf("marshal runtime run request: %w", err)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, d.baseURL+"/internal/runtime/runs", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, d.runtimeRunsEndpoint(), bytes.NewReader(body))
 	if err != nil {
 		return runtimeRunStatusResponse{}, fmt.Errorf("create runtime run request: %w", err)
 	}

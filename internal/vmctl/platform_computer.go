@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -16,66 +14,19 @@ const (
 	UniversalWirePlatformVMID      = "vm-universal-wire-platform"
 )
 
-// UniversalWirePlatformRuntimeEnv holds host-side dispatch binding for the
-// always-on Universal Wire platform computer sandbox.
-type UniversalWirePlatformRuntimeEnv struct {
-	RuntimeBaseURL string
-	OwnerID        string
-}
-
-// WriteUniversalWirePlatformRuntimeEnv atomically writes sourcecycled dispatch
-// binding for the platform computer sandbox URL.
-
-func WriteUniversalWirePlatformRuntimeEnv(path string, env UniversalWirePlatformRuntimeEnv) error {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return fmt.Errorf("platform runtime env path is required")
-	}
-	baseURL := strings.TrimRight(strings.TrimSpace(env.RuntimeBaseURL), "/")
-	if baseURL == "" {
-		return fmt.Errorf("platform runtime base URL is required")
-	}
-	ownerID := strings.TrimSpace(env.OwnerID)
-	if ownerID == "" {
-		ownerID = UniversalWirePlatformOwnerID
-	}
-	content := fmt.Sprintf(
-		"SOURCE_SERVICE_RUNTIME_BASE_URL=%s\nSOURCE_SERVICE_RUNTIME_OWNER_ID=%s\n",
-		baseURL,
-		ownerID,
-	)
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create platform runtime env dir: %w", err)
-	}
-	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, []byte(content), 0o644); err != nil {
-		return fmt.Errorf("write platform runtime env: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("publish platform runtime env: %w", err)
-	}
-	return nil
-}
-
 // EnsureUniversalWirePlatformComputer boots or resumes the always-on platform
-// computer and returns the host-reachable sandbox URL for sourcecycled dispatch.
-func (r *OwnershipRegistry) EnsureUniversalWirePlatformComputer(ctx context.Context) (UniversalWirePlatformRuntimeEnv, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+// computer. It returns an error if the platform computer could not be made
+// ready. Dispatch routing is handled by the sandbox proxy (UDS) — callers
+// no longer need the sandbox URL directly.
+func (r *OwnershipRegistry) EnsureUniversalWirePlatformComputer(ctx context.Context) error {
 	own, err := r.ensureUniversalWirePlatformOwnership(ctx)
 	if err != nil {
-		return UniversalWirePlatformRuntimeEnv{}, err
+		return fmt.Errorf("ensure universal wire platform computer: %w", err)
 	}
-	baseURL := strings.TrimRight(strings.TrimSpace(own.SandboxURL), "/")
-	if baseURL == "" {
-		return UniversalWirePlatformRuntimeEnv{}, fmt.Errorf("platform computer %s has empty sandbox URL", own.VMID)
+	if own == nil || strings.TrimSpace(own.VMID) == "" {
+		return fmt.Errorf("universal wire platform computer has no VM ID")
 	}
-	return UniversalWirePlatformRuntimeEnv{
-		RuntimeBaseURL: baseURL,
-		OwnerID:        UniversalWirePlatformOwnerID,
-	}, nil
+	return nil
 }
 
 // WarmUniversalWirePlatformComputer resumes a stopped platform computer during
@@ -83,21 +34,41 @@ func (r *OwnershipRegistry) EnsureUniversalWirePlatformComputer(ctx context.Cont
 func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer() int {
 	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
 	r.mu.RLock()
-	own := r.ownerships[key]
+	own, ok := r.ownerships[key]
 	r.mu.RUnlock()
-	if own == nil {
+	if !ok || own == nil || own.IsReady() {
 		return 0
 	}
-	if own.State != VMStateStopped && own.State != VMStateHibernated {
-		return 0
-	}
-	resumed, err := r.ResumeVMForDesktop(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
-	if err != nil {
-		log.Printf("vmctl: warmness policy failed to resume platform computer vm=%s: %v", own.VMID, err)
-		return 0
-	}
-	if resumed != nil {
-		return 1
+	if own.State == VMStateStopped || own.State == VMStateHibernated {
+		r.mu.Lock()
+		own, ok = r.ownerships[key]
+		if !ok || own == nil || own.IsReady() {
+			r.mu.Unlock()
+			return 0
+		}
+		snapshot := *own
+		snapshot.State = VMStateBooting
+		r.ownerships[key] = &snapshot
+		mgr := r.vmManager
+		r.mu.Unlock()
+		if mgr != nil {
+			info, err := mgr.ResumeVM(snapshot.VMID)
+			if err != nil {
+				log.Printf("vmctl: resume platform computer %s: %v", snapshot.VMID, err)
+				return 0
+			}
+			r.mu.Lock()
+			current, ok := r.ownerships[key]
+			if ok && current != nil {
+				current.SandboxURL = info.HostURL
+				current.Epoch = info.Epoch
+				current.State = VMStateActive
+				current.LastActiveAt = time.Now()
+				r.saveLocked()
+			}
+			r.mu.Unlock()
+			return 1
+		}
 	}
 	return 0
 }
@@ -160,73 +131,81 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 				current.Epoch = info.Epoch
 				current.State = VMStateActive
 				current.LastActiveAt = time.Now()
-				current.StoppedBy = ""
 				r.saveLocked()
 				vmID := current.VMID
-				sandboxURL := current.SandboxURL
 				r.mu.Unlock()
 				r.ensureExistingGatewayCredential(vmID)
-				log.Printf("vmctl: resumed platform computer %s at %s", vmID, sandboxURL)
 				return current, nil
 			}
 			r.mu.Lock()
 			own.State = VMStateActive
 			own.LastActiveAt = time.Now()
-			own.StoppedBy = ""
 			r.saveLocked()
+			vmID := own.VMID
 			r.mu.Unlock()
+			r.ensureExistingGatewayCredential(vmID)
 			return own, nil
 		case own.State == VMStateBooting:
-			if waiters, ok := r.pendingWaiters[key]; ok {
-				return r.waitForPendingAssignmentLocked(ctx, key, UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID, waiters)
+			// Another goroutine is booting; wait for it.
+			ch := make(chan *VMOwnership, 1)
+			r.pendingWaiters[key] = append(r.pendingWaiters[key], ch)
+			r.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				r.removePendingWaiter(key, ch)
+				return nil, ctx.Err()
+			case result := <-ch:
+				if result == nil {
+					return nil, fmt.Errorf("platform computer boot failed")
+				}
+				return result, nil
 			}
+		default:
+			// Unknown or failed state; treat as needing recovery.
+			mgr := r.vmManager
+			snapshot := *own
+			r.mu.Unlock()
+			info, err := r.startExistingVM(&snapshot, mgr)
+			if err != nil {
+				return nil, fmt.Errorf("recover platform computer %s: %w", snapshot.VMID, err)
+			}
+			r.mu.Lock()
+			current := r.ownerships[key]
+			if current == nil {
+				r.mu.Unlock()
+				return nil, fmt.Errorf("platform computer ownership disappeared during recovery")
+			}
+			current.SandboxURL = info.HostURL
+			current.Epoch = info.Epoch
+			current.State = VMStateActive
+			current.LastActiveAt = time.Now()
+			r.saveLocked()
+			vmID := current.VMID
+			r.mu.Unlock()
+			r.ensureExistingGatewayCredential(vmID)
+			return current, nil
 		}
-		delete(r.vmByID, own.VMID)
-		delete(r.ownerships, key)
-	}
-	if waiters, ok := r.pendingWaiters[key]; ok {
-		return r.waitForPendingAssignmentLocked(ctx, key, UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID, waiters)
 	}
 
+	// No existing ownership — create one.
 	vmID := UniversalWirePlatformVMID
-	epoch := r.nextEpoch()
-	own := &VMOwnership{
-		VMID:          vmID,
-		UserID:        UniversalWirePlatformOwnerID,
-		DesktopID:     UniversalWirePlatformDesktopID,
-		Kind:          VMKindInteractive,
-		WarmnessClass: WarmnessClassPublicPlatform,
-		SandboxURL:    r.sandboxURLForVM(vmID),
-		State:         VMStateBooting,
-		CreatedAt:     time.Now(),
-		LastActiveAt:  time.Now(),
-		Epoch:         epoch,
-		Published:     true,
+	mgr := r.vmManager
+	if mgr == nil {
+		return nil, fmt.Errorf("no VM manager configured for %s", UniversalWirePlatformOwnerID)
 	}
 	r.pendingWaiters[key] = nil
-	r.ownerships[key] = own
-	r.vmByID[vmID] = own
-	r.saveLocked()
-	mgr := r.vmManager
 	r.mu.Unlock()
 
-	if mgr == nil {
-		return nil, fmt.Errorf("platform computer requires Firecracker VM manager")
-	}
-	gwToken := r.issueGatewayToken(vmID)
-	info, err := mgr.BootVM(VMManagerConfig{
-		VMID:              vmID,
-		GuestPort:         8085,
-		MachineCPUCount:   interactiveVMCPUCount,
-		MachineMemSizeMib: interactiveVMMemSizeMib,
-		GatewayToken:      gwToken,
-		ComputerKind:      "platform",
-		OwnerID:           UniversalWirePlatformOwnerID,
-		DesktopID:         UniversalWirePlatformDesktopID,
-	})
+	info, err := mgr.BootVM(vmManagerConfigForOwnership(&VMOwnership{
+		UserID:        UniversalWirePlatformOwnerID,
+		DesktopID:     UniversalWirePlatformDesktopID,
+		VMID:          vmID,
+		Kind:          VMKindInteractive,
+		WarmnessClass: WarmnessClassPublicPlatform,
+		Published:     true,
+	}, issueGatewayTokenAt(r.gatewayURL, vmID)))
 	if err != nil {
 		r.mu.Lock()
-		own.State = VMStateFailed
 		waiters := r.pendingWaiters[key]
 		delete(r.pendingWaiters, key)
 		r.saveLocked()
@@ -237,10 +216,20 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 		return nil, fmt.Errorf("boot platform computer %s: %w", vmID, err)
 	}
 	r.mu.Lock()
-	// Platform computer sandbox is always on the same host as sourcecycled.
-	// BootVM returns a TAP network IP; override to localhost.
-	own.SandboxURL = fmt.Sprintf("http://127.0.0.1:%d", 8085)
-	own.Epoch = info.Epoch
+	own := &VMOwnership{
+		UserID:        UniversalWirePlatformOwnerID,
+		DesktopID:     UniversalWirePlatformDesktopID,
+		VMID:          vmID,
+		SandboxURL:    info.HostURL,
+		Epoch:         info.Epoch,
+		Kind:          VMKindInteractive,
+		WarmnessClass: WarmnessClassPublicPlatform,
+		Published:     true,
+		State:         VMStateActive,
+		CreatedAt:     time.Now(),
+		LastActiveAt:  time.Now(),
+	}
+	r.ownerships[key] = own
 	waiters := r.pendingWaiters[key]
 	delete(r.pendingWaiters, key)
 	r.saveLocked()
@@ -250,6 +239,6 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 		ch <- own
 	}
 	r.ensureExistingGatewayCredential(vmID)
-	log.Printf("vmctl: booted platform computer %s at %s (epoch=%d)", vmID, own.SandboxURL, info.Epoch)
+	log.Printf("vmctl: booted platform computer %s at %s (epoch=%d)", vmID, info.HostURL, info.Epoch)
 	return own, nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -126,6 +125,13 @@ func main() {
 
 	s := server.NewServer("vmctl", port)
 	vmctl.RegisterRoutes(s, handler)
+
+	if socketPath := strings.TrimSpace(os.Getenv("VMCTL_SANDBOX_PROXY_SOCK")); socketPath != "" {
+		if err := s.SetUnixSocket(socketPath); err != nil {
+			log.Fatalf("vmctl: set unix socket %s: %v", socketPath, err)
+		}
+		log.Printf("vmctl: sandbox proxy UDS listener on %s", socketPath)
+	}
 
 	log.Printf("vmctl: ownership registry initialized (sandbox_url_base=%s)", sandboxURLBase)
 	s.Start()
@@ -428,11 +434,6 @@ func startUniversalWirePlatformComputer(registry *vmctl.OwnershipRegistry) {
 	if !envBool("VMCTL_PLATFORM_WIRE_ENABLED", false) {
 		return
 	}
-	envPath := strings.TrimSpace(os.Getenv("VMCTL_PLATFORM_WIRE_RUNTIME_ENV_PATH"))
-	if envPath == "" {
-		envPath = "/var/lib/go-choir/platform-wire-runtime.env"
-	}
-	sourceServiceUnit := strings.TrimSpace(os.Getenv("VMCTL_PLATFORM_WIRE_SOURCE_SERVICE_UNIT"))
 	go func() {
 		timeout := 10 * time.Minute
 		if raw := strings.TrimSpace(os.Getenv("VMCTL_PLATFORM_WIRE_BOOT_TIMEOUT")); raw != "" {
@@ -442,20 +443,8 @@ func startUniversalWirePlatformComputer(registry *vmctl.OwnershipRegistry) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		env, err := registry.EnsureUniversalWirePlatformComputer(ctx)
-		if err != nil {
+		if err := registry.EnsureUniversalWirePlatformComputer(ctx); err != nil {
 			log.Printf("vmctl: universal wire platform computer: %v", err)
-			return
-		}
-		if err := vmctl.WriteUniversalWirePlatformRuntimeEnv(envPath, env); err != nil {
-			log.Printf("vmctl: write universal wire platform runtime env: %v", err)
-			return
-		}
-		log.Printf("vmctl: universal wire platform runtime env written (%s -> %s)", envPath, env.RuntimeBaseURL)
-		if sourceServiceUnit != "" {
-			if err := exec.Command("systemctl", "try-restart", sourceServiceUnit).Run(); err != nil {
-				log.Printf("vmctl: restart %s after platform runtime env update: %v", sourceServiceUnit, err)
-			}
 		}
 	}()
 }

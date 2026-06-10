@@ -1,36 +1,8 @@
 package vmctl
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 )
-
-func TestWriteUniversalWirePlatformRuntimeEnv(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "platform-wire-runtime.env")
-	env := UniversalWirePlatformRuntimeEnv{
-		RuntimeBaseURL: "http://127.0.0.1:8085",
-		OwnerID:        UniversalWirePlatformOwnerID,
-	}
-	if err := WriteUniversalWirePlatformRuntimeEnv(path, env); err != nil {
-		t.Fatalf("WriteUniversalWirePlatformRuntimeEnv: %v", err)
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	content := string(raw)
-	for _, want := range []string{
-		"SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085",
-		"SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform",
-	} {
-		if !strings.Contains(content, want) {
-			t.Fatalf("expected %q in %q", want, content)
-		}
-	}
-}
 
 func TestComputerKindForOwnershipPlatform(t *testing.T) {
 	own := &VMOwnership{
@@ -52,7 +24,7 @@ func TestWarmnessClassProtectedIncludesPublicPlatform(t *testing.T) {
 func TestEnsureUniversalWirePlatformComputerBootsStableVM(t *testing.T) {
 	mgr := &mockVMManager{
 		bootResponse: &VMInstanceInfo{
-			HostURL: "http://127.0.0.1:8085",
+			HostURL: "http://10.203.140.2:8085",
 			Epoch:   3,
 			Healthy: true,
 			State:   "running",
@@ -61,12 +33,9 @@ func TestEnsureUniversalWirePlatformComputerBootsStableVM(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetVMManager(mgr)
 
-	env, err := reg.EnsureUniversalWirePlatformComputer(t.Context())
+	err := reg.EnsureUniversalWirePlatformComputer(t.Context())
 	if err != nil {
 		t.Fatalf("EnsureUniversalWirePlatformComputer: %v", err)
-	}
-	if env.RuntimeBaseURL != "http://127.0.0.1:8085" {
-		t.Fatalf("RuntimeBaseURL = %q", env.RuntimeBaseURL)
 	}
 	if len(mgr.boots) != 1 {
 		t.Fatalf("expected one boot, got %d", len(mgr.boots))
