@@ -817,11 +817,30 @@ not yet an always-on Firecracker VM with its own embedded Dolt.
 - Deployed honest-empty `/api/global-wire/stories` at `fd675252`; platform VM
   migration not yet proven on staging.
 
+**Slice 0.5 landed (2026-06-10):** commit `e9c4bd9e`; platform VM
+`vm-global-wire-platform` at `http://10.203.98.2:8085`; sourcecycled dispatch
+repointed via `/var/lib/go-choir/platform-wire-runtime.env`.
+
+**Slice 1 checkpoint (2026-06-10):**
+
+**Problem:** Processor dispatch could queue from saved source items without a
+typed ingestion-event activation record, and nothing enforced that prompt-bar
+submissions cannot emit ingestion events.
+
+**Fix intent:**
+
+1. Persist `ingestion_events` with fetch provenance for each newly saved item.
+2. Attach `ingestion_event_ids` to processor requests; dispatch skips requests
+   without validated ingestion events.
+3. Reject `prompt_bar` origin at the storage boundary; runtime test proves
+   prompt-bar runs do not carry ingestion activation metadata.
+
 next step:
 
-- Land Slice 0.5 code + Nix binding; staging proof: platform VM healthy,
-  `platform-wire-runtime.env` points at guest tap URL, sourcecycled dispatch
-  hits platform sandbox Dolt owner binding (not host `sandbox-m1`).
+- Land Slice 1; staging proof: source cycle emits ingestion events, processor
+  dispatch metadata includes `activation_origin=ingestion_event`, prompt-bar
+  negative test passes.
+- Slice 2 RSS/GDELT curriculum.
 
 
 ## v1 mission handoff (2026-06-09)

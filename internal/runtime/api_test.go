@@ -95,6 +95,45 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	}
 }
 
+func TestPromptBarSubmissionDoesNotActivateIngestionEvent(t *testing.T) {
+	rt, handler := testAPISetup(t)
+
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Write a Community Wire story about AI policy"}`, "user-alice")
+	w := httptest.NewRecorder()
+	handler.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status: got %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	var resp promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	rec, err := rt.GetRun(context.Background(), resp.SubmissionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get run: %v", err)
+	}
+	if got := metadataStringValue(rec.Metadata, "input_source"); got != "prompt_bar" {
+		t.Fatalf("input_source: got %q, want prompt_bar", got)
+	}
+	if got := metadataStringValue(rec.Metadata, "activation_origin"); got == "ingestion_event" {
+		t.Fatalf("prompt-bar must not activate ingestion events, got activation_origin=%q", got)
+	}
+	if raw, ok := rec.Metadata["ingestion_event_ids"]; ok {
+		switch ids := raw.(type) {
+		case []any:
+			if len(ids) > 0 {
+				t.Fatalf("prompt-bar must not carry ingestion_event_ids, got %v", ids)
+			}
+		case []string:
+			if len(ids) > 0 {
+				t.Fatalf("prompt-bar must not carry ingestion_event_ids, got %v", ids)
+			}
+		default:
+			t.Fatalf("unexpected ingestion_event_ids type %T", raw)
+		}
+	}
+}
+
 func TestHandlePromptBarRejectsBrowserRuntimeMetadata(t *testing.T) {
 	_, handler := testAPISetup(t)
 

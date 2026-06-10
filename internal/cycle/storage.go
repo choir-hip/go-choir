@@ -174,6 +174,19 @@ func createTables(db *sql.DB) error {
 			updated_at                 TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_reconciler_requests_cycle ON reconciler_requests(cycle_id, scope)`,
+		`CREATE TABLE IF NOT EXISTS ingestion_events (
+			event_id       TEXT PRIMARY KEY,
+			cycle_id       TEXT NOT NULL,
+			artifact_id    TEXT NOT NULL,
+			source_id      TEXT NOT NULL,
+			fetch_id       TEXT NOT NULL DEFAULT '',
+			content_hash   TEXT NOT NULL DEFAULT '',
+			dedupe_key     TEXT NOT NULL DEFAULT '',
+			origin         TEXT NOT NULL,
+			created_at     TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_ingestion_events_cycle ON ingestion_events(cycle_id, created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_ingestion_events_artifact ON ingestion_events(artifact_id)`,
 	}
 
 	for _, q := range queries {
@@ -219,6 +232,7 @@ func migrateTables(db *sql.DB) error {
 		`ALTER TABLE items ADD COLUMN created_at TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE issues ADD COLUMN citation_map_json TEXT NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE processor_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE processor_requests ADD COLUMN ingestion_event_ids_json TEXT NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE reconciler_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE fetches ADD COLUMN cycle_id TEXT NOT NULL DEFAULT ''`,
 	}
@@ -231,20 +245,21 @@ func migrateTables(db *sql.DB) error {
 }
 
 type ProcessorRequest struct {
-	RequestID     string
-	CycleID       string
-	ProcessorKey  string
-	Status        string
-	RuntimeRunID  string
-	SourceItemIDs []string
-	SourceCount   int
-	SourceTypes   []string
-	Verticals     []string
-	Regions       []string
-	ContinuityRef string
-	Prompt        string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	RequestID         string
+	CycleID           string
+	ProcessorKey      string
+	Status            string
+	RuntimeRunID      string
+	SourceItemIDs     []string
+	IngestionEventIDs []string
+	SourceCount       int
+	SourceTypes       []string
+	Verticals         []string
+	Regions           []string
+	ContinuityRef     string
+	Prompt            string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type ReconcilerRequest struct {
@@ -453,6 +468,85 @@ func (s *Storage) RecordCycleEvent(ctx context.Context, cycleID, sourceID, kind,
 	return err
 }
 
+func (s *Storage) SaveIngestionEvents(ctx context.Context, events []IngestionEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx, `INSERT OR IGNORE INTO ingestion_events (
+		event_id, cycle_id, artifact_id, source_id, fetch_id, content_hash, dedupe_key, origin, created_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, event := range events {
+		if err := ValidateIngestionEventOrigin(event.Origin); err != nil {
+			return err
+		}
+		if strings.TrimSpace(event.EventID) == "" || strings.TrimSpace(event.CycleID) == "" || strings.TrimSpace(event.ArtifactID) == "" {
+			return fmt.Errorf("ingestion event id, cycle id, and artifact id are required")
+		}
+		createdAt := event.CreatedAt
+		if createdAt.IsZero() {
+			createdAt = time.Now().UTC()
+		}
+		if _, err := stmt.ExecContext(ctx, event.EventID, event.CycleID, event.ArtifactID, event.SourceID,
+			event.FetchID, event.ContentHash, event.DedupeKey, event.Origin, formatTime(createdAt)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Storage) CountIngestionEvents(ctx context.Context) (int, error) {
+	var count int
+	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM ingestion_events`).Scan(&count)
+	return count, err
+}
+
+func (s *Storage) ValidateProcessorRequestIngestionEvents(ctx context.Context, req ProcessorRequest) (bool, error) {
+	if !ProcessorRequestEligibleForDispatch(req) {
+		return false, nil
+	}
+	for _, eventID := range req.IngestionEventIDs {
+		eventID = strings.TrimSpace(eventID)
+		if eventID == "" {
+			return false, nil
+		}
+		var cycleID, artifactID, origin string
+		err := s.DB.QueryRowContext(ctx, `SELECT cycle_id, artifact_id, origin FROM ingestion_events WHERE event_id = ?`, eventID).
+			Scan(&cycleID, &artifactID, &origin)
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if cycleID != strings.TrimSpace(req.CycleID) || origin != IngestionOriginSourceFetch {
+			return false, nil
+		}
+		if !stringSliceContains(req.SourceItemIDs, artifactID) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func stringSliceContains(values []string, target string) bool {
+	target = strings.TrimSpace(target)
+	for _, value := range values {
+		if strings.TrimSpace(value) == target {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []ProcessorRequest) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -460,9 +554,9 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 	}
 	defer tx.Rollback()
 	stmt, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO processor_requests (
-		request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids, source_count,
+		request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids, ingestion_event_ids_json, source_count,
 		source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -489,7 +583,7 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 			sourceCount = len(req.SourceItemIDs)
 		}
 		if _, err := stmt.ExecContext(ctx, req.RequestID, req.CycleID, req.ProcessorKey, status, strings.TrimSpace(req.RuntimeRunID),
-			mustJSON(req.SourceItemIDs), sourceCount, mustJSON(req.SourceTypes), mustJSON(req.Verticals),
+			mustJSON(req.SourceItemIDs), mustJSON(req.IngestionEventIDs), sourceCount, mustJSON(req.SourceTypes), mustJSON(req.Verticals),
 			mustJSON(req.Regions), req.ContinuityRef, req.Prompt, formatTime(createdAt), formatTime(updatedAt)); err != nil {
 			return err
 		}
@@ -652,7 +746,7 @@ func (s *Storage) ListProcessorRequests(ctx context.Context, cycleID string, lim
 	}
 	args = append(args, limit)
 	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids,
-		source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
+		ingestion_event_ids_json, source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
 		FROM processor_requests`+where+` ORDER BY created_at DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
@@ -674,7 +768,7 @@ func (s *Storage) ListQueuedProcessorRequests(ctx context.Context, limit int) ([
 		limit = 50
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids,
-		source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
+		ingestion_event_ids_json, source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
 		FROM processor_requests WHERE status = 'queued' ORDER BY created_at ASC, request_id ASC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -1072,13 +1166,14 @@ func (s *Storage) GetItem(ctx context.Context, itemID string) (sources.Item, err
 
 func scanProcessorRequest(rows interface{ Scan(...any) error }) (ProcessorRequest, error) {
 	var req ProcessorRequest
-	var itemIDs, sourceTypes, verticals, regions, createdAt, updatedAt string
+	var itemIDs, ingestionEventIDs, sourceTypes, verticals, regions, createdAt, updatedAt string
 	if err := rows.Scan(&req.RequestID, &req.CycleID, &req.ProcessorKey, &req.Status, &req.RuntimeRunID, &itemIDs,
-		&req.SourceCount, &sourceTypes, &verticals, &regions, &req.ContinuityRef, &req.Prompt,
+		&ingestionEventIDs, &req.SourceCount, &sourceTypes, &verticals, &regions, &req.ContinuityRef, &req.Prompt,
 		&createdAt, &updatedAt); err != nil {
 		return ProcessorRequest{}, err
 	}
 	_ = json.Unmarshal([]byte(itemIDs), &req.SourceItemIDs)
+	_ = json.Unmarshal([]byte(ingestionEventIDs), &req.IngestionEventIDs)
 	_ = json.Unmarshal([]byte(sourceTypes), &req.SourceTypes)
 	_ = json.Unmarshal([]byte(verticals), &req.Verticals)
 	_ = json.Unmarshal([]byte(regions), &req.Regions)

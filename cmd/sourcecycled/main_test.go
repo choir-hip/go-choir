@@ -271,7 +271,11 @@ func TestSourceServiceAPISourceMaxxLatestReportsAgentHandoffs(t *testing.T) {
 		Verticals:  []string{"supply_chain"},
 		Region:     "global",
 	}}
-	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, now)
+	events := cycle.BuildIngestionEventsFromItems(cycleID, items, now)
+	if err := store.SaveIngestionEvents(ctx, events); err != nil {
+		t.Fatalf("save ingestion events: %v", err)
+	}
+	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, events, now)
 	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
 		t.Fatalf("save processors: %v", err)
 	}
@@ -400,7 +404,11 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 		{ID: "srcitem_gdelt_1", SourceID: "gdelt:15min", SourceType: sources.SourceTypeGDELT, Title: "GDELT 1", Region: "global"},
 		{ID: "srcitem_rss_1", SourceID: "rss:bbc_world", SourceType: sources.SourceTypeRSS, Title: "BBC 1", Verticals: []string{"conflict"}, Region: "global"},
 	}
-	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, now)
+	events := cycle.BuildIngestionEventsFromItems(cycleID, items, now)
+	if err := store.SaveIngestionEvents(ctx, events); err != nil {
+		t.Fatalf("save ingestion events: %v", err)
+	}
+	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, events, now)
 	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
 		t.Fatalf("save processors: %v", err)
 	}
@@ -505,6 +513,46 @@ func TestSourceMaxxRuntimeDispatcherSubmitsProcessorAndReconcilerProfiles(t *tes
 	}
 }
 
+func TestSourceMaxxRuntimeDispatcherSkipsProcessorWithoutIngestionEvents(t *testing.T) {
+	ctx := context.Background()
+	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Date(2026, 6, 10, 9, 0, 0, 0, time.UTC)
+	cycleID, err := store.StartCycle(ctx)
+	if err != nil {
+		t.Fatalf("start cycle: %v", err)
+	}
+	req := cycle.ProcessorRequest{
+		RequestID:     "processor_no_ingestion",
+		CycleID:       cycleID,
+		ProcessorKey:  "processor:general:global:rss",
+		Status:        "queued",
+		SourceItemIDs: []string{"srcitem_orphan"},
+		SourceCount:   1,
+		Prompt:        "orphan processor",
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	if err := store.SaveProcessorRequests(ctx, []cycle.ProcessorRequest{req}); err != nil {
+		t.Fatalf("save processor request: %v", err)
+	}
+
+	dispatcher := &sourceMaxxRuntimeDispatcher{
+		baseURL:              "http://127.0.0.1:1",
+		ownerID:              "global-wire-platform",
+		maxProcessorRequests: 1,
+		client:               http.DefaultClient,
+	}
+	result := dispatcher.dispatch(ctx, store, cycle.SourceMaxxHandoff{})
+	if result.ProcessorSubmitted != 0 || result.ProcessorSkipped != 1 {
+		t.Fatalf("unexpected dispatch result: %+v", result)
+	}
+}
+
 func TestSourceMaxxRuntimeDispatcherRetriesTransientRuntimeUnavailable(t *testing.T) {
 	ctx := context.Background()
 	req := cycle.ProcessorRequest{
@@ -570,17 +618,29 @@ func TestSourceMaxxRuntimeDispatcherKeepsQueuedRequestOnTransientRuntimeFailure(
 	if err != nil {
 		t.Fatalf("start cycle: %v", err)
 	}
+	item := sources.Item{
+		ID:         "srcitem_transient_1",
+		SourceID:   "gdelt:15min",
+		SourceType: sources.SourceTypeGDELT,
+		Title:      "Transient queue item",
+		Region:     "global",
+	}
+	events := cycle.BuildIngestionEventsFromItems(cycleID, []sources.Item{item}, now)
+	if err := store.SaveIngestionEvents(ctx, events); err != nil {
+		t.Fatalf("save ingestion events: %v", err)
+	}
 	req := cycle.ProcessorRequest{
-		RequestID:     "processor_transient_queue",
-		CycleID:       cycleID,
-		ProcessorKey:  "processor:global_firehose:global:gdelt",
-		Status:        "queued",
-		SourceItemIDs: []string{"srcitem_transient_1"},
-		SourceCount:   1,
-		ContinuityRef: "sourcecycled://processor/processor:global_firehose:global:gdelt/latest",
-		Prompt:        "Processor transient queue",
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		RequestID:         "processor_transient_queue",
+		CycleID:           cycleID,
+		ProcessorKey:      "processor:global_firehose:global:gdelt",
+		Status:            "queued",
+		SourceItemIDs:     []string{item.ID},
+		IngestionEventIDs: []string{events[0].EventID},
+		SourceCount:       1,
+		ContinuityRef:     "sourcecycled://processor/processor:global_firehose:global:gdelt/latest",
+		Prompt:            "Processor transient queue",
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 	if err := store.SaveProcessorRequests(ctx, []cycle.ProcessorRequest{req}); err != nil {
 		t.Fatalf("save processor request: %v", err)

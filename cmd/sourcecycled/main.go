@@ -504,6 +504,22 @@ func (d *sourceMaxxRuntimeDispatcher) dispatch(ctx context.Context, store *cycle
 		result.ProcessorSkipped += maxInt(0, queuedCount-len(queued))
 	}
 	for _, req := range processorRequests {
+		if !cycle.ProcessorRequestEligibleForDispatch(req) {
+			result.ProcessorSkipped++
+			continue
+		}
+		if store != nil {
+			ok, err := store.ValidateProcessorRequestIngestionEvents(ctx, req)
+			if err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: validate ingestion events: %v", req.RequestID, err))
+				result.ProcessorSkipped++
+				continue
+			}
+			if !ok {
+				result.ProcessorSkipped++
+				continue
+			}
+		}
 		run, err := d.submitProcessor(ctx, req)
 		if err != nil {
 			if isTransientRuntimeSubmitError(err) {
@@ -589,6 +605,8 @@ func (d *sourceMaxxRuntimeDispatcher) submitProcessor(ctx context.Context, req c
 			"agent_profile":            "processor",
 			"agent_role":               "processor",
 			"request_source":           "sourcecycled",
+			"activation_origin":        "ingestion_event",
+			"ingestion_event_ids":      req.IngestionEventIDs,
 			"source_maxx_request_kind": "processor",
 			"source_maxx_request_id":   req.RequestID,
 			"source_maxx_cycle_id":     req.CycleID,
@@ -795,9 +813,20 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
 		return
 	}
+	now := time.Now().UTC()
+	ingestionEvents := cycle.BuildIngestionEventsFromItems(cycleID, items, now)
+	if err := store.SaveIngestionEvents(ctx, ingestionEvents); err != nil {
+		log.Printf("Failed to save ingestion events: %v", err)
+		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
+		return
+	}
 	_ = store.RecordCycleEvent(ctx, cycleID, "", "items_saved", "source items saved", map[string]any{"item_count": len(items), "fetch_count": len(pollResult.Fetches)})
+	_ = store.RecordCycleEvent(ctx, cycleID, "", "ingestion_events_emitted", "source fetch emitted ingestion activation events", map[string]any{
+		"ingestion_event_count": len(ingestionEvents),
+		"item_count":            len(items),
+	})
 
-	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, time.Now().UTC())
+	handoff := cycle.BuildSourceMaxxHandoff(cycleID, items, ingestionEvents, now)
 	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
 		log.Printf("Failed to save processor requests: %v", err)
 		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)

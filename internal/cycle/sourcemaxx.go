@@ -16,9 +16,9 @@ type SourceMaxxHandoff struct {
 	ReconcilerRequests []ReconcilerRequest
 }
 
-func BuildSourceMaxxHandoff(cycleID string, items []sources.Item, now time.Time) SourceMaxxHandoff {
+func BuildSourceMaxxHandoff(cycleID string, items []sources.Item, events []IngestionEvent, now time.Time) SourceMaxxHandoff {
 	cycleID = strings.TrimSpace(cycleID)
-	if cycleID == "" || len(items) == 0 {
+	if cycleID == "" || len(items) == 0 || len(events) == 0 {
 		return SourceMaxxHandoff{}
 	}
 	if now.IsZero() {
@@ -41,20 +41,25 @@ func BuildSourceMaxxHandoff(cycleID string, items []sources.Item, now time.Time)
 	for _, key := range keys {
 		itemsForKey := batches[key]
 		for batchIndex, batch := range chunkSourceItems(itemsForKey, maxProcessorBatchItems) {
+			sourceItemIDs := orderedSourceItemIDs(batch)
 			req := ProcessorRequest{
-				RequestID:     stableRequestID("processor", cycleID, key, fmt.Sprintf("%d", batchIndex)),
-				CycleID:       cycleID,
-				ProcessorKey:  key,
-				Status:        "queued",
-				SourceItemIDs: orderedSourceItemIDs(batch),
-				SourceCount:   len(batch),
-				SourceTypes:   sortedItemStrings(batch, func(item sources.Item) string { return string(item.SourceType) }),
-				Verticals:     sortedItemStrings(batch, func(item sources.Item) string { return strings.Join(item.Verticals, ",") }),
-				Regions:       sortedItemStrings(batch, func(item sources.Item) string { return item.Region }),
-				ContinuityRef: "sourcecycled://processor/" + key + "/latest",
-				Prompt:        processorHandoffPrompt(key, batch),
-				CreatedAt:     now,
-				UpdatedAt:     now,
+				RequestID:         stableRequestID("processor", cycleID, key, fmt.Sprintf("%d", batchIndex)),
+				CycleID:           cycleID,
+				ProcessorKey:      key,
+				Status:            "queued",
+				SourceItemIDs:     sourceItemIDs,
+				IngestionEventIDs: ingestionEventIDsForItems(events, sourceItemIDs),
+				SourceCount:       len(batch),
+				SourceTypes:       sortedItemStrings(batch, func(item sources.Item) string { return string(item.SourceType) }),
+				Verticals:         sortedItemStrings(batch, func(item sources.Item) string { return strings.Join(item.Verticals, ",") }),
+				Regions:           sortedItemStrings(batch, func(item sources.Item) string { return item.Region }),
+				ContinuityRef:     "sourcecycled://processor/" + key + "/latest",
+				Prompt:            processorHandoffPrompt(key, batch),
+				CreatedAt:         now,
+				UpdatedAt:         now,
+			}
+			if !ProcessorRequestEligibleForDispatch(req) {
+				continue
 			}
 			out.ProcessorRequests = append(out.ProcessorRequests, req)
 		}

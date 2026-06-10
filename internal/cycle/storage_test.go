@@ -417,7 +417,7 @@ func TestBuildSourceMaxxHandoffRoutesSourceItemsToProcessorsAndReconciler(t *tes
 		},
 	}
 
-	handoff := BuildSourceMaxxHandoff("cycle_source_maxx", items, now)
+	handoff := BuildSourceMaxxHandoff("cycle_source_maxx", items, BuildIngestionEventsFromItems("cycle_source_maxx", items, now), now)
 	if len(handoff.ProcessorRequests) != 3 {
 		t.Fatalf("processor requests = %d, want one per source-class route: %+v", len(handoff.ProcessorRequests), handoff.ProcessorRequests)
 	}
@@ -460,14 +460,19 @@ func TestStoragePersistsSourceMaxxHandoffsAndLatestCycleSummary(t *testing.T) {
 		t.Fatalf("start cycle: %v", err)
 	}
 	now := time.Date(2026, 6, 7, 11, 0, 0, 0, time.UTC)
-	handoff := BuildSourceMaxxHandoff(cycleID, []sources.Item{{
+	item := sources.Item{
 		ID:         "srcitem_ai_policy",
 		SourceID:   "rss:ai_policy",
 		SourceType: sources.SourceTypeRSS,
 		Title:      "AI policy update",
 		Verticals:  []string{"ai", "policy"},
 		Region:     "us",
-	}}, now)
+	}
+	events := BuildIngestionEventsFromItems(cycleID, []sources.Item{item}, now)
+	if err := store.SaveIngestionEvents(ctx, events); err != nil {
+		t.Fatalf("save ingestion events: %v", err)
+	}
+	handoff := BuildSourceMaxxHandoff(cycleID, []sources.Item{item}, events, now)
 	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
 		t.Fatalf("save processor requests: %v", err)
 	}
