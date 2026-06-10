@@ -46,8 +46,37 @@ func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.D
 
 
 func fallbackWirePublishURLFromEnv() string {
-	for _, key := range []string{"RUNTIME_VMCTL_URL", "PROXY_VMCTL_URL", "RUNTIME_GATEWAY_URL", "RUNTIME_MAILD_URL"} {
-		base := strings.TrimRight(strings.TrimSpace(os.Getenv(key)), "/")
+	if url := fallbackWirePublishURLFromBases([]string{
+		os.Getenv("RUNTIME_VMCTL_URL"),
+		os.Getenv("PROXY_VMCTL_URL"),
+		os.Getenv("RUNTIME_GATEWAY_URL"),
+		os.Getenv("RUNTIME_MAILD_URL"),
+	}); url != "" {
+		return url
+	}
+	data, err := os.ReadFile("/proc/cmdline")
+	if err != nil {
+		return ""
+	}
+	var bases []string
+	for _, field := range strings.Fields(string(data)) {
+		switch {
+		case strings.HasPrefix(field, "choir.wire_publish_url="):
+			return strings.TrimPrefix(field, "choir.wire_publish_url=")
+		case strings.HasPrefix(field, "choir.vmctl_url="):
+			bases = append(bases, strings.TrimPrefix(field, "choir.vmctl_url="))
+		case strings.HasPrefix(field, "choir.gateway_url="):
+			bases = append(bases, strings.TrimPrefix(field, "choir.gateway_url="))
+		case strings.HasPrefix(field, "choir.maild_url="):
+			bases = append(bases, strings.TrimPrefix(field, "choir.maild_url="))
+		}
+	}
+	return fallbackWirePublishURLFromBases(bases)
+}
+
+func fallbackWirePublishURLFromBases(bases []string) string {
+	for _, raw := range bases {
+		base := strings.TrimRight(strings.TrimSpace(raw), "/")
 		if base == "" {
 			continue
 		}
