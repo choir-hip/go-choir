@@ -75,3 +75,48 @@ Fix Universal Wire production end-to-end: sourcecycled must not overload the pla
 - Prior deploy: `138ab79f` (periodic GC + 16GB disk)
 - Backpressure fix: `27f4eaf8`
 - Platform VM state: stopped via vmctl; data.img preserved
+
+
+## Scientific Update — 2026-06-10 23:15 UTC
+
+### Hypotheses ruled out
+
+1. **Frontend-only rendering bug** — false. Empty/broken UI matched missing durable publication state.
+2. **Source ingestion stalled** — false. sourcecycled kept fetching thousands of items and queuing processor work.
+3. **Dispatch transport still blocked by stale direct TAP URL** — false after UDS proxy deployment.
+4. **Platform VM disk exhaustion is the immediate blocker** — false after 16 GiB expansion and periodic GC.
+5. **Guest lacks any path to host proxy** — false after tap firewall rule for host 8082 was added; guest-local curl to `10.203.176.1:8082/health` succeeded.
+6. **Host publish route fundamentally broken** — false. Direct host replay of a sample article with full revision payload and full run metadata returned `201 Created` and a real publication record.
+
+### Hypotheses confirmed
+
+1. **Backpressure bug** — confirmed. Missing active-concurrency control let sourcecycled admit 32+32 processor runs and wedge the platform VM.
+2. **Guest publish configuration bug** — confirmed and fixed. Runtime initially logged `wire publish is not configured`.
+3. **Proxy desktop-resolution bug** — confirmed and fixed. Internal wire publish route resolved the wrong desktop before being pinned to the platform desktop.
+4. **Tap firewall omission for host proxy 8082** — confirmed and fixed. Live guest probe timed out before the rule and succeeded immediately after adding the 8082 INPUT/DNAT rule.
+5. **Publish-time self-read / synchronous reread fragility** — confirmed and reduced. Direct host replay with the full inline payload succeeds; relying on proxy rereads was part of the earlier failure surface.
+
+### Current frontier
+
+The remaining failing edge is **semantic publication eligibility / completion accounting**, not transport.
+
+Observed current state:
+
+- Fresh processor batches admit under the 4-run cap.
+- Guest creates article revisions and attempts publish.
+- Current guest logs now fail with `revision is not eligible for autonomous wire publish` instead of network timeout.
+- platformd still shows `0` documents / `0` revisions.
+- sourcecycled still has no completion feedback loop, so it keeps 4 requests marked `submitted` after the guest becomes idle.
+
+### Best current theory
+
+There are two live issues left:
+
+1. **Eligibility mismatch**: live processor-created article revisions still fail the host-side publication policy even though older sampled revisions with durable lineage can be published successfully when replayed manually with full metadata.
+2. **Completion accounting gap**: sourcecycled uses stale `submitted` rows as in-flight budget until manually reset or aged out; it does not reconcile against runtime completion state.
+
+### Next probes
+
+1. Inspect one current rejected revision's exact metadata and its correlated run metadata, then compare that against the successful manual replay payload.
+2. Patch sourcecycled to poll submitted runtime run states and release in-flight budget on terminal states.
+3. Once a fresh revision is publish-eligible, verify platformd rows increase, then verify Wire edition ordering and headline-open behavior from the UI.
