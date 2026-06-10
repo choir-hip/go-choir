@@ -43,10 +43,6 @@ let
   serviceExec = name: package: pkgs.writeShellScript "go-choir-${name}-exec" ''
     set -euo pipefail
     export LD_LIBRARY_PATH="${goServiceLibraryPath}''${LD_LIBRARY_PATH:+:}''${LD_LIBRARY_PATH:-}"
-    override="/var/lib/go-choir/services/${name}/bin/${name}"
-    if [ -x "$override" ]; then
-      exec "$override" "$@"
-    fi
     exec "${package}/bin/${name}" "$@"
   '';
   diskRetentionSweep = pkgs.writeShellScript "go-choir-disk-retention-sweep" ''
