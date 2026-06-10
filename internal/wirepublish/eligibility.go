@@ -115,7 +115,16 @@ func revisionCarriesWireLineage(meta map[string]any) bool {
 	if kind == "" {
 		kind = metadataString(meta, "ingestion_handoff_request_kind")
 	}
-	return kind == "processor" || kind == "reconciler"
+	if kind == "processor" || kind == "reconciler" {
+		return true
+	}
+	if metadataString(meta, "input_origin") == "processor_handoff" {
+		return true
+	}
+	if metadataString(meta, "processor_key") != "" {
+		return true
+	}
+	return false
 }
 
 func articleContentLooksLikeSeed(content string) bool {
