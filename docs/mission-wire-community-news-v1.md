@@ -1,6 +1,9 @@
-# MissionGradient: Wire Community News
+# MissionGradient: Universal Wire (Wire Community News)
 
-Date: 2026-06-09 (v1; supersedes v0 after the first run)
+Date: 2026-06-09 (v1; supersedes v0 after the first run). **Product name
+(2026-06-10):** **Universal Wire** — formerly Global Wire / Community Wire in
+user-facing copy. See
+[universal-wire-activation-topology-2026-06-10.md](universal-wire-activation-topology-2026-06-10.md).
 
 ## Goal String
 
@@ -10,8 +13,8 @@ Date: 2026-06-09 (v1; supersedes v0 after the first run)
 
 ## Objective
 
-Land Community Wire as the public source-to-VText news instance of the Choir
-Community Cloud.
+Land **Universal Wire** as the public source-to-VText news instance of the Choir
+Community Cloud (Community Wire deployment).
 
 Requirements contract:
 [choir-wire-source-to-vtext-spec-2026-06-09.md](choir-wire-source-to-vtext-spec-2026-06-09.md).
@@ -27,10 +30,12 @@ Requirements contract:
   SourceMaxx remnants — not audit-and-keep.
 - **Hacker News:** satisfied by existing RSS feeds (`rss:hn_best`, etc.); no
   separate Phase A row or dedicated adapter required.
-- **Publication gate:** fully automatic newspaper — ingest, process, write,
-  publish, reconcile/update with **no human approval** on the product path.
-  Personalization (user subscriptions, per-user rewrites with same sources)
-  and email/newsletter agent are **tabled**, not v1 scope.
+- **Publication gate:** fully automatic newspaper on **Universal Wire (Community
+  Cloud)** — ingest, process, write, publish, reconcile/update with **no
+  operator approval gate** on the publish path. Private Wire instances may
+  configure human gating per deployment policy. Personalization (user
+  subscriptions, per-user rewrites with same sources) and email/newsletter
+  agent are **tabled**, not v1 scope.
 - **Canonical mission doc:** `mission-wire-community-news-v1.md` (autonomous-
   ingestion v1 is archived; see `mission-wire-autonomous-ingestion-v1.md`).
 - **Platform computer uptime:** Community Wire platform computer is **always-on**
@@ -391,18 +396,37 @@ Highest-impact uncertainty:
 - The cleanest hard cutover from legacy graph/fallback to edition-VText truth
   without preserving fake compatibility behavior.
 
+## Execution order (post Slice 2 checkpoint 2026-06-10)
+
+After Slice 2 adapters landed, **architecture checkpoint (a)** records the
+feed-forward activation graph. Implement workstreams **sequentially** — do not
+start (c) before (b) is grep-clean, etc. Full matrix:
+[universal-wire-activation-topology-2026-06-10.md](universal-wire-activation-topology-2026-06-10.md).
+
+```text
+(a) Architecture checkpoint + mission/spec amendments (docs)     [in progress]
+(b) Workstream 1 — Deletion Ledger (replace SourceMaxx spine, then delete)
+(c) Universal Wire rename/migration (edition alias, routes, copy; no redirects)
+(d) Workstream 2 — Activation graph (Slice 3 dispatch + negative proofs)
+(e) Staging acceptance — ingestion chain + fork/claim loop + Slice 4 matrix
+```
+
 ## Phased Route
 
 ### Phase A — Core machinery (required before Phase B)
 
-1. **Slice 0 (excision):** Deletion Ledger — grep-clean proof, drop types/routes
-   with tests, purge staging seed rows and **prompt-initiated edition articles**,
-   remove read-compat shims after purge.
+1. **Slice 0 (excision):** Deletion Ledger — **reopened 2026-06-10** because
+   `BuildSourceMaxxHandoff` and related symbols remain on the ingestion path.
+   Replace handoff/dispatch with neutral vocabulary, then grep-clean delete per
+   symbol, drop types/routes with tests, purge staging seed rows and
+   **prompt-initiated edition articles**, remove read-compat shims after purge.
+   **Workstream (b).**
 2. **Slice 0.5 (platform VM):** always-on `global-wire-platform` computer;
    repoint `SOURCE_SERVICE_RUNTIME_BASE_URL` to platform-computer sandbox;
    evidence row: dispatch + Dolt owner binding, not host `sandbox-m1`.
 3. **Slice 1:** Ingestion event contract; processor dispatch only from ingestion
    events; test that prompt-bar submission cannot produce an ingestion event.
+   **Landed** (behavior on legacy handoff names until Workstream 1).
 4. **Slice 2 (curriculum — RSS/GDELT first):** Adapters writing the same artifact
    + event shape:
    - RSS/Atom with conditional GET and full readability import where allowed;
@@ -410,14 +434,19 @@ Highest-impact uncertainty:
    - Hacker News via proven RSS path (`rss:hn_best`, etc.) — counts as HN row.
    **Post-core (not Phase A gates):** Telegram via MTProto/API (delete HTML
    scraping when replacement lands); ATProto; Qdrant.
-5. **Slice 3:** Dispatch chain ingestion event → processor →
-   researcher/VText-agent requests → Article VTexts with native source
-   transclusions → `Wire.vtext` edition update.
-6. **Slice 3b (platform auto-publish):** platform-internal publish of edition
-   (and article) projections to platformd — automatic, no operator gate; prove
-   public Wire read path resolves platformd bundle.
-7. **Slice 4:** Phase A staging evidence matrix (RSS/Atom, GDELT, HN-via-RSS)
-   plus negative proof (prompt asking for a Wire story creates nothing).
+   **Landed** (deploy evidence in mission report).
+5. **Slice 3 (Workstream 2 / (d)):** Feed-forward activation graph:
+   ingestion event → processor (**vtext spawn only**) → VText autoregressive
+   loop (researcher/super via VText) → Article VTexts with native source
+   transclusions → autonomous publish → debounced reconciler → VText wake on
+   edition `universal-wire/Wire.vtext` (after migration (c)).
+6. **Slice 3b:** Autonomous platform publish to platformd on Community Cloud —
+   **no operator gate**; procedural guards (article-before-edition, fidelity)
+   are load-bearing acceptance, not human approval. Folded into Workstream 2
+   staging proof (e), not a separate operator workflow.
+7. **Slice 4 (part of (e)):** Phase A staging evidence matrix (RSS/Atom, GDELT,
+   HN-via-RSS) plus negative proofs (prompt bar cannot create Wire stories;
+   reconciler cannot `edit_vtext`; processor cannot spawn researcher).
 
 ### Phase A-post-core (after Slice 4 proven)
 
@@ -476,28 +505,34 @@ mission end.
 
 ## Run Checkpoint And Resumption State
 
-status: checkpoint_incomplete
+status: checkpoint_incomplete — **architecture checkpoint (a) 2026-06-10**;
+next code workstream is **(b) Deletion Ledger**.
 
 blocking gate:
 
 - ~~Operator primary computer boot blocked (guest disk full).~~ **Resolved
   2026-06-09:** guest cache prune + refresh; sandbox `ready` on
   `vm-5b0c1bef…` (see incident doc Seventh Finding).
+- **SourceMaxx spine on ingestion path** — must complete Workstream (b) before
+  rename (c) and activation graph (d).
 
 current artifact state:
 
 - Front-page read path is honest-empty when no edition articles exist; v0
   removed frontend hardcoded preview stories and read-time story seeding on
   the active stories endpoint.
-- Legacy ontology survives in store helpers, routes, tests, shims, and staging
-  data — **Slice 0 code excision + staging VText purge complete locally
-  (2026-06-09); deploy/push pending.**
-- No prompt-initiated platform VTexts remain on staging after purge (432 docs,
-  424 orphan aliases; archive at operator `~/go-choir-misc/`).
-- No ingestion-event-driven processor dispatch.
+- **Slice 0 not complete:** `BuildSourceMaxxHandoff`, per-cycle reconciler
+  dispatch, and legacy routes/types survive — see topology checkpoint.
+- Staging VText purge for prompt-initiated edition articles done locally
+  (2026-06-09); deploy evidence recorded separately.
+- **Slice 1 landed:** ingestion events + processor dispatch from sourcecycled
+  (still named SourceMaxx in code until Workstream 1).
+- **Slice 2 landed:** RSS conditional GET + reader import; GDELT export stream
+  (`7877e0aa` deploy evidence).
+- No proven staging path: ingestion → processor → VText → publish → reconciler
+  → correction-request → VText revision (Workstream 2 + (e)).
 - Telegram HTML scraping still active; Telegram/MTProto adapter post-core.
-- No ingestion-event-driven processor dispatch.
-- No platform-internal auto-publish path (platform computer → platformd).
+- No platform-internal auto-publish path proven end-to-end.
 - Platform-computer deployment binding not proven (dispatch still targets host
   `sandbox-m1` per `nix/node-b.nix`).
 
@@ -508,24 +543,29 @@ what shipped (v0):
 
 unproven:
 
-- Deletion Ledger grep-clean on **deployed** staging after push.
-- Any ingestion-triggered story creation for any source class.
-- Platform-computer deployment binding documented and proven.
-- Operator-scoped staging acceptance while PROBLEM 0 is open.
+- Deletion Ledger grep-clean (Workstream **b**).
+- Universal Wire rename with zero `global-wire` references (Workstream **c**).
+- Feed-forward activation graph and negative proofs (Workstream **d**).
+- Staging proofs: ingestion chain + fork/claim loop + Slice 4 matrix (**e**).
+- Platform-computer deployment binding documented and proven (Slice 0.5).
 
 next step:
 
-1. ~~Resolve PROBLEM 0~~ **Done 2026-06-09:** snapshot
-   `data.img.pre-prune-20260609T224644Z`, pruned guest caches (~5G), refresh →
-   sandbox `ready`.
-2. ~~Slice 0: Deletion Ledger + purge prompt-initiated edition article.~~
-   **Done locally 2026-06-09** — push, CI, deploy, staging acceptance next.
-3. Slice 0.5: always-on platform computer VM + repoint sourcecycled dispatch.
-4. Slice 1 → RSS/GDELT curriculum → Slice 3b platform auto-publish → Slice 4
-   Phase A matrix.
+1. ~~Resolve PROBLEM 0~~ **Done 2026-06-09.**
+2. ~~Slice 1 ingestion events~~ **Done.**
+3. ~~Slice 2 RSS/GDELT adapters~~ **Done** (`7877e0aa`).
+4. ~~Architecture checkpoint (a)~~ **Done 2026-06-10** —
+   [universal-wire-activation-topology-2026-06-10.md](universal-wire-activation-topology-2026-06-10.md).
+5. **Workstream (b):** Deletion Ledger — replace then delete SourceMaxx spine.
+6. **Workstream (c):** Universal Wire rename/migration.
+7. **Workstream (d):** Activation graph (Slice 3).
+8. **Workstream (e):** Staging acceptance + Slice 4 matrix.
+9. Slice 0.5 platform VM binding (may parallelize after (b) if unblocked).
 
 ## Related Documents
 
+- [universal-wire-activation-topology-2026-06-10.md](universal-wire-activation-topology-2026-06-10.md) —
+  activation graph, workstream order, negative proofs.
 - [mission-wire-community-news-v0.md](mission-wire-community-news-v0.md) —
   superseded by this document for active work.
 - [mission-wire-autonomous-ingestion-v1.md](mission-wire-autonomous-ingestion-v1.md) —

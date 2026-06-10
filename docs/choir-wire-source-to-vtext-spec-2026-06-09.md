@@ -181,25 +181,37 @@ correctness/security/resource invariant requires it.
 
 Activation is explicit. Nothing in this section is initiated by the prompt bar.
 
+**Architecture checkpoint (2026-06-10):** full activation matrix, workstream
+order, and negative proofs are in
+[universal-wire-activation-topology-2026-06-10.md](universal-wire-activation-topology-2026-06-10.md).
+This section summarizes; on conflict, the checkpoint doc wins until code lands.
+
 ```text
-source daemon fetch
+sourcecycled fetch
   -> source artifact persisted with fetch provenance
   -> ingestion event (artifact id, source id, fetch provenance,
      content hash, dedupe key)
-  -> platform processor run dispatched on the event
-       (batched per cycle or per slice; live per-arrival as ingestion
-        cadence improves)
-  -> processor notes/requests
-  -> researcher runs dispatched on processor/reconciler requests
-  -> VText agent runs dispatched on processor/reconciler requests
-  -> reconciler runs dispatched on schedule and on corpus-change signals
-  -> edition update through the existing approval path
+  -> platform processor run dispatched on the event only
+  -> processor spawns VText agent only (watch-lists for low-signal items)
+  -> VText autoregressive loop:
+       edit_vtext revisions; spawn researcher on doc channel;
+       request_super_execution when needed; worker deliveries wake next step
+  -> autonomous publish (Community Cloud / Universal Wire — no operator gate)
+  -> reconciler on debounced post-publish batch, scheduled sweep,
+     corpus-change (user edit/fork on published platform docs) — never per cycle
+  -> reconciler emits VText wake requests on doc_id (including edition
+     universal-wire/Wire.vtext) — never edit_vtext
 ```
 
 The ingestion event is the only entry point for story creation. Human input
-surfaces dispatch editorial-supervision work only. Scheduled reconciliation and
-operator-approved promotion are the other lawful dispatch causes; both operate
-on work that ingestion originated.
+surfaces dispatch editorial-supervision work only — not ingestion or processor
+runs. Scheduled reconciliation and corpus-change signals are lawful reconciler
+causes; reconciler never holds the VText pen.
+
+**Publication:** Universal Wire (Community Cloud) publishes autonomously.
+Per-deployment policy may gate Private Wire instances. Procedural guards
+(article-before-edition inclusion, fidelity checks) are acceptance criteria,
+not anthropomorphic “approval.”
 
 The processor/reconciler split is direction of motion:
 
@@ -242,11 +254,11 @@ Processors:
 - preserve source artifact refs and source handles;
 - notice changed beliefs, novelty, overlap, contradictions, and emerging
   questions;
-- request researchers when evidence needs depth or verification;
-- request VText agents when an article, report, briefing, edition, fork, or
-  alert should be created, revised, corrected, or explored;
-- write durable notes/evidence in their computer's agent notebook/checkpoint
-  store;
+- **spawn VText agents only** when an article, report, briefing, edition, fork,
+  or alert should be opened or revised (VText may then spawn researchers);
+- **must not spawn researcher or super** directly;
+- write durable notes/evidence and watch-lists in checkpoint store for
+  low-signal items;
 - do not write canonical VText versions.
 
 ### Reconcilers
@@ -267,8 +279,14 @@ and update/correction opportunities.
 
 Reconcilers may read files, VTexts, source artifacts, indexes, and evidence
 packets. They write durable notes/evidence/messages. They must not write
-VTexts. They message VText agents when VTexts should be created, revised,
-corrected, reordered, or updated.
+VTexts or call `edit_vtext`. They emit **VText wake requests** when VTexts
+should be created, revised, corrected, reordered, or updated — including the
+edition doc (`universal-wire/Wire.vtext` on Community Cloud).
+
+Lawful reconciler triggers: **debounced post-publish batch** (N or T),
+**scheduled sweep**, **corpus-change** from user edit/fork on published
+platform docs. Forbidden: per-ingestion-cycle dispatch, processor-submit
+dispatch, in-flight draft dispatch.
 
 ### Researchers
 
@@ -298,7 +316,8 @@ editorial framing.
 
 Examples:
 
-- `Wire.vtext`: Community Wire public front page;
+- `Wire.vtext`: Universal Wire public front page (`universal-wire/Wire.vtext`
+  on Community Cloud after migration);
 - `Wire-Tech.vtext`: Community Wire tech/open-source edition;
 - `Wire-Science.vtext`: Community Wire science edition;
 - `FirmMorningBrief.vtext`: Private Cloud firm-wide morning edition;

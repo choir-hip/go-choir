@@ -887,30 +887,51 @@ filter and blocked Node B deploy.
 3. Shared readability extraction in `internal/sourcefetch` (already in sandbox
    and sourcecycled Nix closures).
 
-**Slice 3 checkpoint (2026-06-10):**
+**Architecture checkpoint (a) — 2026-06-10:**
 
-**Problem:** Ingestion events and processor dispatch exist (Slice 1), and
-adapters now emit richer source artifacts (Slice 2), but there is no proven
-staging path where a `sourcecycled` cycle alone produces Article VTexts with
-native source transclusions and updates `global-wire/Wire.vtext`. Prior proof
-used prompt-bar orchestration (`super` foreground), not
-`activation_origin=ingestion_event` processor runs. `coagentVTextRevisionRoute`
-exists for processor/reconciler callers, but processor handoff prompts are
-generic and do not require edition publication; reconciler prompts explicitly
-forbid mutating platform stories.
+**Problem:** Slice 1–2 landed on a **SourceMaxx-named ingestion spine** that
+still queues **per-cycle reconciler** dispatch — a deletion-ledger violation and
+a feed-forward topology violation. Prior Slice 3 notes assumed processor →
+researcher/VText and reconciler edition writes; adversarial review corrected
+the model: **processor → VText only**; VText owns researcher/super loop;
+**reconciler emits wake requests only** (never `edit_vtext`); publish is
+**autonomous** on Universal Wire (Community Cloud). Product rename: **Universal
+Wire** (`universal-wire/Wire.vtext`), not a shim over `global-wire`.
 
-**Fix intent (Slice 3):**
+**Evidence:** docs-only checkpoint —
+[universal-wire-activation-topology-2026-06-10.md](universal-wire-activation-topology-2026-06-10.md);
+mission v1 and spec Activation section amended same date.
 
-1. Tighten processor/reconciler contracts so ingestion-activated runs request
-   VText agents with source-handle transclusions when publication criteria met.
-2. Wire edition update (`global-wire/Wire.vtext` transclusion) into the
-   reconciler or dedicated edition step after article VText approval.
-3. Local + staging proof: post-cycle processor run → Article VText → edition
-   graph visible on `/api/global-wire/stories` without prompt-bar activation.
+**Belief state after (a):**
+
+| Deliverable | Status |
+|-------------|--------|
+| (a) Architecture checkpoint | **Done** (docs) |
+| (b) Deletion Ledger | **Not started** — SourceMaxx symbols active |
+| (c) Universal Wire rename | **Not started** — blocked on (b) |
+| (d) Activation graph (Slice 3) | **Not started** — blocked on (b),(c) |
+| (e) Staging acceptance | **Not started** |
+
+**Fix intent (sequential workstreams — no code until (b) begins):**
+
+1. **(b)** Replace `BuildSourceMaxxHandoff` / dispatcher with neutral ingestion
+   vocabulary; grep-clean delete legacy symbols; purge staging seeds.
+2. **(c)** Rename user-visible surfaces and API routes; migrate edition alias;
+   delete `global-wire/Wire.vtext` with zero-ref proof (no redirects).
+3. **(d)** Remove per-cycle reconciler from handoff; processor vtext-only
+   outbound; reconciler on publish debounce + schedule + corpus-change only;
+   negative proofs in CI/staging.
+4. **(e)** Staging proof 1: ingestion → processor → VText → autonomous publish
+   → debounced reconciler → correction-request → VText revision. Proof 2:
+   user edit on published platform doc → corpus-change → reconciler → VText
+   response citing user version. Slice 4 Phase A matrix + prompt-bar negative.
+
+**Supersedes:** Slice 3 checkpoint draft (2026-06-10 morning) that proposed
+reconciler edition writes and `global-wire/Wire.vtext` without rename policy.
 
 next step:
 
-- Confirm Slice 2 deploy at fixed SHA; then implement Slice 3 problem fix chain.
+- Land docs checkpoint commit; begin Workstream **(b) Deletion Ledger**.
 
 
 ## v1 mission handoff (2026-06-09)
