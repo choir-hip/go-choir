@@ -123,6 +123,28 @@ let
       set +a
     fi
 
+    if [ -z "''${RUNTIME_WIRE_PUBLISH_URL:-}" ]; then
+      for param in $(cat /proc/cmdline); do
+        case "$param" in
+          choir.wire_publish_url=*)
+            export RUNTIME_WIRE_PUBLISH_URL="''${param#choir.wire_publish_url=}"
+            ;;
+          choir.vmctl_url=*)
+            vmctl_url="''${param#choir.vmctl_url=}"
+            if [ -n "$vmctl_url" ]; then
+              export RUNTIME_WIRE_PUBLISH_URL="$(printf '%s' "$vmctl_url" | sed 's/:8083$/:8082/')"
+            fi
+            ;;
+        esac
+      done
+    fi
+
+    if [ -n "''${RUNTIME_WIRE_PUBLISH_URL:-}" ]; then
+      echo "go-choir-sandbox: wire publish URL configured"
+    else
+      echo "go-choir-sandbox: wire publish URL not configured" >&2
+    fi
+
     dynamic="/mnt/persistent/runtime/sandbox/bin/sandbox"
     if [ -x "$dynamic" ]; then
       if [ -f /mnt/persistent/runtime/sandbox/choir-runtime.env ]; then
