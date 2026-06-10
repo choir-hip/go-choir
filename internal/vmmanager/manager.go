@@ -64,10 +64,10 @@ const (
 	StateFailed VMState = "failed"
 )
 
-// dataImageSizeMB is the minimum mutable data disk size for each VM. Worker
-// self-development runs need room for VText/Dolt state, a candidate repo
+// dataImageSizeMB is the minimum mutable data disk size for each VM (16 GB).
+// Worker self-development runs need room for VText/Dolt state, a candidate repo
 // checkout, Go module/build caches, verifier artifacts, and exported patches.
-const dataImageSizeMB = 8192
+const dataImageSizeMB = 16384
 
 // VMConfig holds the configuration for launching a single Firecracker VM.
 type VMConfig struct {

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	embedded "github.com/dolthub/driver"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
@@ -223,3 +225,31 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 	)
 	return nil
 }
+
+// StartPeriodicDoltGC runs MaybeRunDoltGC on a timer to catch disk growth
+// between sandbox restarts. It is safe to call multiple times — the milestone
+// marker prevents redundant GC runs at the same level. The function returns
+// immediately and runs in a background goroutine until the context is cancelled.
+func StartPeriodicDoltGC(ctx context.Context, persistentDir, storePath string, interval time.Duration) {
+	if doltGCDisabled() {
+		return
+	}
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := MaybeRunDoltGC(persistentDir, storePath); err != nil {
+					log.Printf("store: periodic dolt gc: %v", err)
+				}
+			}
+		}
+	}()
+}
+

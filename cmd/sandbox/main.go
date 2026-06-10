@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -66,6 +67,14 @@ func main() {
 	}
 	defer func() {
 		_ = db.Close()
+	}()
+
+	// Start periodic DoltDB garbage collection to reclaim disk space between
+	// sandbox restarts (milestone-based, idempotent).
+	go func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		store.StartPeriodicDoltGC(ctx, filepath.Dir(rtCfg.StorePath), rtCfg.StorePath, 5*time.Minute)
 	}()
 
 	bus := events.NewEventBus()
