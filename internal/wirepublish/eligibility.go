@@ -22,7 +22,7 @@ func PlatformOwnerID() string {
 }
 
 // EligibleForAutonomousPublish reports whether a re-loaded revision may enter the
-// wire publication-policy choke point.
+// wire publication-policy choke point (proxy re-reads revision metadata here).
 func EligibleForAutonomousPublish(doc types.Document, rev types.Revision, rec *types.RunRecord, platformOwnerID string) bool {
 	if rec == nil || strings.TrimSpace(doc.DocID) == "" {
 		return false
