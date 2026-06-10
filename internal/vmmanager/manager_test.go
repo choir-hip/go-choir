@@ -1123,6 +1123,48 @@ func TestBuildFirecrackerConfig_GuestPortInBootArgs(t *testing.T) {
 	}
 }
 
+
+func TestBuildFirecrackerConfig_LegacyBootIncludesRuntimeServiceURLs(t *testing.T) {
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = t.TempDir()
+	cfg.StoreDiskPath = ""
+	cfg.KernelParams = ""
+
+	mgr := NewManager(cfg)
+
+	vmCfg := VMConfig{
+		VMID:              "vm-legacy-runtime-urls",
+		KernelImagePath:   "/opt/go-choir/guest/vmlinux",
+		RootfsPath:        "/opt/go-choir/guest/rootfs.ext4",
+		GuestPort:         8085,
+		MachineCPUCount:   2,
+		MachineMemSizeMib: 512,
+		Epoch:             7,
+		ComputerKind:      "platform",
+		OwnerID:           "universal-wire-platform",
+		DesktopID:         "platform",
+	}
+
+	fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9000)
+	bootArgs := fcConfig["boot-source"].(map[string]interface{})["boot_args"].(string)
+	for _, arg := range []string{
+		"choir.gateway_url=http://10.200.0.1:8084",
+		"choir.vmctl_url=http://10.200.0.1:8083",
+		"choir.maild_url=http://10.200.0.1:8087",
+		"choir.wire_publish_url=http://10.200.0.1:8082",
+		"choir.source_service_url=http://10.200.0.1:8787",
+		"choir.source_service_runtime_url=http://127.0.0.1:8085",
+		"choir.source_service_runtime_owner_id=universal-wire-platform",
+		"choir.computer_kind=platform",
+		"choir.owner_id=universal-wire-platform",
+		"choir.desktop_id=platform",
+	} {
+		if !containsStr(bootArgs, arg) {
+			t.Fatalf("legacy boot args missing %s in %q", arg, bootArgs)
+		}
+	}
+}
+
 func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T) {
 	cfg := DefaultManagerConfig()
 	cfg.StateDir = t.TempDir()
