@@ -116,6 +116,13 @@ let
   sandboxRuntimeExec = pkgs.writeShellScript "go-choir-run-sandbox-runtime" ''
     set -euo pipefail
 
+    if [ -f /run/go-choir-sandbox.env ]; then
+      set -a
+      # shellcheck disable=SC1091
+      . /run/go-choir-sandbox.env
+      set +a
+    fi
+
     dynamic="/mnt/persistent/runtime/sandbox/bin/sandbox"
     if [ -x "$dynamic" ]; then
       if [ -f /mnt/persistent/runtime/sandbox/choir-runtime.env ]; then
