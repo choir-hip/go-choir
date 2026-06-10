@@ -539,6 +539,7 @@ func (d *ingestionRuntimeDispatcher) dispatch(ctx context.Context, store *cycle.
 		}
 	}
 	submitCap := processorLimit - inFlight
+		log.Printf("Dispatch backpressure: in-flight=%d submitCap=%d (%d - %d)", inFlight, submitCap, processorLimit, inFlight)
 	if submitCap <= 0 {
 		result.ProcessorSkipped += len(processorRequests)
 		return result
