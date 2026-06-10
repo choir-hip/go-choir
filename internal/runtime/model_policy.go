@@ -117,8 +117,8 @@ fallback_model = %q
 reasoning = "medium"
 
 [roles.conductor]
-provider = "xiaomi"
-model = "mimo-v2.5"
+provider = "deepseek"
+model = "deepseek-v4-flash"
 reasoning = "medium"
 
 [roles.super]
@@ -135,8 +135,8 @@ provider = "deepseek"
 model = "deepseek-v4-flash"
 
 [roles.researcher]
-provider = "xiaomi"
-model = "mimo-v2.5"
+provider = "deepseek"
+model = "deepseek-v4-flash"
 reasoning = "medium"
 
 [roles.vtext]
