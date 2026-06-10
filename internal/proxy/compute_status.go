@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
@@ -20,6 +21,7 @@ type computeStatusResponse struct {
 	CurrentComputer computeComputer            `json:"current_computer"`
 	Computers       []computeComputer          `json:"computers"`
 	Runtime         *computeRuntimeStatus      `json:"runtime,omitempty"`
+	PersistentDisk  *persistentdisk.Status     `json:"persistent_disk,omitempty"`
 	Capabilities    computeMonitorCapabilities `json:"capabilities"`
 	Warnings        []string                   `json:"warnings,omitempty"`
 }
@@ -42,13 +44,14 @@ type computeComputer struct {
 }
 
 type computeRuntimeStatus struct {
-	Reachable        bool   `json:"reachable"`
-	Status           string `json:"status,omitempty"`
-	Service          string `json:"service,omitempty"`
-	RuntimeHealth    string `json:"runtime_health,omitempty"`
-	RunningRuns      int    `json:"running_runs,omitempty"`
-	ResearcherCount  int    `json:"researcher_count,omitempty"`
-	ObservationError string `json:"observation_error,omitempty"`
+	Reachable        bool                   `json:"reachable"`
+	Status           string                 `json:"status,omitempty"`
+	Service          string                 `json:"service,omitempty"`
+	RuntimeHealth    string                 `json:"runtime_health,omitempty"`
+	RunningRuns      int                    `json:"running_runs,omitempty"`
+	ResearcherCount  int                    `json:"researcher_count,omitempty"`
+	ObservationError string                 `json:"observation_error,omitempty"`
+	PersistentDisk   *persistentdisk.Status `json:"persistent_disk,omitempty"`
 }
 
 type computeMonitorCapabilities struct {
@@ -172,6 +175,14 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if own.SandboxURL != "" && strings.EqualFold(own.State, string(vmctl.VMStateActive)) {
 		resp.Runtime = h.probeRuntimeHealthForTarget(own.SandboxURL)
+	}
+	if resp.Runtime != nil && resp.Runtime.PersistentDisk != nil {
+		resp.PersistentDisk = resp.Runtime.PersistentDisk
+	} else if own.DataImage != nil {
+		resp.PersistentDisk = persistentDiskFromHostImage(own.DataImage.FileBytes, own.DataImage.CapBytes)
+	}
+	if resp.PersistentDisk != nil {
+		resp.Warnings = appendPersistentDiskWarnings(resp.Warnings, resp.PersistentDisk)
 	}
 	listed, listWarnings := h.userComputersForStatus(r.Context(), authResult.UserID, resp.CurrentComputer)
 	resp.Computers, resp.Warnings = appendComputerList(resp.Computers, resp.Warnings, listed, listWarnings)
@@ -439,16 +450,17 @@ func (h *Handler) probeRuntimeHealthForTarget(targetURL string) *computeRuntimeS
 	defer func() { _ = resp.Body.Close() }()
 
 	var body struct {
-		Status          string `json:"status"`
-		Service         string `json:"service"`
-		RuntimeHealth   string `json:"runtime_health"`
-		RunningRuns     int    `json:"running_runs"`
-		ResearcherCount int    `json:"researcher_count"`
+		Status          string                 `json:"status"`
+		Service         string                 `json:"service"`
+		RuntimeHealth   string                 `json:"runtime_health"`
+		RunningRuns     int                    `json:"running_runs"`
+		ResearcherCount int                    `json:"researcher_count"`
+		PersistentDisk  *persistentdisk.Status `json:"persistent_disk,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return &computeRuntimeStatus{Reachable: resp.StatusCode >= 200 && resp.StatusCode < 500, ObservationError: "runtime health decode failed"}
 	}
-	return &computeRuntimeStatus{
+	runtimeStatus := &computeRuntimeStatus{
 		Reachable:       resp.StatusCode >= 200 && resp.StatusCode < 500,
 		Status:          body.Status,
 		Service:         body.Service,
@@ -456,6 +468,31 @@ func (h *Handler) probeRuntimeHealthForTarget(targetURL string) *computeRuntimeS
 		RunningRuns:     body.RunningRuns,
 		ResearcherCount: body.ResearcherCount,
 	}
+	if body.PersistentDisk != nil {
+		runtimeStatus.PersistentDisk = body.PersistentDisk
+	}
+	return runtimeStatus
+}
+
+func persistentDiskFromHostImage(fileBytes, capBytes uint64) *persistentdisk.Status {
+	if capBytes == 0 {
+		return nil
+	}
+	status := persistentdisk.StatusFromHostImage(fileBytes, capBytes)
+	return &status
+}
+
+func appendPersistentDiskWarnings(warnings []string, disk *persistentdisk.Status) []string {
+	if disk == nil {
+		return warnings
+	}
+	if disk.Critical {
+		return append(warnings, "persistent data image is critically full")
+	}
+	if disk.Warning {
+		return append(warnings, "persistent data image is nearing capacity")
+	}
+	return warnings
 }
 
 func computerRole(desktopID string) string {

@@ -3714,6 +3714,15 @@ func TestHandleHealthReady(t *testing.T) {
 	if resp.Build.Commit == "" {
 		t.Error("build.commit should not be empty")
 	}
+	if resp.PersistentDisk == nil {
+		t.Fatal("expected persistent_disk in health response")
+	}
+	if resp.PersistentDisk.Source != "guest" {
+		t.Fatalf("persistent_disk.source = %q, want guest", resp.PersistentDisk.Source)
+	}
+	if resp.PersistentDisk.DefaultCapBytes != 8*1024*1024*1024 {
+		t.Fatalf("default_cap_bytes = %d, want 8GiB", resp.PersistentDisk.DefaultCapBytes)
+	}
 }
 
 func TestHandleHealthDegraded(t *testing.T) {

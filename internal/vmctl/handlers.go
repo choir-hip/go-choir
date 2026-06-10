@@ -78,6 +78,7 @@ type ownershipResponse struct {
 	LastActiveAt         string `json:"last_active_at"`
 	Epoch                int64  `json:"epoch"`
 	StoppedBy            string `json:"stopped_by,omitempty"`
+	DataImage            *dataImageResponse `json:"data_image,omitempty"`
 }
 
 type forkDesktopRequest struct {
@@ -437,6 +438,10 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		h.registry.ensureExistingGatewayCredential(own.VMID)
 	}
 
+	var dataImage *dataImageResponse
+	if stats, ok := h.registry.DataImageStatsForVM(own.VMID); ok {
+		dataImage = dataImageResponseFromStats(stats)
+	}
 	writeVMCTLJSON(w, http.StatusOK, ownershipResponse{
 		VMID:                 own.VMID,
 		UserID:               own.UserID,
@@ -459,6 +464,7 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		LastActiveAt:         own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
 		Epoch:                own.Epoch,
 		StoppedBy:            own.StoppedBy,
+		DataImage:            dataImage,
 	})
 }
 

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -53,6 +54,10 @@ func main() {
 	// Ensure the store directory exists.
 	if err := os.MkdirAll(storeDir(rtCfg.StorePath), 0o755); err != nil {
 		log.Fatalf("sandbox: create store directory: %v", err)
+	}
+
+	if err := store.MaybeRunDoltGC(filepath.Dir(rtCfg.StorePath), rtCfg.StorePath); err != nil {
+		log.Printf("sandbox: dolt gc maintenance: %v", err)
 	}
 
 	db, err := store.Open(rtCfg.StorePath)

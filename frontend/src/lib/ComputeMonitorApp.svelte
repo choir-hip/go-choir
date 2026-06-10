@@ -20,6 +20,7 @@
   $: computers = status?.computers || [];
   $: candidateComputers = computers.filter((computer) => computer.role === 'candidate');
   $: runtime = status?.runtime || {};
+  $: persistentDisk = status?.persistent_disk || runtime?.persistent_disk || null;
   $: currentWindows = ($windows || []).filter((win) => win.mode !== 'closed' && win.mode !== 'hidden');
   $: visibleWindows = currentWindows.filter((win) => win.mode !== 'minimized');
   $: heavyWindows = visibleWindows.filter((win) => isHeavyAppId(win.appId));
@@ -30,9 +31,13 @@
       ? status.status
       : runtime?.reachable === false
         ? 'degraded'
-        : currentComputer.state === 'not_started'
-          ? 'not started'
-          : 'healthy';
+        : persistentDisk?.critical
+        ? 'disk critical'
+        : persistentDisk?.warning
+          ? 'disk warning'
+          : currentComputer.state === 'not_started'
+            ? 'not started'
+            : 'healthy';
 
   onMount(() => {
     refresh();
@@ -116,8 +121,24 @@
 
   function levelClass() {
     if (status?.status !== 'ok') return 'warn';
+    if (persistentDisk?.critical) return 'warn';
     if (runtime?.reachable === false) return 'warn';
+    if (persistentDisk?.warning) return 'warn';
     return 'ok';
+  }
+
+  function formatGiB(bytes) {
+    const num = Number(bytes);
+    if (!Number.isFinite(num) || num <= 0) return 'n/a';
+    return `${(num / (1024 ** 3)).toFixed(2)} GiB`;
+  }
+
+  function diskMeterWidth(disk) {
+    if (!disk) return '0%';
+    const pct = Number(disk.used_percent);
+    if (Number.isFinite(pct) && pct > 0) return barWidth(pct, 100);
+    if (!disk.cap_bytes) return '0%';
+    return barWidth(disk.used_bytes, disk.cap_bytes);
   }
 
   function barWidth(value, max = 100) {
@@ -179,6 +200,26 @@
       <div class="meter apps"><span style="width:{barWidth(heavyWindows.length, Math.max(visibleWindows.length, 1))}"></span></div>
       <small>{suspendedWindows.length} suspended</small>
     </article>
+    <article class="metric-card" class:warn-card={persistentDisk?.warning || persistentDisk?.critical} data-compute-monitor-disk>
+      <span class="metric-label">Data image</span>
+      <strong>
+        {#if persistentDisk}
+          {formatGiB(persistentDisk.used_bytes)} / {formatGiB(persistentDisk.cap_bytes)}
+        {:else}
+          unknown
+        {/if}
+      </strong>
+      <div class="meter disk" class:critical={persistentDisk?.critical} class:warning={persistentDisk?.warning}>
+        <span style="width:{diskMeterWidth(persistentDisk)}"></span>
+      </div>
+      <small>
+        {#if persistentDisk}
+          {persistentDisk.source || 'reported'} · {persistentDisk.avail_bytes ? `${formatGiB(persistentDisk.avail_bytes)} free` : 'cap only'}
+        {:else}
+          usage appears when the computer reports in
+        {/if}
+      </small>
+    </article>
   </section>
 
   <div class="monitor-grid">
@@ -192,6 +233,17 @@
         <div><dt>Desktop</dt><dd>{currentComputer.desktop_id || 'primary'}</dd></div>
         <div><dt>Runtime</dt><dd>{runtime.runtime_health || runtime.status || (runtime.reachable === false ? 'unreachable' : 'unknown')}</dd></div>
         <div><dt>Running runs</dt><dd>{runtime.running_runs ?? 'n/a'}</dd></div>
+        <div><dt>Data image</dt><dd>
+          {#if persistentDisk}
+            {formatGiB(persistentDisk.used_bytes)} used of {formatGiB(persistentDisk.cap_bytes)} cap
+            {#if persistentDisk.warning || persistentDisk.critical}
+              · {persistentDisk.critical ? 'critically full' : 'nearing capacity'}
+            {/if}
+          {:else}
+            unavailable
+          {/if}
+        </dd></div>
+        <div><dt>Default cap</dt><dd>{persistentDisk?.default_cap_bytes ? formatGiB(persistentDisk.default_cap_bytes) : '8.00 GiB'}</dd></div>
       </dl>
       <div class="policy-copy">
         <strong>{currentComputer.reclaimable ? 'Reclaimable' : 'Protected first'}</strong>
@@ -280,6 +332,7 @@
       <li>compute status api: {status?.generated_at || 'waiting'}</li>
       <li>current desktop: {currentComputer.desktop_id || 'primary'}</li>
       <li>runtime health: {runtime.runtime_health || runtime.status || 'unknown'}</li>
+      <li>data image: {persistentDisk ? `${formatGiB(persistentDisk.used_bytes)} / ${formatGiB(persistentDisk.cap_bytes)} (${persistentDisk.source || 'unknown'})` : 'unreported'}</li>
       <li>warnings: {status?.warnings?.length || 0}</li>
     </ul>
   </section>
@@ -413,7 +466,7 @@
 
   .metric-strip {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
     gap: 0.65rem;
     margin-bottom: 0.75rem;
   }
@@ -475,6 +528,22 @@
 
   .meter.apps span {
     background: linear-gradient(90deg, var(--choir-state-selected), var(--choir-status-danger));
+  }
+
+  .meter.disk span {
+    background: linear-gradient(90deg, var(--choir-state-selected), var(--choir-status-success));
+  }
+
+  .meter.disk.warning span {
+    background: linear-gradient(90deg, var(--choir-status-warning), var(--choir-status-danger));
+  }
+
+  .meter.disk.critical span {
+    background: linear-gradient(90deg, var(--choir-status-danger), var(--choir-status-danger));
+  }
+
+  .metric-card.warn-card {
+    outline: 1px solid color-mix(in srgb, var(--choir-status-warning) 55%, transparent);
   }
 
   .monitor-grid {

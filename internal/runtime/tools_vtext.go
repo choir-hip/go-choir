@@ -411,6 +411,18 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 			},
 		})
 	}
+	if normalizedContent, normalizedCount, entityPatch := normalizeWireArticleSourceServiceProse(materialized.Content, revMeta, rec); normalizedCount > 0 {
+		materialized.Content = normalizedContent
+		if len(entityPatch) > 0 {
+			revMeta = mergeVTextRevisionMetadata(revMeta, map[string]any{"source_entities": entityPatch})
+		}
+		revMeta = mergeVTextRevisionMetadata(revMeta, map[string]any{
+			"source_ref_normalization": map[string]any{
+				"normalized_source_service_prose": normalizedCount,
+				"syntax":                          "[label](source:ENTITY_ID)",
+			},
+		})
+	}
 	if canonicalPath != "" {
 		revMeta = mergeVTextRevisionMetadata(revMeta, map[string]any{
 			"canonical_vtext_source_path": canonicalPath,
@@ -506,6 +518,59 @@ func normalizeWireArticleBareSourceRefs(content string, metadata json.RawMessage
 		return "[" + label + "](source:" + id + ")"
 	})
 	return normalized, count
+}
+
+var wireArticleSourceServiceProseRE = regexp.MustCompile(`Source Service item (srcitem_[A-Za-z0-9_-]+)`)
+
+func normalizeWireArticleSourceServiceProse(content string, metadata json.RawMessage, rec *types.RunRecord) (string, int, []vtextSourceEntity) {
+	if !wirepublish.IsWireArticleRevisionRun(rec) {
+		return content, 0, nil
+	}
+	if !wireArticleSourceServiceProseRE.MatchString(content) && !vtextRawSourceServiceItemIDRE.MatchString(content) {
+		return content, 0, nil
+	}
+	meta := decodeRevisionMetadata(metadata)
+	entities := decodeVTextSourceEntities(meta["source_entities"])
+	labels := map[string]string{}
+	entityByItem := map[string]vtextSourceEntity{}
+	for _, entity := range entities {
+		id := strings.TrimSpace(entity.EntityID)
+		itemID := strings.TrimSpace(entity.Target.ItemID)
+		if id == "" {
+			continue
+		}
+		label := strings.TrimSpace(firstNonEmpty(entity.Label, entity.Kind, "source"))
+		if label == "" {
+			label = "source"
+		}
+		labels[id] = label
+		if itemID != "" {
+			entityByItem[itemID] = entity
+		}
+	}
+	count := 0
+	normalized := wireArticleSourceServiceProseRE.ReplaceAllStringFunc(content, func(match string) string {
+		parts := wireArticleSourceServiceProseRE.FindStringSubmatch(match)
+		if len(parts) != 2 {
+			return match
+		}
+		itemID := strings.TrimSpace(parts[1])
+		entity, ok := entityByItem[itemID]
+		if !ok {
+			entity = sourceServiceItemRefToSourceEntity(itemID, content)
+			entities, _ = mergeVTextSourceEntities(entities, []vtextSourceEntity{entity})
+			entityByItem[itemID] = entity
+		}
+		entityID := strings.TrimSpace(entity.EntityID)
+		label := strings.TrimSpace(firstNonEmpty(entity.Label, labels[entityID], "source"))
+		if entityID == "" || label == "" {
+			return match
+		}
+		labels[entityID] = label
+		count++
+		return "[" + label + "](source:" + entityID + ")"
+	})
+	return normalized, count, entities
 }
 
 func materializeVTextToolEdit(edit editVTextArgs, current types.Revision) (materializedVTextEdit, error) {

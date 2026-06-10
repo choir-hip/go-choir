@@ -1924,7 +1924,13 @@
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
-  $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly;
+  $: isForeignPlatformWireArticle = !!(
+    currentDoc?.owner_id &&
+    currentUser?.id &&
+    currentDoc.owner_id !== currentUser.id &&
+    appContext?.appHint === 'universal-wire'
+  );
+  $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly || isForeignPlatformWireArticle;
   $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published VText document' : 'VText document';
   $: editorSurfaceAriaMultiline = isPublishedReadOnly ? undefined : 'true';
   $: revisionLineLabel = isViewingHistorical ? 'Historical' : 'Latest';

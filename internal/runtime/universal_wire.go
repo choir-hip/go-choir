@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -169,6 +170,58 @@ func universalWirePlatformOwnerID() string {
 		ownerID = "universal-wire-platform"
 	}
 	return ownerID
+}
+
+// resolveUniversalWireVTextReadOwner returns the document owner to use for a
+// read-only VText API request. Authenticated users may read platform-owned
+// article VTexts that are transcluded in the Universal Wire edition.
+func (h *APIHandler) resolveUniversalWireVTextReadOwner(ctx context.Context, requesterOwnerID, docID string) (string, error) {
+	if h == nil || h.rt == nil || h.rt.Store() == nil {
+		return "", store.ErrNotFound
+	}
+	requesterOwnerID = strings.TrimSpace(requesterOwnerID)
+	docID = strings.TrimSpace(docID)
+	if requesterOwnerID == "" || docID == "" {
+		return "", store.ErrNotFound
+	}
+	if _, err := h.rt.Store().GetDocument(ctx, docID, requesterOwnerID); err == nil {
+		return requesterOwnerID, nil
+	} else if err != store.ErrNotFound {
+		return "", err
+	}
+	platformOwner := universalWirePlatformOwnerID()
+	if _, err := h.rt.Store().GetDocument(ctx, docID, platformOwner); err != nil {
+		return "", err
+	}
+	if !h.universalWireEditionIncludesDoc(ctx, docID) {
+		return "", store.ErrNotFound
+	}
+	return platformOwner, nil
+}
+
+func (h *APIHandler) universalWireEditionIncludesDoc(ctx context.Context, docID string) bool {
+	if h == nil || h.rt == nil || h.rt.Store() == nil {
+		return false
+	}
+	platformOwner := universalWirePlatformOwnerID()
+	editionDocID, err := h.rt.Store().GetDocumentAlias(ctx, platformOwner, universalWireEditionSourcePath)
+	if err != nil {
+		return false
+	}
+	editionDoc, err := h.rt.Store().GetDocument(ctx, editionDocID, platformOwner)
+	if err != nil || strings.TrimSpace(editionDoc.CurrentRevisionID) == "" {
+		return false
+	}
+	editionRev, err := h.rt.Store().GetRevision(ctx, editionDoc.CurrentRevisionID, platformOwner)
+	if err != nil {
+		return false
+	}
+	for _, included := range universalWireEditionIncludedDocIDs(editionRev.Content, editionDoc.DocID) {
+		if included == docID {
+			return true
+		}
+	}
+	return false
 }
 
 func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Document, rev types.Revision, styleSources []types.WireStyleSource) (types.WireStory, bool) {
@@ -612,6 +665,38 @@ func normalizeWireStoryPresentation(story types.WireStory) types.WireStory {
 		story.Freshness = wireArticleFreshness(story.UpdatedAt)
 	}
 	return story
+}
+
+// normalizeWireArticleRevisionForRead repairs reader-facing source refs in
+// platform wire article revisions without mutating stored revision content.
+func normalizeWireArticleRevisionForRead(rev types.Revision) types.Revision {
+	meta := decodeRevisionMetadata(rev.Metadata)
+	if metadataString(meta, "source") != "edit_vtext" || sourceNetworkCycleID(meta) == "" {
+		return rev
+	}
+	rec := &types.RunRecord{
+		OwnerID: strings.TrimSpace(rev.OwnerID),
+		Metadata: map[string]any{
+			"request_intent":             "integrate_worker_findings",
+			"type":                       "vtext_agent_revision",
+			"ingestion_handoff_cycle_id": sourceNetworkCycleID(meta),
+		},
+	}
+	content := rev.Content
+	if normalized, count := normalizeWireArticleBareSourceRefs(content, rev.Metadata, rec); count > 0 {
+		content = normalized
+	}
+	if normalized, count, entities := normalizeWireArticleSourceServiceProse(content, rev.Metadata, rec); count > 0 {
+		content = normalized
+		if len(entities) > 0 {
+			meta["source_entities"] = entities
+			if patched, err := json.Marshal(meta); err == nil {
+				rev.Metadata = patched
+			}
+		}
+	}
+	rev.Content = content
+	return rev
 }
 
 func universalWireStoryFreshnessLooksAuto(freshness string) bool {

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/mail"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -253,6 +255,7 @@ type runtimeHealthResponse struct {
 	RunningRuns     int                      `json:"running_runs"`
 	ResearcherCount int                      `json:"researcher_count"`
 	ActiveProvider  string                   `json:"active_provider"`
+	PersistentDisk  *persistentdisk.Status   `json:"persistent_disk,omitempty"`
 	Build           buildinfo.Info           `json:"build"`
 }
 
@@ -1615,7 +1618,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
-	_ = json.NewEncoder(w).Encode(runtimeHealthResponse{
+	resp := runtimeHealthResponse{
 		Status:          string(health),
 		Service:         "sandbox",
 		SandboxID:       h.rt.cfg.SandboxID,
@@ -1624,7 +1627,12 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		ResearcherCount: h.rt.cfg.ResearcherCount,
 		ActiveProvider:  h.rt.provider.ProviderName(),
 		Build:           buildinfo.Snapshot("sandbox"),
-	})
+	}
+	if usage, err := persistentdisk.Statfs(filepath.Dir(h.rt.cfg.StorePath)); err == nil {
+		status := persistentdisk.StatusFromGuestUsage(usage)
+		resp.PersistentDisk = &status
+	}
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // RegisterRoutes registers runtime API routes on the given server.

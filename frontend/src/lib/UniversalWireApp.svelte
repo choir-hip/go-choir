@@ -16,7 +16,6 @@
   let refreshTimer = null;
 
   $: selectedStory = stories.find((story) => story.id === selectedStoryId) || stories[0] || null;
-  $: ownerLabel = authenticated ? (currentUser?.email || 'owner computer') : 'public reader';
 
   onMount(() => {
     loadUniversalWireVTexts({ force: true });
@@ -83,63 +82,6 @@
     }
   }
 
-  function sourceEntityId(item = {}) {
-    const base = String(item.id || item.content_id || item.title || '').toLowerCase();
-    const cleaned = base.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
-    return cleaned ? `gw-src-${cleaned}` : '';
-  }
-
-  function sourceRef(item = {}, fallback = 'source') {
-    const label = item.title || fallback;
-    const entityId = sourceEntityId(item);
-    return entityId ? `[${label}](source:${entityId})` : label;
-  }
-
-  function manifestItems(story = selectedStory) {
-    return [
-      ...(story.manifest?.lead || []),
-      ...(story.manifest?.supporting || []),
-      ...(story.manifest?.contrary || []),
-      ...(story.manifest?.context || []),
-    ];
-  }
-
-  function storySourceEntities(story = selectedStory) {
-    return manifestItems(story)
-      .map((item) => {
-        const entityId = sourceEntityId(item);
-        if (!entityId) return null;
-        return {
-          entity_id: entityId,
-          kind: 'content_item',
-          label: item.title,
-          target: {
-            target_kind: 'content_item',
-            content_id: item.content_id || item.id || entityId,
-            canonical_url: item.canonical_url || '',
-          },
-          selectors: [{ selector_kind: 'whole_resource' }],
-          display: {
-            inline_mode: 'collapsed_citation',
-            expanded_mode: 'source_card',
-            open_surface: 'source',
-            default_collapsed: true,
-          },
-          evidence: {
-            state: 'available',
-            research_state: 'represented',
-            relation: item.role || 'context',
-          },
-          provenance: {
-            created_by: 'universal_wire',
-            rights_scope: 'private_user_source',
-            untrusted_source_text: true,
-          },
-        };
-      })
-      .filter(Boolean);
-  }
-
   function storyRelatedVTexts(story = selectedStory) {
     return (story.related || [])
       .map((storyId) => {
@@ -159,7 +101,7 @@
             relation: 'related_story',
           },
           provenance: {
-            created_by: 'universal_wire',
+            created_from: 'universal_wire',
             source: 'universal_wire_related_story_index',
           },
         };
@@ -167,43 +109,7 @@
       .filter(Boolean);
   }
 
-  function storyVTextContent(story = selectedStory) {
-    const lead = story.manifest?.lead?.[0];
-    const secondLead = story.manifest?.lead?.[1];
-    const supporting = story.manifest?.supporting?.[0];
-    const qualifying = story.manifest?.contrary?.[0];
-    const context = story.manifest?.context?.[0];
-    const related = (story.related || [])
-      .map((storyId) => {
-        const relatedStory = stories.find((item) => item.id === storyId);
-        if (!relatedStory) return '';
-        return `[${relatedStory.headline}](vtext:${relatedStory.story_vtext_doc_id || storyId})`;
-      })
-      .filter(Boolean);
-    return [
-      `# ${story.headline}`,
-      '',
-      story.dek,
-      '',
-      lead ? `The lead signal is still the narrowest one: ${sourceRef(lead, 'lead source')} supports the update without turning it into an all-clear.${secondLead ? ` ${sourceRef(secondLead, 'operator source')} keeps the operator view attached to the story.` : ''}` : '',
-      '',
-      story.projections['wire-style'],
-      '',
-      supporting || qualifying
-        ? `The source neighborhood keeps the story open rather than flattening it into a verdict.${supporting ? ` ${sourceRef(supporting, 'supporting source')} adds context for the headline improvement.` : ''}${qualifying ? ` ${sourceRef(qualifying, 'qualifying source')} remains visible as qualifying evidence.` : ''}`
-        : '',
-      '',
-      context ? `Background remains part of the article rather than a hidden appendix. ${sourceRef(context, 'context source')} supplies the context future revisions can walk when the story updates.` : '',
-      '',
-      related.length
-        ? `This article transcludes the related ${related.join(related.length === 2 ? ' and ' : ', ')} VTexts so reconcilers can review cross-story updates without flattening the relationship into a list.`
-        : '',
-      '',
-      'This is a living Universal Wire VText. Later processor and reconciler updates should revise this article as ordinary VText versions, with corrections treated as progress rather than as a separate product surface.',
-    ].join('\n');
-  }
-
-  function launchVText({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = true, sourceEntities = [], relatedVTexts = [] }) {
+  function launchVText({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = false, relatedVTexts = [] }) {
     dispatch('launchapp', {
       appId: 'vtext',
       appName: 'VText',
@@ -215,7 +121,6 @@
         createInitialVersion,
         createdFrom,
         sourcePath,
-        sourceEntities,
         relatedVTexts,
         appHint: 'universal-wire',
         allowMultiple: true,
@@ -226,17 +131,15 @@
   function openStoryVText(story = selectedStory) {
     if (!story) return;
     selectedStoryId = story.id;
-    const projectionDocId = story.story_vtext_doc_id || '';
-    const platformOwned = story.owner_id && story.owner_id !== currentUser?.id;
-    const openDocId = platformOwned ? '' : projectionDocId;
+    const docId = story.story_vtext_doc_id || '';
+    if (!docId) return;
     launchVText({
       title: story.headline,
-      content: story.vtext_content || storyVTextContent(story),
-      createdFrom: 'universal_wire_story_projection',
+      content: '',
+      createdFrom: 'universal_wire_article',
       sourcePath: `universal-wire/${story.id}.story.vtext`,
-      docId: openDocId,
-      createInitialVersion: !openDocId && !story.owner_id,
-      sourceEntities: storySourceEntities(story),
+      docId,
+      createInitialVersion: false,
       relatedVTexts: storyRelatedVTexts(story),
     });
   }
@@ -249,9 +152,7 @@
       <h2>Universal Wire</h2>
     </div>
     <div class="wire-state" data-universal-wire-state>
-      <span>{ownerLabel}</span>
       <strong>{stories.length.toLocaleString()} article{stories.length === 1 ? '' : 's'}</strong>
-      <small>{dataSource}</small>
     </div>
   </header>
 
@@ -260,12 +161,7 @@
   {/if}
 
   <main class="wire-paper">
-    <section class="wire-edition" data-universal-wire-front-page aria-label="Front page">
-      <div class="edition-head">
-        <span>Front Page</span>
-        <span>awaiting edition VTexts</span>
-      </div>
-
+    <section class="wire-edition" data-universal-wire-front-page aria-label="Universal Wire articles">
       {#if stories.length}
         <div class="article-columns">
           {#each stories as story}
@@ -277,16 +173,17 @@
               on:mouseenter={() => (selectedStoryId = story.id)}
               on:focusin={() => (selectedStoryId = story.id)}
             >
-              <div class="article-tools">
-                <button type="button" aria-label="Open article VText" title="Open article VText" on:click={() => openStoryVText(story)} data-universal-wire-open-vtext>V</button>
-              </div>
-              <p class="article-meta">{story.changeState} · {story.freshness} · {story.tension}</p>
-              <h1>{story.headline}</h1>
+              <p class="article-meta">{story.freshness}</p>
+              <button
+                type="button"
+                class="headline-button"
+                data-universal-wire-open-vtext
+                on:click={() => openStoryVText(story)}
+              >
+                {story.headline}
+              </button>
               <p class="dek">{story.dek}</p>
               <p class="projection" data-universal-wire-story-reader>{story.projections?.['wire-style']}</p>
-              <p class="source-line">
-                {(story.manifest?.lead || []).length} lead · {(story.manifest?.supporting || []).length} supporting · {(story.manifest?.contrary || []).length} qualifying
-              </p>
               <div class="claims" data-universal-wire-claims>
                 {#each (story.claims || []).slice(0, 2) as claim}
                   <p>{claim}</p>
@@ -334,10 +231,8 @@
 
   .kicker,
   .article-meta,
-  .source-line,
   .wire-state span,
-  .wire-state small,
-  .edition-head {
+  .wire-state small {
     color: var(--choir-text-muted);
     font-family: var(--choir-font-ui);
     font-size: 0.78rem;
@@ -383,13 +278,6 @@
     display: block;
   }
 
-  .edition-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 20px;
-  }
-
   .article-columns {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -424,63 +312,37 @@
     padding: 0 0 2px;
   }
 
-  .wire-article[data-selected='true'] h1 {
+  .wire-article[data-selected='true'] .headline-button {
     color: var(--choir-text-accent);
-  }
-
-  .article-tools {
-    position: absolute;
-    top: 0;
-    right: 0;
-    display: flex;
-    gap: 4px;
-    opacity: 0.58;
-  }
-
-  .wire-article:hover .article-tools,
-  .wire-article:focus-within .article-tools {
-    opacity: 1;
-  }
-
-  .article-tools button {
-    min-width: 36px;
-    min-height: 32px;
-    border: 0;
-    border-radius: 999px;
-    background: var(--choir-surface-control);
-    color: var(--choir-text-primary);
-    box-shadow: var(--choir-control-shadow);
-    font: 700 0.82rem/1 var(--choir-font-ui);
-    cursor: pointer;
-  }
-
-  .article-tools button {
-    min-width: 28px;
-    min-height: 28px;
-    border-radius: 50%;
-    background: transparent;
-    box-shadow: none;
-    color: var(--choir-text-muted);
-  }
-
-  .article-tools button:hover,
-  .article-tools button:focus-visible {
-    background: var(--choir-state-selected);
-    color: var(--choir-text-accent);
-    outline: none;
   }
 
   .article-meta {
-    padding-right: 68px;
     margin-bottom: 8px;
     text-transform: uppercase;
   }
 
-  .wire-article h1 {
+  .headline-button {
+    display: block;
+    width: 100%;
+    margin: 0 0 12px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
     font-family: Georgia, 'Times New Roman', ui-serif, serif;
-    font-size: clamp(1.55rem, 2.2vw, 2.05rem);
-    line-height: 1.08;
-    margin-bottom: 12px;
+    font-size: clamp(1.05rem, 1.45vw, 1.28rem);
+    font-variant: small-caps;
+    font-weight: 700;
+    line-height: 1.22;
+    letter-spacing: 0.03em;
+    color: var(--choir-text-primary);
+  }
+
+  .headline-button:hover,
+  .headline-button:focus-visible {
+    color: var(--choir-text-accent);
+    outline: none;
   }
 
   .dek,
@@ -490,6 +352,8 @@
     font-size: 1.05rem;
     line-height: 1.48;
     color: var(--choir-text-primary);
+    text-align: justify;
+    hyphens: auto;
   }
 
   .dek {
@@ -498,11 +362,6 @@
   }
 
   .projection {
-    margin-bottom: 12px;
-  }
-
-  .source-line {
-    color: var(--choir-text-accent);
     margin-bottom: 12px;
   }
 
@@ -520,7 +379,7 @@
     background: var(--choir-surface-document);
   }
 
-  :global(:root[data-theme-id='london-salmon']) .wire-article h1,
+  :global(:root[data-theme-id='london-salmon']) .headline-button,
   :global(:root[data-theme-id='london-salmon']) h2,
   :global(:root[data-theme-id='london-salmon']) .dek,
   :global(:root[data-theme-id='london-salmon']) .projection,
@@ -528,11 +387,11 @@
     font-family: Georgia, 'Times New Roman', ui-serif, serif;
   }
 
-  :global(:root[data-theme-id='carbon-fiber-kintsugi']) .wire-article h1 {
+  :global(:root[data-theme-id='carbon-fiber-kintsugi']) .headline-button {
     color: var(--choir-accent-2);
   }
 
-  :global(:root[data-theme-id='carbon-fiber-kintsugi']) .wire-article[data-selected='true'] h1 {
+  :global(:root[data-theme-id='carbon-fiber-kintsugi']) .wire-article[data-selected='true'] .headline-button {
     color: var(--choir-accent);
   }
 
@@ -566,8 +425,7 @@
       font-size: 1.05rem;
     }
 
-    .article-meta,
-    .edition-head {
+    .article-meta {
       font-size: 0.7rem;
     }
 
@@ -577,9 +435,9 @@
       row-gap: 30px;
     }
 
-    .wire-article h1 {
-      font-size: 1.45rem;
-      line-height: 1.1;
+    .headline-button {
+      font-size: 1.08rem;
+      line-height: 1.18;
     }
   }
 </style>

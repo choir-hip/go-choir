@@ -51,6 +51,17 @@ export const previewComputeStatus = {
     runtime_health: 'public-preview',
     running_runs: 0,
   },
+  persistent_disk: {
+    source: 'public-preview',
+    used_bytes: 2 * 1024 * 1024 * 1024,
+    total_bytes: 8 * 1024 * 1024 * 1024,
+    avail_bytes: 6 * 1024 * 1024 * 1024,
+    cap_bytes: 8 * 1024 * 1024 * 1024,
+    used_percent: 25,
+    warning: false,
+    critical: false,
+    default_cap_bytes: 8 * 1024 * 1024 * 1024,
+  },
   capabilities: {
     wake_current_computer: false,
   },

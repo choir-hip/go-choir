@@ -215,6 +215,7 @@
           internalDirs = [
             "internal/buildinfo"
             "internal/markdownstructure"
+            "internal/persistentdisk"
             "internal/platform"
             "internal/proxy"
             "internal/server"
@@ -264,6 +265,7 @@
             "internal/gateway"
             "internal/markdownstructure"
             "internal/modelcatalog"
+            "internal/persistentdisk"
             "internal/provider"
             "internal/runtime"
             "internal/sandbox"
@@ -323,6 +325,7 @@
             "internal/gatewayruntime"
             "internal/markdownstructure"
             "internal/modelcatalog"
+            "internal/persistentdisk"
             "internal/runtime"
             "internal/sandbox"
             "internal/server"

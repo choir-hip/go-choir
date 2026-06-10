@@ -2575,7 +2575,24 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 	})
 	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":           "ready",
+			"service":          "sandbox",
+			"runtime_health":   "ready",
+			"running_runs":     0,
+			"researcher_count": 1,
+			"persistent_disk": map[string]interface{}{
+				"source":            "guest",
+				"used_bytes":          2 * 1024 * 1024 * 1024,
+				"total_bytes":         8 * 1024 * 1024 * 1024,
+				"avail_bytes":         6 * 1024 * 1024 * 1024,
+				"cap_bytes":           8 * 1024 * 1024 * 1024,
+				"used_percent":        25,
+				"warning":             false,
+				"critical":            false,
+				"default_cap_bytes":   8 * 1024 * 1024 * 1024,
+			},
+		})
 	})
 
 	sandboxServer := httptest.NewServer(sandboxMux)
@@ -3111,6 +3128,37 @@ func TestComputeStatusListsOnlyUserComputers(t *testing.T) {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("compute status leaked %q in %s", forbidden, body)
 		}
+	}
+}
+
+func TestComputeStatusReportsPersistentDiskFromRuntimeHealth(t *testing.T) {
+	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
+	client := vmctl.NewClient(vmctlSrv.URL)
+	if _, err := client.ResolveDesktop("compute-disk-user", vmctl.PrimaryDesktopID); err != nil {
+		t.Fatalf("resolve desktop: %v", err)
+	}
+	token := issueTestAccessJWT(priv, "compute-disk-user")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/compute/status", nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	w := httptest.NewRecorder()
+	handler.HandleAPI(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("compute status = %d, want 200 body=%s", w.Code, w.Body.String())
+	}
+
+	var result computeStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode compute status: %v", err)
+	}
+	if result.PersistentDisk == nil {
+		t.Fatalf("expected persistent_disk in compute status: %+v", result)
+	}
+	if result.PersistentDisk.Source != "guest" {
+		t.Fatalf("persistent_disk.source = %q, want guest", result.PersistentDisk.Source)
+	}
+	if result.PersistentDisk.CapBytes != 8*1024*1024*1024 {
+		t.Fatalf("cap_bytes = %d, want 8GiB", result.PersistentDisk.CapBytes)
 	}
 }
 

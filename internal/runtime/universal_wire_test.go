@@ -344,3 +344,56 @@ func TestHandleUniversalWireStoriesRequiresAuth(t *testing.T) {
 		t.Fatalf("unauth story status = %d body=%s", w.Code, w.Body.String())
 	}
 }
+
+func TestResolveUniversalWireVTextReadOwnerAllowsEditionTranscludedPlatformDoc(t *testing.T) {
+	_, handler := testAPISetup(t)
+	doc := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-wire-read-through")
+	seedUniversalWireEditionFixture(t, handler, doc.DocID)
+
+	ctx := context.Background()
+	owner, err := handler.resolveUniversalWireVTextReadOwner(ctx, "user-universal-wire", doc.DocID)
+	if err != nil {
+		t.Fatalf("resolveUniversalWireVTextReadOwner: %v", err)
+	}
+	if owner != "universal-wire-platform" {
+		t.Fatalf("owner = %q, want universal-wire-platform", owner)
+	}
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/vtext/documents/"+doc.DocID, "", "user-universal-wire")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET platform wire document status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestNormalizeWireArticleSourceServiceProseRewritesBareLabels(t *testing.T) {
+	itemID := "srcitem_el_nino"
+	entityID := stableSourceEntityID("source_service_item", itemID)
+	content := "Forecasters warned Source Service item " + itemID + " that El Niño odds rose."
+	meta, _ := json.Marshal(map[string]any{
+		"source_entities": []map[string]any{{
+			"entity_id": entityID,
+			"kind":      "source_service_item",
+			"label":     "WMO El Niño bulletin",
+			"target":    map[string]any{"target_kind": "source_service_item", "item_id": itemID},
+		}},
+	})
+	rec := &types.RunRecord{
+		OwnerID: "universal-wire-platform",
+		Metadata: map[string]any{
+			"request_intent":              "integrate_worker_findings",
+			"type":                        "vtext_agent_revision",
+			"ingestion_handoff_cycle_id":  "cycle-el-nino",
+		},
+	}
+	normalized, count, entities := normalizeWireArticleSourceServiceProse(content, meta, rec)
+	if count != 1 {
+		t.Fatalf("normalized count = %d, want 1", count)
+	}
+	want := "[WMO El Niño bulletin](source:" + entityID + ")"
+	if !strings.Contains(normalized, want) {
+		t.Fatalf("normalized content = %q, want %q", normalized, want)
+	}
+	if len(entities) != 1 || entities[0].EntityID != entityID {
+		t.Fatalf("entities = %#v, want preserved entity %s", entities, entityID)
+	}
+}

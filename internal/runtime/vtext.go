@@ -883,12 +883,22 @@ func (h *APIHandler) handleVTextGetDocument(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
+	readOwnerID, err := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, docID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+			return
+		}
+		log.Printf("vtext api: resolve document owner %s: %v", docID, err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load document"})
+		return
+	}
+	doc, err := h.rt.Store().GetDocument(r.Context(), docID, readOwnerID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
+	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, readOwnerID)
 	if err != nil {
 		log.Printf("vtext api: get pending mutation for document: %v", err)
 	}
@@ -1285,7 +1295,17 @@ func (h *APIHandler) handleVTextListRevisions(w http.ResponseWriter, r *http.Req
 	if limit > 10000 {
 		limit = 10000
 	}
-	revs, err := h.rt.Store().ListRevisionsByDoc(r.Context(), docID, ownerID, limit)
+	readOwnerID, err := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, docID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+			return
+		}
+		log.Printf("vtext api: resolve revision list owner %s: %v", docID, err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list revisions"})
+		return
+	}
+	revs, err := h.rt.Store().ListRevisionsByDoc(r.Context(), docID, readOwnerID, limit)
 	if err != nil {
 		log.Printf("vtext api: list revisions: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list revisions"})
@@ -1294,6 +1314,9 @@ func (h *APIHandler) handleVTextListRevisions(w http.ResponseWriter, r *http.Req
 
 	resp := vtextListRevisionsResponse{Revisions: make([]vtextRevisionResponse, 0, len(revs))}
 	for _, rev := range revs {
+		if readOwnerID != ownerID {
+			rev = normalizeWireArticleRevisionForRead(rev)
+		}
 		resp.Revisions = append(resp.Revisions, revisionResponseFromRecord(rev))
 	}
 
@@ -1323,10 +1346,24 @@ func (h *APIHandler) HandleVTextRevision(w http.ResponseWriter, r *http.Request)
 
 	rev, err := h.rt.Store().GetRevision(r.Context(), revisionID, ownerID)
 	if err != nil {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
-		return
+		if errors.Is(err, store.ErrNotFound) {
+			if unscoped, unscopedErr := h.rt.Store().GetRevisionUnscoped(r.Context(), revisionID); unscopedErr == nil {
+				readOwnerID, resolveErr := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, unscoped.DocID)
+				if resolveErr == nil && readOwnerID == unscoped.OwnerID {
+					rev = unscoped
+					err = nil
+				}
+			}
+		}
+		if err != nil {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
+			return
+		}
 	}
 
+	if readOwnerID, resolveErr := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, rev.DocID); resolveErr == nil && readOwnerID != ownerID {
+		rev = normalizeWireArticleRevisionForRead(rev)
+	}
 	writeAPIJSON(w, http.StatusOK, revisionResponseFromRecord(rev))
 }
 
@@ -1352,7 +1389,17 @@ func (h *APIHandler) HandleVTextHistory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	entries, err := h.rt.Store().GetHistory(r.Context(), docID, ownerID, 50)
+	readOwnerID, err := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, docID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+			return
+		}
+		log.Printf("vtext api: resolve history owner %s: %v", docID, err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get history"})
+		return
+	}
+	entries, err := h.rt.Store().GetHistory(r.Context(), docID, readOwnerID, 50)
 	if err != nil {
 		log.Printf("vtext api: get history: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get history"})
@@ -1386,7 +1433,17 @@ func (h *APIHandler) HandleVTextDocumentStream(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
+	readOwnerID, err := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, docID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+			return
+		}
+		log.Printf("vtext api: resolve stream owner %s: %v", docID, err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to open document stream"})
+		return
+	}
+	doc, err := h.rt.Store().GetDocument(r.Context(), docID, readOwnerID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
@@ -1400,7 +1457,7 @@ func (h *APIHandler) HandleVTextDocumentStream(w http.ResponseWriter, r *http.Re
 		flusher.Flush()
 	}
 
-	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
+	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, readOwnerID)
 	if err != nil {
 		log.Printf("vtext api: get pending mutation for stream: %v", err)
 	}
