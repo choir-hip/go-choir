@@ -11,7 +11,7 @@ func TestWriteUniversalWirePlatformRuntimeEnv(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "platform-wire-runtime.env")
 	env := UniversalWirePlatformRuntimeEnv{
-		RuntimeBaseURL: "http://10.200.3.2:8085",
+		RuntimeBaseURL: "http://127.0.0.1:8085",
 		OwnerID:        UniversalWirePlatformOwnerID,
 	}
 	if err := WriteUniversalWirePlatformRuntimeEnv(path, env); err != nil {
@@ -23,7 +23,7 @@ func TestWriteUniversalWirePlatformRuntimeEnv(t *testing.T) {
 	}
 	content := string(raw)
 	for _, want := range []string{
-		"SOURCE_SERVICE_RUNTIME_BASE_URL=http://10.200.3.2:8085",
+		"SOURCE_SERVICE_RUNTIME_BASE_URL=http://127.0.0.1:8085",
 		"SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform",
 	} {
 		if !strings.Contains(content, want) {
@@ -52,7 +52,7 @@ func TestWarmnessClassProtectedIncludesPublicPlatform(t *testing.T) {
 func TestEnsureUniversalWirePlatformComputerBootsStableVM(t *testing.T) {
 	mgr := &mockVMManager{
 		bootResponse: &VMInstanceInfo{
-			HostURL: "http://10.200.9.2:8085",
+			HostURL: "http://127.0.0.1:8085",
 			Epoch:   3,
 			Healthy: true,
 			State:   "running",
@@ -65,7 +65,7 @@ func TestEnsureUniversalWirePlatformComputerBootsStableVM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureUniversalWirePlatformComputer: %v", err)
 	}
-	if env.RuntimeBaseURL != "http://10.200.9.2:8085" {
+	if env.RuntimeBaseURL != "http://127.0.0.1:8085" {
 		t.Fatalf("RuntimeBaseURL = %q", env.RuntimeBaseURL)
 	}
 	if len(mgr.boots) != 1 {

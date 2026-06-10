@@ -25,6 +25,7 @@ type UniversalWirePlatformRuntimeEnv struct {
 
 // WriteUniversalWirePlatformRuntimeEnv atomically writes sourcecycled dispatch
 // binding for the platform computer sandbox URL.
+
 func WriteUniversalWirePlatformRuntimeEnv(path string, env UniversalWirePlatformRuntimeEnv) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -236,7 +237,9 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 		return nil, fmt.Errorf("boot platform computer %s: %w", vmID, err)
 	}
 	r.mu.Lock()
-	own.SandboxURL = info.HostURL
+	// Platform computer sandbox is always on the same host as sourcecycled.
+	// BootVM returns a TAP network IP; override to localhost.
+	own.SandboxURL = fmt.Sprintf("http://127.0.0.1:%d", 8085)
 	own.Epoch = info.Epoch
 	waiters := r.pendingWaiters[key]
 	delete(r.pendingWaiters, key)
@@ -247,6 +250,6 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 		ch <- own
 	}
 	r.ensureExistingGatewayCredential(vmID)
-	log.Printf("vmctl: booted platform computer %s at %s (epoch=%d)", vmID, info.HostURL, info.Epoch)
+	log.Printf("vmctl: booted platform computer %s at %s (epoch=%d)", vmID, own.SandboxURL, info.Epoch)
 	return own, nil
 }
