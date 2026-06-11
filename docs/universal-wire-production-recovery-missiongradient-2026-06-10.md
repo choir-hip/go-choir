@@ -451,6 +451,19 @@ evidence artifact refs:
 
 rollback refs: latest host/runtime deploys are on `main`; platform guest can be stop/resume refreshed cleanly; no manual state seeding or fake article insertion was used.
 
+
+## Post-Mission Refactor Notes
+
+These notes are intentionally outside the current proof branch but should guide the next design/doc revision cycle:
+
+- remove parent/child as the primary causality/control abstraction; use coagent trajectory + artifact/channel scoped liveness instead;
+- VText should not route to co-super or vsuper;
+- VText should only route to super for real coding/execution/privileged work, not vague continuation/orchestration;
+- supers will use nucleus sandboxes for ephemeral execution;
+- rename sandbox -> autoputer for persistent computers;
+- rename platformd -> corpusd for durable publication service;
+- evolve MissionGradient so conjecture ledgers are first-class rather than manually appended.
+
 ## Forbidden Shortcuts
 
 - Do not seed platformd docs/revisions manually and call that production.

@@ -233,3 +233,96 @@ This means the current orchestration model is using the wrong liveness boundary.
 ### Consequence
 
 The next architecture/protocol change should not be another transport patch. It should change the admission / liveness invariant from `root processor run is done` to something closer to `publication trajectory for this channel/candidate is settled`.
+
+
+## Planned Refactor Program — 2026-06-11 discussion checkpoint
+
+These are not part of the just-completed semantic-frontier proof branch. They are forward-looking architectural notes captured from discussion so tomorrow's design/doc revision starts from explicit intent rather than chat residue.
+
+### 1. Remove parent/child as the primary causality/control abstraction
+
+Current diagnosis:
+- parent/child is still used as a control invariant in places where the real work is a shared coagent trajectory over a document/channel/publication object.
+- this leaks badly in Universal Wire, where a root processor can complete while work continues through VText/super-owned continuations on the same channel.
+
+Planned direction:
+- treat parent/child, if retained temporarily, as **provenance/debugging only**;
+- stop using parent completion as a publication-progress or admission invariant;
+- move liveness/accounting toward channel / trajectory / candidate / artifact scoped coordination;
+- redesign causality around explicit coagent coordination and durable artifact lineage rather than rooted trees.
+
+### 2. VText should not route to co-super or vsuper
+
+Current diagnosis:
+- VText currently has too much latitude to request general continuation/orchestration through super pathways.
+- regular research/article publication should remain VText-centered, with researcher evidence support when needed.
+
+Planned direction:
+- VText may call researcher for factual/current evidence work.
+- VText may call **super only when actual coding / execution / privileged system work is required**.
+- VText should not route to co-super or vsuper.
+- remove fuzzy "general continuation/orchestration" language; continuation of what, orchestration of what, must be explicit and artifact-scoped.
+
+### 3. Introduce nucleus sandboxes for ephemeral execution
+
+Planned direction:
+- supers will use nucleus sandboxes for ephemeral execution work.
+- separate ephemeral execution environments from persistent user/platform computers.
+- keep persistent-computer semantics for long-lived product state; use nucleus for throwaway execution/probing.
+
+### 4. Rename `sandbox` to `autoputer`
+
+Reason:
+- what the product currently calls sandboxes are actually persistent computers, so `sandbox` is a misleading ontology.
+- `autoputer` (automatic computer) is closer to the object we really mean.
+
+Planned effect:
+- rename product/runtime terminology from sandbox -> autoputer in docs, architecture, and later implementation.
+- this should be done carefully to avoid conflating ephemeral nucleus sandboxes with persistent autoputers.
+
+### 5. Rename `platformd` to `corpusd`
+
+Reason:
+- `platformd` is too easily confused with platform computers / platform VM ownership.
+- `corpusd` makes the durable publication/corpus role explicit and distinct.
+
+Planned effect:
+- rename service/docs/API references from platformd -> corpusd.
+- keep the semantic distinction clear: corpusd is durable publication state, not the platform computer itself.
+
+### 6. Upgrade MissionGradient around conjectures
+
+Current diagnosis:
+- this mission only partially reflected the real conjecture workflow until a conjecture ledger was added manually.
+- the useful control object was not a flat checklist but a conjecture program with falsifiers and branch outcomes.
+
+Planned direction:
+- upgrade MissionGradient so conjectures are first-class:
+  - conjecture ledger,
+  - current strongest evidence,
+  - next falsifier,
+  - branch outcomes,
+  - explicit outside-the-envelope blind spots.
+- move forward with conjecture learning as the central control model.
+
+### 7. Realest decoupled news pipeline remains the architectural north star
+
+Planned direction:
+```text
+source fetch
+-> normalized source facts / source items
+-> processor evidence pass
+-> durable candidate story ledger on platform computer
+-> coverage / dedup against published corpus only
+-> publication-candidate selection
+-> VText article spawn or revision
+-> autonomous publish to corpusd
+-> durable Wire edition update
+-> public stories list / headline open
+```
+
+Constraint:
+- no second article truth.
+- candidate ledger is pre-article planning state only.
+- VText remains article truth.
+- corpusd remains durable public publication truth.
