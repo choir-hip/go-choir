@@ -873,7 +873,7 @@ func (s *Storage) ListSubmittedProcessorRequests(ctx context.Context, limit int)
 		limit = 100
 	}
 	rows, err := s.DB.QueryContext(ctx,
-		`SELECT request_id, cycle_id, processor_key, prompt, continuity_ref, source_count, source_types_json, source_item_ids_json, verticals_json, regions_json, ingestion_event_ids_json, status, runtime_run_id, created_at, updated_at
+		`SELECT request_id, cycle_id, processor_key, prompt, continuity_ref, source_count, source_types_json, source_item_ids, verticals_json, regions_json, ingestion_event_ids_json, status, runtime_run_id, created_at, updated_at
 		 FROM processor_requests WHERE status = 'submitted' ORDER BY updated_at ASC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
