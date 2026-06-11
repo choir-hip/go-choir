@@ -249,15 +249,16 @@ type channelMessageListResponse struct {
 // (VAL-RUNTIME-001). The active provider name is included so operators
 // can distinguish real-provider paths from stub/canned paths.
 type runtimeHealthResponse struct {
-	Status          string                   `json:"status"`
-	Service         string                   `json:"service"`
-	SandboxID       string                   `json:"sandbox_id"`
-	RuntimeHealth   types.RuntimeHealthState `json:"runtime_health"`
-	RunningRuns     int                      `json:"running_runs"`
-	ResearcherCount int                      `json:"researcher_count"`
-	ActiveProvider  string                   `json:"active_provider"`
-	PersistentDisk  *persistentdisk.Status   `json:"persistent_disk,omitempty"`
-	Build           buildinfo.Info           `json:"build"`
+	Status               string                   `json:"status"`
+	Service              string                   `json:"service"`
+	SandboxID            string                   `json:"sandbox_id"`
+	RuntimeHealth        types.RuntimeHealthState `json:"runtime_health"`
+	RunningRuns          int                      `json:"running_runs"`
+	RunningProcessorRuns int                      `json:"running_processor_runs"`
+	ResearcherCount      int                      `json:"researcher_count"`
+	ActiveProvider       string                   `json:"active_provider"`
+	PersistentDisk       *persistentdisk.Status   `json:"persistent_disk,omitempty"`
+	Build                buildinfo.Info           `json:"build"`
 }
 
 // runtimeTopologyResponse is the JSON structure returned by GET /api/agent/topology.
@@ -265,12 +266,13 @@ type runtimeHealthResponse struct {
 // can see how many researchers the microVM expects and what the current runtime
 // fan-out looks like.
 type runtimeTopologyResponse struct {
-	SandboxID       string `json:"sandbox_id"`
-	ResearcherCount int    `json:"researcher_count"`
-	RunningRuns     int    `json:"running_runs"`
-	ChannelCount    int    `json:"channel_count"`
-	RuntimeHealth   string `json:"runtime_health"`
-	ActiveProvider  string `json:"active_provider"`
+	SandboxID            string `json:"sandbox_id"`
+	ResearcherCount      int    `json:"researcher_count"`
+	RunningRuns          int    `json:"running_runs"`
+	RunningProcessorRuns int    `json:"running_processor_runs"`
+	ChannelCount         int    `json:"channel_count"`
+	RuntimeHealth        string `json:"runtime_health"`
+	ActiveProvider       string `json:"active_provider"`
 }
 
 // APIHandler provides HTTP handlers for the runtime API endpoints.
