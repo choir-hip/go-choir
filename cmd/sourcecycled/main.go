@@ -39,12 +39,13 @@ type runtimeRunSubmitRequest struct {
 }
 
 type runtimeRunStatusResponse struct {
-	RunID        string `json:"loop_id"`
-	AgentID      string `json:"agent_id"`
-	ChannelID    string `json:"channel_id,omitempty"`
-	AgentProfile string `json:"agent_profile,omitempty"`
-	AgentRole    string `json:"agent_role,omitempty"`
-	State        string `json:"state,omitempty"`
+	RunID           string `json:"loop_id"`
+	AgentID         string `json:"agent_id"`
+	ChannelID       string `json:"channel_id,omitempty"`
+	AgentProfile    string `json:"agent_profile,omitempty"`
+	AgentRole       string `json:"agent_role,omitempty"`
+	State           string `json:"state,omitempty"`
+	ActiveChildRuns int    `json:"active_child_runs,omitempty"`
 }
 
 type ingestionRuntimeDispatcher struct {
@@ -586,7 +587,7 @@ func (d *ingestionRuntimeDispatcher) reconcileSubmittedProcessorRequests(ctx con
 			}
 			continue
 		}
-		if !isTerminalRuntimeState(run.State) {
+		if !isTerminalRuntimeState(run.State) || run.ActiveChildRuns > 0 {
 			continue
 		}
 		status := "completed"

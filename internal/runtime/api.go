@@ -192,22 +192,23 @@ type runSubmitResponse struct {
 // It returns the full run record correlated to the submitted handle
 // (VAL-RUNTIME-004).
 type runStatusResponse struct {
-	AgentID      string         `json:"agent_id"`
-	RunID        string         `json:"loop_id"`
-	ChannelID    string         `json:"channel_id,omitempty"`
-	ParentRunID  string         `json:"parent_loop_id,omitempty"`
-	AgentProfile string         `json:"agent_profile,omitempty"`
-	AgentRole    string         `json:"agent_role,omitempty"`
-	OwnerID      string         `json:"owner_id"`
-	SandboxID    string         `json:"sandbox_id"`
-	State        types.RunState `json:"state"`
-	Prompt       string         `json:"prompt"`
-	Result       string         `json:"result,omitempty"`
-	Error        string         `json:"error,omitempty"`
-	CreatedAt    string         `json:"created_at"`
-	UpdatedAt    string         `json:"updated_at"`
-	FinishedAt   *string        `json:"finished_at,omitempty"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
+	AgentID         string         `json:"agent_id"`
+	RunID           string         `json:"loop_id"`
+	ChannelID       string         `json:"channel_id,omitempty"`
+	ParentRunID     string         `json:"parent_loop_id,omitempty"`
+	AgentProfile    string         `json:"agent_profile,omitempty"`
+	AgentRole       string         `json:"agent_role,omitempty"`
+	OwnerID         string         `json:"owner_id"`
+	SandboxID       string         `json:"sandbox_id"`
+	State           types.RunState `json:"state"`
+	Prompt          string         `json:"prompt"`
+	Result          string         `json:"result,omitempty"`
+	Error           string         `json:"error,omitempty"`
+	CreatedAt       string         `json:"created_at"`
+	UpdatedAt       string         `json:"updated_at"`
+	FinishedAt      *string        `json:"finished_at,omitempty"`
+	ActiveChildRuns int            `json:"active_child_runs,omitempty"`
+	Metadata        map[string]any `json:"metadata,omitempty"`
 }
 
 // runListResponse is the JSON response for GET /api/agent/loops.
@@ -349,8 +350,9 @@ func runStatusFromRecord(rec *types.RunRecord) runStatusResponse {
 		Error:        rec.Error,
 		CreatedAt:    rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 		UpdatedAt:    rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-		FinishedAt:   finishedAt,
-		Metadata:     rec.Metadata,
+		FinishedAt:      finishedAt,
+		ActiveChildRuns: 0,
+		Metadata:        rec.Metadata,
 	}
 }
 
@@ -1252,8 +1254,9 @@ func (h *APIHandler) HandleRunStatus(w http.ResponseWriter, r *http.Request) {
 		Error:        rec.Error,
 		CreatedAt:    rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 		UpdatedAt:    rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-		FinishedAt:   finishedAt,
-		Metadata:     rec.Metadata,
+		FinishedAt:      finishedAt,
+		ActiveChildRuns: 0,
+		Metadata:        rec.Metadata,
 	})
 }
 
