@@ -16,6 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 // Runtime is the core runtime engine that manages run lifecycle, event
@@ -352,6 +353,26 @@ func (rt *Runtime) StartRun(ctx context.Context, prompt, ownerID string) (*types
 // StartRunWithMetadata creates a new run with the given metadata, persists it,
 // emits a submitted event, and begins execution in a goroutine. Metadata is
 // used to carry feature-specific context (e.g., vtext agent revision info).
+func shouldLogWireLifecycle(rec *types.RunRecord) bool {
+	if rec == nil {
+		return false
+	}
+	profile := canonicalAgentProfile(agentProfileForRun(rec))
+	if profile == AgentProfileProcessor || profile == AgentProfileVText || profile == AgentProfileResearcher || profile == AgentProfileCoSuper {
+		if metadataStringValue(rec.Metadata, runMetadataProcessorKey) != "" || strings.TrimSpace(rec.OwnerID) == vmctl.UniversalWirePlatformOwnerID {
+			return true
+		}
+	}
+	return false
+}
+
+func wireLifecycleSummary(rec *types.RunRecord) string {
+	if rec == nil {
+		return ""
+	}
+	return fmt.Sprintf("run=%s profile=%s parent=%s channel=%s processor_key=%s state=%s", rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), strings.TrimSpace(rec.ParentRunID), strings.TrimSpace(rec.ChannelID), metadataStringValue(rec.Metadata, runMetadataProcessorKey), rec.State)
+}
+
 func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID string, metadata map[string]any) (*types.RunRecord, error) {
 	rec, err := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
 	if err != nil {
@@ -390,6 +411,9 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 
 	if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt)); err != nil {
 		return nil, err
+	}
+	if shouldLogWireLifecycle(rec) {
+		log.Printf("runtime: submitted %s", wireLifecycleSummary(rec))
 	}
 	return rec, nil
 }
@@ -576,6 +600,9 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		"parent_id":     parentID,
 	})
 	rt.emitEvent(ctx, rec, types.EventRunSubmitted, events.CauseTaskLifecycle, objectiveLenPayload)
+	if shouldLogWireLifecycle(rec) || shouldLogWireLifecycle(&parentRec) {
+		log.Printf("runtime: started child %s from parent=%s parent_profile=%s", wireLifecycleSummary(rec), parentRec.RunID, canonicalAgentProfile(agentProfileForRun(&parentRec)))
+	}
 
 	// Begin execution in a goroutine. Use a copy of the record to avoid
 	// racing with the caller (the returned rec must retain RunPending).
@@ -1151,6 +1178,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if err := rt.store.UpdateRun(persistCtx, *rec); err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
+	}
+	if shouldLogWireLifecycle(rec) {
+		preview := rec.Result
+		if len(preview) > 160 { preview = preview[:160] }
+		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
 	}
 	rt.reconcileCompletedVTextRun(rec)
 	resultLenPayload, _ := json.Marshal(map[string]any{
