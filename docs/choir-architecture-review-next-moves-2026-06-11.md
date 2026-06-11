@@ -46,6 +46,8 @@ incident.
 
 A RunContinuation is a durable record meaning: *"run X finished or blocked;
 the next bounded objective is Y; run it as profile P with lease L."*
+(Historical description of the continuation record; "lease" is retired in
+v1 vocabulary — see the durable-actors doc's lease deferral.)
 (`internal/runtime/continuation.go`, `run_continuations` table,
 `internal/store/continuations.go`.)
 
@@ -85,7 +87,9 @@ retries (api_compaction_eval.go:369-401).
 | **Trace UI / API** | continuation events render as moments (api_trace.go:1421-1430) | low |
 
 The valuable ideas inside it: deterministic next-goal selection, compaction
-before handoff, fingerprint dedup, bounded authority, lease clamps. None of
+before handoff, fingerprint dedup, bounded authority. (Lease clamps are NOT
+salvaged — v1 uses step/token budgets and activation caps; see the
+durable-actors doc.) None of
 these require the run-tree shape — but the record is keyed by `SourceRunID`
 and starts its successor via `StartChildRun`, so **the good machinery is
 welded to the bad ontology.**
@@ -219,8 +223,8 @@ first real cycle). This is the object the conjecture program calls
 
 ### 3.2 TrajectoryWorkItem replaces RunContinuation
 
-Same machinery, re-keyed: objective, reason, bounded authority profile, lease,
-fingerprint dedup, compaction checkpoint, status
+Same machinery, re-keyed: objective, reason, bounded authority profile,
+step/token budgets (no lease vocabulary in v1), fingerprint dedup, compaction checkpoint, status
 (selected/started/blocked/done) — but `source` is the **trajectory** (with a
 provenance ref to the proposing run/agent), not a run-tree edge, and starting
 one does not require the proposer to be terminal. Three immediate wins:
@@ -283,7 +287,7 @@ re-derive invariants from structure.
    double-bookkeeping window instead of institutionalizing it.
 4. **The replacement is mostly relocation, not invention.** `trajectory_id`
    is threaded everywhere except `runs`; the continuation machinery's good
-   parts (compaction, fingerprints, bounded authority, leases) port unchanged;
+   parts (compaction, fingerprints, bounded authority) port unchanged;
    Wire eligibility already uses metadata lineage, not run state.
 
 **Named hyperthesis edges of the aggressive path** (kept, not hidden):

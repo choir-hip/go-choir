@@ -43,8 +43,8 @@ pair: together they retire the leaked invariant on real production traffic.
 
 **Real artifact:** durable trajectory records (kind, subject refs, status,
 settlement rule as data) + `trajectory_id` on runs + work items (the ported
-continuation mechanics: objective, bounded authority, lease clamps,
-fingerprint dedup), in the runtime store. Additive; no control-flow change.
+continuation mechanics: objective, bounded authority profile, step/token
+budgets, fingerprint dedup — no lease vocabulary in v1), in the runtime store. Additive; no control-flow change.
 
 **Driving conjecture (N2′):** one durable object — trajectory + work items —
 replaces every parent/child control use with no loss of budget, cancellation,

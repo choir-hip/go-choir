@@ -182,7 +182,7 @@ old trajectories may be re-warmed": rewarming is just activation with old
 memory.
 
 **No completion.** Actors don't complete. An *activation* ends (one bounded
-residency under a lease). A *work item* completes (an assigned objective).
+residency, evictable). A *work item* completes (an assigned objective).
 A *trajectory* settles (its artifact reached its settlement rule). The agent
 remains, passivated, re-warmable. `recoverInterruptedRuns` → on boot, no
 actors are resident; they reactivate lazily on first message (or eagerly for
@@ -349,7 +349,7 @@ Event-driven reaction instead of Go-coded planning:
   a supervisor actor whose *job* (prompted, not hardcoded) is deciding what
   deserves attention. The hardcoded mission-doc fallback dies.
 - **Work assignment:** spawning or tasking an actor creates a durable work
-  item on a trajectory (objective, bounded authority, lease, fingerprint).
+  item on a trajectory (objective, bounded authority, budgets, fingerprint).
   This is the continuation record's good half, re-keyed off the run tree.
 
 Named risk (taken deliberately): until event wiring is complete the system
@@ -407,7 +407,8 @@ substrate it can actually work on.
   AGENTS.md) and the Trace UI; these must be re-pointed at work items in the
   same cutover or verifier discipline silently weakens.
 - **Scope:** the synthesis/decision layer. Compaction, fingerprints, bounded
-  profiles, leases are retained under the actor model.
+  profiles are retained under the actor model (lease clamps are not — v1
+  has no lease concept; budgets and activation caps bound work).
 
 ### R4 — One message primitive, doubling as the wake primitive
 
@@ -472,7 +473,7 @@ This program is also the §15 ConjectureRecord proof mission (review v2, N5).
    `internal/actor` or similar.
 2. **Trajectory model.** Trajectory record + settlement rules as data +
    `trajectory_id` on runs/activations + work items (port of continuation record
-   mechanics: objective, bounded profile, lease, fingerprint).
+   mechanics: objective, bounded profile, budgets, fingerprint).
 3. **Messaging cutover.** send() as the single path; `update_coagent` rename +
    promotion; delete inbox polling, wait_agent, notifyParent,
    cast_agent_update; spawned-worker results become update_coagent calls.
