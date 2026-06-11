@@ -1,7 +1,7 @@
 ---
 name: mission-gradient
-description: Compile ambitious long-running Codex /goal work into an invariant-preserving optimization landscape instead of a procedural checklist. Use when preparing overnight or multi-hour coding/research/ops missions, especially when the user wants "homotopy not ladder", mission-gradient control, agentic root-cause investigation, cognitive search-space reframing before stopping, belief-state tracking, quality-sensitive work, dense verification, anti-Goodhart constraints, rollback policy, staging/deployed proof, or self-development through production-like pathways.
-version: 1.3.0
+description: Compile ambitious long-running Codex /goal work into an invariant-preserving optimization landscape instead of a procedural checklist. Use when preparing overnight or multi-hour coding/research/ops missions, especially when the user wants "homotopy not ladder", mission-gradient control, conjecture-led supervision, hyperthesis-edge tracking, agentic root-cause investigation, cognitive search-space reframing before stopping, belief-state tracking, quality-sensitive work, dense verification, anti-Goodhart constraints, rollback policy, staging/deployed proof, or self-development through production-like pathways.
+version: 2.0.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -14,7 +14,9 @@ metadata:
 
 Use MissionGradient to convert a long-running agent mission into a navigable optimization landscape.
 
-The output is not a normal plan. It is a goal geometry: real artifact, invariants, value criterion, quality gradient, homotopy parameters, belief state, receding-horizon control, dense feedback, evidence ledger, mission report, anti-Goodhart constraints, rollback policy, learning side-channel, escalation rules, and stopping condition.
+The output is not a normal plan. It is a goal geometry: real artifact, invariants, value criterion, quality gradient, homotopy parameters, conjecture ledger (the typed belief state), receding-horizon control, dense feedback, evidence ledger, mission report, anti-Goodhart constraints, rollback policy, learning side-channel, escalation rules, and stopping condition.
+
+Since v2.0.0 the supervisory object is the **conjecture trajectory**: what the mission currently believes, how it would know, what its tests cannot see, and what it may claim afterward. Theory: `docs/conjecture-learning-proof-theory-2026-06-11.md` and `docs/handoff-conjecture-learning-fixed-point-2026-06-10.md`. The compact frame: an observer is a proof system; its hyperthesis is its incompleteness; a claim's authority is the reach of its evidence — including this one.
 
 ## Execution Kernel
 
@@ -23,7 +25,9 @@ MissionGradient exists to keep long-running agents oriented.
 Use it to:
 
 - preserve the real artifact topology;
-- maintain an explicit belief state;
+- maintain an explicit belief state as a conjecture ledger;
+- name every load-bearing claim's hyperthesis edge (what the current
+  observer cannot see) and scope (the domain the evidence actually covers);
 - act by short receding-horizon control intervals;
 - investigate blockers to root cause before treating them as stopping conditions;
 - transform the cognitive search space when the current route stalls;
@@ -41,6 +45,10 @@ Do not:
 - optimize a checklist instead of the artifact;
 - treat code existence as behavioral proof;
 - hide uncertainty;
+- assert past the reach of the evidence (selling existential evidence —
+  "tests pass", "one run worked" — as a universal claim);
+- let a worker verify its own work: agent output is a candidate proof,
+  never a theorem, until an independent checker accepts it;
 - turn an actionable blocker into a final answer while authorized probes remain;
 - write a next mission instead of executing the next safe probe when it is inside the current authority boundary;
 - keep working after the mission identity has changed;
@@ -242,21 +250,79 @@ After the first working version, perform one quality pass:
 
 Do not polish cosmetics before behavioral correctness. Do not stop at behavioral correctness when the mission asked for a durable artifact.
 
-## Belief State
+## Conjecture Ledger (The Typed Belief State)
 
-Maintain a lightweight belief state during the run.
+Maintain the belief state as a ledger of conjectures, not prose. Every
+load-bearing belief becomes a conjecture:
 
-Track:
+```text
+CONJECTURE = (CLAIM, TEST, HYPERTHESIS_EDGE, DELTA_O, SCOPE)
 
-- believed current artifact state;
-- evidence for that belief;
-- main uncertainties;
-- highest-impact uncertainty;
-- next observation that would reduce uncertainty.
+CLAIM             what might be true
+TEST              how the current observer would know
+HYPERTHESIS_EDGE  how the claim could survive falsely without detection
+DELTA_O           the smallest observer upgrade that would shrink the edge
+SCOPE             the domain over which the claim may be asserted if the test passes
+```
 
-Do not treat a plausible explanation as known state. If the next action depends on uncertain state, probe before mutating.
+Conjecture statuses: `proposed | active | testing | supported | weakened |
+falsified | superseded | promoted_to_assertion`. An assertion is a supported
+conjecture with receipts (evidence refs) and an explicit scope; assertions
+carry `invalidation_triggers` — when a premise dies (base moved, verifier
+superseded), the assertion reverts to a conjecture, visibly.
 
-If the belief state becomes stale, contradictory, or unsupported, update it before continuing. Silent state confusion is a major long-run failure mode.
+The hyperthesis edge names which of four incompleteness classes blocks the
+observer, because each class has a different fix:
+
+```text
+independence    the mission's assumptions don't bear on it  -> adopt a new evidence source, explicitly
+resource        a proof exists but exceeds the budget       -> more budget, or a smaller claim
+missing_oracle  no instrumentation/permission/tool sees it  -> the usual observer upgrade
+frame_lock      the refutation can't be stated in the
+                mission's current vocabulary                -> extend the vocabulary; this is the
+                                                               dangerous class (evidence gets
+                                                               reinterpreted to fit the expressible)
+```
+
+Anti-decoration gate: a conjecture record is useful only if it changes the
+next discriminator, probe, verifier, action route, assertion scope, or
+stopping condition. Filling fields without changed behavior is conjecture
+paperwork — the named failure mode of this format. If the ledger is not
+changing decisions, say so in the report.
+
+Do not treat a plausible explanation as known state. If the next action
+depends on an uncertain conjecture, probe before mutating. If the ledger
+becomes stale, contradictory, or unsupported, update it before continuing.
+Silent state confusion is a major long-run failure mode.
+
+## Claims, Proof, and Scope
+
+A claim is never bare `phi`; it is `for all x in D: phi(x)` for an explicit
+domain D — the domain the evidence actually covers. The two cardinal sins:
+
+- **Overclaiming**: asserting beyond the proven domain. "Tests pass,
+  therefore the code is correct" sells existential evidence (some executions
+  behaved) as a universal claim (all executions behave).
+- **Heresy**: keeping an assertion in circulation after its proof died —
+  docs, prompts, or UI copy stating something the retained evidence no
+  longer supports.
+
+Each evidence class is a proof system with a characteristic reach. Scope
+claims to the class that produced them:
+
+```text
+model checking (TLC)    universal over the MODEL; transfers to code only via conformance
+code-level proof        universal over the code proven, nothing more
+property-based tests    probabilistic, over the stated distribution
+example tests           existential: exactly the executions run
+verifier contract       the predicate checked, on the artifact checked
+human review            the reviewer's attention and competence
+```
+
+Untrusted provers, trusted checkers: the agent doing the work is the
+untrusted prover. Its output — code, a claim, "done" — is a candidate proof
+until a checker (test, contract, TLC run, independent verifier, owner)
+accepts it. A proof checked by its own prover is not checked.
 
 ## Receding-Horizon Control
 
@@ -268,8 +334,21 @@ Operate in short control intervals:
 2. predict what evidence should change;
 3. act within a bounded mutation radius;
 4. observe actual evidence;
-5. update belief state;
+5. update the conjecture ledger;
 6. continue, narrow, branch, rollback, or stop.
+
+Conjecture rules per interval:
+
+- **Before mutation**: state the active conjecture; name its hyperthesis
+  edge; define what evidence would update it; choose the smallest safe
+  substrate (direct probe, capsule, candidate world, verifier, or human
+  decision).
+- **Before verification**: state the assertion scope if verification
+  passes; name what the verifier cannot see; state whether an observer
+  upgrade is required before promotion.
+- **Before stopping**: list supported, weakened, falsified, superseded, and
+  still-open conjectures; state remaining hyperthesis edges; name the next
+  highest-information action. Do not call a checkpoint a completion.
 
 If observations are surprising, shrink scope and increase instrumentation.
 
@@ -283,13 +362,15 @@ The evidence ledger records what was actually proven.
 
 For each nontrivial claim, record:
 
-- claim;
+- claim, with its scope (the domain the evidence covers);
+- evidence class (model check / proof / property test / example test /
+  contract / human observation) — the claim must not outrun the class;
 - evidence source;
 - command or observation;
 - artifact path;
 - result;
-- uncertainty or caveat;
-- whether this supports promotion.
+- uncertainty or caveat (the hyperthesis edge this evidence leaves open);
+- whether this supports promotion, and at which scope.
 
 Do not report behavior as verified unless the evidence was produced by an executed command, captured trace, deployed endpoint, screenshot, log, durable artifact, or explicitly named manual observation.
 
@@ -419,17 +500,30 @@ Name continuous realism axes. Examples:
 - read-only proof -> mutable proof with rollback;
 - single worker -> parallel workers.
 
-### Belief State
+### Conjecture Ledger
 
-State the starting belief model:
+Seed the ledger with the mission's driving conjectures — the claims whose
+truth or falsity decides the mission. For each:
 
-- current artifact state;
-- evidence for that state;
-- main uncertainties;
-- highest-impact uncertainty;
-- next observation that would reduce it.
+```text
+id:
+claim:
+test:
+hyperthesis_edge:
+  blind_spot:
+  boundary_type: independence | resource | missing_oracle | frame_lock
+  bound:
+observer_upgrade:
+scope_if_supported:
+falsifier:           # the observation that would kill this claim fastest
+status: proposed
+```
 
-Update this section when observations surprise the mission.
+Also state the conventional belief model (current artifact state, evidence
+for it, highest-impact uncertainty, next observation that would reduce it).
+Update this section whenever a conjecture changes status — and record what
+the status change changed about the mission's next action. A ledger that
+never changes the route is decorative.
 
 ### Investigation & Cognitive Reframing
 
@@ -531,6 +625,14 @@ Common examples:
 
 Define how the mission preserves reversibility. Include git, deploy, state, VM, database, route, and artifact rollback where relevant.
 
+For missions that mutate canonical/user-facing state, decompose the safety
+claim per `docs/conjecture-learning-proof-theory-2026-06-11.md` Part II:
+protocol-safe (machine-checked) AND instance-compliant (record check) AND
+contracts-passed (bounded, scoped) AND revertible-within-window AND
+residual-accepted-by-owner. Reversibility substitutes for unprovable
+correctness only while the rollback window is open; irreversible effects are
+a different claim class and must be flagged before, not after.
+
 ### Learning Side-Channel
 
 Classify surprises:
@@ -558,7 +660,11 @@ Completion requires proof, not effort:
   directory for broad MissionGradient runs;
 - residual risks stated plainly;
 - rollback target exists when state was mutated;
-- evidence ledger supports the promotion recommendation.
+- evidence ledger supports the promotion recommendation;
+- the conjecture ledger is settled: every driving conjecture is supported
+  (with scoped receipts), falsified, superseded, or explicitly left open
+  with a named hyperthesis edge and next discriminator;
+- no claim in the report outruns its evidence class.
 
 If the stopping condition is satisfied, report `complete`.
 
@@ -593,7 +699,7 @@ mission geometry into a long-running agent run.
 Short `/goal` shape:
 
 ```text
-Use MissionGradient. Complete docs/<mission-gradient-doc>.md by optimizing the real artifact under its invariants, belief-state updates, investigation loop, cognitive reframing, quality gradient, and verification criteria. Preserve topology, avoid forbidden shortcuts, maintain an evidence ledger, execute safe next probes instead of stopping on tactical blockers, and stop/escalate only on success, invariant-level surprises, external authority boundaries, or hard blockers after root-cause probes.
+Use MissionGradient. Complete docs/<mission-gradient-doc>.md by optimizing the real artifact under its invariants, conjecture-ledger updates, investigation loop, cognitive reframing, quality gradient, and verification criteria. Before each mutation state the active conjecture and its hyperthesis edge; scope every claim to its evidence class; never let a worker verify its own work. Preserve topology, avoid forbidden shortcuts, maintain an evidence ledger, execute safe next probes instead of stopping on tactical blockers, and stop/escalate only on success, invariant-level surprises, external authority boundaries, or hard blockers after root-cause probes.
 ```
 
 For long-running work, append:
@@ -607,6 +713,11 @@ If the stopping condition is not reached, do not call the mission complete. Land
 Before handing the mission to `/goal`, answer:
 
 - What is the real artifact?
+- What are the driving conjectures, and what is each one's fastest falsifier?
+- For each driving conjecture: what can the current observer not see
+  (hyperthesis edge), and which incompleteness class is it?
+- What is the strongest claim the planned evidence class can actually
+  support, and is the mission promising more than that anywhere?
 - Which invariants define identity of the artifact?
 - What quality level is expected?
 - What is the current belief state and what is uncertain?
