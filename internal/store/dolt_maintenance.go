@@ -109,11 +109,11 @@ func planDoltGC(usage doltGCDiskUsage, previousMilestoneGiB, milestoneGiB uint64
 }
 
 func runDoltGCWorkspace(workspacePath string) error {
-	rootDSN := fmt.Sprintf(
-		"file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true",
+	dbDSN := fmt.Sprintf(
+		"file://%s?commitname=Choir&commitemail=system@choir.local&database=vtext&multistatements=true&clientfoundrows=true",
 		workspacePath,
 	)
-	cfg, err := embedded.ParseDSN(rootDSN)
+	cfg, err := embedded.ParseDSN(dbDSN)
 	if err != nil {
 		return fmt.Errorf("dolt gc: parse dsn: %w", err)
 	}
