@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"net"
 	"os/signal"
@@ -511,11 +513,97 @@ func writeSourceServiceJSON(w http.ResponseWriter, status int, value any) {
 	}
 }
 
+func isTerminalRuntimeState(state string) bool {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "completed", "failed", "cancelled":
+		return true
+	default:
+		return false
+	}
+}
+
+func (d *ingestionRuntimeDispatcher) getRunStatus(ctx context.Context, runID string) (runtimeRunStatusResponse, error) {
+	var zero runtimeRunStatusResponse
+	baseURL := strings.TrimRight(strings.TrimSpace(d.baseURL), "/")
+	if baseURL == "" {
+		return zero, fmt.Errorf("runtime base URL is not configured")
+	}
+	endpoint, err := url.Parse(baseURL + "/internal/runtime/runs/" + url.PathEscape(strings.TrimSpace(runID)))
+	if err != nil {
+		return zero, fmt.Errorf("parse runtime status URL: %w", err)
+	}
+	q := endpoint.Query()
+	q.Set("owner_id", d.ownerID)
+	endpoint.RawQuery = q.Encode()
+	client := d.client
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return zero, fmt.Errorf("build runtime status request: %w", err)
+	}
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		return zero, err
+	}
+	body, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if readErr != nil {
+		return zero, fmt.Errorf("read runtime status response: %w", readErr)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return zero, fmt.Errorf("runtime status returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var out runtimeRunStatusResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return zero, fmt.Errorf("decode runtime status response: %w", err)
+	}
+	return out, nil
+}
+
+func (d *ingestionRuntimeDispatcher) reconcileSubmittedProcessorRequests(ctx context.Context, store *cycle.Storage) error {
+	if d == nil || store == nil {
+		return nil
+	}
+	submitted, err := store.ListSubmittedProcessorRequests(ctx, 128)
+	if err != nil {
+		return err
+	}
+	for _, req := range submitted {
+		runID := strings.TrimSpace(req.RuntimeRunID)
+		if runID == "" {
+			continue
+		}
+		run, err := d.getRunStatus(ctx, runID)
+		if err != nil {
+			continue
+		}
+		if !isTerminalRuntimeState(run.State) {
+			continue
+		}
+		status := "completed"
+		if strings.EqualFold(run.State, "failed") || strings.EqualFold(run.State, "cancelled") {
+			status = "dispatch_failed"
+		}
+		if err := store.UpdateProcessorRequestStatus(ctx, req.RequestID, status); err != nil {
+			log.Printf("sourcecycled: reconcile submitted request %s -> %s: %v", req.RequestID, status, err)
+		}
+	}
+	return nil
+}
+
 func (d *ingestionRuntimeDispatcher) dispatch(ctx context.Context, store *cycle.Storage, handoff cycle.IngestionHandoff) ingestionDispatchResult {
 	var result ingestionDispatchResult
 	if d == nil || strings.TrimSpace(d.baseURL) == "" {
 		result.ProcessorSkipped = len(handoff.ProcessorRequests)
 		return result
+	}
+	if store != nil {
+		if err := d.reconcileSubmittedProcessorRequests(ctx, store); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("reconcile submitted processors: %v", err))
+		}
 	}
 	processorLimit := d.maxProcessorRequests
 	if processorLimit <= 0 {
