@@ -212,7 +212,10 @@ escalation point.
 
 **Dependencies:** M6. **Size:** 2 overnight missions.
 
-## M9 — Docs revision + heresy sweep (grand synthesis §6.1)
+## M9 — Docs revision + heresy sweep (grand synthesis §6.1) — DONE 2026-06-11
+
+**Completed**: see `docs/mission-docs-revision-v1.md` for the run record and
+evidence ledger.
 
 **Real artifact:** canonical docs match the post-cutover ontology: ontology
 chapter (actor, mailbox, activation, passivation, rewarm, trajectory, work

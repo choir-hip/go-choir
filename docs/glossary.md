@@ -1,7 +1,8 @@
 # Choir Glossary
 
 **Status:** canonical vocabulary
-**Last updated:** 2026-06-09
+**Last updated:** 2026-06-11 (actor runtime + conjecture vocabulary added;
+continuation/channel/parent-child retirements recorded)
 
 This glossary names the current Choir product and runtime vocabulary. It folds
 the old root `PROJECT-GLOSSARY.md` into `docs/` and updates it for the current
@@ -490,3 +491,141 @@ Preferred replacements:
 - `computer`
 - active/background/candidate computer
 - trajectory / loop / run / leap / fly, depending on duration and scope
+
+## Actor Runtime Vocabulary (2026-06-11)
+
+Doctrine sources: `choir-rearchitecture-durable-actors-2026-06-11.md`,
+`system-v1-one-cut-2026-06-11.md`, `choir-role-free-actor-protocol-2026-06-11.md`.
+Code cutover in progress per `mission-portfolio-2026-06-11.md`; these are the
+target terms new work should use.
+
+### actor
+
+An agent as a durable actor: a goroutine with a Go-channel mailbox while
+resident; an idempotent durable update log plus a compacted memory snapshot
+while passivated. Actors never "complete" — they passivate on quiescence and
+re-warm on the next update or sweep. Implemented in `internal/actor`.
+
+### activation
+
+One residency of an actor: wake → work (possibly hours, many loops and
+compactions, mailbox live throughout) → passivate. Replaces "run" as the unit
+of residency; runs remain as activation records (a read model). Bounded by
+step/token budgets, activation caps, and eviction — there is no lease concept
+in v1.
+
+### update
+
+The single agent-to-agent message primitive (`update_coagent`): typed
+(findings, evidence, verification, blocker, question, proposal, status,
+directive, assignment, capability_request), idempotent by `update_id`,
+durably appended before delivery. Some kinds carry ledger effects in the same
+transaction (assignment → work item; verification → acceptance evidence).
+The only wake source.
+
+### mailbox
+
+The in-memory delivery vehicle of a resident actor. Never authoritative —
+always rebuildable from `log minus processed`. Say *mailbox* for delivery,
+*document/trajectory channel* for the product surface, *Go channel* for the
+language primitive; the unqualified word "channel" is retired.
+
+### passivation / eviction / sweep
+
+Passivation: graceful sleep, only with zero unprocessed backlog (the check is
+atomic with delivery). Eviction: forced passivation at any moment —
+deliberately crash-equivalent (no snapshot; backlog stays durable). Sweep:
+any non-resident agent with unprocessed backlog is activation-eligible —
+one rule covering boot recovery, crash windows, and post-eviction re-wake.
+
+### trajectory
+
+The causality object: a durable record (kind, subject refs, explicit
+settlement rule stored as data, status live/settled/cancelled). Replaces
+parent/child run trees as the control model; parent links survive only as
+provenance (`spawned_by`).
+
+### work item
+
+A durable assignment on a trajectory: objective, authority envelope,
+fingerprint-deduped. Replaces RunContinuation. Blockers and questions open
+obligation work items addressed to whoever can discharge them.
+
+### settlement
+
+A trajectory's earned closure, evaluated from its rule inside the
+transactions that could change the verdict (never polled). Example rule
+(publication): no open work items AND publish ref recorded AND edition
+updated. Replaces root-run completion as liveness truth.
+
+### authority envelope
+
+What a bounded profile (super, vsuper, co-super, researcher, vtext,
+processor, reconciler, conductor) may do — the code-enforced capability
+boundary. Profiles are envelopes, not personas: actors are prompted with
+obligations, trajectory state, and authority, never with identities
+("you are X" is a banned prompt pattern — see the role-free actor protocol).
+
+### capsule (designed, not built)
+
+An ephemeral, effect-fenced execution chamber inside a computer (Nucleus-
+class). Runs risky/bounded work; produces effect reports; never a seat of
+agency, never canonical-state authority. Companion records: CapsuleSpec
+(launch policy) and CapsuleResult (durable outcome + policy hashes).
+
+### MutationTransaction / commit point / rollback window
+
+The promotion protocol: per-ledger prepare (durable, idempotent, inert) →
+verify → owner approval → one atomic commit-point flip (also the visibility
+gate) → reconcile secondaries from the commit point alone. Freshness CAS
+blocks committing against a moved foreground. The rollback window is explicit
+state, closed by the first write the previous version cannot read; reverting
+after that is the torn-rollback failure. Model-checked:
+`specs/promotion_protocol.tla`.
+
+## Conjecture Vocabulary (2026-06-11)
+
+Source: `conjecture-learning-proof-theory-2026-06-11.md`. The compact frame:
+an observer is a proof system; its hyperthesis is its incompleteness; a
+claim's authority is the reach of its evidence — including this one.
+
+### conjecture
+
+The active control object: `(CLAIM, TEST, HYPERTHESIS_EDGE, ΔO, SCOPE)` —
+what might be true, how the current observer would know, how the claim could
+survive falsely, the smallest observer upgrade that shrinks the edge, and
+where the claim may be asserted if supported.
+
+### hyperthesis edge
+
+The named incompleteness of the current observer over a claim, classed as
+independence, resource, missing_oracle, or frame_lock — each with a
+different fix. Most systems run with null hyperthesis: confidence without a
+named blind spot.
+
+### assertion
+
+A supported conjecture with receipts (evidence refs) and an explicit scope,
+carrying invalidation triggers: when a premise dies, the assertion reverts
+to a conjecture, visibly. Ledger: `conjecture-assertion-ledger-2026-06.md`.
+
+### heresy
+
+A claim still in circulation after its proof died — in docs, prompts, code
+comments, or UI copy. Heresy sweeps are consistency maintenance, not
+housekeeping: one tolerated contradiction licenses anything downstream.
+
+## Retired Terms (2026-06-11)
+
+- **continuation** — named two unrelated mechanisms (RunContinuation
+  synthesis; channel handoff to persistent super). Replaced by work items
+  and warm steering. Still in code during cutover; do not use in new
+  doctrine.
+- **parent/child run** as control semantics — replaced by trajectories +
+  settlement; provenance edge only.
+- **channel**, unqualified — disambiguate (mailbox / document channel /
+  Go channel).
+- **sandbox** as product ontology — the product object is a persistent
+  computer; the code/service rename waits for capsules.
+- **lease** — no lease concept in v1; say budgets, caps, envelopes.
+  Reserved for future QoS/pricing tiers.

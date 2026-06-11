@@ -203,9 +203,9 @@ route-switch certificates.
 
 ## Messaging
 
-Live actors should receive hot-path payloads over in-memory queues, channels,
-direct transport, or relays. They should not normally wake and then query Dolt
-before acting.
+Live actors should receive hot-path payloads over in-memory mailboxes (Go
+channels), direct transport, or relays. They should not normally wake and then
+query Dolt before acting.
 
 Durable handoff/control records exist for recovery, replay, audit, provenance,
 and important handoff durability.
@@ -219,6 +219,15 @@ or explicit failure.
 
 Cross-VM routing should use direct transport or a relay, not platform-Dolt
 polling.
+
+This invariant is the spirit of the target durable-actor model
+(`docs/choir-rearchitecture-durable-actors-2026-06-11.md`: "the database
+remembers, Go delivers"). Today's `channel_messages`/inbox-poll path is being
+replaced by Go-channel mailboxes with activation-on-send; until that cutover
+lands, the current per-turn inbox-poll path is what satisfies this invariant in
+code. "Channel" in product/UI contexts (a document or trajectory's update
+stream) names a different thing than the Go-channel mailbox described here —
+do not conflate the two.
 
 ## Trace
 
@@ -248,6 +257,12 @@ Acceptance levels are explicit:
 Do not claim `promotion-level` without verifier contract evidence plus owner
 review and promotion or rollback evidence. Do not claim `continuation-level`
 without run-memory/compaction and bounded continuation evidence.
+
+`continuation-level` is transitional: per
+`docs/choir-rearchitecture-durable-actors-2026-06-11.md`, this acceptance
+level is being re-pointed at trajectory/work-item settlement evidence
+(portfolio M4). Until that re-pointing lands, the current rule and evidence
+requirement above remain in force.
 
 Browser acceptance may use public authenticated product APIs. It must not use
 browser-public internal orchestration routes such as `/api/agent/*`,

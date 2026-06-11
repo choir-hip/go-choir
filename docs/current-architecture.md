@@ -1,6 +1,7 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-06-09
+**Last updated:** 2026-06-11 (ontology revision: durable actors, trajectories,
+conjecture vocabulary; see the new Ontology section)
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `vtext`, conductor routing, workers, Trace, Dolt,
@@ -30,6 +31,57 @@ When this document says "current," it should be backed by one of:
 
 If code, staging, and this document disagree, code/staging evidence wins and
 this document should be fixed.
+
+## Ontology (2026-06-11 Revision)
+
+The architecture program of 2026-06-11 revised the core ontology. The doctrine
+sources are `choir-rearchitecture-durable-actors-2026-06-11.md` (the target
+model and cutover program), `choir-role-free-actor-protocol-2026-06-11.md`
+(actors get obligations, not identities), `system-v1-one-cut-2026-06-11.md`
+(the v1 design every cutover mission implements), and
+`conjecture-learning-proof-theory-2026-06-11.md` (the epistemic frame). The
+runtime protocols are model-checked in `specs/` (TLC runs in CI).
+
+**Transitional honesty:** the code has NOT fully cut over. Parent/child runs,
+RunContinuations, and DB-polled channel messages still run today; the
+portfolio (`mission-portfolio-2026-06-11.md`) sequences their replacement.
+This section states the target vocabulary so new work stops accreting on the
+retired ontology.
+
+| Term | Meaning |
+|---|---|
+| **actor** | an agent as a durable actor: goroutine + mailbox while resident; idempotent update log + compacted memory snapshot while passivated. Actors never "complete" — they passivate and re-warm. |
+| **activation** | one residency: wake → work (possibly hours, many compactions) → passivate. Bounded by budgets and eviction, not leases (no lease concept in v1). |
+| **update** | the one agent-to-agent message primitive (`update_coagent`): typed, idempotent by update_id, durably logged before delivery. The only wake source. |
+| **mailbox** | the in-memory delivery vehicle for a resident actor. Never the truth — always rebuildable from the log. |
+| **sweep** | the recovery rule: any non-resident agent with unprocessed backlog is activation-eligible. Covers boot, crash windows, post-eviction re-wake. |
+| **trajectory** | the causality object: durable record with kind, subject refs, and an explicit settlement rule (data, not code). Replaces parent/child trees as the control model. |
+| **work item** | a durable assignment on a trajectory: objective, authority envelope, fingerprint-deduped. Replaces RunContinuation. |
+| **settlement** | a trajectory's goal closure, earned by its rule (e.g. publication: published AND listed AND no open work). Replaces root-run completion as liveness truth. |
+| **obligation** | an open work item, blocker, or question on a live trajectory. "Open obligations with no resident assignee" is the stall query — observability, never a planner. |
+| **authority envelope** | what a bounded profile (super/vsuper/co-super/researcher/vtext/...) may do — code-enforced capability boundary. Profiles are envelopes, not personas. |
+| **capsule** | (designed, not built) an ephemeral effect-fenced execution chamber inside a computer; never a seat of agency, never promotion authority. |
+| **MutationTransaction / promotion** | state change via a single commit point: per-ledger prepare → verify → owner approval → atomic flip → reconcile; freshness CAS against the foreground; rollback window explicit. |
+| **conjecture / hyperthesis / assertion** | the epistemic vocabulary: a claim under test with a named blind edge and scope; an assertion is a supported conjecture with receipts; heresy is a circulating claim whose proof died. |
+
+Retired vocabulary: **"continuation"** (named two unrelated mechanisms; both
+are replaced — work items and warm steering). **Parent/child as control**
+(provenance-only edge remains). **"Channel"** unqualified — say *mailbox* for
+delivery, *document/trajectory channel* for the product surface, *Go channel*
+for the primitive. **"Sandbox" as product ontology** — the product object is a
+persistent computer (code/service rename deferred until capsules land).
+
+The self-improvement frame (one promotion discipline at every grain):
+
+| Level | Scope | Candidate | Verifier | Promotion |
+|---|---|---|---|---|
+| 1. Improvement in the small | VText media content | draft revision | citation checks, review, rubrics | revision becomes current |
+| 2. Self-development | Choir's own code and architecture | candidate computer | verifier fleet, RunAcceptance | MutationTransaction route switch |
+| 3. Meta-learning | the conjecture discipline itself | docs branch / one-mission trial | did action/evidence/scope/stopping change | skill/doc/invariant updates |
+
+Same five-tuple at every level: `(CLAIM, TEST, HYPERTHESIS_EDGE, ΔO, SCOPE)`.
+Level N changes are admitted by gates at level N+1 — self-reference without
+gates is the named anti-pattern.
 
 ## Current Reality
 
@@ -693,6 +745,15 @@ sender writes platform DB -> receiver polls platform DB -> receiver acts
 ```
 
 The database is the ledger. It is not the network.
+
+The durable-actor model makes this concrete (target; cutover in progress):
+within one runtime, **the database remembers, Go delivers** — sends durably
+append to an idempotent update log, then deliver into a Go-channel mailbox,
+activating the recipient if cold; nothing polls. Across VMs, the
+transactional outbox carries the same semantics over HTTP (at-least-once
+visibility, exactly-once ledger effects). Both protocols are model-checked:
+`specs/actor_protocol.tla`, `specs/actor_protocol_xvm.tla`. Today's
+`channel_messages` + per-turn inbox polling is the legacy path this replaces.
 
 ## Provider Neutrality
 

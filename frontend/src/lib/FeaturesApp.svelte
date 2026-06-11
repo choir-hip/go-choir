@@ -440,6 +440,7 @@
       kind === 'app_adoption.proposed' ||
       kind === 'app_adoption.verification_started' ||
       kind === 'app_adoption.verified' ||
+      kind === 'app_adoption.owner_approved' ||
       kind === 'app_adoption.blocked' ||
       kind === 'app_adoption.promoted' ||
       kind === 'app_adoption.rolled_back'

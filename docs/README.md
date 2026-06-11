@@ -53,6 +53,17 @@ Use these buckets when reading or editing docs:
   custom domain roadmap.
 - `docs/current-architecture.md` - current product/runtime architecture,
   including the surviving service-topology signal from deleted older sketches.
+- `docs/choir-rearchitecture-durable-actors-2026-06-11.md` - target durable-actor
+  rearchitecture conjecture (trajectories/work items replacing parent/child run
+  control, Go-channel mailboxes replacing DB-table channels, continuation
+  synthesis deletion). Conjecture-program target, not yet cut over; current code
+  still uses parent/child runs and continuations during the transition.
+- `docs/choir-role-free-actor-protocol-2026-06-11.md` - target prompt/identity
+  doctrine: obligations and authority envelopes instead of persona/"you are X"
+  framing. Bounded profiles (super/vsuper/researcher/...) remain as authority
+  envelopes; only the persona-prompt layer is retired, on the same cutover.
+- `docs/system-v1-one-cut-2026-06-11.md` - derisking pseudocode for the v1 cut
+  of the durable-actor model (durable schema, settlement, transactional send).
 - `docs/code-docs-reconciliation-2026-06-06.md` - code-to-core-docs review
   notes from the 2026-06-06 full-codebase reconciliation pass.
 - `docs/intended-architecture-next-2026-06-06.md` - target architecture for

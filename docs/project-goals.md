@@ -239,7 +239,12 @@ Read [adr-dolt-as-canonical-state.md](adr-dolt-as-canonical-state.md).
 5. Keep documentation canonical enough that long-running agents do not follow
    stale mission files.
 6. Make run acceptance cover promotion-level and continuation-level self
-   development, not just export-level evidence.
+   development, not just export-level evidence. `continuation-level` is
+   transitional: it is being re-pointed at trajectory/work-item settlement
+   evidence under the durable-actors rearchitecture
+   (`docs/choir-rearchitecture-durable-actors-2026-06-11.md`, portfolio M4);
+   until that lands, the current continuation-level evidence requirement
+   stays in force.
 7. Make candidate computer lineage, typed delta export, verifier contracts, and
    rollback certificates first-class.
 8. Use Playwright/Codex to prompt Choir to develop Choir once the product path

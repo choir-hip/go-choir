@@ -1,7 +1,15 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-05-30
+**Last updated:** 2026-06-11
+**Changelog:** Reconciled the App Catalog and Apps & Changes/Features entries
+with the shipped `features` app (frontend/src/lib/FeaturesApp.svelte) after
+the 2026-05-28/31 frontend redesign cutover, the 2026-06-11 owner-approval
+gate (commit `77f65651`), and the freshness CAS guard; moved unshipped
+design intentions (Uninstall/Disable/portfolio review/Trace UI/Try-preview)
+to a clearly labeled "Design intent, not shipped" section with pointers to
+`mission-portfolio-2026-06-11.md` (M6, M7) and
+`choir-promotion-protocol-conjecture-2026-06-11.md`.
 **Baseline checked:** `choir.news` primary-domain cutover, WebAuthn hard reset,
 VM retention/pruning policy hardening, deploy-speed, and disk-pressure work.
 
@@ -210,9 +218,9 @@ Known gaps:
 | **Trace Evidence** | Trace remains as structured evidence, unified logs, run bundles, acceptance records, and diagnosis artifacts. The visual Trace app is no longer a product direction and should be unshipped rather than redesigned. | Preserve machine-readable evidence for zot, VText reports, run acceptance, and operator diagnosis. Do not keep an emergency human Trace UI. |
 | **Web Lens / Browser** | Browser-style URL input with backend Web Lens snapshots when authenticated/configured and iframe fallback for guest/external pages. | Backend control/screenshot support remains a distinct substrate frontier. Browser should remain an app, not a bypass around product APIs. |
 | **Super Console** | Target replacement for Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It reads unified logs/source/files/process state, can run command-actuation such as `!` commands, patches/rebuilds/restarts locally, verifies, and writes markdown diagnosis reports that VText can open. | Do not expose raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple chat-agent sessions. It is repair mode when VText/MAS malfunctions. |
-| **Settings** | Account, runtime health, server-backed theme presets/editing, and low-level promotion/adoption evidence. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Settings should not be the main owner-facing install surface; Apps & Changes owns ordinary change discovery and adoption. Runtime health still needs a true push source rather than opportunistic event refreshes. |
+| **Settings** | Account, runtime health, server-backed theme presets/editing, and low-level promotion/adoption evidence. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Settings should not be the main owner-facing install surface; Features owns ordinary change discovery and adoption. Runtime health still needs a true push source rather than opportunistic event refreshes. |
 | **Compute Monitor** | First-class app for user-computer health and recovery. It uses authenticated product APIs to show only the current user's current computer, background candidate computers, warmness/protection, current runtime health, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. Manual refresh UI has been removed. | Add true event-backed computer status updates, trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
-| **Apps & Changes** | Launcher-facing change store replacing Candidate Desktop. It presents reviewable changes by name, hides package/candidate refs inside technical details, can pull an AppChangePackage, create a candidate adoption for the current computer, preview that candidate through an internal frame, verify recipient builds, install/promote, rollback through product APIs, and open/create a mission VText dashboard plus owner-readable per-change VText reports. All four alternate-computer experiments now have product-openable VText reports with screenshot/video/benchmark artifact links; Liquid and Python benchmark artifacts are linked from those reports. The selected Change now exposes an honest removal/recovery model: Chiron is rollback-only, Uninstall is disabled without a verified inverse source patch, Disable is disabled without a declared feature flag/capability toggle, and empty rollback-profile JSON is not accepted as evidence. Chiron has accepted promotion-level run acceptance from product adoption evidence, and the owner-facing Chiron detail can surface run-acceptance/evidence refs for the relevant trajectory without opening a Trace app. The portfolio review panel aggregates all four experiment Changes with report/benchmark coverage, shows Chiron's accepted promotion-level row, and run-acceptance synthesis now carries adoption rollback refs into the accepted record. | Needs actual source-level uninstall and feature-disable semantics beyond rollback-only labeling, inline media embedding in VText, continuation-level evidence, a loaded accepted-record path for non-Chiron source experiments inside the recipient computer, and owner-review visual polish. |
+| **Features** (`frontend/src/lib/FeaturesApp.svelte`, app id `features`, registry name "Features") | Launcher-facing catalog app that replaced "Apps & Changes" in the 2026-05-28/31 frontend redesign cutover (registry.ts:193-201). It lists `AppChangePackage`s as a catalog with status pills (available/importing/ready/active/rolled back/blocked), and a detail pane with demo video/screenshot, summary, and a "View details" technical panel (source package id, import/adoption id, build/runtime/UI digests, rollback recorded/pending, evidence refs). Actions: **Import** (creates an adoption for `TARGET_COMPUTER_ID = 'primary'` and kicks off an async verify with email notification on completion/block); **Activate**, which as of 2026-06-11 (commit `77f65651`) first POSTs `/api/adoptions/{id}/approve` (the resurrected owner-approval gate, producing status `owner_approved`) and then POSTs `/promote` — `promote` now requires `owner_approved` status server-side; **Roll back** (requires a recorded rollback ref); **Roll forward** (requires a rolled-back adoption with both runtime and UI digests). Live updates arrive via `/api/ws`-backed SSE on `app_change_package.published`, `app_adoption.proposed`, `app_adoption.verification_started`, `app_adoption.verified`, `app_adoption.blocked`, `app_adoption.promoted`, and `app_adoption.rolled_back`; the backend also now emits `app_adoption.owner_approved` (types.EventAppAdoptionOwnerApproved) when the approval gate fires, but the Features app's live-event handler does not yet include that kind in its refresh trigger list (verify on next touch). | Promotion mechanics: "Activate" updates the `ComputerSourceLineageRecord` (`ActiveSourceRef`, digests, `RouteProfile`) — a durable pointer flip in product state. Nothing yet consumes `RouteProfile`: there is no route switch, process restart, or binary swap. Two new server-side guards landed 2026-06-11: promote requires `owner_approved` (the approve step above), and a freshness CAS blocks promotion with a "re-verify" error if the foreground lineage moved since verification. Making the route flip real is **planned**, not shipped: portfolio M6 (route-flip consumer, promotion record + reconciler) and the design in `docs/system-v1-one-cut-2026-06-11.md` Cut 4; see also `docs/choir-promotion-protocol-conjecture-2026-06-11.md`. A preview endpoint exists at `/api/adoptions/{id}/preview/*` (requires a verified recipient build) but the Features UI never calls it; wiring a Try-it-now flow to it is portfolio M7 ("cheapest high-value fix in the system"). `TARGET_COMPUTER_ID` is hardcoded to `'primary'` (single-computer assumption). See "Design intent, not shipped" below for Uninstall/Disable/portfolio-review/Trace-integration intentions that predate the cutover and were not carried into Features. |
 | **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and VText radio continuity later. |
 | **Image** | First-class app with source resolution, title, fit/original, zoom controls, rotate left/right, reset, and image rendering. | Add pan/drag, touch/pinch behavior, folder gallery navigation, richer metadata, and persisted viewer state. |
 | **Audio** | First-class app with play/pause, 15s back, 30s forward, scrubber, speed, current/duration, native audio fallback, server-backed recents, and server-backed playback-position sync. | Add queue/playlist from Files, metadata, Media Session integration, transcript/VText hook, and keyboard controls. |
@@ -220,6 +228,55 @@ Known gaps:
 | **PDF** | Real reader path using PDF.js: browser-fetchable PDFs render to canvas pages with actual page count, page navigation, zoom/fit width/fit page, text search, and server-backed recents. Files/prompt routes can open the PDF app. | Add thumbnails/outline, annotations, richer text selection, and server-side/import fallback for CORS-blocked remote PDFs. |
 | **EPUB** | Real reader path using EPUB archive parsing: browser-fetchable EPUBs parse container/package/spine, render chapters as safe text blocks, expose chapter selection, font/width/progress controls, search, server-backed recents, and server-backed reading-position sync. Extracted text still renders as a reader source. | Add richer XHTML formatting, EPUB nav/TOC semantics, bookmarks, image assets, server-side extraction, and VText/transclusion handoff. |
 | **ContentViewer** | Legacy generic content surface still exists in code but is not the place to add media behavior. | Do not put new app work here. Retain only as fallback/dispatcher/inspector until it can be safely retired or narrowed. |
+
+## Features: design intent, not shipped
+
+The predecessor "Apps & Changes" app described capabilities and a removal
+model that were never carried into the shipped `features` app
+(`frontend/src/lib/FeaturesApp.svelte`) after the 2026-05-28/31 frontend
+redesign cutover. These remain real design intentions worth preserving, but
+none of the following ships today. Do not describe them as current product
+behavior.
+
+- **Uninstall / Disable removal model.** The pre-cutover design called for an
+  honest removal/recovery model: rollback-only labeling for changes without a
+  verified inverse source patch, Uninstall disabled without a verified
+  inverse source patch, Disable disabled without a declared feature
+  flag/capability toggle, and empty rollback-profile JSON not accepted as
+  evidence. Features today only ships **Roll back** / **Roll forward** against
+  a recorded rollback ref; there is no Uninstall or Disable action, declared
+  or stubbed, in the current UI or adoption API. Source-level
+  uninstall/disable semantics remain a real gap (see Near-Term Gaps item 9).
+- **Portfolio review panel.** The pre-cutover design aggregated multiple
+  experiment Changes into a portfolio view with report/benchmark coverage and
+  an accepted-promotion-level row per experiment. Features has no portfolio
+  aggregation view; it is a flat catalog list with a single detail pane.
+  Portfolio-style review (headline, plan view, check badges gating Approve,
+  restore-point timeline) is the direction of portfolio mission M7 ("Changes
+  app review loop") — see `docs/mission-portfolio-2026-06-11.md`.
+- **Trace integration.** The pre-cutover design intended the selected Change
+  to surface run-acceptance/evidence refs and open a Trace view without a
+  separate Trace app. In the shipped Features app, "Open Trace" is wired but
+  returns the literal string `"Trace UI is unshipped"` (plus the evidence id)
+  when a trace ref exists. The visual Trace app remains, per the App Catalog
+  above, "no longer a product direction and should be unshipped rather than
+  redesigned" — Features' Trace button is consistent with that direction, but
+  the button itself does nothing useful yet.
+- **Try/preview flow.** The pre-cutover design described an internal-frame
+  preview of a candidate before installing. A preview endpoint already EXISTS
+  server-side at `/api/adoptions/{id}/preview/*` (requires a verified
+  recipient build), but the Features UI never calls it — there is no
+  Try-it-now button or preview frame. Wiring this up is portfolio mission M7,
+  described as "the cheapest high-value fix in the system."
+- **Promotion as a real route flip.** The pre-cutover design implied that
+  Install/Activate changes what the computer actually serves. Today
+  "Activate" only updates the `ComputerSourceLineageRecord`
+  (`ActiveSourceRef`, digests, `RouteProfile`) — a durable pointer flip in
+  product state, with no route switch, process restart, or binary swap
+  consuming it. Making the flip real (route-flip consumer, promotion record,
+  reconciler) is portfolio mission M6; the protocol design is in
+  `docs/choir-promotion-protocol-conjecture-2026-06-11.md` and
+  `docs/system-v1-one-cut-2026-06-11.md` Cut 4.
 
 ## App Boundary Rules
 
@@ -235,7 +292,7 @@ Known gaps:
 - VText may embed snippets from other apps, but the full-control surface remains
   the owning app. Embedded snippets are durable artifact references and layout
   intent; they are not a reason to collapse Image, Audio, Video, Podcast, PDF,
-  EPUB, Trace, Apps & Changes, or Browser back into a generic viewer.
+  EPUB, Trace, Features, or Browser back into a generic viewer.
 - Each VText snippet should expose an expansion target that opens the relevant
   app/window while preserving the reader's VText position. Multi-window reading
   is a core affordance for sources, demos, media, nested VTexts, and evidence.
@@ -343,7 +400,11 @@ Recent deployed platform proof for live multi-device computer sync:
   `mobile-driver-vtext-content-sync.png`.
 
 Recent deployed platform proof for Apps & Changes, VText reports, and benchmark
-evidence:
+evidence (historical: this proof predates the 2026-05-28/31 frontend redesign
+cutover that replaced "Apps & Changes" with the `features` app described
+above; the underlying adoption/promotion product APIs and evidence model are
+still in active use by Features, but the "Apps & Changes" UI and its
+portfolio review panel no longer ship):
 
 - behavior commits:
   `e0a8f76954cb01a983c6d980b3e558fae45e06a0`,
@@ -629,5 +690,7 @@ The highest-gradient UX gaps are:
 7. Shelf/Desk/Desktop Overview behavior needs richer mobile desktop proof,
    live thumbnails, and configurable Shelf placement.
 8. Candidate/promotion surfaces should become contextual product surfaces.
-9. Apps & Changes needs honest source-level uninstall/disable capability
-   records and non-Chiron accepted-record loading across source computers.
+9. Features needs honest source-level uninstall/disable capability records,
+   non-Chiron accepted-record loading across source computers, a real
+   route-flip consumer for promotion (M6), and a Try-it-now flow wired to the
+   existing preview endpoint (M7). See "Design intent, not shipped" below.

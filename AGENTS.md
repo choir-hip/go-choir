@@ -168,8 +168,12 @@ should behave identically for conductor, VText, researcher, super, vsuper,
 co-super, verifier, and future agent roles unless there is a proven invariant
 that requires divergence.
 
-Prefer role prompts, tool descriptions, capability policy, and product-visible
-state over role-specific harness branches. If a proposed fix requires
+Prefer prompts, tool descriptions, capability policy, and product-visible
+state over role-specific harness branches. (Prompt content itself is moving
+from persona framing toward obligation/authority-envelope framing — see
+`docs/choir-role-free-actor-protocol-2026-06-11.md` — but the structural point
+here, prompt/policy over code branches, holds either way.) If a proposed fix
+requires
 programmatic divergence in the core loop for one role, document the evidence,
 the invariant being protected, the simpler alternatives rejected, and obtain
 explicit human approval before landing it. Divergence is acceptable only when it
@@ -243,6 +247,13 @@ POST /api/run-acceptances/synthesize
 Required evidence should include trajectory/run ids, authority profile, build/deploy identity, vmctl worker lease, AppChangePackage/adoption evidence or a precise blocker, verifier contracts, rollback refs, and residual risks. Use explicit levels: `docs-level`, `staging-smoke-level`, `export-level`, `promotion-level`, `continuation-level`.
 
 Do not claim `promotion-level` without AppChangePackage adoption verifier contract evidence plus owner review and promote/rollback evidence. Do not claim `continuation-level` without run-memory/compaction and continuation evidence.
+
+`continuation-level` is transitional: the durable-actors rearchitecture
+(`docs/choir-rearchitecture-durable-actors-2026-06-11.md`) re-points this
+acceptance level at trajectory/work-item settlement evidence (portfolio M4).
+Until that cutover lands, `continuation-level` keeps its current meaning and
+evidence requirement above — do not weaken it and do not claim trajectory
+settlement evidence in its place before the level is formally re-pointed.
 
 ## Git And Staging
 
