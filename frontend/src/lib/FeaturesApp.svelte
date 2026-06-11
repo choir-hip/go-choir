@@ -346,6 +346,14 @@
     const label = action === 'promote' ? 'Activating' : action === 'rollback' ? 'Rolling back' : 'Rolling forward';
     actionStatus = `${label} ${feature?.title || adoption.app_id || adoption.package_id}`;
     try {
+      if (action === 'promote' && adoption.status === 'verified') {
+        // The Activate click is the owner approval: record it as its own
+        // transition before promoting. Verification alone never promotes.
+        await fetchJSON(`/api/adoptions/${encodeURIComponent(adoption.adoption_id)}/approve`, {
+          method: 'POST',
+          body: '{}',
+        });
+      }
       const next = await fetchJSON(`/api/adoptions/${encodeURIComponent(adoption.adoption_id)}/${action}`, {
         method: 'POST',
         body: action === 'rollback' ? undefined : '{}',

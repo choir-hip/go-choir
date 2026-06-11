@@ -44,6 +44,30 @@ jobs:
       - name: Go build
         run: go build ./cmd/...
 
+  tla-model-check:
+    name: TLA+ Model Check (specs/)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download TLA+ tools
+        run: curl -fsSL -o /tmp/tla2tools.jar https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
+
+      - name: Model check all specs
+        working-directory: specs
+        run: |
+          set -euo pipefail
+          for spec in *.tla; do
+            echo "=== ${spec} ==="
+            java -XX:+UseParallelGC -cp /tmp/tla2tools.jar tlc2.TLC -deadlock -workers auto "${spec}"
+          done
+
   go-test:
     name: Go Test (non-runtime)
     runs-on: ubuntu-latest

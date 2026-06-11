@@ -118,6 +118,21 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 		t.Fatalf("preview asset status = %d body=%s", assetW.Code, assetW.Body.String())
 	}
 
+	prematurePromoteW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/promote", `{}`, ownerID)
+	if prematurePromoteW.Code != http.StatusBadRequest {
+		t.Fatalf("promote without owner approval must be rejected: status = %d body=%s", prematurePromoteW.Code, prematurePromoteW.Body.String())
+	}
+	approveW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/approve", `{}`, ownerID)
+	if approveW.Code != http.StatusOK {
+		t.Fatalf("approve status = %d body=%s", approveW.Code, approveW.Body.String())
+	}
+	if err := json.Unmarshal(approveW.Body.Bytes(), &adoption); err != nil {
+		t.Fatalf("decode approved adoption: %v", err)
+	}
+	if adoption.Status != types.AppAdoptionOwnerApproved {
+		t.Fatalf("approved adoption status = %q", adoption.Status)
+	}
+
 	promoteW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/promote", `{}`, ownerID)
 	if promoteW.Code != http.StatusOK {
 		t.Fatalf("promote status = %d body=%s", promoteW.Code, promoteW.Body.String())
@@ -161,6 +176,10 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 	verifyPlatform := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+platformAdoption.AdoptionID+"/verify", `{"foreground_tail_merge_result":"no-conflict","merge_strategy":"rebase"}`, ownerID)
 	if verifyPlatform.Code != http.StatusOK {
 		t.Fatalf("verify platform status = %d body=%s", verifyPlatform.Code, verifyPlatform.Body.String())
+	}
+	approvePlatform := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+platformAdoption.AdoptionID+"/approve", `{}`, ownerID)
+	if approvePlatform.Code != http.StatusOK {
+		t.Fatalf("approve platform status = %d body=%s", approvePlatform.Code, approvePlatform.Body.String())
 	}
 	promotePlatform := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+platformAdoption.AdoptionID+"/promote", `{}`, ownerID)
 	if promotePlatform.Code != http.StatusOK {

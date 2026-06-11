@@ -404,13 +404,62 @@ func (rt *Runtime) finishAppAdoptionVerification(ctx context.Context, ownerID st
 	return rec, nil
 }
 
+// ApproveAppAdoption records the owner-approval gate: review authorizes a
+// verified transition; it does not replace verification. Promotion requires
+// this transition — verification alone never makes a change user-visible
+// (specs/promotion_protocol.tla ApprovalGate).
+func (rt *Runtime) ApproveAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+	rec, pkg, _, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	if rec.Status == types.AppAdoptionOwnerApproved {
+		return rec, nil
+	}
+	if rec.Status != types.AppAdoptionVerified {
+		return rec, fmt.Errorf("approve app adoption: adoption status %q is not verified", rec.Status)
+	}
+	rec.Status = types.AppAdoptionOwnerApproved
+	rec.Error = ""
+	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionOwnerApproved, "adoption", map[string]any{
+		"adoption_id":           rec.AdoptionID,
+		"package_id":            pkg.PackageID,
+		"target_computer_id":    rec.TargetComputerID,
+		"continuous_app_change": true,
+	})
+	return rec, nil
+}
+
+// promoteFreshnessCAS enforces the spec's NoStaleCommit invariant: the
+// foreground lineage must not have moved since this adoption was verified.
+// Evidence about a stale base authorizes nothing — re-verify instead.
+// Legacy records without the captured base skip the check.
+func promoteFreshnessCAS(rec types.AppAdoptionRecord, lineage types.ComputerSourceLineageRecord) error {
+	var rollback map[string]any
+	if err := json.Unmarshal(rec.RollbackProfileJSON, &rollback); err != nil {
+		return nil
+	}
+	baseRef, recorded := rollback["lineage_ref_at_verification"].(string)
+	if !recorded {
+		return nil
+	}
+	if strings.TrimSpace(lineage.ActiveSourceRef) != strings.TrimSpace(baseRef) {
+		return fmt.Errorf("foreground lineage moved since verification (verified against %q, now %q); re-verify the adoption before promoting", baseRef, lineage.ActiveSourceRef)
+	}
+	return nil
+}
+
 func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
 	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	if rec.Status != types.AppAdoptionVerified && rec.Status != types.AppAdoptionOwnerApproved {
-		return rec, fmt.Errorf("promote app adoption: adoption status %q is not verified", rec.Status)
+	if rec.Status != types.AppAdoptionOwnerApproved {
+		return rec, fmt.Errorf("promote app adoption: adoption status %q is not owner_approved; verification alone does not authorize promotion", rec.Status)
 	}
 	if rec.RuntimeArtifactDigest == "" || rec.UIArtifactDigest == "" {
 		return rec, fmt.Errorf("promote app adoption: runtime/ui artifact digests are required")
@@ -418,6 +467,9 @@ func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID s
 	rollbackSourceRef := rollbackSourceRefFromProfile(rec.RollbackProfileJSON)
 	if rollbackSourceRef == "" {
 		return rec, fmt.Errorf("promote app adoption: rollback source ref is required")
+	}
+	if err := promoteFreshnessCAS(rec, lineage); err != nil {
+		return rec, fmt.Errorf("promote app adoption: %w", err)
 	}
 	rec.Status = types.AppAdoptionAdopted
 	rec.Error = ""
@@ -506,6 +558,9 @@ func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoption
 	}
 	if strings.TrimSpace(rec.CandidateSourceRef) == "" {
 		return rec, fmt.Errorf("roll forward app adoption: verified source ref is required")
+	}
+	if strings.TrimSpace(lineage.ActiveSourceRef) != strings.TrimSpace(rollbackSourceRef) {
+		return rec, fmt.Errorf("roll forward app adoption: foreground lineage moved since rollback (expected %q, now %q); re-verify before rolling forward", rollbackSourceRef, lineage.ActiveSourceRef)
 	}
 	rec.Status = types.AppAdoptionAdopted
 	rec.Error = ""
@@ -702,6 +757,11 @@ func appAdoptionRollbackProfileJSON(rec types.AppAdoptionRecord, lineage types.C
 		"candidate_source_ref":       rec.CandidateSourceRef,
 		"package_id":                 rec.PackageID,
 		"adoption_id":                rec.AdoptionID,
+		// Freshness base for the promote-time CAS: the foreground lineage ref
+		// observed when verification started. Promotion is only valid while
+		// the foreground has not moved past this point (specs/
+		// promotion_protocol.tla NoStaleCommit).
+		"lineage_ref_at_verification": lineage.ActiveSourceRef,
 	}
 	rollbackJSON, _ := json.Marshal(rollback)
 	return rollbackJSON

@@ -370,6 +370,22 @@ func (h *APIHandler) HandleAppAdoptionDetail(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, rec)
+	case "approve":
+		var req struct{}
+		if r.Body != nil && r.ContentLength != 0 {
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&req); err != nil {
+				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid app adoption approve request"})
+				return
+			}
+		}
+		rec, err := h.rt.ApproveAppAdoption(r.Context(), ownerID, adoptionID)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, rec)
 	case "promote":
 		var req struct{}
 		if r.Body != nil && r.ContentLength != 0 {

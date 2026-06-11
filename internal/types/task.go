@@ -253,6 +253,11 @@ const (
 	// reject or cannot complete an adoption.
 	EventAppAdoptionBlocked EventKind = "app_adoption.blocked"
 
+	// EventAppAdoptionOwnerApproved is emitted when the owner approves a
+	// verified adoption for promotion. Review authorizes a verified
+	// transition; it does not replace verification.
+	EventAppAdoptionOwnerApproved EventKind = "app_adoption.owner_approved"
+
 	// EventAppAdoptionPromoted is emitted when an approved adoption advances a
 	// target computer source lineage.
 	EventAppAdoptionPromoted EventKind = "app_adoption.promoted"
