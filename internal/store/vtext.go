@@ -555,7 +555,7 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 		`SELECT DISTINCT d.doc_id, d.title, d.owner_id, d.updated_at, SUBSTRING(r.content, 1, 200) as snippet, 'content' as match_source
 		   FROM vtext_documents d
 		   JOIN vtext_revisions r ON r.doc_id = d.doc_id AND r.revision_id = d.current_revision_id
-		  WHERE %s%s%s
+		  WHERE %s%s%s%s
 		  ORDER BY d.updated_at DESC
 		  LIMIT ?`, contentWhere, contentOwnerClause, publishedContentClause, excludeClause)
 	contentArgs = append(contentArgs, remaining)
