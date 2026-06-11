@@ -900,6 +900,13 @@ func (s *Storage) CountRecentlySubmittedProcessorRequests(ctx context.Context, s
 // ResetStaleSubmittedProcessorRequests marks processor requests with status 'submitted'
 // and updated_at before the cutoff as 'queued' (clearing runtime_run_id) so they can be
 // retried. This recovers from platform VM restarts that orphan previously submitted runs.
+func (s *Storage) ResetProcessorRequestSubmission(ctx context.Context, requestID string) error {
+	_, err := s.DB.ExecContext(ctx,
+		`UPDATE processor_requests SET status = 'queued', runtime_run_id = '', updated_at = ? WHERE request_id = ?`,
+		time.Now().UTC().Format(time.RFC3339), requestID)
+	return err
+}
+
 func (s *Storage) ResetStaleSubmittedProcessorRequests(ctx context.Context, cutoff time.Time) (int, error) {
 	result, err := s.DB.ExecContext(ctx,
 		`UPDATE processor_requests SET status = 'queued', runtime_run_id = '', updated_at = ? WHERE status = 'submitted' AND updated_at < ?`,

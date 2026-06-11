@@ -578,6 +578,12 @@ func (d *ingestionRuntimeDispatcher) reconcileSubmittedProcessorRequests(ctx con
 		}
 		run, err := d.getRunStatus(ctx, runID)
 		if err != nil {
+			msg := strings.ToLower(err.Error())
+			if strings.Contains(msg, "returned 404") || strings.Contains(msg, "not found") {
+				if resetErr := store.ResetProcessorRequestSubmission(ctx, req.RequestID); resetErr != nil {
+					log.Printf("sourcecycled: reset missing runtime run %s for %s: %v", runID, req.RequestID, resetErr)
+				}
+			}
 			continue
 		}
 		if !isTerminalRuntimeState(run.State) {
