@@ -47,3 +47,4 @@ vmctl.log
 # Test results
 test-results/
 sourcecycled
+specs/states/
