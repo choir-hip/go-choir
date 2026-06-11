@@ -61,11 +61,13 @@ behavior change proven by the existing suite staying green.
 transfers only via conformance — say so in the report).
 
 **Proof-mission overlay (conjecture handoff §15):** run this mission under
-MissionGradient v2.0.0 with a live conjecture ledger. Success criteria: at
-least one conjecture changed an action or verifier; at least one edge
-narrowed a claim; the handoff is easier to resume; no canonical mutation
-without gates. Failure criteria: the ledger was decorative. Report honestly —
-this adjudicates whether the v2 format earns invariant status.
+**Parallax** (`skills/parallax/SKILL.md`, 2026-06-11 — the successor skill;
+MissionGradient v2 is frozen as baseline/fallback). Success criteria: at
+least one SHIFT changed the route; at least one edge narrowed a claim's
+scope; the case file is cheaper to resume than a MissionGradient doc; no
+canonical mutation without gates. Failure criteria: circuit fields filled,
+moves identical to what MissionGradient would have produced. Report honestly —
+this adjudicates Parallax's promotion (see docs/parallax-design-2026-06-11.md §6).
 
 **Size:** 1 overnight mission.
 
