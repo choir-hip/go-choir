@@ -709,11 +709,13 @@ func (d *ingestionRuntimeDispatcher) submitProcessor(ctx context.Context, req cy
 		"\nSource item handles: " + strings.Join(req.SourceItemIDs, ", ") +
 		"\nDo not paste source bodies into the checkpoint. Use source_search/fetch_url by handle or URL when needed, preserve source handles, and spawn VText agents when a story should be opened or revised."
 	channelID := "processor-v2:" + strings.ReplaceAll(req.ProcessorKey, ":", "-")
+	agentID := "processor-v2:" + strings.ReplaceAll(req.ProcessorKey, ":", "-")
 	return d.submit(ctx, runtimeRunSubmitRequest{
 		OwnerID: d.ownerID,
 		Prompt:  prompt,
 		Metadata: map[string]any{
 			"channel_id":                     channelID,
+			"agent_id":                       agentID,
 			"agent_profile":                 "processor",
 			"agent_role":                    "processor",
 			"request_source":                "sourcecycled",
