@@ -365,7 +365,7 @@ in
         "SOURCE_SERVICE_DB_PATH=${sourceServiceDir}/sourcecycled.db"
         "SOURCE_SERVICE_CONFIG_PATH=/opt/go-choir/configs/sources.json"
         "SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform"
-        "SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=4"
+        "SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=1"
         "SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS=60"
         "VMCTL_SANDBOX_PROXY_SOCK=/run/go-choir/vmctl.sock"
       ];

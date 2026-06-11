@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	defaultIngestionProcessorDispatchLimit = 4
+	defaultIngestionProcessorDispatchLimit = 1
 	defaultIngestionRuntimeDispatchRetries = 8
 	defaultIngestionRuntimeRetryDelay      = 2 * time.Second
 	defaultIngestionQueueDrainInterval     = 1 * time.Minute
