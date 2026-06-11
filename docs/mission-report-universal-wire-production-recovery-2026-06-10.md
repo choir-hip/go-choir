@@ -211,3 +211,25 @@ platformd still remained at `0 docs / 0 revs`.
 ### Updated best theory
 
 The publication chain can escape the root processor run and continue through a super-owned branch on the same document channel. Root-run or direct-child accounting is therefore insufficient as the admission invariant. A durable publication-chain lock likely needs to be keyed by channel / trajectory / candidate state, not just by the root processor run id.
+
+
+## Completion Branch Outcome — 2026-06-11 05:10 UTC
+
+The narrowed semantic-frontier objective was satisfied on the **expose exact reason** branch, not on the **durable publication succeeded** branch.
+
+### What was proven
+
+On a fresh platform guest and fresh `processor-v2:*` identity, one admitted processor did not produce a durable platformd publication. The exact reason is now exposed:
+
+```text
+processor run completes
+while a super-owned continuation on the same document channel remains active
+which can spawn its own VText child work
+so root-run completion is not a safe admission invariant for publication progress
+```
+
+This means the current orchestration model is using the wrong liveness boundary. Universal Wire publication is not a rooted tree that ends when the root processor run finishes; it behaves like a channel/trajectory-scoped coagent process.
+
+### Consequence
+
+The next architecture/protocol change should not be another transport patch. It should change the admission / liveness invariant from `root processor run is done` to something closer to `publication trajectory for this channel/candidate is settled`.

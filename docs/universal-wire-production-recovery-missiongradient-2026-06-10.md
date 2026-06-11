@@ -290,6 +290,8 @@ Any design that lets candidate records or sourcecycled rows stand in for VText a
 - **Action taken:** child-run-aware sourcecycled reconciliation was added for direct descendants, but this result shows that root-child tracking alone is insufficient when the chain continues through another supervising run on the same document channel.
 - **Next falsifier:** account for active publication chains by shared channel / trajectory / candidate-ledger state rather than only by direct root-child relationships, then re-run one-at-a-time admission and see whether a second processor is still admitted before the first document channel settles.
 
+- **Current strongest evidence:** clean lifecycle trace showed `processor 9a2606ee -> vtext ffaa48da (completed) -> processor completes -> super f653e2b6 continues on same channel -> vtext 42eda5a8 (completed)` while platformd stayed zero. This is sufficient to falsify the simpler root-run completion invariant for Universal Wire.
+
 ### Outside current experimental envelope
 These are not conjectures but known blind spots in the current experimental program:
 - exact live child-run topology inside the platform guest after one processor admission;
