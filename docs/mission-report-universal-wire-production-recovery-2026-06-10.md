@@ -120,3 +120,94 @@ There are two live issues left:
 1. Inspect one current rejected revision's exact metadata and its correlated run metadata, then compare that against the successful manual replay payload.
 2. Patch sourcecycled to poll submitted runtime run states and release in-flight budget on terminal states.
 3. Once a fresh revision is publish-eligible, verify platformd rows increase, then verify Wire edition ordering and headline-open behavior from the UI.
+
+
+## Scientific Update — 2026-06-11 03:30 UTC
+
+### What changed
+
+The investigation moved from infrastructure failures into the semantic decision frontier inside processor runs.
+
+### Newly ruled out
+
+1. **Ghost articles were manual mocks** — false. They were real platform-VM-local article revisions that leaked into the list before durable publication.
+2. **The current blocker is still guest→host transport** — false. Guest-local curl to host TAP `:8082/health` succeeded after the tap firewall repair, and direct host replay of a full article payload returned `201 Created`.
+3. **Queue bookkeeping alone explains the stall** — false. Sourcecycled queue accounting now self-heals much better; the dominant remaining failure is what processors decide to do after admission.
+
+### Strongest current evidence
+
+- One-at-a-time processor admission works.
+- A clean admitted processor completed and explicitly returned: "No VText spawns required — all 10 items have existing article coverage."
+- Another later processor returned: "VText spawning deferred — blocked on wire corpus search restoration for dedup verification."
+- `search_wire_corpus` previously searched guest-local unpublished docs; that has now been cut over to published-only docs.
+- Universal Wire list honesty was repaired so guest-local unpublished stories should no longer surface as canonical list items.
+- platformd still remains at `0` docs / `0` revisions.
+
+### Best current theory
+
+The current bottleneck is semantic/agentic: the processor still carries stale continuity or stale coverage beliefs and suppresses the VText/article creation step, or it spawns child work that does not converge into durable publication.
+
+### Next probes
+
+1. Treat the processor channel/continuity as suspect and test one run on the new `processor-v2:*` channel.
+2. If the stale belief persists, bypass continuity for one clean run.
+3. Capture the live child-run topology of a single admitted processor.
+4. Verify that the first truly clean processor run either creates one platformd row or yields a single exact semantic blocker.
+
+
+## Conjecture Ledger Snapshot
+
+- **C1 split-brain list/open:** confirmed and mitigated. List was exposing guest-local unpublished stories; click path expected durable docs.
+- **C2 transport/publish path:** mostly ruled out as the primary blocker after publish URL, desktop resolution, and TAP 8082 fixes.
+- **C3 queue bookkeeping:** improved enough that it is no longer the dominant blocker.
+- **C4 unpublished corpus poisoning:** confirmed and fixed by constraining `search_wire_corpus` to published-only docs.
+- **C5 stale processor continuity:** current leading conjecture. Completed processors still express old beliefs such as `wire corpus search restoration blocked`.
+- **C6 single-run destabilization:** still active. One admitted processor can still drive the guest unhealthy before durable publish reaches platformd.
+- **C7 primary mission frontier:** on a fresh guest and fresh processor identity, one admitted processor must either yield one durable platformd publication or expose the exact child-run / coverage-decision reason it does not.
+
+
+## Architectural Conjecture: Realest Decoupled Pipeline
+
+A new architectural conjecture emerged from the latest clean processor runs: even when transport, queue accounting, and list honesty are repaired, one processor run still tries to do too much semantic control work. The realest decoupled pipeline that preserves current topology is:
+
+```text
+source fetch
+-> normalized source facts / source items
+-> processor evidence pass
+-> durable candidate story ledger on platform VM
+-> coverage / dedup against published corpus only
+-> publication-candidate selection
+-> VText article spawn or revision
+-> autonomous publish to platformd
+-> durable Wire edition update
+-> public stories list / headline open
+```
+
+This does **not** create a second article truth. It keeps:
+- candidate ledger = pre-article planning state
+- VText = article truth
+- platformd = public durable publication truth
+
+The conjecture is that the current monolithic processor run is over-coupled and can suppress the whole pipeline with a local semantic decision ("already covered", "need dedup verification", "need publication direction"). The decoupled version would make those states durable and explicit instead of burying them in one processor completion result.
+
+
+## Scientific Update — 2026-06-11 04:40 UTC
+
+### New decisive trace
+
+A clean one-at-a-time processor run on a fresh guest produced the first precise child-run topology evidence:
+
+```text
+processor 9a2606ee...
+-> vtext ffaa48da... (completed)
+-> processor completes
+-> super f653e2b6... continues on same document channel
+   -> vtext 42eda5a8... (completed)
+-> sourcecycled admits next processor dbc6478a... before the super/vtext continuation is finished
+```
+
+platformd still remained at `0 docs / 0 revs`.
+
+### Updated best theory
+
+The publication chain can escape the root processor run and continue through a super-owned branch on the same document channel. Root-run or direct-child accounting is therefore insufficient as the admission invariant. A durable publication-chain lock likely needs to be keyed by channel / trajectory / candidate state, not just by the root processor run id.

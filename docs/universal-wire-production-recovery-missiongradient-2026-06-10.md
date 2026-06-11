@@ -146,6 +146,157 @@ The first failure transition after `runtime accepted processor run`.
 
 Inspect platform runtime/VText state after recovering the VM or mounting its data disk safely while stopped, and classify submitted run IDs against VText/publish/edition records.
 
+
+## Conjecture Ledger
+
+This mission is now best understood as conjecture control rather than a flat plan. Each conjecture records: current status, strongest evidence, and the next falsifier.
+
+### C1 — Split-brain list/open state
+- **Status:** confirmed, mitigated
+- **Claim:** Universal Wire list was surfacing guest-local platform-VM article revisions before durable platformd publication existed, while headline-open expected the durable published doc path.
+- **Evidence:** users observed 0 ↔ 12 oscillation and `Get document failed (404)` on click; platformd remained at `0 docs / 0 revs`; runtime list path read guest-local store.
+- **Action taken:** list indexing now requires durable publication markers.
+- **Next falsifier:** if list still shows stories while platformd is zero, the new list guard is incomplete.
+
+### C2 — Transport / host publish path was the blocker
+- **Status:** ruled out as current blocker
+- **Claim:** guest could not reach or use the host publish path.
+- **Evidence:** guest-local curl to host TAP `:8082/health` now succeeds; direct host replay of a real full article payload returned `201 Created`.
+- **Action taken:** fixed publish URL config, proxy desktop resolution, and tap firewall `8082`.
+- **Next falsifier:** none for current frontier; keep as historical ledger entry.
+
+### C3 — Queue accounting alone caused the stall
+- **Status:** ruled out as sole blocker
+- **Claim:** sourcecycled stale `submitted` rows were the main reason progress stopped.
+- **Evidence:** queue accounting fixes improved progression, but processors still completed without platformd rows.
+- **Action taken:** submitted-row reconciliation, missing-run requeue, stale-row resets.
+- **Next falsifier:** if queue freezes again with no guest work, inspect sourcecycled reconciliation first.
+
+### C4 — Processor coverage decisions were poisoned by unpublished guest-local docs
+- **Status:** confirmed, fixed in substrate
+- **Claim:** `search_wire_corpus` was searching the whole guest-local corpus, causing false “already covered” conclusions from unpublished local articles.
+- **Evidence:** live processor explicitly reported “existing article coverage”; earlier ghost stories existed only in guest-local state; search tool originally queried guest-local corpus wholesale.
+- **Action taken:** `search_wire_corpus` now searches published-only docs.
+- **Next falsifier:** if a clean processor still claims “already covered,” then a different coverage path or stale continuity is responsible.
+
+### C5 — Stale processor continuity / agent identity is steering live decisions
+- **Status:** active leading conjecture
+- **Claim:** the processor still carries old checkpoint beliefs such as “corpus search restoration blocked” or legacy coverage assumptions, and that stale continuity is suppressing VText spawn even after substrate fixes.
+- **Evidence:** completed processor outputs include “VText spawning deferred — blocked on wire corpus search restoration for dedup verification”; old processor agent identities were stable; channel-only versioning was insufficient, so agent identity was versioned to `processor-v2:*`.
+- **Action taken:** processor `channel_id` and `agent_id` now versioned to `processor-v2:*`.
+- **Next falsifier:** inspect the first clean processor run on the new identity. If it still reports stale restoration/coverage beliefs, the poison is not coming from the old processor identity alone.
+
+### C6 — Single admitted processor still destabilizes the guest before durable publish
+- **Status:** active
+- **Claim:** even one admitted processor can push the platform VM into an unhealthy state before platformd sync occurs.
+- **Evidence:** one-at-a-time admission works; guest often becomes unhealthy with `running_processor_runs` around 1 while platformd remains zero.
+- **Action taken:** lowered concurrency to 1 and added `running_processor_runs` health instrumentation.
+- **Next falsifier:** capture the exact child-run topology and terminal state of one clean admitted processor. If it completes without unhealthy periods, then the main issue is semantic, not capacity.
+
+### C7 — Current semantic frontier
+- **Status:** active primary conjecture
+- **Claim:** on a fresh platform guest and fresh processor continuity channel, one admitted processor should either (a) produce one durable platformd publication, or (b) expose the exact child-run / coverage-decision reason it does not.
+- **Strongest evidence:** latest clean processor completed and explicitly decided not to spawn VText because it believed no new VText work was required. Platformd stayed zero.
+- **Next falsifier:** run one clean processor on the fresh `processor-v2:*` identity and inspect its full terminal reasoning, child runs, and any publish attempt.
+
+### C8 — Ingestion and publication are over-coupled inside a single processor run
+- **Status:** active architectural conjecture
+- **Claim:** the current processor is doing too much in one long-lived run: ingesting source items, deduping against existing coverage, deciding publication priority, optionally fetching full text, optionally spawning VText, and effectively acting as an orchestration gate. This coupling raises the chance that a semantic deferral ("already covered", "need dedup verification", "need publication direction") prevents durable publication entirely.
+- **Evidence:** clean processors complete without crashing yet still return outcomes like "No VText spawns required" or "VText spawning deferred"; queue/transport fixes no longer change that decision frontier.
+- **Action taken:** none yet on architecture; only substrate and observability fixes so far.
+- **Next falsifier:** if a processor on fresh continuity still suppresses VText spawn after published-only corpus search is fixed, decoupling becomes the leading architectural remedy rather than a fallback idea.
+
+## Realest Decoupled Pipeline Preserving Topology
+
+This is not the "smallest" pipeline. It is the **realest** one that preserves the current system's topology, authority boundaries, and product ontology.
+
+```text
+source fetch
+-> normalized source facts / source items
+-> processor evidence pass (read-only semantic extraction, no publication authority)
+-> durable candidate story ledger on platform VM
+-> coverage / dedup pass against published corpus only
+-> publication-candidate selection / ranking
+-> VText article spawn or revision
+-> autonomous publish to platformd
+-> durable Wire edition update
+-> public stories list / headline open
+```
+
+### Why this is the realest cut
+
+- **Preserves platform VM ownership** of live article creation and editorial state.
+- **Preserves platformd** as the durable public publication surface.
+- **Preserves VText ownership** of article bodies and revision history.
+- **Preserves sourcecycled** as ingestion/orchestration substrate, but removes the demand that one processor run must perform ingestion, dedup, editorial triage, and publication control all at once.
+- **Preserves current topology**: no fake side stores, no manual seed path, no alternate article substrate.
+
+### Boundary split
+
+1. **Processor evidence pass**
+   - input: source item handles + prior candidate context
+   - output: structured findings / candidate story records / watch items
+   - not allowed to decide "do nothing forever" merely because a guest-local unpublished doc exists
+
+2. **Coverage / dedup pass**
+   - input: candidate story records
+   - corpus: published-only durable corpus
+   - output: `new`, `update_existing`, `defer`, or `duplicate`
+
+3. **Publication candidate selection**
+   - explicit prioritization step
+   - determines which `new` / `update_existing` candidates actually become VText work
+   - removes hidden editorial policy from the processor's final paragraph
+
+4. **VText article spawn / revision**
+   - VText owns article body creation and revision history
+   - output must carry durable lineage required for autonomous publish
+
+5. **Autonomous publish / sync**
+   - platform VM -> platformd
+   - only after this step is a story eligible for the canonical Wire list
+
+### Why this helps the current failure mode
+
+It turns the processor from a monolithic control object into a narrower semantic extractor. The current system lets one processor completion short-circuit the whole pipeline with a conclusion like "already covered" or "need dedup verification". The decoupled version moves those decisions into explicit durable states and separate passes.
+
+### Expected benefits
+
+- fewer long-lived processor runs
+- lower guest pressure per run
+- explicit durable candidate state instead of hidden continuity beliefs
+- clearer evidence for why a story did or did not become a VText article
+- easier replay / verification of the pipeline from candidate -> publish
+
+### Risks
+
+- more durable intermediate state means more schema / ledger complexity
+- if the candidate ledger becomes the new canonical article substrate, that would violate topology; it must remain a **pre-VText candidate ledger**, not a parallel article store
+
+### Architectural invariant
+
+The decoupled pipeline must not create a second article truth.
+
+- candidate ledger = pre-article planning state
+- VText = article truth
+- platformd = public durable publication truth
+
+Any design that lets candidate records or sourcecycled rows stand in for VText articles is a regression.
+
+### C9 — Publication chain escapes the root processor run
+- **Status:** confirmed, active
+- **Claim:** a processor may spawn a VText child that completes, yet the effective publication work continues under a super-owned branch on the same document channel. If sourcecycled only tracks the root processor run (or even its direct children), it can admit the next processor while the prior publication chain is still active.
+- **Evidence:** clean lifecycle trace on 2026-06-11: processor `9a2606ee...` spawned VText `ffaa48da...` and completed; then a super-owned parent `f653e2b6...` spawned VText `42eda5a8...` on the same channel; sourcecycled admitted the next processor `dbc6478a...` before that super/vtext continuation finished; platformd remained zero.
+- **Action taken:** child-run-aware sourcecycled reconciliation was added for direct descendants, but this result shows that root-child tracking alone is insufficient when the chain continues through another supervising run on the same document channel.
+- **Next falsifier:** account for active publication chains by shared channel / trajectory / candidate-ledger state rather than only by direct root-child relationships, then re-run one-at-a-time admission and see whether a second processor is still admitted before the first document channel settles.
+
+### Outside current experimental envelope
+These are not conjectures but known blind spots in the current experimental program:
+- exact live child-run topology inside the platform guest after one processor admission;
+- exact continuity contents influencing the new `processor-v2:*` identity;
+- whether any remaining coverage decisions are bypassing `search_wire_corpus`;
+- whether platformd sync will succeed once a processor actually chooses to spawn VText again.
+
 ## Investigation & Cognitive Reframing Loop
 
 Before declaring blocked:
@@ -244,51 +395,59 @@ Evidence linking policy: keep logs/large command output in artifacts or named co
 ## Run Checkpoint & Resumption State
 
 status: `checkpoint_incomplete`
+last checkpoint: Transport, backpressure, queue accounting, and guest-local ghost-story listing were repaired enough to isolate the remaining semantic frontier.
 
-last checkpoint: Incident root cause documented in `docs/universal-wire-empty-front-page-root-cause-2026-06-10.md`; MissionGradient control doc created here.
+current artifact state: Universal Wire should no longer surface unpublished guest-local stories as canonical list items; platformd still has zero docs/revisions; one-at-a-time processor admission works; the strongest current evidence is that admitted processors often decide not to spawn VText because of stale/incorrect coverage beliefs, or they spawn child work that does not converge into durable publication.
 
-current artifact state: Universal Wire still shows zero articles on staging; source fetch works; processor admission overloaded/wedged the platform VM; platformd has zero VText rows.
+what shipped:
 
-what shipped: Documentation only in this checkpoint.
+- guest→host publish transport repairs (publish URL, tap 8082, desktop resolution)
+- host publish path repairs (inline payload, raw internal reads, run-metadata preservation)
+- sourcecycled queue/accounting repairs (submitted reconciliation, missing-run requeue, stale-row resets)
+- Wire list honesty guard (durable-published-only indexing instead of guest-local ghost stories)
+- published-only corpus search for `search_wire_corpus`
+- one-at-a-time processor admission experiment
 
 what was proven:
 
-- source ingestion is not the immediate blocker;
-- platform VM is unhealthy/wedged despite active ownership;
-- sourcecycled submitted processor runs without end-to-end completion evidence;
-- platformd contains no published VText docs/revisions.
+- the ghost 12-card list was guest-local platform VM state, not manual mocks;
+- platformd remains the durable source of truth and is still empty;
+- host publish endpoint can succeed on full replay payloads;
+- guest can reach host proxy on TAP 8082;
+- sourcecycled can now admit exactly one processor at a time and self-heal submitted rows much better than before;
+- at least one admitted processor completed and explicitly chose not to spawn VText because it believed existing coverage already existed.
 
 unproven or partial claims:
 
-- exact state of the 64 submitted processor runs;
-- whether VText documents were created inside the platform sandbox;
-- whether publish eligibility or edition mutation would fail after overload is fixed;
-- whether platformd-backed public story reads are fully wired.
+- whether the published-only corpus-search fix has been observed through a truly clean processor run free of stale continuity;
+- whether live processor child-run topology converges to VText spawn and publish;
+- whether any current live processor-generated revision can produce the first non-zero platformd document/revision row without manual replay.
 
 belief-state changes:
 
-- replaced prior false belief “32 submitted means producing news” with “submission overloaded the platform computer and no publication reached platformd.”
+- the dominant failure is no longer transport or UI; it is a semantic/agentic decision frontier inside the processor run;
+- continuity/channel memory is now a leading hypothesis, because processors still emit stale beliefs like “wire corpus search restoration” after the substrate changed.
 
 remaining error field:
 
-- missing live concurrency/backpressure;
-- missing completion/publication ledger;
-- platform VM health/status mismatch;
-- platformd empty;
-- public app empty.
+- processor continuity poisoning or stale coverage beliefs;
+- possible child-run non-convergence after a single admitted processor;
+- no durable platformd publication yet.
 
-highest-impact remaining uncertainty: earliest failed transition after accepted processor run.
+highest-impact remaining uncertainty: when a single clean processor run is admitted on a fresh guest and fresh processor channel, does it spawn VText and publish durably, or does it still suppress itself because of stale continuity / false coverage?
 
-next executable probe: recover or safely inspect platform VM runtime state and classify submitted processor runs by completion/VText/publish/edition outcome.
+next executable probe: run one fresh processor on the new `processor-v2:*` channel, inspect its channel memory and terminal result, and if needed clear/bypass continuity for one trial to test whether VText spawn reappears.
 
-suggested resume goal string: use the short `/goal` string above.
+suggested resume goal string: Use MissionGradient. Complete docs/universal-wire-production-recovery-missiongradient-2026-06-10.md by proving or falsifying the current semantic frontier: on a fresh platform guest and fresh processor continuity channel, one admitted processor must either produce one durable platformd publication or expose the exact child-run / coverage-decision reason it does not. Keep Universal Wire list honesty (published-only), preserve platform/user authority boundaries, maintain evidence-ledger updates in the mission report, and stop only on durable platformd proof or a hard blocker after root-cause probes.
 
 evidence artifact refs:
 
-- `docs/universal-wire-empty-front-page-root-cause-2026-06-10.md`
-- live logs and command output from 2026-06-10 investigation summarized in that doc.
+- docs/universal-wire-empty-front-page-root-cause-2026-06-10.md
+- docs/mission-report-universal-wire-production-recovery-2026-06-10.md
+- direct host publish replay returned 201 while live processors still withheld VText spawn
+- guest-local curl to host 8082 succeeded after tap firewall repair
 
-rollback refs: no behavior-changing rollback needed for this docs checkpoint. Future behavior-changing commits must name git SHA and deployment rollback target.
+rollback refs: latest host/runtime deploys are on `main`; platform guest can be stop/resume refreshed cleanly; no manual state seeding or fake article insertion was used.
 
 ## Forbidden Shortcuts
 
