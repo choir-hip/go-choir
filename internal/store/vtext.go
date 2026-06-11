@@ -441,7 +441,15 @@ type SearchResult struct {
 // SearchDocuments searches the VText corpus by title and revision content.
 // It returns documents matching the query terms, ordered by relevance.
 // Searches across all owners when ownerID is empty.
+func (s *Store) SearchPublishedDocuments(ctx context.Context, query string, ownerID string, limit int) ([]SearchResult, error) {
+	return s.searchDocuments(ctx, query, ownerID, limit, true)
+}
+
 func (s *Store) SearchDocuments(ctx context.Context, query string, ownerID string, limit int) ([]SearchResult, error) {
+	return s.searchDocuments(ctx, query, ownerID, limit, false)
+}
+
+func (s *Store) searchDocuments(ctx context.Context, query string, ownerID string, limit int, publishedOnly bool) ([]SearchResult, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -475,13 +483,17 @@ func (s *Store) SearchDocuments(ctx context.Context, query string, ownerID strin
 		ownerClause = " AND d.owner_id = ?"
 		args = append(args, ownerID)
 	}
+	publishedClause := ""
+	if publishedOnly {
+		publishedClause = " AND EXISTS (SELECT 1 FROM vtext_revisions rp WHERE rp.doc_id = d.doc_id AND rp.revision_id = d.current_revision_id AND rp.metadata_json LIKE '%\"platformd_route_path\"%')"
+	}
 	titleArgs := append([]any(nil), args...)
 	titleSQL := fmt.Sprintf(
 		`SELECT d.doc_id, d.title, d.owner_id, d.updated_at, 'title' as match_source
 		   FROM vtext_documents d
-		  WHERE %s%s
+		  WHERE %s%s%s
 		  ORDER BY d.updated_at DESC
-		  LIMIT ?`, titleWhere, ownerClause)
+		  LIMIT ?`, titleWhere, ownerClause, publishedClause)
 	titleArgs = append(titleArgs, limit)
 
 	rows, err := s.vtextHandle().QueryContext(ctx, titleSQL, titleArgs...)
@@ -526,6 +538,10 @@ func (s *Store) SearchDocuments(ctx context.Context, query string, ownerID strin
 		contentOwnerClause = " AND d.owner_id = ?"
 		contentArgs = append(contentArgs, ownerID)
 	}
+	publishedContentClause := ""
+	if publishedOnly {
+		publishedContentClause = " AND r.metadata_json LIKE '%\"platformd_route_path\"%'"
+	}
 	// Exclude already-found docs.
 	excludeClause := ""
 	if len(seen) > 0 {
@@ -541,7 +557,7 @@ func (s *Store) SearchDocuments(ctx context.Context, query string, ownerID strin
 		   JOIN vtext_revisions r ON r.doc_id = d.doc_id AND r.revision_id = d.current_revision_id
 		  WHERE %s%s%s
 		  ORDER BY d.updated_at DESC
-		  LIMIT ?`, contentWhere, contentOwnerClause, excludeClause)
+		  LIMIT ?`, contentWhere, contentOwnerClause, publishedContentClause, excludeClause)
 	contentArgs = append(contentArgs, remaining)
 
 	rows2, err := s.vtextHandle().QueryContext(ctx, contentSQL, contentArgs...)

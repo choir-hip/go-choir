@@ -1080,7 +1080,7 @@ func newSearchWireCorpusTool(rt *Runtime) Tool {
 			if ownerID == "" {
 				ownerID = universalWirePlatformOwnerID()
 			}
-			results, err := rt.store.SearchDocuments(ctx, query, ownerID, limit)
+			results, err := rt.store.SearchPublishedDocuments(ctx, query, ownerID, limit)
 			if err != nil {
 				return "", fmt.Errorf("search wire corpus: %w", err)
 			}
