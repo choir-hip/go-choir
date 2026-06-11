@@ -1634,15 +1634,17 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
+	runningProcessorRuns := h.rt.RunningCountByProfile(r.Context(), AgentProfileProcessor)
 	resp := runtimeHealthResponse{
-		Status:          string(health),
-		Service:         "sandbox",
-		SandboxID:       h.rt.cfg.SandboxID,
-		RuntimeHealth:   health,
-		RunningRuns:     h.rt.RunningCount(),
-		ResearcherCount: h.rt.cfg.ResearcherCount,
-		ActiveProvider:  h.rt.provider.ProviderName(),
-		Build:           buildinfo.Snapshot("sandbox"),
+		Status:               string(health),
+		Service:              "sandbox",
+		SandboxID:            h.rt.cfg.SandboxID,
+		RuntimeHealth:        health,
+		RunningRuns:          h.rt.RunningCount(),
+		RunningProcessorRuns: runningProcessorRuns,
+		ResearcherCount:      h.rt.cfg.ResearcherCount,
+		ActiveProvider:       h.rt.provider.ProviderName(),
+		Build:                buildinfo.Snapshot("sandbox"),
 	}
 	if usage, err := persistentdisk.Statfs(filepath.Dir(h.rt.cfg.StorePath)); err == nil {
 		status := persistentdisk.StatusFromGuestUsage(usage)
