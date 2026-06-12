@@ -33,7 +33,7 @@ transfers only via conformance — say so in the report).
 
 ## Parallax State
 
-status: proposed (not started)
+status: working
 
 **mission conjecture:** if durable trajectory + work-item records are added
 to the runtime store, minted at conductor/processor/VText spawn points, with
@@ -179,7 +179,72 @@ Blind spots from this position (edge classes named):
   only writers are the explicit-objective API path and
   `maybeStartConfiguredContinuation`.)
 
-**ledger / move log:** (empty — mission not started)
+**ledger / move log:**
+
+- 2026-06-12 PROBE (Q1): all spawn surfaces funnel through three CreateRun
+  sites — `createRunWithMetadata`/`persistSubmittedRun`,
+  `completePromptBarDecisionRun`, `StartChildRun`, plus the email tool's
+  direct CreateRun; processor runs enter via `HandleInternalRunSubmission` →
+  `StartRunWithMetadata`. Minting at those sites covers conductor,
+  processor, VText, coagents, email. *Receipt:* api.go:883→StartRunWithMetadata;
+  runtime.go createRunWithMetadata/StartChildRun; tools_email.go.
+- 2026-06-12 SETTLE (Q2): v1 kinds = document | publication | task, derived
+  from spawn profile (processor → publication; conductor/vtext/email →
+  document; else task). Settlement rules as data:
+  `types.SettlementRule{RequireNoOpenWorkItems, RequiredSubjectRefs}`;
+  publication additionally requires `publish_ref`. Reviewable after M5's
+  first real cycle (the frame_lock edge stays open and named).
+- 2026-06-12 SETTLE (Q3): additive only — work items are a new table; the
+  `run_continuations` write path is untouched; freeze decision stays with M4.
+- 2026-06-12 CONSTRUCT: `internal/types/trajectory.go` (TrajectoryRecord,
+  WorkItemRecord, SettlementRule as data); `trajectories` + `work_items`
+  tables + CRUD (`internal/store/trajectory.go`); `runs.trajectory_id`
+  column (CREATE TABLE + ensureColumn migration + post-migration index);
+  `RunRecord.TrajectoryID`; minting helper `stampAndMintTrajectory`
+  (`internal/runtime/trajectory.go`) wired at all four spawn sites,
+  best-effort so a mint failure can never fail a spawn (C3 invariant);
+  open-obligations query `TrajectoryObligations` + pure
+  `EvaluateTrajectorySettlement`; GET /api/trajectories and
+  /api/trajectories/{id} (owner-scoped).
+- 2026-06-12 PROBE (C2, C3): example tests green — store CRUD/idempotent
+  mint/fingerprint dedup (completed blocks reuse, cancelled releases),
+  runtime minting at conductor + processor spawns, child joins parent's
+  trajectory without a second record, obligations query answers
+  "waiting on". Full default `go test ./...` green except
+  `TestIngestionRuntimeDispatcherSubmitsProcessorProfilesOnly`
+  (cmd/sourcecycled) — **pre-existing**: fails identically at 52e6baef,
+  before any of this session's changes; likely date-sensitive stale-request
+  cleanup flake; out of M1 scope, flagged for follow-up.
+- 2026-06-12 SHIFT (vocabulary, founder-directed): provenance is tracked
+  without parent/child vocabulary entirely — `spawned_by` is a past-tense
+  event fact, not a present-tense relationship; the relationship reading is
+  where the retired bug classes lived. Glossary updated (new "provenance
+  (spawned_by)" entry; parent/child retirement strengthened to cover
+  provenance prose). M1's own tests scrubbed. Code identifiers
+  (`ParentRunID`, `StartChildRun`) rename in M3 as already scheduled.
+- Evidence-class note: all tests are existential (example runs); the
+  wire_pipeline.tla mapping transfers only via conformance. No universal
+  claim is made.
+
+### C1 mapping — control inventory → trajectory/work-item expression
+
+Vantage shift: each entry read as its consumer mission will use it. This is
+the bridge test for N2′ at the additive stage; the *behavioral* falsifier for
+each row runs in the mission that flips it.
+
+| Control use (today) | Expression (new records) | Consumer / falsifier |
+|---|---|---|
+| liveness: `isTerminalRuntimeState && ActiveChildRuns == 0` (sourcecycled main.go:590) | `TrajectoryObligations.SettlementReady` — open work items + rule refs, queryable now | M5 flips the reconcile condition; falsifier: multi-story cycle at maxProc>1 |
+| child budgets per parent (`enforceChildSpawnBudget`) | count open work items / live runs per `trajectory_id` (indexed column) | M2/M3; expressible — `idx_runs_trajectory_id` makes it one query |
+| cancellation cascade `CancelRunGraph` (runtime.go:828) | cancel-by-trajectory: `UpdateTrajectoryStatus(cancelled)` + cancel runs WHERE trajectory_id | M3; record + column exist, the cascade rewrite is M3's |
+| completion signaling `notifyParent` | `update_coagent` carrying `TrajectoryID` (already a field on `actor.Update`) | M2 |
+| co-super slots keyed (parent, slot) | re-key (trajectory, slot): trajectory_id now durable on every run | M2 (named riskiest migration) |
+| provenance `parent_loop_id` | unchanged — provenance only; trajectory carries control; `spawned_by_run_id` rename is M3's | M3 |
+| continuation record (objective/authority/fingerprint) | `WorkItemRecord` — ported with dedup semantics (completed blocks reuse, cancelled releases) | M4 deletes the old table |
+
+No inventory entry found that the records cannot express → C1 **supported at
+the expressibility scope only** (existential evidence; behavioral transfer
+is per-row, in M2–M5).
 
 **version / lineage:** v0, compiled 2026-06-11 from portfolio M1 + code
 inventory. Predecessors: none. Successors gated on this: M2 (messaging), M5
@@ -187,7 +252,37 @@ inventory. Predecessors: none. Successors gated on this: M2 (messaging), M5
 
 **learning state:** retained here.
 
-**settlement:** not settled. Exit requires: tables + column landed; minting
-at conductor/processor/VText spawn points; open-obligations query working;
-suite green; landing proof (commit/push/CI) recorded here; C1 mapping written
-per inventory entry; honest C4 verdict for the Parallax adoption gate.
+**settlement:** open_handoff → settled pending CI. Evidence so far:
+
+- Witness landed: `trajectories` + `work_items` tables with CRUD
+  (internal/store/trajectory.go), `runs.trajectory_id` column + index
+  (fresh-DB CREATE TABLE + ensureColumn migration + post-migration index),
+  `RunRecord.TrajectoryID`, minting at all four spawn sites
+  (internal/runtime/trajectory.go), `TrajectoryObligations` query +
+  `EvaluateTrajectorySettlement` (pure), GET /api/trajectories[/{id}].
+- Tests: store trajectory/work-item suite green; runtime minting +
+  obligations suite green; comprehensive-tag subset (continuation, run
+  API, trajectory) green; full default `go test ./...` green except the
+  **pre-existing** sourcecycled dispatcher flake (fails at 52e6baef,
+  before this session — not an M1 regression; follow-up candidate).
+  Live-LLM tests are env-gated and skipped (no credentials set; zero API
+  spend). Full comprehensive matrix delegated to CI.
+- C1 mapping written per inventory entry (table above); supported at
+  expressibility scope only.
+- C4 (Parallax adoption) verdict, honestly: the conjecture framing did
+  change the route — the C2 identity decision (adopt the derived ID as
+  the durable key) came directly from the position probe and avoided a
+  data migration; the vocabulary shift (spawned_by, founder-directed)
+  changed glossary doctrine and this mission's own artifact prose; M1a
+  (pre-mission deletion) came from interrogating the bridge rather than
+  executing the plan as written. Moves were not identical to
+  MissionGradient behavior. One honest caveat: the SHIFT that "changed
+  the route" most was founder input mid-circuit, not an autonomous
+  observer move — count it as evidence for the discipline's
+  escalation-surface, not for autonomous shift selection.
+
+**Landing proof** (required for settlement):
+- commits: b508f71c (M1a synthesis deletion), 14479930 (Parallax v1.2.0
+  docs + dead trace.js deletion), a31fd2b5 → amended (M1 witness)
+- push/CI: pending — next discriminator: CI green on the comprehensive
+  matrix this mission did not run locally.

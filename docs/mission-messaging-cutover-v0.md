@@ -1,0 +1,197 @@
+# Mission M2 — Messaging Cutover (cutover step 3) — v0
+
+Source: `docs/mission-portfolio-2026-06-11.md` §M2. Program:
+`docs/choir-rearchitecture-durable-actors-2026-06-11.md` (cutover step 3,
+§2.2/§2.4, conjecture R4). Spec: `specs/actor_protocol.tla` (send / activate
+/ deliver / steer / passivate; conformance target). Discipline:
+`skills/parallax/SKILL.md`. Predecessor: M1
+(`docs/mission-trajectory-model-v0.md`) — trajectory records and work items
+must exist before slots re-key and results become durable updates.
+
+## Source form (from the portfolio, verbatim intent)
+
+**Real artifact:** `update_coagent` (renamed, promoted `submit_coagent_update`)
+as the sole agent-to-agent primitive over the `internal/actor` send path;
+deletion of `cast_agent`, `cast_agent_update`, `wait_agent`, `notifyParent`,
+per-turn inbox polling; co-super slot registry keyed (trajectory, slot) with
+atomic claim.
+
+**Bridge conjecture (R4):** one structured message primitive doubling as the
+wake primitive makes results single-sourced and control flow legible.
+*Falsifier:* a real coordination need that typed kinds + notes cannot express
+(watch the kind distribution for prose-stuffing). *Edge (missing_oracle):*
+silent stall — liveness now rests on the open-obligations query; a trajectory
+that stops progressing while showing zero open obligations kills the design.
+
+**Settlement:** grep-level zero callers of the deleted mechanisms; a vsuper
+coordinating two co-supers sees every result exactly once across a process
+restart; prompts updated (co-super.md, vsuper.md, vtext.md).
+
+**Dependencies:** M1. **Size:** 1–2 overnight missions; the slot registry is
+the riskiest single migration — its own control interval and test.
+
+## Parallax State
+
+status: proposed (blocked on M1 settlement)
+
+**mission conjecture:** if `update_coagent` becomes the sole agent-to-agent
+message and wake primitive over the `internal/actor` send path, and the four
+overlapping mechanisms are deleted with the slot registry re-keyed to
+(trajectory, slot), then the deeper rearchitecture goal advances: results
+become single-sourced, control flow becomes legible (who updates whom with
+what kind), and the lost-wake / completed-but-unknown bug classes become
+structurally unrepresentable rather than merely less likely.
+
+**deeper goal (G):** durable actors, evidence-bearing promotion, and
+self-development operational instead of documentary (portfolio G).
+
+**witness/spec (A/S):** one send path (`actor.Runtime.Send` semantics:
+idempotent durable append + deliver-or-activate); `update_coagent` tool
+(rename + promotion of `submit_coagent_update`, kind enum grown with
+`directive` and `assignment`; `assignment` writes a work item,
+`verification` writes acceptance evidence — message and control record are
+one act); deletions per the source form; slot registry keyed
+(trajectory, slot) with atomic claim. Spec conformance:
+`specs/actor_protocol.tla` invariants (no lost wake, idempotent delivery,
+atomic passivation).
+
+**invariants / qualities / domain ramp (I/Q/D):**
+- I: exactly-once ledger effects committed transactionally at send;
+  at-least-once visibility is accepted slack, never "fixed" with
+  coordination machinery. No new message primitives (pub/sub and
+  multi-recipient stay deferred; multi-recipient = loop over idempotent
+  sends). VText tool-scope enforcement untouched.
+- Q: every prompted coordination use expressible as a typed kind + prose
+  body; the kind distribution is watched, not assumed (R4 prose-pressure
+  edge).
+- D: starts in-process (one computer's runtime); cross-VM send (super ↔
+  vsuper outbox, actor_protocol_xvm.tla) is explicitly out of scope —
+  deferred until the first real cross-VM pair is live. The restart
+  falsifier must run on a real process, not only unit tests.
+
+**authority / bounds:** repo changes on a branch; behavior changes gated on
+the full suite + the named falsifiers; prompts (co-super.md, vsuper.md,
+vtext.md) updated in the same cut — stale prompts naming deleted tools are
+heresy vectors. Landing proof (commit, push, CI, staging acceptance)
+required in this document before settlement; this is a
+platform-behavior-changing mission, so local proof is not settlement.
+
+### Position — code inventory (compiled 2026-06-12, pre-start)
+
+What this observer can already see cheaply (receipts from grep; re-verify at
+mission start, M1 may shift lines):
+
+1. **The four mechanisms to delete:**
+   - `cast_agent` (tools_coagent.go:721), `cast_agent_update`
+     (tools_coagent.go:792), `wait_agent` (tools_coagent.go:944) — tool
+     definitions; registry entries at tools.go:380–382; dispatch at
+     tools.go:718 ff.
+   - `notifyParent` — 5 non-test sites (runtime.go:1197, 1331, 2342, def
+     2454 ff.).
+   - per-turn inbox polling — `injectPendingInboxTurns` (runtime.go:1230,
+     called at runtime.go:1141) and a second poller in
+     super_controller.go:37 (`ListPendingInboxDeliveries`) — **note: the
+     super controller is a polling consumer the portfolio entry does not
+     name; sweep it in the same cut or the deletion is incomplete.**
+2. **The survivor:** `submit_coagent_update` (tools_worker_update.go;
+   registry tools.go:395). Consumers that key off its tool name:
+   tools_research.go:714, delegate_worker_update_fallback.go:30 — the
+   rename must sweep these literals (and any event payloads carrying the
+   tool name).
+3. **The slot registry:** today keyed (spawning run, slot) via
+   `activeChildRunForCoSuperSlot(parentRec.RunID, slot)` under
+   `childSpawnMu` (runtime.go:529–556 region; sequencing logic through
+   ~:703). Re-key to (trajectory_id, slot): M1's `runs.trajectory_id`
+   column + index make the claim query one indexed lookup. The riskiest
+   migration (R5 names co-super slot sequencing the riskiest single
+   semantic) — own control interval, own test, atomic claim semantics
+   stated explicitly (the check-then-act race at runtime.go:534–545 is one
+   of the bug classes this mission exists to delete; do not reproduce it
+   keyed differently).
+4. **The actor core is built and tested:** `internal/actor` — idempotent
+   `Log.Append` on UpdateID, Send with atomic {residency check + delivery},
+   Sweep for backlog, Evict crash-equivalent; `actor.Update` already
+   carries `TrajectoryID`. SQLiteLog exists. **Open question Q1: the
+   runtime store is Dolt/MySQL while actor's Log implementation is SQLite —
+   decide whether the durable update log lands in the runtime store (new
+   Log impl over Dolt) or stays a separate SQLite file; exactly-once ledger
+   effects (work items, acceptance evidence in the same transaction as
+   append) require the log and the ledger in the same transactional
+   domain.**
+5. **Prompts naming deleted tools:** vsuper.md, vtext.md, co-super.md
+   (prompt_defaults). Settlement includes their update.
+6. **M1 hooks available:** work items (`assignment` kind writes one),
+   `TrajectoryObligations` (the open-obligations query the silent-stall
+   edge rests on), `runs.trajectory_id` for the slot re-key.
+
+Blind spots from this position (edge classes named):
+- **missing_oracle (R4's named edge):** silent stall. After wait_agent and
+  polling die, liveness rests entirely on open obligations being modeled
+  honestly. The discriminator to build *early in this mission*: a stall
+  probe — a trajectory with in-flight coordination must never show zero
+  open obligations; if it can, the obligation model is too loose and the
+  design dies here, cheaply.
+- **independence:** actor_protocol.tla covers the protocol model;
+  `internal/actor` tests cover the package. Neither covers the runtime
+  integration (LLM loop steering at step boundaries, warm injection). The
+  model's ∀ transfers only via conformance — say so in every claim.
+- **resource:** the deletion touches every coordination path at once. If
+  the cut cannot stay green mid-mission, shrink D: land send-path
+  unification first (all four mechanisms become shims over send()), then
+  delete shims one per control interval.
+
+### Initial conjectures
+
+- **C1 (= R4 bridge):** every real coordination use is a typed message.
+  *Test:* audit of prompted uses (verifier failure reports, vsuper
+  correctives, VText worker instructions — rearchitecture §2.2 already
+  audited these as typed-with-prose-bodies); post-cut, the kind
+  distribution shows no prose-stuffing into `notes`. *Falsifier:* a
+  coordination need that cannot be a kind.
+- **C2 (single source):** a vsuper coordinating two co-supers sees every
+  result exactly once, in its mailbox, across a process restart (kill -9
+  between append and delivery; the sweep delivers on reboot). *This is the
+  mission's behavioral falsifier and its settlement gate.*
+- **C3 (slot atomicity):** two concurrent spawns claiming
+  (trajectory, slot) — exactly one wins, durably, under crash injection
+  between claim and spawn. Own control interval.
+- **C4 (no silent stall):** with wait_agent deleted, a trajectory with
+  undelivered results or unanswered blockers always shows nonzero open
+  obligations via `TrajectoryObligations`. *Falsifier (kills the design,
+  per R4):* a stalled trajectory reporting zero open obligations.
+
+### Open questions (first probes)
+
+- **Q1:** transactional domain for the durable update log (Dolt store vs
+  actor's SQLite) — exactly-once ledger effects need same-transaction
+  append+effect. Probe: where does `assignment` → work item write commit?
+- **Q2:** wake-into-runtime integration — `actor.Handler.HandleUpdate` vs
+  the existing `executeRun` LLM loop: M2 needs delivery/steering into live
+  loops (replacing `injectPendingInboxTurns`), but full activation-loop
+  replacement is M3. Probe: define the M2/M3 boundary precisely — M2 may
+  deliver into the existing run loop at step boundaries as long as the
+  send path is the only source.
+- **Q3:** does anything outside the runtime read `inbox_deliveries` or
+  `channel_messages` as a delivery mechanism (vs audit log)? Grep before
+  deleting the pollers; channel_messages survives as replay-only log.
+
+**ledger / move log:** (empty — mission not started; M1 must settle first)
+
+**version / lineage:** v0, compiled 2026-06-12 from portfolio M2 + code
+inventory, while M1 was in flight (line numbers may drift; re-verify at
+start). Predecessor: M1 (`docs/mission-trajectory-model-v0.md`).
+Successors gated on this: M3 (lifecycle), M6/M7 indirectly.
+
+**learning state:** retained here. Inherited from M1's circuit: provenance
+vocabulary is `spawned_by` only (no parent/child, even in prose — glossary
+"provenance (spawned_by)"); the slot re-key consumes M1's
+`runs.trajectory_id` column; the silent-stall oracle consumes M1's
+`TrajectoryObligations`.
+
+**settlement:** not started. Exit requires: grep-level zero callers of
+`cast_agent`, `cast_agent_update`, `wait_agent`, `notifyParent`,
+`injectPendingInboxTurns` (and the super_controller poller); C2 restart
+falsifier passes on a real process; C3 slot test under concurrency; C4
+stall probe shows the obligation model is honest; prompts updated; full
+suite green; landing proof (commit, push, CI, staging acceptance) recorded
+here.

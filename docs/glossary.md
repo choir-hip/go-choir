@@ -542,8 +542,16 @@ one rule covering boot recovery, crash windows, and post-eviction re-wake.
 
 The causality object: a durable record (kind, subject refs, explicit
 settlement rule stored as data, status live/settled/cancelled). Replaces
-parent/child run trees as the control model; parent links survive only as
-provenance (`spawned_by`).
+parent/child run trees as the control model. What survives is provenance.
+
+### provenance (spawned_by)
+
+The frozen, past-tense fact that one run spawned another: `spawned_by` is
+an event that happened, not a relationship that holds. No control reads —
+no waiting on, budgeting by, or cancelling through the spawn edge. Say
+"spawned by", "spawn site", "spawned run"; never "parent" or "child", even
+for provenance — the present-tense relationship reading is where the
+retired bug classes lived.
 
 ### work item
 
@@ -632,8 +640,11 @@ housekeeping: one tolerated contradiction licenses anything downstream.
   synthesis; channel handoff to persistent super). Replaced by work items
   and warm steering. Still in code during cutover; do not use in new
   doctrine.
-- **parent/child run** as control semantics — replaced by trajectories +
-  settlement; provenance edge only.
+- **parent/child run** — retired entirely, including for provenance. The
+  control semantics are replaced by trajectories + settlement; the
+  surviving edge is `spawned_by`, a past-tense event fact (see provenance).
+  Still in code during cutover (`ParentRunID`, `StartChildRun`); the field
+  rename lands with M3; do not use the words in new doctrine.
 - **channel**, unqualified — disambiguate (mailbox / document channel /
   Go channel).
 - **sandbox** as product ontology — the product object is a persistent

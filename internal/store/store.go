@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS runs (
 	agent_id    VARCHAR(255) NOT NULL DEFAULT '',
 	channel_id  VARCHAR(255) NOT NULL DEFAULT '',
 	parent_loop_id VARCHAR(255) NOT NULL DEFAULT '',
+	trajectory_id VARCHAR(255) NOT NULL DEFAULT '',
 	agent_profile VARCHAR(255) NOT NULL DEFAULT '',
 	agent_role VARCHAR(255) NOT NULL DEFAULT '',
 	owner_id    VARCHAR(255) NOT NULL,
@@ -273,6 +274,36 @@ CREATE TABLE IF NOT EXISTS run_continuations (
 	updated_at         DATETIME NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS trajectories (
+	trajectory_id        VARCHAR(255) PRIMARY KEY,
+	owner_id             VARCHAR(255) NOT NULL DEFAULT '',
+	kind                 VARCHAR(64) NOT NULL DEFAULT '',
+	subject_refs_json    LONGTEXT NOT NULL DEFAULT '{}',
+	status               VARCHAR(64) NOT NULL DEFAULT 'live',
+	settlement_rule_json LONGTEXT NOT NULL DEFAULT '{}',
+	created_at           DATETIME NOT NULL,
+	updated_at           DATETIME NOT NULL,
+	settled_at           DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS work_items (
+	work_item_id          VARCHAR(255) PRIMARY KEY,
+	trajectory_id         VARCHAR(255) NOT NULL DEFAULT '',
+	owner_id              VARCHAR(255) NOT NULL DEFAULT '',
+	objective             LONGTEXT NOT NULL,
+	reason                LONGTEXT NOT NULL DEFAULT '',
+	authority_profile     VARCHAR(255) NOT NULL DEFAULT '',
+	step_budget           BIGINT NOT NULL DEFAULT 0,
+	token_budget          BIGINT NOT NULL DEFAULT 0,
+	objective_fingerprint VARCHAR(255) NOT NULL DEFAULT '',
+	status                VARCHAR(64) NOT NULL DEFAULT 'open',
+	assigned_agent_id     VARCHAR(255) NOT NULL DEFAULT '',
+	created_by_loop_id    VARCHAR(255) NOT NULL DEFAULT '',
+	details_json          LONGTEXT NOT NULL DEFAULT '{}',
+	created_at            DATETIME NOT NULL,
+	updated_at            DATETIME NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS browser_sessions (
 	session_id       VARCHAR(255) PRIMARY KEY,
 	owner_id         VARCHAR(255) NOT NULL DEFAULT '',
@@ -383,6 +414,10 @@ CREATE INDEX IF NOT EXISTS idx_runs_sandbox_id ON runs(sandbox_id);
 CREATE INDEX IF NOT EXISTS idx_runs_agent_id ON runs(agent_id);
 CREATE INDEX IF NOT EXISTS idx_runs_channel_id ON runs(channel_id);
 CREATE INDEX IF NOT EXISTS idx_runs_parent_loop_id ON runs(parent_loop_id);
+CREATE INDEX IF NOT EXISTS idx_trajectories_owner_status ON trajectories(owner_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_work_items_trajectory_status ON work_items(trajectory_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_work_items_owner_status ON work_items(owner_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_work_items_fingerprint ON work_items(owner_id, trajectory_id, objective_fingerprint);
 CREATE INDEX IF NOT EXISTS idx_events_loop_id_seq ON events(loop_id, seq);
 CREATE INDEX IF NOT EXISTS idx_events_owner_id ON events(owner_id);
 CREATE INDEX IF NOT EXISTS idx_events_agent_id ON events(agent_id);
@@ -560,6 +595,7 @@ func (s *Store) bootstrap() error {
 		{"runs", "parent_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"runs", "agent_profile", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"runs", "agent_role", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"runs", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"events", "agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"events", "channel_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"events", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
@@ -587,6 +623,10 @@ func (s *Store) bootstrap() error {
 	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_owner_stream_seq ON events(owner_id, stream_seq)`); err != nil {
 		return fmt.Errorf("create idx_events_owner_stream_seq: %w", err)
+	}
+	// After ensureColumn so existing databases gain runs.trajectory_id first.
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_runs_trajectory_id ON runs(trajectory_id)`); err != nil {
+		return fmt.Errorf("create idx_runs_trajectory_id: %w", err)
 	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_trajectory_stream_seq ON events(trajectory_id, stream_seq)`); err != nil {
 		return fmt.Errorf("create idx_events_trajectory_stream_seq: %w", err)
@@ -761,12 +801,13 @@ func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
 	runErr := sanitizeStoreText(rec.Error)
 
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO runs (loop_id, agent_id, channel_id, parent_loop_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO runs (loop_id, agent_id, channel_id, parent_loop_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.RunID,
 		rec.AgentID,
 		rec.ChannelID,
 		rec.ParentRunID,
+		rec.TrajectoryID,
 		rec.AgentProfile,
 		rec.AgentRole,
 		rec.OwnerID,
@@ -789,7 +830,7 @@ func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
 // GetRun returns the run with the given run ID.
 func (s *Store) GetRun(ctx context.Context, runID string) (types.RunRecord, error) {
 	row := s.queryDB().QueryRowContext(ctx,
-		`SELECT loop_id, agent_id, channel_id, parent_loop_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
+		`SELECT loop_id, agent_id, channel_id, parent_loop_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 		   FROM runs
 		  WHERE loop_id = ?`,
 		runID,
@@ -931,7 +972,7 @@ func (s *Store) ListChildRuns(ctx context.Context, parentRunID string, limit int
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.
 func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT loop_id, agent_id, channel_id, parent_loop_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
+		`SELECT loop_id, agent_id, channel_id, parent_loop_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 		   FROM runs
 		  WHERE owner_id = ?
 		    AND agent_id = ?
@@ -945,7 +986,7 @@ func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID 
 }
 
 func (s *Store) listRunsWhere(ctx context.Context, where string, args []any, limit int) ([]types.RunRecord, error) {
-	query := `SELECT loop_id, agent_id, channel_id, parent_loop_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
+	query := `SELECT loop_id, agent_id, channel_id, parent_loop_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 	            FROM runs`
 	if where != "" {
 		query += " WHERE " + where
@@ -1876,6 +1917,7 @@ func scanRun(row interface{ Scan(...any) error }) (types.RunRecord, error) {
 		&rec.AgentID,
 		&rec.ChannelID,
 		&rec.ParentRunID,
+		&rec.TrajectoryID,
 		&rec.AgentProfile,
 		&rec.AgentRole,
 		&rec.OwnerID,

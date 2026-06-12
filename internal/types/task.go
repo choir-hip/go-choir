@@ -86,6 +86,11 @@ type RunRecord struct {
 	// ParentRunID links this run to the run that spawned it, if any.
 	ParentRunID string `json:"parent_loop_id,omitempty"`
 
+	// TrajectoryID keys this run to its durable trajectory record. It is
+	// the same value the runtime threads through run metadata; the column
+	// makes trajectory membership queryable without parsing metadata_json.
+	TrajectoryID string `json:"trajectory_id,omitempty"`
+
 	// AgentProfile is the profile/tool policy used for this run.
 	AgentProfile string `json:"agent_profile,omitempty"`
 

@@ -274,6 +274,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		FinishedAt:   &now,
 		Metadata:     metadata,
 	}
+	rt.stampAndMintTrajectory(ctx, run)
 	if err := rt.store.CreateRun(ctx, *run); err != nil {
 		return nil, fmt.Errorf("persist email appagent run: %w", err)
 	}

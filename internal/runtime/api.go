@@ -1699,6 +1699,8 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/app-change-packages/", h.HandleAppChangePackageDetail)
 	s.HandleFunc("/api/adoptions", h.HandleAppAdoptionsRoot)
 	s.HandleFunc("/api/adoptions/", h.HandleAppAdoptionDetail)
+	s.HandleFunc("/api/trajectories", h.HandleTrajectoriesRoot)
+	s.HandleFunc("/api/trajectories/", h.HandleTrajectoryDetail)
 	s.HandleFunc("/api/continuations", h.HandleRunContinuationsRoot)
 	s.HandleFunc("/api/continuations/", h.HandleRunContinuationDetail)
 	s.HandleFunc("/api/run-acceptances", h.HandleRunAcceptancesRoot)

@@ -408,6 +408,7 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 		UpdatedAt:    now,
 		Metadata:     metadata,
 	}
+	rt.stampAndMintTrajectory(ctx, rec)
 
 	if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt)); err != nil {
 		return nil, err
@@ -472,6 +473,7 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 		FinishedAt:   &now,
 		Metadata:     metadata,
 	}
+	rt.stampAndMintTrajectory(ctx, rec)
 	if err := rt.store.CreateRun(ctx, *rec); err != nil {
 		return nil, fmt.Errorf("persist run: %w", err)
 	}
@@ -588,6 +590,7 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		UpdatedAt:    now,
 		Metadata:     metadata,
 	}
+	rt.stampAndMintTrajectory(ctx, rec)
 
 	if err := rt.store.CreateRun(ctx, *rec); err != nil {
 		return nil, fmt.Errorf("persist child run: %w", err)
