@@ -583,16 +583,16 @@ state, closed by the first write the previous version cannot read; reverting
 after that is the torn-rollback failure. Model-checked:
 `specs/promotion_protocol.tla`.
 
-### parallax / shift / probe
+### parallax / conjecture circuit / shift / probe
 
 Parallax (`skills/parallax/SKILL.md`) is the mission discipline succeeding
-MissionGradient: a mission is the constructive proof of a scoped claim (the
-artifact is the witness), worked as a circuit of four moves — **probe** (test
-under the current observer), **shift** (move the observer: instrument,
-vantage, vocabulary, domain, prover, inversion), **construct** (extend the
-witness), **settle** (decide or accept the edge). The forcing rule: repeated
-null moves or too-easy agreement force a shift — confirmation is what a
-stuck observer produces. MissionGradient remains frozen as the baseline.
+MissionGradient. Its literal shape is a **conjecture circuit**: the mission
+document claims that if witness A satisfies spec/objective S under invariants
+I and quality Q over domain D, then deeper goal G is achieved or materially
+advanced. The circuit tests and constructs that claim through four moves:
+**probe** (test under the current observer), **shift** (move the observer:
+instrument, vantage, vocabulary, domain, prover, inversion), **construct**
+(extend the witness), and **settle** (decide or accept the edge).
 
 ## Conjecture Vocabulary (2026-06-11)
 

@@ -1,137 +1,152 @@
-# Parallax: Design — 2026-06-11
+# Parallax Design — Conjecture Circuit — 2026-06-11
 
 ## Status
 
-Design record for the Parallax skill (`skills/parallax/SKILL.md`) — the
-proof-theoretic conjecture-learning circuit that supersedes MissionGradient
-for new missions. Named, designed, and constrained by the post-mortem of two
-prior attempts. Parallax is itself candidate state: its promotion follows the
-adoption gate in §6.
+Design record for `skills/parallax/SKILL.md`. Parallax is the mission
+discipline succeeding MissionGradient for new work. Its literal shape is a
+**conjecture circuit**: compile a mission document into a live conjecture,
+then alternate construction, probing, observer shifts, and settlement.
 
-## 1. Why a new skill instead of rewriting MissionGradient
+MissionGradient remains a baseline/fallback for old mission docs. Parallax is
+candidate state until real missions prove that it changes routes, narrows
+claims, and improves handoff quality.
 
-MissionGradient (now v2.0.0, ~750 lines) is a plan-control artifact that
-accumulated anti-failure armor over months, with the conjecture material
-added on top — producing redundancy (belief state vs conjecture ledger,
-evidence ledger vs assertions, blocker taxonomy vs hyperthesis edges) rather
-than clarity. It was the precursor: the thing we needed before the conjecture
-frame existed. Rewriting it in place would churn every prompt and mission
-that references it. Instead: **MissionGradient is frozen** (no further
-development; existing references keep working), and Parallax is the pure
-successor for new work.
+## 1. Mission as conjecture
 
-What makes a mission succeed is not only whether the next step is +EV. It is
-**how you shift your theory of the case, your positionality, and therefore
-your blind spot**. In proof terms: the critical moves in proof search are not
-inference steps but changes of proof system (ΔO). That is the organizing
-insight Parallax is built around, and the reason for its name: parallax is
-the method of measuring what no single vantage can — truth revealed by
-displacement of the observer.
-
-## 2. The Campaign Compiler harvest (failure modes → design constraints)
-
-`docs/mission-campaign-compiler-selfdev-v0.md` (2026-05-29) was the prior
-attempt to transcend MissionGradient. It died at `ready_for_execution`,
-having shipped nothing. The harvest:
-
-| Failure mode | What happened | Parallax constraint |
-|---|---|---|
-| Cathedral before chapel | ~900 lines specifying the mature system; the first executable step was too big to take | the circuit is identical at 10-minute scale and overnight scale; only budgets differ |
-| Noun proliferation | 8 new record types as the deliverable; a schema instead of a loop | **zero new nouns** — the runtime objects are trajectory, work item, update, assertion (they exist) |
-| Paperwork as product | violated its own via-negativa ("mission paperwork but no evidence") predictably | the anti-decoration gate is the adoption criterion: first use must change a move |
-| Layer conflation | tried to be cognition + control plane + product surface at once | Parallax is ONLY the cognitive circuit; the control plane is the actor runtime; UI comes later |
-| Transforms as bolt-on | cognitive transforms decorated a plan-control frame with no epistemic core to operate on | the observer shift is a first-class move type weighed against probing on every pass |
-
-Meta-lesson from both attempts: **a cognitive circuit must fit in working
-memory** — the model's attention and the human's review. Parallax's size
-budget is a hard constraint: under 200 lines.
-
-## 3. The two unifications that make it small
-
-**The artifact is the witness.** Every mission is the constructive proof of a
-scoped claim: *there exists — and here it is — an artifact A satisfying
-invariants I with qualities Q over domain D*. Building is proving (proof by
-exhibition). This absorbs MissionGradient's "real artifact," value criterion,
-and quality gradient into one clause structure: I(A) are the hard invariants,
-Q(A) the quality clauses, D the scope.
-
-**Homotopy is scope.** MissionGradient's λ coordinate IS the domain D of the
-goal claim, grown continuously: λ 0→1 = D small→production. A "fake island"
-is precisely a claim whose domain does not embed in production's. One concept
-replaces a section, and the anti-detritus rule becomes checkable: *does this
-simplified domain embed?*
-
-## 4. The circuit
+The mission document is not just a plan. It is a conjecture:
 
 ```text
-1. CASE      what do I believe decides this mission? (active conjectures)
-2. POSITION  from where am I looking — and what can this position not see?
-3. MOVE      probe | shift | construct | settle
-             forcing rule: two null moves, or evidence that agrees too
-             easily, forces a SHIFT — confirmation is what a stuck
-             observer produces
-4. BOUND     smallest substrate, authority envelope, reversible
-5. UPDATE    what did this move change? (nothing → evidence about the observer)
-6. EXIT?     case decided | edge accepted | obligation handed off
+If witness A satisfies spec/objective S under invariants I and quality Q
+over domain D, then deeper goal G is achieved or materially advanced.
 ```
 
-The distinctive beat vs MissionGradient: POSITION is a per-pass statement,
-and SHIFT competes with PROBE on every pass — not a remedy applied before
-giving up. MissionGradient's "apply 2–5 cognitive transforms before stopping"
-made observer movement a blocker ritual; Parallax makes it the move most
-likely to be undervalued and therefore explicitly priced each pass.
+This is the missing bridge in ordinary planning. A normal plan assumes that
+finishing the stated objective means success. Parallax makes that assumption
+testable. The mission can complete the spec and still fail if the bridge from
+`A satisfies S` to `G advances` is false.
 
-The shift catalog (instruments of displacement): change instrument (new
-test/trace/log), change vantage (read as user/attacker/maintainer; different
-layer of the stack), change vocabulary (new predicate — the frame_lock fix),
-change domain (shrink D until the claim is decidable), change prover
-(independent agent or checker), invert (seek refutation instead of
-confirmation).
+Terms:
 
-## 5. Runtime mapping (the transfer path into Choir)
+- **G** — the deeper goal; why this mission matters.
+- **A/S** — the witness and spec/objective; what the agent will build, prove,
+  fix, decide, or document.
+- **I/Q** — hard invariants and quality clauses.
+- **D** — the scope/domain over which the claim may be asserted.
+- **EDGE / DELTA_O** — what the current observer cannot see, and what
+  observer upgrade would shrink that blind spot.
 
-Campaign Compiler invented its runtime nouns; Parallax inherits ones that
-already exist from the rearchitecture:
+## 2. `/goal docs/<mission>.md`
 
-| Parallax object | Runtime object |
+The user interface should be:
+
+```text
+/goal docs/<mission>.md
+```
+
+The mission document is the source program and the handoff. It may begin as
+research, architecture, a spec, an objective, a failure trace, a conjecture
+set, or a mixture. Parallax compiles it just-in-time into a compact
+`Parallax State` section in the same document:
+
+```text
+status
+mission conjecture
+deeper goal
+witness/spec
+invariants / qualities / domain ramp
+authority / bounds
+bridge conjecture + sub-conjectures / position
+ledger / move log
+version / lineage
+learning state: retained here / promoted outward / successor links
+settlement
+```
+
+Preserve the author's source text. Add only the missing executable state.
+When the document already contains a field in prose, extract it rather than
+duplicating it. Ask only when artifact identity, authority, or safety is
+ambiguous.
+
+For Choir platform behavior changes, the same document carries the landing
+proof required by `AGENTS.md`: commit, push, CI, deploy identity, staging
+acceptance, rollback refs, and residual risks. Parallax can choose the route
+just-in-time; it cannot lower the evidence bar.
+
+The mission document is mutable and versioned. A mission may change its
+conjecture, narrow its domain, split its witness, or hand work to a successor.
+That is learning, not failure, if lineage is preserved. A successor mission
+must link the predecessor and migrate live conjectures, open edges, and
+remaining obligations. The predecessor closes as `open_handoff`,
+`superseded`, `blocked`, or `settled` — never as silent abandonment.
+
+## 3. Circuit
+
+Each control interval runs the same circuit:
+
+```text
+CLAIM     what conjecture currently decides the mission?
+POSITION  what can this observer see, and what can it not see?
+MOVE      probe | shift | construct | settle
+BOUND     smallest safe substrate and authority envelope
+UPDATE    what changed: route, scope, verifier, artifact, settlement?
+EXIT      settled | open_handoff | blocked | superseded
+```
+
+The distinctive move is **shift**: move the observer instead of grinding from
+one vantage. Shift forms: instrument, vantage, vocabulary, domain, prover,
+inversion. The forcing rule remains: if the last two moves changed nothing,
+or evidence agrees too easily, the next move is a shift.
+
+The conjecture-learning rule is stronger: repeated obstacles are evidence
+against the conjecture or its observer, not merely signs that the route is
+hard. When the same obstacle class recurs, the agent must reconsider the
+bridge from `A satisfies S` to `G advances`: perhaps the witness is wrong,
+the spec is a proxy, the domain does not embed, or the observer lacks the
+predicate that would expose the real goal. The next move should update,
+weaken, split, or supersede the conjecture before continuing.
+
+The retention rule is equally important: every mission must leave its mission
+document as the durable learning artifact on success, failure, handoff, or
+supersession. Promote learning outward only when it changes shared doctrine,
+assertions, architecture, tests/specs, skills, or successor work. Partial
+work is allowed; lost learning is not.
+
+When the circuit needs extra perspective, the cognitive-transform portfolio is
+a shift amplifier, not a parallel method. A transform is admitted only if it
+changes the next probe, route, scope, verifier, or stopping condition.
+
+## 4. Runtime mapping
+
+Parallax uses the durable-actor ontology rather than inventing runtime nouns:
+
+| Parallax | Runtime |
 |---|---|
-| the case | trajectory (+ its conjecture state, M1 records) |
+| mission conjecture | trajectory |
 | obligations | work items |
 | moves and evidence | updates |
-| the theory of the case | assertion ledger |
-| case decided | settlement |
-| one circuit pass (or several) | one activation |
+| theory | assertion ledger |
+| decided mission | settlement |
+| one or more circuit passes | activation |
 
-The role-free actor protocol already prompts actors with obligation +
-conjecture + edge + authority — **an activation natively is a circuit pass**:
-wake → read case → state position → move → update → settle or passivate.
+v1 is markdown discipline invoked by `/goal docs/<mission>.md`. v2 keys the
+mission document to trajectory/work-item records. v3 makes the circuit the
+native actor prompt core.
 
-Staging: v1 — markdown discipline invoked via `/goal` and in-session (now).
-v2 — the case file keys to M1's trajectory/work-item records (the ledger
-becomes durable runtime state). v3 — native: the circuit is what actors do;
-the skill text becomes the actor prompt's cognitive core. No stage adds
-nouns.
+## 5. Adoption gate
 
-## 6. Adoption gate (Parallax applied to Parallax)
+Promote Parallax only if its first real missions show:
 
-Parallax is candidate state. Promotion criteria (the §15 shape):
+- the bridge conjecture changed the route, not just the wording;
+- a shift narrowed a claim's scope or upgraded the observer;
+- partial or superseded missions preserved lineage and retained learning;
+- the mission document was easier to resume and retrospect than a
+  MissionGradient doc;
+- no canonical mutation was admitted without scoped evidence and rollback or
+  owner acceptance.
 
-- first real mission (M1, which now runs under Parallax rather than
-  MissionGradient v2) shows at least one SHIFT that changed the route, a
-  probe-vs-shift decision made explicitly, and a claim whose scope was
-  narrowed by an edge;
-- the case file was cheaper to resume than a MissionGradient doc;
-- failure criterion: the circuit fields were filled but no move differed
-  from what MissionGradient would have produced — then Parallax is
-  decoration and gets demoted, honestly.
+Demote or revise it if fields get filled while moves stay unchanged.
 
-MissionGradient v2 remains the comparison baseline and the fallback.
+## 6. Name
 
-## 7. Name
-
-**Parallax**: displacement of the observer as the measurement method.
-One word, speakable, STT-safe (no homophone collision — the
-hyperthesis/hypothesis lesson), verb-able ("we've probed three times — time
-to parallax"). Considered and declined: Casework (generic), Tack (cute),
-Conjecture Circuit (boring). Recorded per the codesign rule: vocabulary is
-candidate state; the name is promoted with the skill.
+**Conjecture Circuit** is the literal name. **Parallax** is the shorter
+working name: observer displacement as the measurement method.
