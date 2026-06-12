@@ -209,3 +209,52 @@ Receipt:
 Open edge: owner must provide or open an authenticated `choir.news` session;
 then resume with the goal string in the paradoc. Do not bypass auth with
 internal routes.
+
+## 2026-06-12 — Public Surface Probe: Publication Corpus Live, Cycle Predicate Still Auth-Gated
+
+Claim/scope: unauthenticated staging can still provide product-path observer
+evidence about public platformd publication health, but it cannot by itself
+settle M5 because the Universal Wire edition/cycle predicate is auth-gated.
+
+Move: shift observer from prompt-bar/authenticated owner APIs to public
+platformd publication, retrieval, and export APIs on deployed staging commit
+`b8f33087ce099d11054447d852e788453379a787`.
+
+Expected ΔV: 0-1. Either discover a public product predicate that can reduce
+the product-proof blocker, or prove that authenticated owner proof is still
+the first gate.
+
+Actual ΔV: 0. Observer evidence improved, but all six settlement blockers
+remain. Public retrieval/resolve/export are alive and useful receipts;
+Universal Wire story/edition proof and cycle linkage still require an
+authenticated owner session.
+
+Receipt:
+- `curl -fsS https://choir.news/health | jq .` reports proxy and sandbox
+  `build.commit` / `deployed_commit`
+  `b8f33087ce099d11054447d852e788453379a787`, deployed at
+  `2026-06-12T23:11:18Z`.
+- `curl -i https://choir.news/api/universal-wire/stories` returned HTTP 401
+  `{"error":"authentication required"}`.
+- `curl -fsS 'https://choir.news/api/platform/retrieval/search?q=Universal%20Wire'`
+  returned HTTP 200 with zero results.
+- `curl -fsS 'https://choir.news/api/platform/retrieval/search?q=wire'`
+  returned HTTP 200 with 15 public publication results.
+- Public resolve for
+  `/pub/vtext/climate-change-raises-bilateral-trade-costs-through-maritime-shipping-disruption-boe-research-fi-pub09e4bf037`
+  returned an active public route plus consent, review, and attestation ids.
+- Public export for that route returned publication
+  `pub-09e4bf03-7cf8-43ea-88f1-191c6f68bc1b`, version
+  `pubver-1b8910c7-ab8e-43e5-9570-346ea94e35ca`, Markdown content length
+  `4390`, `private_material_omitted=true`, source revision hash
+  `9a1f53d16ada1e0bd3f1683b11ba16a04995695325c00bbf90d120aadbcb1fa1`,
+  two source manifest entries, and two transclusions.
+- Public search showed duplicate-looking titles with distinct publication ids
+  and distinct source revision hashes, including four variants of
+  `Climate Change Raises Bilateral Trade Costs Through Maritime Shipping
+  Disruption, BoE Research Finds.vtext`. This is a front-page quality
+  discriminator to check under auth, not a standalone accounting-leak verdict.
+
+Open edge: resume with an authenticated owner session and prove the actual
+cycle link: trace/vtext/publication/front-page receipts, sourcecycled timing,
+duplicate/stale-publication interpretation, and production maxProc>1 behavior.

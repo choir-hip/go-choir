@@ -36,8 +36,9 @@ cycle.
 
 status: open_handoff (2026-06-12; route-switch substrate is committed,
 pushed, CI-green, and deployed to staging at `b8f33087`; product-path
-wire-cycle proof is blocked on an authenticated owner session and the
-production maxProc>1 evidence gate remains open)
+wire-cycle proof is narrowed but still blocked on an authenticated owner
+session; public publication/retrieval surfaces are live but do not expose
+the cycle predicate; the production maxProc>1 evidence gate remains open)
 
 **mission conjecture:** if publication trajectories carry coverage/publish
 decisions as durable work items and subject refs, settlement is evaluated
@@ -78,8 +79,10 @@ missing product-path staging wire-cycle proof; missing honest-and-full
 instrument; missing observed production multi-story cycle at maxProc>1;
 undecided processor-phase admission scope outside the story-route branch;
 unspecified non-fetch deferred wake policy; missing final verdict on the
-rearchitecture core claim. Current V=6. Last observed ΔV: local review,
-CI, and staging identity blockers are discharged. The pushed stack ends at
+rearchitecture core claim. Current V=6. Last observed ΔV: 0 from the
+public-surface probe, but it bought observer evidence: authenticated
+Universal Wire story/edition proof is still required, while public
+platformd resolve/export/search are alive. The pushed stack ends at
 `b8f33087`; forced CI/deploy run `27448287123` passed and `/health` reports
 proxy+sandbox build/deployed commit `b8f33087ce099d11054447d852e788453379a787`.
 
@@ -110,25 +113,38 @@ within one Store instance and preserve projected request verdicts during
 stale runtime-submission recovery. Remote CI/deploy evidence now exists:
 push CI `27448208407` passed but skipped deploy after a docs/test fix, then
 manual workflow_dispatch `27448287123` with `force_staging_deploy=true`
-passed and deployed current `main`. Open edge: product-path proof is still
-missing because unauthenticated `/api/prompt-bar` returns 401 and the
-available Chrome tabs showed signed-out preview only; local/staging health
-cannot settle the production route-switch conjecture.
+passed and deployed current `main`. Public staging probe on that deployed
+commit showed `/api/universal-wire/stories` returns 401 without auth, while
+`/api/platform/retrieval/search?q=wire` returns 15 public publication
+results, `/api/platform/retrieval/search?q=Universal%20Wire` returns zero,
+and public resolve/export for
+`/pub/vtext/climate-change-raises-bilateral-trade-costs-through-maritime-shipping-disruption-boe-research-fi-pub09e4bf037`
+returns an active public route, attestation/review/consent provenance, an
+exportable Markdown artifact, `private_material_omitted=true`, two source
+manifest entries, and two transclusions. The same public search also shows
+duplicate-looking titles with distinct publication ids and source revision
+hashes; that is a next honest-and-full discriminator for the authenticated
+edition/front-page proof, not yet an M5 accounting verdict. Open edge:
+product-path cycle proof is still missing because unauthenticated
+`/api/prompt-bar` and `/api/universal-wire/stories` return 401 and the
+available Chrome tabs showed signed-out preview only; public platformd
+corpus health cannot settle the production route-switch conjecture.
 
 **next move:** run the authenticated product-proof boundary: with an owner
 session on `https://choir.news`, verify the deployed build identity, then run
-the smallest product-path wire-cycle observation that can show whether the
-remaining blockers are product auth/session, source traffic, sourcecycled
-cycle timing, honest-and-full front-page instrumentation, or production
-maxProc policy. Do not use internal/test routes to compensate for missing
-auth.
+the smallest product-path wire-cycle observation that can link a real
+Universal Wire cycle to trace/vtext/publication/front-page receipts and show
+whether the remaining blockers are source traffic, sourcecycled cycle timing,
+honest-and-full front-page instrumentation, duplicate/stale publication
+handling, or production maxProc policy. Do not use internal/test routes to
+compensate for missing auth.
 
 **ledger file:** `docs/mission-wire-on-settlement-v0.ledger.md` for future
 append-only Parallax pass entries. Historical passes before this checkpoint
 remain embedded below under `ledger / move log` and should not be
 transcribed unless auditing requires it.
 
-**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State and append to docs/mission-wire-on-settlement-v0.ledger.md. Start from deployed commit b8f33087ce099d11054447d852e788453379a787: CI/deploy are green, staging /health identity is proven, and V=6. With an authenticated owner session on https://choir.news, run only browser-public product paths to observe the smallest Universal Wire cycle evidence available: prompt-bar/session proof if needed, trace/vtext/publication/front-page receipts, sourcecycled cycle timing, and whether a real multi-story cycle at maxProc>1 can be observed. Do not use /api/agent, /internal, /api/test, raw event mutation, or manual success seeding. If auth or source traffic blocks the proof, update the paradoc/ledger with exact blocker receipts and next discriminator. Do not call M5 settled without production multi-story maxProc>1 evidence, honest-and-full front-page proof, rollback refs, and a verdict on the durable-actors core claim.`
+**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State and append to docs/mission-wire-on-settlement-v0.ledger.md. Start from deployed commit b8f33087ce099d11054447d852e788453379a787: CI/deploy are green, staging /health identity is proven, public platformd publication search/resolve/export work, /api/universal-wire/stories is auth-gated, and V=6. With an authenticated owner session on https://choir.news, run only browser-public product paths to observe the smallest Universal Wire cycle evidence available: session/provenance proof, trace/vtext/publication/front-page receipts, sourcecycled cycle timing, duplicate/stale-publication interpretation, and whether a real multi-story cycle at maxProc>1 can be observed. Do not use /api/agent, /internal, /api/test, raw event mutation, or manual success seeding. If auth, source traffic, or instrumentation blocks the proof, update the paradoc/ledger with exact blocker receipts and next discriminator. Do not call M5 settled without production multi-story maxProc>1 evidence, honest-and-full front-page proof, rollback refs, and a verdict on the durable-actors core claim.`
 
 ### Position — code inventory (compiled 2026-06-12, post-M1)
 
