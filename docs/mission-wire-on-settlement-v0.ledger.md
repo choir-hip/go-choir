@@ -134,3 +134,26 @@ Receipt:
 
 Open edge: push the fix commit, monitor CI/deploy, then verify staging build
 identity and product-path wire evidence.
+
+## 2026-06-12 — Landing Edge: Green Fix Run Skipped Deploy
+
+Claim/scope: a green CI run is not sufficient landing proof if the deploy job
+is skipped after a prior behavior-changing commit failed before deploy. Scope
+is the pushed stack ending at `7504e151`.
+
+Move: observe landing rerun. Pushed `7504e151` and monitored GitHub Actions run
+`27448208407`.
+
+Expected ΔV: green CI should start staging deploy.
+
+Actual ΔV: CI passed, but deploy was skipped. The deploy-impact job compared
+the test/docs fix commit against its immediate parent and saw no deployed
+artifact path change, while the previous behavior commit `09a5dc80` had never
+deployed because run `27447982144` failed before deploy.
+
+Receipt: GitHub Actions run `27448208407` passed all Go/TLA/frontend gates but
+reported `Deploy to Staging (Node B)` as skipped.
+
+Open edge: use the workflow's explicit `force_staging_deploy=true` dispatch on
+`main`, then verify `/health` build identity before attempting product-path
+wire proof. Do not claim staging acceptance from the green skipped-deploy run.
