@@ -853,6 +853,9 @@ func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID s
 	if len(patch) == 0 {
 		return nil
 	}
+	s.jsonPatchMu.Lock()
+	defer s.jsonPatchMu.Unlock()
+
 	rev, err := s.GetRevision(ctx, revisionID, ownerID)
 	if err != nil {
 		return err

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -337,6 +338,73 @@ func TestVTextCreateRevisionRejectsStaleHead(t *testing.T) {
 	err := s.CreateRevision(ctx, stale)
 	if !errors.Is(err, ErrStaleDocumentHead) {
 		t.Fatalf("CreateRevision stale err = %v, want ErrStaleDocumentHead", err)
+	}
+}
+
+func TestVTextRevisionMetadataConcurrentMergePatchesPreserveKeys(t *testing.T) {
+	s := vtextTestStore(t)
+	ctx := context.Background()
+
+	doc := types.Document{
+		DocID:   "doc-concurrent-metadata",
+		OwnerID: "user-1",
+		Title:   "Concurrent Metadata",
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	initialMeta, _ := json.Marshal(map[string]any{"source": "wire"})
+	rev := types.Revision{
+		RevisionID:  "rev-concurrent-metadata",
+		DocID:       doc.DocID,
+		OwnerID:     doc.OwnerID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "wire",
+		Content:     "Article",
+		Metadata:    initialMeta,
+		CreatedAt:   time.Now().UTC(),
+	}
+	if err := s.CreateRevision(ctx, rev); err != nil {
+		t.Fatalf("CreateRevision: %v", err)
+	}
+
+	const patches = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, patches)
+	for i := 0; i < patches; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- s.PatchRevisionMetadata(ctx, rev.OwnerID, rev.RevisionID, map[string]any{
+				fmt.Sprintf("patch_%02d", i): fmt.Sprintf("value-%02d", i),
+			})
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent revision metadata patch: %v", err)
+		}
+	}
+
+	got, err := s.GetRevision(ctx, rev.RevisionID, rev.OwnerID)
+	if err != nil {
+		t.Fatalf("GetRevision: %v", err)
+	}
+	meta := map[string]any{}
+	if err := json.Unmarshal(got.Metadata, &meta); err != nil {
+		t.Fatalf("unmarshal metadata: %v", err)
+	}
+	if meta["source"] != "wire" {
+		t.Fatalf("existing metadata lost: %+v", meta)
+	}
+	for i := 0; i < patches; i++ {
+		key := fmt.Sprintf("patch_%02d", i)
+		if meta[key] != fmt.Sprintf("value-%02d", i) {
+			t.Fatalf("metadata %s = %q, want value-%02d; metadata=%+v", key, meta[key], i, meta)
+		}
 	}
 }
 
