@@ -326,3 +326,47 @@ Receipt:
 Open edge: commit this paradoc update, push the fix stack, monitor CI/deploy,
 verify staging identity for the new behavior SHA, then resume authenticated
 product-path Universal Wire proof.
+
+## 2026-06-12 — Landing + Product-Proof Boundary: Metadata Fix Deployed, Auth Gate Remains
+
+Claim/scope: the metadata-merge fix is landed only if the behavior-changing
+stack is pushed, CI-green, deployed to staging, and staging reports the new
+commit. M5 settlement still requires an authenticated product-path wire-cycle
+proof and a production multi-story maxProc>1 cycle.
+
+Move: land and probe. Pushed the stack through `4b4562a2`, monitored CI/deploy,
+verified `/health`, then retried the smallest allowed unauthenticated
+product-path probes plus public publication controls.
+
+Expected ΔV: 0. Landing proof should strengthen the evidence class but not
+remove the authenticated product-proof or production-cycle blockers.
+
+Actual ΔV: 0. Metadata fix is deployed; V remains 6. Product-path cycle proof
+is still blocked on owner authentication.
+
+Receipt:
+- Pushed `4b4562a2e01549291a3ff2080ec2a187ef5f365f` to `origin/main`.
+- CI run `27449221402` completed successfully.
+- CI jobs included runtime shards 0/1/2/3, non-runtime tests, Go vet/build,
+  integration smoke, TLA+ model check, deploy-impact, and staging deploy.
+- Deploy job `81140982346` succeeded in 21s.
+- FlakeHub publish run `27449221388` succeeded.
+- `curl -fsS https://choir.news/health | jq .` reported proxy and sandbox
+  `build.commit` / `deployed_commit`
+  `4b4562a2e01549291a3ff2080ec2a187ef5f365f`, deployed at
+  `2026-06-12T23:37:50Z`.
+- `curl -i https://choir.news/api/universal-wire/stories` returned HTTP 401
+  `{"error":"authentication required"}`.
+- `curl -i -X POST https://choir.news/api/prompt-bar ...` returned HTTP 401
+  `{"error":"authentication required"}`.
+- `curl -fsS 'https://choir.news/api/platform/retrieval/search?q=wire'`
+  returned HTTP 200 with 15 public publication results.
+- Public export for
+  `/pub/vtext/climate-change-raises-bilateral-trade-costs-through-maritime-shipping-disruption-boe-research-fi-pub09e4bf037`
+  returned publication `pub-09e4bf03-7cf8-43ea-88f1-191c6f68bc1b`,
+  version `pubver-1b8910c7-ab8e-43e5-9570-346ea94e35ca`, Markdown content
+  length `4390`, `private_material_omitted=true`, and source revision hash
+  `9a1f53d16ada1e0bd3f1683b11ba16a04995695325c00bbf90d120aadbcb1fa1`.
+
+Open edge: owner-authenticated session required for Universal Wire
+cycle/front-page/trace proof. Do not call M5 settled from public corpus health.
