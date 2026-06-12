@@ -87,3 +87,50 @@ Receipt:
 Open edge: this is still local proof. M5 remains open_handoff until landing,
 staging build identity, product-path wire-cycle evidence, and the production
 maxProc>1 evidence gate are recorded.
+
+## 2026-06-12 — Landing Blocker: Proxy Wire Publish Test Fixture Drift
+
+Claim/scope: the M5 substrate can pass CI and reach staging only if the host
+wire-publication choke-point test exercises the same sandbox API shape as the
+handler. Scope is CI landing evidence for pushed commit `09a5dc80`.
+
+Move: observe landing. Pushed the docs/Parallax/M5 implementation stack and
+monitored GitHub Actions run `27447982144`.
+
+Expected ΔV: landing proof should reduce deploy/staging uncertainty.
+
+Actual ΔV: CI found a concrete blocker before deploy. Runtime shards, vet,
+build, integration smoke, TLA+, and deploy-impact passed, but non-runtime Go
+tests failed in `internal/proxy`.
+
+Receipt: GitHub Actions run `27447982144`, job `81137136114`,
+`TestHandleInternalWirePlatformPublishPostsToPlatformd`:
+`status = 502 body = {"error":"failed to load wire document"}` after the
+handler logged `proxy: wire publish fetch document: sandbox status 404`.
+
+Open edge: inspect the proxy handler's sandbox fetch path and update the test
+fixture or handler as appropriate; rerun `internal/proxy` and then push a fix
+commit so deploy can proceed.
+
+## 2026-06-12 — Construct + Verify: Proxy Fixture Matches Wire Choke Point
+
+Claim/scope: the CI blocker was test-fixture drift, not a handler regression.
+The handler reads the platform owner's document and revision through sandbox
+`/internal/vtext/...` paths; the post-publish async sync still reads the public
+document revisions list.
+
+Move: construct. Update `TestHandleInternalWirePlatformPublishPostsToPlatformd`
+to serve the handler's internal document/revision paths while preserving the
+public revisions-list fixture used by sync.
+
+Expected ΔV: unblock CI landing without changing runtime behavior.
+
+Actual ΔV: local non-runtime package blocker removed; deploy/staging evidence
+still pending on the next pushed CI run.
+
+Receipt:
+- `nix develop -c go test ./internal/proxy -run TestHandleInternalWirePlatformPublishPostsToPlatformd` passed.
+- `nix develop -c go test ./internal/proxy` passed in `10.628s`.
+
+Open edge: push the fix commit, monitor CI/deploy, then verify staging build
+identity and product-path wire evidence.

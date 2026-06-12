@@ -30,13 +30,13 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/vtext/documents/doc-wire-proxy":
+		case "/internal/vtext/documents/doc-wire-proxy", "/api/vtext/documents/doc-wire-proxy":
 			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
 				DocID:   "doc-wire-proxy",
 				OwnerID: platformOwner,
 				Title:   "Proxy story.vtext",
 			})
-		case "/api/vtext/revisions/rev-wire-proxy":
+		case "/internal/vtext/revisions/rev-wire-proxy", "/api/vtext/revisions/rev-wire-proxy":
 			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
 				RevisionID: "rev-wire-proxy",
 				DocID:      "doc-wire-proxy",
