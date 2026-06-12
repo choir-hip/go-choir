@@ -293,3 +293,36 @@ Receipt:
 Open edge: fix `PatchRevisionMetadata` with the same Store-instance
 serialization guard, add a concurrent regression test, then rerun focused
 store/runtime checks before returning to authenticated product proof.
+
+## 2026-06-12 — Construct + Verify: Revision Metadata Merge Serialized
+
+Claim/scope: the independent-review falsifier is discharged locally if VText
+revision metadata merge patches share the same Store-instance serialization
+guard as trajectory subject refs and work item details, and a concurrent test
+preserves all patch keys. Scope is local code/test evidence for the
+metadata-merge edge, not staging product proof.
+
+Move: construct. `PatchRevisionMetadata` now locks `Store.jsonPatchMu` before
+reading, merging, and writing `metadata_json`; added
+`TestVTextRevisionMetadataConcurrentMergePatchesPreserveKeys`.
+
+Expected ΔV: +1 by removing the unfixed revision-metadata merge blocker.
+
+Actual ΔV: +1 locally. Current V returns to 6. Push/CI/deploy evidence for
+the fix is still pending, and authenticated product proof remains open.
+
+Receipt:
+- Commit `0d4d57a5` (`fix: serialize vtext metadata merge patches`).
+- `nix develop -c go test ./internal/store -run TestVTextRevisionMetadataConcurrentMergePatchesPreserveKeys -count=1`
+  passed.
+- `nix develop -c go test ./internal/store -count=1` passed in `56.994s`.
+- `nix develop -c go test ./internal/runtime -run 'TestWire|TestVText|TestTrajectory|TestProcessor' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime ./internal/cycle ./internal/store ./cmd/sourcecycled -count=1`
+  passed: `internal/runtime` 22.374s, `internal/cycle` 2.825s,
+  `internal/store` 60.112s, `cmd/sourcecycled` 5.561s.
+- `git diff --check` passed.
+
+Open edge: commit this paradoc update, push the fix stack, monitor CI/deploy,
+verify staging identity for the new behavior SHA, then resume authenticated
+product-path Universal Wire proof.
