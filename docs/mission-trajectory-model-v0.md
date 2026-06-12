@@ -33,7 +33,7 @@ transfers only via conformance — say so in the report).
 
 ## Parallax State
 
-status: working
+status: settled (2026-06-12; scope: additive witness — see settlement)
 
 **mission conjecture:** if durable trajectory + work-item records are added
 to the runtime store, minted at conductor/processor/VText spawn points, with
@@ -284,5 +284,28 @@ inventory. Predecessors: none. Successors gated on this: M2 (messaging), M5
 **Landing proof** (required for settlement):
 - commits: b508f71c (M1a synthesis deletion), 14479930 (Parallax v1.2.0
   docs + dead trace.js deletion), a31fd2b5 → amended (M1 witness)
-- push/CI: pending — next discriminator: CI green on the comprehensive
-  matrix this mission did not run locally.
+- push: origin/main 52e6baef..554d25de (2026-06-12).
+- CI run 27395049664: all four internal/runtime shards green, TLA+ model
+  check green, integration smoke green, Go Vet + Build green, frontend
+  build green. Failing jobs contain exactly the two failures already red
+  on the baseline run (27384348346, commit 52e6baef, before this
+  session): `TestIngestionRuntimeDispatcherSubmitsProcessorProfilesOnly`
+  (cmd/sourcecycled) and
+  `TestHandleInternalWirePlatformPublishPostsToPlatformd`
+  (internal/proxy). **No new failures introduced — the zero-behavior-
+  change claim holds at CI scope.**
+
+**Settlement verdict:** settled, at the scope claimed: the witness exists
+(records, minting, column, queryable obligations), evidence is existential
+(example tests) + CI conformance; no claim about settlement *correctness*
+on real traffic — that is M5's domain. Residual risks, accepted and named:
+1. Two pre-existing CI reds gate the staging-deploy job; until fixed,
+   every later mission's landing proof is blocked at the same gate.
+   Smallest discharge: fix or quarantine the two tests (follow-up, not
+   M1 scope — both predate this session).
+2. The frame_lock settlement-rule edge stays open: v1 kinds and rules are
+   reviewable after M5's first real cycle.
+3. Staging schema migration (`trajectories`, `work_items`,
+   `runs.trajectory_id`) has not executed against staging because deploy
+   skipped on the pre-existing reds; it runs automatically once the gate
+   clears (ensureColumn path is boot-time and idempotent).
