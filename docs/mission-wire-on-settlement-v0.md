@@ -34,12 +34,14 @@ cycle.
 
 ## Parallax State
 
-status: open_handoff (2026-06-12; route-switch substrate and the
+status: blocked (2026-06-12; route-switch substrate and the
 independent-review metadata-merge fix are committed, pushed, CI-green, and
 deployed to staging at `4b4562a2`; product-path wire-cycle proof is narrowed
-but still blocked on an authenticated owner session; public
-publication/retrieval surfaces are live but do not expose the cycle predicate;
-the production maxProc>1 evidence gate remains open)
+but blocked on an authenticated owner session; public publication/retrieval
+surfaces are live but do not expose the cycle predicate; the production
+maxProc>1 evidence gate remains open. Blocking authority: owner. Smallest
+discharge: open or provide an authenticated owner session on
+`https://choir.news`, then run one real Universal Wire product-path cycle.)
 
 **mission conjecture:** if publication trajectories carry coverage/publish
 decisions as durable work items and subject refs, settlement is evaluated
@@ -84,10 +86,12 @@ rearchitecture core claim. Current V=6. Last observed ΔV: +1 from fixing the
 independent review falsifier: `PatchRevisionMetadata` now uses
 `Store.jsonPatchMu`, and
 `TestVTextRevisionMetadataConcurrentMergePatchesPreserveKeys` verifies
-concurrent revision metadata patches preserve all keys. The pushed deployed
-stack now ends at `4b4562a2`; CI run `27449221402` passed and `/health`
-reports proxy+sandbox build/deployed commit
-`4b4562a2e01549291a3ff2080ec2a187ef5f365f`.
+concurrent revision metadata patches preserve all keys. Last observed ΔV: 0
+from Chrome owner-session probe: the visible `https://choir.news/` page still
+renders the signed-out preview (`Local preview - sign in to save`), so the
+product-proof observer is still missing. The pushed deployed stack now ends at
+`4b4562a2`; CI run `27449221402` passed and `/health` reports proxy+sandbox
+build/deployed commit `4b4562a2e01549291a3ff2080ec2a187ef5f365f`.
 
 **budget:** next run should assume one owner-authenticated product-proof
 session plus one production-cycle observation window. Solvency verdict:
@@ -139,23 +143,26 @@ returns publication `pub-09e4bf03-7cf8-43ea-88f1-191c6f68bc1b`, version
 The same public search also shows duplicate-looking titles with distinct
 publication ids and source revision hashes; that is a next honest-and-full
 discriminator for the authenticated edition/front-page proof, not yet an M5
-accounting verdict. Open edge: product-path cycle proof is still missing
-because authenticated owner APIs are unavailable; public platformd corpus
-health cannot settle the production route-switch conjecture.
+accounting verdict. Chrome owner-session probe after landing still rendered
+the signed-out preview (`Local preview - sign in to save`). Open edge:
+product-path cycle proof is blocked because authenticated owner APIs are
+unavailable; public platformd corpus health cannot settle the production
+route-switch conjecture.
 
-**next move:** with an owner-authenticated session on `https://choir.news`,
-run the smallest product-path wire-cycle observation that can link a real
-Universal Wire cycle to trace/vtext/publication/front-page receipts and show
-source traffic, sourcecycled cycle timing, honest-and-full front-page
-instrumentation, duplicate/stale publication handling, and production maxProc
-policy. Do not use internal/test routes to compensate for missing auth.
+**next move:** owner opens or provides an authenticated session on
+`https://choir.news`; then resume from this paradoc and run the smallest
+product-path wire-cycle observation that can link a real Universal Wire cycle
+to trace/vtext/publication/front-page receipts and show source traffic,
+sourcecycled cycle timing, honest-and-full front-page instrumentation,
+duplicate/stale publication handling, and production maxProc policy. Do not
+use internal/test routes to compensate for missing auth.
 
 **ledger file:** `docs/mission-wire-on-settlement-v0.ledger.md` for future
 append-only Parallax pass entries. Historical passes before this checkpoint
 remain embedded below under `ledger / move log` and should not be
 transcribed unless auditing requires it.
 
-**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State and append to docs/mission-wire-on-settlement-v0.ledger.md. Current V=6: the revision-metadata JSON merge serialization gap found by independent review is fixed, pushed, CI-green, and deployed at 4b4562a2e01549291a3ff2080ec2a187ef5f365f; staging /health identity is proven; public platformd publication search/export still works; /api/universal-wire/stories and POST /api/prompt-bar are auth-gated without an owner session. With an authenticated owner session on https://choir.news, run only browser-public product paths to observe the smallest Universal Wire cycle evidence available: session/provenance proof, trace/vtext/publication/front-page receipts, sourcecycled cycle timing, duplicate/stale-publication interpretation, and whether a real multi-story cycle at maxProc>1 can be observed. Do not use /api/agent, /internal, /api/test, raw event mutation, or manual success seeding. If auth, source traffic, or instrumentation blocks the proof, update the paradoc/ledger with exact blocker receipts and next discriminator. Do not call M5 settled without production multi-story maxProc>1 evidence, honest-and-full front-page proof, rollback refs, and a verdict on the durable-actors core claim.`
+**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State and append to docs/mission-wire-on-settlement-v0.ledger.md. Current status is blocked, V=6: the revision-metadata JSON merge serialization gap found by independent review is fixed, pushed, CI-green, and deployed at 4b4562a2e01549291a3ff2080ec2a187ef5f365f; staging /health identity is proven; public platformd publication search/export still works; /api/universal-wire/stories and POST /api/prompt-bar are auth-gated without an owner session; Chrome still shows the signed-out preview. First obtain an authenticated owner session on https://choir.news. Then run only browser-public product paths to observe the smallest Universal Wire cycle evidence available: session/provenance proof, trace/vtext/publication/front-page receipts, sourcecycled cycle timing, duplicate/stale-publication interpretation, and whether a real multi-story cycle at maxProc>1 can be observed. Do not use /api/agent, /internal, /api/test, raw event mutation, or manual success seeding. If auth, source traffic, or instrumentation blocks the proof, update the paradoc/ledger with exact blocker receipts and next discriminator. Do not call M5 settled without production multi-story maxProc>1 evidence, honest-and-full front-page proof, rollback refs, and a verdict on the durable-actors core claim.`
 
 ### Position — code inventory (compiled 2026-06-12, post-M1)
 

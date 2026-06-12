@@ -370,3 +370,37 @@ Receipt:
 
 Open edge: owner-authenticated session required for Universal Wire
 cycle/front-page/trace proof. Do not call M5 settled from public corpus health.
+
+## 2026-06-12 — Blocked Exit: Owner Session Still Signed Out
+
+Claim/scope: M5 cannot descend past V=6 from the current observer if no
+authenticated owner session is available. Scope is product-path proof
+readiness after the metadata fix landed on staging.
+
+Move: shift observer from unauthenticated curl to the user's Chrome profile
+using the existing `choir.news` tab. Read visible page state only; did not
+inspect cookies, local storage, profiles, or internal routes.
+
+Expected ΔV: 0 or +1. If Chrome carried an owner session, the next probe could
+attempt authenticated Universal Wire cycle evidence. If Chrome was still
+signed out, the mission should exit blocked with a precise owner obligation.
+
+Actual ΔV: 0. Chrome still rendered the signed-out preview, so the missing
+owner-authenticated session remains the first blocker. Current V remains 6.
+
+Receipt:
+- `git status --short` was clean; `HEAD == origin/main ==
+  c2be9b7c7980f5b972230e7a2b4a8accf5c732a1`.
+- Staging `/health` still reports proxy and sandbox deployed behavior commit
+  `4b4562a2e01549291a3ff2080ec2a187ef5f365f`, deployed at
+  `2026-06-12T23:37:50Z`.
+- Chrome open tabs included `https://choir.news/`.
+- After claiming and refreshing that tab, visible page text included
+  `Choir Preview` and `Local preview - sign in to save`.
+- The page did not expose a usable owner session for authenticated
+  `/api/universal-wire/stories` or prompt-bar product proof.
+
+Blocked obligation: owner must open or provide an authenticated
+`https://choir.news` session, then run one real product-path Universal Wire
+cycle. Public platformd corpus health and signed-out preview state remain
+insufficient for M5 settlement.
