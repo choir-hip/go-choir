@@ -23,6 +23,7 @@ type vtextHandoffRequest struct {
 	Title          string
 	ChannelID      string
 	InitialContent string
+	SourceItemIDs  []string
 }
 
 type vtextHandoffDecision struct {
@@ -87,6 +88,7 @@ func (rt *Runtime) ensureVTextHandoff(ctx context.Context, parentRec *types.RunR
 			Title:          req.Title,
 			ChannelID:      req.ChannelID,
 			InitialContent: req.InitialContent,
+			SourceItemIDs:  req.SourceItemIDs,
 		})
 		if err != nil {
 			return vtextHandoffDecision{}, err

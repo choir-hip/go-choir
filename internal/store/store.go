@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -56,6 +57,7 @@ type Store struct {
 	vtextDB       *sql.DB
 	vtextPath     string
 	doltConnector doltConnector
+	jsonPatchMu   sync.Mutex
 }
 
 // schemaDDL creates the runtime tables if they do not already exist.

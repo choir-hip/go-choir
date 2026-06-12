@@ -25,6 +25,7 @@ func testPromptAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 }
 
 func TestHandlePromptListReturnsEffectivePrompts(t *testing.T) {
+	t.Parallel()
 	_, handler := testPromptAPISetup(t)
 
 	req := authenticatedRequest(http.MethodGet, "/api/prompts", "", "user-alice")
@@ -59,6 +60,7 @@ func TestHandlePromptListReturnsEffectivePrompts(t *testing.T) {
 }
 
 func TestHandlePromptRoleSupportsSaveAndReset(t *testing.T) {
+	t.Parallel()
 	_, handler := testPromptAPISetup(t)
 
 	putReq := authenticatedRequest(http.MethodPut, "/api/prompts/vtext", `{"content":"Custom prompt"}`, "user-alice")

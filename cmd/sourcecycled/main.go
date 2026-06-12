@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"net"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -25,10 +25,10 @@ import (
 )
 
 const (
-	defaultIngestionProcessorDispatchLimit = 1
-	defaultIngestionRuntimeDispatchRetries = 8
-	defaultIngestionRuntimeRetryDelay      = 2 * time.Second
-	defaultIngestionQueueDrainInterval     = 1 * time.Minute
+	defaultIngestionProcessorDispatchLimit  = 1
+	defaultIngestionRuntimeDispatchRetries  = 8
+	defaultIngestionRuntimeRetryDelay       = 2 * time.Second
+	defaultIngestionQueueDrainInterval      = 1 * time.Minute
 	defaultIngestionProcessorInFlightWindow = 15 * time.Minute
 )
 
@@ -39,13 +39,34 @@ type runtimeRunSubmitRequest struct {
 }
 
 type runtimeRunStatusResponse struct {
-	RunID           string `json:"loop_id"`
-	AgentID         string `json:"agent_id"`
-	ChannelID       string `json:"channel_id,omitempty"`
-	AgentProfile    string `json:"agent_profile,omitempty"`
-	AgentRole       string `json:"agent_role,omitempty"`
-	State           string `json:"state,omitempty"`
-	ActiveChildRuns int    `json:"active_child_runs,omitempty"`
+	RunID               string                                    `json:"loop_id"`
+	AgentID             string                                    `json:"agent_id"`
+	ChannelID           string                                    `json:"channel_id,omitempty"`
+	AgentProfile        string                                    `json:"agent_profile,omitempty"`
+	AgentRole           string                                    `json:"agent_role,omitempty"`
+	State               string                                    `json:"state,omitempty"`
+	ActiveChildRuns     int                                       `json:"active_child_runs,omitempty"`
+	Trajectory          *runtimeTrajectoryStatusResponse          `json:"trajectory,omitempty"`
+	ProcessorResolution *runtimeProcessorResolutionStatusResponse `json:"processor_resolution,omitempty"`
+}
+
+type runtimeTrajectoryStatusResponse struct {
+	TrajectoryID      string   `json:"trajectory_id"`
+	Status            string   `json:"status,omitempty"`
+	SettlementReady   bool     `json:"settlement_ready"`
+	WaitingOn         []string `json:"waiting_on,omitempty"`
+	OpenWorkItemCount int      `json:"open_work_item_count"`
+}
+
+type runtimeProcessorResolutionStatusResponse struct {
+	WorkItemID              string `json:"work_item_id"`
+	Status                  string `json:"status,omitempty"`
+	ResolutionState         string `json:"resolution_state,omitempty"`
+	SourceItemCount         int    `json:"source_item_count,omitempty"`
+	ResolvedSourceItemCount int    `json:"resolved_source_item_count,omitempty"`
+	LastDecision            string `json:"last_decision,omitempty"`
+	StoryDocID              string `json:"story_doc_id,omitempty"`
+	CoveredByDocID          string `json:"covered_by_doc_id,omitempty"`
 }
 
 type ingestionRuntimeDispatcher struct {
@@ -53,7 +74,7 @@ type ingestionRuntimeDispatcher struct {
 	socketPath           string // UDS socket path; if set, uses unix transport and proxy path for sandbox
 	ownerID              string
 	maxProcessorRequests int
-	inFlightWindow        time.Duration
+	inFlightWindow       time.Duration
 	client               *http.Client
 	retryAttempts        int
 	retryDelay           time.Duration
@@ -200,7 +221,7 @@ func ingestionRuntimeDispatcherFromEnv() *ingestionRuntimeDispatcher {
 		socketPath:           socketPath,
 		maxProcessorRequests: limit,
 		retryAttempts:        retries,
-		inFlightWindow: time.Duration(parsePositiveInt(firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_INFLIGHT_WINDOW_SECONDS", "SOURCECYCLED_INFLIGHT_WINDOW_SECONDS"), int(defaultIngestionProcessorInFlightWindow/time.Second))) * time.Second,
+		inFlightWindow:       time.Duration(parsePositiveInt(firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_INFLIGHT_WINDOW_SECONDS", "SOURCECYCLED_INFLIGHT_WINDOW_SECONDS"), int(defaultIngestionProcessorInFlightWindow/time.Second))) * time.Second,
 		retryDelay:           defaultIngestionRuntimeRetryDelay,
 	}
 	if socketPath != "" {
@@ -439,6 +460,7 @@ func sourceAPIProcessorRequests(requests []cycle.ProcessorRequest) []sourceapi.P
 			ProcessorKey:  req.ProcessorKey,
 			Status:        req.Status,
 			RuntimeRunID:  req.RuntimeRunID,
+			RuntimeStatus: req.RuntimeStatus,
 			SourceItemIDs: req.SourceItemIDs,
 			SourceCount:   req.SourceCount,
 			SourceTypes:   req.SourceTypes,
@@ -523,6 +545,82 @@ func isTerminalRuntimeState(state string) bool {
 	}
 }
 
+// processorRunProjection classifies what the runtime's trajectory and
+// processor-resolution state imply for the request verdict. The cases are
+// mutually exclusive: they require distinct trajectory statuses, or distinct
+// resolution states under the same status.
+type processorRunProjection int
+
+const (
+	projectionNone processorRunProjection = iota
+	projectionPublishedCorpusCoverage
+	projectionExplicitNoStoryTerminal
+	projectionDeferredWithoutStory
+	projectionPublicationSettled
+)
+
+func classifyProcessorRunProjection(run runtimeRunStatusResponse) processorRunProjection {
+	trajectoryStatus := ""
+	if run.Trajectory != nil {
+		trajectoryStatus = strings.ToLower(strings.TrimSpace(run.Trajectory.Status))
+	}
+	resolutionCompleted := false
+	resolutionState := ""
+	coveredByDocID := ""
+	if run.ProcessorResolution != nil {
+		resolutionCompleted = strings.EqualFold(strings.TrimSpace(run.ProcessorResolution.Status), "completed")
+		resolutionState = strings.ToLower(strings.TrimSpace(run.ProcessorResolution.ResolutionState))
+		coveredByDocID = strings.TrimSpace(run.ProcessorResolution.CoveredByDocID)
+	}
+	switch {
+	case trajectoryStatus == "cancelled" && resolutionCompleted &&
+		resolutionState == sourceapi.ResolutionStateSuppressedAgainstPublishedCorpus && coveredByDocID != "":
+		return projectionPublishedCorpusCoverage
+	case trajectoryStatus == "cancelled" && resolutionCompleted &&
+		resolutionState == sourceapi.ResolutionStateDecidedWithoutStoryRoute:
+		return projectionExplicitNoStoryTerminal
+	case trajectoryStatus == "live" && resolutionState == sourceapi.ResolutionStateDeferredWithoutStoryRoute:
+		return projectionDeferredWithoutStory
+	case trajectoryStatus == "settled":
+		return projectionPublicationSettled
+	default:
+		return projectionNone
+	}
+}
+
+// processorStoryRouteCompleted reports whether the processor request resolved
+// every source item with a story route; that releases runtime admission
+// capacity even while the run tree is still working the story.
+func processorStoryRouteCompleted(run runtimeRunStatusResponse) bool {
+	return run.ProcessorResolution != nil &&
+		strings.EqualFold(strings.TrimSpace(run.ProcessorResolution.Status), "completed") &&
+		strings.EqualFold(strings.TrimSpace(run.ProcessorResolution.ResolutionState), sourceapi.ResolutionStateDecidedWithStoryRoute)
+}
+
+// processorRunReconcileDecision projects a runtime run status onto at most
+// one verdict write and one runtime-status write. The deferred projection
+// intentionally records a verdict only once the run itself is terminal.
+func processorRunReconcileDecision(run runtimeRunStatusResponse) (verdict, runtimeStatus string) {
+	projection := classifyProcessorRunProjection(run)
+	switch projection {
+	case projectionPublishedCorpusCoverage, projectionExplicitNoStoryTerminal, projectionPublicationSettled:
+		verdict = "completed"
+	}
+	if processorStoryRouteCompleted(run) {
+		runtimeStatus = "completed"
+	}
+	if isTerminalRuntimeState(run.State) {
+		runtimeStatus = strings.ToLower(strings.TrimSpace(run.State))
+		switch {
+		case projection == projectionDeferredWithoutStory:
+			verdict = "deferred"
+		case verdict == "" && (strings.EqualFold(run.State, "failed") || strings.EqualFold(run.State, "cancelled")):
+			verdict = "dispatch_failed"
+		}
+	}
+	return verdict, runtimeStatus
+}
+
 func (d *ingestionRuntimeDispatcher) getRunStatus(ctx context.Context, runID string) (runtimeRunStatusResponse, error) {
 	var zero runtimeRunStatusResponse
 	baseURL := strings.TrimRight(strings.TrimSpace(d.baseURL), "/")
@@ -568,7 +666,7 @@ func (d *ingestionRuntimeDispatcher) reconcileSubmittedProcessorRequests(ctx con
 	if d == nil || store == nil {
 		return nil
 	}
-	submitted, err := store.ListSubmittedProcessorRequests(ctx, 128)
+	submitted, err := store.ListReconcilableProcessorRequests(ctx, 128)
 	if err != nil {
 		return err
 	}
@@ -580,22 +678,23 @@ func (d *ingestionRuntimeDispatcher) reconcileSubmittedProcessorRequests(ctx con
 		run, err := d.getRunStatus(ctx, runID)
 		if err != nil {
 			msg := strings.ToLower(err.Error())
-			if strings.Contains(msg, "returned 404") || strings.Contains(msg, "not found") {
+			if (strings.Contains(msg, "returned 404") || strings.Contains(msg, "not found")) && strings.EqualFold(strings.TrimSpace(req.RuntimeStatus), "submitted") {
 				if resetErr := store.ResetProcessorRequestSubmission(ctx, req.RequestID); resetErr != nil {
 					log.Printf("sourcecycled: reset missing runtime run %s for %s: %v", runID, req.RequestID, resetErr)
 				}
 			}
 			continue
 		}
-		if !isTerminalRuntimeState(run.State) || run.ActiveChildRuns > 0 {
-			continue
+		verdict, runtimeStatus := processorRunReconcileDecision(run)
+		if runtimeStatus != "" {
+			if err := store.UpdateProcessorRequestRuntimeStatus(ctx, req.RequestID, runtimeStatus, runID); err != nil {
+				log.Printf("sourcecycled: reconcile submitted request runtime %s -> %s: %v", req.RequestID, runtimeStatus, err)
+			}
 		}
-		status := "completed"
-		if strings.EqualFold(run.State, "failed") || strings.EqualFold(run.State, "cancelled") {
-			status = "dispatch_failed"
-		}
-		if err := store.UpdateProcessorRequestStatus(ctx, req.RequestID, status); err != nil {
-			log.Printf("sourcecycled: reconcile submitted request %s -> %s: %v", req.RequestID, status, err)
+		if verdict != "" {
+			if err := store.UpdateProcessorRequestVerdictStatus(ctx, req.RequestID, verdict); err != nil {
+				log.Printf("sourcecycled: reconcile submitted request %s -> %s: %v", req.RequestID, verdict, err)
+			}
 		}
 	}
 	return nil
@@ -646,7 +745,7 @@ func (d *ingestionRuntimeDispatcher) dispatch(ctx context.Context, store *cycle.
 		}
 	}
 	submitCap := processorLimit - inFlight
-		log.Printf("Dispatch backpressure: in-flight=%d submitCap=%d (%d - %d)", inFlight, submitCap, processorLimit, inFlight)
+	log.Printf("Dispatch backpressure: in-flight=%d submitCap=%d (%d - %d)", inFlight, submitCap, processorLimit, inFlight)
 	if submitCap <= 0 {
 		result.ProcessorSkipped += len(processorRequests)
 		return result
@@ -677,7 +776,7 @@ func (d *ingestionRuntimeDispatcher) dispatch(ctx context.Context, store *cycle.
 			result.ProcessorFailed++
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", req.RequestID, err))
 			if store != nil {
-				_ = store.UpdateProcessorRequestStatus(ctx, req.RequestID, "dispatch_failed")
+				_ = store.UpdateProcessorRequestRuntimeRun(ctx, req.RequestID, "dispatch_failed", "")
 			}
 			continue
 		}
@@ -717,24 +816,24 @@ func (d *ingestionRuntimeDispatcher) submitProcessor(ctx context.Context, req cy
 		Metadata: map[string]any{
 			"channel_id":                     channelID,
 			"agent_id":                       agentID,
-			"agent_profile":                 "processor",
-			"agent_role":                    "processor",
-			"request_source":                "sourcecycled",
-			"activation_origin":             "ingestion_event",
-			"ingestion_event_ids":           req.IngestionEventIDs,
-			"source_network_cycle_id":       req.CycleID,
-			"source_network_request_id":     req.RequestID,
-			"source_network_request_kind":   "processor",
+			"agent_profile":                  "processor",
+			"agent_role":                     "processor",
+			"request_source":                 "sourcecycled",
+			"activation_origin":              "ingestion_event",
+			"ingestion_event_ids":            req.IngestionEventIDs,
+			"source_network_cycle_id":        req.CycleID,
+			"source_network_request_id":      req.RequestID,
+			"source_network_request_kind":    "processor",
 			"ingestion_handoff_request_kind": "processor",
 			"ingestion_handoff_request_id":   req.RequestID,
 			"ingestion_handoff_cycle_id":     req.CycleID,
-			"processor_key":                 req.ProcessorKey,
-			"source_item_ids":               req.SourceItemIDs,
-			"source_count":                  req.SourceCount,
-			"source_types":                  req.SourceTypes,
-			"verticals":                     req.Verticals,
-			"regions":                       req.Regions,
-			"continuity_ref":                req.ContinuityRef,
+			"processor_key":                  req.ProcessorKey,
+			"source_item_ids":                req.SourceItemIDs,
+			"source_count":                   req.SourceCount,
+			"source_types":                   req.SourceTypes,
+			"verticals":                      req.Verticals,
+			"regions":                        req.Regions,
+			"continuity_ref":                 req.ContinuityRef,
 		},
 	})
 }
@@ -750,15 +849,15 @@ func (d *ingestionRuntimeDispatcher) submitReconciler(ctx context.Context, req c
 		OwnerID: d.ownerID,
 		Prompt:  prompt,
 		Metadata: map[string]any{
-			"agent_profile":            "reconciler",
-			"agent_role":               "reconciler",
-			"request_source":           "sourcecycled",
+			"agent_profile":                  "reconciler",
+			"agent_role":                     "reconciler",
+			"request_source":                 "sourcecycled",
 			"ingestion_handoff_request_kind": "reconciler",
 			"ingestion_handoff_request_id":   req.RequestID,
 			"ingestion_handoff_cycle_id":     req.CycleID,
-			"reconciler_scope":         req.Scope,
-			"source_item_ids":          req.SourceItemIDs,
-			"processor_request_ids":    req.ProcessorRequestIDs,
+			"reconciler_scope":               req.Scope,
+			"source_item_ids":                req.SourceItemIDs,
+			"processor_request_ids":          req.ProcessorRequestIDs,
 		},
 	})
 }
@@ -801,7 +900,6 @@ func (d *ingestionRuntimeDispatcher) runtimeRunsEndpoint() string {
 	}
 	return d.baseURL + "/internal/runtime/runs"
 }
-
 
 func (d *ingestionRuntimeDispatcher) submitOnce(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {
 	body, err := json.Marshal(payload)

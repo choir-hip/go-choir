@@ -31,7 +31,7 @@ func defaultSettlementRuleForKind(kind types.TrajectoryKind) types.SettlementRul
 	case types.TrajectoryKindPublication:
 		return types.SettlementRule{
 			RequireNoOpenWorkItems: true,
-			RequiredSubjectRefs:    []string{"publish_ref"},
+			RequiredSubjectRefs:    []string{"publish_ref", "edition_ref"},
 		}
 	default:
 		return types.SettlementRule{RequireNoOpenWorkItems: true}

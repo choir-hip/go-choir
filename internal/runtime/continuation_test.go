@@ -14,6 +14,7 @@ import (
 )
 
 func TestRunContinuationCompactsAndStartsBoundedNextGoal(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	rt.cfg.RunMemoryKeepRecentTokens = 1
@@ -109,6 +110,7 @@ func TestRunContinuationCompactsAndStartsBoundedNextGoal(t *testing.T) {
 }
 
 func TestRunControlCompactsEventLedgerWhenSourceHasNoProviderMemory(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	now := time.Now().UTC()
@@ -189,6 +191,7 @@ func TestRunControlCompactsEventLedgerWhenSourceHasNoProviderMemory(t *testing.T
 }
 
 func TestRunCompletionCanAutoStartConfiguredContinuation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	rt.cfg.RunMemoryKeepRecentTokens = 1

@@ -39,6 +39,7 @@ func toolSchemaStringEnum(schema map[string]any, property string) []string {
 }
 
 func TestWorkerRepoBootstrapPromptIncludesHumanEvidenceBrowserContract(t *testing.T) {
+	t.Parallel()
 	prompt := remoteWorkerRepoBootstrapPrompt("https://github.com/yusefmosiah/go-choir.git", "abc123")
 	for _, want := range []string{
 		"node, npm",
@@ -57,6 +58,7 @@ func TestWorkerRepoBootstrapPromptIncludesHumanEvidenceBrowserContract(t *testin
 }
 
 func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
+	t.Parallel()
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -151,18 +153,36 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("spawn_agent"); ok {
 		t.Fatalf("researcher should not have spawn_agent")
 	}
+	for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update", "record_wire_processor_decision"} {
+		if _, ok := processor.Lookup(name); !ok {
+			t.Fatalf("%s missing tool %q", AgentProfileProcessor, name)
+		}
+	}
+	for _, forbidden := range []string{"bash", "write_file", "edit_file", "edit_vtext", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
+		if _, ok := processor.Lookup(forbidden); ok {
+			t.Fatalf("%s should not have %s", AgentProfileProcessor, forbidden)
+		}
+	}
+	for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
+		if _, ok := reconciler.Lookup(name); !ok {
+			t.Fatalf("%s missing tool %q", AgentProfileReconciler, name)
+		}
+	}
+	if _, ok := reconciler.Lookup("record_wire_processor_decision"); ok {
+		t.Fatalf("%s should not have record_wire_processor_decision", AgentProfileReconciler)
+	}
+	for _, forbidden := range []string{"bash", "write_file", "edit_file", "edit_vtext", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
+		if _, ok := reconciler.Lookup(forbidden); ok {
+			t.Fatalf("%s should not have %s", AgentProfileReconciler, forbidden)
+		}
+	}
 	for profile, registry := range map[string]*ToolRegistry{
 		AgentProfileProcessor:  processor,
 		AgentProfileReconciler: reconciler,
 	} {
-		for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
+		for _, name := range []string{"spawn_agent"} {
 			if _, ok := registry.Lookup(name); !ok {
 				t.Fatalf("%s missing tool %q", profile, name)
-			}
-		}
-		for _, forbidden := range []string{"bash", "write_file", "edit_file", "edit_vtext", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
-			if _, ok := registry.Lookup(forbidden); ok {
-				t.Fatalf("%s should not have %s", profile, forbidden)
 			}
 		}
 		spawnTool, ok := registry.Lookup("spawn_agent")
@@ -247,6 +267,7 @@ func TestForegroundSuperMutationGuardBlocksWritableTools(t *testing.T) {
 }
 
 func TestPersistentSuperInboxBashRequiresCoagentUpdate(t *testing.T) {
+	t.Parallel()
 	ownerID := "owner-super-bash"
 	run := &types.RunRecord{
 		RunID:        "run-super-bash",
@@ -278,6 +299,7 @@ func TestPersistentSuperInboxBashRequiresCoagentUpdate(t *testing.T) {
 }
 
 func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -370,6 +392,7 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 }
 
 func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -487,6 +510,7 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 }
 
 func TestWaitAgentToolReceivesChildResult(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -591,6 +615,7 @@ func TestWaitAgentToolReceivesChildResult(t *testing.T) {
 }
 
 func TestWaitAgentToolTimesOutWithRunState(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -683,6 +708,7 @@ func TestWaitAgentToolTimesOutWithRunState(t *testing.T) {
 }
 
 func TestChannelCastDedupesPendingAddressedDelivery(t *testing.T) {
+	t.Parallel()
 	rt, s, _ := testRuntimeWithTempCWD(t)
 	parent, err := rt.StartRunWithMetadata(context.Background(), "coordinate repeated work", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileVText,
@@ -722,13 +748,14 @@ func TestChannelCastDedupesPendingAddressedDelivery(t *testing.T) {
 }
 
 func TestRedirectWorkerDelegationPostsSuperAuthoredWorkerInbox(t *testing.T) {
+	t.Parallel()
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
 	}
 	workerDir := t.TempDir()
 	workerDB := filepath.Join(workerDir, "worker.db")
-	workerStore, err := store.Open(workerDB)
+	workerStore, err := openTestStore(workerDB)
 	if err != nil {
 		t.Fatalf("open worker store: %v", err)
 	}
@@ -818,6 +845,7 @@ func TestRedirectWorkerDelegationPostsSuperAuthoredWorkerInbox(t *testing.T) {
 }
 
 func TestRequestSuperExecutionDedupesSameVTextRun(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default tools: %v", err)
@@ -882,6 +910,7 @@ func TestRequestSuperExecutionDedupesSameVTextRun(t *testing.T) {
 }
 
 func TestRequestSuperExecutionDedupesDifferentObjectivesInSameVTextRun(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default tools: %v", err)
@@ -952,13 +981,14 @@ func TestRequestSuperExecutionDedupesDifferentObjectivesInSameVTextRun(t *testin
 }
 
 func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-agent-tools-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -1060,6 +1090,7 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 }
 
 func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default tools: %v", err)
@@ -1132,6 +1163,7 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 }
 
 func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -1256,6 +1288,7 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 }
 
 func TestSuperForkDesktopClonesStateAndPublishRequestsVM(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 
 	reg := vmctl.NewOwnershipRegistry("http://sandbox.test")
@@ -1407,6 +1440,7 @@ func TestSuperForkDesktopClonesStateAndPublishRequestsVM(t *testing.T) {
 }
 
 func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
+	t.Parallel()
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 
 	reg := vmctl.NewOwnershipRegistry("http://sandbox.test")
@@ -1516,6 +1550,7 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 }
 
 func TestSuperRequestWorkerVMNormalizesStandardMachineClass(t *testing.T) {
+	t.Parallel()
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 
 	reg := vmctl.NewOwnershipRegistry("http://sandbox.test")
@@ -1571,6 +1606,7 @@ func TestSuperRequestWorkerVMNormalizesStandardMachineClass(t *testing.T) {
 }
 
 func TestSuperRequestWorkerVMReusesActiveLeaseUnlessParallelAllowed(t *testing.T) {
+	t.Parallel()
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 
 	reg := vmctl.NewOwnershipRegistry("http://sandbox.test")
@@ -1632,6 +1668,7 @@ func TestSuperRequestWorkerVMReusesActiveLeaseUnlessParallelAllowed(t *testing.T
 }
 
 func TestSuperRequestWorkerVMDedupesSameRunByMachineClass(t *testing.T) {
+	t.Parallel()
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 
 	reg := vmctl.NewOwnershipRegistry("http://sandbox.test")
@@ -1692,6 +1729,7 @@ func TestSuperRequestWorkerVMDedupesSameRunByMachineClass(t *testing.T) {
 }
 
 func TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 
 	workerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1788,6 +1826,7 @@ func TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure(t *tes
 }
 
 func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -1854,6 +1893,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
 }
 
 func TestSuperDelegateWorkerVMDedupesSameWorkerAcrossTrajectoryRuns(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -1925,6 +1965,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerAcrossTrajectoryRuns(t *testing.T
 }
 
 func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -1951,16 +1992,12 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	}`)); err == nil {
 		t.Fatal("conductor should not be allowed to spawn researcher")
 	}
-	if _, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
-		"objective":"create v0 and own the document",
-		"role":"vtext"
-	}`)); err == nil {
-		t.Fatal("conductor spawn vtext without channel_id should fail")
-	}
+	// Conductor spawn_agent role=vtext without channel_id materializes a new
+	// document route (the conductor user-prompt handoff owns document
+	// creation; channel_id is only meaningful for revising existing docs).
 	vtextSpawnRaw, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
 		"objective":"create v0 and own the document",
-		"role":"vtext",
-		"channel_id":"doc-work"
+		"role":"vtext"
 	}`))
 	if err != nil {
 		t.Fatalf("conductor spawn vtext: %v", err)
@@ -1995,6 +2032,25 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	}
 	if vtextSpawn.UserRevisionID == "" || vtextSpawn.FramingRevisionID != "" || vtextSpawn.InitialRevisionID != vtextSpawn.UserRevisionID {
 		t.Fatalf("unexpected vtext spawn revision ids: %+v", vtextSpawn)
+	}
+	// A repeat conductor vtext spawn on the same conductor run must dedupe to
+	// the already-materialized document instead of opening a second route.
+	repeatSpawnRaw, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
+		"objective":"create v0 and own the document",
+		"role":"vtext",
+		"channel_id":"doc-work"
+	}`))
+	if err != nil {
+		t.Fatalf("conductor repeat spawn vtext: %v", err)
+	}
+	var repeatSpawn struct {
+		ChannelID string `json:"channel_id"`
+	}
+	if err := json.Unmarshal([]byte(repeatSpawnRaw), &repeatSpawn); err != nil {
+		t.Fatalf("decode repeat vtext spawn: %v", err)
+	}
+	if repeatSpawn.ChannelID != vtextSpawn.ChannelID {
+		t.Fatalf("repeat vtext spawn channel_id = %q, want deduped %q", repeatSpawn.ChannelID, vtextSpawn.ChannelID)
 	}
 	vtextAgent, err := s.GetAgent(context.Background(), vtextSpawn.AgentID)
 	if err != nil {
@@ -2135,16 +2191,16 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	}
 
 	processorRun, err := rt.StartRunWithMetadata(context.Background(), "ingest source batch", "user-alice", map[string]any{
-		runMetadataAgentProfile:       "source-processor",
-		runMetadataAgentRole:          "source-processor",
-		runMetadataProcessorKey:       "processor:global_firehose:global:gdelt",
-		"source_network_cycle_id":     "cycle-test",
-		"source_network_request_id":   "processor-test",
-		"source_network_request_kind": "processor",
-		"ingestion_handoff_cycle_id":        "cycle-test",
-		"ingestion_handoff_request_id":      "processor-test",
-		"ingestion_handoff_request_kind":    "processor",
-		"source_item_ids":             []string{sourceItem.ContentID},
+		runMetadataAgentProfile:          "source-processor",
+		runMetadataAgentRole:             "source-processor",
+		runMetadataProcessorKey:          "processor:global_firehose:global:gdelt",
+		"source_network_cycle_id":        "cycle-test",
+		"source_network_request_id":      "processor-test",
+		"source_network_request_kind":    "processor",
+		"ingestion_handoff_cycle_id":     "cycle-test",
+		"ingestion_handoff_request_id":   "processor-test",
+		"ingestion_handoff_request_kind": "processor",
+		"source_item_ids":                []string{sourceItem.ContentID},
 	})
 	if err != nil {
 		t.Fatalf("start processor run: %v", err)
@@ -2242,6 +2298,41 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	}
 	if vtextRun.AgentID != "vtext:"+vtextSpawn.DocID || vtextRun.ChannelID != vtextSpawn.DocID || metadataString(vtextRun.Metadata, "type") != "vtext_agent_revision" {
 		t.Fatalf("processor vtext run is not a vtext revision run: %+v", vtextRun)
+	}
+	workItems, err := rt.Store().ListWorkItemsByTrajectory(context.Background(), "user-alice", processorRun.TrajectoryID, true)
+	if err != nil {
+		t.Fatalf("list processor publication work items: %v", err)
+	}
+	if len(workItems) != 1 {
+		t.Fatalf("open processor publication work items = %+v, want only story-resolution after VText handoff", workItems)
+	}
+	var sawStoryResolution bool
+	for _, item := range workItems {
+		switch item.ObjectiveFingerprint {
+		case wireStoryResolutionWorkItemFingerprint(processorRun.TrajectoryID, vtextSpawn.DocID):
+			sawStoryResolution = true
+			if item.Details["kind"] != "wire_story_resolution" || item.Details["doc_id"] != vtextSpawn.DocID {
+				t.Fatalf("processor story-resolution work item details = %+v", item.Details)
+			}
+		default:
+			t.Fatalf("unexpected processor work item = %+v", item)
+		}
+	}
+	if !sawStoryResolution {
+		t.Fatalf("processor work items missing expected story-resolution fingerprint: %+v", workItems)
+	}
+	processorDecision, found, err := rt.Store().FindWorkItemByFingerprint(context.Background(), "user-alice", processorRun.TrajectoryID, wireProcessorDecisionWorkItemFingerprint(processorRun.TrajectoryID))
+	if err != nil {
+		t.Fatalf("find completed processor decision work item: %v", err)
+	}
+	if !found {
+		t.Fatal("processor decision work item missing after VText handoff")
+	}
+	if processorDecision.Status != types.WorkItemCompleted ||
+		processorDecision.Details["last_decision"] != "opened_vtext" ||
+		processorDecision.Details["resolution_state"] != "all_source_items_decided_with_story_route" ||
+		processorDecision.Details["story_doc_id"] != vtextSpawn.DocID {
+		t.Fatalf("processor decision work item = %+v", processorDecision)
 	}
 	if metadataString(vtextRun.Metadata, "source_network_cycle_id") != "cycle-test" || metadataString(vtextRun.Metadata, "processor_key") != "processor:global_firehose:global:gdelt" {
 		t.Fatalf("processor vtext run did not preserve source-network metadata: %+v", vtextRun.Metadata)
@@ -2392,6 +2483,7 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 }
 
 func TestConcurrentConductorVTextSpawnsShareRoute(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -2491,6 +2583,7 @@ func TestConcurrentConductorVTextSpawnsShareRoute(t *testing.T) {
 }
 
 func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -2594,6 +2687,7 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 }
 
 func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -2692,6 +2786,7 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 }
 
 func TestVSuperSpawnAgentReusesActiveCoSuperSlot(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -2772,6 +2867,7 @@ func TestVSuperSpawnAgentReusesActiveCoSuperSlot(t *testing.T) {
 }
 
 func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -2858,6 +2954,7 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 }
 
 func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -2939,6 +3036,7 @@ func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 }
 
 func TestVerifierCoSuperCannotPublishAppChangePackage(t *testing.T) {
+	t.Parallel()
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -2995,6 +3093,7 @@ func appendRuntimeToolResult(t *testing.T, s *store.Store, run types.RunRecord, 
 }
 
 func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -3039,12 +3138,11 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	}
 
 	var resp struct {
-		UpdateID    string   `json:"update_id"`
-		AgentID     string   `json:"agent_id"`
-		ChannelID   string   `json:"channel_id"`
-		Cursor      int64    `json:"cursor"`
-		EvidenceIDs []string `json:"evidence_ids"`
-		Status      string   `json:"status"`
+		UpdateID  string `json:"update_id"`
+		AgentID   string `json:"agent_id"`
+		ChannelID string `json:"channel_id"`
+		Cursor    int64  `json:"cursor"`
+		Status    string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode submit_coagent_update: %v", err)
@@ -3055,21 +3153,23 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	if resp.AgentID != "vtext:doc-1" {
 		t.Fatalf("agent_id = %q, want %q", resp.AgentID, "vtext:doc-1")
 	}
-	if len(resp.EvidenceIDs) != 1 {
-		t.Fatalf("evidence_ids = %+v, want 1 id", resp.EvidenceIDs)
+
+	finding, err := s.GetWorkerUpdate(context.Background(), "user-alice", "finding-001")
+	if err != nil {
+		t.Fatalf("get coagent update: %v", err)
+	}
+	// The tool response was normalized to delivery metadata only; inline
+	// evidence must still be persisted and linked on the durable update.
+	if len(finding.EvidenceIDs) != 1 {
+		t.Fatalf("evidence_ids = %+v, want 1 id", finding.EvidenceIDs)
 	}
 
-	evidence, err := s.GetEvidence(context.Background(), resp.EvidenceIDs[0], "user-alice")
+	evidence, err := s.GetEvidence(context.Background(), finding.EvidenceIDs[0], "user-alice")
 	if err != nil {
 		t.Fatalf("get evidence: %v", err)
 	}
 	if evidence.Title != "Release notes" {
 		t.Fatalf("evidence title = %q, want %q", evidence.Title, "Release notes")
-	}
-
-	finding, err := s.GetWorkerUpdate(context.Background(), "user-alice", "finding-001")
-	if err != nil {
-		t.Fatalf("get coagent update: %v", err)
 	}
 	if finding.MessageSeq != resp.Cursor {
 		t.Fatalf("update message_seq = %d, want %d", finding.MessageSeq, resp.Cursor)
@@ -3116,7 +3216,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	}
 	var findingsMessage *types.ChannelMessage
 	for i := range messages {
-		if messages[i].ToAgentID == "vtext:doc-1" && strings.Contains(messages[i].Content, resp.EvidenceIDs[0]) {
+		if messages[i].ToAgentID == "vtext:doc-1" && strings.Contains(messages[i].Content, finding.EvidenceIDs[0]) {
 			findingsMessage = &messages[i]
 			break
 		}
@@ -3127,6 +3227,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 }
 
 func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -3199,8 +3300,12 @@ func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
 	if provenance["rights_scope"] != "private_user_source" || provenance["untrusted_source_text"] != true {
 		t.Fatalf("provenance = %#v", provenance)
 	}
-	if got := resp["next_required_tool"]; got != "submit_coagent_update" {
-		t.Fatalf("next_required_tool = %#v, want submit_coagent_update", got)
+	// The hard next_required_tool gate was replaced by a soft checkpoint
+	// instruction; researchers must still be told to submit findings before
+	// further research turns.
+	instruction, _ := resp["next_instruction"].(string)
+	if !strings.Contains(instruction, "findings update") {
+		t.Fatalf("next_instruction = %#v, want findings checkpoint instruction", resp["next_instruction"])
 	}
 }
 
@@ -3286,6 +3391,7 @@ func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
 }
 
 func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -3455,6 +3561,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 }
 
 func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -3537,6 +3644,7 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 }
 
 func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -3644,6 +3752,7 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 }
 
 func TestSubmitWorkerUpdateUsesVTextRequesterOverExplicitAgent(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -3731,6 +3840,7 @@ func TestSubmitWorkerUpdateUsesVTextRequesterOverExplicitAgent(t *testing.T) {
 }
 
 func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -3791,6 +3901,7 @@ func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing
 }
 
 func TestSubmitWorkerUpdateFallsBackToVTextChannelWhenExplicitTargetMissing(t *testing.T) {
+	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -3868,6 +3979,7 @@ func TestSubmitWorkerUpdateFallsBackToVTextChannelWhenExplicitTargetMissing(t *t
 }
 
 func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	rt, s, _ := testRuntimeWithTempCWD(t)
 	ownerID := "user-delegate-fallback"
@@ -4050,14 +4162,20 @@ func TestResearcherWebSearchRoutesThroughGateway(t *testing.T) {
 		t.Fatalf("gateway search auth = %q, want Bearer sandbox-token", gotAuth)
 	}
 
+	// web_search now returns a tool-output projection envelope; the
+	// model-visible payload carries the gateway provider and result cards.
+	projection := parseToolOutputProjection(raw)
+	if projection == nil {
+		t.Fatalf("web_search output is not a tool projection: %s", raw)
+	}
 	var resp struct {
 		Provider string `json:"provider"`
 		Results  []struct {
 			URL string `json:"url"`
 		} `json:"results"`
 	}
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode web_search: %v", err)
+	if err := json.Unmarshal([]byte(projection.ModelOutput), &resp); err != nil {
+		t.Fatalf("decode web_search model output: %v", err)
 	}
 	if resp.Provider != "mock-gateway" {
 		t.Fatalf("provider = %q, want mock-gateway", resp.Provider)
@@ -4108,11 +4226,15 @@ func TestResearcherWebSearchFallsBackToProxyGatewayURL(t *testing.T) {
 		t.Fatalf("proxy gateway search path = %q, want /provider/v1/search", gotPath)
 	}
 
+	projection := parseToolOutputProjection(raw)
+	if projection == nil {
+		t.Fatalf("web_search output is not a tool projection: %s", raw)
+	}
 	var resp struct {
 		Provider string `json:"provider"`
 	}
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode web_search: %v", err)
+	if err := json.Unmarshal([]byte(projection.ModelOutput), &resp); err != nil {
+		t.Fatalf("decode web_search model output: %v", err)
 	}
 	if resp.Provider != "proxy-gateway" {
 		t.Fatalf("provider = %q, want proxy-gateway", resp.Provider)
@@ -4150,6 +4272,7 @@ func TestResearcherWebSearchWithoutGatewayIsUnavailable(t *testing.T) {
 }
 
 func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
+	t.Parallel()
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 	rt.cfg.SandboxID = "vm-tool-export"
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
@@ -4252,13 +4375,14 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 }
 
 func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
+	t.Parallel()
 	activeRT, activeStore, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
 	}
 
 	workerDir := t.TempDir()
-	workerDB, err := store.Open(filepath.Join(workerDir, "worker.db"))
+	workerDB, err := openTestStore(filepath.Join(workerDir, "worker.db"))
 	if err != nil {
 		t.Fatalf("open worker store: %v", err)
 	}
@@ -4407,6 +4531,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 }
 
 func TestStartWorkerDelegationPreloadsReferencedAppChangePackage(t *testing.T) {
+	t.Parallel()
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
@@ -4502,6 +4627,7 @@ func TestStartWorkerDelegationPreloadsReferencedAppChangePackage(t *testing.T) {
 }
 
 func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing.T) {
+	t.Parallel()
 	activeRT, activeStore, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
@@ -4533,7 +4659,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing
 	}
 
 	workerDir := t.TempDir()
-	workerDB, err := store.Open(filepath.Join(workerDir, "worker.db"))
+	workerDB, err := openTestStore(filepath.Join(workerDir, "worker.db"))
 	if err != nil {
 		t.Fatalf("open worker store: %v", err)
 	}
@@ -4647,6 +4773,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing
 }
 
 func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testing.T) {
+	t.Parallel()
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
@@ -4728,6 +4855,21 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 				return
 			}
 			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: childEvents})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/app-change-packages/pkg-child":
+			// The delegate path mirrors worker packages into the canonical
+			// store by fetching package detail from the worker runtime.
+			writeAPIJSON(w, http.StatusOK, types.AppChangePackageRecord{
+				PackageID:                "pkg-child",
+				OwnerID:                  "user-alice",
+				AppID:                    "trace-proof",
+				Status:                   types.AppChangePackagePublishedPrivate,
+				PackageManifestSHA256:    "manifest-child",
+				RuntimeSourceDeltaSHA256: "runtime-child",
+				UISourceDeltaSHA256:      "ui-child",
+				RuntimeSourceDelta:       "diff --git runtime-child",
+				CreatedAt:                now,
+				UpdatedAt:                now,
+			})
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
 		}
@@ -4787,6 +4929,7 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 }
 
 func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *testing.T) {
+	t.Parallel()
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
@@ -4906,6 +5049,7 @@ func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *
 }
 
 func TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete(t *testing.T) {
+	t.Parallel()
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
@@ -5002,6 +5146,7 @@ func TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete(t *t
 }
 
 func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) {
+	t.Parallel()
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := os.RemoveAll(activeCWD); err != nil {
 		t.Fatalf("reset active cwd: %v", err)
@@ -5024,7 +5169,7 @@ func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) 
 	}
 
 	workerDir := t.TempDir()
-	workerDB, err := store.Open(filepath.Join(workerDir, "worker.db"))
+	workerDB, err := openTestStore(filepath.Join(workerDir, "worker.db"))
 	if err != nil {
 		t.Fatalf("open worker store: %v", err)
 	}
@@ -5115,6 +5260,7 @@ func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) 
 }
 
 func TestPollInternalWorkerRunRetriesTransientStatusTimeout(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5154,6 +5300,7 @@ func TestPollInternalWorkerRunRetriesTransientStatusTimeout(t *testing.T) {
 }
 
 func TestPollInternalWorkerRunRetriesTransientStatusCode(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5192,6 +5339,7 @@ func TestPollInternalWorkerRunRetriesTransientStatusCode(t *testing.T) {
 }
 
 func TestPollInternalWorkerRunRetriesTransientNotFound(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5230,6 +5378,7 @@ func TestPollInternalWorkerRunRetriesTransientNotFound(t *testing.T) {
 }
 
 func TestMergeFollowedWorkerChildRunStatesPreservesRefreshedState(t *testing.T) {
+	t.Parallel()
 	evidence := workerRunEvidence{
 		ChildRunStates: map[string]types.RunState{
 			"child-from-refresh": types.RunCompleted,
@@ -5261,6 +5410,7 @@ func TestMergeFollowedWorkerChildRunStatesPreservesRefreshedState(t *testing.T) 
 }
 
 func TestPollInternalWorkerRunRetriesTransientConnectionReset(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5307,6 +5457,7 @@ func TestPollInternalWorkerRunRetriesTransientConnectionReset(t *testing.T) {
 }
 
 func TestDelegateWorkerVMRetriesInterruptedWorkerRunOnce(t *testing.T) {
+	t.Parallel()
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
@@ -5408,6 +5559,7 @@ func TestDelegateWorkerVMRetriesInterruptedWorkerRunOnce(t *testing.T) {
 }
 
 func TestDelegateWorkerVMReturnsFailedRunEvidence(t *testing.T) {
+	t.Parallel()
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
@@ -5526,6 +5678,7 @@ func TestDelegateWorkerVMReturnsFailedRunEvidence(t *testing.T) {
 }
 
 func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
+	t.Parallel()
 	activeRT, s, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
@@ -5719,6 +5872,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 }
 
 func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
+	t.Parallel()
 	activeRT, s, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
@@ -5886,6 +6040,7 @@ func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
 }
 
 func TestDelegateWorkerVMReturnsSubmitFailureEvidence(t *testing.T) {
+	t.Parallel()
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
@@ -6009,6 +6164,7 @@ func TestPrepareRemoteWorkerRepoBootstrapPrefersConfiguredBaseOverGitHead(t *tes
 }
 
 func TestWorkerVSuperDelegateContractPreventsCheckoutRaces(t *testing.T) {
+	t.Parallel()
 	contract := workerVSuperDelegateContract(15 * time.Minute)
 	for _, want := range []string{
 		"Spawn the implementation co-super first",
@@ -6080,7 +6236,7 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 	}
 
 	workerDir := t.TempDir()
-	workerDB, err := store.Open(filepath.Join(workerDir, "worker.db"))
+	workerDB, err := openTestStore(filepath.Join(workerDir, "worker.db"))
 	if err != nil {
 		t.Fatalf("open worker store: %v", err)
 	}
@@ -6221,7 +6377,7 @@ func testRuntimeWithTempCWD(t *testing.T) (*Runtime, *store.Store, string) {
 	}
 	_ = os.Remove(dbPath)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

@@ -17,6 +17,7 @@ import (
 )
 
 func TestAppAdoptionRequiresActualRecipientBuild(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	sourceRepo := testAppPromotionSourceRepo(t)
 	rt.cfg.PromotionSourceRepo = sourceRepo
@@ -92,6 +93,7 @@ func TestAppAdoptionRequiresActualRecipientBuild(t *testing.T) {
 }
 
 func TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	sourceRepo := testAppPromotionSourceRepo(t)
 	rt.cfg.PromotionSourceRepo = sourceRepo
@@ -239,6 +241,7 @@ func TestAppPromotionBaseRefSkipsProductOnlyComputerRefs(t *testing.T) {
 }
 
 func TestAppPromotionBuildEnvUsesWorkspaceScratchPaths(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join(t.TempDir(), "promotion-workspaces")
 	candidateDir := filepath.Join(root, "adoption-1")
 	env, scratchRoot, err := appPromotionBuildEnv(candidateDir)
@@ -278,6 +281,7 @@ func TestAppPromotionBuildEnvUsesWorkspaceScratchPaths(t *testing.T) {
 }
 
 func TestDefaultAppPromotionBuildCommandsUseBuildCapableMemoryCaps(t *testing.T) {
+	t.Parallel()
 	if !strings.Contains(DefaultAppPromotionRuntimeBuildCommand, "GOMEMLIMIT=1024MiB") {
 		t.Fatalf("runtime promotion build command should use the build-capable memory cap: %s", DefaultAppPromotionRuntimeBuildCommand)
 	}
@@ -287,6 +291,7 @@ func TestDefaultAppPromotionBuildCommandsUseBuildCapableMemoryCaps(t *testing.T)
 }
 
 func TestTruncateAppPromotionOutputPreservesHeadAndTail(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("a", 13000) + "compiler-tail-error"
 	got := truncateAppPromotionOutput(long)
 	if len(got) > 12050 {

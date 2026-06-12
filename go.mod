@@ -3,6 +3,7 @@ module github.com/yusefmosiah/go-choir
 go 1.25.6
 
 require (
+	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/dolthub/driver v1.84.1
 	github.com/go-webauthn/webauthn v0.16.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -59,7 +60,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.16 // indirect
 	github.com/aws/smithy-go v1.22.2 // indirect
 	github.com/bcicen/jstream v1.0.1 // indirect
-	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20251022180443-0feb69152e9f // indirect
 	github.com/creack/pty/v2 v2.0.1 // indirect

@@ -88,6 +88,7 @@ func seedTraceTrajectory(t *testing.T, rt *Runtime) (*types.RunRecord, *types.Ru
 }
 
 func TestHandleTraceTrajectoryIndexOwnerScoped(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	parent, _ := seedTraceTrajectory(t, rt)
@@ -124,6 +125,7 @@ func TestHandleTraceTrajectoryIndexOwnerScoped(t *testing.T) {
 }
 
 func TestTraceTrajectorySummaryUsesEntryRunTitle(t *testing.T) {
+	t.Parallel()
 	now := time.Now().UTC()
 	parent := types.RunRecord{
 		RunID:        "prompt-bar-root",
@@ -176,6 +178,7 @@ func TestTraceTrajectorySummaryUsesEntryRunTitle(t *testing.T) {
 }
 
 func TestRegisteredTraceRoutesAreReadOnly(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	cases := []struct {
@@ -196,6 +199,7 @@ func TestRegisteredTraceRoutesAreReadOnly(t *testing.T) {
 }
 
 func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	parent, child := seedTraceTrajectory(t, rt)
@@ -339,6 +343,7 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 }
 
 func TestHandleTraceTrajectoryLogsReturnsDebugText(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	parent, _ := seedTraceTrajectory(t, rt)
@@ -368,6 +373,7 @@ func TestHandleTraceTrajectoryLogsReturnsDebugText(t *testing.T) {
 }
 
 func TestTraceTrajectorySummaryStaysLiveWhileAnyRunIsActive(t *testing.T) {
+	t.Parallel()
 	now := time.Now().UTC()
 	finishedAt := now.Add(30 * time.Second)
 	runs := []types.RunRecord{
@@ -416,6 +422,7 @@ func TestTraceTrajectorySummaryStaysLiveWhileAnyRunIsActive(t *testing.T) {
 }
 
 func TestTraceRunGeometryMomentsHaveReadableSummaries(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	parent, _ := seedTraceTrajectory(t, rt)
@@ -574,6 +581,7 @@ func TestTraceRunGeometryMomentsHaveReadableSummaries(t *testing.T) {
 }
 
 func TestBuildTraceSearchSummaryAggregatesProviderAttempts(t *testing.T) {
+	t.Parallel()
 	events := []types.EventRecord{
 		{
 			Kind: types.EventToolResult,
@@ -613,6 +621,7 @@ func TestBuildTraceSearchSummaryAggregatesProviderAttempts(t *testing.T) {
 }
 
 func TestHandleTraceMomentDetailReturnsMessageAndFindings(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	parent, _ := seedTraceTrajectory(t, rt)
@@ -679,15 +688,6 @@ func TestHandleTraceTrajectoryEventsStreamFiltersByTrajectory(t *testing.T) {
 		t.Fatalf("start other trajectory: %v", err)
 	}
 
-	req := authenticatedRequest(http.MethodGet, "/api/trace/trajectories/"+parent.RunID+"/events?after_seq=0", "", "user-alice")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	req = req.WithContext(ctx)
-	w := httptest.NewRecorder()
-
-	go handler.HandleTraceTrajectories(w, req)
-	time.Sleep(50 * time.Millisecond)
-
 	if _, err := rt.ChannelPost(WithToolExecutionContext(context.Background(), child), child.ChannelID, "researcher", "researcher", "Second moss finding"); err != nil {
 		t.Fatalf("trajectory channel post: %v", err)
 	}
@@ -695,28 +695,41 @@ func TestHandleTraceTrajectoryEventsStreamFiltersByTrajectory(t *testing.T) {
 		t.Fatalf("other trajectory channel post: %v", err)
 	}
 
-	time.Sleep(150 * time.Millisecond)
-	cancel()
+	req := authenticatedRequest(http.MethodGet, "/api/trace/trajectories/"+parent.RunID+"/events?after_seq=1", "", "user-alice")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
 
-	body := w.Body.String()
-	scanner := bufio.NewScanner(strings.NewReader(body))
+	go handler.HandleTraceTrajectories(w, req)
+
 	foundTarget := false
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		body := w.Body.String()
+		scanner := bufio.NewScanner(strings.NewReader(body))
+		for scanner.Scan() {
+			line := scanner.Text()
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			var ev types.EventRecord
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &ev); err != nil {
+				continue
+			}
+			if ev.TrajectoryID != parent.RunID {
+				t.Fatalf("unexpected trajectory in stream: got %q, want %q", ev.TrajectoryID, parent.RunID)
+			}
+			if ev.Kind == types.EventChannelMessage {
+				foundTarget = true
+			}
 		}
-		var ev types.EventRecord
-		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &ev); err != nil {
-			continue
+		if foundTarget {
+			break
 		}
-		if ev.TrajectoryID != parent.RunID {
-			t.Fatalf("unexpected trajectory in stream: got %q, want %q", ev.TrajectoryID, parent.RunID)
-		}
-		if ev.Kind == types.EventChannelMessage {
-			foundTarget = true
-		}
+		time.Sleep(25 * time.Millisecond)
 	}
+	cancel()
 	if !foundTarget {
 		t.Fatal("expected channel.message event in trajectory stream")
 	}

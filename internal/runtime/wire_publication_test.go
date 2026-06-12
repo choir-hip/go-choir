@@ -25,6 +25,30 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load story revision: %v", err)
 	}
+	if _, err := handler.rt.Store().CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID:   "traj-publish-slice",
+		OwnerID:        universalWirePlatformOwnerID(),
+		Kind:           types.TrajectoryKindPublication,
+		SettlementRule: defaultSettlementRuleForKind(types.TrajectoryKindPublication),
+	}); err != nil {
+		t.Fatalf("create publication trajectory: %v", err)
+	}
+	storyResolution, err := handler.rt.Store().CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              universalWirePlatformOwnerID(),
+		TrajectoryID:         "traj-publish-slice",
+		Objective:            "resolve wire story candidate to publication or explicit non-publication decision",
+		Reason:               "processor opened a wire story VText route",
+		AuthorityProfile:     AgentProfileVText,
+		ObjectiveFingerprint: wireStoryResolutionWorkItemFingerprint("traj-publish-slice", story.DocID),
+		CreatedByRunID:       "run-publish-slice",
+		Details: map[string]any{
+			"kind":   "wire_story_resolution",
+			"doc_id": story.DocID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("create story-resolution work item: %v", err)
+	}
 
 	rec := &types.RunRecord{
 		OwnerID: universalWirePlatformOwnerID(),
@@ -32,6 +56,7 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 		Metadata: map[string]any{
 			"type":           "vtext_agent_revision",
 			"request_intent": "universal_wire_processor_article_revision",
+			"trajectory_id":  "traj-publish-slice",
 		},
 	}
 	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
@@ -77,6 +102,33 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 	if ref == nil || ref["route_path"] != "wire/madrid-dispatch" {
 		t.Fatalf("expected platformd_publication_ref on revision metadata, got %+v", meta)
 	}
+	trajectory, err := handler.rt.Store().GetTrajectory(ctx, universalWirePlatformOwnerID(), "traj-publish-slice")
+	if err != nil {
+		t.Fatalf("load publication trajectory: %v", err)
+	}
+	if trajectory.Status != types.TrajectorySettled || trajectory.SettledAt == nil {
+		t.Fatalf("publication trajectory = %+v, want settled with settled_at", trajectory)
+	}
+	if trajectory.SubjectRefs["publish_ref"] != "platformd_publication:pub-wire-test/pubver-wire-test" {
+		t.Fatalf("publish_ref = %q, want platform publication ref; trajectory=%+v", trajectory.SubjectRefs["publish_ref"], trajectory)
+	}
+	if !strings.HasPrefix(trajectory.SubjectRefs["edition_ref"], "vtext_edition:") {
+		t.Fatalf("edition_ref = %q, want edition ref; trajectory=%+v", trajectory.SubjectRefs["edition_ref"], trajectory)
+	}
+	openItems, err := handler.rt.Store().ListWorkItemsByTrajectory(ctx, universalWirePlatformOwnerID(), "traj-publish-slice", true)
+	if err != nil {
+		t.Fatalf("list open work items after publish: %v", err)
+	}
+	if len(openItems) != 0 {
+		t.Fatalf("open work items after successful publish = %+v, want none", openItems)
+	}
+	storyResolution, err = handler.rt.Store().GetWorkItem(ctx, universalWirePlatformOwnerID(), storyResolution.WorkItemID)
+	if err != nil {
+		t.Fatalf("reload story-resolution work item: %v", err)
+	}
+	if storyResolution.Status != types.WorkItemCompleted {
+		t.Fatalf("story-resolution work item status = %s, want completed", storyResolution.Status)
+	}
 }
 
 func TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails(t *testing.T) {
@@ -93,11 +145,35 @@ func TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails(t *testi
 		t.Fatalf("load story revision: %v", err)
 	}
 	editionBefore, _ := handler.rt.Store().GetDocumentAlias(ctx, universalWirePlatformOwnerID(), universalWireEditionSourcePath)
+	if _, err := handler.rt.Store().CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID:   "traj-publish-fail",
+		OwnerID:        universalWirePlatformOwnerID(),
+		Kind:           types.TrajectoryKindPublication,
+		SettlementRule: defaultSettlementRuleForKind(types.TrajectoryKindPublication),
+	}); err != nil {
+		t.Fatalf("create publication trajectory: %v", err)
+	}
+	if _, err := handler.rt.Store().CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              universalWirePlatformOwnerID(),
+		TrajectoryID:         "traj-publish-fail",
+		Objective:            "resolve wire story candidate to publication or explicit non-publication decision",
+		Reason:               "processor opened a wire story VText route",
+		AuthorityProfile:     AgentProfileVText,
+		ObjectiveFingerprint: wireStoryResolutionWorkItemFingerprint("traj-publish-fail", story.DocID),
+		CreatedByRunID:       "run-publish-fail",
+		Details: map[string]any{
+			"kind":   "wire_story_resolution",
+			"doc_id": story.DocID,
+		},
+	}); err != nil {
+		t.Fatalf("create story-resolution work item: %v", err)
+	}
 	rec := &types.RunRecord{
 		OwnerID: universalWirePlatformOwnerID(),
 		RunID:   "run-publish-fail",
 		Metadata: map[string]any{
 			"request_intent": "universal_wire_processor_article_revision",
+			"trajectory_id":  "traj-publish-fail",
 		},
 	}
 	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
@@ -130,6 +206,26 @@ func TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails(t *testi
 		if pending != 0 {
 			t.Fatalf("debouncer pending = %d, want 0 after failed platform publish", pending)
 		}
+	}
+	trajectory, err := handler.rt.Store().GetTrajectory(ctx, universalWirePlatformOwnerID(), "traj-publish-fail")
+	if err != nil {
+		t.Fatalf("load publication trajectory: %v", err)
+	}
+	if trajectory.Status != types.TrajectoryLive || trajectory.SettledAt != nil {
+		t.Fatalf("failed publication trajectory = %+v, want live without settled_at", trajectory)
+	}
+	if trajectory.SubjectRefs["publish_ref"] != "" || trajectory.SubjectRefs["edition_ref"] != "" {
+		t.Fatalf("failed platform publish should not write trajectory refs: %+v", trajectory.SubjectRefs)
+	}
+	obligations, err := handler.rt.TrajectoryObligations(ctx, universalWirePlatformOwnerID(), "traj-publish-fail")
+	if err != nil {
+		t.Fatalf("trajectory obligations after failed publish: %v", err)
+	}
+	if got, want := len(obligations.OpenWorkItems), 2; got != want {
+		t.Fatalf("open work items after failed publish = %+v, want %d items (story-resolution + in-flight publication)", obligations.OpenWorkItems, want)
+	}
+	if obligations.SettlementReady {
+		t.Fatalf("failed publish should not be settlement-ready: %+v", obligations)
 	}
 }
 
@@ -195,7 +291,7 @@ func TestWireInputRevisionDoesNotAutonomousPublish(t *testing.T) {
 		OwnerID: ownerID,
 		Metadata: map[string]any{
 			"type":           "vtext_agent_revision",
-			"request_intent":   "universal_wire_processor_article_revision",
+			"request_intent": "universal_wire_processor_article_revision",
 		},
 	}
 	handler.rt.maybeAutonomousPublishWireArticle(ctx, doc, rev, rec)

@@ -35,15 +35,16 @@ func RegisterCoAgentTools(registry *ToolRegistry, rt *Runtime, spec AgentRoleSpe
 
 func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 	type args struct {
-		Objective            string `json:"objective"`
-		Role                 string `json:"role"`
-		Profile              string `json:"profile,omitempty"`
-		ChannelID            string `json:"channel_id,omitempty"`
-		Slot                 string `json:"slot,omitempty"`
-		Model                string `json:"model,omitempty"`
-		ModelPolicyOverlayID string `json:"model_policy_overlay_id,omitempty"`
-		Title                string `json:"title,omitempty"`
-		InitialContent       string `json:"initial_content,omitempty"`
+		Objective            string   `json:"objective"`
+		Role                 string   `json:"role"`
+		Profile              string   `json:"profile,omitempty"`
+		ChannelID            string   `json:"channel_id,omitempty"`
+		Slot                 string   `json:"slot,omitempty"`
+		Model                string   `json:"model,omitempty"`
+		ModelPolicyOverlayID string   `json:"model_policy_overlay_id,omitempty"`
+		Title                string   `json:"title,omitempty"`
+		InitialContent       string   `json:"initial_content,omitempty"`
+		SourceItemIDs        []string `json:"source_item_ids,omitempty"`
 	}
 	allowedTargets := canonicalAllowedDelegateTargets(spec.AllowedDelegateTargets)
 	roleDescription := "Canonical role/profile name. Allowed target roles for this caller: " + strings.Join(allowedTargets, ", ") + "."
@@ -66,6 +67,11 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			"initial_content": map[string]any{
 				"type":        "string",
 				"description": "For role=vtext from processor or reconciler: optional source/brief seed revision for the VText before the VText agent writes the article.",
+			},
+			"source_item_ids": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "For role=vtext from processor: the exact source item ids this story handoff covers. Required when the processor request contains multiple source items.",
 			},
 		}, []string{"objective", "role"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -127,6 +133,9 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 						ChannelID:    stringFromToolContext(ctx, toolCtxChannelID),
 					}
 				}
+				// ensureCoagentVTextRevisionRoute owns source-item validation
+				// for processor callers; do not pre-resolve here.
+				sourceItemIDs := trimNonEmpty(in.SourceItemIDs)
 				kind := vtextHandoffKindForCaller(callerProfile)
 				decision, err := rt.ensureVTextHandoff(ctx, parentRec, vtextHandoffRequest{
 					Kind:           kind,
@@ -135,6 +144,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 					Title:          in.Title,
 					ChannelID:      in.ChannelID,
 					InitialContent: in.InitialContent,
+					SourceItemIDs:  sourceItemIDs,
 				})
 				if err != nil {
 					return "", err
@@ -209,6 +219,7 @@ type coagentVTextRouteRequest struct {
 	Title          string
 	ChannelID      string
 	InitialContent string
+	SourceItemIDs  []string
 }
 
 type coagentVTextRouteDecision struct {
@@ -237,10 +248,22 @@ func (rt *Runtime) ensureCoagentVTextRevisionRoute(ctx context.Context, parentRe
 	}
 
 	now := time.Now().UTC()
+	if callerProfile == AgentProfileProcessor {
+		resolvedSourceItemIDs, err := resolveWireProcessorSourceItemIDs(parentRec, req.SourceItemIDs, true)
+		if err != nil {
+			return coagentVTextRouteDecision{}, err
+		}
+		req.SourceItemIDs = resolvedSourceItemIDs
+	}
 	sourceEntities := rt.coagentVTextSourceEntities(ctx, parentRec, req)
 	doc, created, seedRevisionID, err := rt.coagentVTextTargetDocument(ctx, parentRec, req, now, sourceEntities)
 	if err != nil {
 		return coagentVTextRouteDecision{}, err
+	}
+	if callerProfile == AgentProfileProcessor {
+		if _, err := rt.beginWireStoryResolutionWorkItem(ctx, parentRec, doc); err != nil {
+			return coagentVTextRouteDecision{}, fmt.Errorf("open wire story resolution work item: %w", err)
+		}
 	}
 
 	if err := rt.store.UpsertAgent(ctx, types.AgentRecord{
@@ -266,6 +289,18 @@ func (rt *Runtime) ensureCoagentVTextRevisionRoute(ctx context.Context, parentRe
 	}, parentRec.RunID, 0)
 	if err != nil {
 		return coagentVTextRouteDecision{}, fmt.Errorf("start vtext article revision: %w", err)
+	}
+	if callerProfile == AgentProfileProcessor {
+		if _, err := rt.recordWireProcessorDecision(ctx, parentRec, wireProcessorDecisionUpdate{
+			Verdict:       wireProcessorDecisionOpenedVText,
+			Summary:       "processor opened a VText story route for this request",
+			DocID:         doc.DocID,
+			RevisionRunID: rec.RunID,
+			SourceItemIDs: req.SourceItemIDs,
+			Complete:      true,
+		}); err != nil {
+			return coagentVTextRouteDecision{}, fmt.Errorf("record processor VText route decision: %w", err)
+		}
 	}
 
 	return coagentVTextRouteDecision{
@@ -305,28 +340,28 @@ func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *ty
 	seedRevisionID := uuid.New().String()
 	selectedStyles, styleRationale := coagentVTextSelectedStyles(req)
 	seedMetaMap := map[string]any{
-		"source":                      "coagent_vtext_seed",
-		"artifact_kind":               "source_brief",
-		"revision_role":               vtextRevisionRoleInput,
-		"input_origin":                vtextInputOriginForCaller(req.CallerProfile),
-		"vtext_version_stage":         "pre_article_brief",
-		"created_from":                canonicalAgentProfile(req.CallerProfile),
-		"parent_loop_id":              parentRec.RunID,
-		"parent_agent_id":             strings.TrimSpace(parentRec.AgentID),
-		"parent_channel_id":           strings.TrimSpace(parentRec.ChannelID),
-		"requested_channel_id":        strings.TrimSpace(req.ChannelID),
-		"seed_prompt":                 strings.TrimSpace(req.Objective),
-		"source_network_cycle_id":       firstNonEmpty(metadataString(parentRec.Metadata, "source_network_cycle_id"), metadataString(parentRec.Metadata, "ingestion_handoff_cycle_id")),
-		"source_network_request_id":     firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_id"), metadataString(parentRec.Metadata, "ingestion_handoff_request_id")),
-		"source_network_request_kind":   firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_kind"), metadataString(parentRec.Metadata, "ingestion_handoff_request_kind")),
-		"ingestion_handoff_cycle_id":    metadataString(parentRec.Metadata, "ingestion_handoff_cycle_id"),
-		"ingestion_handoff_request_id":  metadataString(parentRec.Metadata, "ingestion_handoff_request_id"),
+		"source":                         "coagent_vtext_seed",
+		"artifact_kind":                  "source_brief",
+		"revision_role":                  vtextRevisionRoleInput,
+		"input_origin":                   vtextInputOriginForCaller(req.CallerProfile),
+		"vtext_version_stage":            "pre_article_brief",
+		"created_from":                   canonicalAgentProfile(req.CallerProfile),
+		"parent_loop_id":                 parentRec.RunID,
+		"parent_agent_id":                strings.TrimSpace(parentRec.AgentID),
+		"parent_channel_id":              strings.TrimSpace(parentRec.ChannelID),
+		"requested_channel_id":           strings.TrimSpace(req.ChannelID),
+		"seed_prompt":                    strings.TrimSpace(req.Objective),
+		"source_network_cycle_id":        firstNonEmpty(metadataString(parentRec.Metadata, "source_network_cycle_id"), metadataString(parentRec.Metadata, "ingestion_handoff_cycle_id")),
+		"source_network_request_id":      firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_id"), metadataString(parentRec.Metadata, "ingestion_handoff_request_id")),
+		"source_network_request_kind":    firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_kind"), metadataString(parentRec.Metadata, "ingestion_handoff_request_kind")),
+		"ingestion_handoff_cycle_id":     metadataString(parentRec.Metadata, "ingestion_handoff_cycle_id"),
+		"ingestion_handoff_request_id":   metadataString(parentRec.Metadata, "ingestion_handoff_request_id"),
 		"ingestion_handoff_request_kind": metadataString(parentRec.Metadata, "ingestion_handoff_request_kind"),
-		"source_item_ids":             parentRec.Metadata["source_item_ids"],
-		"processor_key":               metadataString(parentRec.Metadata, runMetadataProcessorKey),
-		"reconciler_scope":            metadataString(parentRec.Metadata, runMetadataReconcilerScope),
-		"selected_style_sources":      selectedStyles,
-		"selected_style_rationale":    styleRationale,
+		"source_item_ids":                firstNonEmptySourceItemIDs(req.SourceItemIDs, metadataStringSlice(parentRec.Metadata["source_item_ids"])),
+		"processor_key":                  metadataString(parentRec.Metadata, runMetadataProcessorKey),
+		"reconciler_scope":               metadataString(parentRec.Metadata, runMetadataReconcilerScope),
+		"selected_style_sources":         selectedStyles,
+		"selected_style_rationale":       styleRationale,
 	}
 	if len(sourceEntities) > 0 {
 		seedMetaMap["source_entities"] = sourceEntities
@@ -523,7 +558,7 @@ func (rt *Runtime) coagentVTextSourceEntities(ctx context.Context, parentRec *ty
 	if rt == nil || rt.store == nil || ownerID == "" {
 		return entities
 	}
-	for _, contentID := range coagentVTextSourceContentIDs(parentRec, seenText) {
+	for _, contentID := range coagentVTextSourceContentIDs(parentRec, req, seenText) {
 		item, err := rt.Store().GetContentItem(ctx, ownerID, contentID)
 		if err != nil {
 			continue
@@ -535,7 +570,7 @@ func (rt *Runtime) coagentVTextSourceEntities(ctx context.Context, parentRec *ty
 	return entities
 }
 
-func coagentVTextSourceContentIDs(parentRec *types.RunRecord, text string) []string {
+func coagentVTextSourceContentIDs(parentRec *types.RunRecord, req coagentVTextRouteRequest, text string) []string {
 	seen := map[string]bool{}
 	out := []string{}
 	add := func(raw string) {
@@ -546,13 +581,96 @@ func coagentVTextSourceContentIDs(parentRec *types.RunRecord, text string) []str
 		seen[raw] = true
 		out = append(out, raw)
 	}
-	for _, key := range []string{"source_item_ids", "source_content_ids", "source_content_id", "content_id"} {
-		for _, value := range metadataStringSlice(parentRec.Metadata[key]) {
-			add(value)
+	for _, value := range req.SourceItemIDs {
+		add(value)
+	}
+	keys := []string{"source_item_ids", "source_content_ids", "source_content_id", "content_id"}
+	if len(req.SourceItemIDs) == 0 {
+		for _, key := range keys {
+			for _, value := range metadataStringSlice(parentRec.Metadata[key]) {
+				add(value)
+			}
 		}
 	}
 	for _, value := range contentItemIDsFromWorkerMessage(text) {
 		add(value)
+	}
+	return out
+}
+
+func firstNonEmptySourceItemIDs(values ...[]string) []string {
+	for _, value := range values {
+		if len(value) == 0 {
+			continue
+		}
+		out := make([]string, 0, len(value))
+		for _, item := range value {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			out = append(out, item)
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return nil
+}
+
+func resolveWireProcessorSourceItemIDs(rec *types.RunRecord, requested []string, requireExplicitForMulti bool) ([]string, error) {
+	available := wireProcessorSourceItemIDs(rec)
+	if len(requested) == 0 {
+		switch {
+		case len(available) == 0:
+			return nil, nil
+		case len(available) == 1:
+			return append([]string(nil), available...), nil
+		case requireExplicitForMulti:
+			return nil, fmt.Errorf("source_item_ids required when processor request contains %d source items", len(available))
+		default:
+			return nil, nil
+		}
+	}
+	if len(available) == 0 {
+		return nil, fmt.Errorf("source_item_ids were provided but the processor run has no source_item_ids to bind")
+	}
+	allowed := make(map[string]bool, len(available))
+	for _, itemID := range available {
+		allowed[itemID] = true
+	}
+	seen := make(map[string]bool, len(requested))
+	out := make([]string, 0, len(requested))
+	for _, itemID := range requested {
+		itemID = strings.TrimSpace(itemID)
+		if itemID == "" || seen[itemID] {
+			continue
+		}
+		if !allowed[itemID] {
+			return nil, fmt.Errorf("source_item_id %s is not part of this processor request", itemID)
+		}
+		seen[itemID] = true
+		out = append(out, itemID)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("source_item_ids must not be empty")
+	}
+	return out, nil
+}
+
+func wireProcessorSourceItemIDs(rec *types.RunRecord) []string {
+	if rec == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := []string{}
+	for _, itemID := range metadataStringSlice(rec.Metadata["source_item_ids"]) {
+		itemID = strings.TrimSpace(itemID)
+		if itemID == "" || seen[itemID] {
+			continue
+		}
+		seen[itemID] = true
+		out = append(out, itemID)
 	}
 	return out
 }

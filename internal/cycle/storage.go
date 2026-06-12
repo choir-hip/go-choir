@@ -151,6 +151,7 @@ func createTables(db *sql.DB) error {
 			processor_key    TEXT NOT NULL,
 			status           TEXT NOT NULL,
 			runtime_run_id   TEXT NOT NULL DEFAULT '',
+			runtime_status   TEXT NOT NULL DEFAULT '',
 			source_item_ids   TEXT NOT NULL DEFAULT '[]',
 			source_count      INTEGER NOT NULL DEFAULT 0,
 			source_types_json TEXT NOT NULL DEFAULT '[]',
@@ -233,6 +234,7 @@ func migrateTables(db *sql.DB) error {
 		`ALTER TABLE items ADD COLUMN created_at TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE issues ADD COLUMN citation_map_json TEXT NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE processor_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE processor_requests ADD COLUMN runtime_status TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE processor_requests ADD COLUMN ingestion_event_ids_json TEXT NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE sources ADD COLUMN last_aux_cursor TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE reconciler_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
@@ -252,6 +254,7 @@ type ProcessorRequest struct {
 	ProcessorKey      string
 	Status            string
 	RuntimeRunID      string
+	RuntimeStatus     string
 	SourceItemIDs     []string
 	IngestionEventIDs []string
 	SourceCount       int
@@ -362,10 +365,10 @@ func (s *Storage) ApplySourcePollState(registry *sources.Registry) error {
 	}
 	defer rows.Close()
 	type pollState struct {
-		lastPolled     time.Time
-		lastETag       string
-		lastModified   string
-		lastAuxCursor  string
+		lastPolled    time.Time
+		lastETag      string
+		lastModified  string
+		lastAuxCursor string
 	}
 	byID := map[string]pollState{}
 	for rows.Next() {
@@ -627,9 +630,9 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 	}
 	defer tx.Rollback()
 	stmt, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO processor_requests (
-		request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids, ingestion_event_ids_json, source_count,
+		request_id, cycle_id, processor_key, status, runtime_run_id, runtime_status, source_item_ids, ingestion_event_ids_json, source_count,
 		source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -641,6 +644,10 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 		status := strings.TrimSpace(req.Status)
 		if status == "" {
 			status = "queued"
+		}
+		runtimeStatus := strings.TrimSpace(req.RuntimeStatus)
+		if runtimeStatus == "" {
+			runtimeStatus = status
 		}
 		now := time.Now().UTC()
 		createdAt := req.CreatedAt
@@ -655,7 +662,7 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 		if sourceCount == 0 {
 			sourceCount = len(req.SourceItemIDs)
 		}
-		if _, err := stmt.ExecContext(ctx, req.RequestID, req.CycleID, req.ProcessorKey, status, strings.TrimSpace(req.RuntimeRunID),
+		if _, err := stmt.ExecContext(ctx, req.RequestID, req.CycleID, req.ProcessorKey, status, strings.TrimSpace(req.RuntimeRunID), runtimeStatus,
 			mustJSON(req.SourceItemIDs), mustJSON(req.IngestionEventIDs), sourceCount, mustJSON(req.SourceTypes), mustJSON(req.Verticals),
 			mustJSON(req.Regions), req.ContinuityRef, req.Prompt, formatTime(createdAt), formatTime(updatedAt)); err != nil {
 			return err
@@ -664,26 +671,38 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 	return tx.Commit()
 }
 
-func (s *Storage) UpdateProcessorRequestStatus(ctx context.Context, requestID, status string) error {
-	return s.UpdateProcessorRequestRuntimeRun(ctx, requestID, status, "")
-}
-
 func (s *Storage) UpdateProcessorRequestRuntimeRun(ctx context.Context, requestID, status, runtimeRunID string) error {
 	if strings.TrimSpace(requestID) == "" || strings.TrimSpace(status) == "" {
 		return fmt.Errorf("processor request id and status are required")
 	}
-	if strings.TrimSpace(runtimeRunID) == "" {
-		_, err := s.DB.ExecContext(ctx, `UPDATE processor_requests SET status = ?, updated_at = ? WHERE request_id = ?`,
-			strings.TrimSpace(status), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
-		if err != nil {
-			return fmt.Errorf("update processor request status: %w", err)
-		}
-		return nil
-	}
-	_, err := s.DB.ExecContext(ctx, `UPDATE processor_requests SET status = ?, runtime_run_id = ?, updated_at = ? WHERE request_id = ?`,
-		strings.TrimSpace(status), strings.TrimSpace(runtimeRunID), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
+	_, err := s.DB.ExecContext(ctx, `UPDATE processor_requests SET status = ?, runtime_status = ?, runtime_run_id = ?, updated_at = ? WHERE request_id = ?`,
+		strings.TrimSpace(status), strings.TrimSpace(status), strings.TrimSpace(runtimeRunID), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
 	if err != nil {
 		return fmt.Errorf("update processor request status: %w", err)
+	}
+	return nil
+}
+
+func (s *Storage) UpdateProcessorRequestRuntimeStatus(ctx context.Context, requestID, runtimeStatus, runtimeRunID string) error {
+	if strings.TrimSpace(requestID) == "" || strings.TrimSpace(runtimeStatus) == "" {
+		return fmt.Errorf("processor request id and runtime status are required")
+	}
+	_, err := s.DB.ExecContext(ctx, `UPDATE processor_requests SET runtime_status = ?, runtime_run_id = ?, updated_at = ? WHERE request_id = ?`,
+		strings.TrimSpace(runtimeStatus), strings.TrimSpace(runtimeRunID), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
+	if err != nil {
+		return fmt.Errorf("update processor request runtime status: %w", err)
+	}
+	return nil
+}
+
+func (s *Storage) UpdateProcessorRequestVerdictStatus(ctx context.Context, requestID, status string) error {
+	if strings.TrimSpace(requestID) == "" || strings.TrimSpace(status) == "" {
+		return fmt.Errorf("processor request id and verdict status are required")
+	}
+	_, err := s.DB.ExecContext(ctx, `UPDATE processor_requests SET status = ?, updated_at = ? WHERE request_id = ?`,
+		strings.TrimSpace(status), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
+	if err != nil {
+		return fmt.Errorf("update processor request verdict status: %w", err)
 	}
 	return nil
 }
@@ -702,7 +721,7 @@ func (s *Storage) SupersedeQueuedProcessorRequests(ctx context.Context, replacem
 		}
 		result, err := s.DB.ExecContext(ctx, `UPDATE processor_requests
 			SET status = 'superseded', updated_at = ?
-			WHERE status = 'queued'
+			WHERE status IN ('queued', 'deferred')
 			  AND continuity_ref = ?
 			  AND request_id != ?
 			  AND created_at < ?`,
@@ -807,6 +826,26 @@ func (s *Storage) SupersedeQueuedReconcilersWithSupersededProcessors(ctx context
 	return total, nil
 }
 
+const processorRequestColumns = `request_id, cycle_id, processor_key, status, runtime_run_id, runtime_status, source_item_ids,
+	ingestion_event_ids_json, source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at`
+
+func (s *Storage) queryProcessorRequests(ctx context.Context, clause string, args ...any) ([]ProcessorRequest, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT `+processorRequestColumns+` FROM processor_requests`+clause, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ProcessorRequest
+	for rows.Next() {
+		req, err := scanProcessorRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, req)
+	}
+	return out, rows.Err()
+}
+
 func (s *Storage) ListProcessorRequests(ctx context.Context, cycleID string, limit int) ([]ProcessorRequest, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -818,44 +857,15 @@ func (s *Storage) ListProcessorRequests(ctx context.Context, cycleID string, lim
 		args = append(args, strings.TrimSpace(cycleID))
 	}
 	args = append(args, limit)
-	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids,
-		ingestion_event_ids_json, source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
-		FROM processor_requests`+where+` ORDER BY created_at DESC LIMIT ?`, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []ProcessorRequest
-	for rows.Next() {
-		req, err := scanProcessorRequest(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, req)
-	}
-	return out, rows.Err()
+	return s.queryProcessorRequests(ctx, where+` ORDER BY created_at DESC LIMIT ?`, args...)
 }
 
 func (s *Storage) ListQueuedProcessorRequests(ctx context.Context, limit int) ([]ProcessorRequest, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids,
-		ingestion_event_ids_json, source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
-		FROM processor_requests WHERE status = 'queued' AND ingestion_event_ids_json != '[]' ORDER BY created_at ASC, request_id ASC LIMIT ?`, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []ProcessorRequest
-	for rows.Next() {
-		req, err := scanProcessorRequest(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, req)
-	}
-	return out, rows.Err()
+	return s.queryProcessorRequests(ctx,
+		` WHERE status = 'queued' AND ingestion_event_ids_json != '[]' ORDER BY created_at ASC, request_id ASC LIMIT ?`, limit)
 }
 
 func (s *Storage) CountQueuedProcessorRequests(ctx context.Context) (int, error) {
@@ -864,53 +874,62 @@ func (s *Storage) CountQueuedProcessorRequests(ctx context.Context) (int, error)
 	return count, err
 }
 
-
-// CountRecentlySubmittedProcessorRequests returns the number of processor requests
-// with status 'submitted' whose updated_at is >= since. This estimates in-flight
-// processor runs that have not yet completed or failed.
-func (s *Storage) ListSubmittedProcessorRequests(ctx context.Context, limit int) ([]ProcessorRequest, error) {
+// ListReconcilableProcessorRequests returns processor requests that still need
+// verdict reconciliation or are still holding runtime capacity. Request status
+// and runtime status are intentionally separate axes.
+func (s *Storage) ListReconcilableProcessorRequests(ctx context.Context, limit int) ([]ProcessorRequest, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := s.DB.QueryContext(ctx,
-		`SELECT request_id, cycle_id, processor_key, status, runtime_run_id, source_item_ids,
-		 ingestion_event_ids_json, source_count, source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
-		 FROM processor_requests WHERE status = 'submitted' ORDER BY updated_at ASC LIMIT ?`, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []ProcessorRequest
-	for rows.Next() {
-		req, err := scanProcessorRequest(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, req)
-	}
-	return out, rows.Err()
+	return s.queryProcessorRequests(ctx,
+		` WHERE status = 'submitted' OR runtime_status = 'submitted' ORDER BY updated_at ASC LIMIT ?`, limit)
 }
 
+// CountRecentlySubmittedProcessorRequests returns the number of processor requests
+// with runtime_status 'submitted' whose updated_at is >= since. This estimates
+// in-flight processor runs that have not yet completed or failed.
 func (s *Storage) CountRecentlySubmittedProcessorRequests(ctx context.Context, since time.Time) (int, error) {
 	var count int
-	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM processor_requests WHERE status = ? AND updated_at >= ?`,
+	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM processor_requests WHERE runtime_status = ? AND updated_at >= ?`,
 		"submitted", since.Format(time.RFC3339)).Scan(&count)
 	return count, err
 }
 
-// ResetStaleSubmittedProcessorRequests marks processor requests with status 'submitted'
-// and updated_at before the cutoff as 'queued' (clearing runtime_run_id) so they can be
-// retried. This recovers from platform VM restarts that orphan previously submitted runs.
+// ResetProcessorRequestSubmission recovers a single processor request after
+// its runtime run disappeared. Unresolved submitted verdicts are requeued;
+// already projected verdicts keep their request status and release runtime
+// capacity.
 func (s *Storage) ResetProcessorRequestSubmission(ctx context.Context, requestID string) error {
 	_, err := s.DB.ExecContext(ctx,
-		`UPDATE processor_requests SET status = 'queued', runtime_run_id = '', updated_at = ? WHERE request_id = ?`,
+		`UPDATE processor_requests
+		    SET status = CASE WHEN status = 'submitted' THEN 'queued' ELSE status END,
+		        runtime_status = CASE
+		          WHEN status = 'submitted' THEN 'queued'
+		          WHEN status = 'dispatch_failed' THEN 'failed'
+		          ELSE 'completed'
+		        END,
+		        runtime_run_id = '',
+		        updated_at = ?
+		  WHERE request_id = ?`,
 		time.Now().UTC().Format(time.RFC3339), requestID)
 	return err
 }
 
+// ResetStaleSubmittedProcessorRequests recovers runtime-capacity state after a
+// platform VM restart. Unresolved submitted verdicts are requeued; already
+// projected request verdicts keep their status and only release runtime_status.
 func (s *Storage) ResetStaleSubmittedProcessorRequests(ctx context.Context, cutoff time.Time) (int, error) {
 	result, err := s.DB.ExecContext(ctx,
-		`UPDATE processor_requests SET status = 'queued', runtime_run_id = '', updated_at = ? WHERE status = 'submitted' AND updated_at < ?`,
+		`UPDATE processor_requests
+		    SET status = CASE WHEN status = 'submitted' THEN 'queued' ELSE status END,
+		        runtime_status = CASE
+		          WHEN status = 'submitted' THEN 'queued'
+		          WHEN status = 'dispatch_failed' THEN 'failed'
+		          ELSE 'completed'
+		        END,
+		        runtime_run_id = '',
+		        updated_at = ?
+		  WHERE runtime_status = 'submitted' AND updated_at < ?`,
 		time.Now().UTC().Format(time.RFC3339), cutoff.Format(time.RFC3339))
 	if err != nil {
 		return 0, fmt.Errorf("reset stale submitted processor requests: %w", err)
@@ -921,7 +940,6 @@ func (s *Storage) ResetStaleSubmittedProcessorRequests(ctx context.Context, cuto
 	}
 	return int(affected), nil
 }
-
 
 func (s *Storage) ListReconcilerRequests(ctx context.Context, cycleID string, limit int) ([]ReconcilerRequest, error) {
 	if limit <= 0 || limit > 200 {
@@ -991,7 +1009,7 @@ func (s *Storage) ProcessorRequestsSubmitted(ctx context.Context, requestIDs []s
 		placeholders[idx] = "?"
 		args[idx] = id
 	}
-	query := `SELECT COUNT(*), SUM(CASE WHEN status = 'submitted' AND runtime_run_id != '' THEN 1 ELSE 0 END)
+	query := `SELECT COUNT(*), SUM(CASE WHEN runtime_status = 'submitted' AND runtime_run_id != '' THEN 1 ELSE 0 END)
 		FROM processor_requests WHERE request_id IN (` + strings.Join(placeholders, ",") + `)`
 	var total int
 	var submitted sql.NullInt64
@@ -1299,7 +1317,7 @@ func (s *Storage) GetItem(ctx context.Context, itemID string) (sources.Item, err
 func scanProcessorRequest(rows interface{ Scan(...any) error }) (ProcessorRequest, error) {
 	var req ProcessorRequest
 	var itemIDs, ingestionEventIDs, sourceTypes, verticals, regions, createdAt, updatedAt string
-	if err := rows.Scan(&req.RequestID, &req.CycleID, &req.ProcessorKey, &req.Status, &req.RuntimeRunID, &itemIDs,
+	if err := rows.Scan(&req.RequestID, &req.CycleID, &req.ProcessorKey, &req.Status, &req.RuntimeRunID, &req.RuntimeStatus, &itemIDs,
 		&ingestionEventIDs, &req.SourceCount, &sourceTypes, &verticals, &regions, &req.ContinuityRef, &req.Prompt,
 		&createdAt, &updatedAt); err != nil {
 		return ProcessorRequest{}, err

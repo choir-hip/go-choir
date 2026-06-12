@@ -32,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	embedded "github.com/dolthub/driver"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -196,6 +197,7 @@ func openVTextWorkspaceDB(path string) (*sql.DB, string, doltConnector, error) {
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("vtext workspace: parse dsn: %w", err)
 	}
+	cfg.BackOff = newDoltOpenBackOff()
 	connector, err := embedded.NewConnector(cfg)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("vtext workspace: new connector: %w", err)
@@ -226,6 +228,7 @@ func openVTextWorkspaceDB(path string) (*sql.DB, string, doltConnector, error) {
 		if err != nil {
 			return nil, "", nil, fmt.Errorf("vtext workspace: parse database dsn: %w", err)
 		}
+		dbCfg.BackOff = newDoltOpenBackOff()
 		dbConnector, err := embedded.NewConnector(dbCfg)
 		if err != nil {
 			lastErr = fmt.Errorf("vtext workspace: new database connector: %w", err)
@@ -248,6 +251,17 @@ func openVTextWorkspaceDB(path string) (*sql.DB, string, doltConnector, error) {
 	}
 
 	return nil, "", nil, lastErr
+}
+
+func newDoltOpenBackOff() backoff.BackOff {
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = 25 * time.Millisecond
+	b.RandomizationFactor = 0.2
+	b.Multiplier = 1.6
+	b.MaxInterval = 250 * time.Millisecond
+	b.MaxElapsedTime = 2 * time.Second
+	b.Reset()
+	return backoff.WithMaxRetries(b, 8)
 }
 
 func (s *Store) vtextHandle() *sql.DB {
@@ -430,12 +444,12 @@ func (s *Store) ListAllDocuments(ctx context.Context, limit int) ([]types.Docume
 
 // SearchResult is a document match from corpus search.
 type SearchResult struct {
-	DocID         string    `json:"doc_id"`
-	Title         string    `json:"title"`
-	OwnerID       string    `json:"owner_id"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	Snippet       string    `json:"snippet,omitempty"`
-	MatchSource   string    `json:"match_source"` // "title" or "content"
+	DocID       string    `json:"doc_id"`
+	Title       string    `json:"title"`
+	OwnerID     string    `json:"owner_id"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Snippet     string    `json:"snippet,omitempty"`
+	MatchSource string    `json:"match_source"` // "title" or "content"
 }
 
 // SearchDocuments searches the VText corpus by title and revision content.

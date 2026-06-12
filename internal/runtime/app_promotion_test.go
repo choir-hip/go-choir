@@ -15,6 +15,7 @@ import (
 )
 
 func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	ownerID := "mission-owner"
 	traceID := "traj-app-change-migration"
@@ -233,6 +234,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 }
 
 func TestPrivateAppChangePackageIsNotVisibleAcrossOwners(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 	body := `{
 		"app_id":"podcast",
@@ -258,6 +260,7 @@ func TestPrivateAppChangePackageIsNotVisibleAcrossOwners(t *testing.T) {
 }
 
 func TestAppChangePackageReviewEvidenceReturnsRedactedPackageScopedAcceptances(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	body := `{
 		"app_id":"portfolio-experiment",
@@ -354,6 +357,7 @@ func TestAppChangePackageReviewEvidenceReturnsRedactedPackageScopedAcceptances(t
 }
 
 func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 	body := `{
 		"app_id":"human-proof-experiment",
@@ -517,6 +521,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 }
 
 func TestInternalAppChangePackageDetailRequiresInternalCaller(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 	body := `{
 		"app_id":"portfolio-experiment",
@@ -587,6 +592,7 @@ func TestInternalAppChangePackageDetailRequiresInternalCaller(t *testing.T) {
 }
 
 func TestAppChangePackageRejectsPrivateSourceMarkers(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 	body := `{
 		"app_id":"podcast",

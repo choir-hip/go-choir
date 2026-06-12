@@ -20,6 +20,7 @@ import (
 )
 
 func TestSubmitTaskReturnsStableHandle(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
 
@@ -50,6 +51,7 @@ func TestSubmitTaskReturnsStableHandle(t *testing.T) {
 }
 
 func TestSubmitTaskPersistsToStore(t *testing.T) {
+	t.Parallel()
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 
@@ -72,6 +74,7 @@ func TestSubmitTaskPersistsToStore(t *testing.T) {
 }
 
 func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
+	t.Parallel()
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 
@@ -183,6 +186,7 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 }
 
 func TestConductorDecisionNormalizesToastAfterMaterializedVTextRoute(t *testing.T) {
+	t.Parallel()
 	rec := &types.RunRecord{
 		RunID:   "run-conductor-toast-after-route",
 		OwnerID: "user-alice",
@@ -213,6 +217,7 @@ func TestConductorDecisionNormalizesToastAfterMaterializedVTextRoute(t *testing.
 }
 
 func TestConductorPromptBarStructuredDecisionMaterializesVTextRoute(t *testing.T) {
+	t.Parallel()
 	rt, s := testRuntime(t)
 	provider := rt.provider.(*StubProvider)
 	provider.Result = `{"action":"open_app","app":"vtext","title":"Durable document","initial_content":"# Durable document\n\nInitial conductor-authored abstract."}`
@@ -241,8 +246,17 @@ func TestConductorPromptBarStructuredDecisionMaterializesVTextRoute(t *testing.T
 	if result.Action != "open_app" || result.App != AgentProfileVText || result.DocID == "" {
 		t.Fatalf("conductor result = %+v, want materialized vtext route", result)
 	}
-	if result.InitialContent != "# Durable document\n\nInitial conductor-authored abstract." {
-		t.Fatalf("initial_content = %q", result.InitialContent)
+	// Conductor decisions no longer ship canonical document content; the
+	// vtext agent owns authoring, so any provider-supplied initial_content
+	// must be stripped from the materialized route.
+	if result.InitialContent != "" {
+		t.Fatalf("initial_content = %q, want empty (vtext owns canonical content)", result.InitialContent)
+	}
+	if result.CreateInitialVersion == nil || *result.CreateInitialVersion {
+		t.Fatalf("create_initial_version = %v, want explicit false", result.CreateInitialVersion)
+	}
+	if result.InitialLoopID == "" {
+		t.Fatalf("conductor result missing initial vtext revision loop id: %+v", result)
 	}
 	doc, err := s.GetDocument(context.Background(), result.DocID, "user-alice")
 	if err != nil {
@@ -251,9 +265,17 @@ func TestConductorPromptBarStructuredDecisionMaterializesVTextRoute(t *testing.T
 	if doc.CurrentRevisionID == "" {
 		t.Fatalf("materialized document has no current revision: %+v", doc)
 	}
+	rev, err := s.GetRevision(context.Background(), doc.CurrentRevisionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get seed prompt revision: %v", err)
+	}
+	if !strings.Contains(rev.Content, "make a durable document") {
+		t.Fatalf("seed revision content = %q, want durable user prompt revision", rev.Content)
+	}
 }
 
 func TestConductorPromptBarVTextRouteFallsBackToSeedPromptContent(t *testing.T) {
+	t.Parallel()
 	rt, s := testRuntime(t)
 	provider := rt.provider.(*StubProvider)
 	provider.Result = `{"action":"open_app","app":"vtext","title":"Fallback document"}`
@@ -282,8 +304,11 @@ func TestConductorPromptBarVTextRouteFallsBackToSeedPromptContent(t *testing.T) 
 	if result.Action != "open_app" || result.App != AgentProfileVText || result.DocID == "" {
 		t.Fatalf("conductor result = %+v, want materialized vtext route", result)
 	}
-	if !strings.Contains(result.InitialContent, "Draft fallback content") {
-		t.Fatalf("initial_content = %q, want seed prompt content", result.InitialContent)
+	// initial_content is intentionally empty on materialized vtext routes;
+	// the seed prompt is preserved as the document's durable user revision
+	// instead.
+	if result.InitialContent != "" {
+		t.Fatalf("initial_content = %q, want empty (seed prompt lives in the user revision)", result.InitialContent)
 	}
 	doc, err := s.GetDocument(context.Background(), result.DocID, "user-alice")
 	if err != nil {
@@ -299,6 +324,7 @@ func TestConductorPromptBarVTextRouteFallsBackToSeedPromptContent(t *testing.T) 
 }
 
 func TestProviderPromptUsesPromptOverride(t *testing.T) {
+	t.Parallel()
 	rt := testPromptRuntime(t)
 	if _, err := rt.PromptStore().Save("user-alice", AgentProfileConductor, "Custom conductor prompt"); err != nil {
 		t.Fatalf("save prompt override: %v", err)
@@ -323,6 +349,7 @@ func TestProviderPromptUsesPromptOverride(t *testing.T) {
 }
 
 func TestSystemPromptForVTextDefaultsToResearch(t *testing.T) {
+	t.Parallel()
 	rt := testPromptRuntime(t)
 
 	rec := &types.RunRecord{
@@ -338,22 +365,26 @@ func TestSystemPromptForVTextDefaultsToResearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("systemPromptForRun: %v", err)
 	}
-	if !strings.Contains(prompt, "Open researcher work first") {
-		t.Fatalf("vtext system prompt should bias toward spawning researchers first, got %q", prompt)
+	if !strings.Contains(prompt, "open worker work first") {
+		t.Fatalf("vtext system prompt should bias toward opening worker work first for factual requests, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "prefer one broad researcher checkpoint before widening") {
+	if !strings.Contains(prompt, "`spawn_agent` with `role=\"researcher\"`") {
+		t.Fatalf("vtext system prompt should route research through spawn_agent researcher, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "Choose researcher parallelism from the task shape") {
 		t.Fatalf("vtext system prompt should make researcher parallelism contextual, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "Current coordination channel: doc-1.") {
 		t.Fatalf("vtext system prompt should include coordination channel, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "explicitly ask super to lease a worker VM and delegate a vsuper candidate-world run") ||
+	if !strings.Contains(prompt, "ask super to lease a worker VM and delegate a `vsuper`") ||
 		!strings.Contains(prompt, "For bounded local scratch work such as API calls") {
 		t.Fatalf("vtext system prompt should preserve sweep substrate topology in super requests, got %q", prompt)
 	}
 }
 
 func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
+	t.Parallel()
 	rt := testPromptRuntime(t)
 
 	rec := &types.RunRecord{
@@ -390,6 +421,7 @@ func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
 }
 
 func TestWorkerRepoBootstrapContextReachesVSuperAndCoSuper(t *testing.T) {
+	t.Parallel()
 	rt := testPromptRuntime(t)
 	metadata := map[string]any{
 		runMetadataWorkerRepoRemote:    "https://github.com/yusefmosiah/go-choir.git",
@@ -438,6 +470,7 @@ func TestWorkerRepoBootstrapContextReachesVSuperAndCoSuper(t *testing.T) {
 }
 
 func TestStartChildRunInheritsWorkerRepoMetadata(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
 	parent, err := rt.StartRun(ctx, "delegate worker", "user-alice")
@@ -473,6 +506,7 @@ func TestStartChildRunInheritsWorkerRepoMetadata(t *testing.T) {
 }
 
 func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
+	t.Parallel()
 	rt := testPromptRuntime(t)
 
 	rec := &types.RunRecord{
@@ -521,6 +555,7 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 }
 
 func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testing.T) {
+	t.Parallel()
 	rt := testPromptRuntime(t)
 
 	for _, tc := range []struct {
@@ -534,9 +569,9 @@ func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testin
 			want: []string{
 				"Universal Wire source-understanding agent",
 				"SourceItem batches",
-				"Reuse existing researcher agents",
-				"Reuse existing VText agents",
-				"Do not call VText editing tools",
+				"`spawn_agent` with `role=vtext`",
+				"VText owns canonical article prose and researcher follow-up on the document channel",
+				"record_wire_processor_decision",
 				"submit_coagent_update",
 			},
 		},
@@ -546,9 +581,8 @@ func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testin
 			want: []string{
 				"corpus-level Universal Wire story agent",
 				"existing published VTexts",
-				"Reuse existing researcher agents",
-				"Reuse existing VText agents",
-				"Do not call VText editing tools",
+				"`spawn_agent` with `role=vtext`",
+				"VText owns canonical article prose and researcher follow-up on the document channel",
 				"submit_coagent_update",
 			},
 		},
@@ -577,6 +611,7 @@ func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testin
 }
 
 func TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead(t *testing.T) {
+	t.Parallel()
 	rt := testPromptRuntime(t)
 
 	universalWireRec := &types.RunRecord{
@@ -645,6 +680,7 @@ func TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead(t *testing.T) 
 }
 
 func TestSystemPromptIncludesRepoSkillContext(t *testing.T) {
+	t.Parallel()
 	rt := testPromptRuntime(t)
 	skillsRoot := t.TempDir()
 	for _, skill := range []struct {
@@ -702,6 +738,7 @@ func TestSystemPromptIncludesRepoSkillContext(t *testing.T) {
 }
 
 func TestGetRunCallerScoped(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
 
@@ -730,6 +767,7 @@ func TestGetRunCallerScoped(t *testing.T) {
 }
 
 func TestGetRunNotFound(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
 
@@ -740,6 +778,7 @@ func TestGetRunNotFound(t *testing.T) {
 }
 
 func TestTaskCompletesSuccessfully(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
 
@@ -762,6 +801,7 @@ func TestTaskCompletesSuccessfully(t *testing.T) {
 }
 
 func TestProviderFailureSurfacesStructuredOutcome(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-008: provider failures surface as structured task outcomes
 	// without crashing the runtime.
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
@@ -771,7 +811,7 @@ func TestProviderFailureSurfacesStructuredOutcome(t *testing.T) {
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -827,6 +867,7 @@ func TestProviderFailureSurfacesStructuredOutcome(t *testing.T) {
 }
 
 func TestRuntimeRemainsAvailableAfterProviderFailure(t *testing.T) {
+	t.Parallel()
 	// Verify that after a provider failure, the runtime is still healthy
 	// and can accept and complete new runs (VAL-RUNTIME-008).
 	rt, _ := testRuntime(t)
@@ -849,6 +890,7 @@ func TestRuntimeRemainsAvailableAfterProviderFailure(t *testing.T) {
 }
 
 func TestEventEmissionOnTaskSubmission(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
 
@@ -876,6 +918,7 @@ func TestEventEmissionOnTaskSubmission(t *testing.T) {
 }
 
 func TestEventsPersistedToStore(t *testing.T) {
+	t.Parallel()
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 
@@ -904,6 +947,7 @@ func TestEventsPersistedToStore(t *testing.T) {
 }
 
 func TestTaskRecoveryAcrossRestart(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-010: accepted task state remains recoverable after
 	// sandbox restart.
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
@@ -914,7 +958,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 	_ = os.Remove(dbPath)
 
 	// Open store, create runtime, submit a task, and stop.
-	s1, err := store.Open(dbPath)
+	s1, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store 1: %v", err)
 	}
@@ -941,7 +985,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 	_ = s1.Close()
 
 	// Reopen the store and create a new runtime (simulates restart).
-	s2, err := store.Open(dbPath)
+	s2, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store 2: %v", err)
 	}
@@ -974,6 +1018,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 }
 
 func TestInterruptedRunningTasksRecoveredOnStart(t *testing.T) {
+	t.Parallel()
 	// When the sandbox restarts, runs that were running should be resolved
 	// to an explicit terminal outcome (VAL-RUNTIME-010).
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
@@ -986,7 +1031,7 @@ func TestInterruptedRunningTasksRecoveredOnStart(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a store with a running task that was interrupted.
-	s1, err := store.Open(dbPath)
+	s1, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store 1: %v", err)
 	}
@@ -1008,7 +1053,7 @@ func TestInterruptedRunningTasksRecoveredOnStart(t *testing.T) {
 
 	// Simulate restart: open new store and runtime, then call Start()
 	// which should recover interrupted runs.
-	s2, err := store.Open(dbPath)
+	s2, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store 2: %v", err)
 	}
@@ -1047,6 +1092,7 @@ func TestInterruptedRunningTasksRecoveredOnStart(t *testing.T) {
 }
 
 func TestHealthStartsReady(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 
 	if rt.HealthState() != types.HealthReady {
@@ -1055,6 +1101,7 @@ func TestHealthStartsReady(t *testing.T) {
 }
 
 func TestSetHealthTransitionsVisible(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-001: health transitions are visible.
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
@@ -1091,6 +1138,7 @@ func TestSetHealthTransitionsVisible(t *testing.T) {
 }
 
 func TestSetHealthNoOpForSameState(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 
 	// Set health to ready (already ready) — should not emit an event.
@@ -1108,6 +1156,7 @@ func TestSetHealthNoOpForSameState(t *testing.T) {
 }
 
 func TestListRunsByOwner(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
 
@@ -1143,6 +1192,7 @@ func TestListRunsByOwner(t *testing.T) {
 }
 
 func TestProviderStubEmitsProgress(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
 
@@ -1195,6 +1245,7 @@ done:
 }
 
 func TestProviderStubDeltaEvent(t *testing.T) {
+	t.Parallel()
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 
@@ -1275,7 +1326,7 @@ func testRuntimeWithBridge(t *testing.T, bridge Provider) (*Runtime, *store.Stor
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -1299,12 +1350,13 @@ func testRuntimeWithBridge(t *testing.T, bridge Provider) (*Runtime, *store.Stor
 }
 
 func TestBridgeProviderSubmitsAndCompletes(t *testing.T) {
+	t.Parallel()
 	bridge := &mockBridgeProvider{
 		name:   "bedrock",
 		result: "Real Bedrock response with genuine inference!",
 	}
 
-	rt, s := testRuntimeWithBridge(t, bridge)
+	rt, _ := testRuntimeWithBridge(t, bridge)
 	ctx := context.Background()
 
 	rec, err := rt.StartRun(ctx, "What is the capital of France?", "user-bridge")
@@ -1312,14 +1364,8 @@ func TestBridgeProviderSubmitsAndCompletes(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	// Wait for the task to complete.
-	time.Sleep(200 * time.Millisecond)
-
 	// Verify task completed with the bridge provider result.
-	stored, err := s.GetRun(ctx, rec.RunID)
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
+	stored := waitForRunTerminalState(t, rt, rec.RunID, "user-bridge", 5*time.Second)
 	if stored.State != types.RunCompleted {
 		t.Errorf("state: got %q, want completed", stored.State)
 	}
@@ -1334,6 +1380,7 @@ func TestBridgeProviderSubmitsAndCompletes(t *testing.T) {
 }
 
 func TestBridgeProviderFailureSurfacesWithoutCrashing(t *testing.T) {
+	t.Parallel()
 	bridge := &mockBridgeProvider{
 		name:    "zai",
 		execErr: fmt.Errorf("upstream provider timeout"),
@@ -1347,13 +1394,8 @@ func TestBridgeProviderFailureSurfacesWithoutCrashing(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
 	// The task should be in failed state, not crashing the runtime.
-	stored, err := rt.GetRun(ctx, rec.RunID, "user-fail")
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
+	stored := waitForRunTerminalState(t, rt, rec.RunID, "user-fail", 5*time.Second)
 	if stored.State != types.RunFailed {
 		t.Errorf("state: got %q, want failed", stored.State)
 	}
@@ -1374,6 +1416,7 @@ func TestBridgeProviderFailureSurfacesWithoutCrashing(t *testing.T) {
 }
 
 func TestBridgeProviderEventsContainRealMarker(t *testing.T) {
+	t.Parallel()
 	bridge := &mockBridgeProvider{
 		name:   "zai",
 		result: "Z.AI generated text",
@@ -1416,6 +1459,7 @@ func TestBridgeProviderEventsContainRealMarker(t *testing.T) {
 }
 
 func TestHealthReportsActiveProvider(t *testing.T) {
+	t.Parallel()
 	bridge := &mockBridgeProvider{
 		name:   "bedrock",
 		result: "test",
@@ -1434,6 +1478,7 @@ func TestHealthReportsActiveProvider(t *testing.T) {
 // conductor_loop_id from the parent revision metadata so subsequent
 // revise requests retain the original user context.
 func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
+	t.Parallel()
 	rt, s := testRuntime(t)
 
 	ctx := context.Background()

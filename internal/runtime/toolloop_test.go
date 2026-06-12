@@ -2360,7 +2360,7 @@ func testRuntimeWithProviderAndRegistry(t *testing.T, provider Provider, registr
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

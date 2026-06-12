@@ -308,6 +308,19 @@ func TestStorageSupersedesQueuedProcessorContinuityAndDependentReconcilers(t *te
 		CreatedAt:     oldTime,
 		UpdatedAt:     oldTime,
 	}
+	oldDeferred := ProcessorRequest{
+		RequestID:     "processor_old_deferred",
+		CycleID:       oldCycle,
+		ProcessorKey:  "processor:technology:global:rss",
+		Status:        "deferred",
+		RuntimeRunID:  "run-old-deferred",
+		RuntimeStatus: "completed",
+		SourceItemIDs: []string{"srcitem_old_deferred"},
+		ContinuityRef: continuityRef,
+		Prompt:        "old deferred",
+		CreatedAt:     oldTime,
+		UpdatedAt:     oldTime,
+	}
 	otherQueued := ProcessorRequest{
 		RequestID:     "processor_other_queued",
 		CycleID:       oldCycle,
@@ -330,7 +343,7 @@ func TestStorageSupersedesQueuedProcessorContinuityAndDependentReconcilers(t *te
 		CreatedAt:     newTime,
 		UpdatedAt:     newTime,
 	}
-	if err := store.SaveProcessorRequests(ctx, []ProcessorRequest{oldQueued, oldSubmitted, otherQueued, newQueued}); err != nil {
+	if err := store.SaveProcessorRequests(ctx, []ProcessorRequest{oldQueued, oldSubmitted, oldDeferred, otherQueued, newQueued}); err != nil {
 		t.Fatalf("save processors: %v", err)
 	}
 	reconciler := ReconcilerRequest{
@@ -351,8 +364,8 @@ func TestStorageSupersedesQueuedProcessorContinuityAndDependentReconcilers(t *te
 	if err != nil {
 		t.Fatalf("supersede processors: %v", err)
 	}
-	if supersededProcessors != 1 {
-		t.Fatalf("superseded processors = %d, want 1", supersededProcessors)
+	if supersededProcessors != 2 {
+		t.Fatalf("superseded processors = %d, want 2", supersededProcessors)
 	}
 	supersededReconcilers, err := store.SupersedeQueuedReconcilersWithSupersededProcessors(ctx)
 	if err != nil {
@@ -375,6 +388,9 @@ func TestStorageSupersedesQueuedProcessorContinuityAndDependentReconcilers(t *te
 	}
 	if statusByID[oldSubmitted.RequestID] != "submitted" {
 		t.Fatalf("old submitted status = %q, want submitted; all=%+v", statusByID[oldSubmitted.RequestID], statusByID)
+	}
+	if statusByID[oldDeferred.RequestID] != "superseded" {
+		t.Fatalf("old deferred status = %q, want superseded; all=%+v", statusByID[oldDeferred.RequestID], statusByID)
 	}
 	if statusByID[otherQueued.RequestID] != "queued" || statusByID[newQueued.RequestID] != "queued" {
 		t.Fatalf("unrelated/new queued statuses wrong: %+v", statusByID)
@@ -509,6 +525,190 @@ func TestStoragePersistsIngestionHandoffsAndLatestCycleSummary(t *testing.T) {
 	}
 	if summary.ProcessorRequests[0].RuntimeRunID != "processor-run-1" {
 		t.Fatalf("runtime run ids not persisted: processors=%+v", summary.ProcessorRequests)
+	}
+}
+
+func TestProcessorRequestRuntimeStatusCanDivergeFromVerdictStatus(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("open storage: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
+	req := ProcessorRequest{
+		RequestID:     "processor_runtime_split",
+		CycleID:       "cycle_runtime_split",
+		ProcessorKey:  "processor:general:global:rss",
+		Status:        "queued",
+		RuntimeStatus: "queued",
+		SourceItemIDs: []string{"srcitem-1"},
+		SourceCount:   1,
+		Prompt:        "runtime status split",
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	if err := store.SaveProcessorRequests(ctx, []ProcessorRequest{req}); err != nil {
+		t.Fatalf("save processor request: %v", err)
+	}
+	if err := store.UpdateProcessorRequestRuntimeRun(ctx, req.RequestID, "submitted", "run-runtime-split"); err != nil {
+		t.Fatalf("mark runtime submitted: %v", err)
+	}
+	if err := store.UpdateProcessorRequestVerdictStatus(ctx, req.RequestID, "completed"); err != nil {
+		t.Fatalf("mark verdict completed: %v", err)
+	}
+
+	processors, err := store.ListProcessorRequests(ctx, "", 10)
+	if err != nil {
+		t.Fatalf("list processors: %v", err)
+	}
+	if len(processors) != 1 {
+		t.Fatalf("processor count = %d, want 1", len(processors))
+	}
+	if processors[0].Status != "completed" || processors[0].RuntimeStatus != "submitted" || processors[0].RuntimeRunID != "run-runtime-split" {
+		t.Fatalf("unexpected split processor request: %+v", processors[0])
+	}
+
+	submitted, err := store.ListReconcilableProcessorRequests(ctx, 10)
+	if err != nil {
+		t.Fatalf("list reconcilable by runtime status: %v", err)
+	}
+	if len(submitted) != 1 || submitted[0].RequestID != req.RequestID || submitted[0].Status != "completed" {
+		t.Fatalf("reconcilable runtime-status view wrong: %+v", submitted)
+	}
+	inFlight, err := store.CountRecentlySubmittedProcessorRequests(ctx, time.Now().UTC().Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("count submitted by runtime status: %v", err)
+	}
+	if inFlight != 1 {
+		t.Fatalf("in-flight runtime-status count = %d, want 1", inFlight)
+	}
+	ok, err := store.ProcessorRequestsSubmitted(ctx, []string{req.RequestID})
+	if err != nil {
+		t.Fatalf("processor requests submitted: %v", err)
+	}
+	if !ok {
+		t.Fatal("processor request should still count as runtime-submitted")
+	}
+}
+
+func TestResetProcessorRequestSubmissionPreservesProjectedVerdict(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("open storage: %v", err)
+	}
+	defer store.Close()
+
+	req := ProcessorRequest{
+		RequestID:     "processor_projected_missing_run",
+		CycleID:       "cycle_projected_missing_run",
+		ProcessorKey:  "processor:general:global:rss",
+		Status:        "completed",
+		RuntimeStatus: "submitted",
+		RuntimeRunID:  "run-missing",
+		SourceItemIDs: []string{"srcitem-1"},
+		SourceCount:   1,
+		Prompt:        "projected verdict",
+	}
+	if err := store.SaveProcessorRequests(ctx, []ProcessorRequest{req}); err != nil {
+		t.Fatalf("save processor request: %v", err)
+	}
+	if err := store.ResetProcessorRequestSubmission(ctx, req.RequestID); err != nil {
+		t.Fatalf("reset processor request submission: %v", err)
+	}
+
+	processors, err := store.ListProcessorRequests(ctx, "", 10)
+	if err != nil {
+		t.Fatalf("list processors: %v", err)
+	}
+	if len(processors) != 1 {
+		t.Fatalf("processor count = %d, want 1", len(processors))
+	}
+	got := processors[0]
+	if got.Status != "completed" || got.RuntimeStatus != "completed" || got.RuntimeRunID != "" {
+		t.Fatalf("reset projected verdict = %+v, want completed verdict with released runtime axis", got)
+	}
+}
+
+func TestResetStaleSubmittedProcessorRequestsPreservesProjectedVerdicts(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("open storage: %v", err)
+	}
+	defer store.Close()
+
+	old := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
+	requests := []ProcessorRequest{
+		{
+			RequestID:     "processor_unresolved_stale",
+			CycleID:       "cycle_stale",
+			ProcessorKey:  "processor:general:global:rss",
+			Status:        "submitted",
+			RuntimeStatus: "submitted",
+			RuntimeRunID:  "run-unresolved-stale",
+			SourceItemIDs: []string{"srcitem-unresolved"},
+			SourceCount:   1,
+			Prompt:        "unresolved stale",
+			CreatedAt:     old,
+			UpdatedAt:     old,
+		},
+		{
+			RequestID:     "processor_completed_stale",
+			CycleID:       "cycle_stale",
+			ProcessorKey:  "processor:general:global:rss",
+			Status:        "completed",
+			RuntimeStatus: "submitted",
+			RuntimeRunID:  "run-completed-stale",
+			SourceItemIDs: []string{"srcitem-completed"},
+			SourceCount:   1,
+			Prompt:        "completed stale",
+			CreatedAt:     old,
+			UpdatedAt:     old,
+		},
+		{
+			RequestID:     "processor_deferred_stale",
+			CycleID:       "cycle_stale",
+			ProcessorKey:  "processor:general:global:rss",
+			Status:        "deferred",
+			RuntimeStatus: "submitted",
+			RuntimeRunID:  "run-deferred-stale",
+			SourceItemIDs: []string{"srcitem-deferred"},
+			SourceCount:   1,
+			Prompt:        "deferred stale",
+			CreatedAt:     old,
+			UpdatedAt:     old,
+		},
+	}
+	if err := store.SaveProcessorRequests(ctx, requests); err != nil {
+		t.Fatalf("save processor requests: %v", err)
+	}
+	affected, err := store.ResetStaleSubmittedProcessorRequests(ctx, old.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("reset stale submitted processor requests: %v", err)
+	}
+	if affected != 3 {
+		t.Fatalf("affected = %d, want 3", affected)
+	}
+
+	processors, err := store.ListProcessorRequests(ctx, "", 10)
+	if err != nil {
+		t.Fatalf("list processors: %v", err)
+	}
+	byID := make(map[string]ProcessorRequest)
+	for _, req := range processors {
+		byID[req.RequestID] = req
+	}
+	if got := byID["processor_unresolved_stale"]; got.Status != "queued" || got.RuntimeStatus != "queued" || got.RuntimeRunID != "" {
+		t.Fatalf("unresolved stale request = %+v, want queued/queued", got)
+	}
+	if got := byID["processor_completed_stale"]; got.Status != "completed" || got.RuntimeStatus != "completed" || got.RuntimeRunID != "" {
+		t.Fatalf("completed stale request = %+v, want completed/completed", got)
+	}
+	if got := byID["processor_deferred_stale"]; got.Status != "deferred" || got.RuntimeStatus != "completed" || got.RuntimeRunID != "" {
+		t.Fatalf("deferred stale request = %+v, want deferred/completed", got)
 	}
 }
 

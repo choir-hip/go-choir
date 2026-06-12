@@ -79,9 +79,14 @@ func TestProcessorSpawnMintsPublicationTrajectory(t *testing.T) {
 	rt, s := testRuntime(t)
 
 	run, err := rt.StartRunWithMetadata(ctx, "ingest source handoff", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileProcessor,
-		runMetadataAgentRole:    AgentProfileProcessor,
-		runMetadataProcessorKey: "processor:global_firehose:global:gdelt",
+		runMetadataAgentProfile:        AgentProfileProcessor,
+		runMetadataAgentRole:           AgentProfileProcessor,
+		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
+		"ingestion_handoff_request_id": "processor-request-1",
+		"source_network_request_id":    "processor-request-1",
+		"source_item_ids":              []string{"srcitem-1", "srcitem-2"},
+		"source_count":                 2,
+		"continuity_ref":               "sourcecycled://processor/global/latest",
 	})
 	if err != nil {
 		t.Fatalf("start processor run: %v", err)
@@ -96,8 +101,38 @@ func TestProcessorSpawnMintsPublicationTrajectory(t *testing.T) {
 	if trajectory.SubjectRefs["processor_key"] != "processor:global_firehose:global:gdelt" {
 		t.Fatalf("subject refs missing processor key: %+v", trajectory.SubjectRefs)
 	}
-	if len(trajectory.SettlementRule.RequiredSubjectRefs) == 0 {
+	if len(trajectory.SettlementRule.RequiredSubjectRefs) != 2 {
 		t.Fatalf("publication settlement rule missing required refs: %+v", trajectory.SettlementRule)
+	}
+	workItems, err := s.ListWorkItemsByTrajectory(ctx, "user-alice", run.TrajectoryID, true)
+	if err != nil {
+		t.Fatalf("list processor work items: %v", err)
+	}
+	if len(workItems) != 3 {
+		t.Fatalf("processor open work items = %+v, want request item + two source-item items", workItems)
+	}
+	sawRequest := false
+	sawSourceItems := map[string]bool{}
+	for _, item := range workItems {
+		switch item.ObjectiveFingerprint {
+		case wireProcessorDecisionWorkItemFingerprint(run.TrajectoryID):
+			sawRequest = true
+			if item.Details["kind"] != "wire_processor_request_resolution" || item.Details["request_id"] != "processor-request-1" {
+				t.Fatalf("processor request decision details = %+v", item.Details)
+			}
+		case wireProcessorSourceItemDecisionWorkItemFingerprint(run.TrajectoryID, "srcitem-1"),
+			wireProcessorSourceItemDecisionWorkItemFingerprint(run.TrajectoryID, "srcitem-2"):
+			sourceItemID, _ := item.Details["source_item_id"].(string)
+			sawSourceItems[sourceItemID] = true
+			if item.Details["kind"] != "wire_source_item_resolution" || item.Details["request_id"] != "processor-request-1" {
+				t.Fatalf("processor source-item decision details = %+v", item.Details)
+			}
+		default:
+			t.Fatalf("unexpected processor work item = %+v", item)
+		}
+	}
+	if !sawRequest || !sawSourceItems["srcitem-1"] || !sawSourceItems["srcitem-2"] {
+		t.Fatalf("processor work items missing expected request/source items: %+v", workItems)
 	}
 }
 
@@ -111,6 +146,15 @@ func TestTrajectoryObligationsAnswersWaitingOn(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("start run: %v", err)
+	}
+	autoItems, err := s.ListWorkItemsByTrajectory(ctx, "user-alice", run.TrajectoryID, true)
+	if err != nil {
+		t.Fatalf("list auto-opened work items: %v", err)
+	}
+	for _, item := range autoItems {
+		if _, err := s.UpdateWorkItemStatus(ctx, "user-alice", item.WorkItemID, types.WorkItemCompleted); err != nil {
+			t.Fatalf("complete auto-opened work item %s: %v", item.WorkItemID, err)
+		}
 	}
 
 	item, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
@@ -134,9 +178,9 @@ func TestTrajectoryObligationsAnswersWaitingOn(t *testing.T) {
 	if len(obligations.OpenWorkItems) != 1 || obligations.OpenWorkItems[0].WorkItemID != item.WorkItemID {
 		t.Fatalf("open work items = %+v, want the created item", obligations.OpenWorkItems)
 	}
-	// Publication kind also waits on its required subject ref.
-	if len(obligations.WaitingOn) != 2 {
-		t.Fatalf("waiting_on = %+v, want open-item + missing publish_ref", obligations.WaitingOn)
+	// Publication kind also waits on both required subject refs.
+	if len(obligations.WaitingOn) != 3 {
+		t.Fatalf("waiting_on = %+v, want open-item + missing publish_ref + missing edition_ref", obligations.WaitingOn)
 	}
 
 	if _, err := s.UpdateWorkItemStatus(ctx, "user-alice", item.WorkItemID, types.WorkItemCompleted); err != nil {
@@ -149,7 +193,7 @@ func TestTrajectoryObligationsAnswersWaitingOn(t *testing.T) {
 	if len(obligations.OpenWorkItems) != 0 {
 		t.Fatalf("open work items after completion = %+v", obligations.OpenWorkItems)
 	}
-	// Still not ready: the publish_ref subject ref is missing — the rule
+	// Still not ready: publish_ref and edition_ref are missing — the rule
 	// is evaluated as data, not satisfied by run state.
 	if obligations.SettlementReady {
 		t.Fatalf("publication trajectory settled without publish_ref: %+v", obligations)
@@ -159,8 +203,8 @@ func TestTrajectoryObligationsAnswersWaitingOn(t *testing.T) {
 func TestEvaluateTrajectorySettlementIsPureDataEvaluation(t *testing.T) {
 	rec := types.TrajectoryRecord{
 		Status:         types.TrajectoryLive,
-		SubjectRefs:    map[string]string{"publish_ref": "refs/publications/p-1"},
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"publish_ref"}},
+		SubjectRefs:    map[string]string{"publish_ref": "refs/publications/p-1", "edition_ref": "refs/editions/e-1"},
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"publish_ref", "edition_ref"}},
 	}
 	if ready, waiting := EvaluateTrajectorySettlement(rec, 0); !ready || len(waiting) != 0 {
 		t.Fatalf("satisfied rule not ready: ready=%v waiting=%v", ready, waiting)
@@ -169,7 +213,7 @@ func TestEvaluateTrajectorySettlementIsPureDataEvaluation(t *testing.T) {
 		t.Fatalf("open work items did not block settlement")
 	}
 	rec.SubjectRefs = nil
-	if ready, waiting := EvaluateTrajectorySettlement(rec, 0); ready || len(waiting) != 1 {
+	if ready, waiting := EvaluateTrajectorySettlement(rec, 0); ready || len(waiting) != 2 {
 		t.Fatalf("missing required ref did not block settlement: waiting=%v", waiting)
 	}
 	rec.Status = types.TrajectorySettled

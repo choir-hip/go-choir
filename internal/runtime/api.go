@@ -15,8 +15,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"os"
 )
@@ -196,23 +196,44 @@ type runSubmitResponse struct {
 // It returns the full run record correlated to the submitted handle
 // (VAL-RUNTIME-004).
 type runStatusResponse struct {
-	AgentID         string         `json:"agent_id"`
-	RunID           string         `json:"loop_id"`
-	ChannelID       string         `json:"channel_id,omitempty"`
-	ParentRunID     string         `json:"parent_loop_id,omitempty"`
-	AgentProfile    string         `json:"agent_profile,omitempty"`
-	AgentRole       string         `json:"agent_role,omitempty"`
-	OwnerID         string         `json:"owner_id"`
-	SandboxID       string         `json:"sandbox_id"`
-	State           types.RunState `json:"state"`
-	Prompt          string         `json:"prompt"`
-	Result          string         `json:"result,omitempty"`
-	Error           string         `json:"error,omitempty"`
-	CreatedAt       string         `json:"created_at"`
-	UpdatedAt       string         `json:"updated_at"`
-	FinishedAt      *string        `json:"finished_at,omitempty"`
-	ActiveChildRuns int            `json:"active_child_runs,omitempty"`
-	Metadata        map[string]any `json:"metadata,omitempty"`
+	AgentID             string                                `json:"agent_id"`
+	RunID               string                                `json:"loop_id"`
+	ChannelID           string                                `json:"channel_id,omitempty"`
+	ParentRunID         string                                `json:"parent_loop_id,omitempty"`
+	AgentProfile        string                                `json:"agent_profile,omitempty"`
+	AgentRole           string                                `json:"agent_role,omitempty"`
+	OwnerID             string                                `json:"owner_id"`
+	SandboxID           string                                `json:"sandbox_id"`
+	State               types.RunState                        `json:"state"`
+	Prompt              string                                `json:"prompt"`
+	Result              string                                `json:"result,omitempty"`
+	Error               string                                `json:"error,omitempty"`
+	CreatedAt           string                                `json:"created_at"`
+	UpdatedAt           string                                `json:"updated_at"`
+	FinishedAt          *string                               `json:"finished_at,omitempty"`
+	ActiveChildRuns     int                                   `json:"active_child_runs,omitempty"`
+	Metadata            map[string]any                        `json:"metadata,omitempty"`
+	Trajectory          *runTrajectoryStatusResponse          `json:"trajectory,omitempty"`
+	ProcessorResolution *runProcessorResolutionStatusResponse `json:"processor_resolution,omitempty"`
+}
+
+type runTrajectoryStatusResponse struct {
+	TrajectoryID      string                 `json:"trajectory_id"`
+	Status            types.TrajectoryStatus `json:"status"`
+	SettlementReady   bool                   `json:"settlement_ready"`
+	WaitingOn         []string               `json:"waiting_on,omitempty"`
+	OpenWorkItemCount int                    `json:"open_work_item_count"`
+}
+
+type runProcessorResolutionStatusResponse struct {
+	WorkItemID              string               `json:"work_item_id"`
+	Status                  types.WorkItemStatus `json:"status"`
+	ResolutionState         string               `json:"resolution_state,omitempty"`
+	SourceItemCount         int                  `json:"source_item_count,omitempty"`
+	ResolvedSourceItemCount int                  `json:"resolved_source_item_count,omitempty"`
+	LastDecision            string               `json:"last_decision,omitempty"`
+	StoryDocID              string               `json:"story_doc_id,omitempty"`
+	CoveredByDocID          string               `json:"covered_by_doc_id,omitempty"`
 }
 
 // runListResponse is the JSON response for GET /api/agent/loops.
@@ -340,24 +361,65 @@ func runStatusFromRecord(rec *types.RunRecord) runStatusResponse {
 		finishedAt = &s
 	}
 	return runStatusResponse{
-		AgentID:      rec.AgentID,
-		RunID:        rec.RunID,
-		ChannelID:    rec.ChannelID,
-		ParentRunID:  rec.ParentRunID,
-		AgentProfile: rec.AgentProfile,
-		AgentRole:    rec.AgentRole,
-		OwnerID:      rec.OwnerID,
-		SandboxID:    rec.SandboxID,
-		State:        rec.State,
-		Prompt:       rec.Prompt,
-		Result:       rec.Result,
-		Error:        rec.Error,
-		CreatedAt:    rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:    rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+		AgentID:         rec.AgentID,
+		RunID:           rec.RunID,
+		ChannelID:       rec.ChannelID,
+		ParentRunID:     rec.ParentRunID,
+		AgentProfile:    rec.AgentProfile,
+		AgentRole:       rec.AgentRole,
+		OwnerID:         rec.OwnerID,
+		SandboxID:       rec.SandboxID,
+		State:           rec.State,
+		Prompt:          rec.Prompt,
+		Result:          rec.Result,
+		Error:           rec.Error,
+		CreatedAt:       rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:       rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
 		FinishedAt:      finishedAt,
 		ActiveChildRuns: 0,
 		Metadata:        rec.Metadata,
 	}
+}
+
+func (h *APIHandler) runStatusWithTrajectory(ctx context.Context, rec *types.RunRecord) runStatusResponse {
+	resp := runStatusFromRecord(rec)
+	if h == nil || h.rt == nil || rec == nil {
+		return resp
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	trajectoryID := strings.TrimSpace(trajectoryIDForRun(rec))
+	if trajectoryID == "" {
+		return resp
+	}
+	// Errors are intentionally swallowed: this is a best-effort status
+	// projection, not an authority surface.
+	obligations, err := h.rt.TrajectoryObligations(ctx, ownerID, trajectoryID)
+	if err != nil {
+		return resp
+	}
+	resp.Trajectory = &runTrajectoryStatusResponse{
+		TrajectoryID:      obligations.Trajectory.TrajectoryID,
+		Status:            obligations.Trajectory.Status,
+		SettlementReady:   obligations.SettlementReady,
+		WaitingOn:         append([]string(nil), obligations.WaitingOn...),
+		OpenWorkItemCount: len(obligations.OpenWorkItems),
+	}
+	if canonicalAgentProfile(agentProfileForRun(rec)) == AgentProfileProcessor && ownerID != "" {
+		item, found, err := h.rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireProcessorDecisionWorkItemFingerprint(trajectoryID))
+		if err == nil && found {
+			resp.ProcessorResolution = &runProcessorResolutionStatusResponse{
+				WorkItemID:              item.WorkItemID,
+				Status:                  item.Status,
+				ResolutionState:         metadataStringValue(item.Details, wireDetailKeyResolutionState),
+				SourceItemCount:         metadataIntValue(item.Details, "source_item_count"),
+				ResolvedSourceItemCount: metadataIntValue(item.Details, "resolved_source_item_count"),
+				LastDecision:            metadataStringValue(item.Details, wireDetailKeyLastDecision),
+				StoryDocID:              metadataStringValue(item.Details, wireDetailKeyStoryDocID),
+				CoveredByDocID:          metadataStringValue(item.Details, wireDetailKeyCoveredByDocID),
+			}
+		}
+	}
+	return resp
 }
 
 // HandlePromptBar handles POST /api/prompt-bar. This is the browser-public
@@ -805,7 +867,7 @@ func (h *APIHandler) HandleRunSubmission(w http.ResponseWriter, r *http.Request)
 		req.Metadata = make(map[string]any)
 	}
 	req.Metadata[runMetadataDesktopID] = requestDesktopID(r)
-		rec, err := h.rt.StartRunWithMetadata(r.Context(), req.Prompt, ownerID, req.Metadata)
+	rec, err := h.rt.StartRunWithMetadata(r.Context(), req.Prompt, ownerID, req.Metadata)
 	if err != nil {
 		log.Printf("runtime api: submit run: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit run"})
@@ -976,7 +1038,7 @@ func (h *APIHandler) HandleInternalRunStatus(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
 		return
 	}
-	writeAPIJSON(w, http.StatusOK, runStatusFromRecord(rec))
+	writeAPIJSON(w, http.StatusOK, h.runStatusWithTrajectory(r.Context(), rec))
 }
 
 // HandleInternalRunCancel handles POST /internal/runtime/runs/{id}/cancel.
@@ -1254,20 +1316,20 @@ func (h *APIHandler) HandleRunStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeAPIJSON(w, http.StatusOK, runStatusResponse{
-		AgentID:      rec.AgentID,
-		RunID:        rec.RunID,
-		ChannelID:    rec.ChannelID,
-		ParentRunID:  rec.ParentRunID,
-		AgentProfile: rec.AgentProfile,
-		AgentRole:    rec.AgentRole,
-		OwnerID:      rec.OwnerID,
-		SandboxID:    rec.SandboxID,
-		State:        rec.State,
-		Prompt:       rec.Prompt,
-		Result:       rec.Result,
-		Error:        rec.Error,
-		CreatedAt:    rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:    rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+		AgentID:         rec.AgentID,
+		RunID:           rec.RunID,
+		ChannelID:       rec.ChannelID,
+		ParentRunID:     rec.ParentRunID,
+		AgentProfile:    rec.AgentProfile,
+		AgentRole:       rec.AgentRole,
+		OwnerID:         rec.OwnerID,
+		SandboxID:       rec.SandboxID,
+		State:           rec.State,
+		Prompt:          rec.Prompt,
+		Result:          rec.Result,
+		Error:           rec.Error,
+		CreatedAt:       rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:       rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
 		FinishedAt:      finishedAt,
 		ActiveChildRuns: 0,
 		Metadata:        rec.Metadata,

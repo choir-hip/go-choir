@@ -75,6 +75,7 @@ func TestPodcastSearchFallsBackToLibrary(t *testing.T) {
 }
 
 func TestPodcastRefreshSeedsExistingRSSContent(t *testing.T) {
+	t.Parallel()
 	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
 		_, _ = w.Write([]byte(`<?xml version="1.0"?>
@@ -113,6 +114,7 @@ func TestPodcastRefreshSeedsExistingRSSContent(t *testing.T) {
 }
 
 func TestPodcastSubscriptionsPersistAndListContent(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
 		_, _ = w.Write([]byte(`<?xml version="1.0"?>

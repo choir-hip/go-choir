@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
@@ -39,7 +41,7 @@ func vtextAPISetup(t *testing.T) (*APIHandler, *store.Store) {
 	_ = os.Remove(dbPath)
 	_ = os.RemoveAll(promptRoot)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open vtext api test store: %v", err)
 	}
@@ -90,6 +92,7 @@ func vtextApplyEditsResult(edits []vtextTextEdit, baseRevisionIDs ...string) str
 }
 
 func TestHandleInternalVTextProposalDeliveryRecordsAuthorInbox(t *testing.T) {
+	t.Parallel()
 	h, s := vtextAPISetup(t)
 	req := httptest.NewRequest(http.MethodPost, "/internal/vtext/proposals", strings.NewReader(`{
 		"owner_id":"author-1",
@@ -324,6 +327,7 @@ func extractPromptValue(s, prefix, suffix string) string {
 // ----- Document creation -----
 
 func TestVTextAPICreateDocument(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
@@ -351,6 +355,7 @@ func TestVTextAPICreateDocument(t *testing.T) {
 }
 
 func TestVTextAPICreateDocumentAuth(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	// No auth header.
@@ -365,6 +370,7 @@ func TestVTextAPICreateDocumentAuth(t *testing.T) {
 }
 
 func TestVTextCancelAgentRevisionCancelsRunGraphAndLeavesMutationResumable(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -461,6 +467,7 @@ func TestVTextCancelAgentRevisionCancelsRunGraphAndLeavesMutationResumable(t *te
 // ----- Document list -----
 
 func TestVTextAPIListDocuments(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	// Create 2 documents.
@@ -495,6 +502,7 @@ func TestVTextAPIListDocuments(t *testing.T) {
 // ----- Document get -----
 
 func TestVTextAPIGetDocument(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
@@ -526,6 +534,7 @@ func TestVTextAPIGetDocument(t *testing.T) {
 // ----- Revision creation (user edit) -----
 
 func TestVTextAPICreateRevisionUserEdit(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
@@ -570,6 +579,7 @@ func TestVTextAPICreateRevisionUserEdit(t *testing.T) {
 }
 
 func TestVTextAPICreateRevisionCanonicalizesAliasedImportedDocumentTitle(t *testing.T) {
+	t.Parallel()
 	h, s := vtextAPISetup(t)
 	ctx := context.Background()
 
@@ -613,6 +623,7 @@ func TestVTextAPICreateRevisionCanonicalizesAliasedImportedDocumentTitle(t *test
 }
 
 func TestVTextAPIListRevisionsReturnsDurableVersionNumbersPastFifty(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
@@ -690,6 +701,7 @@ func TestVTextAPIListRevisionsReturnsDurableVersionNumbersPastFifty(t *testing.T
 // ----- Revision creation ignores browser appagent authorship -----
 
 func TestVTextAPICreateRevisionIgnoresAppAgentAuthorFields(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
@@ -740,6 +752,7 @@ func TestVTextAPICreateRevisionIgnoresAppAgentAuthorFields(t *testing.T) {
 // ----- Invalid browser author kind ignored -----
 
 func TestVTextAPIIgnoresInvalidAuthorKind(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
@@ -777,6 +790,7 @@ func TestVTextAPIIgnoresInvalidAuthorKind(t *testing.T) {
 // ----- History -----
 
 func TestVTextAPIGetHistory(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
@@ -832,6 +846,7 @@ func TestVTextAPIGetHistory(t *testing.T) {
 // ----- Diff -----
 
 func TestVTextAPIGetDiff(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	// Create a document and revisions.
@@ -889,6 +904,7 @@ func TestVTextAPIGetDiff(t *testing.T) {
 // ----- Blame -----
 
 func TestVTextAPIGetBlame(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	// Create a document and revisions.
@@ -944,6 +960,7 @@ func TestVTextAPIGetBlame(t *testing.T) {
 // ----- Snapshot (view historical revision) -----
 
 func TestVTextAPISnapshotDoesNotMutateHead(t *testing.T) {
+	t.Parallel()
 	h, s := vtextAPISetup(t)
 
 	// Create a document.
@@ -1004,6 +1021,7 @@ func TestVTextAPISnapshotDoesNotMutateHead(t *testing.T) {
 // ----- Auth gating on vtext endpoints -----
 
 func TestVTextAPIAuthGating(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	endpoints := []struct {
@@ -1035,6 +1053,7 @@ func TestVTextAPIAuthGating(t *testing.T) {
 // ----- Citations and metadata -----
 
 func TestVTextAPICitationsMetadataRoundTrip(t *testing.T) {
+	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
@@ -1114,7 +1133,7 @@ func vtextAPISetupWithProviderAndOptions(t *testing.T, provider Provider, instal
 	_ = os.Remove(dbPath)
 	_ = os.RemoveAll(promptRoot)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open vtext api test store: %v", err)
 	}
@@ -1580,6 +1599,7 @@ func metadataSeqContains(t *testing.T, metadata map[string]any, key string, seq 
 // an agent revision prompt creates a canonical appagent-authored revision
 // (VAL-ETEXT-003).
 func TestVTextAgentRevisionCreatesCanonicalRevision(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 
 	docID, _ := createDocWithUserRevision(t, h)
@@ -1651,6 +1671,7 @@ func TestVTextAgentRevisionCreatesCanonicalRevision(t *testing.T) {
 }
 
 func TestVTextSystemPromptSharesChoirCoreContext(t *testing.T) {
+	t.Parallel()
 	rt := testPromptRuntime(t)
 
 	rec := &types.RunRecord{
@@ -1682,6 +1703,7 @@ func TestVTextSystemPromptSharesChoirCoreContext(t *testing.T) {
 }
 
 func TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Hello, edited document.\n\nPolished structure."))
 
 	h, s, _ := vtextAPISetupWithProvider(t, provider, true)
@@ -1729,6 +1751,7 @@ func TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testin
 }
 
 func TestInitialVTextRunWritesFirstAppagentRevisionThroughEdit(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("First VText-authored working revision."))
 
 	h, s, rt := vtextAPISetupWithProvider(t, provider, true)
@@ -1802,6 +1825,7 @@ func TestInitialVTextRunWritesFirstAppagentRevisionThroughEdit(t *testing.T) {
 }
 
 func TestVTextPromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {
+	t.Parallel()
 	current := types.Revision{
 		DocID:      "doc-current-events",
 		RevisionID: "rev-current-events",
@@ -1824,6 +1848,7 @@ func TestVTextPromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {
 }
 
 func TestVTextAgentRevisionAppliesStructuredEdit(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextApplyEditsResult([]vtextTextEdit{
 		{Op: "replace", Find: "Hello, world!", Replace: "Hello, edited document."},
 		{Op: "append", Text: "Evidence: structured worker update integrated."},
@@ -1868,6 +1893,7 @@ func TestVTextAgentRevisionAppliesStructuredEdit(t *testing.T) {
 }
 
 func TestVTextAgentRevisionIgnoresRawStubProviderResult(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithProvider(t, NewStubProvider(1*time.Millisecond), false)
 	docID, _ := createDocWithUserRevision(t, h)
 
@@ -1895,6 +1921,7 @@ func TestVTextAgentRevisionIgnoresRawStubProviderResult(t *testing.T) {
 }
 
 func TestVTextAgentRevisionIgnoresProviderFinalJSONEdit(t *testing.T) {
+	t.Parallel()
 	provider := &finalTextProvider{result: vtextReplaceAllResult("FINAL JSON MUST NOT MATERIALIZE")}
 	h, s, _ := vtextAPISetupWithProvider(t, provider, true)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
@@ -1930,6 +1957,7 @@ func TestVTextAgentRevisionIgnoresProviderFinalJSONEdit(t *testing.T) {
 }
 
 func TestVTextAgentRevisionRejectsMalformedEditVTextToolCall(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextApplyEditsResult([]vtextTextEdit{
 		{Op: "replace", Find: "text that is not in the current document", Replace: "replacement"},
 	}))
@@ -1960,6 +1988,7 @@ func TestVTextAgentRevisionRejectsMalformedEditVTextToolCall(t *testing.T) {
 }
 
 func TestVTextStaleAgentRevisionRejectsEditAfterUserEdit(t *testing.T) {
+	t.Parallel()
 	provider := &revisionPromptEchoProvider{delay: 250 * time.Millisecond}
 
 	h, s, _ := vtextAPISetupWithProvider(t, provider, true)
@@ -2061,22 +2090,24 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 		t.Fatalf("conductor state = %q, want completed", conductorDone.State)
 	}
 	var decision struct {
-		DocID             string `json:"doc_id"`
-		UserRevisionID    string `json:"user_revision_id"`
-		FramingRevisionID string `json:"framing_revision_id"`
+		DocID          string `json:"doc_id"`
+		UserRevisionID string `json:"user_revision_id"`
 	}
 	if err := json.Unmarshal([]byte(conductorDone.Result), &decision); err != nil {
 		t.Fatalf("decode conductor decision: %v\nraw=%s", err, conductorDone.Result)
 	}
-	if decision.DocID == "" || decision.UserRevisionID == "" || decision.FramingRevisionID == "" {
+	if decision.DocID == "" || decision.UserRevisionID == "" {
 		t.Fatalf("conductor decision missing durable vtext ids: %+v", decision)
 	}
 	initialRevs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, ownerID, 10)
 	if err != nil {
 		t.Fatalf("list initial revisions: %v", err)
 	}
-	if len(initialRevs) != 2 {
-		t.Fatalf("initial revision count = %d, want 2", len(initialRevs))
+	if len(initialRevs) != 1 {
+		t.Fatalf("initial revision count = %d, want 1 user seed revision", len(initialRevs))
+	}
+	if initialRevs[0].RevisionID != decision.UserRevisionID || initialRevs[0].AuthorKind != types.AuthorUser {
+		t.Fatalf("initial revision = %+v, want user seed revision %s", initialRevs[0], decision.UserRevisionID)
 	}
 
 	initialReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+decision.DocID+"/revise",
@@ -2115,6 +2146,7 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 		fn   func()
 	}
 	var workerSeqs []uint64
+	latestWorkerSeqByRole := map[string]uint64{}
 	var userRevisionIDs []string
 	postWorkerUpdate := func(run *types.RunRecord, from, role, content string) {
 		t.Helper()
@@ -2123,6 +2155,7 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 			t.Fatalf("post worker update %q: %v", content, err)
 		}
 		workerSeqs = append(workerSeqs, seq)
+		latestWorkerSeqByRole[role] = seq
 	}
 	addUserEdit := func(marker string) {
 		t.Helper()
@@ -2194,7 +2227,11 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 	}
 	waitForVTextQuiescent(t, rt, s, ownerID, decision.DocID, maxWorkerSeq, 20*time.Second)
 
-	revs, consumedSeqs, batchedRevision := waitForWorkerUpdatesConsumed(t, s, decision.DocID, ownerID, workerSeqs, 20*time.Second)
+	expectedConsumedSeqs := make([]uint64, 0, len(latestWorkerSeqByRole))
+	for _, seq := range latestWorkerSeqByRole {
+		expectedConsumedSeqs = append(expectedConsumedSeqs, seq)
+	}
+	revs, consumedSeqs, batchedRevision := waitForWorkerUpdatesConsumed(t, s, decision.DocID, ownerID, expectedConsumedSeqs, 20*time.Second)
 	for _, rev := range revs {
 		if strings.Contains(rev.Content, "Stale output") {
 			t.Fatalf("stale output materialized in revision %+v", rev)
@@ -2203,7 +2240,7 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 			t.Fatalf("cancelled output materialized in revision %+v", rev)
 		}
 	}
-	for _, seq := range workerSeqs {
+	for _, seq := range expectedConsumedSeqs {
 		if !consumedSeqs[int64(seq)] {
 			t.Fatalf("worker update seq %d was not recorded as consumed; consumed=%+v", seq, consumedSeqs)
 		}
@@ -2287,6 +2324,7 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 }
 
 func TestVTextWorkerMessageAutoWakeCreatesFollowUpRevision(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Integrated grounded findings into the next revision."))
 
 	h, s, rt := vtextAPISetupWithProvider(t, provider, true)
@@ -2388,8 +2426,11 @@ func TestVTextWorkerMessageAutoWakeCreatesFollowUpRevision(t *testing.T) {
 	if !strings.Contains(wakeRun.Prompt, "Evidence: the latest public model releases") {
 		t.Fatalf("wake run prompt missing worker message content: %q", wakeRun.Prompt)
 	}
-	if !strings.Contains(wakeRun.Prompt, "User-authored revision diffs (oldest to newest)") {
-		t.Fatalf("wake run prompt missing user diff compaction context: %q", wakeRun.Prompt)
+	if !strings.Contains(wakeRun.Prompt, "User edit diff from previous canonical revision to current user-authored draft:") {
+		t.Fatalf("wake run prompt missing user diff context: %q", wakeRun.Prompt)
+	}
+	if !strings.Contains(wakeRun.Prompt, "- added: Original draft.") {
+		t.Fatalf("wake run prompt missing user diff content: %q", wakeRun.Prompt)
 	}
 }
 
@@ -2485,6 +2526,7 @@ func TestVTextWorkerMessageAutoWakeBatchesRapidMessages(t *testing.T) {
 }
 
 func TestVTextWorkerMessageDebounceUsesFakeClock(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Integrated fake-clock worker findings."))
 	clock := &fakeVTextWakeClock{}
 
@@ -2549,6 +2591,7 @@ func TestVTextWorkerMessageDebounceUsesFakeClock(t *testing.T) {
 }
 
 func TestVTextWorkerWakeRequeuesWhileMutationPending(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Integrated after pending mutation cleared."))
 	clock := &fakeVTextWakeClock{}
 
@@ -2604,6 +2647,7 @@ func TestVTextWorkerWakeRequeuesWhileMutationPending(t *testing.T) {
 }
 
 func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Integrated persisted findings into the next revision."))
 	provider.delay = 500 * time.Millisecond
 	clock := &fakeVTextWakeClock{}
@@ -2697,12 +2741,21 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	if wakeRun == nil {
 		t.Fatalf("expected findings-driven vtext wake run on channel %s, got %+v", docID, runs)
 	}
-	if !strings.Contains(wakeRun.Prompt, "Release notes") {
-		t.Fatalf("wake run prompt missing persisted findings evidence context: %q", wakeRun.Prompt)
+	evidenceID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("choir:research-finding:finding-stream-001:0")).String()
+	if !strings.Contains(wakeRun.Prompt, evidenceID) {
+		t.Fatalf("wake run prompt missing durable evidence handle %s: %q", evidenceID, wakeRun.Prompt)
+	}
+	evidence, err := s.GetEvidence(context.Background(), evidenceID, "user-1")
+	if err != nil {
+		t.Fatalf("evidence handle %s in wake prompt does not resolve: %v", evidenceID, err)
+	}
+	if evidence.Title != "Release notes" {
+		t.Fatalf("evidence title = %q, want %q", evidence.Title, "Release notes")
 	}
 }
 
 func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Integrated structured super update into the next revision."))
 	provider.delay = 500 * time.Millisecond
 	clock := &fakeVTextWakeClock{}
@@ -2813,6 +2866,7 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 }
 
 func TestVTextWorkerMessageDuringActiveRevisionTriggersLaterFollowUp(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Integrated content after the run completed."))
 	provider.delay = 300 * time.Millisecond
 
@@ -2939,6 +2993,7 @@ func TestVTextWorkerMessageDuringActiveRevisionTriggersLaterFollowUp(t *testing.
 }
 
 func TestBuildAgentRevisionRequestRequiresSuperContinuationForActiveWorker(t *testing.T) {
+	t.Parallel()
 	current := types.Revision{
 		DocID:      "doc-active-worker-dashboard",
 		RevisionID: "rev-active-worker-dashboard",
@@ -2969,6 +3024,7 @@ func TestBuildAgentRevisionRequestRequiresSuperContinuationForActiveWorker(t *te
 }
 
 func TestRestartRecoveryClearsInterruptedVTextMutationAndRelaunches(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-vtext-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create temp dir: %v", err)
@@ -2979,7 +3035,7 @@ func TestRestartRecoveryClearsInterruptedVTextMutationAndRelaunches(t *testing.T
 	_ = os.RemoveAll(promptRoot)
 
 	ctx := context.Background()
-	s1, err := store.Open(dbPath)
+	s1, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store 1: %v", err)
 	}
@@ -3081,7 +3137,7 @@ func TestRestartRecoveryClearsInterruptedVTextMutationAndRelaunches(t *testing.T
 		t.Fatalf("close store 1: %v", err)
 	}
 
-	s2, err := store.Open(dbPath)
+	s2, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store 2: %v", err)
 	}
@@ -3175,6 +3231,7 @@ func TestRestartRecoveryClearsInterruptedVTextMutationAndRelaunches(t *testing.T
 }
 
 func TestHandleTestVTextResearchFindingsUsesResearcherToolPath(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Browser test findings revision."))
 
 	h, s, rt := vtextAPISetupWithProvider(t, provider, true)
@@ -3234,6 +3291,7 @@ func TestHandleTestVTextResearchFindingsUsesResearcherToolPath(t *testing.T) {
 }
 
 func TestHandleTestVTextWorkerUpdateUsesStructuredToolPath(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Browser test structured worker update revision."))
 
 	h, s, rt := vtextAPISetupWithProvider(t, provider, true)
@@ -3319,6 +3377,7 @@ func TestHandleTestVTextWorkerUpdateUsesStructuredToolPath(t *testing.T) {
 }
 
 func TestVTextAgentRevisionInheritsConductorTrajectoryFromRevisionMetadata(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Conductor-linked vtext revision."))
 
 	h, s, _ := vtextAPISetupWithProvider(t, provider, true)
@@ -3396,6 +3455,7 @@ func TestVTextAgentRevisionInheritsConductorTrajectoryFromRevisionMetadata(t *te
 }
 
 func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 
 	openReq := func(initialContent string) *httptest.ResponseRecorder {
@@ -3503,6 +3563,7 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 }
 
 func TestVTextPlainTextImportCarriesMigrationMetadataToFirstDurableRevision(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 
@@ -3616,6 +3677,7 @@ func TestVTextPlainTextImportCarriesMigrationMetadataToFirstDurableRevision(t *t
 }
 
 func TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTable(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 
@@ -3699,6 +3761,7 @@ func TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTa
 }
 
 func TestVTextMarkdownStructureStabilizationRepairsMalformedTableTailRow(t *testing.T) {
+	t.Parallel()
 	parentContent := strings.Join([]string{
 		"# Legal Cloud",
 		"",
@@ -3733,6 +3796,7 @@ func TestVTextMarkdownStructureStabilizationRepairsMalformedTableTailRow(t *test
 }
 
 func TestVTextMarkdownStructureStabilizationHandlesPartialTableContexts(t *testing.T) {
+	t.Parallel()
 	parentContent := strings.Join([]string{
 		"# Appendix",
 		"",
@@ -3836,6 +3900,7 @@ func TestVTextMarkdownStructureStabilizationHandlesPartialTableContexts(t *testi
 }
 
 func TestVTextRestoreRevisionNormalizesMalformedTableTailRows(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 	createDocReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents", vtextCreateDocRequest{
@@ -3938,6 +4003,7 @@ func TestVTextRestoreRevisionNormalizesMalformedTableTailRows(t *testing.T) {
 }
 
 func TestVTextMarkdownStructureStabilizationAllowsExplicitTableDeletion(t *testing.T) {
+	t.Parallel()
 	parentContent := strings.Join([]string{
 		"# Appendix",
 		"",
@@ -3969,6 +4035,7 @@ func TestVTextMarkdownStructureStabilizationAllowsExplicitTableDeletion(t *testi
 }
 
 func TestVTextMarkdownTableRowParserHandlesEscapedPipes(t *testing.T) {
+	t.Parallel()
 	cells := markdownstructure.TableRowCells(`| Term \| Alias | Definition with \| symbol |`)
 	if len(cells) != 2 {
 		t.Fatalf("cells = %#v, want 2 cells", cells)
@@ -3979,6 +4046,7 @@ func TestVTextMarkdownTableRowParserHandlesEscapedPipes(t *testing.T) {
 }
 
 func TestVTextImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 
 	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
@@ -4100,6 +4168,7 @@ func TestVTextImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 }
 
 func TestVTextImportMarkdownLineageResolvesCitationMarkers(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	entity := vtextSourceEntity{
 		EntityID: "src-aba-rule-16",
@@ -4200,6 +4269,7 @@ func TestVTextImportMarkdownLineageResolvesCitationMarkers(t *testing.T) {
 }
 
 func TestVTextUserSaveAndAgentRevisePreserveSourcesAndTableShape(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider("")
 	provider.resultFunc = func(string) string {
 		return vtextApplyEditsResult([]vtextTextEdit{{
@@ -4339,6 +4409,7 @@ func TestVTextUserSaveAndAgentRevisePreserveSourcesAndTableShape(t *testing.T) {
 }
 
 func TestVTextUserSaveRemovesDuplicateMarkdownTableSeparator(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 	entity := vtextSourceEntity{
@@ -4441,6 +4512,7 @@ func TestVTextUserSaveRemovesDuplicateMarkdownTableSeparator(t *testing.T) {
 }
 
 func TestVTextSourceGapRepairCreatesRevision(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	entity := vtextSourceEntity{
 		EntityID: "src-aba-rule-16-repair",
@@ -4546,6 +4618,7 @@ func TestVTextSourceGapRepairCreatesRevision(t *testing.T) {
 }
 
 func TestVTextSourceGapRepairPreservesUnrepairedGaps(t *testing.T) {
+	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
 	entity := vtextSourceEntity{
 		EntityID: "src-rule-one",
@@ -4612,6 +4685,7 @@ func TestVTextSourceGapRepairPreservesUnrepairedGaps(t *testing.T) {
 }
 
 func TestVTextSourceGapRepairCanOmitNoSourceNeededMarker(t *testing.T) {
+	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
 	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/legal-cloud-no-source-needed.md",
@@ -4675,6 +4749,7 @@ func TestVTextSourceGapRepairCanOmitNoSourceNeededMarker(t *testing.T) {
 }
 
 func TestVTextSourceGapRepairRejectsUnknownEntity(t *testing.T) {
+	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
 	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/legal-cloud-bad-repair.md",
@@ -4711,6 +4786,7 @@ func TestVTextSourceGapRepairRejectsUnknownEntity(t *testing.T) {
 }
 
 func TestVTextSourceArtifactAttachmentCreatesMetadataOnlyRevision(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 	entity := vtextSourceEntity{
@@ -4830,6 +4906,7 @@ func TestVTextSourceArtifactAttachmentCreatesMetadataOnlyRevision(t *testing.T) 
 }
 
 func TestVTextSourceArtifactAttachmentRejectsEmptyContentItem(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 	entity := vtextSourceEntity{
@@ -4896,6 +4973,7 @@ func TestVTextSourceArtifactAttachmentRejectsEmptyContentItem(t *testing.T) {
 }
 
 func TestVTextImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -5010,6 +5088,7 @@ func TestVTextImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 }
 
 func TestVTextImportMarkdownLineageRejectsMissingContentItem(t *testing.T) {
+	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
 	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/missing-content-item.md",
@@ -5030,6 +5109,7 @@ func TestVTextImportMarkdownLineageRejectsMissingContentItem(t *testing.T) {
 }
 
 func TestVTextImportMarkdownLineageRejectsUnknownCitationEntity(t *testing.T) {
+	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
 	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/bad-sourced.md",
@@ -5051,6 +5131,7 @@ func TestVTextImportMarkdownLineageRejectsUnknownCitationEntity(t *testing.T) {
 }
 
 func TestVTextImportMarkdownLineageRejectsExistingAlias(t *testing.T) {
+	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
 	body := vtextMarkdownLineageImportRequest{
 		SourcePath: "notes/duplicate.md",
@@ -5083,6 +5164,7 @@ func TestVTextImportMarkdownLineageRejectsExistingAlias(t *testing.T) {
 }
 
 func TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 
 	openFile := func(sourcePath, title, initialContent string) vtextOpenFileResponse {
@@ -5110,16 +5192,16 @@ func TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts(t *testing.T) {
 	pdf := openFile("imports/legal-cloud-proposal.pdf", "legal-cloud-proposal.pdf", "Extracted PDF projection text")
 
 	for _, tc := range []struct {
-		name           string
-		resp           vtextOpenFileResponse
-		mediaType      string
-		appHint        string
-		lossiness      float64
-		warning        string
-		expectTextless bool
+		name      string
+		resp      vtextOpenFileResponse
+		mediaType string
+		appHint   string
+		lossiness float64
+		warning   string
+		wantText  string
 	}{
-		{name: "docx", resp: docx, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", appHint: "vtext", lossiness: 40, warning: "docx_projection_requires_style_adapter", expectTextless: true},
-		{name: "pdf", resp: pdf, mediaType: "application/pdf", appHint: "pdf", lossiness: 80, warning: "pdf_projection_requires_extraction_adapter", expectTextless: true},
+		{name: "docx", resp: docx, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", appHint: "vtext", lossiness: 40, warning: "docx_projection_requires_style_adapter", wantText: "Extracted DOCX projection text"},
+		{name: "pdf", resp: pdf, mediaType: "application/pdf", appHint: "pdf", lossiness: 80, warning: "pdf_projection_requires_extraction_adapter", wantText: "Extracted PDF projection text"},
 	} {
 		doc, err := s.GetDocument(context.Background(), tc.resp.DocID, "user-1")
 		if err != nil {
@@ -5135,8 +5217,8 @@ func TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts(t *testing.T) {
 		if item.MediaType != tc.mediaType || item.AppHint != tc.appHint || item.FilePath == "" || item.ContentHash == "" {
 			t.Fatalf("%s original item = %#v", tc.name, item)
 		}
-		if tc.expectTextless && item.TextContent != "" {
-			t.Fatalf("%s original text content stored for binary: %q", tc.name, item.TextContent)
+		if item.TextContent != tc.wantText {
+			t.Fatalf("%s original text content = %q, want extracted projection %q", tc.name, item.TextContent, tc.wantText)
 		}
 		revs, err := s.ListRevisionsByDoc(context.Background(), tc.resp.DocID, "user-1", 10)
 		if err != nil {
@@ -5410,6 +5492,7 @@ func TestVTextEnsureManifestReusesExistingAlias(t *testing.T) {
 }
 
 func TestVTextCreateRevisionRejectsStaleHead(t *testing.T) {
+	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 
@@ -5439,6 +5522,7 @@ func TestVTextCreateRevisionRejectsStaleHead(t *testing.T) {
 }
 
 func TestVTextCreateRevisionRebasesAllowedStaleUserDraft(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 
@@ -5501,6 +5585,7 @@ func TestVTextCreateRevisionRebasesAllowedStaleUserDraft(t *testing.T) {
 }
 
 func TestVTextDocumentStreamSendsSnapshot(t *testing.T) {
+	t.Parallel()
 	h, s := vtextAPISetup(t)
 	docID, _ := createDocWithUserRevision(t, h)
 
@@ -5550,6 +5635,7 @@ func TestVTextDocumentStreamSendsSnapshot(t *testing.T) {
 }
 
 func TestVTextDocumentResponseReportsPendingAgentMutation(t *testing.T) {
+	t.Parallel()
 	h, s := vtextAPISetup(t)
 	docID, _ := createDocWithUserRevision(t, h)
 	if err := s.CreateAgentMutation(context.Background(), store.AgentMutation{
@@ -5581,6 +5667,7 @@ func TestVTextDocumentResponseReportsPendingAgentMutation(t *testing.T) {
 }
 
 func TestVTextDocumentResponseReconcilesPendingMutationFromCurrentHead(t *testing.T) {
+	t.Parallel()
 	h, s := vtextAPISetup(t)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 	runID := "run-vtext-head-already-written"
@@ -5635,6 +5722,7 @@ func TestVTextDocumentResponseReconcilesPendingMutationFromCurrentHead(t *testin
 }
 
 func TestVTextDiagnosisReportsCurrentRevisionVersion(t *testing.T) {
+	t.Parallel()
 	h, s := vtextAPISetup(t)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 	if err := s.CreateRevision(context.Background(), types.Revision{
@@ -5687,6 +5775,7 @@ func TestVTextDiagnosisReportsCurrentRevisionVersion(t *testing.T) {
 }
 
 func TestVTextDiagnosisCanOmitRevisionContentForStructureEvidence(t *testing.T) {
+	t.Parallel()
 	h, s := vtextAPISetup(t)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 	if err := s.CreateRevision(context.Background(), types.Revision{
@@ -5729,6 +5818,7 @@ func TestVTextDiagnosisCanOmitRevisionContentForStructureEvidence(t *testing.T) 
 }
 
 func TestVTextDocumentStreamEmitsHeadChangeAfterAgentRevision(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	docID, _ := createDocWithUserRevision(t, h)
 
@@ -5806,6 +5896,7 @@ func TestVTextDocumentStreamEmitsHeadChangeAfterAgentRevision(t *testing.T) {
 }
 
 func TestVTextDocumentStreamEmitsHeadChangeAfterUserRevision(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 
@@ -5886,6 +5977,7 @@ func parseVTextStreamEvents(t *testing.T, body string) []vtextDocumentStreamEven
 // TestVTextAgentRevisionAuthRequired verifies that agent revision
 // requires authentication (VAL-ETEXT-003: auth-gated).
 func TestVTextAgentRevisionAuthRequired(t *testing.T) {
+	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
 
 	docID, _ := createDocWithUserRevision(t, h)
@@ -5905,6 +5997,7 @@ func TestVTextAgentRevisionAuthRequired(t *testing.T) {
 // that an end-to-end flow preserves both user and appagent attribution
 // in history (VAL-CROSS-119).
 func TestVTextAgentRevisionPreservesUserAndAppAgentAttribution(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 
 	docID, _ := createDocWithUserRevision(t, h)
@@ -5970,6 +6063,7 @@ func TestVTextAgentRevisionPreservesUserAndAppAgentAttribution(t *testing.T) {
 // canonical history attributes the change to the appagent, not to any
 // worker identity (VAL-CROSS-120).
 func TestVTextAgentRevisionNoWorkerAuthorship(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 
 	docID, _ := createDocWithUserRevision(t, h)
@@ -6003,6 +6097,7 @@ func TestVTextAgentRevisionNoWorkerAuthorship(t *testing.T) {
 // TestVTextAgentRevisionNoDuplicateOnRenewalRetry verifies that renewal
 // and retry does not duplicate a canonical document mutation (VAL-CROSS-122).
 func TestVTextAgentRevisionNoDuplicateOnRenewalRetry(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 
 	docID, _ := createDocWithUserRevision(t, h)
@@ -6059,6 +6154,7 @@ func TestVTextAgentRevisionNoDuplicateOnRenewalRetry(t *testing.T) {
 // TestVTextAgentRevisionMutationCompletedOnlyOnce verifies that edit_vtext is
 // the idempotency boundary for canonical appagent revisions (VAL-CROSS-122).
 func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
+	t.Parallel()
 	_, s, rt := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -6183,6 +6279,7 @@ func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 }
 
 func TestVTextAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
+	t.Parallel()
 	_, s, rt := vtextAPISetupWithRuntime(t)
 
 	ctx := context.Background()
@@ -6289,6 +6386,7 @@ func TestVTextAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 }
 
 func TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *testing.T) {
+	t.Parallel()
 	_, s, rt := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 	doc := types.Document{
@@ -6385,6 +6483,7 @@ func TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *te
 }
 
 func TestVTextApplyEditsRejectsAmbiguousReplace(t *testing.T) {
+	t.Parallel()
 	current := types.Revision{
 		RevisionID: "rev-1",
 		Content:    "repeat\nkeep\nrepeat",
@@ -6424,6 +6523,7 @@ func TestVTextApplyEditsRejectsAmbiguousReplace(t *testing.T) {
 // are emitted during agent revision execution with the doc_id so
 // the frontend can correlate to the open document (VAL-ETEXT-004).
 func TestVTextAgentRevisionProgressEvents(t *testing.T) {
+	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 
 	docID, _ := createDocWithUserRevision(t, h)
@@ -6490,6 +6590,7 @@ func TestVTextAgentRevisionProgressEvents(t *testing.T) {
 // frontend can submit a plain revise event and let the backend compile the
 // effective vtext request from document state.
 func TestVTextAgentRevisionAcceptsReviseEventWithoutPrompt(t *testing.T) {
+	t.Parallel()
 	h, _, rt := vtextAPISetupWithRuntime(t)
 
 	docID, _ := createDocWithUserRevision(t, h)
@@ -6521,6 +6622,7 @@ func TestVTextAgentRevisionAcceptsReviseEventWithoutPrompt(t *testing.T) {
 }
 
 func TestVTextDiagnosisIncludesDocumentChannelRuns(t *testing.T) {
+	t.Parallel()
 	h, _, rt := vtextAPISetupWithRuntime(t)
 	docID, _ := createDocWithUserRevision(t, h)
 
@@ -6662,6 +6764,7 @@ func TestVTextAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 }
 
 func TestVTextAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *testing.T) {
+	t.Parallel()
 	h, s, rt := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -6758,6 +6861,7 @@ func TestVTextAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *test
 }
 
 func TestMarkVTextMediaSourceRefsResearchState(t *testing.T) {
+	t.Parallel()
 	metadata := map[string]any{
 		"media_source_research_required": true,
 		"media_source_refs": []vtextMediaSourceRef{
@@ -6794,6 +6898,7 @@ func TestMarkVTextMediaSourceRefsResearchState(t *testing.T) {
 }
 
 func TestMediaSourceRefToSourceEntityUsesTypedEvidenceStates(t *testing.T) {
+	t.Parallel()
 	candidate := mediaSourceRefToSourceEntity(vtextMediaSourceRef{
 		Kind:         "image",
 		CanonicalURL: "https://example.com/pending-source.png",
@@ -6831,6 +6936,7 @@ func TestMediaSourceRefToSourceEntityUsesTypedEvidenceStates(t *testing.T) {
 // TestVTextAgentRevisionDocumentNotFound verifies that requesting an
 // agent revision for a non-existent document returns 404.
 func TestVTextAgentRevisionDocumentNotFound(t *testing.T) {
+	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
 
 	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/nonexistent/revise",
@@ -6846,6 +6952,7 @@ func TestVTextAgentRevisionDocumentNotFound(t *testing.T) {
 // TestVTextAgentRevisionWrongOwner verifies that requesting an agent
 // revision for a document owned by another user returns 404.
 func TestVTextAgentRevisionWrongOwner(t *testing.T) {
+	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
 
 	docID, _ := createDocWithUserRevision(t, h)

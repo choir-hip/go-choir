@@ -52,7 +52,7 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 	_ = os.Remove(dbPath)
 	_ = os.RemoveAll(promptRoot)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -149,7 +149,7 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 	_ = os.Remove(dbPath)
 	_ = os.RemoveAll(promptRoot)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

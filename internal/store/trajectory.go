@@ -3,9 +3,9 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -70,15 +70,14 @@ func (s *Store) CreateTrajectoryIfAbsent(ctx context.Context, rec types.Trajecto
 	return s.GetTrajectory(ctx, rec.OwnerID, rec.TrajectoryID)
 }
 
+const selectTrajectoryByID = `SELECT trajectory_id, owner_id, kind, subject_refs_json, status,
+        settlement_rule_json, created_at, updated_at, settled_at
+   FROM trajectories
+  WHERE trajectory_id = ? AND owner_id = ?`
+
 // GetTrajectory returns the trajectory with the given ID, owner-scoped.
 func (s *Store) GetTrajectory(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
-	row := s.queryDB().QueryRowContext(ctx,
-		`SELECT trajectory_id, owner_id, kind, subject_refs_json, status,
-		        settlement_rule_json, created_at, updated_at, settled_at
-		   FROM trajectories
-		  WHERE trajectory_id = ? AND owner_id = ?`,
-		trajectoryID, ownerID,
-	)
+	row := s.queryDB().QueryRowContext(ctx, selectTrajectoryByID, trajectoryID, ownerID)
 	return scanTrajectory(row)
 }
 
@@ -140,6 +139,67 @@ func (s *Store) UpdateTrajectoryStatus(ctx context.Context, ownerID, trajectoryI
 		if _, getErr := s.GetTrajectory(ctx, ownerID, trajectoryID); getErr != nil {
 			return types.TrajectoryRecord{}, getErr
 		}
+	}
+	return s.GetTrajectory(ctx, ownerID, trajectoryID)
+}
+
+// UpdateTrajectorySubjectRefs merges the provided subject refs into the
+// trajectory record and stamps updated_at. Empty keys or values are ignored.
+// Merge patches are serialized within one Store instance so concurrent callers
+// cannot drop each other's keys by overwriting the whole JSON object.
+func (s *Store) UpdateTrajectorySubjectRefs(ctx context.Context, ownerID, trajectoryID string, patch map[string]string) (types.TrajectoryRecord, error) {
+	if len(patch) == 0 {
+		return s.GetTrajectory(ctx, ownerID, trajectoryID)
+	}
+	s.jsonPatchMu.Lock()
+	defer s.jsonPatchMu.Unlock()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return types.TrajectoryRecord{}, fmt.Errorf("begin trajectory subject refs update: %w", err)
+	}
+	defer tx.Rollback()
+	rec, err := scanTrajectory(tx.QueryRowContext(ctx, selectTrajectoryByID, trajectoryID, ownerID))
+	if err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	if rec.SubjectRefs == nil {
+		rec.SubjectRefs = map[string]string{}
+	}
+	changed := false
+	for key, value := range patch {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			continue
+		}
+		if rec.SubjectRefs[key] == value {
+			continue
+		}
+		rec.SubjectRefs[key] = value
+		changed = true
+	}
+	if !changed {
+		return rec, nil
+	}
+	now := time.Now().UTC()
+	subjectRefsJSON, err := marshalJSON(rec.SubjectRefs)
+	if err != nil {
+		return types.TrajectoryRecord{}, fmt.Errorf("marshal trajectory subject refs: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE trajectories
+		    SET subject_refs_json = ?, updated_at = ?
+		  WHERE trajectory_id = ? AND owner_id = ?`,
+		string(subjectRefsJSON),
+		now.Format(time.RFC3339Nano),
+		trajectoryID,
+		ownerID,
+	); err != nil {
+		return types.TrajectoryRecord{}, fmt.Errorf("update trajectory subject refs: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return types.TrajectoryRecord{}, fmt.Errorf("commit trajectory subject refs update: %w", err)
 	}
 	return s.GetTrajectory(ctx, ownerID, trajectoryID)
 }
@@ -238,6 +298,18 @@ func (s *Store) findWorkItemByFingerprint(ctx context.Context, ownerID, trajecto
 	return rec, true, nil
 }
 
+// FindWorkItemByFingerprint returns the first open or completed work item
+// matching the owner/trajectory fingerprint tuple.
+func (s *Store) FindWorkItemByFingerprint(ctx context.Context, ownerID, trajectoryID, fingerprint string) (types.WorkItemRecord, bool, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	fingerprint = strings.TrimSpace(fingerprint)
+	if ownerID == "" || trajectoryID == "" || fingerprint == "" {
+		return types.WorkItemRecord{}, false, nil
+	}
+	return s.findWorkItemByFingerprint(ctx, ownerID, trajectoryID, fingerprint)
+}
+
 // GetWorkItem returns the work item with the given ID, owner-scoped.
 func (s *Store) GetWorkItem(ctx context.Context, ownerID, workItemID string) (types.WorkItemRecord, error) {
 	row := s.queryDB().QueryRowContext(ctx,
@@ -297,6 +369,75 @@ func (s *Store) UpdateWorkItemStatus(ctx context.Context, ownerID, workItemID st
 		if _, getErr := s.GetWorkItem(ctx, ownerID, workItemID); getErr != nil {
 			return types.WorkItemRecord{}, getErr
 		}
+	}
+	return s.GetWorkItem(ctx, ownerID, workItemID)
+}
+
+// UpdateWorkItemDetails merges the provided details into the work item and
+// stamps updated_at. Empty string keys or nil values are ignored.
+// Merge patches are serialized within one Store instance so concurrent callers
+// cannot drop each other's keys by overwriting the whole JSON object.
+func (s *Store) UpdateWorkItemDetails(ctx context.Context, ownerID, workItemID string, patch map[string]any) (types.WorkItemRecord, error) {
+	if len(patch) == 0 {
+		return s.GetWorkItem(ctx, ownerID, workItemID)
+	}
+	s.jsonPatchMu.Lock()
+	defer s.jsonPatchMu.Unlock()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return types.WorkItemRecord{}, fmt.Errorf("begin work item details update: %w", err)
+	}
+	defer tx.Rollback()
+	rec, err := scanWorkItem(tx.QueryRowContext(ctx,
+		`SELECT `+workItemColumns+`
+		   FROM work_items
+		  WHERE work_item_id = ? AND owner_id = ?`,
+		workItemID, ownerID,
+	))
+	if err != nil {
+		return types.WorkItemRecord{}, err
+	}
+	if rec.Details == nil {
+		rec.Details = map[string]any{}
+	}
+	changed := false
+	for key, value := range patch {
+		key = strings.TrimSpace(key)
+		if key == "" || value == nil {
+			continue
+		}
+		if existing, ok := rec.Details[key]; ok {
+			existingJSON, existingErr := marshalJSON(existing)
+			valueJSON, valueErr := marshalJSON(value)
+			if existingErr == nil && valueErr == nil && string(existingJSON) == string(valueJSON) {
+				continue
+			}
+		}
+		rec.Details[key] = value
+		changed = true
+	}
+	if !changed {
+		return rec, nil
+	}
+	now := time.Now().UTC()
+	detailsJSON, err := marshalJSON(rec.Details)
+	if err != nil {
+		return types.WorkItemRecord{}, fmt.Errorf("marshal work item details: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE work_items
+		    SET details_json = ?, updated_at = ?
+		  WHERE work_item_id = ? AND owner_id = ?`,
+		string(detailsJSON),
+		now.Format(time.RFC3339Nano),
+		workItemID,
+		ownerID,
+	); err != nil {
+		return types.WorkItemRecord{}, fmt.Errorf("update work item details: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return types.WorkItemRecord{}, fmt.Errorf("commit work item details update: %w", err)
 	}
 	return s.GetWorkItem(ctx, ownerID, workItemID)
 }

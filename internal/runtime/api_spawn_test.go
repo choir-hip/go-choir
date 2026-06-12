@@ -38,6 +38,7 @@ func testSpawnSetup(t *testing.T) (*Runtime, *APIHandler, string) {
 // TestSpawnCreatesChildTask verifies that POST /api/agent/spawn creates a child
 // task linked to the parent with correct fields (VAL-CHOIR-001).
 func TestSpawnCreatesChildTask(t *testing.T) {
+	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
 	body := fmt.Sprintf(`{"parent_id":"%s","objective":"research the history of Go"}`, parentID)
@@ -75,6 +76,7 @@ func TestSpawnCreatesChildTask(t *testing.T) {
 // TestSpawnChildCarriesParentMetadata verifies the child run keeps the
 // parent relationship in its runtime metadata.
 func TestSpawnChildCarriesParentMetadata(t *testing.T) {
+	t.Parallel()
 	rt, handler, parentID := testSpawnSetup(t)
 
 	body := fmt.Sprintf(`{"parent_id":"%s","objective":"child task objective"}`, parentID)
@@ -111,6 +113,7 @@ func TestSpawnChildCarriesParentMetadata(t *testing.T) {
 // TestSpawnInheritsOwnerFromParent verifies that the child task inherits the
 // owner from the authenticated user context (feature requirement).
 func TestSpawnInheritsOwnerFromAuth(t *testing.T) {
+	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
 	// Spawn as user-bob — child should be owned by bob.
@@ -138,6 +141,7 @@ func TestSpawnInheritsOwnerFromAuth(t *testing.T) {
 
 // TestSpawnWithoutParentIDFails verifies that spawn requires a parent_id.
 func TestSpawnWithoutParentIDFails(t *testing.T) {
+	t.Parallel()
 	_, handler, _ := testSpawnSetup(t)
 
 	body := `{"objective":"orphan task"}`
@@ -153,6 +157,7 @@ func TestSpawnWithoutParentIDFails(t *testing.T) {
 
 // TestSpawnWithoutObjectiveFails verifies that spawn requires an objective.
 func TestSpawnWithoutObjectiveFails(t *testing.T) {
+	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
 	body := fmt.Sprintf(`{"parent_id":"%s"}`, parentID)
@@ -169,6 +174,7 @@ func TestSpawnWithoutObjectiveFails(t *testing.T) {
 // TestSpawnWithConstraints verifies that constraints can be passed in the
 // spawn request and are stored in the child task metadata.
 func TestSpawnWithConstraints(t *testing.T) {
+	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
 	body := fmt.Sprintf(`{
@@ -200,6 +206,7 @@ func TestSpawnWithConstraints(t *testing.T) {
 
 // TestSpawnAuthGated verifies that spawn requires authentication.
 func TestSpawnAuthGated(t *testing.T) {
+	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
 	body := fmt.Sprintf(`{"parent_id":"%s","objective":"test"}`, parentID)
@@ -215,6 +222,7 @@ func TestSpawnAuthGated(t *testing.T) {
 
 // TestSpawnMethodNotAllowed verifies that only POST is accepted.
 func TestSpawnMethodNotAllowed(t *testing.T) {
+	t.Parallel()
 	_, handler, _ := testSpawnSetup(t)
 
 	req := authenticatedRequest(http.MethodGet, "/api/agent/spawn", "", "user-alice")
@@ -229,6 +237,7 @@ func TestSpawnMethodNotAllowed(t *testing.T) {
 
 // TestSpawnInvalidBody verifies that invalid JSON is rejected.
 func TestSpawnInvalidBody(t *testing.T) {
+	t.Parallel()
 	_, handler, _ := testSpawnSetup(t)
 
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", "not json", "user-alice")
@@ -244,6 +253,7 @@ func TestSpawnInvalidBody(t *testing.T) {
 // TestSpawnNonexistentParent verifies that spawning with a nonexistent parent_id
 // returns an appropriate error.
 func TestSpawnNonexistentParent(t *testing.T) {
+	t.Parallel()
 	_, handler, _ := testSpawnSetup(t)
 
 	body := `{"parent_id":"nonexistent-task-id","objective":"orphan child"}`
@@ -260,6 +270,7 @@ func TestSpawnNonexistentParent(t *testing.T) {
 // TestSpawnMultipleChildrenFromSameParent verifies that multiple children
 // can be spawned from the same parent (VAL-CHOIR-008).
 func TestSpawnMultipleChildrenFromSameParent(t *testing.T) {
+	t.Parallel()
 	rt, handler, parentID := testSpawnSetup(t)
 
 	childIDs := make(map[string]bool)
@@ -308,6 +319,7 @@ func TestSpawnMultipleChildrenFromSameParent(t *testing.T) {
 // We verify metadata rather than state since the task may have already
 // transitioned to running by the time we read it.
 func TestSpawnCreatesRuntimeTask(t *testing.T) {
+	t.Parallel()
 	rt, handler, parentID := testSpawnSetup(t)
 
 	body := fmt.Sprintf(`{"parent_id":"%s","objective":"child runtime task"}`, parentID)
@@ -352,6 +364,7 @@ func TestSpawnCreatesRuntimeTask(t *testing.T) {
 // TestSpawnChildMetadataAndTaskConsistent verifies the spawned run keeps its
 // parent linkage and owner on the canonical runtime record.
 func TestSpawnChildMetadataAndTaskConsistent(t *testing.T) {
+	t.Parallel()
 	rt, handler, parentID := testSpawnSetup(t)
 
 	body := fmt.Sprintf(`{"parent_id":"%s","objective":"consistency check"}`, parentID)
@@ -385,6 +398,7 @@ func TestSpawnChildMetadataAndTaskConsistent(t *testing.T) {
 // TestSpawnListedByParent verifies that spawned children keep their parent_id
 // in runtime metadata (VAL-CHOIR-004).
 func TestSpawnListedByParent(t *testing.T) {
+	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
 	// Spawn two children.
@@ -406,6 +420,7 @@ func TestSpawnListedByParent(t *testing.T) {
 // TestSpawnEmptyObjectiveRejected verifies that whitespace-only objectives
 // are rejected.
 func TestSpawnEmptyObjectiveRejected(t *testing.T) {
+	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
 	body := fmt.Sprintf(`{"parent_id":"%s","objective":"   "}`, parentID)
@@ -432,6 +447,7 @@ func TestSpawnEmptyObjectiveRejected(t *testing.T) {
 // available as an internal handler/tool path but is not registered on the
 // browser-public route table.
 func TestSpawnRouteNotBrowserRegistered(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/agent/spawn", "{}", "user-alice")

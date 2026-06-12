@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -302,6 +303,9 @@ func TestSourceServiceAPIIngestionHandoffLatestReportsAgentHandoffs(t *testing.T
 	if len(resp.ProcessorRequests) != 1 || resp.ProcessorRequests[0].SourceItemIDs[0] != "srcitem_ingestion_handoff" {
 		t.Fatalf("unexpected processor requests: %+v", resp.ProcessorRequests)
 	}
+	if resp.ProcessorRequests[0].Status != "queued" || resp.ProcessorRequests[0].RuntimeStatus != "queued" {
+		t.Fatalf("unexpected processor status projection: %+v", resp.ProcessorRequests[0])
+	}
 	if len(resp.ReconcilerRequests) != 0 {
 		t.Fatalf("unexpected reconciler requests: %+v", resp.ReconcilerRequests)
 	}
@@ -418,25 +422,33 @@ func TestIngestionRuntimeDispatcherSubmitsProcessorProfilesOnly(t *testing.T) {
 
 	var submissions []runtimeRunSubmitRequest
 	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/internal/runtime/runs" {
-			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
-		}
 		if r.Header.Get("X-Internal-Caller") != "true" {
 			t.Fatalf("missing internal caller header")
 		}
-		var req runtimeRunSubmitRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode runtime request: %v", err)
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			var req runtimeRunSubmitRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode runtime request: %v", err)
+			}
+			submissions = append(submissions, req)
+			profile, _ := req.Metadata["agent_profile"].(string)
+			writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{
+				RunID:        "run-" + profile + "-" + strings.TrimSpace(req.Metadata["ingestion_handoff_request_id"].(string)),
+				AgentID:      profile + ":agent",
+				AgentProfile: profile,
+				AgentRole:    profile,
+				State:        "pending",
+			})
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/runtime/runs/"):
+			writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+				RunID:   path.Base(r.URL.Path),
+				AgentID: "processor:agent",
+				State:   "completed",
+			})
+		default:
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
 		}
-		submissions = append(submissions, req)
-		profile, _ := req.Metadata["agent_profile"].(string)
-		writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{
-			RunID:        "run-" + profile + "-" + strings.TrimSpace(req.Metadata["ingestion_handoff_request_id"].(string)),
-			AgentID:      profile + ":agent",
-			AgentProfile: profile,
-			AgentRole:    profile,
-			State:        "pending",
-		})
 	}))
 	defer runtimeServer.Close()
 
@@ -651,5 +663,580 @@ func TestIngestionRuntimeDispatcherKeepsQueuedRequestOnTransientRuntimeFailure(t
 	}
 	if len(processors) != 1 || processors[0].Status != "queued" || processors[0].RuntimeRunID != "" {
 		t.Fatalf("transient runtime failure should leave request queued: %+v", processors)
+	}
+}
+
+// dispatcherReconcileFixture is the shared two-request shape every dispatcher
+// reconcile test starts from: one queued processor request waiting on
+// admission, and one live request already submitted to the runtime whose
+// status projection drives the test.
+type dispatcherReconcileFixture struct {
+	store   *cycle.Storage
+	cycleID string
+	queued  cycle.ProcessorRequest
+	live    cycle.ProcessorRequest
+}
+
+// newDispatcherReconcileFixture seeds storage with one ingestion item plus the
+// queued/live processor request pair. slug namespaces all generated IDs;
+// liveStatus is the live request's verdict column ("submitted" or
+// "completed") — its runtime_status is always "submitted". Rows are stamped
+// with the current wall clock: dispatch backpressure counts in-flight
+// requests by updated_at recency, so fixed timestamps would silently expire.
+func newDispatcherReconcileFixture(t *testing.T, slug string, liveStatus string) dispatcherReconcileFixture {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	cycleID, err := store.StartCycle(ctx)
+	if err != nil {
+		t.Fatalf("start cycle: %v", err)
+	}
+	item := sources.Item{
+		ID:         "srcitem_" + slug + "_1",
+		SourceID:   "gdelt:15min",
+		SourceType: sources.SourceTypeGDELT,
+		Title:      slug + " item",
+		Region:     "global",
+	}
+	events := cycle.BuildIngestionEventsFromItems(cycleID, []sources.Item{item}, now)
+	if err := store.SaveIngestionEvents(ctx, events); err != nil {
+		t.Fatalf("save ingestion events: %v", err)
+	}
+	queued := cycle.ProcessorRequest{
+		RequestID:         "processor_" + slug + "_queue",
+		CycleID:           cycleID,
+		ProcessorKey:      "processor:global_firehose:global:gdelt",
+		Status:            "queued",
+		RuntimeStatus:     "queued",
+		SourceItemIDs:     []string{item.ID},
+		IngestionEventIDs: []string{events[0].EventID},
+		SourceCount:       1,
+		ContinuityRef:     "sourcecycled://processor/processor:global_firehose:global:gdelt/latest",
+		Prompt:            "Queued " + slug + " processor",
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+	live := cycle.ProcessorRequest{
+		RequestID:         "processor_" + slug + "_live",
+		CycleID:           cycleID,
+		ProcessorKey:      "processor:global_firehose:global:gdelt",
+		Status:            liveStatus,
+		RuntimeStatus:     "submitted",
+		RuntimeRunID:      "run-" + strings.ReplaceAll(slug, "_", "-") + "-live",
+		SourceItemIDs:     []string{"srcitem-live"},
+		IngestionEventIDs: []string{"ingestion-event-live"},
+		SourceCount:       1,
+		ContinuityRef:     "sourcecycled://processor/processor:global_firehose:global:gdelt/latest",
+		Prompt:            "Live " + slug + " processor",
+		CreatedAt:         now.Add(-time.Minute),
+		UpdatedAt:         now,
+	}
+	if err := store.SaveProcessorRequests(ctx, []cycle.ProcessorRequest{queued, live}); err != nil {
+		t.Fatalf("save processor requests: %v", err)
+	}
+	return dispatcherReconcileFixture{store: store, cycleID: cycleID, queued: queued, live: live}
+}
+
+// dispatcher returns the standard single-slot dispatcher pointed at the test
+// runtime server. The in-flight window must cover the fixture's row
+// timestamps: with the default zero window, backpressure only counts rows
+// updated at or after time.Now() and the fixture's rows would never qualify.
+func (f dispatcherReconcileFixture) dispatcher(server *httptest.Server) *ingestionRuntimeDispatcher {
+	return &ingestionRuntimeDispatcher{
+		baseURL:              server.URL,
+		ownerID:              "owner-universal-wire",
+		maxProcessorRequests: 1,
+		client:               server.Client(),
+		inFlightWindow:       time.Hour,
+	}
+}
+
+func (f dispatcherReconcileFixture) requestsByID(t *testing.T, ctx context.Context) map[string]cycle.ProcessorRequest {
+	t.Helper()
+	processors, err := f.store.ListProcessorRequests(ctx, f.cycleID, 10)
+	if err != nil {
+		t.Fatalf("list processors: %v", err)
+	}
+	byID := map[string]cycle.ProcessorRequest{}
+	for _, req := range processors {
+		byID[req.RequestID] = req
+	}
+	return byID
+}
+
+func TestIngestionRuntimeDispatcherKeepsRuntimeSubmittedRequestsInFlightAfterVerdictCompletion(t *testing.T) {
+	ctx := context.Background()
+	fx := newDispatcherReconcileFixture(t, "budget", "completed")
+
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/runtime/runs/"):
+			writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+				RunID:   path.Base(r.URL.Path),
+				AgentID: "processor:agent",
+				State:   "running",
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			t.Fatalf("unexpected processor submission while runtime_status=request submitted remains in flight")
+		default:
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer runtimeServer.Close()
+
+	result := fx.dispatcher(runtimeServer).dispatch(ctx, fx.store, cycle.IngestionHandoff{})
+	if result.ProcessorSubmitted != 0 || result.ProcessorSkipped != 1 {
+		t.Fatalf("unexpected dispatch result: %+v", result)
+	}
+
+	statusByID := fx.requestsByID(t, ctx)
+	if statusByID[fx.live.RequestID].Status != "completed" || statusByID[fx.live.RequestID].RuntimeStatus != "submitted" {
+		t.Fatalf("live request runtime/verdict split lost: %+v", statusByID[fx.live.RequestID])
+	}
+	if statusByID[fx.queued.RequestID].Status != "queued" || statusByID[fx.queued.RequestID].RuntimeStatus != "queued" {
+		t.Fatalf("queued request changed unexpectedly: %+v", statusByID[fx.queued.RequestID])
+	}
+}
+
+func TestIngestionRuntimeDispatcherProjectsPublishedCorpusCoverageWithoutReleasingBudget(t *testing.T) {
+	ctx := context.Background()
+	fx := newDispatcherReconcileFixture(t, "coverage", "submitted")
+
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/runtime/runs/"):
+			writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+				RunID:   path.Base(r.URL.Path),
+				AgentID: "processor:agent",
+				State:   "running",
+				Trajectory: &runtimeTrajectoryStatusResponse{
+					TrajectoryID:      "traj-coverage-live",
+					Status:            "cancelled",
+					SettlementReady:   false,
+					OpenWorkItemCount: 0,
+				},
+				ProcessorResolution: &runtimeProcessorResolutionStatusResponse{
+					WorkItemID:              "work-coverage-live",
+					Status:                  "completed",
+					ResolutionState:         "all_source_items_suppressed_against_published_corpus",
+					SourceItemCount:         1,
+					ResolvedSourceItemCount: 1,
+					LastDecision:            "already_covered",
+					CoveredByDocID:          "doc-covered-live",
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			t.Fatalf("unexpected processor submission while runtime_status submitted still occupies the slot")
+		default:
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer runtimeServer.Close()
+
+	result := fx.dispatcher(runtimeServer).dispatch(ctx, fx.store, cycle.IngestionHandoff{})
+	if result.ProcessorSubmitted != 0 || result.ProcessorSkipped != 1 {
+		t.Fatalf("unexpected dispatch result: %+v", result)
+	}
+
+	statusByID := fx.requestsByID(t, ctx)
+	if statusByID[fx.live.RequestID].Status != "completed" || statusByID[fx.live.RequestID].RuntimeStatus != "submitted" {
+		t.Fatalf("coverage live request projection wrong: %+v", statusByID[fx.live.RequestID])
+	}
+	if statusByID[fx.queued.RequestID].Status != "queued" || statusByID[fx.queued.RequestID].RuntimeStatus != "queued" {
+		t.Fatalf("queued request changed unexpectedly: %+v", statusByID[fx.queued.RequestID])
+	}
+}
+
+func TestIngestionRuntimeDispatcherProjectsExplicitNoStoryTerminalWithoutReleasingBudget(t *testing.T) {
+	ctx := context.Background()
+	fx := newDispatcherReconcileFixture(t, "no_story", "submitted")
+
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/runtime/runs/"):
+			writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+				RunID:   path.Base(r.URL.Path),
+				AgentID: "processor:agent",
+				State:   "running",
+				Trajectory: &runtimeTrajectoryStatusResponse{
+					TrajectoryID:      "traj-no-story-live",
+					Status:            "cancelled",
+					SettlementReady:   false,
+					OpenWorkItemCount: 0,
+				},
+				ProcessorResolution: &runtimeProcessorResolutionStatusResponse{
+					WorkItemID:              "work-no-story-live",
+					Status:                  "completed",
+					ResolutionState:         "all_source_items_decided_without_story_route",
+					SourceItemCount:         1,
+					ResolvedSourceItemCount: 1,
+					LastDecision:            "not_newsworthy",
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			t.Fatalf("unexpected processor submission while runtime_status submitted still occupies the slot")
+		default:
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer runtimeServer.Close()
+
+	result := fx.dispatcher(runtimeServer).dispatch(ctx, fx.store, cycle.IngestionHandoff{})
+	if result.ProcessorSubmitted != 0 || result.ProcessorSkipped != 1 {
+		t.Fatalf("unexpected dispatch result: %+v", result)
+	}
+
+	statusByID := fx.requestsByID(t, ctx)
+	if statusByID[fx.live.RequestID].Status != "completed" || statusByID[fx.live.RequestID].RuntimeStatus != "submitted" {
+		t.Fatalf("explicit no-story live request projection wrong: %+v", statusByID[fx.live.RequestID])
+	}
+	if statusByID[fx.queued.RequestID].Status != "queued" || statusByID[fx.queued.RequestID].RuntimeStatus != "queued" {
+		t.Fatalf("queued request changed unexpectedly: %+v", statusByID[fx.queued.RequestID])
+	}
+}
+
+func TestIngestionRuntimeDispatcherProjectsSettledTrajectoryWithoutWaitingForRunTree(t *testing.T) {
+	ctx := context.Background()
+	fx := newDispatcherReconcileFixture(t, "settled", "submitted")
+
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/runtime/runs/"):
+			writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+				RunID:           path.Base(r.URL.Path),
+				AgentID:         "processor:agent",
+				State:           "running",
+				ActiveChildRuns: 2,
+				Trajectory: &runtimeTrajectoryStatusResponse{
+					TrajectoryID:      "traj-settled-live",
+					Status:            "settled",
+					SettlementReady:   false,
+					OpenWorkItemCount: 0,
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			t.Fatalf("unexpected processor submission while runtime_status submitted still occupies the slot")
+		default:
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer runtimeServer.Close()
+
+	result := fx.dispatcher(runtimeServer).dispatch(ctx, fx.store, cycle.IngestionHandoff{})
+	if result.ProcessorSubmitted != 0 || result.ProcessorSkipped != 1 {
+		t.Fatalf("unexpected dispatch result: %+v", result)
+	}
+
+	statusByID := fx.requestsByID(t, ctx)
+	if statusByID[fx.live.RequestID].Status != "completed" || statusByID[fx.live.RequestID].RuntimeStatus != "submitted" {
+		t.Fatalf("settled live request projection wrong: %+v", statusByID[fx.live.RequestID])
+	}
+	if statusByID[fx.queued.RequestID].Status != "queued" || statusByID[fx.queued.RequestID].RuntimeStatus != "queued" {
+		t.Fatalf("queued request changed unexpectedly: %+v", statusByID[fx.queued.RequestID])
+	}
+}
+
+func TestIngestionRuntimeDispatcherMarksDeferredBranchWithoutRepollingForever(t *testing.T) {
+	ctx := context.Background()
+	fx := newDispatcherReconcileFixture(t, "deferred", "submitted")
+
+	var deferredPolls int
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/runtime/runs/"):
+			runID := path.Base(r.URL.Path)
+			switch runID {
+			case fx.live.RuntimeRunID:
+				deferredPolls++
+				writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+					RunID:   runID,
+					AgentID: "processor:deferred",
+					State:   "completed",
+					Trajectory: &runtimeTrajectoryStatusResponse{
+						TrajectoryID:      "traj-deferred-live",
+						Status:            "live",
+						SettlementReady:   false,
+						OpenWorkItemCount: 1,
+					},
+					ProcessorResolution: &runtimeProcessorResolutionStatusResponse{
+						WorkItemID:              "work-deferred-live",
+						Status:                  "open",
+						ResolutionState:         "all_source_items_deferred_without_story_route",
+						SourceItemCount:         1,
+						ResolvedSourceItemCount: 1,
+						LastDecision:            "deferred",
+					},
+				})
+			case "run-deferred-queued":
+				writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+					RunID:   runID,
+					AgentID: "processor:queued",
+					State:   "running",
+				})
+			default:
+				t.Fatalf("unexpected runtime status run %s", runID)
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{
+				RunID:        "run-deferred-queued",
+				AgentID:      "processor:queued",
+				AgentProfile: "processor",
+				AgentRole:    "processor",
+				State:        "pending",
+			})
+		default:
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer runtimeServer.Close()
+
+	dispatcher := fx.dispatcher(runtimeServer)
+
+	first := dispatcher.dispatch(ctx, fx.store, cycle.IngestionHandoff{})
+	if first.ProcessorSubmitted != 1 {
+		t.Fatalf("first dispatch should submit queued request after deferred runtime releases capacity: %+v", first)
+	}
+	byID := fx.requestsByID(t, ctx)
+	if got := byID[fx.live.RequestID]; got.Status != "deferred" || got.RuntimeStatus != "completed" {
+		t.Fatalf("live deferred request after first dispatch = %+v, want deferred verdict + completed runtime", got)
+	}
+	if got := byID[fx.queued.RequestID]; got.Status != "submitted" || got.RuntimeStatus != "submitted" || got.RuntimeRunID != "run-deferred-queued" {
+		t.Fatalf("queued request after first dispatch = %+v, want submitted/submitted with runtime run id", got)
+	}
+
+	second := dispatcher.dispatch(ctx, fx.store, cycle.IngestionHandoff{})
+	if second.ProcessorSubmitted != 0 {
+		t.Fatalf("second dispatch should not submit more work: %+v", second)
+	}
+	byID = fx.requestsByID(t, ctx)
+	if got := byID[fx.live.RequestID]; got.Status != "deferred" || got.RuntimeStatus != "completed" {
+		t.Fatalf("live deferred request after second dispatch = %+v, want deferred verdict + completed runtime", got)
+	}
+	if deferredPolls != 1 {
+		t.Fatalf("deferred run should stop being repolled once request leaves submitted; deferredPolls=%d", deferredPolls)
+	}
+}
+
+func TestIngestionRuntimeDispatcherKeepsPollingSubmittedVerdictAfterRuntimeCompletes(t *testing.T) {
+	ctx := context.Background()
+	fx := newDispatcherReconcileFixture(t, "settlement", "submitted")
+
+	var livePolls int
+	var submissions int
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/runtime/runs/"):
+			runID := path.Base(r.URL.Path)
+			switch runID {
+			case fx.live.RuntimeRunID:
+				livePolls++
+				settled := livePolls >= 2
+				activeChildren, openItems, trajStatus := 2, 1, "live"
+				if settled {
+					activeChildren, openItems, trajStatus = 1, 0, "settled"
+				}
+				writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+					RunID:           runID,
+					AgentID:         "processor:settlement",
+					State:           "completed",
+					ActiveChildRuns: activeChildren,
+					Trajectory: &runtimeTrajectoryStatusResponse{
+						TrajectoryID:      "traj-settlement-live",
+						Status:            trajStatus,
+						SettlementReady:   false,
+						OpenWorkItemCount: openItems,
+					},
+				})
+			case "run-queued-submitted":
+				writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+					RunID:   runID,
+					AgentID: "processor:queued",
+					State:   "running",
+				})
+			default:
+				t.Fatalf("unexpected runtime status run %s", runID)
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			submissions++
+			writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{
+				RunID:        "run-queued-submitted",
+				AgentID:      "processor:queued",
+				AgentProfile: "processor",
+				AgentRole:    "processor",
+				State:        "pending",
+			})
+		default:
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer runtimeServer.Close()
+
+	dispatcher := fx.dispatcher(runtimeServer)
+
+	first := dispatcher.dispatch(ctx, fx.store, cycle.IngestionHandoff{})
+	if first.ProcessorSubmitted != 1 {
+		t.Fatalf("first dispatch should submit queued request after runtime capacity releases: %+v", first)
+	}
+	byID := fx.requestsByID(t, ctx)
+	if got := byID[fx.live.RequestID]; got.Status != "submitted" || got.RuntimeStatus != "completed" {
+		t.Fatalf("live request after first dispatch = %+v, want submitted verdict + completed runtime", got)
+	}
+	if got := byID[fx.queued.RequestID]; got.Status != "submitted" || got.RuntimeStatus != "submitted" || got.RuntimeRunID != "run-queued-submitted" {
+		t.Fatalf("queued request after first dispatch = %+v, want submitted/submitted with runtime run id", got)
+	}
+
+	second := dispatcher.dispatch(ctx, fx.store, cycle.IngestionHandoff{})
+	if second.ProcessorSubmitted != 0 {
+		t.Fatalf("second dispatch should not submit more work: %+v", second)
+	}
+	byID = fx.requestsByID(t, ctx)
+	if got := byID[fx.live.RequestID]; got.Status != "completed" || got.RuntimeStatus != "completed" {
+		t.Fatalf("live request after second dispatch = %+v, want completed verdict + completed runtime", got)
+	}
+	if livePolls < 2 {
+		t.Fatalf("live request was not repolled after runtime completion; livePolls=%d submissions=%d", livePolls, submissions)
+	}
+}
+
+func TestIngestionRuntimeDispatcherStopsReadingActiveChildRunsForCompletedProcessorCapacity(t *testing.T) {
+	ctx := context.Background()
+	fx := newDispatcherReconcileFixture(t, "childrun_capacity", "submitted")
+
+	var submissions int
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/runtime/runs/"):
+			runID := path.Base(r.URL.Path)
+			switch runID {
+			case fx.live.RuntimeRunID:
+				writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+					RunID:           runID,
+					AgentID:         "processor:childrun-capacity",
+					State:           "running",
+					ActiveChildRuns: 3,
+					Trajectory: &runtimeTrajectoryStatusResponse{
+						TrajectoryID:      "traj-childrun-capacity-live",
+						Status:            "live",
+						SettlementReady:   false,
+						OpenWorkItemCount: 1,
+					},
+					ProcessorResolution: &runtimeProcessorResolutionStatusResponse{
+						WorkItemID:              "work-childrun-capacity-live",
+						Status:                  "completed",
+						ResolutionState:         "all_source_items_decided_with_story_route",
+						SourceItemCount:         1,
+						ResolvedSourceItemCount: 1,
+						LastDecision:            "opened_vtext",
+						StoryDocID:              "doc-childrun-capacity-live",
+					},
+				})
+			case "run-childrun-capacity-queued":
+				writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+					RunID:   runID,
+					AgentID: "processor:queued",
+					State:   "running",
+				})
+			default:
+				t.Fatalf("unexpected runtime status run %s", runID)
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			submissions++
+			writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{
+				RunID:        "run-childrun-capacity-queued",
+				AgentID:      "processor:queued",
+				AgentProfile: "processor",
+				AgentRole:    "processor",
+				State:        "pending",
+			})
+		default:
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer runtimeServer.Close()
+
+	result := fx.dispatcher(runtimeServer).dispatch(ctx, fx.store, cycle.IngestionHandoff{})
+	if result.ProcessorSubmitted != 1 {
+		t.Fatalf("dispatch should submit queued request once completed processor-resolution frees capacity despite active children: %+v", result)
+	}
+
+	byID := fx.requestsByID(t, ctx)
+	if got := byID[fx.live.RequestID]; got.Status != "submitted" || got.RuntimeStatus != "completed" {
+		t.Fatalf("live request after dispatch = %+v, want submitted verdict + completed runtime", got)
+	}
+	if got := byID[fx.queued.RequestID]; got.Status != "submitted" || got.RuntimeStatus != "submitted" || got.RuntimeRunID != "run-childrun-capacity-queued" {
+		t.Fatalf("queued request after dispatch = %+v, want submitted/submitted with runtime run id", got)
+	}
+	if submissions != 1 {
+		t.Fatalf("queued request should have submitted exactly once; submissions=%d", submissions)
+	}
+}
+
+func TestIngestionRuntimeDispatcherStoryRouteCapacityReleaseAlignsWithRuntimeAdmission(t *testing.T) {
+	ctx := context.Background()
+	fx := newDispatcherReconcileFixture(t, "story_route_429", "submitted")
+
+	var submissions int
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/runtime/runs/"):
+			writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+				RunID:           path.Base(r.URL.Path),
+				AgentID:         "processor:story-route-429",
+				State:           "running",
+				ActiveChildRuns: 2,
+				Trajectory: &runtimeTrajectoryStatusResponse{
+					TrajectoryID:      "traj-story-route-429-live",
+					Status:            "live",
+					SettlementReady:   false,
+					OpenWorkItemCount: 1,
+				},
+				ProcessorResolution: &runtimeProcessorResolutionStatusResponse{
+					WorkItemID:              "work-story-route-429-live",
+					Status:                  "completed",
+					ResolutionState:         "all_source_items_decided_with_story_route",
+					SourceItemCount:         1,
+					ResolvedSourceItemCount: 1,
+					LastDecision:            "opened_vtext",
+					StoryDocID:              "doc-story-route-429-live",
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			submissions++
+			writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{
+				RunID:        "run-story-route-429-queued",
+				AgentID:      "processor:queued",
+				AgentProfile: "processor",
+				AgentRole:    "processor",
+				State:        "pending",
+			})
+		default:
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer runtimeServer.Close()
+
+	result := fx.dispatcher(runtimeServer).dispatch(ctx, fx.store, cycle.IngestionHandoff{})
+	if result.ProcessorSubmitted != 1 {
+		t.Fatalf("dispatch should submit queued request once runtime admission aligns with story-route release: %+v", result)
+	}
+	if len(result.Errors) != 0 {
+		t.Fatalf("dispatch errors = %+v, want none", result.Errors)
+	}
+
+	byID := fx.requestsByID(t, ctx)
+	if got := byID[fx.live.RequestID]; got.Status != "submitted" || got.RuntimeStatus != "completed" {
+		t.Fatalf("live request after dispatch = %+v, want submitted verdict + completed runtime", got)
+	}
+	if got := byID[fx.queued.RequestID]; got.Status != "submitted" || got.RuntimeStatus != "submitted" || got.RuntimeRunID != "run-story-route-429-queued" {
+		t.Fatalf("queued request after dispatch = %+v, want submitted/submitted with runtime run id", got)
+	}
+	if submissions != 1 {
+		t.Fatalf("queued request should have submitted exactly once; submissions=%d", submissions)
 	}
 }

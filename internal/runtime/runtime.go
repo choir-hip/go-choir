@@ -13,10 +13,11 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
+	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
 // Runtime is the core runtime engine that manages run lifecycle, event
@@ -47,18 +48,18 @@ type Runtime struct {
 	wirePublishDebouncer  *wirePublishDebouncer
 	wirePublishTimer      vtextWakeTimer
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishVTextResponse, error)
-	vtextEditMu      sync.Mutex
-	superRequestMu   sync.Mutex
-	childSpawnMu     sync.Mutex
-	workerRequestMu  sync.Mutex
-	workerRequests   map[string]string
-	conductorRouteMu sync.Mutex
-	browserOpMu      sync.Mutex
-	browserOps       map[string]*sync.Mutex
-	browserCDPMu     sync.Mutex
-	browserCDP       map[string]*browserCDPSession
-	modelPolicyMu    sync.Mutex
-	modelPolicies    map[string]ModelPolicy
+	vtextEditMu           sync.Mutex
+	superRequestMu        sync.Mutex
+	childSpawnMu          sync.Mutex
+	workerRequestMu       sync.Mutex
+	workerRequests        map[string]string
+	conductorRouteMu      sync.Mutex
+	browserOpMu           sync.Mutex
+	browserOps            map[string]*sync.Mutex
+	browserCDPMu          sync.Mutex
+	browserCDP            map[string]*browserCDPSession
+	modelPolicyMu         sync.Mutex
+	modelPolicies         map[string]ModelPolicy
 }
 
 type vtextWakeTimer interface {
@@ -412,6 +413,14 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 
 	if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt)); err != nil {
 		return nil, err
+	}
+	if canonicalAgentProfile(agentProfileForRun(rec)) == AgentProfileProcessor {
+		if _, err := rt.beginWireProcessorDecisionWorkItem(ctx, rec); err != nil {
+			log.Printf("runtime: wire processor decision work item run=%s: %v", rec.RunID, err)
+		}
+		if err := rt.beginWireProcessorSourceDecisionWorkItems(ctx, rec); err != nil {
+			log.Printf("runtime: wire processor source decision work items run=%s: %v", rec.RunID, err)
+		}
 	}
 	if shouldLogWireLifecycle(rec) {
 		log.Printf("runtime: submitted %s", wireLifecycleSummary(rec))
@@ -948,7 +957,11 @@ func (rt *Runtime) RunningCount() int {
 	return len(rt.running)
 }
 
-// ToolRegistry returns the runtime's tool registry, or nil if none is configured.
+// RunningCountByProfile returns the number of running runs with the given
+// agent profile that still occupy admission capacity. Note: for processors
+// this issues one FindWorkItemByFingerprint per running run (an N+1 against
+// the work-item table; acceptable at current run volumes), and any lookup
+// error silently defaults to "occupies admission" — the conservative side.
 func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) int {
 	runs, err := rt.store.ListRunsByState(ctx, types.RunRunning, 1000)
 	if err != nil {
@@ -958,13 +971,40 @@ func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) in
 	profile = canonicalAgentProfile(profile)
 	count := 0
 	for i := range runs {
-		if canonicalAgentProfile(runs[i].AgentProfile) == profile {
-			count++
+		if canonicalAgentProfile(runs[i].AgentProfile) != profile {
+			continue
 		}
+		if profile == AgentProfileProcessor && !rt.processorRunOccupiesAdmission(ctx, runs[i]) {
+			continue
+		}
+		count++
 	}
 	return count
 }
 
+func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.RunRecord) bool {
+	if rt == nil || rt.store == nil {
+		return true
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	trajectoryID := strings.TrimSpace(trajectoryIDForRun(&rec))
+	if ownerID == "" || trajectoryID == "" {
+		return true
+	}
+	item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireProcessorDecisionWorkItemFingerprint(trajectoryID))
+	if err != nil || !found {
+		return true
+	}
+	if item.Status != types.WorkItemCompleted {
+		return true
+	}
+	if strings.EqualFold(metadataStringValue(item.Details, wireDetailKeyResolutionState), sourceapi.ResolutionStateDecidedWithStoryRoute) {
+		return false
+	}
+	return true
+}
+
+// ToolRegistry returns the runtime's tool registry, or nil if none is configured.
 func (rt *Runtime) ToolRegistry() *ToolRegistry {
 	return rt.toolRegistry
 }
@@ -1184,7 +1224,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	if shouldLogWireLifecycle(rec) {
 		preview := rec.Result
-		if len(preview) > 160 { preview = preview[:160] }
+		if len(preview) > 160 {
+			preview = preview[:160]
+		}
 		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
 	}
 	rt.reconcileCompletedVTextRun(rec)

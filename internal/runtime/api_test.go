@@ -17,13 +17,13 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // --- Task Submission Tests ---
 
 func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Draft a research plan"}`, "user-alice")
@@ -69,8 +69,24 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	if decision.Action != "open_app" || decision.App != AgentProfileVText || decision.DocID == "" {
 		t.Fatalf("prompt-bar decision = %+v, want immediate vtext route", decision)
 	}
-	if !strings.Contains(decision.InitialContent, "Draft a research plan") {
-		t.Fatalf("initial_content = %q, want prompt-derived content", decision.InitialContent)
+	// Materialized vtext routes no longer carry initial_content; the prompt
+	// is preserved as the document's durable user revision instead.
+	if decision.InitialContent != "" {
+		t.Fatalf("initial_content = %q, want empty (prompt lives in the user revision)", decision.InitialContent)
+	}
+	doc, err := rt.store.GetDocument(context.Background(), decision.DocID, "user-alice")
+	if err != nil {
+		t.Fatalf("get materialized document: %v", err)
+	}
+	if doc.CurrentRevisionID == "" {
+		t.Fatalf("materialized document has no current revision: %+v", doc)
+	}
+	rev, err := rt.store.GetRevision(context.Background(), doc.CurrentRevisionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get seed prompt revision: %v", err)
+	}
+	if !strings.Contains(rev.Content, "Draft a research plan") {
+		t.Fatalf("seed revision content = %q, want prompt-derived content", rev.Content)
 	}
 
 	statusReq := authenticatedRequest(http.MethodGet, "/api/prompt-bar/submissions/"+resp.SubmissionID, "", "user-alice")
@@ -96,6 +112,7 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 }
 
 func TestPromptBarSubmissionDoesNotActivateIngestionEvent(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Write a Universal Wire story about AI policy"}`, "user-alice")
@@ -135,6 +152,7 @@ func TestPromptBarSubmissionDoesNotActivateIngestionEvent(t *testing.T) {
 }
 
 func TestHandlePromptBarRejectsBrowserRuntimeMetadata(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	body := `{"text":"do work","metadata":{"agent_profile":"super"},"agent_role":"super","model":"x"}`
@@ -149,6 +167,7 @@ func TestHandlePromptBarRejectsBrowserRuntimeMetadata(t *testing.T) {
 }
 
 func TestHandleModelPolicyResolveUsesOverlayFile(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
 	overlayDir := filepath.Join(filepath.Dir(policyPath), "model-policy-overlays")
@@ -208,6 +227,7 @@ reasoning = "medium"
 }
 
 func TestHandleCompactionRecallEvalStartsResearcherWithOverlayAndFrozenContent(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
 	overlayDir := filepath.Join(filepath.Dir(policyPath), "model-policy-overlays")
@@ -334,6 +354,7 @@ reasoning = "low"
 }
 
 func TestCompactionRecallEvalStatusAssessesCoverageAndAnswerContract(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	rec := createCompletedCompactionRecallEvalRunForTest(t, rt, "weak-eval-run", "Ready for final synthesis if you want it.", 3)
 	emitSelectorReadResultsForTest(rt, &rec, 2)
@@ -361,6 +382,7 @@ func TestCompactionRecallEvalStatusAssessesCoverageAndAnswerContract(t *testing.
 }
 
 func TestCompactionRecallEvalContinueStartsResearcherWithOverlay(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	rec := createCompletedCompactionRecallEvalRunForTest(t, rt, "continue-eval-run", "I'm ready for the concise final synthesis if you want it.", 3)
 	emitSelectorReadResultsForTest(rt, &rec, 3)
@@ -467,6 +489,7 @@ func containsReasonSubstring(reasons []string, want string) bool {
 }
 
 func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	ctx := context.Background()
 	seedRunAcceptanceTrajectory(t, rt)
@@ -547,6 +570,7 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 }
 
 func TestRunAcceptanceSynthesizeCountsTimedOutDelegateWithReviewableExport(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	seedRunAcceptanceExportedTimeoutTrajectory(t, rt)
 
@@ -575,6 +599,7 @@ func TestRunAcceptanceSynthesizeCountsTimedOutDelegateWithReviewableExport(t *te
 }
 
 func TestRunAcceptanceSynthesizeAcceptsSourcePackageWithoutRecipientAdoption(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	seedRunAcceptanceSourcePackageOnlyTrajectory(t, rt)
 
@@ -606,6 +631,7 @@ func TestRunAcceptanceSynthesizeAcceptsSourcePackageWithoutRecipientAdoption(t *
 }
 
 func TestRunAcceptanceSynthesizeAcceptsRuntimeSupervisionWithoutAppPackage(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	seedRunAcceptanceRuntimeSupervisionTrajectory(t, rt)
 
@@ -639,6 +665,7 @@ func TestRunAcceptanceSynthesizeAcceptsRuntimeSupervisionWithoutAppPackage(t *te
 }
 
 func TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	seedRunAcceptanceBlockedDelegationTrajectory(t, rt)
 
@@ -682,6 +709,7 @@ func TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker(t *testing.T) {
 }
 
 func TestRunAcceptanceSynthesizePreservesStructuredFailedAndPendingDelegateEvidence(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	seedRunAcceptanceBlockedDelegationTrajectory(t, rt)
 	now := time.Now().UTC()
@@ -754,6 +782,7 @@ func TestRunAcceptanceSynthesizePreservesStructuredFailedAndPendingDelegateEvide
 }
 
 func TestRunAcceptanceSynthesizeRecordsPendingWorkerDelegateInvocation(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	seedRunAcceptancePendingDelegationTrajectory(t, rt)
 
@@ -788,6 +817,7 @@ func TestRunAcceptanceSynthesizeRecordsPendingWorkerDelegateInvocation(t *testin
 }
 
 func TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	seedRunAcceptanceTrajectory(t, rt)
 
@@ -843,6 +873,7 @@ func TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel(t *te
 }
 
 func TestRunAcceptanceSynthesizeAcceptsDirectProductAdoptionEvidence(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	now := time.Now().UTC()
 	for i, ev := range []types.EventRecord{
@@ -1777,6 +1808,7 @@ func acceptanceCheckpoint(rec types.RunAcceptanceRecord, kind, state string) *ty
 }
 
 func TestBrowserCapabilitiesRequireAuthAndReportUnavailable(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	unauth := authenticatedRequest(http.MethodGet, "/api/browser/capabilities", "", "")
@@ -1814,6 +1846,7 @@ func TestBrowserCapabilitiesRequireAuthAndReportUnavailable(t *testing.T) {
 }
 
 func TestBrowserCapabilitiesDetectConfiguredObscuraBinary(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "obscura")
@@ -1847,6 +1880,7 @@ func TestBrowserCapabilitiesDetectConfiguredObscuraBinary(t *testing.T) {
 }
 
 func TestBrowserCapabilitiesReportOptInCDPScreenshotSubstrate(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "obscura")
@@ -1878,6 +1912,7 @@ func TestBrowserCapabilitiesReportOptInCDPScreenshotSubstrate(t *testing.T) {
 }
 
 func TestBrowserSessionsNavigateThroughOwnerScopedBackendSnapshot(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "obscura")
@@ -1995,6 +2030,7 @@ fi
 }
 
 func TestBrowserSessionRejectsDirectWorldBinding(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 	forged := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{"vm_id":"vm-forged"}`, "user-alice")
 	if forged.Code != http.StatusBadRequest {
@@ -2003,6 +2039,7 @@ func TestBrowserSessionRejectsDirectWorldBinding(t *testing.T) {
 }
 
 func TestBrowserSessionNavigateKeepsTextWhenOptionalSnapshotDumpsFail(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "obscura")
@@ -2081,6 +2118,7 @@ exit 2
 }
 
 func TestBrowserSessionNavigateUsesHTMLFallbackWhenTextSnapshotEmpty(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "obscura")
@@ -2160,6 +2198,7 @@ fi
 }
 
 func TestBrowserSessionNavigateUsesDeclaredMarkdownAlternateWhenHTMLFallbackLowContent(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	rt, handler := testAPISetup(t)
 	markdown := strings.Repeat("Similarity search article text recovered from the declared Markdown alternate. ", 10)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2247,6 +2286,7 @@ fi
 }
 
 func TestBrowserSessionNavigateUsesDeclaredMarkdownAlternateFromCanonicalShell(t *testing.T) {
+	allowPrivateSourceFetchForTest(t)
 	rt, handler := testAPISetup(t)
 	markdown := strings.Repeat("Similarity search article text recovered from the canonical page Markdown alternate. ", 10)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2331,6 +2371,7 @@ func serverURLFromRequest(r *http.Request) string {
 }
 
 func TestBrowserSessionNavigateFailsWhenTextSnapshotFails(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "obscura")
@@ -2383,6 +2424,7 @@ printf 'optional artifact should not matter\n'
 }
 
 func TestBrowserSessionNavigateFailsClosedWhenBackendUnavailable(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
@@ -2418,6 +2460,7 @@ func TestBrowserSessionNavigateFailsClosedWhenBackendUnavailable(t *testing.T) {
 }
 
 func TestBrowserSessionCloseIsOwnerScopedIdempotentAndPreventsNavigation(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "obscura")
@@ -2487,6 +2530,7 @@ esac
 }
 
 func TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	cases := []struct {
@@ -2516,6 +2560,7 @@ func TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs(t *testing.T) {
 }
 
 func TestRegisteredPromptBarRouteAcceptsIntentOnly(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	ok := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/prompt-bar", `{"text":"build a document"}`, "user-alice")
@@ -2530,6 +2575,7 @@ func TestRegisteredPromptBarRouteAcceptsIntentOnly(t *testing.T) {
 }
 
 func TestRunContinuationPublicSelectListAndStartAreOwnerScoped(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	source, err := rt.StartRunWithMetadata(context.Background(), "finish controller API source", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileSuper,
@@ -2620,6 +2666,7 @@ func TestRunContinuationPublicSelectListAndStartAreOwnerScoped(t *testing.T) {
 }
 
 func TestInternalRuntimeRunRoutesRequireInternalCallerAndConstrainProfiles(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	body := `{"owner_id":"user-alice","prompt":"do worker work","metadata":{"agent_profile":"co-super"}}`
@@ -2692,7 +2739,249 @@ func TestInternalRuntimeRunRoutesRequireInternalCallerAndConstrainProfiles(t *te
 	}
 }
 
+func TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolutionCompletes(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	t.Setenv("RUNTIME_MAX_PROCESSOR_RUNS", "1")
+
+	rec, err := rt.createRunWithMetadata(context.Background(), "route a story to vtext", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileProcessor,
+		runMetadataAgentRole:    AgentProfileProcessor,
+		runMetadataProcessorKey: "processor:global_firehose:global:gdelt",
+		"source_item_ids":       []string{"source-item-1"},
+		"source_count":          1,
+	})
+	if err != nil {
+		t.Fatalf("create processor run: %v", err)
+	}
+	if _, err := rt.ensureCoagentVTextRevisionRoute(context.Background(), rec, coagentVTextRouteRequest{
+		CallerProfile: AgentProfileProcessor,
+		Role:          AgentProfileVText,
+		Profile:       AgentProfileVText,
+		Objective:     "Draft the article.",
+		Title:         "Wire Story",
+		SourceItemIDs: []string{"source-item-1"},
+	}); err != nil {
+		t.Fatalf("ensure processor vtext route: %v", err)
+	}
+
+	requestItem, found, err := rt.Store().FindWorkItemByFingerprint(context.Background(), "user-alice", rec.TrajectoryID, wireProcessorDecisionWorkItemFingerprint(rec.TrajectoryID))
+	if err != nil {
+		t.Fatalf("find processor request work item: %v", err)
+	}
+	if !found {
+		t.Fatal("processor request work item missing")
+	}
+	if requestItem.Status != types.WorkItemCompleted || requestItem.Details["resolution_state"] != "all_source_items_decided_with_story_route" {
+		t.Fatalf("processor request work item = %+v, want completed story-route resolution", requestItem)
+	}
+
+	rec.State = types.RunRunning
+	rec.UpdatedAt = time.Now().UTC()
+	if err := rt.Store().UpdateRun(context.Background(), *rec); err != nil {
+		t.Fatalf("mark processor run running: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/internal/runtime/runs", strings.NewReader(`{"owner_id":"user-alice","prompt":"ingest next source handoff","metadata":{"agent_profile":"processor","processor_key":"processor:global_firehose:global:gdelt"}}`))
+	req.Header.Set("X-Internal-Caller", "true")
+	w := httptest.NewRecorder()
+	handler.HandleInternalRunSubmission(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("processor internal runtime status = %d, want 202; body=%s", w.Code, w.Body.String())
+	}
+	var resp runStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode processor internal run response: %v", err)
+	}
+	if resp.AgentProfile != AgentProfileProcessor || resp.AgentID != "processor:processor-global_firehose-global-gdelt" {
+		t.Fatalf("unexpected processor internal run response: %+v", resp)
+	}
+}
+
+func TestHandleInternalRunStatusIncludesTrajectoryObligations(t *testing.T) {
+	t.Parallel()
+	rt, handler := testAPISetup(t)
+
+	rec, err := rt.StartRunWithMetadata(context.Background(), "ingest source handoff", "user-alice", map[string]any{
+		runMetadataAgentProfile:        AgentProfileProcessor,
+		runMetadataAgentRole:           AgentProfileProcessor,
+		"ingestion_handoff_request_id": "processor-request-status",
+		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
+		"source_item_ids":              []string{"source-item-1"},
+		"source_count":                 1,
+		"source_network_request_id":    "source-request-status",
+	})
+	if err != nil {
+		t.Fatalf("start processor run: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/runtime/runs/"+rec.RunID+"?owner_id=user-alice", nil)
+	req.Header.Set("X-Internal-Caller", "true")
+	w := httptest.NewRecorder()
+	handler.HandleInternalRunStatus(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("internal run status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+
+	var resp runStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode internal run status: %v", err)
+	}
+	if resp.Trajectory == nil {
+		t.Fatal("internal run status trajectory is nil")
+	}
+	if resp.Trajectory.TrajectoryID != rec.TrajectoryID {
+		t.Fatalf("trajectory_id = %q, want %q", resp.Trajectory.TrajectoryID, rec.TrajectoryID)
+	}
+	if resp.Trajectory.Status != types.TrajectoryLive {
+		t.Fatalf("trajectory status = %q, want %q", resp.Trajectory.Status, types.TrajectoryLive)
+	}
+	if resp.Trajectory.SettlementReady {
+		t.Fatalf("trajectory unexpectedly settlement-ready: %+v", resp.Trajectory)
+	}
+	if resp.Trajectory.OpenWorkItemCount == 0 {
+		t.Fatalf("trajectory open work item count = 0, want > 0")
+	}
+	if len(resp.Trajectory.WaitingOn) == 0 {
+		t.Fatalf("trajectory waiting_on empty, want obligations")
+	}
+	if resp.ProcessorResolution == nil {
+		t.Fatal("internal run status processor_resolution is nil")
+	}
+	if resp.ProcessorResolution.Status != types.WorkItemOpen {
+		t.Fatalf("processor resolution status = %q, want %q", resp.ProcessorResolution.Status, types.WorkItemOpen)
+	}
+	if resp.ProcessorResolution.ResolutionState != "awaiting_source_item_decisions" {
+		t.Fatalf("processor resolution_state = %q, want awaiting_source_item_decisions", resp.ProcessorResolution.ResolutionState)
+	}
+	if resp.ProcessorResolution.SourceItemCount != 1 || resp.ProcessorResolution.ResolvedSourceItemCount != 0 {
+		t.Fatalf("processor resolution counts = %+v", resp.ProcessorResolution)
+	}
+}
+
+func TestHandleInternalRunStatusIncludesProcessorResolutionTerminalBranch(t *testing.T) {
+	t.Parallel()
+	rt, handler := testAPISetup(t)
+	coveredByDocID := seedPublishedCoverageDoc(t, rt.Store(), "user-alice", "wire-status-covered")
+
+	rec, err := rt.StartRunWithMetadata(context.Background(), "review this batch", "user-alice", map[string]any{
+		runMetadataAgentProfile:        AgentProfileProcessor,
+		runMetadataAgentRole:           AgentProfileProcessor,
+		"ingestion_handoff_request_id": "processor-request-status-covered",
+		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
+		"source_item_ids":              []string{"source-item-1"},
+		"source_count":                 1,
+		"source_network_request_id":    "source-request-status-covered",
+	})
+	if err != nil {
+		t.Fatalf("start processor run: %v", err)
+	}
+
+	registry := NewToolRegistry()
+	if err := RegisterWireProcessorTools(registry, rt); err != nil {
+		t.Fatalf("register wire processor tools: %v", err)
+	}
+	if _, err := registry.Execute(WithToolExecutionContext(context.Background(), rec), "record_wire_processor_decision", json.RawMessage(`{
+		"decision":"already_covered",
+		"summary":"Published coverage already satisfies this source item.",
+		"covered_by_doc_id":"`+coveredByDocID+`"
+	}`)); err != nil {
+		t.Fatalf("record_wire_processor_decision: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/runtime/runs/"+rec.RunID+"?owner_id=user-alice", nil)
+	req.Header.Set("X-Internal-Caller", "true")
+	w := httptest.NewRecorder()
+	handler.HandleInternalRunStatus(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("internal run status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+
+	var resp runStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode internal run status: %v", err)
+	}
+	if resp.Trajectory == nil || resp.Trajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("trajectory status = %+v, want cancelled", resp.Trajectory)
+	}
+	if resp.ProcessorResolution == nil {
+		t.Fatal("internal run status processor_resolution is nil")
+	}
+	if resp.ProcessorResolution.Status != types.WorkItemCompleted {
+		t.Fatalf("processor resolution status = %q, want %q", resp.ProcessorResolution.Status, types.WorkItemCompleted)
+	}
+	if resp.ProcessorResolution.ResolutionState != "all_source_items_suppressed_against_published_corpus" {
+		t.Fatalf("processor resolution_state = %q, want all_source_items_suppressed_against_published_corpus", resp.ProcessorResolution.ResolutionState)
+	}
+	if resp.ProcessorResolution.LastDecision != "already_covered" {
+		t.Fatalf("processor last_decision = %q, want already_covered", resp.ProcessorResolution.LastDecision)
+	}
+	if resp.ProcessorResolution.CoveredByDocID != coveredByDocID {
+		t.Fatalf("processor covered_by_doc_id = %q, want %q", resp.ProcessorResolution.CoveredByDocID, coveredByDocID)
+	}
+}
+
+func TestHandleInternalRunStatusIncludesExplicitNoStoryTerminalBranch(t *testing.T) {
+	t.Parallel()
+	rt, handler := testAPISetup(t)
+
+	rec, err := rt.StartRunWithMetadata(context.Background(), "review this batch", "user-alice", map[string]any{
+		runMetadataAgentProfile:        AgentProfileProcessor,
+		runMetadataAgentRole:           AgentProfileProcessor,
+		"ingestion_handoff_request_id": "processor-request-status-no-story",
+		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
+		"source_item_ids":              []string{"source-item-1"},
+		"source_count":                 1,
+		"source_network_request_id":    "source-request-status-no-story",
+	})
+	if err != nil {
+		t.Fatalf("start processor run: %v", err)
+	}
+
+	registry := NewToolRegistry()
+	if err := RegisterWireProcessorTools(registry, rt); err != nil {
+		t.Fatalf("register wire processor tools: %v", err)
+	}
+	if _, err := registry.Execute(WithToolExecutionContext(context.Background(), rec), "record_wire_processor_decision", json.RawMessage(`{
+		"decision":"not_newsworthy",
+		"summary":"The batch does not justify a publication route."
+	}`)); err != nil {
+		t.Fatalf("record_wire_processor_decision: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/runtime/runs/"+rec.RunID+"?owner_id=user-alice", nil)
+	req.Header.Set("X-Internal-Caller", "true")
+	w := httptest.NewRecorder()
+	handler.HandleInternalRunStatus(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("internal run status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+
+	var resp runStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode internal run status: %v", err)
+	}
+	if resp.Trajectory == nil || resp.Trajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("trajectory status = %+v, want cancelled", resp.Trajectory)
+	}
+	if resp.ProcessorResolution == nil {
+		t.Fatal("internal run status processor_resolution is nil")
+	}
+	if resp.ProcessorResolution.Status != types.WorkItemCompleted {
+		t.Fatalf("processor resolution status = %q, want %q", resp.ProcessorResolution.Status, types.WorkItemCompleted)
+	}
+	if resp.ProcessorResolution.ResolutionState != "all_source_items_decided_without_story_route" {
+		t.Fatalf("processor resolution_state = %q, want all_source_items_decided_without_story_route", resp.ProcessorResolution.ResolutionState)
+	}
+	if resp.ProcessorResolution.LastDecision != "not_newsworthy" {
+		t.Fatalf("processor last_decision = %q, want not_newsworthy", resp.ProcessorResolution.LastDecision)
+	}
+	if resp.ProcessorResolution.CoveredByDocID != "" {
+		t.Fatalf("processor covered_by_doc_id = %q, want empty", resp.ProcessorResolution.CoveredByDocID)
+	}
+}
+
 func TestHandleRunSubmissionReturnsStableHandle(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-003: accepted run submission returns a stable handle.
 	_, handler := testAPISetup(t)
 
@@ -2723,6 +3012,7 @@ func TestHandleRunSubmissionReturnsStableHandle(t *testing.T) {
 }
 
 func TestHandleRunSubmissionPreservesMetadata(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	body := `{"prompt":"route this into conductor","metadata":{"agent_profile":"conductor","agent_role":"conductor","input_source":"prompt_bar","requested_app":"vtext"}}`
@@ -2760,6 +3050,7 @@ func TestHandleRunSubmissionPreservesMetadata(t *testing.T) {
 }
 
 func TestHandleRunSubmissionInjectsDesktopIDFromRequest(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	body := `{"prompt":"fork this desktop later","metadata":{"agent_profile":"super","agent_role":"super"}}`
@@ -2787,6 +3078,7 @@ func TestHandleRunSubmissionInjectsDesktopIDFromRequest(t *testing.T) {
 }
 
 func TestHandleRunListOwnerScoped(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	alice, err := rt.StartRunWithMetadata(context.Background(), "trace alice root", "user-alice", map[string]any{
@@ -2830,6 +3122,7 @@ func TestHandleRunListOwnerScoped(t *testing.T) {
 }
 
 func TestHandleEventListSupportsOwnerAndTaskHistory(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	rec, err := rt.StartRunWithMetadata(context.Background(), "trace selected task", "user-alice", map[string]any{
@@ -2888,6 +3181,7 @@ func TestHandleEventListSupportsOwnerAndTaskHistory(t *testing.T) {
 }
 
 func TestHandleChannelMessageListOwnerScoped(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 
 	rec, err := rt.StartRunWithMetadata(context.Background(), "trace shared workflow", "user-alice", map[string]any{
@@ -2954,6 +3248,7 @@ func TestHandleChannelMessageListOwnerScoped(t *testing.T) {
 }
 
 func TestHandleRunSubmissionAuthGated(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-002: task submission is auth-gated.
 	_, handler := testAPISetup(t)
 
@@ -2970,6 +3265,7 @@ func TestHandleRunSubmissionAuthGated(t *testing.T) {
 }
 
 func TestHandleRunSubmissionMethodNotAllowed(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	req := authenticatedRequest(http.MethodGet, "/api/agent/loop", "", "user-alice")
@@ -2983,6 +3279,7 @@ func TestHandleRunSubmissionMethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleRunSubmissionEmptyPrompt(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	body := `{"prompt":""}`
@@ -2997,6 +3294,7 @@ func TestHandleRunSubmissionEmptyPrompt(t *testing.T) {
 }
 
 func TestHandleRunSubmissionInvalidBody(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	req := authenticatedRequest(http.MethodPost, "/api/agent/loop", "not json", "user-alice")
@@ -3012,6 +3310,7 @@ func TestHandleRunSubmissionInvalidBody(t *testing.T) {
 // --- Task Status Tests ---
 
 func TestHandleRunStatusReturnsCorrelatedHandle(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-004: status is correlated to the submitted handle.
 	rt, handler := testAPISetup(t)
 
@@ -3049,6 +3348,7 @@ func TestHandleRunStatusReturnsCorrelatedHandle(t *testing.T) {
 }
 
 func TestHandleRunStatusAuthGated(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-006: status is auth-gated.
 	_, handler := testAPISetup(t)
 
@@ -3063,6 +3363,7 @@ func TestHandleRunStatusAuthGated(t *testing.T) {
 }
 
 func TestHandleRunStatusCallerScoped(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-006: status is caller-scoped (user cannot see other users' runs).
 	rt, handler := testAPISetup(t)
 
@@ -3084,6 +3385,7 @@ func TestHandleRunStatusCallerScoped(t *testing.T) {
 }
 
 func TestHandleRunStatusMissingRunID(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	req := authenticatedRequest(http.MethodGet, "/api/agent/status", "", "user-alice")
@@ -3097,6 +3399,7 @@ func TestHandleRunStatusMissingRunID(t *testing.T) {
 }
 
 func TestHandleRunStatusNotFound(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	req := authenticatedRequest(http.MethodGet, "/api/agent/status?loop_id=nonexistent", "", "user-alice")
@@ -3110,6 +3413,7 @@ func TestHandleRunStatusNotFound(t *testing.T) {
 }
 
 func TestHandleRunStatusFailedOutcome(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-004: status exposes non-happy-path outcomes.
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-api-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -3118,7 +3422,7 @@ func TestHandleRunStatusFailedOutcome(t *testing.T) {
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -3179,6 +3483,7 @@ func TestHandleRunStatusFailedOutcome(t *testing.T) {
 // GET /api/agent/{id}/status
 
 func TestHandleRunStatusByIDReturnsTaskRecord(t *testing.T) {
+	t.Parallel()
 	// VAL-CHOIR-002: GET /api/agent/{id}/status returns task record.
 	rt, handler := testAPISetup(t)
 
@@ -3227,6 +3532,7 @@ func TestHandleRunStatusByIDReturnsTaskRecord(t *testing.T) {
 }
 
 func TestHandleRunStatusByIDCompletedResult(t *testing.T) {
+	t.Parallel()
 	// VAL-CHOIR-005: completed task has result and finished_at.
 	rt, handler := testAPISetup(t)
 
@@ -3265,6 +3571,7 @@ func TestHandleRunStatusByIDCompletedResult(t *testing.T) {
 }
 
 func TestHandleRunStatusByIDAuthGated(t *testing.T) {
+	t.Parallel()
 	// VAL-CHOIR-002: unauthenticated request returns 401.
 	_, handler := testAPISetup(t)
 
@@ -3279,6 +3586,7 @@ func TestHandleRunStatusByIDAuthGated(t *testing.T) {
 }
 
 func TestHandleRunStatusByIDCallerScoped(t *testing.T) {
+	t.Parallel()
 	// VAL-CHOIR-002: 404 for task owned by different user (403 in spec,
 	// but we use 404 to prevent IDOR probing — same as query-param handler).
 	rt, handler := testAPISetup(t)
@@ -3301,6 +3609,7 @@ func TestHandleRunStatusByIDCallerScoped(t *testing.T) {
 }
 
 func TestHandleRunStatusByIDNotFound(t *testing.T) {
+	t.Parallel()
 	// VAL-CHOIR-002: 404 for non-existent task.
 	_, handler := testAPISetup(t)
 
@@ -3316,6 +3625,7 @@ func TestHandleRunStatusByIDNotFound(t *testing.T) {
 }
 
 func TestHandleRunStatusByIDFailedOutcome(t *testing.T) {
+	t.Parallel()
 	// VAL-CHOIR-002: status exposes error information for failed runs.
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-api-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -3324,7 +3634,7 @@ func TestHandleRunStatusByIDFailedOutcome(t *testing.T) {
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -3385,6 +3695,7 @@ func TestHandleRunStatusByIDFailedOutcome(t *testing.T) {
 }
 
 func TestHandleRunStatusByIDMethodNotAllowed(t *testing.T) {
+	t.Parallel()
 	// Only GET is allowed.
 	_, handler := testAPISetup(t)
 
@@ -3399,6 +3710,7 @@ func TestHandleRunStatusByIDMethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleRunStatusByIDSpawnedChildTask(t *testing.T) {
+	t.Parallel()
 	// VAL-CHOIR-002: status works for spawned child runs too.
 	rt, handler := testAPISetup(t)
 
@@ -3447,6 +3759,7 @@ func TestHandleRunStatusByIDSpawnedChildTask(t *testing.T) {
 }
 
 func TestHandleRunStatusByIDStateTransitions(t *testing.T) {
+	t.Parallel()
 	// VAL-CHOIR-002: state transitions reflected in status.
 	// Verify that status shows different states as the task progresses.
 	rt, handler := testAPISetup(t)
@@ -3502,6 +3815,7 @@ func TestHandleRunStatusByIDStateTransitions(t *testing.T) {
 // --- Events Tests ---
 
 func TestHandleEventsAuthGated(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-006: events are auth-gated.
 	_, handler := testAPISetup(t)
 
@@ -3516,6 +3830,7 @@ func TestHandleEventsAuthGated(t *testing.T) {
 }
 
 func TestHandleEventsReturnsSSEStream(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-005: events stream is long-lived and incremental.
 	rt, handler := testAPISetup(t)
 
@@ -3576,6 +3891,7 @@ func TestHandleEventsReturnsSSEStream(t *testing.T) {
 }
 
 func TestHandleEventsCallerScoped(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-006: events are caller-scoped.
 	rt, handler := testAPISetup(t)
 
@@ -3619,6 +3935,7 @@ func TestHandleEventsCallerScoped(t *testing.T) {
 }
 
 func TestHandleEventsIncremental(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-005: events arrive incrementally, not buffered.
 	rt, handler := testAPISetup(t)
 
@@ -3670,6 +3987,7 @@ func TestHandleEventsIncremental(t *testing.T) {
 // --- Health Tests ---
 
 func TestHandleHealthReady(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-001: health reflects runtime readiness.
 	_, handler := testAPISetup(t)
 
@@ -3717,6 +4035,7 @@ func TestHandleHealthReady(t *testing.T) {
 }
 
 func TestHandleHealthDegraded(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-001: degraded state is surfaced.
 	rt, handler := testAPISetup(t)
 
@@ -3745,6 +4064,7 @@ func TestHandleHealthDegraded(t *testing.T) {
 }
 
 func TestHandleHealthFailed(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-001: failed state is surfaced with 503.
 	rt, handler := testAPISetup(t)
 
@@ -3770,6 +4090,7 @@ func TestHandleHealthFailed(t *testing.T) {
 }
 
 func TestHandleHealthReflectsRunningTasks(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 	rt := handler.rt
 
@@ -3805,6 +4126,7 @@ func TestHandleHealthReflectsRunningTasks(t *testing.T) {
 }
 
 func TestHandleTopologyReportsOrchestrationShape(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	rt.cfg.ResearcherCount = 5
 
@@ -3838,6 +4160,7 @@ func TestHandleTopologyReportsOrchestrationShape(t *testing.T) {
 }
 
 func TestHandleVTextDocumentsRootUsesVTextRoutes(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	createReqBody := `{"title":"vtext alias doc","content":"hello"}`
@@ -3880,6 +4203,7 @@ func TestHandleVTextDocumentsRootUsesVTextRoutes(t *testing.T) {
 // --- Supervisor Recovery Visibility Tests ---
 
 func TestSupervisorRecoveryVisible(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-009: supervisor recovery is externally visible.
 	rt, _ := testAPISetup(t)
 
@@ -3915,6 +4239,7 @@ func TestSupervisorRecoveryVisible(t *testing.T) {
 }
 
 func TestProviderFailureDoesNotCrashRuntime(t *testing.T) {
+	t.Parallel()
 	// VAL-RUNTIME-008: provider failures surface without crashing the runtime.
 	// Submit a failing task, verify the runtime still accepts new runs.
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-api-test")
@@ -3924,7 +4249,7 @@ func TestProviderFailureDoesNotCrashRuntime(t *testing.T) {
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -4017,6 +4342,7 @@ func intFromMetadata(metadata map[string]any, key string) int {
 // --- AuthenticateUser Tests ---
 
 func TestAuthenticateUserMissing(t *testing.T) {
+	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/api/agent/status", nil)
 	_, err := authenticateUser(req)
 	if err == nil {
@@ -4025,6 +4351,7 @@ func TestAuthenticateUserMissing(t *testing.T) {
 }
 
 func TestAuthenticateUserPresent(t *testing.T) {
+	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/api/agent/status", nil)
 	req.Header.Set("X-Authenticated-User", "user-alice")
 
@@ -4040,6 +4367,7 @@ func TestAuthenticateUserPresent(t *testing.T) {
 // --- Provider Bridge Health Visibility ---
 
 func TestHandleHealthReportsBridgeProvider(t *testing.T) {
+	t.Parallel()
 	// When a bridge provider is active, the health endpoint should report
 	// its name (e.g., "bedrock" or "zai") instead of "stub", so operators
 	// can distinguish real-provider paths from canned responses.
@@ -4051,7 +4379,7 @@ func TestHandleHealthReportsBridgeProvider(t *testing.T) {
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

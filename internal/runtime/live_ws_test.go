@@ -18,6 +18,7 @@ import (
 )
 
 func TestLiveWSPublishesOwnerScopedProductEvents(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	srv := server.NewServer("runtime-live-ws-test", "0")
 	RegisterRoutes(srv, handler)
@@ -55,6 +56,7 @@ func TestLiveWSPublishesOwnerScopedProductEvents(t *testing.T) {
 }
 
 func TestLiveWSCatchesUpAfterStreamSeq(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	srv := server.NewServer("runtime-live-ws-test", "0")
 	RegisterRoutes(srv, handler)

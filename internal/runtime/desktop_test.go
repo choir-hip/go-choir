@@ -18,6 +18,7 @@ func bytesReader(b []byte) *bytes.Reader {
 }
 
 func TestDesktopStateGetUnauthenticated(t *testing.T) {
+	t.Parallel()
 	_, h := testAPISetup(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/desktop/state", nil)
@@ -31,6 +32,7 @@ func TestDesktopStateGetUnauthenticated(t *testing.T) {
 }
 
 func TestDesktopStateGetEmpty(t *testing.T) {
+	t.Parallel()
 	_, h := testAPISetup(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/desktop/state", nil)
@@ -56,6 +58,7 @@ func TestDesktopStateGetEmpty(t *testing.T) {
 }
 
 func TestDesktopStateSaveAndGet(t *testing.T) {
+	t.Parallel()
 	_, h := testAPISetup(t)
 
 	// Save desktop state.
@@ -117,6 +120,7 @@ func TestDesktopStateSaveAndGet(t *testing.T) {
 }
 
 func TestDesktopStateSaveSanitizesInvalidWindowRecords(t *testing.T) {
+	t.Parallel()
 	_, h := testAPISetup(t)
 
 	saveReq := desktopStateSaveRequest{
@@ -199,6 +203,7 @@ func TestDesktopStateSaveSanitizesInvalidWindowRecords(t *testing.T) {
 }
 
 func TestDesktopStateActiveWindowFollowsTopVisibleZOrder(t *testing.T) {
+	t.Parallel()
 	_, h := testAPISetup(t)
 
 	saveReq := desktopStateSaveRequest{
@@ -252,6 +257,7 @@ func TestDesktopStateActiveWindowFollowsTopVisibleZOrder(t *testing.T) {
 }
 
 func TestDesktopStateSaveUnauthenticated(t *testing.T) {
+	t.Parallel()
 	_, h := testAPISetup(t)
 
 	saveReq := desktopStateSaveRequest{
@@ -271,6 +277,7 @@ func TestDesktopStateSaveUnauthenticated(t *testing.T) {
 }
 
 func TestDesktopStateUserIsolation(t *testing.T) {
+	t.Parallel()
 	_, h := testAPISetup(t)
 
 	// Save state for user-1.
@@ -339,6 +346,7 @@ func TestDesktopStateUserIsolation(t *testing.T) {
 }
 
 func TestDesktopStateRouterMethodDispatch(t *testing.T) {
+	t.Parallel()
 	_, h := testAPISetup(t)
 
 	// POST should be method not allowed.
@@ -373,6 +381,7 @@ func TestDesktopStateRouterMethodDispatch(t *testing.T) {
 }
 
 func TestDesktopStateSaveAndGetByDesktopSelector(t *testing.T) {
+	t.Parallel()
 	_, h := testAPISetup(t)
 
 	saveReq := desktopStateSaveRequest{
@@ -437,6 +446,7 @@ func TestDesktopStateSaveAndGetByDesktopSelector(t *testing.T) {
 }
 
 func TestDesktopStatePassiveSessionCannotReplaceSharedState(t *testing.T) {
+	t.Parallel()
 	_, h := testAPISetup(t)
 
 	driverReq := desktopStateSaveRequest{
@@ -509,6 +519,7 @@ func TestDesktopStatePassiveSessionCannotReplaceSharedState(t *testing.T) {
 }
 
 func TestDesktopStateSessionsConvergeOnLatestDriverPlacement(t *testing.T) {
+	t.Parallel()
 	_, h := testAPISetup(t)
 
 	saveForSession := func(sessionID string, x int) {

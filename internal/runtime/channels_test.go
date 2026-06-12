@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // --- AgentChannel Tests ---
 
 func TestAgentChannelPost(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 
 	cursor, err := ch.Post(ChannelMessage{
@@ -34,6 +34,7 @@ func TestAgentChannelPost(t *testing.T) {
 }
 
 func TestAgentChannelPostEmpty(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 
 	_, err := ch.Post(ChannelMessage{
@@ -46,6 +47,7 @@ func TestAgentChannelPostEmpty(t *testing.T) {
 }
 
 func TestAgentChannelPostSetsTimestamp(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 
 	_, err := ch.Post(ChannelMessage{
@@ -66,6 +68,7 @@ func TestAgentChannelPostSetsTimestamp(t *testing.T) {
 }
 
 func TestAgentChannelLoadSkipsAlreadyMirroredDurableSequence(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 
 	if _, err := ch.Post(ChannelMessage{
@@ -97,6 +100,7 @@ func TestAgentChannelLoadSkipsAlreadyMirroredDurableSequence(t *testing.T) {
 }
 
 func TestAgentChannelPostClosed(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 	ch.Close()
 
@@ -110,6 +114,7 @@ func TestAgentChannelPostClosed(t *testing.T) {
 }
 
 func TestAgentChannelReadSince(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 
 	if _, err := ch.Post(ChannelMessage{From: "a", Content: "msg1"}); err != nil {
@@ -148,6 +153,7 @@ func TestAgentChannelReadSince(t *testing.T) {
 }
 
 func TestAgentChannelReadSinceOutOfRange(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 
 	if _, err := ch.Post(ChannelMessage{From: "a", Content: "msg1"}); err != nil {
@@ -161,6 +167,7 @@ func TestAgentChannelReadSinceOutOfRange(t *testing.T) {
 }
 
 func TestAgentChannelWait(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 
 	// Post a message asynchronously.
@@ -188,6 +195,7 @@ func TestAgentChannelWait(t *testing.T) {
 }
 
 func TestAgentChannelWaitContextCancelled(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -200,6 +208,7 @@ func TestAgentChannelWaitContextCancelled(t *testing.T) {
 }
 
 func TestAgentChannelWaitClosed(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 
 	go func() {
@@ -214,6 +223,7 @@ func TestAgentChannelWaitClosed(t *testing.T) {
 }
 
 func TestAgentChannelCursor(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 
 	if ch.Cursor() != 0 {
@@ -229,6 +239,7 @@ func TestAgentChannelCursor(t *testing.T) {
 }
 
 func TestAgentChannelClose(t *testing.T) {
+	t.Parallel()
 	ch := NewAgentChannel()
 
 	ch.Close()
@@ -243,6 +254,7 @@ func TestAgentChannelClose(t *testing.T) {
 // --- ChannelManager Tests ---
 
 func TestChannelManagerGetOrCreate(t *testing.T) {
+	t.Parallel()
 	mgr := NewChannelManager()
 
 	ch1, err := mgr.Channel("task-123")
@@ -261,6 +273,7 @@ func TestChannelManagerGetOrCreate(t *testing.T) {
 }
 
 func TestChannelManagerEmptyWorkID(t *testing.T) {
+	t.Parallel()
 	mgr := NewChannelManager()
 
 	_, err := mgr.Channel("")
@@ -270,6 +283,7 @@ func TestChannelManagerEmptyWorkID(t *testing.T) {
 }
 
 func TestChannelManagerClose(t *testing.T) {
+	t.Parallel()
 	mgr := NewChannelManager()
 
 	_, err := mgr.Channel("task-123")
@@ -288,6 +302,7 @@ func TestChannelManagerClose(t *testing.T) {
 }
 
 func TestChannelManagerListChannels(t *testing.T) {
+	t.Parallel()
 	mgr := NewChannelManager()
 
 	if _, err := mgr.Channel("task-1"); err != nil {
@@ -307,6 +322,7 @@ func TestChannelManagerListChannels(t *testing.T) {
 }
 
 func TestChannelManagerPostToChannel(t *testing.T) {
+	t.Parallel()
 	mgr := NewChannelManager()
 
 	cursor, err := mgr.PostToChannel("task-123", ChannelMessage{
@@ -339,6 +355,7 @@ func TestChannelManagerPostToChannel(t *testing.T) {
 }
 
 func TestChannelManagerPostToChannelWithEmit(t *testing.T) {
+	t.Parallel()
 	mgr := NewChannelManager()
 
 	var emittedKinds []types.EventKind
@@ -366,6 +383,7 @@ func TestChannelManagerPostToChannelWithEmit(t *testing.T) {
 // --- Runtime Channel Integration Tests ---
 
 func TestRuntimeChannelPost(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 
 	cursor, err := rt.ChannelPost(context.Background(), "task-123", "appagent", "coordinator", "Starting work")
@@ -378,6 +396,7 @@ func TestRuntimeChannelPost(t *testing.T) {
 }
 
 func TestRuntimeChannelRead(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 
 	if _, err := rt.ChannelPost(context.Background(), "task-123", "appagent", "coordinator", "Starting work"); err != nil {
@@ -412,6 +431,7 @@ func TestRuntimeChannelRead(t *testing.T) {
 }
 
 func TestRuntimeChannelPostEmitsEvent(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 
 	// Subscribe to the event bus.
@@ -441,6 +461,7 @@ func TestRuntimeChannelPostEmitsEvent(t *testing.T) {
 }
 
 func TestRuntimeChannelWait(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 
 	// Post a message asynchronously.
@@ -470,6 +491,7 @@ func TestRuntimeChannelWait(t *testing.T) {
 }
 
 func TestRuntimeChannelManagerAccessor(t *testing.T) {
+	t.Parallel()
 	rt, _ := testRuntime(t)
 
 	mgr := rt.ChannelManager()
@@ -488,6 +510,7 @@ func TestRuntimeChannelManagerAccessor(t *testing.T) {
 }
 
 func TestRuntimeToolRegistryAccessor(t *testing.T) {
+	t.Parallel()
 	// Without tool registry.
 	rt, _ := testRuntime(t)
 	if rt.ToolRegistry() != nil {
@@ -510,7 +533,7 @@ func TestRuntimeToolRegistryAccessor(t *testing.T) {
 	dbPath := filepath.Join(dir, "accessor.db")
 	_ = os.Remove(dbPath)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -539,6 +562,7 @@ func TestRuntimeToolRegistryAccessor(t *testing.T) {
 }
 
 func TestRuntimeWithChannelManagerOption(t *testing.T) {
+	t.Parallel()
 	customMgr := NewChannelManager()
 
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-cmopt-test")
@@ -548,7 +572,7 @@ func TestRuntimeWithChannelManagerOption(t *testing.T) {
 	dbPath := filepath.Join(dir, "cmopt.db")
 	_ = os.Remove(dbPath)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

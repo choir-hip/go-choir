@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -35,7 +34,7 @@ func testParentChildSetup(t *testing.T) (*Runtime, *APIHandler, string) {
 	dir := t.TempDir()
 	dbPath := dbPathForTest(t, dir)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -81,6 +80,7 @@ func dbPathForTest(t *testing.T, dir string) string {
 // can send a message to its parent via channel, and the parent can receive it
 // (VAL-CHOIR-006, feature expected behavior #1 and #2).
 func TestParentChildChannel_ChildSendsParentReceives(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -118,6 +118,7 @@ func TestParentChildChannel_ChildSendsParentReceives(t *testing.T) {
 // are delivered through the channel when a child task completes
 // (VAL-CHOIR-006, feature expected behavior #3).
 func TestParentChildChannel_ChildSendsResultOnCompletion(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -166,6 +167,7 @@ func TestParentChildChannel_ChildSendsResultOnCompletion(t *testing.T) {
 // properly scoped to the parent-child relationship. Other parents should
 // not receive messages from unrelated children (VAL-CHOIR-015).
 func TestParentChildChannel_ScopedToRelationship(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -223,6 +225,7 @@ func TestParentChildChannel_ScopedToRelationship(t *testing.T) {
 // subscribe to (wait for) messages from a specific child using the blocking
 // Wait method (feature expected behavior #2).
 func TestParentChildChannel_WaitForChildMessages(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -260,6 +263,7 @@ func TestParentChildChannel_WaitForChildMessages(t *testing.T) {
 // children can post messages to the same parent channel, and the parent
 // receives all of them (VAL-CHOIR-006, VAL-CHOIR-008).
 func TestParentChildChannel_MultipleChildrenSameParent(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -297,6 +301,7 @@ func TestParentChildChannel_MultipleChildrenSameParent(t *testing.T) {
 // TestParentChildChannel_CrossChannelIsolation verifies that posting to one
 // channel does not wake waiters on another channel (VAL-CHOIR-015).
 func TestParentChildChannel_CrossChannelIsolation(t *testing.T) {
+	t.Parallel()
 	rt, _, parentAID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -359,6 +364,7 @@ func TestParentChildChannel_CrossChannelIsolation(t *testing.T) {
 // that closing a channel discards its messages and creates a fresh channel
 // on next access.
 func TestParentChildChannel_ChannelClosureIsolation(t *testing.T) {
+	t.Parallel()
 	rt, _, parentAID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -423,6 +429,7 @@ func TestParentChildChannel_ChannelClosureIsolation(t *testing.T) {
 // parent and child emit observable events through the event bus
 // (VAL-CHOIR-006, VAL-CHOIR-011).
 func TestParentChildChannel_EventEmission(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -474,6 +481,7 @@ func TestParentChildChannel_EventEmission(t *testing.T) {
 // a child task is spawned, a channel is available for the child to post
 // results that the parent can receive (VAL-CHOIR-006).
 func TestParentChildChannel_SpawnedChildPostsToParentChannel(t *testing.T) {
+	t.Parallel()
 	rt, handler, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -540,6 +548,7 @@ func TestParentChildChannel_SpawnedChildPostsToParentChannel(t *testing.T) {
 // Since spawned children now auto-post results on completion, the parent
 // receives both auto-posted results and manually posted results.
 func TestParentChildChannel_MultipleSpawnedChildrenPostResults(t *testing.T) {
+	t.Parallel()
 	rt, handler, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -611,6 +620,7 @@ func TestParentChildChannel_MultipleSpawnedChildrenPostResults(t *testing.T) {
 // Since spawned children now auto-post results on completion, the parent
 // automatically receives the child's result through the channel.
 func TestParentChildChannel_ParentWaitsForChildResult(t *testing.T) {
+	t.Parallel()
 	rt, handler, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -663,6 +673,7 @@ func TestParentChildChannel_ParentWaitsForChildResult(t *testing.T) {
 // child task automatically ensures a channel exists for the parent, enabling
 // immediate communication without explicit channel setup.
 func TestParentChildChannel_ChannelAutoCreatedOnSpawn(t *testing.T) {
+	t.Parallel()
 	_, handler, parentID := testParentChildSetup(t)
 
 	// Before spawning, the parent should have a channel (created by StartRun).
@@ -695,6 +706,7 @@ func TestParentChildChannel_ChannelAutoCreatedOnSpawn(t *testing.T) {
 // fails, the error can be communicated to the parent through the channel
 // (VAL-CHOIR-009).
 func TestParentChildChannel_ErrorNotification(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -726,6 +738,7 @@ func TestParentChildChannel_ErrorNotification(t *testing.T) {
 // incrementally read messages using cursor-based reads, only seeing
 // new messages since the last read.
 func TestParentChildChannel_IncrementalRead(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -768,6 +781,7 @@ func TestParentChildChannel_IncrementalRead(t *testing.T) {
 // the expected format with from, to (via channel_id), type (role), and payload
 // (content) fields (feature expected behavior #5).
 func TestParentChildChannel_MessageFormat(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -817,6 +831,7 @@ func TestParentChildChannel_MessageFormat(t *testing.T) {
 // TestParentChildChannel_ConcurrentAccess verifies that channels support
 // concurrent access from multiple children posting to the same parent.
 func TestParentChildChannel_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -853,6 +868,7 @@ func TestParentChildChannel_ConcurrentAccess(t *testing.T) {
 // TestParentChildChannel_PostChildResult verifies the PostChildResult
 // convenience method for child result delivery (VAL-CHOIR-006).
 func TestParentChildChannel_PostChildResult(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -888,6 +904,7 @@ func TestParentChildChannel_PostChildResult(t *testing.T) {
 // TestParentChildChannel_PostChildError verifies the PostChildError
 // convenience method for error delivery (VAL-CHOIR-009).
 func TestParentChildChannel_PostChildError(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -914,6 +931,7 @@ func TestParentChildChannel_PostChildError(t *testing.T) {
 // TestParentChildChannel_PostChildProgress verifies the PostChildProgress
 // convenience method for progress updates (VAL-CHOIR-011).
 func TestParentChildChannel_PostChildProgress(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -951,6 +969,7 @@ func TestParentChildChannel_PostChildProgress(t *testing.T) {
 // TestParentChildChannel_WaitForChildResultFiltered verifies the
 // WaitForChildResult method that filters by child ID and role.
 func TestParentChildChannel_WaitForChildResultFiltered(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -983,6 +1002,7 @@ func TestParentChildChannel_WaitForChildResultFiltered(t *testing.T) {
 // TestParentChildChannel_WaitForChildResultAsync verifies WaitForChildResult
 // when the result arrives asynchronously after the wait starts.
 func TestParentChildChannel_WaitForChildResultAsync(t *testing.T) {
+	t.Parallel()
 	rt, _, parentID := testParentChildSetup(t)
 
 	ctx := context.Background()
@@ -1014,6 +1034,7 @@ func TestParentChildChannel_WaitForChildResultAsync(t *testing.T) {
 // a child task automatically creates channels for both parent and child
 // in the channel manager.
 func TestParentChildChannel_ChannelsAutoCreatedOnSpawn(t *testing.T) {
+	t.Parallel()
 	rt, handler, parentID := testParentChildSetup(t)
 
 	body := fmt.Sprintf(`{"parent_id":"%s","objective":"auto channel test"}`, parentID)

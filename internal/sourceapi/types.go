@@ -7,6 +7,17 @@ const (
 	TargetKind   = "source_service_item"
 )
 
+// Resolution states recorded by the runtime on the wire-processor request
+// work item and projected through the internal run-status API; sourcecycled's
+// reconcile loop branches on them, so writers and readers must share these.
+const (
+	ResolutionStateAwaitingSourceItemDecisions      = "awaiting_source_item_decisions"
+	ResolutionStateDecidedWithStoryRoute            = "all_source_items_decided_with_story_route"
+	ResolutionStateSuppressedAgainstPublishedCorpus = "all_source_items_suppressed_against_published_corpus"
+	ResolutionStateDeferredWithoutStoryRoute        = "all_source_items_deferred_without_story_route"
+	ResolutionStateDecidedWithoutStoryRoute         = "all_source_items_decided_without_story_route"
+)
+
 type HealthResponse struct {
 	Status     string    `json:"status"`
 	ItemCount  int       `json:"item_count"`
@@ -15,11 +26,11 @@ type HealthResponse struct {
 }
 
 type IngestionHandoffResponse struct {
-	Provider           string                  `json:"provider"`
-	Cycle              CycleSummary            `json:"cycle"`
-	SourceHealth       SourceHealth            `json:"source_health,omitempty"`
-	ProcessorRequests  []ProcessorRequest      `json:"processor_requests"`
-	ReconcilerRequests []ReconcilerRequest     `json:"reconciler_requests"`
+	Provider           string                   `json:"provider"`
+	Cycle              CycleSummary             `json:"cycle"`
+	SourceHealth       SourceHealth             `json:"source_health,omitempty"`
+	ProcessorRequests  []ProcessorRequest       `json:"processor_requests"`
+	ReconcilerRequests []ReconcilerRequest      `json:"reconciler_requests"`
 	Metadata           IngestionHandoffMetadata `json:"metadata,omitempty"`
 }
 
@@ -63,6 +74,7 @@ type ProcessorRequest struct {
 	ProcessorKey  string   `json:"processor_key"`
 	Status        string   `json:"status"`
 	RuntimeRunID  string   `json:"runtime_run_id,omitempty"`
+	RuntimeStatus string   `json:"runtime_status,omitempty"`
 	SourceItemIDs []string `json:"source_item_ids"`
 	SourceCount   int      `json:"source_count"`
 	SourceTypes   []string `json:"source_types,omitempty"`

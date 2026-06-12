@@ -378,6 +378,7 @@ func TestContentImportURLRefreshesLegacyBrowserIdentityReaderItem(t *testing.T) 
 }
 
 func TestContentCreateSupportsDurableMediaReferences(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 	body := `{"source_type":"file","file_path":"uploads/book.epub","media_type":"application/epub+zip","title":"Book"}`
 	req := authenticatedRequest(http.MethodPost, "/api/content/items", body, "user-content")
@@ -541,6 +542,7 @@ func TestContentImportURLDedupesYouTubeSourcePackets(t *testing.T) {
 }
 
 func TestYouTubeJSON3CaptionURLForcesFormat(t *testing.T) {
+	t.Parallel()
 	got := youtubeJSON3CaptionURL("https://www.youtube.com/api/timedtext?v=abc&lang=en&fmt=srv3")
 	if !strings.Contains(got, "fmt=json3") {
 		t.Fatalf("caption URL = %q, want fmt=json3", got)
@@ -764,6 +766,7 @@ func TestFetchYouTubeTranscriptFromInnerTubeRejectsForbiddenCaptionURL(t *testin
 }
 
 func TestChooseYouTubeCaptionTrackPrefersHumanEnglish(t *testing.T) {
+	t.Parallel()
 	got, ok := chooseYouTubeCaptionTrack([]youtubeCaptionTrack{
 		{BaseURL: "first", LanguageCode: "es"},
 		{BaseURL: "auto", LanguageCode: "en", Kind: "asr"},
@@ -775,6 +778,7 @@ func TestChooseYouTubeCaptionTrackPrefersHumanEnglish(t *testing.T) {
 }
 
 func TestParseYouTubeTranscriptProviderPayloadHandlesNestedTranscript(t *testing.T) {
+	t.Parallel()
 	raw := []byte(`{
 		"data": [{
 			"video_id": "abc123",
@@ -801,6 +805,7 @@ func TestParseYouTubeTranscriptProviderPayloadHandlesNestedTranscript(t *testing
 }
 
 func TestPromptBarBareURLRoutesToDisplayApp(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 	body := `{"text":"https://example.com/report.pdf"}`
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", body, "user-content")
@@ -843,6 +848,7 @@ func TestPromptBarBareURLRoutesToDisplayApp(t *testing.T) {
 }
 
 func TestPromptBarBareURLDoesNotRequireProvider(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	rt.provider = &StubProvider{Delay: 10 * time.Millisecond, FailErr: errors.New("provider unavailable")}
 	body := `{"text":"https://example.com/report.pdf"}`
@@ -879,6 +885,7 @@ func TestPromptBarBareURLDoesNotRequireProvider(t *testing.T) {
 }
 
 func TestPromptBarContextualURLRoutesToVText(t *testing.T) {
+	t.Parallel()
 	_, handler := testAPISetup(t)
 	body := `{"text":"Summarize https://example.com/report.pdf for a research note"}`
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", body, "user-content")

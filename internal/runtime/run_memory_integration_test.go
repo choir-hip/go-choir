@@ -16,6 +16,7 @@ import (
 )
 
 func TestRuntimeRunMemoryThresholdCompaction(t *testing.T) {
+	t.Parallel()
 	registry := testRunMemoryRegistry(t)
 	provider := newMockToolLoopProvider(
 		&ToolLoopResponse{
@@ -100,6 +101,7 @@ func TestRuntimeRunMemoryThresholdCompaction(t *testing.T) {
 }
 
 func TestRuntimeRunMemoryOverflowRetriesOnceThenCompletes(t *testing.T) {
+	t.Parallel()
 	registry := testRunMemoryRegistry(t)
 	provider := &runtimeOverflowProvider{
 		failuresBeforeSuccess: 1,
@@ -134,6 +136,7 @@ func TestRuntimeRunMemoryOverflowRetriesOnceThenCompletes(t *testing.T) {
 }
 
 func TestRuntimeRunMemoryOverflowFailureBlocksRun(t *testing.T) {
+	t.Parallel()
 	registry := testRunMemoryRegistry(t)
 	provider := &runtimeOverflowProvider{
 		failuresBeforeSuccess: 3,
@@ -155,6 +158,7 @@ func TestRuntimeRunMemoryOverflowFailureBlocksRun(t *testing.T) {
 }
 
 func TestRuntimeManualRunMemoryCompaction(t *testing.T) {
+	t.Parallel()
 	registry := testRunMemoryRegistry(t)
 	provider := newMockToolLoopProvider(
 		&ToolLoopResponse{StopReason: "end_turn", Text: "manual compaction target", Model: "test-model"},
@@ -192,6 +196,7 @@ func TestRuntimeManualRunMemoryCompaction(t *testing.T) {
 }
 
 func TestChildRunUsesRunMemory(t *testing.T) {
+	t.Parallel()
 	registry := testRunMemoryRegistry(t)
 	provider := newMockToolLoopProvider(
 		&ToolLoopResponse{StopReason: "end_turn", Text: "parent done", Model: "test-model"},
@@ -229,6 +234,7 @@ func TestChildRunUsesRunMemory(t *testing.T) {
 }
 
 func TestRuntimeRunMemoryOverflowRecoveryRetrievesRawEntry(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 	provider := &runMemoryOverflowRetrievalProvider{
 		sentinel: "RAW_ENTRY_SENTINEL_6b8c1f0e_exact",

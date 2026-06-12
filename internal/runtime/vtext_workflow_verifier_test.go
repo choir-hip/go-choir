@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 func TestVerifyVTextWorkflowDeterministicEventLog(t *testing.T) {
+	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Moss habitats working document.\n\nInitial useful draft."))
 	h, _, rt := vtextAPISetupWithProvider(t, provider, true)
 	ctx := context.Background()
@@ -28,7 +28,10 @@ func TestVerifyVTextWorkflowDeterministicEventLog(t *testing.T) {
 	artifactRelPath := filepath.ToSlash(filepath.Join("artifacts", "vtext-workflow-verifier", "moss-habitat.txt"))
 	t.Cleanup(func() { _ = os.RemoveAll(filepath.Dir(artifactRelPath)) })
 
-	promptText := "Write a testable note about moss habitat conditions."
+	// The prompt must avoid vtextPromptNeedsSuperExecution markers (e.g.
+	// "test", "verify") so the conductor opens a plain vtext loop; this test
+	// drives the researcher/super handoffs itself via explicit tool calls.
+	promptText := "Write a short note about moss habitat conditions."
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"`+promptText+`"}`, ownerID)
 	w := httptest.NewRecorder()
 	h.HandlePromptBar(w, req)
@@ -361,7 +364,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 	base := strings.TrimSpace(runGit(t, activeCWD, "rev-parse", "HEAD"))
 
 	workerDir := t.TempDir()
-	workerDB, err := store.Open(filepath.Join(workerDir, "worker.db"))
+	workerDB, err := openTestStore(filepath.Join(workerDir, "worker.db"))
 	if err != nil {
 		t.Fatalf("open worker store: %v", err)
 	}

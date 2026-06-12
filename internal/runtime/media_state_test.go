@@ -11,6 +11,7 @@ import (
 )
 
 func TestMediaProgressAPIStoresAndEmitsEvent(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	ch := rt.EventBus().SubscribeWithBuffer(8)
 	defer rt.EventBus().Unsubscribe(ch)
@@ -52,6 +53,7 @@ func TestMediaProgressAPIStoresAndEmitsEvent(t *testing.T) {
 }
 
 func TestThemePreferenceAPIStoresAndEmitsEvent(t *testing.T) {
+	t.Parallel()
 	rt, handler := testAPISetup(t)
 	ch := rt.EventBus().SubscribeWithBuffer(8)
 	defer rt.EventBus().Unsubscribe(ch)

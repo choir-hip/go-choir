@@ -77,7 +77,7 @@ func testStreamingRuntime(t *testing.T, provider Provider) (*Runtime, *store.Sto
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
 
-	s, err := store.Open(dbPath)
+	s, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -131,6 +131,7 @@ func waitForRunTerminalState(t *testing.T, rt *Runtime, runID, ownerID string, t
 // chunk. This is the core behavior that enables real-time SSE streaming from
 // provider → runtime → browser (VAL-LLM-008).
 func TestStreamingProviderEmitsMultipleDeltas(t *testing.T) {
+	t.Parallel()
 	chunks := []string{"Hello ", "world ", "from ", "streaming!"}
 	provider := &streamingProvider{
 		name:   "stream-test",
@@ -190,6 +191,7 @@ func TestStreamingProviderEmitsMultipleDeltas(t *testing.T) {
 // during streaming are published to the EventBus and can be received by
 // subscribers. This tests the full chain: provider → emit → EventBus → subscriber.
 func TestStreamingDeltaEventsReceivedOnBus(t *testing.T) {
+	t.Parallel()
 	chunks := []string{"chunk1 ", "chunk2 ", "chunk3"}
 	provider := &streamingProvider{
 		name:   "bus-test",
@@ -266,6 +268,7 @@ done:
 // contains the text from the corresponding streaming chunk, enabling the
 // frontend to display incremental text as it arrives (VAL-LLM-008).
 func TestStreamingEventsContainChunkText(t *testing.T) {
+	t.Parallel()
 	chunks := []string{"The ", "quick ", "brown ", "fox"}
 	provider := &streamingProvider{
 		name:   "text-test",
@@ -280,22 +283,27 @@ func TestStreamingEventsContainChunkText(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	time.Sleep(300 * time.Millisecond)
-
-	evts, err := s.ListEvents(ctx, rec.RunID, 50)
-	if err != nil {
-		t.Fatalf("list events: %v", err)
-	}
-
 	// Collect the text from each delta event.
 	var deltaTexts []string
-	for _, ev := range evts {
-		if ev.Kind == types.EventRunDelta {
-			var payload map[string]string
-			if err := json.Unmarshal(ev.Payload, &payload); err == nil {
-				deltaTexts = append(deltaTexts, payload["text"])
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		deltaTexts = deltaTexts[:0]
+		evts, err := s.ListEvents(ctx, rec.RunID, 50)
+		if err != nil {
+			t.Fatalf("list events: %v", err)
+		}
+		for _, ev := range evts {
+			if ev.Kind == types.EventRunDelta {
+				var payload map[string]string
+				if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+					deltaTexts = append(deltaTexts, payload["text"])
+				}
 			}
 		}
+		if len(deltaTexts) >= len(chunks) {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
 
 	// Verify we got the exact chunks.
@@ -314,6 +322,7 @@ func TestStreamingEventsContainChunkText(t *testing.T) {
 // emitted. This ensures the stream lifecycle is complete and the browser
 // receives a clear completion signal (VAL-LLM-008, VAL-LLM-009).
 func TestStreamingCompletesWithProperTermination(t *testing.T) {
+	t.Parallel()
 	chunks := []string{"Hello", " streaming", " world"}
 	provider := &streamingProvider{
 		name:   "term-test",
@@ -358,6 +367,7 @@ func TestStreamingCompletesWithProperTermination(t *testing.T) {
 // fails, the task transitions to failed state with proper error events,
 // matching the non-streaming failure behavior.
 func TestStreamingFailureEmitsErrorEvents(t *testing.T) {
+	t.Parallel()
 	provider := &streamingProvider{
 		name:    "fail-stream",
 		execErr: context.DeadlineExceeded,
@@ -392,6 +402,7 @@ func TestStreamingFailureEmitsErrorEvents(t *testing.T) {
 // task context stops the emission of further delta events. This tests proper
 // context propagation through the streaming pipeline.
 func TestStreamingCancellationStopsEmission(t *testing.T) {
+	t.Parallel()
 	// Create a provider that would emit many chunks but with delays.
 	chunks := make([]string, 100)
 	for i := range chunks {
@@ -442,6 +453,7 @@ counted:
 // TestStreamingWithEmptyChunks verifies that streaming with empty chunks
 // handles gracefully without emitting delta events for empty text.
 func TestStreamingWithEmptyChunks(t *testing.T) {
+	t.Parallel()
 	chunks := []string{"Hello", "", " world", ""}
 	provider := &streamingProvider{
 		name:   "empty-test",
@@ -471,6 +483,7 @@ func TestStreamingWithEmptyChunks(t *testing.T) {
 // TestStreamingLargePayload verifies that streaming works correctly with
 // larger text payloads, simulating realistic LLM responses.
 func TestStreamingLargePayload(t *testing.T) {
+	t.Parallel()
 	// Simulate a 1KB response split into 10 chunks of ~100 bytes each.
 	var chunks []string
 	longText := strings.Repeat("Lorem ipsum dolor sit amet. ", 40) // ~1KB

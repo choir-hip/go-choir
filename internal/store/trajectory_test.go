@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -73,6 +75,87 @@ func TestTrajectoryStatusTransitionStampsSettledAt(t *testing.T) {
 	}
 	if settled.Status != types.TrajectorySettled || settled.SettledAt == nil {
 		t.Fatalf("settled record missing status/settled_at: %+v", settled)
+	}
+}
+
+func TestTrajectorySubjectRefsMergePatch(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID: "traj-refs",
+		OwnerID:      "user-alice",
+		Kind:         types.TrajectoryKindPublication,
+		SubjectRefs:  map[string]string{"processor_key": "processor:global"},
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	updated, err := s.UpdateTrajectorySubjectRefs(ctx, "user-alice", "traj-refs", map[string]string{
+		"publish_ref": "platformd_publication:pub-1/ver-1",
+		"edition_ref": "vtext_edition:wire/rev-1",
+		"":            "ignored",
+	})
+	if err != nil {
+		t.Fatalf("update trajectory subject refs: %v", err)
+	}
+	if updated.SubjectRefs["processor_key"] != "processor:global" {
+		t.Fatalf("existing subject ref lost: %+v", updated.SubjectRefs)
+	}
+	if updated.SubjectRefs["publish_ref"] != "platformd_publication:pub-1/ver-1" {
+		t.Fatalf("publish_ref missing: %+v", updated.SubjectRefs)
+	}
+	if updated.SubjectRefs["edition_ref"] != "vtext_edition:wire/rev-1" {
+		t.Fatalf("edition_ref missing: %+v", updated.SubjectRefs)
+	}
+}
+
+func TestTrajectorySubjectRefsConcurrentMergePatchesPreserveKeys(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID: "traj-concurrent-refs",
+		OwnerID:      "user-alice",
+		Kind:         types.TrajectoryKindPublication,
+		SubjectRefs:  map[string]string{"processor_key": "processor:global"},
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+
+	const patches = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, patches)
+	for i := 0; i < patches; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := s.UpdateTrajectorySubjectRefs(ctx, "user-alice", "traj-concurrent-refs", map[string]string{
+				fmt.Sprintf("ref_%02d", i): fmt.Sprintf("value-%02d", i),
+			})
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent subject ref patch: %v", err)
+		}
+	}
+
+	got, err := s.GetTrajectory(ctx, "user-alice", "traj-concurrent-refs")
+	if err != nil {
+		t.Fatalf("get trajectory: %v", err)
+	}
+	if got.SubjectRefs["processor_key"] != "processor:global" {
+		t.Fatalf("existing subject ref lost: %+v", got.SubjectRefs)
+	}
+	for i := 0; i < patches; i++ {
+		key := fmt.Sprintf("ref_%02d", i)
+		if got.SubjectRefs[key] != fmt.Sprintf("value-%02d", i) {
+			t.Fatalf("subject ref %s = %q, want value-%02d; refs=%+v", key, got.SubjectRefs[key], i, got.SubjectRefs)
+		}
 	}
 }
 
@@ -178,5 +261,92 @@ func TestWorkItemFingerprintDedupAndOpenObligationsQuery(t *testing.T) {
 	}
 	if again.WorkItemID == created.WorkItemID {
 		t.Fatalf("cancelled fingerprint was not released")
+	}
+}
+
+func TestWorkItemDetailsMergePatch(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	item, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              "user-alice",
+		TrajectoryID:         "traj-details",
+		Objective:            "record a processor decision",
+		ObjectiveFingerprint: "fp-details",
+		Details: map[string]any{
+			"kind":       "wire_processor_request_resolution",
+			"request_id": "request-1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("create work item: %v", err)
+	}
+	updated, err := s.UpdateWorkItemDetails(ctx, "user-alice", item.WorkItemID, map[string]any{
+		"decision":         "already_covered",
+		"decision_summary": "Existing coverage already satisfies this batch.",
+	})
+	if err != nil {
+		t.Fatalf("update work item details: %v", err)
+	}
+	if updated.Details["kind"] != "wire_processor_request_resolution" || updated.Details["request_id"] != "request-1" {
+		t.Fatalf("existing details lost after patch: %+v", updated.Details)
+	}
+	if updated.Details["decision"] != "already_covered" || updated.Details["decision_summary"] != "Existing coverage already satisfies this batch." {
+		t.Fatalf("patched details missing: %+v", updated.Details)
+	}
+}
+
+func TestWorkItemDetailsConcurrentMergePatchesPreserveKeys(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	item, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              "user-alice",
+		TrajectoryID:         "traj-concurrent-details",
+		Objective:            "record concurrent processor decisions",
+		ObjectiveFingerprint: "fp-concurrent-details",
+		Details: map[string]any{
+			"kind":       "wire_processor_request_resolution",
+			"request_id": "request-concurrent",
+		},
+	})
+	if err != nil {
+		t.Fatalf("create work item: %v", err)
+	}
+
+	const patches = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, patches)
+	for i := 0; i < patches; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := s.UpdateWorkItemDetails(ctx, "user-alice", item.WorkItemID, map[string]any{
+				fmt.Sprintf("decision_%02d", i): fmt.Sprintf("value-%02d", i),
+			})
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent work item detail patch: %v", err)
+		}
+	}
+
+	got, err := s.GetWorkItem(ctx, "user-alice", item.WorkItemID)
+	if err != nil {
+		t.Fatalf("get work item: %v", err)
+	}
+	if got.Details["kind"] != "wire_processor_request_resolution" || got.Details["request_id"] != "request-concurrent" {
+		t.Fatalf("existing details lost: %+v", got.Details)
+	}
+	for i := 0; i < patches; i++ {
+		key := fmt.Sprintf("decision_%02d", i)
+		if got.Details[key] != fmt.Sprintf("value-%02d", i) {
+			t.Fatalf("detail %s = %q, want value-%02d; details=%+v", key, got.Details[key], i, got.Details)
+		}
 	}
 }
