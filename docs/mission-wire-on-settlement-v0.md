@@ -34,9 +34,10 @@ cycle.
 
 ## Parallax State
 
-status: open_handoff (2026-06-12; ready to resume M5 after local green
-checkpoint; route-switch substrate exists locally but is unlanded, unpushed,
-and not yet proven on staging/production)
+status: open_handoff (2026-06-12; route-switch substrate is committed,
+pushed, CI-green, and deployed to staging at `b8f33087`; product-path
+wire-cycle proof is blocked on an authenticated owner session and the
+production maxProc>1 evidence gate remains open)
 
 **mission conjecture:** if publication trajectories carry coverage/publish
 decisions as durable work items and subject refs, settlement is evaluated
@@ -73,22 +74,19 @@ conformance only.
   a green local cycle is not the gate.
 
 **variant (ranking function) V:** count remaining settlement blockers:
-unlanded local code checkpoint; pre-landing review not yet converted into
-remote reviewer/CI evidence; missing honest-and-full instrument; missing
-local maxProc>1 multi-story cycle; missing staging deploy/build-identity
-proof; missing observed production multi-story cycle; undecided
-processor-phase admission scope outside the story-route branch; unspecified
-non-fetch deferred wake policy; missing final verdict on the rearchitecture
-core claim. Current V=9. Last observed ΔV: review removed two local
-pre-landing blockers (Store JSON merge-patch race and stale reset crossing
-request/runtime axes), and local verification is green at
-`103.344s` package / `120.82s` wall for comprehensive runtime plus the
-normal touched-package suite, both vet modes, and `git diff --check`.
+missing product-path staging wire-cycle proof; missing honest-and-full
+instrument; missing observed production multi-story cycle at maxProc>1;
+undecided processor-phase admission scope outside the story-route branch;
+unspecified non-fetch deferred wake policy; missing final verdict on the
+rearchitecture core claim. Current V=6. Last observed ΔV: local review,
+CI, and staging identity blockers are discharged. The pushed stack ends at
+`b8f33087`; forced CI/deploy run `27448287123` passed and `/health` reports
+proxy+sandbox build/deployed commit `b8f33087ce099d11054447d852e788453379a787`.
 
-**budget:** next run should assume one Parallax goal session plus one owner
-attention gate for staging/production observation. Solvency verdict: local
-landing and staging proof likely fit one session; production-cycle evidence
-may require owner timing if source traffic or deploy gates do not cooperate.
+**budget:** next run should assume one owner-authenticated product-proof
+session plus one production-cycle observation window. Solvency verdict:
+landing is done; the next uncertainty is authenticated product proof and
+whether source traffic/cycle timing can produce a real maxProc>1 cycle.
 
 **authority / bounds:** repo changes on a branch; production observation
 requires deploy — note the deploy gate is currently red on two known
@@ -109,25 +107,28 @@ processor admission between sourcecycled and runtime. Local checks are green:
 `nix develop -c go vet ./...`; `nix develop -c go vet -tags comprehensive ./...`;
 `git diff --check`. Review fixes now serialize Store JSON merge patches
 within one Store instance and preserve projected request verdicts during
-stale runtime-submission recovery. Open edge: remote CI/reviewer evidence and
-product-path proof are still missing; local checks cannot settle the
-production route-switch conjecture.
+stale runtime-submission recovery. Remote CI/deploy evidence now exists:
+push CI `27448208407` passed but skipped deploy after a docs/test fix, then
+manual workflow_dispatch `27448287123` with `force_staging_deploy=true`
+passed and deployed current `main`. Open edge: product-path proof is still
+missing because unauthenticated `/api/prompt-bar` returns 401 and the
+available Chrome tabs showed signed-out preview only; local/staging health
+cannot settle the production route-switch conjecture.
 
-**next move:** run the handoff/settlement boundary, not more substrate
-wandering: perform an independent diff review with the store JSON merge edge
-as the first falsifier; document/fix any new problem before code changes;
-then commit an intentionally scoped checkpoint, push, monitor CI/deploy,
-verify deployed commit identity on `https://choir.news`, and run the
-smallest product-path/staging wire-cycle proof that can decide whether the
-remaining blockers are local code, deploy/CI, source traffic, or owner
-attention.
+**next move:** run the authenticated product-proof boundary: with an owner
+session on `https://choir.news`, verify the deployed build identity, then run
+the smallest product-path wire-cycle observation that can show whether the
+remaining blockers are product auth/session, source traffic, sourcecycled
+cycle timing, honest-and-full front-page instrumentation, or production
+maxProc policy. Do not use internal/test routes to compensate for missing
+auth.
 
 **ledger file:** `docs/mission-wire-on-settlement-v0.ledger.md` for future
 append-only Parallax pass entries. Historical passes before this checkpoint
 remain embedded below under `ledger / move log` and should not be
 transcribed unless auditing requires it.
 
-**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State, use docs/mission-wire-on-settlement-v0.ledger.md for new pass entries, and descend V from 9 toward settlement: first independently review the uncommitted M5/M5a diff with the store JSON merge/concurrency edge as the falsifier, document any new problem before fixing it, preserve all Choir invariants and no fake islands, run widest local checks plus independent review before exit, then commit/push, monitor CI/deploy, verify staging commit identity at https://choir.news, run the smallest product-path wire-cycle proof that can support or weaken the route-switch claim, and update the paradoc with exact evidence, residual edges, rollback refs, and a scoped verdict. Do not call M5 settled without one observed production multi-story cycle at maxProc > 1, honest-and-full evidence, landing proof, and a verdict on the rearchitecture core claim; if that gate cannot be reached, exit only as open_handoff or blocked with V, receipts, and next discriminator updated.`
+**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State and append to docs/mission-wire-on-settlement-v0.ledger.md. Start from deployed commit b8f33087ce099d11054447d852e788453379a787: CI/deploy are green, staging /health identity is proven, and V=6. With an authenticated owner session on https://choir.news, run only browser-public product paths to observe the smallest Universal Wire cycle evidence available: prompt-bar/session proof if needed, trace/vtext/publication/front-page receipts, sourcecycled cycle timing, and whether a real multi-story cycle at maxProc>1 can be observed. Do not use /api/agent, /internal, /api/test, raw event mutation, or manual success seeding. If auth or source traffic blocks the proof, update the paradoc/ledger with exact blocker receipts and next discriminator. Do not call M5 settled without production multi-story maxProc>1 evidence, honest-and-full front-page proof, rollback refs, and a verdict on the durable-actors core claim.`
 
 ### Position — code inventory (compiled 2026-06-12, post-M1)
 

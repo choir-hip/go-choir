@@ -157,3 +157,55 @@ reported `Deploy to Staging (Node B)` as skipped.
 Open edge: use the workflow's explicit `force_staging_deploy=true` dispatch on
 `main`, then verify `/health` build identity before attempting product-path
 wire proof. Do not claim staging acceptance from the green skipped-deploy run.
+
+## 2026-06-12 — Landing Proof: Forced Deploy + Staging Identity
+
+Claim/scope: the M5 substrate stack reached staging, but not product-path or
+production-cycle acceptance. Scope is deploy identity only.
+
+Move: force the documented deploy path after the skipped-deploy edge. Dispatch
+`ci.yml` on `main` with `force_staging_deploy=true`.
+
+Expected ΔV: discharge CI/deploy/build-identity blockers.
+
+Actual ΔV: CI and staging identity are discharged. M5 remains open_handoff
+because no authenticated product-path wire-cycle proof or production maxProc>1
+cycle has been observed.
+
+Receipt:
+- Push CI run `27448208407` for `7504e151` passed all gates but skipped deploy.
+- Manual workflow_dispatch run `27448287123` for `b8f33087` passed all gates.
+- Deploy job `81138219091` completed successfully in `5m13s`.
+- `curl -fsS https://choir.news/health | jq .` returned proxy and sandbox
+  `build.commit` / `deployed_commit`
+  `b8f33087ce099d11054447d852e788453379a787`, deployed at
+  `2026-06-12T23:11:18Z`.
+
+Open edge: run product-path proof from an authenticated owner session.
+
+## 2026-06-12 — Product-Proof Blocker: No Authenticated Browser Session
+
+Claim/scope: staging product APIs remain correctly auth-gated and cannot be
+used for proof without an owner session. Scope is product-path proof readiness,
+not runtime correctness.
+
+Move: probe only allowed browser-public/product paths after staging identity.
+
+Expected ΔV: either submit/observe a real product-path proof or identify the
+first missing condition.
+
+Actual ΔV: product-path proof is blocked on auth. Unauthenticated curl calls to
+`POST /api/prompt-bar` and `GET /api/prompt-bar/submissions/nonexistent`
+returned `401 {"error":"authentication required"}`. Chrome-connected staging
+tabs rendered the signed-out preview ("Local preview - sign in to save").
+
+Receipt:
+- `curl -i https://choir.news/api/prompt-bar ...` -> HTTP 401.
+- `curl -i https://choir.news/api/prompt-bar/submissions/nonexistent` -> HTTP
+  401.
+- Chrome DOM snapshots of `https://choir.news/` showed the signed-out preview,
+  not the durable owner computer.
+
+Open edge: owner must provide or open an authenticated `choir.news` session;
+then resume with the goal string in the paradoc. Do not bypass auth with
+internal routes.
