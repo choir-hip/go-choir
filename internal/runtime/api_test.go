@@ -2529,7 +2529,7 @@ func TestRegisteredPromptBarRouteAcceptsIntentOnly(t *testing.T) {
 	}
 }
 
-func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T) {
+func TestRunContinuationPublicSelectListAndStartAreOwnerScoped(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	source, err := rt.StartRunWithMetadata(context.Background(), "finish controller API source", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileSuper,
@@ -2542,28 +2542,20 @@ func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T)
 	if done.State != types.RunCompleted {
 		t.Fatalf("source state = %s", done.State)
 	}
-	adoptionID := "adoption-" + done.RunID
-	if _, err := rt.store.UpsertAppAdoption(context.Background(), types.AppAdoptionRecord{
-		AdoptionID:         adoptionID,
-		OwnerID:            "user-alice",
-		PackageID:          "pkg-continuation-api",
-		AppID:              "podcast",
-		TargetComputerID:   "computer-continuation-api",
-		TargetComputerKind: "user",
-		TargetCandidateID:  "candidate-continuation-api",
-		Status:             types.AppAdoptionCandidateApplied,
-		CandidateSourceRef: "refs/computers/computer-continuation-api/candidates/candidate-continuation-api",
-		TraceID:            traceTrajectoryIDForRun(done),
-	}); err != nil {
-		t.Fatalf("upsert app adoption: %v", err)
-	}
 
-	unauth := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/continuations", `{"source_loop_id":"`+done.RunID+`"}`, "")
+	selectBody := `{"source_loop_id":"` + done.RunID + `","objective":"verify the controller API change with recipient build evidence","authority_profile":"vsuper"}`
+
+	unauth := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/continuations", selectBody, "")
 	if unauth.Code != http.StatusUnauthorized {
 		t.Fatalf("unauth status = %d, want %d", unauth.Code, http.StatusUnauthorized)
 	}
 
-	selectW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/continuations", `{"source_loop_id":"`+done.RunID+`"}`, "user-alice")
+	noObjective := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/continuations", `{"source_loop_id":"`+done.RunID+`"}`, "user-alice")
+	if noObjective.Code != http.StatusBadRequest {
+		t.Fatalf("missing objective status = %d, want %d; body=%s", noObjective.Code, http.StatusBadRequest, noObjective.Body.String())
+	}
+
+	selectW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/continuations", selectBody, "user-alice")
 	if selectW.Code != http.StatusAccepted {
 		t.Fatalf("select status = %d, want %d; body=%s", selectW.Code, http.StatusAccepted, selectW.Body.String())
 	}
@@ -2571,7 +2563,7 @@ func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T)
 	if err := json.NewDecoder(selectW.Body).Decode(&selected); err != nil {
 		t.Fatalf("decode selected: %v", err)
 	}
-	if selected.Status != types.RunContinuationSelected || selected.Details["adoption_id"] != adoptionID {
+	if selected.Status != types.RunContinuationSelected || selected.Details["selection_source"] != "api_explicit_objective" {
 		t.Fatalf("unexpected selected continuation: %+v", selected)
 	}
 	sourceEvents, err := rt.store.ListEvents(context.Background(), done.RunID, 100)
@@ -2584,14 +2576,13 @@ func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T)
 			continue
 		}
 		payload := parseTracePayload(ev.Payload)
-		details, _ := payload["details"].(map[string]any)
-		if payloadString(payload, "compaction_status") != "" && payloadString(details, "adoption_id") == adoptionID {
+		if payloadString(payload, "compaction_status") != "" {
 			foundContinuationEvidence = true
 			break
 		}
 	}
 	if !foundContinuationEvidence {
-		t.Fatalf("continuation selected event missing compaction/adoption evidence: %+v", sourceEvents)
+		t.Fatalf("continuation selected event missing compaction evidence: %+v", sourceEvents)
 	}
 
 	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/continuations?source_loop_id="+done.RunID, "", "user-alice")

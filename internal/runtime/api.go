@@ -81,9 +81,13 @@ type runContinuationListResponse struct {
 	Continuations []types.RunContinuationRecord `json:"continuations"`
 }
 
-type runContinuationSynthesizeRequest struct {
-	SourceRunID string `json:"source_loop_id"`
-	Start       bool   `json:"start,omitempty"`
+type runContinuationSelectRequest struct {
+	SourceRunID      string `json:"source_loop_id"`
+	Objective        string `json:"objective"`
+	Reason           string `json:"reason,omitempty"`
+	AuthorityProfile string `json:"authority_profile,omitempty"`
+	LeaseSeconds     int    `json:"lease_seconds,omitempty"`
+	Start            bool   `json:"start,omitempty"`
 }
 
 type runAcceptanceSynthesizeRequest struct {
@@ -590,7 +594,7 @@ func (h *APIHandler) HandleRunContinuationsRoot(w http.ResponseWriter, r *http.R
 		}
 		writeAPIJSON(w, http.StatusOK, runContinuationListResponse{Continuations: continuations})
 	case http.MethodPost:
-		var req runContinuationSynthesizeRequest
+		var req runContinuationSelectRequest
 		decoder := json.NewDecoder(r.Body)
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&req); err != nil {
@@ -602,7 +606,17 @@ func (h *APIHandler) HandleRunContinuationsRoot(w http.ResponseWriter, r *http.R
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "source_loop_id is required"})
 			return
 		}
-		rec, err := h.rt.SelectSynthesizedRunContinuation(r.Context(), sourceRunID, ownerID)
+		if strings.TrimSpace(req.Objective) == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "objective is required: continuation synthesis was removed; the caller decides the next objective"})
+			return
+		}
+		rec, err := h.rt.SelectRunContinuation(r.Context(), sourceRunID, ownerID, ContinuationProposal{
+			Objective:        req.Objective,
+			Reason:           req.Reason,
+			AuthorityProfile: req.AuthorityProfile,
+			LeaseSeconds:     req.LeaseSeconds,
+			Details:          map[string]any{"selection_source": "api_explicit_objective"},
+		})
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return

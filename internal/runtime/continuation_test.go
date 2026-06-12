@@ -55,7 +55,7 @@ func TestRunContinuationCompactsAndStartsBoundedNextGoal(t *testing.T) {
 		t.Fatalf("continuation missing objective fingerprint: %+v", selected.Details)
 	}
 	duplicate, err := rt.SelectRunContinuation(ctx, done.RunID, "user-alice", ContinuationProposal{
-		Objective:        " continue WITH the next/candidate world product patch!! ",
+		Objective:        " continue WITH the next/candidate-computer product change!! ",
 		Reason:           "same objective repeated by the controller",
 		AuthorityProfile: AgentProfileVSuper,
 		LeaseSeconds:     60,
@@ -108,76 +108,6 @@ func TestRunContinuationCompactsAndStartsBoundedNextGoal(t *testing.T) {
 	}
 }
 
-func TestRunControlSynthesizesContinuationFromAppAdoption(t *testing.T) {
-	ctx := context.Background()
-	rt, s := testRuntime(t)
-	rt.cfg.RunMemoryKeepRecentTokens = 1
-	rt.cfg.RunMemoryContextThresholdTokens = 1
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
-		t.Fatalf("install agent tools: %v", err)
-	}
-
-	source, err := rt.StartRunWithMetadata(ctx, "finish candidate-producing work", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
-		runMetadataTrajectoryID: "trace-run-control",
-	})
-	if err != nil {
-		t.Fatalf("start source run: %v", err)
-	}
-	done := waitForRunTerminalState(t, rt, source.RunID, "user-alice", 5*time.Second)
-	if done.State != types.RunCompleted {
-		t.Fatalf("source state = %s", done.State)
-	}
-
-	if _, err := rt.store.UpsertAppAdoption(ctx, types.AppAdoptionRecord{
-		AdoptionID:         "adoption-" + done.RunID,
-		OwnerID:            "user-alice",
-		PackageID:          "pkg-run-control",
-		AppID:              "podcast",
-		TargetComputerID:   "computer-run-control",
-		TargetComputerKind: "user",
-		TargetCandidateID:  "candidate-run-control",
-		Status:             types.AppAdoptionCandidateApplied,
-		CandidateSourceRef: "refs/computers/computer-run-control/candidates/candidate-run-control",
-		TraceID:            "trace-run-control",
-	}); err != nil {
-		t.Fatalf("upsert app adoption: %v", err)
-	}
-
-	selected, err := rt.SelectSynthesizedRunContinuation(ctx, done.RunID, "user-alice")
-	if err != nil {
-		t.Fatalf("select synthesized continuation: %v", err)
-	}
-	if selected.AuthorityProfile != AgentProfileVSuper {
-		t.Fatalf("authority profile = %q, want %q", selected.AuthorityProfile, AgentProfileVSuper)
-	}
-	if !strings.Contains(selected.Objective, "adoption-"+done.RunID) || !strings.Contains(selected.Objective, "Verify app adoption") {
-		t.Fatalf("objective = %q, want app adoption verification objective", selected.Objective)
-	}
-	if selected.Details["signal"] != "app_adoption" || selected.Details["adoption_id"] != "adoption-"+done.RunID {
-		t.Fatalf("details missing app adoption signal: %+v", selected.Details)
-	}
-	if selected.Details["compaction_status"] != "completed" {
-		t.Fatalf("synthesized continuation did not compact first: %+v", selected.Details)
-	}
-
-	duplicate, err := rt.SelectSynthesizedRunContinuation(ctx, done.RunID, "user-alice")
-	if err != nil {
-		t.Fatalf("select duplicate synthesized continuation: %v", err)
-	}
-	if duplicate.ContinuationID != selected.ContinuationID {
-		t.Fatalf("duplicate synthesized continuation = %s, want %s", duplicate.ContinuationID, selected.ContinuationID)
-	}
-	continuations, err := s.ListRunContinuationsBySource(ctx, "user-alice", done.RunID)
-	if err != nil {
-		t.Fatalf("list continuations: %v", err)
-	}
-	if len(continuations) != 1 {
-		t.Fatalf("continuations = %d, want one synthesized continuation", len(continuations))
-	}
-}
-
 func TestRunControlCompactsEventLedgerWhenSourceHasNoProviderMemory(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
@@ -208,27 +138,17 @@ func TestRunControlCompactsEventLedgerWhenSourceHasNoProviderMemory(t *testing.T
 	rt.emitEvent(ctx, &source, types.EventRunSubmitted, events.CauseTaskLifecycle, json.RawMessage(`{"prompt_length":46}`))
 	rt.emitEvent(ctx, &source, types.EventRunCompleted, events.CauseTaskLifecycle, json.RawMessage(`{"result_length":57}`))
 
-	if _, err := rt.store.UpsertAppAdoption(ctx, types.AppAdoptionRecord{
-		AdoptionID:         "adoption-" + source.RunID,
-		OwnerID:            "user-alice",
-		PackageID:          "pkg-no-provider-memory",
-		AppID:              "podcast",
-		TargetComputerID:   "computer-no-provider-memory",
-		TargetComputerKind: "user",
-		TargetCandidateID:  "candidate-no-provider-memory",
-		Status:             types.AppAdoptionCandidateApplied,
-		CandidateSourceRef: "refs/computers/computer-no-provider-memory/candidates/candidate-no-provider-memory",
-		TraceID:            "trace-no-provider-memory",
-	}); err != nil {
-		t.Fatalf("upsert app adoption: %v", err)
-	}
-
-	selected, err := rt.SelectSynthesizedRunContinuation(ctx, source.RunID, "user-alice")
+	selected, err := rt.SelectRunContinuation(ctx, source.RunID, "user-alice", ContinuationProposal{
+		Objective:        "verify app adoption adoption-" + source.RunID + " with recipient build evidence",
+		Reason:           "explicit next objective for a run with no provider transcript",
+		AuthorityProfile: AgentProfileVSuper,
+		LeaseSeconds:     60,
+	})
 	if err != nil {
-		t.Fatalf("select synthesized continuation: %v", err)
+		t.Fatalf("select continuation: %v", err)
 	}
 	if selected.Details["compaction_status"] != "completed" {
-		t.Fatalf("synthesized continuation did not record event-ledger compaction: %+v", selected.Details)
+		t.Fatalf("continuation did not record event-ledger compaction: %+v", selected.Details)
 	}
 
 	entries, err := s.ListRunMemoryEntries(ctx, "user-alice", source.RunID)
@@ -265,40 +185,6 @@ func TestRunControlCompactsEventLedgerWhenSourceHasNoProviderMemory(t *testing.T
 	}
 	if completedPayload["source"] != "run_event_ledger" || completedPayload["entry_id"] != checkpoint.EntryID {
 		t.Fatalf("compaction event payload = %+v, want event-ledger checkpoint ref %s", completedPayload, checkpoint.EntryID)
-	}
-}
-
-func TestRunControlSynthesizesMissionFallbackWhenNoCandidateSignals(t *testing.T) {
-	ctx := context.Background()
-	rt, _ := testRuntime(t)
-	rt.cfg.RunMemoryKeepRecentTokens = 1
-	rt.cfg.RunMemoryContextThresholdTokens = 1
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
-		t.Fatalf("install agent tools: %v", err)
-	}
-
-	source, err := rt.StartRunWithMetadata(ctx, "finish without candidates", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
-		"mission_doc":           "docs/mission-choir-grand-deformation-v0.md",
-	})
-	if err != nil {
-		t.Fatalf("start source run: %v", err)
-	}
-	done := waitForRunTerminalState(t, rt, source.RunID, "user-alice", 5*time.Second)
-
-	selected, err := rt.SelectSynthesizedRunContinuation(ctx, done.RunID, "user-alice")
-	if err != nil {
-		t.Fatalf("select synthesized fallback: %v", err)
-	}
-	if selected.AuthorityProfile != AgentProfileVSuper {
-		t.Fatalf("authority profile = %q, want %q", selected.AuthorityProfile, AgentProfileVSuper)
-	}
-	if !strings.Contains(selected.Objective, "docs/mission-choir-grand-deformation-v0.md") {
-		t.Fatalf("objective = %q, want mission doc fallback", selected.Objective)
-	}
-	if selected.Details["signal"] != "mission_gradient" || selected.Details["selection_source"] != "run_control_memory" {
-		t.Fatalf("details missing run-control fallback signal: %+v", selected.Details)
 	}
 }
 

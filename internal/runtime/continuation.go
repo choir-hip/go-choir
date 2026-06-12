@@ -23,54 +23,6 @@ type ContinuationProposal struct {
 	Details          map[string]any
 }
 
-// SynthesizeRunContinuation chooses the next bounded objective from durable
-// runtime signals. It is intentionally deterministic and conservative: app
-// adoption work beats open-ended mission continuation, and it only returns a
-// proposal for SelectRunContinuation to record through the normal compaction
-// and fingerprint path.
-func (rt *Runtime) SynthesizeRunContinuation(ctx context.Context, sourceRunID, ownerID string) (ContinuationProposal, error) {
-	if rt == nil || rt.store == nil {
-		return ContinuationProposal{}, fmt.Errorf("synthesize run continuation: runtime store is unavailable")
-	}
-	source, err := rt.GetRun(ctx, sourceRunID, ownerID)
-	if err != nil {
-		return ContinuationProposal{}, err
-	}
-	adoptions, err := rt.store.ListAppAdoptions(ctx, ownerID, 100)
-	if err != nil {
-		return ContinuationProposal{}, fmt.Errorf("synthesize run continuation: list app adoptions: %w", err)
-	}
-	if proposal, ok := continuationFromAppAdoptions(source, adoptions); ok {
-		return proposal, nil
-	}
-	missionDoc := metadataStringValue(source.Metadata, "mission_doc")
-	if missionDoc == "" {
-		missionDoc = "docs/mission-choir-grand-deformation-v0.md"
-	}
-	return ContinuationProposal{
-		Objective:        "Continue " + missionDoc + " by selecting the next verifier-dense Choir-in-Choir deformation from run memory, Trace, app adoption state, and product gaps.",
-		Reason:           "run control memory found no pending AppChangePackage adoption, so it falls back to mission-gradient continuation",
-		AuthorityProfile: AgentProfileVSuper,
-		LeaseSeconds:     4 * 60 * 60,
-		Details: map[string]any{
-			"selection_source": "run_control_memory",
-			"signal":           "mission_gradient",
-			"mission_doc":      missionDoc,
-		},
-	}, nil
-}
-
-// SelectSynthesizedRunContinuation records the deterministic controller choice
-// as a normal continuation. It does not start the continuation or mutate
-// canonical state.
-func (rt *Runtime) SelectSynthesizedRunContinuation(ctx context.Context, sourceRunID, ownerID string) (types.RunContinuationRecord, error) {
-	proposal, err := rt.SynthesizeRunContinuation(ctx, sourceRunID, ownerID)
-	if err != nil {
-		return types.RunContinuationRecord{}, err
-	}
-	return rt.SelectRunContinuation(ctx, sourceRunID, ownerID, proposal)
-}
-
 // SelectRunContinuation records the next objective for a completed or blocked
 // run. It first attempts a durable compaction checkpoint so the continuation has
 // operational memory rather than only chat transcript state.
@@ -235,88 +187,6 @@ func (rt *Runtime) maybeStartConfiguredContinuation(ctx context.Context, rec *ty
 	}
 }
 
-func continuationFromAppAdoptions(source *types.RunRecord, adoptions []types.AppAdoptionRecord) (ContinuationProposal, bool) {
-	if source == nil {
-		return ContinuationProposal{}, false
-	}
-	sourceRunID := strings.TrimSpace(source.RunID)
-	trajectoryID := metadataStringValue(source.Metadata, runMetadataTrajectoryID)
-	for _, status := range []types.AppAdoptionStatus{
-		types.AppAdoptionProposed,
-		types.AppAdoptionCandidateApplied,
-		types.AppAdoptionBlocked,
-		types.AppAdoptionVerified,
-	} {
-		for _, adoption := range adoptions {
-			if adoption.Status != status || !appAdoptionImpactsSource(adoption, sourceRunID, trajectoryID) {
-				continue
-			}
-			return continuationFromAppAdoption(adoption), true
-		}
-	}
-	return ContinuationProposal{}, false
-}
-
-func appAdoptionImpactsSource(adoption types.AppAdoptionRecord, sourceRunID, trajectoryID string) bool {
-	if strings.TrimSpace(adoption.AdoptionID) == "" {
-		return false
-	}
-	if trajectoryID != "" && strings.TrimSpace(adoption.TraceID) == trajectoryID {
-		return true
-	}
-	return sourceRunID != "" && strings.Contains(adoption.AdoptionID, sourceRunID)
-}
-
-func continuationFromAppAdoption(adoption types.AppAdoptionRecord) ContinuationProposal {
-	summary := strings.TrimSpace(adoption.AppID)
-	if summary == "" {
-		summary = adoption.PackageID
-	}
-	if summary == "" {
-		summary = "AppChangePackage adoption"
-	}
-	details := map[string]any{
-		"selection_source":     "run_control_memory",
-		"signal":               "app_adoption",
-		"adoption_id":          adoption.AdoptionID,
-		"package_id":           adoption.PackageID,
-		"adoption_status":      string(adoption.Status),
-		"trace_id":             adoption.TraceID,
-		"verifier_target":      "app_adoption",
-		"target_computer_id":   adoption.TargetComputerID,
-		"target_candidate_id":  adoption.TargetCandidateID,
-		"candidate_source_ref": adoption.CandidateSourceRef,
-		"canonical_mutation":   "forbidden_until_verified_with_rollback",
-	}
-	switch adoption.Status {
-	case types.AppAdoptionVerified:
-		return ContinuationProposal{
-			Objective:        fmt.Sprintf("Prepare promotion or rollback decision for verified app adoption %s: %s", adoption.AdoptionID, summary),
-			Reason:           "run control memory found a verified recipient adoption that still needs promotion/rollback closure",
-			AuthorityProfile: AgentProfileCoSuper,
-			LeaseSeconds:     60 * 60,
-			Details:          details,
-		}
-	case types.AppAdoptionBlocked:
-		details["error"] = adoption.Error
-		return ContinuationProposal{
-			Objective:        fmt.Sprintf("Recover blocked app adoption %s without mutating active state: %s", adoption.AdoptionID, summary),
-			Reason:           "run control memory found a blocked recipient build/verifier contract",
-			AuthorityProfile: AgentProfileVSuper,
-			LeaseSeconds:     2 * 60 * 60,
-			Details:          details,
-		}
-	default:
-		return ContinuationProposal{
-			Objective:        fmt.Sprintf("Verify app adoption %s with actual recipient build evidence before promotion: %s", adoption.AdoptionID, summary),
-			Reason:           "run control memory found a proposed recipient adoption that needs verifier contracts",
-			AuthorityProfile: AgentProfileVSuper,
-			LeaseSeconds:     2 * 60 * 60,
-			Details:          details,
-		}
-	}
-}
-
 func objectiveFingerprint(ownerID, trajectoryID, parentRunID, objective string) string {
 	parts := []string{
 		strings.TrimSpace(ownerID),
@@ -336,12 +206,6 @@ func normalizeObjectiveText(raw string) string {
 		token := strings.TrimSpace(b.String())
 		if token == "" {
 			return
-		}
-		switch token {
-		case "world":
-			token = "computer"
-		case "patch":
-			token = "change"
 		}
 		terms = append(terms, token)
 		b.Reset()

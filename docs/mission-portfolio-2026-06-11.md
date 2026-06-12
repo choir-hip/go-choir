@@ -2,12 +2,12 @@
 
 ## Status
 
-The defined-missions backlog, compiled under MissionGradient v2.0.0
-(conjecture-native). Defining missions is currently the priority over
-executing them: each entry below is a mission *definition* — real artifact,
-driving conjectures with falsifiers and edges, settlement condition, evidence
-class, dependencies — sufficient for an agent to expand into a full mission
-doc and run. Full mission docs get written at mission start, not here.
+The defined-missions backlog, now governed by Parallax (`skills/parallax/SKILL.md`)
+as a portfolio-level conjecture circuit. Each entry below is a mission source
+form: witness/spec, deeper goal, bridge conjecture, falsifier, edge,
+settlement, and dependencies. At mission start, `/goal docs/<mission>.md`
+compiles the relevant entry and references into a mutable mission document
+with `Parallax State`.
 
 Sources of truth these missions execute against:
 `docs/choir-rearchitecture-durable-actors-2026-06-11.md` (the cutover
@@ -17,7 +17,37 @@ in `specs/`, and `docs/mission-geometry.md` (the layer each mission serves).
 
 Already done (not missions): specs 0–4 + CI; actor core package
 (`internal/actor`, cutover step 1); promotion P2 guards (approval gate +
-freshness CAS); MissionGradient v2.0.0.
+freshness CAS); MissionGradient v2.0.0; Parallax v1.2.0 as candidate
+mission discipline.
+
+## Portfolio Parallax State
+
+**status:** working
+
+**mission conjecture:** If the portfolio lands the trajectory/work-item
+model, settlement-gated Wire, single-message actor cutover, real promotion
+route flip, review UI, Dolt rollback window, and capsule/corpus side tracks
+under the named invariants and staging proof requirements, then Choir's
+deeper rearchitecture goal advances: durable actors, evidence-bearing
+promotion, and self-development become operational instead of documentary.
+
+**deeper goal (G):** make Choir a self-improving persistent-computer system
+whose agents can change code, data, docs, and method through typed
+conjectures, verifier evidence, owner gates, and rollback-aware promotion.
+
+**witness/spec (A/S):** M1–M8 are the core witness path; M10/M11 are side
+tracks. M9 is completed doctrine cleanup. The specs and docs named above are
+the source program.
+
+**bridge conjecture + sub-conjectures / position:** The bridge is not assumed:
+each mission must test whether its artifact advances the deeper goal or merely
+adds scaffolding. Repeated obstacles require revising the mission conjecture,
+not spawning a disconnected replacement. Superseded missions link successors
+and preserve their learning state in the mission doc.
+
+**learning state:** retained first in mutable mission docs; promoted outward
+only when it changes shared assertions, architecture, specs/tests, skills, or
+successor missions.
 
 ## Dependency graph
 
@@ -35,9 +65,31 @@ M11 corpusd rename ─ independent side PR, anytime
 
 Recommended order of *execution*: M9 → M1 (proof mission) → M5 → M2 → M6+M7
 → M3 → M4 → M8, with M10/M11 parallel. M1 and M5 are the highest-information
-pair: together they retire the leaked invariant on real production traffic.
+pair: together they test whether the trajectory model actually retires the
+leaked invariant on real production traffic.
 
 ---
+
+## M1a — Continuation synthesis deletion (pre-M1 side PR) — DONE 2026-06-12
+
+**Real artifact:** the synthesis *decision* layer deleted ahead of M1, on the
+principle that a deletion costing nothing proven and requiring no replacement
+should not wait for its cutover step: `SynthesizeRunContinuation`,
+`SelectSynthesizedRunContinuation`, the app-adoption→objective mapping with
+its adoption-ID substring match, the hardcoded mission-doc fallback, the
+synthesis lease defaults, and the synonym folding inside the fingerprint
+normalizer. `POST /api/continuations` now requires an explicit objective (the
+caller decides; the record layer only records). The record layer —
+`SelectRunContinuation`, `StartRunContinuation`, fingerprint dedup,
+compaction-before-handoff — survives until M1 ports it to work items and M4
+retires it.
+
+**Rationale receipt:** the only production caller of synthesis was the API
+endpoint (api.go:605), reached from a dead frontend export and the agent
+product-API allowlist; the autonomous path (`maybeStartConfiguredContinuation`)
+always used explicit metadata objectives. Loss = autonomous objective
+selection, already accepted as unproven (rearchitecture doc §2.5 named risk).
+Suite green (runtime, actor, store; comprehensive continuation/API tests).
 
 ## M1 — Trajectory model (cutover step 2; also the §15 proof mission)
 
@@ -46,7 +98,7 @@ settlement rule as data) + `trajectory_id` on runs + work items (the ported
 continuation mechanics: objective, bounded authority profile, step/token
 budgets, fingerprint dedup — no lease vocabulary in v1), in the runtime store. Additive; no control-flow change.
 
-**Driving conjecture (N2′):** one durable object — trajectory + work items —
+**Bridge conjecture (N2′):** one durable object — trajectory + work items —
 replaces every parent/child control use with no loss of budget, cancellation,
 or provenance function. *Falsifier:* a control use surfaced in the review-v2
 inventory that trajectories cannot express. *Edge (frame_lock):* settlement
@@ -60,14 +112,17 @@ behavior change proven by the existing suite staying green.
 **Evidence class:** example tests + the wire_pipeline.tla mapping (model ∀
 transfers only via conformance — say so in the report).
 
-**Proof-mission overlay (conjecture handoff §15):** run this mission under
-**Parallax** (`skills/parallax/SKILL.md`, 2026-06-11 — the successor skill;
-MissionGradient v2 is frozen as baseline/fallback). Success criteria: at
-least one SHIFT changed the route; at least one edge narrowed a claim's
-scope; the case file is cheaper to resume than a MissionGradient doc; no
-canonical mutation without gates. Failure criteria: circuit fields filled,
-moves identical to what MissionGradient would have produced. Report honestly —
-this adjudicates Parallax's promotion (see docs/parallax-design-2026-06-11.md §6).
+**Parallax overlay:** run this mission from a mutable mission document whose
+bridge conjecture is: if trajectory/work-item records are added with no
+behavior change, then the deeper rearchitecture goal advances by making
+parent/child replacement and settlement accounting executable. Success
+criteria: at least one SHIFT changed the route; the bridge was tested rather
+than assumed; repeated obstacles updated CLAIM/TEST/EDGE/ΔO/SCOPE instead of
+spawning a disconnected mission; the mission doc retained learning state and
+was cheaper to resume/retrospect than a MissionGradient doc; no canonical
+mutation without gates. Failure criterion: circuit fields filled while moves
+stay identical to old MissionGradient behavior. Report honestly — this
+adjudicates Parallax's promotion (see docs/parallax-design-2026-06-11.md §5).
 
 **Size:** 1 overnight mission.
 
@@ -79,7 +134,7 @@ deletion of `cast_agent`, `cast_agent_update`, `wait_agent`, `notifyParent`,
 per-turn inbox polling; co-super slot registry keyed (trajectory, slot) with
 atomic claim.
 
-**Driving conjecture (R4):** one structured message primitive doubling as the
+**Bridge conjecture (R4):** one structured message primitive doubling as the
 wake primitive makes results single-sourced and control flow legible.
 *Falsifier:* a real coordination need that typed kinds + notes cannot express
 (watch the kind distribution for prose-stuffing). *Edge (missing_oracle):*
@@ -100,7 +155,7 @@ activation loops; `recoverInterruptedRuns` blanket-fail deleted (boot = cold
 actors + sweep); cancel-by-trajectory replaces `CancelRunGraph`;
 `ParentRunID` → `spawned_by_run_id` provenance-only.
 
-**Driving conjecture (R1/R2):** activation/passivation/sweep semantics,
+**Bridge conjecture (R1/R2):** activation/passivation/sweep semantics,
 already proven at the protocol level (actor_protocol.tla) and package level
 (internal/actor tests), survive contact with the real LLM loop. *Falsifier:*
 kill -9 mid-activation under multi-agent load; on restart, sends reactivate
@@ -121,7 +176,7 @@ update to the owning actor's mailbox); acceptance-evidence
 "continuation-level" re-pointed at work items; `/api/continuations` shimmed
 or 410.
 
-**Driving conjecture (R3):** nothing of proven value is lost — every behavior
+**Bridge conjecture (R3):** nothing of proven value is lost — every behavior
 the synthesis layer provided is unproven (autonomous self-development) or
 better expressed as events + work items. *Falsifier:* one app-adoption flow
 end-to-end (propose → verify → approve → promote/rollback) with no
@@ -139,7 +194,7 @@ of `isTerminalRuntimeState && ActiveChildRuns == 0` (main.go:590); processor
 opens publication trajectories carrying coverage/publish decisions; `maxProc`
 raised above 1.
 
-**Driving conjecture:** the wire_pipeline.tla result transfers — with durable
+**Bridge conjecture:** the wire_pipeline.tla result transfers — with durable
 decisions and settlement accounting, parallel processors publish with zero
 accounting leaks, retiring the serialization stopgap on evidence rather than
 hope. *Falsifier:* a multi-story cycle at maxProc > 1 with a publication
@@ -162,7 +217,7 @@ observably changes what the running computer serves; a durable promotion
 record + reconciler finishes interrupted promotions from the commit point
 alone (promotion_protocol.tla shape).
 
-**Driving conjecture (P1):** the single-commit-point protocol is
+**Bridge conjecture (P1):** the single-commit-point protocol is
 implementable as a thin layer over existing AppAdoption now, without waiting
 for capsules. *Falsifier:* kill the coordinator mid-promotion; a reconciler
 completes it from the promotion record alone; "Activate" demonstrably changes
@@ -184,7 +239,7 @@ rollback-window status; plain-language check badges gating Approve; Approve
 visibly the S5 signature; restore-point timeline for rollback.
 `platform-os-app-state.md` reconciled with what actually ships.
 
-**Driving conjecture:** approval becomes an *informed* discharge of the
+**Bridge conjecture:** approval becomes an *informed* discharge of the
 intent obligation — preview-as-review beats diff-as-review for non-developers.
 *Falsifier:* dogfood — the owner reviews a real change end-to-end without
 reading a diff or a hash. *Edge (frame_lock):* the headline/plan author has a
@@ -203,7 +258,7 @@ durable state, closed by the first N-1-incompatible write, gating both
 AutoRevert and the user's Rollback button; contract-phase changes structurally
 forced into separate later promotions.
 
-**Driving conjecture (P3/P4):** versioned, mergeable user data converts the
+**Bridge conjecture (P3/P4):** versioned, mergeable user data converts the
 worst promotion risk class from blue-green prayer into surfaced conflicts;
 the rollback window as state prevents the torn-rollback class. *Falsifier:*
 a candidate migrating a table while the foreground writes rows — commit
@@ -227,7 +282,7 @@ as a receipted assertion; the three-level self-improvement table promoted;
 overclaim audit of UI/doc language ("verified" never rendered as "safe");
 glossary entries per hybrid handoff Milestone 0.
 
-**Driving conjecture:** docs are heresy vectors — stale assertions regenerate
+**Bridge conjecture:** docs are heresy vectors — stale assertions regenerate
 bad behavior in every agent that reads them; the sweep is consistency
 maintenance, not housekeeping. *Falsifier (cheap):* grep-class checks per
 heresy named in the review docs. **No dependencies — do this first or in
@@ -242,13 +297,33 @@ VM filesystem strategy (Btrfs vs qcow2 overlays vs Firecracker snapshots);
 secret/capability delegation into capsules; CapsuleSpec/CapsuleResult
 integration with Trace and promotion certificates.
 
-**Driving conjecture:** Nucleus strict-agent fits the capsule role
+**Bridge conjecture:** Nucleus strict-agent fits the capsule role
 (hybrid handoff's claim, currently supported only by README reading —
 independence-class edge: no hands-on evidence). *Falsifier:* a hands-on spike
 running a real parser job in strict-agent mode with effect capture.
 
 **Dependencies:** none (design track). **Size:** 1 research mission;
 unblocks the curl|bash story and hybrid Milestones 1–3.
+
+## M12 — Dead-export and dead-endpoint sweep (side mission, M9-class)
+
+**Real artifact:** the codex ruins accounted for: an export-level sweep of
+frontend JS/TS (dead exports inside live files — the `synthesizeContinuation`
+class; tooling like `knip` or per-export grep), a Go API-route sweep
+(endpoints with no remaining frontend or agent callers — candidate: parts of
+`/api/trace/*` after the Trace app was unshipped in 95196069), and a verdict
+on the 16 remaining pre-rewrite `.js` files (~2,670 lines: js→ts stragglers
+from the TS migration unit — `stores/desktop.js` 688, `vtext.js` 555,
+`auth.js` 384, …). File-level reachability already verified clean 2026-06-12
+(zero orphaned files/components after `trace.js` deletion); this mission is
+the export/endpoint level that scan cannot see.
+
+**Bridge conjecture:** same as M9 — dead surface is a heresy vector
+(stability, security, dev velocity), not housekeeping. *Falsifier (cheap):*
+the sweep tooling reports zero dead exports/endpoints — then the conjecture
+that ruins remain is refuted and the mission settles immediately.
+**Dependencies:** none; M4/M7 retire some Trace/continuation surface anyway —
+coordinate to avoid double deletion. **Size:** half a session, agent-heavy.
 
 ## M11 — corpusd rename (side PR)
 
@@ -271,13 +346,22 @@ mission. **Dependencies:** none. **Size:** half a session.
 - **Slides/computational cinematography, vector index service, new source
   families** — per the conjecture program §5; substrate first.
 
-## Portfolio-level conjecture
+## Portfolio Settlement Conjecture
 
-*Claim:* this portfolio, executed in order, converts the rearchitecture from
-documents into a system whose causality, messaging, lifecycle, and promotion
-are each backed by a machine-checked spec and at least one production
-falsifier run. *Edge (resource):* it is ~10–14 overnight missions of work;
-the bound is owner attention at the gates (M5's evidence gate, M6's
-escalation, M7's dogfood, M8's policy decision), not agent capacity. *Scope:*
-asserted only for the missions as defined; each mission re-scopes at start
-under its own ledger.
+*Claim:* this portfolio, executed with Parallax mission documents, converts
+the rearchitecture from documents into a system whose causality, messaging,
+lifecycle, and promotion are each backed by a machine-checked spec, scoped
+runtime conformance, and at least one production falsifier run.
+
+*Bridge edge:* the portfolio can still succeed locally while failing the
+deeper goal if missions ship isolated scaffolding, silently abandon partial
+learning, or replace hard conjectures with new mission names. Each mission
+therefore preserves lineage, retained learning state, and successor links
+when it is blocked or superseded.
+
+*Resource edge:* this remains ~10–14 overnight missions. The bound is owner
+attention at the gates (M5's evidence gate, M6's escalation, M7's dogfood,
+M8's policy decision), not agent capacity.
+
+*Scope:* asserted only for the missions as defined; each mission re-scopes at
+start inside its own Parallax State.
