@@ -34,11 +34,13 @@ cycle.
 
 ## Parallax State
 
-status: open_handoff (2026-06-12; route-switch substrate is committed,
-pushed, CI-green, and deployed to staging at `b8f33087`; product-path
-wire-cycle proof is narrowed but still blocked on an authenticated owner
-session; public publication/retrieval surfaces are live but do not expose
-the cycle predicate; the production maxProc>1 evidence gate remains open)
+status: working (2026-06-12; route-switch substrate is committed, pushed,
+CI-green, and deployed to staging at `b8f33087`, but the required independent
+review found a revision-metadata JSON merge serialization gap before final
+handoff; product-path wire-cycle proof is narrowed but still blocked on an
+authenticated owner session; public publication/retrieval surfaces are live
+but do not expose the cycle predicate; the production maxProc>1 evidence gate
+remains open)
 
 **mission conjecture:** if publication trajectories carry coverage/publish
 decisions as durable work items and subject refs, settlement is evaluated
@@ -75,14 +77,16 @@ conformance only.
   a green local cycle is not the gate.
 
 **variant (ranking function) V:** count remaining settlement blockers:
-missing product-path staging wire-cycle proof; missing honest-and-full
-instrument; missing observed production multi-story cycle at maxProc>1;
-undecided processor-phase admission scope outside the story-route branch;
-unspecified non-fetch deferred wake policy; missing final verdict on the
-rearchitecture core claim. Current V=6. Last observed ΔV: 0 from the
-public-surface probe, but it bought observer evidence: authenticated
-Universal Wire story/edition proof is still required, while public
-platformd resolve/export/search are alive. The pushed stack ends at
+unfixed revision-metadata JSON merge serialization gap; missing product-path
+staging wire-cycle proof; missing honest-and-full instrument; missing observed
+production multi-story cycle at maxProc>1; undecided processor-phase admission
+scope outside the story-route branch; unspecified non-fetch deferred wake
+policy; missing final verdict on the rearchitecture core claim. Current V=7.
+Last observed ΔV: -1 from the independent review falsifier: the mission
+claimed Store JSON merge patches were serialized, but
+`internal/store/vtext.go:844` reads/merges/writes revision metadata without
+holding `Store.jsonPatchMu`, unlike `UpdateTrajectorySubjectRefs` and
+`UpdateWorkItemDetails`. The pushed stack ends at
 `b8f33087`; forced CI/deploy run `27448287123` passed and `/health` reports
 proxy+sandbox build/deployed commit `b8f33087ce099d11054447d852e788453379a787`.
 
@@ -130,21 +134,24 @@ product-path cycle proof is still missing because unauthenticated
 available Chrome tabs showed signed-out preview only; public platformd
 corpus health cannot settle the production route-switch conjecture.
 
-**next move:** run the authenticated product-proof boundary: with an owner
-session on `https://choir.news`, verify the deployed build identity, then run
-the smallest product-path wire-cycle observation that can link a real
-Universal Wire cycle to trace/vtext/publication/front-page receipts and show
-whether the remaining blockers are source traffic, sourcecycled cycle timing,
-honest-and-full front-page instrumentation, duplicate/stale publication
-handling, or production maxProc policy. Do not use internal/test routes to
-compensate for missing auth.
+**next move:** fix the documented revision-metadata JSON merge gap first:
+serialize `PatchRevisionMetadata` through the same Store-instance merge-patch
+guard used by trajectory subject refs and work item details, add a concurrent
+metadata-patch regression test, then rerun the focused store/runtime checks
+before returning to authenticated product proof. Only after that, with an owner
+session on `https://choir.news`, verify deployed build identity and run the
+smallest product-path wire-cycle observation that can link a real Universal
+Wire cycle to trace/vtext/publication/front-page receipts and show source
+traffic, sourcecycled cycle timing, honest-and-full front-page instrumentation,
+duplicate/stale publication handling, and production maxProc policy. Do not
+use internal/test routes to compensate for missing auth.
 
 **ledger file:** `docs/mission-wire-on-settlement-v0.ledger.md` for future
 append-only Parallax pass entries. Historical passes before this checkpoint
 remain embedded below under `ledger / move log` and should not be
 transcribed unless auditing requires it.
 
-**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State and append to docs/mission-wire-on-settlement-v0.ledger.md. Start from deployed commit b8f33087ce099d11054447d852e788453379a787: CI/deploy are green, staging /health identity is proven, public platformd publication search/resolve/export work, /api/universal-wire/stories is auth-gated, and V=6. With an authenticated owner session on https://choir.news, run only browser-public product paths to observe the smallest Universal Wire cycle evidence available: session/provenance proof, trace/vtext/publication/front-page receipts, sourcecycled cycle timing, duplicate/stale-publication interpretation, and whether a real multi-story cycle at maxProc>1 can be observed. Do not use /api/agent, /internal, /api/test, raw event mutation, or manual success seeding. If auth, source traffic, or instrumentation blocks the proof, update the paradoc/ledger with exact blocker receipts and next discriminator. Do not call M5 settled without production multi-story maxProc>1 evidence, honest-and-full front-page proof, rollback refs, and a verdict on the durable-actors core claim.`
+**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State and append to docs/mission-wire-on-settlement-v0.ledger.md. Current V=7 because the independent review found an unfixed revision-metadata JSON merge serialization gap: internal/store/vtext.go PatchRevisionMetadata reads/merges/writes metadata_json without Store.jsonPatchMu, unlike trajectory subject refs and work item details. First fix that documented problem with a concurrent regression test and rerun focused store/runtime checks. Then commit/push, monitor CI/deploy as needed, verify staging identity, and with an authenticated owner session on https://choir.news run only browser-public product paths to observe the smallest Universal Wire cycle evidence available: session/provenance proof, trace/vtext/publication/front-page receipts, sourcecycled cycle timing, duplicate/stale-publication interpretation, and whether a real multi-story cycle at maxProc>1 can be observed. Do not use /api/agent, /internal, /api/test, raw event mutation, or manual success seeding. If auth, source traffic, or instrumentation blocks the proof, update the paradoc/ledger with exact blocker receipts and next discriminator. Do not call M5 settled without production multi-story maxProc>1 evidence, honest-and-full front-page proof, rollback refs, and a verdict on the durable-actors core claim.`
 
 ### Position — code inventory (compiled 2026-06-12, post-M1)
 

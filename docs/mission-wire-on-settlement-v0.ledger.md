@@ -258,3 +258,38 @@ Receipt:
 Open edge: resume with an authenticated owner session and prove the actual
 cycle link: trace/vtext/publication/front-page receipts, sourcecycled timing,
 duplicate/stale-publication interpretation, and production maxProc>1 behavior.
+
+## 2026-06-12 — Independent Review Falsifier: Revision Metadata Merge Not Serialized
+
+Claim/scope: the landed M5/M5a stack is not ready for final handoff if a
+concurrent publication metadata patch can drop another revision metadata key.
+Scope is code review evidence before any code fix.
+
+Move: prover/review shift over the landed M5 range, using the store JSON
+merge/concurrency edge as the falsifier.
+
+Expected ΔV: either 0 if the prior review claim holds, or negative if the
+review finds an unfixed accounting substrate problem.
+
+Actual ΔV: -1. Current V increases from 6 to 7 until the problem is fixed and
+verified. The paradoc previously claimed Store JSON merge patches are
+serialized, and trajectory/work-item patches do take `Store.jsonPatchMu`, but
+revision metadata patches do not.
+
+Receipt:
+- `internal/store/store.go:60` defines `jsonPatchMu`.
+- `internal/store/trajectory.go:150` `UpdateTrajectorySubjectRefs` locks
+  `s.jsonPatchMu` around read/merge/write of `subject_refs_json`.
+- `internal/store/trajectory.go:380` `UpdateWorkItemDetails` locks
+  `s.jsonPatchMu` around read/merge/write of `details_json`.
+- `internal/store/vtext.go:844` `PatchRevisionMetadata` reads the revision,
+  unmarshals `metadata_json`, merges patch keys, and writes the whole JSON
+  object back without taking `s.jsonPatchMu`.
+- `internal/runtime/wire_platform_publish.go:169` uses
+  `PatchRevisionMetadata` to persist `platformd_route_path` and
+  `platformd_publication_ref`, so a concurrent metadata patch can lose the
+  publication ref or the other patch key.
+
+Open edge: fix `PatchRevisionMetadata` with the same Store-instance
+serialization guard, add a concurrent regression test, then rerun focused
+store/runtime checks before returning to authenticated product proof.
