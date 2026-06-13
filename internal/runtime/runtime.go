@@ -2073,7 +2073,8 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	if initialPrompt == "" {
 		initialPrompt = "Create the first useful current-state version of this vtext document."
 	}
-	if vtextPromptNeedsSuperExecution(decision.SeedPrompt + " " + initialPrompt) {
+	combinedPrompt := decision.SeedPrompt + " " + initialPrompt
+	if vtextPromptNeedsSuperExecution(combinedPrompt) && !vtextPromptExplicitlyRequestsResearcher(combinedPrompt) {
 		requestCtx := WithToolExecutionContext(ctx, &types.RunRecord{
 			RunID:        rec.RunID,
 			AgentID:      "vtext:" + doc.DocID,
@@ -2171,10 +2172,44 @@ func initialVTextToolChoice(rec *types.RunRecord) string {
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""
 	}
-	if vtextPromptNeedsSuperExecution(metadataStringValue(rec.Metadata, "seed_prompt") + " " + metadataStringValue(rec.Metadata, "original_prompt")) {
+	prompt := metadataStringValue(rec.Metadata, "seed_prompt") + " " + metadataStringValue(rec.Metadata, "original_prompt")
+	if vtextPromptNeedsSuperExecution(prompt) && !vtextPromptExplicitlyRequestsResearcher(prompt) {
 		return exactRequiredToolChoice("request_super_execution")
 	}
 	return exactRequiredToolChoice("edit_vtext")
+}
+
+func vtextPromptExplicitlyRequestsResearcher(prompt string) bool {
+	text := strings.ToLower(strings.TrimSpace(prompt))
+	if text == "" {
+		return false
+	}
+	researcherMarkers := []string{
+		"ask researcher",
+		"ask a researcher",
+		"ask the researcher",
+		"request researcher",
+		"request a researcher",
+		"request the researcher",
+		"spawn researcher",
+		"spawn a researcher",
+		"spawn the researcher",
+		"role=\"researcher\"",
+		"role='researcher'",
+		"role: researcher",
+		"researcher finding",
+		"researcher findings",
+		"researcher evidence",
+		"researcher update",
+		"researcher branch",
+		"researcher for",
+	}
+	for _, marker := range researcherMarkers {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func vtextPromptNeedsSuperExecution(prompt string) bool {

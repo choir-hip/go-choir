@@ -1892,3 +1892,40 @@ conductor -> super -> VText and skip the explicit researcher branch entirely,
 so the vmctl restart oracle did not execute. No code fix in this checkpoint,
 and no continuation-level, promotion-level, zero-stranding, or final M3
 settlement is claimed.
+
+## 2026-06-13 - Batch X Construct: Explicit Researcher Requests Bypass Super Shortcut
+
+Claim/scope: close the local pre-refresh orchestration hole from Batch W. Scope
+is prompt-bar VText routing for prompts that explicitly ask for researcher
+work while also containing execution/product-proof words that would otherwise
+trigger the persistent-super initial shortcut.
+
+Move:
+
+- Added `vtextPromptExplicitlyRequestsResearcher`.
+- `ensureConductorVTextRoute` still uses the persistent-super initial handoff
+  for broad operational/code/product-path prompts, but not when the combined
+  prompt explicitly asks for a researcher.
+- `initialVTextToolChoice` no longer forces `request_super_execution` first
+  for explicit researcher prompts; it leaves the initial VText run on the
+  normal `edit_vtext` first step so VText can create the working revision and
+  open researcher work in that run.
+- VText prompt construction now says that an explicit researcher request must
+  be satisfied with `spawn_agent` role `researcher`, not by asking only super.
+
+Receipts:
+
+- Focused prompt-bar/VText tests:
+  `nix develop -c go test ./internal/runtime -run 'TestHandlePromptBarExplicitResearcherBypassesPersistentSuperShortcut|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestVTextPromptExplicitResearcherOverridesSuperFirstShortcut|TestVTextPromptSteersCurrentEventsToResearcherNotSuper' -count=1`
+  passed.
+- Focused lifecycle/restart/tool-surface tests:
+  `nix develop -c go test ./internal/runtime -run 'TestConductorCanSpawnVTextAndVTextCanSpawnResearcher|TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog|TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog|TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill|TestStartChildRunCompletesSpawnedWorkItem|TestStartSweepsAssignedOpenWorkItemsAfterPassivation' -count=1`
+  passed.
+- Runtime shard coverage:
+  `nix develop -c scripts/go-test-runtime-shards` passed.
+
+Expected Delta V: -1 locally for the Batch W pre-refresh researcher-omission
+subclaim. Actual Delta V: -1 locally. Remaining error field: this code has not
+yet been committed, pushed, deployed, or rerun against the vmctl-routed staging
+restart oracle. M3 remains open; no continuation-level, promotion-level,
+zero-stranding, or final settlement is claimed.

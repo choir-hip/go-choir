@@ -89,3 +89,43 @@ func TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper(t *tes
 		t.Fatalf("initial_handoff = %q, want persistent_super", got)
 	}
 }
+
+func TestHandlePromptBarExplicitResearcherBypassesPersistentSuperShortcut(t *testing.T) {
+	rt, handler := testAPISetup(t)
+
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Create a vtext document for M3. Ask researcher for a concise finding. Ask super to create a tiny verification note."}`, "user-alice")
+	w := httptest.NewRecorder()
+	handler.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+
+	var resp promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	conductor, err := rt.GetRun(context.Background(), resp.SubmissionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get conductor: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	if decision.InitialLoopID == "" {
+		t.Fatalf("conductor decision missing initial loop: %+v", decision)
+	}
+	initialRun, err := rt.GetRun(context.Background(), decision.InitialLoopID, "user-alice")
+	if err != nil {
+		t.Fatalf("get initial loop run: %v", err)
+	}
+	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
+		t.Fatalf("initial loop profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
+	}
+	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
+		t.Fatalf("initial_handoff = %q, want vtext path for explicit researcher request", got)
+	}
+	if choice := initialVTextToolChoice(initialRun); choice != exactRequiredToolChoice("edit_vtext") {
+		t.Fatalf("initial tool choice = %q, want edit_vtext so vtext can open researcher work", choice)
+	}
+}

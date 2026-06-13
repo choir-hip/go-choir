@@ -583,6 +583,9 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\nDo not require //edit markers, XML tags, HTML comments, or other meta syntax. Do not classify the prompt into a workflow before acting; use retrieval tools only if this diff needs more context.")
 		b.WriteString("\nBecause VText owns the document, write the first useful owner-readable revision with edit_vtext before opening longer worker work.")
 		b.WriteString("\nFor greetings or simple non-factual prompts, answer directly and do not open workers.")
+		if vtextPromptExplicitlyRequestsResearcher(metadataString(metadata, "seed_prompt") + " " + req.Prompt) {
+			b.WriteString("\nThe owner explicitly asked for a researcher. After the brief working revision, call spawn_agent with role=\"researcher\" in this run; do not satisfy the researcher request by asking only super.")
+		}
 		b.WriteString("\nFor factual/current/search requests, the first revision should be a short working brief with explicit uncertainty and no ungrounded claims, followed by a researcher spawn in the same run.")
 		b.WriteString("\nFor coding/execution requests, the first revision should state the objective and evidence plan, followed by request_super_execution in the same run.")
 		b.WriteString("\nIf execution evidence is still pending in an initial or interim revision, do not include the final [CMD] evidence label yet; describe pending command evidence without that label.")

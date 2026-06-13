@@ -1905,6 +1905,25 @@ func TestVTextPromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {
 	}
 }
 
+func TestVTextPromptExplicitResearcherOverridesSuperFirstShortcut(t *testing.T) {
+	t.Parallel()
+	current := types.Revision{
+		DocID:      "doc-explicit-researcher",
+		RevisionID: "rev-explicit-researcher",
+		Content:    "Ask researcher for a concise finding and ask super for a tiny verification note.",
+		AuthorKind: types.AuthorUser,
+	}
+	prompt := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
+		Intent: "initial_conductor_workflow",
+		Prompt: "Ask researcher for a concise finding and ask super for a tiny verification note.",
+	}, "", false, nil, nil)
+
+	want := "The owner explicitly asked for a researcher. After the brief working revision, call spawn_agent with role=\"researcher\" in this run; do not satisfy the researcher request by asking only super."
+	if !strings.Contains(prompt, want) {
+		t.Fatalf("explicit researcher vtext prompt missing %q:\n%s", want, prompt)
+	}
+}
+
 func TestVTextAgentRevisionAppliesStructuredEdit(t *testing.T) {
 	t.Parallel()
 	provider := newVTextEditToolProvider(vtextApplyEditsResult([]vtextTextEdit{
