@@ -2017,7 +2017,7 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	}
 
 	userRevisionID := uuid.New().String()
-	userRevMeta, _ := json.Marshal(map[string]any{
+	userRevisionMetadata := map[string]any{
 		"seed_prompt":         decision.SeedPrompt,
 		"conductor_loop_id":   rec.RunID,
 		runMetadataOwnerEmail: metadataString(rec.Metadata, runMetadataOwnerEmail),
@@ -2026,7 +2026,11 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		"revision_role":       vtextRevisionRoleInput,
 		"input_origin":        vtextInputOriginUserPrompt,
 		"vtext_version":       "v0",
-	})
+	}
+	if metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) {
+		userRevisionMetadata[runMetadataExplicitResearcher] = true
+	}
+	userRevMeta, _ := json.Marshal(userRevisionMetadata)
 	userRev := types.Revision{
 		RevisionID:  userRevisionID,
 		DocID:       doc.DocID,
@@ -2074,7 +2078,8 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		initialPrompt = "Create the first useful current-state version of this vtext document."
 	}
 	combinedPrompt := decision.SeedPrompt + " " + initialPrompt
-	if vtextPromptNeedsSuperExecution(combinedPrompt) && !vtextPromptExplicitlyRequestsResearcher(combinedPrompt) {
+	explicitResearcher := metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) || vtextPromptExplicitlyRequestsResearcher(combinedPrompt)
+	if vtextPromptNeedsSuperExecution(combinedPrompt) && !explicitResearcher {
 		requestCtx := WithToolExecutionContext(ctx, &types.RunRecord{
 			RunID:        rec.RunID,
 			AgentID:      "vtext:" + doc.DocID,
@@ -2173,10 +2178,15 @@ func initialVTextToolChoice(rec *types.RunRecord) string {
 		return ""
 	}
 	prompt := metadataStringValue(rec.Metadata, "seed_prompt") + " " + metadataStringValue(rec.Metadata, "original_prompt")
-	if vtextPromptNeedsSuperExecution(prompt) && !vtextPromptExplicitlyRequestsResearcher(prompt) {
+	explicitResearcher := metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) || vtextPromptExplicitlyRequestsResearcher(prompt)
+	if vtextPromptNeedsSuperExecution(prompt) && !explicitResearcher {
 		return exactRequiredToolChoice("request_super_execution")
 	}
 	return exactRequiredToolChoice("edit_vtext")
+}
+
+func promptBarExplicitResearcherIntent(prompt string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(prompt)), AgentProfileResearcher)
 }
 
 func vtextPromptExplicitlyRequestsResearcher(prompt string) bool {
@@ -2491,6 +2501,7 @@ func (rt *Runtime) maybeWakeVTextOnWorkerMessage(ctx context.Context, ownerID st
 // the original user context (seed_prompt, source_path, etc.).
 var durableMetadataKeys = []string{
 	"seed_prompt",
+	runMetadataExplicitResearcher,
 	"source_path",
 	"canonical_vtext_source_path",
 	"import_manifest",

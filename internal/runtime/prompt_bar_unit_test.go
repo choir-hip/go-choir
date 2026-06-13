@@ -112,6 +112,9 @@ func TestHandlePromptBarExplicitResearcherBypassesPersistentSuperShortcut(t *tes
 	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
 		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
 	}
+	if !metadataBoolValue(conductor.Metadata, runMetadataExplicitResearcher) {
+		t.Fatalf("conductor metadata missing %s=true: %+v", runMetadataExplicitResearcher, conductor.Metadata)
+	}
 	if decision.InitialLoopID == "" {
 		t.Fatalf("conductor decision missing initial loop: %+v", decision)
 	}
@@ -121,6 +124,9 @@ func TestHandlePromptBarExplicitResearcherBypassesPersistentSuperShortcut(t *tes
 	}
 	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
 		t.Fatalf("initial loop profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
+	}
+	if !metadataBoolValue(initialRun.Metadata, runMetadataExplicitResearcher) {
+		t.Fatalf("initial run metadata missing %s=true: %+v", runMetadataExplicitResearcher, initialRun.Metadata)
 	}
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
 		t.Fatalf("initial_handoff = %q, want vtext path for explicit researcher request", got)

@@ -489,6 +489,9 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 	if ownerEmail := authenticatedUserEmail(r); ownerEmail != "" {
 		metadata[runMetadataOwnerEmail] = ownerEmail
 	}
+	if promptBarExplicitResearcherIntent(text) {
+		metadata[runMetadataExplicitResearcher] = true
+	}
 	if contentSourceURL != "" {
 		metadata["content_source_url"] = contentSourceURL
 		metadata["content_media_type"] = contentMediaType

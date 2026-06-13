@@ -49,6 +49,7 @@ const (
 	runMetadataSpawnReused         = "spawn_reused_existing_child"
 	runMetadataProcessorKey        = "processor_key"
 	runMetadataReconcilerScope     = "reconciler_scope"
+	runMetadataExplicitResearcher  = "explicit_researcher_request"
 )
 
 type toolContextKey string
