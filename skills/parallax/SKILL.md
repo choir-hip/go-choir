@@ -1,6 +1,6 @@
 ---
 name: parallax
-description: Run a mission as a conjecture circuit: the mission document claims that completing an artifact/spec/objective will actually advance a deeper goal, then tests and constructs that claim through observer shifts, descending a declared variant under an explicit budget. Use for any nontrivial /goal mission where the route is uncertain, the evidence may mislead, or the work must hand off cleanly.
+description: "Run a mission as a conjecture circuit: the mission document claims that completing an artifact/spec/objective will actually advance a deeper goal, then tests and constructs that claim through observer shifts, descending a declared variant under an explicit budget. Use for any nontrivial /goal mission where the route is uncertain, the evidence may mislead, or the work must hand off cleanly."
 version: 1.3.1
 metadata:
   hermes:
@@ -139,10 +139,12 @@ docs/<mission>.ledger.md     append-only; written every pass, never re-read
 At mission start: read the document and required references; extract
 objective, artifact, invariants, qualities, domain/acceptance target,
 variant, budget, authority, initial conjectures, blind edges, and
-obligations; infer conservatively when safe; ask only when artifact
-identity, authority, or safety is ambiguous. Then execute from the compiled
-state and update it after moves that change conjecture status, position,
-scope, verifier, artifact state, or settlement.
+obligations; classify mutation class; name protected surfaces touched; define
+the evidence packet; and record expected heresy delta (`discovered`,
+`introduced`, `repaired`). Infer conservatively when safe; ask only when
+artifact identity, authority, or safety is ambiguous. Then execute from the
+compiled state and update it after moves that change conjecture status,
+position, scope, verifier, artifact state, or settlement.
 
 ```text
 ## Parallax State
@@ -154,6 +156,9 @@ invariants / qualities / domain ramp (I/Q/D):
 variant (ranking function) V: definition; current value; last ΔV
 budget: granted / spent / remaining; solvency verdict
 authority / bounds:        (standing bounds stated once, not per pass)
+mutation class / protected surfaces:
+evidence packet:
+heresy delta:
 position / live conjectures / open edges:
 next move:
 ledger file: docs/<mission>.ledger.md
@@ -228,6 +233,24 @@ bridge `A satisfies S => G`: the witness may be wrong, the spec may be a
 proxy, the domain may not embed, or the observer may lack the predicate that
 would reveal the real goal. Update, weaken, split, or supersede the
 conjecture before grinding further.
+
+**The architectural-mode rule.** A move that changes Choir from agentic to
+workflow, trajectory/work-item to run-tree, evidence contract to smoke proxy,
+or promotion protocol to shortcut behavior requires an explicit conjecture
+delta before construction. Do not let a probe precondition silently become
+architecture.
+
+**The evidence-packet rule.** Missions must leave a packet containing mutation
+class, protected surfaces touched, claims and evidence class, tests/probes,
+rollback refs or blocker, heresy delta (`discovered`, `introduced`,
+`repaired`), conjecture delta, residual risks, and a short human-learning
+digest. Discovery of a heresy is epistemic progress but not repair progress.
+
+**The doctrine-touch rule.** When touching doctrine, operating contracts,
+mission portfolio, prompts, or high-read architecture docs, reconcile framing
+and sentiment as well as facts. Choir Doctrine is the apex: self-improving
+mainframe, persistent computers, truth from facts, conjecture learning,
+evidence-bounded claims, protected invariants, and deletion pressure.
 
 **The retention rule.** Every mission leaves its mission document and ledger
 file as the durable learning artifacts, even when it fails or is superseded.
