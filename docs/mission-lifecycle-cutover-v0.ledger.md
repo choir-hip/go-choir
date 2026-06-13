@@ -836,3 +836,52 @@ Next proof move: recover staging to healthy proxy+sandbox identity at
 prompt-bar/VText/RunAcceptance synthesis proof. If recovery requires a code
 change, this section is the Problem Documentation First checkpoint for that
 fix.
+
+## 2026-06-13 - Sandbox Startup Failure Root Cause
+
+Diagnostic deploy change:
+`68fd27e4dde77470a39c4b3071d937c9e63590ca`
+(`ci: capture nixos switch deploy diagnostics`) moved service diagnostics ahead
+of the NixOS switch retry and prints systemd status, recent journals, and local
+health probes when `switch-to-configuration` fails.
+
+Local proof before push:
+
+- `.github/scripts/deploy-impact-classify-test`
+- `git diff --check`
+
+Forced workflow dispatch run `27461068327` at SHA
+`68fd27e4dde77470a39c4b3071d937c9e63590ca` passed TLA+, Go vet/build,
+non-runtime tests, all four runtime shards, integration smoke, frontend build,
+and the aggregate Go gate. Deploy job `81174942714` then failed with exit code
+4 during Node B NixOS activation. The new diagnostics captured the concrete
+sandbox startup root cause:
+
+```text
+sandbox: open runtime store: runtime store: bootstrap: apply schema:
+Error 1072: key column 'delivered_at' doesn't exist in table
+```
+
+The same diagnostic block showed local health at the failed deploy point:
+auth, vmctl, gateway, platformd, and maild were healthy; proxy was degraded
+because upstream sandbox was unreachable. Public `https://choir.news/health`
+after the failed deploy reported `status=degraded`, `upstream=unreachable`,
+`vmctl_status=ok`, and proxy build/deployed commit
+`68fd27e4dde77470a39c4b3071d937c9e63590ca`.
+
+Observed problem: deployed staging has an existing runtime `worker_updates`
+table without the newer `delivered_at` delivery column, but runtime bootstrap
+tries to create `idx_worker_updates_pending_target` on
+`worker_updates(owner_id, target_agent_id, delivered_at, created_at)` inside
+the main schema DDL before the compatibility `ensureColumn` migration can add
+`delivered_at`.
+
+Claim/scope: repair runtime store bootstrap ordering so legacy Dolt stores can
+add worker-update delivery columns before indexes that depend on them. Do not
+change worker-update delivery semantics, RunAcceptance gates, or acceptance
+level rules. This is a staging recovery prerequisite, not M3 settlement.
+
+Expected Delta V: 0 for lifecycle semantics, but it should unblock the staging
+recovery path. The mission variant remains open until a forced deploy reaches
+healthy proxy+sandbox identity and the public product-path RunAcceptance smoke
+returns an accepted `staging-smoke-level` record.

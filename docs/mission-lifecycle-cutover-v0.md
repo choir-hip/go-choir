@@ -111,6 +111,16 @@ workflow dispatch with `DEPLOY_ACTIVE_VM_REFRESH=true` and `DEPLOY_HOST_OS=true`
 then failed during Node B activation: `go-choir-sandbox.service` exited during
 the NixOS switch, and `/health` reported `status=degraded` with upstream 502s
 while the proxy build identity stayed at `25c498365221485cfe19bcb5d2a1992bb8bd6986`.
+Deploy diagnostic commit `68fd27e4dde77470a39c4b3071d937c9e63590ca` then
+proved the sandbox startup root cause in workflow dispatch run `27461068327`,
+deploy job `81174942714`: the sandbox journal repeats `runtime store:
+bootstrap: apply schema: Error 1072: key column 'delivered_at' doesn't exist in
+table`. The deployed proxy/platformd identity moved to `68fd27e4`, but the
+sandbox remains down. This narrows the blocker from generic activation failure
+to runtime store schema bootstrap ordering: an existing `worker_updates` table
+can lack `delivered_at`, while the main schema tries to create
+`idx_worker_updates_pending_target` on that column before the compatibility
+migration adds it.
 The mission remains open on deployed acceptance proof and staging recovery; no
 continuation-level, promotion-level, or final M3 settlement is claimed.
 
