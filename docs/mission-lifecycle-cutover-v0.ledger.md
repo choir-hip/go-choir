@@ -1059,3 +1059,37 @@ prior actor checkpoint and wake input under the new activation's evidence row.
 Open edge: this is a v0 bridge, not the final schema. The durable target is
 still an actor-scoped memory snapshot plus log tail; `loop_id` remains an
 activation/evidence key until that explicit schema cut lands.
+
+Landing receipts:
+
+- Behavior commit:
+  `a7b43100bf789480ee8da1a2ec4c78f0b0217e2b`
+  (`runtime: seed rewarm activations with actor memory`).
+- Push CI run `27462249760` succeeded. The run included Go non-runtime tests,
+  all four `internal/runtime` shards, Go vet/build, integration-tagged smoke,
+  TLA+ model check, deploy-impact classification, and staging deploy.
+- FlakeHub publish run `27462249771` succeeded.
+- Staging deploy job `81178185271` succeeded. Public
+  `https://choir.news/health` reported `status=ok`, `upstream=ok`,
+  `vmctl_status=ok`, and proxy plus sandbox commit/deployed commit
+  `a7b43100bf789480ee8da1a2ec4c78f0b0217e2b`.
+- Deployed lifecycle smoke passed:
+  `GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news pnpm --dir frontend exec playwright test tests/adaptive-lifecycle-control-deployed.spec.js --project=chromium --reporter=list`.
+- Browser-public acceptance synthesis used WebAuthn registration and product
+  APIs only. It submitted prompt-bar trajectory/run
+  `d224018b-a651-40b1-8e1e-dd9287d94c28`, opened VText document
+  `e93fead9-2f1b-49ab-8b0f-b87e6f0c2f52`, and synthesized
+  RunAcceptanceRecord `runacc-cd78deed35b77e23cddd`. The record state was
+  `accepted`, level `staging-smoke-level`, deployment/health commit
+  `a7b43100bf789480ee8da1a2ec4c78f0b0217e2b`, checkpoints `submitted` and
+  `vtext_opened` passed, invariants `product_path_observed`,
+  `worker_mutation_bounded`, `promotion_not_overclaimed`, and
+  `checkpoint_causal_order` passed, with residual risk:
+  `continuation-level acceptance is not proven until run-memory compaction and
+  continuation evidence are recorded`.
+
+Landing Delta V: expected 0 and actual 0 for full M3. The actor-memory bridge
+is deployed and smoke-accepted, but the remaining discriminator is still the
+deployed kill/restart actor-memory rewarm falsifier plus deletion of permanent
+dual lifecycle models. No continuation-level, promotion-level, or final M3
+settlement is claimed.

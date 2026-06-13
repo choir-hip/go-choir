@@ -100,7 +100,17 @@ not run. Batch I then narrowed the run-memory blocker: fresh tool-loop
 activations seed their new `run_memory_entries` log with a deterministic
 `actor_rewarm` compaction checkpoint from the latest prior inactive activation
 for the same `(owner_id, agent_id)`, preserving prior compacted memory before
-the wake input is appended. Landing then proved the code reached staging, but
+the wake input is appended. Commit
+`a7b43100bf789480ee8da1a2ec4c78f0b0217e2b` then landed this bridge: CI run
+`27462249760` and deploy job `81178185271` succeeded, public
+`https://choir.news/health` reported proxy and sandbox commit/deployed commit
+`a7b43100bf789480ee8da1a2ec4c78f0b0217e2b`, Playwright deployed lifecycle
+smoke passed, and browser-public prompt-bar/VText/RunAcceptance smoke accepted
+`runacc-cd78deed35b77e23cddd` at `staging-smoke-level` for trajectory/run
+`d224018b-a651-40b1-8e1e-dd9287d94c28` and VText document
+`e93fead9-2f1b-49ab-8b0f-b87e6f0c2f52`. This smoke proves the deployed
+product path remains healthy after the bridge; it does not prove the
+kill/restart actor-memory falsifier. Earlier landing proved the code reached staging, but
 the deployed RunAcceptance smoke exposed the remaining acceptance-repointing blocker: a
 prompt/VText trajectory at `https://choir.news` produced `staging-smoke-level`
 evidence at deployed commit `a2252af27b5db087cbbb931e8d1b5dc04e402285`, while
@@ -214,8 +224,8 @@ See "Lifecycle Inventory - 2026-06-13" below.
 
 **next move:** keep M3 open as a lifecycle cutover mission, not a deployment
 recovery mission. The service-pointer execution gap is fixed and staging is
-healthy at `05f9a1507f5060ec92e2ff173c006d4be8fbbf88`; public product-path
-smoke accepted RunAcceptanceRecord `runacc-e2a8723d1f297b9d8389` at
+healthy at `a7b43100bf789480ee8da1a2ec4c78f0b0217e2b`; public product-path
+smoke accepted RunAcceptanceRecord `runacc-cd78deed35b77e23cddd` at
 `staging-smoke-level` with `product_path_observed` and
 `worker_mutation_bounded` passed. The next discriminator is the durable-actor
 restart falsifier: kill/restart or equivalent deployed evidence that a cold
