@@ -939,3 +939,48 @@ carry a regression that reproduces the actual missing-column/index order, not
 only the narrower `worker_updates` table case. No staging acceptance,
 continuation-level, promotion-level, or M3 settlement is claimed while
 `go-choir-sandbox.service` is crash-looping.
+
+## 2026-06-13 - Service Pointer Deploy Does Not Drive Systemd ExecStart
+
+Follow-up read-only Node B inspection narrowed the failed `a08076ed` deploy.
+The active systemd unit for `go-choir-sandbox.service` still points at a NixOS
+closure generated from commit `68fd27e4dde77470a39c4b3071d937c9e63590ca`:
+
+```text
+Environment=RUNTIME_WORKER_REPO_BASE_SHA=68fd27e4dde77470a39c4b3071d937c9e63590ca
+ExecStart=/nix/store/ra3hn32zm5hgm72114hqjc2xiqvnlyi7-go-choir-sandbox-exec
+```
+
+That wrapper execs:
+
+```text
+/nix/store/ikmd0b6bzrdw2wn4vbvmvbqz4fxhim70-sandbox-0.1.0/bin/sandbox
+```
+
+At the same time, the service-pointer directory had been updated during the
+`a08076ed` deploy:
+
+```text
+/var/lib/go-choir/services/sandbox/bin/sandbox
+mtime: 2026-06-13 08:11 UTC
+```
+
+Observed problem: for `internal/store` pushes the deploy-impact classifier
+selects host service pointer deployment for `gateway,sandbox`, and the deploy
+script builds/copies the fast-built packages into
+`/var/lib/go-choir/services/<service>`. However the currently deployed NixOS
+units still execute their baked Nix package wrappers directly. Restarting
+`go-choir-sandbox.service` after a pointer deploy therefore restarts the old
+Nix package, not the newly copied pointer package. The public health build
+identity can move through `/var/lib/go-choir/deploy.env`, masking that the
+sandbox process is still old.
+
+Claim/scope: fix the host service execution contract so pointer deployments
+are the executable path systemd uses, while retaining the baked Nix package as
+a fallback for fresh hosts or missing pointers. This is deploy plumbing and
+staging recovery; it does not alter runtime lifecycle semantics or acceptance
+levels.
+
+Expected Delta V: 0 for lifecycle semantics. It should allow the already-built
+runtime store bootstrap fix to actually start on Node B and unblock the public
+product-path acceptance rerun.

@@ -203,8 +203,11 @@ deploy-script/runtime bug. Do not weaken acceptance gates to route around it.
 Commit `a08076eda2ac6ca9ebcacb27e466d0399e6a1db2` deployed a first runtime
 store bootstrap ordering fix, but live Node B evidence shows the sandbox still
 crashing on `Error 1072: key column 'delivered_at' doesn't exist in table`.
-Before any second fix, inspect the full schema bootstrap path and prove which
-table/index is still evaluated before its compatibility column migration. Once
+Read-only Node B inspection then showed the active sandbox systemd unit still
+comes from the `68fd27e4` NixOS closure, while the service-pointer directory
+does contain a newer fast-built sandbox package. The next fix is therefore the
+service-pointer execution contract: host service pointer deploys must cause
+systemd units to run the pointer package, not an older baked Nix package. Once
 `/health` is healthy for proxy and sandbox at the repaired SHA, rerun the
 public prompt-bar/VText/RunAcceptance synthesis proof and require an accepted
 `staging-smoke-level` record. Cancellation's store-active fallback and
