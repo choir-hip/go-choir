@@ -1093,3 +1093,23 @@ is deployed and smoke-accepted, but the remaining discriminator is still the
 deployed kill/restart actor-memory rewarm falsifier plus deletion of permanent
 dual lifecycle models. No continuation-level, promotion-level, or final M3
 settlement is claimed.
+
+## 2026-06-13 - Batch J Problem Checkpoint: vSuper Cancel Active-Run Fallback
+
+Claim/scope: document a newly confirmed authority-boundary problem before the
+fix. In `cancel_agent`, vSuper callers first consult the caller trajectory's
+co-super slot registry, but when no slot is found the implementation falls
+through to `GetLatestActiveRunByAgent`. That fallback can select a same-owner
+agent activation in a different trajectory and let the caller vSuper cancel it.
+
+Evidence: code inspection of `internal/runtime/tools_coagent.go` showed the
+slot lookup only guarded the found-slot branch; the generic active-run fallback
+remained reachable for vSuper. The existing comprehensive regression
+`TestVSuperCancelAgentDoesNotCancelExportedChild` also encoded the wrong
+expectation for a different-trajectory child: it expected cancellation instead
+of a caller-trajectory guard.
+
+Expected Delta V: 0 for full M3; actual Delta V: 0. The fix target is narrow:
+make co-super slot ownership in the caller trajectory the only vSuper
+`cancel_agent` authority, while leaving non-vSuper compatibility cancellation
+fallbacks out of scope for this batch.
