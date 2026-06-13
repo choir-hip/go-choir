@@ -885,3 +885,57 @@ Expected Delta V: 0 for lifecycle semantics, but it should unblock the staging
 recovery path. The mission variant remains open until a forced deploy reaches
 healthy proxy+sandbox identity and the public product-path RunAcceptance smoke
 returns an accepted `staging-smoke-level` record.
+
+## 2026-06-13 - First Schema Bootstrap Fix Did Not Recover Staging
+
+Fix attempt:
+`a08076eda2ac6ca9ebcacb27e466d0399e6a1db2`
+(`store: migrate worker update delivery columns before indexes`) moved the
+known worker-update and inbox-delivery delivery-column indexes out of the main
+schema DDL, added compatibility column migrations before those index creates,
+and added a Dolt regression for reopening a legacy `worker_updates` table
+without delivery columns.
+
+Local proof before push:
+
+- `nix develop -c go test ./internal/store -run 'TestOpenMigratesWorkerUpdatesBeforeDeliveryIndex|TestOpenCreatesDatabase|TestOpenImportsLegacySQLiteRuntimeState|TestUpdateRunAndMarkWorkerUpdatesDelivered' -count=1`
+- `nix develop -c go test ./internal/types ./internal/store`
+- `nix develop -c scripts/go-test-runtime-shards`
+- `git diff --check`
+
+Push CI run `27461261681` for SHA
+`a08076eda2ac6ca9ebcacb27e466d0399e6a1db2` passed the code gates and entered
+deploy job `81175517320`. During that deploy, public
+`https://choir.news/health` showed the proxy already deployed at
+`a08076eda2ac6ca9ebcacb27e466d0399e6a1db2`, but the route stayed degraded:
+`upstream=unreachable` and `vmctl_status=unavailable`. Read-only Node B probes
+at `2026-06-13T08:19:46Z` showed:
+
+- `go-choir-vmctl.service`: `active/running`, but local port `8083` health
+  timed out after 5 seconds.
+- `go-choir-sandbox.service`: `activating/auto-restart`,
+  `ExecMainStatus=1`.
+- auth, gateway, platformd, and maild health endpoints were healthy; platformd
+  reported build/deployed commit
+  `a08076eda2ac6ca9ebcacb27e466d0399e6a1db2`.
+- the sandbox journal, both for the host service and freshly refreshed guest
+  runtime, still repeated:
+
+```text
+sandbox: open runtime store: runtime store: bootstrap: apply schema:
+Error 1072: key column 'delivered_at' doesn't exist in table
+```
+
+Observed problem: the first schema-ordering fix was incomplete. Staging still
+has a runtime store bootstrap path that evaluates a `delivered_at`-dependent
+index before the corresponding compatibility column exists, or the deployed
+sandbox runtime package is still constructing an older schema order than the
+fixed host package. The earlier worker-update-only hypothesis is therefore not
+settled by the code change.
+
+Next proof move: inspect the complete runtime store schema bootstrap order and
+the deployed package path before changing code again. The next code fix must
+carry a regression that reproduces the actual missing-column/index order, not
+only the narrower `worker_updates` table case. No staging acceptance,
+continuation-level, promotion-level, or M3 settlement is claimed while
+`go-choir-sandbox.service` is crash-looping.

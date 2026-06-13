@@ -200,8 +200,13 @@ See "Lifecycle Inventory - 2026-06-13" below.
 `25c498365221485cfe19bcb5d2a1992bb8bd6986`. First determine whether the
 forced active-VM-refresh deploy failure is transient operational state or a
 deploy-script/runtime bug. Do not weaken acceptance gates to route around it.
-Once `/health` is healthy for proxy and sandbox at `25c49836`, rerun the public
-prompt-bar/VText/RunAcceptance synthesis proof and require an accepted
+Commit `a08076eda2ac6ca9ebcacb27e466d0399e6a1db2` deployed a first runtime
+store bootstrap ordering fix, but live Node B evidence shows the sandbox still
+crashing on `Error 1072: key column 'delivered_at' doesn't exist in table`.
+Before any second fix, inspect the full schema bootstrap path and prove which
+table/index is still evaluated before its compatibility column migration. Once
+`/health` is healthy for proxy and sandbox at the repaired SHA, rerun the
+public prompt-bar/VText/RunAcceptance synthesis proof and require an accepted
 `staging-smoke-level` record. Cancellation's store-active fallback and
 `executeActivation` terminal run rows are accepted for v0 as compatibility/audit
 surfaces, not ordinary warm-residency or agent-liveness oracles.
