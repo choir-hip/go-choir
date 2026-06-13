@@ -178,6 +178,7 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 		prompt = strings.TrimSpace(baseRevision.Content)
 	}
 	baseRevisionMeta := decodeRevisionMetadata(baseRevision.Metadata)
+	revMeta := decodeRevisionMetadata(rev.Metadata)
 	if prompt != "" {
 		if intent, ok := extractEmailDraftIntent(prompt, rev.Content); ok {
 			if baseRevision.AuthorKind == types.AuthorUser || grounded {
@@ -199,7 +200,8 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 	}
 	explicitResearcher := metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) ||
 		metadataBoolValue(baseRevisionMeta, runMetadataExplicitResearcher) ||
-		vtextPromptExplicitlyRequestsResearcher(vtextEditResearcherIntentText(prompt, baseRevision, baseRevisionMeta))
+		metadataBoolValue(revMeta, runMetadataExplicitResearcher) ||
+		vtextPromptExplicitlyRequestsResearcher(vtextEditResearcherIntentText(rec, prompt, baseRevision, baseRevisionMeta, rev, revMeta))
 	if explicitResearcher &&
 		!rt.vtextTrajectoryHasResearcherParticipation(ctx, rec, rev.DocID) {
 		objective := "Research the user's request for this VText document and send a concise finding with evidence via update_coagent."
@@ -207,7 +209,13 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 			metadataStringValue(baseRevisionMeta, "seed_prompt"),
 			metadataStringValue(baseRevisionMeta, "original_prompt"),
 			metadataStringValue(baseRevisionMeta, "request_intent"),
+			metadataStringValue(revMeta, "seed_prompt"),
+			metadataStringValue(revMeta, "original_prompt"),
+			metadataStringValue(revMeta, "request_intent"),
 			baseRevision.Content,
+			metadataStringValue(rec.Metadata, "seed_prompt"),
+			metadataStringValue(rec.Metadata, "original_prompt"),
+			metadataStringValue(rec.Metadata, "request_intent"),
 			prompt,
 		); strings.TrimSpace(focus) != "" {
 			objective += " Focus on: " + truncateForToolInstruction(focus, 420)
@@ -225,13 +233,20 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 	return vtextRequiredContinuation{}, false
 }
 
-func vtextEditResearcherIntentText(prompt string, baseRevision types.Revision, baseRevisionMeta map[string]any) string {
+func vtextEditResearcherIntentText(rec *types.RunRecord, prompt string, baseRevision types.Revision, baseRevisionMeta map[string]any, rev types.Revision, revMeta map[string]any) string {
 	parts := []string{
 		prompt,
+		metadataStringValue(rec.Metadata, "seed_prompt"),
+		metadataStringValue(rec.Metadata, "original_prompt"),
+		metadataStringValue(rec.Metadata, "request_intent"),
 		baseRevision.Content,
 		metadataStringValue(baseRevisionMeta, "seed_prompt"),
 		metadataStringValue(baseRevisionMeta, "original_prompt"),
 		metadataStringValue(baseRevisionMeta, "request_intent"),
+		rev.Content,
+		metadataStringValue(revMeta, "seed_prompt"),
+		metadataStringValue(revMeta, "original_prompt"),
+		metadataStringValue(revMeta, "request_intent"),
 	}
 	return strings.Join(parts, "\n")
 }
