@@ -96,7 +96,14 @@ index and renamed the hot path to `executeActivation`, so warm reuse no longer
 depends first on persisted active-run rows. Full mission V remains 1 because
 the activation body still records terminal run state as evidence, cancellation
 keeps active-row compatibility fallbacks, and deployed restart acceptance has
-not run.
+not run. Landing then proved the code reached staging, but the deployed
+RunAcceptance smoke exposed the remaining acceptance-repointing blocker: a
+prompt/VText trajectory at `https://choir.news` produced `staging-smoke-level`
+evidence at deployed commit `a2252af27b5db087cbbb931e8d1b5dc04e402285`, while
+the synthesized RunAcceptanceRecord `runacc-ffec1c9975f357724d29` stayed
+`blocked` because `product_path_observed` still requires `super_requested` and
+`worker_mutation_bounded` still requires worker/export/adoption evidence even
+when no worker mutation was attempted.
 
 **budget:** 2 overnight missions. Solvency check: do not spend the first pass
 rewriting the whole LLM loop. First buy the map: classify lifecycle reads and
@@ -170,12 +177,14 @@ controllers to it; blocked/nonresident historical rows no longer suppress a
 fresh coagent activation when durable backlog exists.
 See "Lifecycle Inventory - 2026-06-13" below.
 
-**next move:** resolve whether the remaining compatibility fallbacks block v0
-settlement: cancellation still has store-active fallback behavior for
-legacy/manual active rows, and `executeActivation` still writes terminal run
-state as activation evidence. If those are acceptable as compatibility/audit
-surfaces, move to commit, push, CI/deploy monitoring, and deployed restart
-acceptance; if not, document the exact blocker before another construct.
+**next move:** repair the acceptance smoke semantics documented in the
+2026-06-13 staging proof: prompt/VText-only deployed smoke should be accepted
+as `staging-smoke-level` when no worker mutation was attempted, while
+worker/export/promotion/continuation claims remain gated by their existing
+evidence. Then rerun focused acceptance tests, push, monitor CI/deploy, and
+rerun deployed acceptance synthesis. Cancellation's store-active fallback and
+`executeActivation` terminal run rows are accepted for v0 as compatibility/audit
+surfaces, not ordinary warm-residency or agent-liveness oracles.
 Preserve historical `parent_loop_id` compatibility surfaces for trace/API
 evidence until the rename cut is explicit, but do not let spawned-run
 provenance decide liveness or authority.

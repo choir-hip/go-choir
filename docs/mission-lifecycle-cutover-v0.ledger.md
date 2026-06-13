@@ -731,3 +731,45 @@ active-row compatibility, and `executeActivation` still marks run terminal
 state as activation evidence. The next proof must decide whether those
 compatibility fallbacks are acceptable for v0 landing or need another code cut
 before staging acceptance.
+
+## 2026-06-13 - Landing Proof Exposes Acceptance-Repointing Blocker
+
+Reliable staging evidence before code: commits `8a826254` and
+`a2252af27b5db087cbbb931e8d1b5dc04e402285` landed on `origin/main`. GitHub
+Actions run `27460187209` completed successfully, including the Node B staging
+deploy. `https://choir.news/health` then reported both proxy and sandbox
+`deployed_commit` as `a2252af27b5db087cbbb931e8d1b5dc04e402285`.
+
+Product-path acceptance smoke used a real browser-authenticated staging user
+created through public `/auth/*` WebAuthn routes:
+`qa-1781335537059-6oqwnm@example.com`. The proof called public authenticated
+product APIs only:
+
+- `POST /api/prompt-bar` created submission
+  `8a73c212-e1bb-4dcb-9188-43937a77bc09`.
+- `GET /api/prompt-bar/submissions/8a73c212-e1bb-4dcb-9188-43937a77bc09`
+  returned `state=completed` with VText doc
+  `feede330-9de4-4773-9fd9-03e4759154c8` and initial loop
+  `4445146e-9153-4e3c-b07a-bea4addcb2e6`.
+- `POST /api/run-acceptances/synthesize` produced
+  `runacc-ffec1c9975f357724d29` at `staging-smoke-level`, with
+  `deployment_commit` and `health_commit` both equal to
+  `a2252af27b5db087cbbb931e8d1b5dc04e402285`.
+
+Observed problem: the acceptance record remained `state=blocked`. Its derived
+checkpoints were `submitted` and `vtext_opened`, but invariant
+`product_path_observed` still required `super_requested`, and invariant
+`worker_mutation_bounded` still required worker/export/adoption evidence even
+though this deployed smoke did not attempt worker mutation. This is not a
+staging deploy failure; it is the M3 acceptance-evidence repointing blocker
+from the mission variant made concrete.
+
+Claim/scope: repair RunAcceptance staging-smoke semantics so prompt/VText
+product-path evidence can be accepted as `staging-smoke-level` when no worker
+mutation path was attempted. Do not weaken blocked worker delegation,
+export-level, promotion-level, or continuation-level gates.
+
+Expected Delta V: -1 if the same deployed smoke can synthesize an accepted
+`staging-smoke-level` record after CI/deploy, while existing tests still prove
+worker delegate blockers remain blocked and runtime-supervision/export paths
+keep their stronger gates.
