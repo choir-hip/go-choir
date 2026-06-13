@@ -1585,3 +1585,43 @@ produce a researcher activation with trajectory metadata but without the
 assigned work item needed for boot rewarm. No code fix in this checkpoint, and
 no continuation-level, promotion-level, zero-stranding, or final M3 settlement
 is claimed.
+
+## 2026-06-13 - Batch R Construct: Passivation Synthesizes Missing Spawned Work
+
+Claim/scope: close the sharper Batch Q local shape where an interrupted
+spawned child activation already has owner, trajectory, parent, agent, and
+objective metadata, but has no `work_item_ids` and no preexisting assigned
+work item. Scope is runtime boot passivation plus assigned-work rewarm; no
+deployed acceptance is claimed in this batch.
+
+Move: boot passivation now attempts `createSpawnedChildWorkItem` for
+interrupted spawned researcher, super, vsuper, and co-super activations before
+storing the passivated run. If that creates or resolves an item, the passivated
+run metadata gains `work_item_ids` and `passivated_spawned_work_item_id`. The
+existing assigned-work sweep then sees the live/open item and rewarms the
+durable agent with `request_source=trajectory_work_item_sweep`.
+
+Receipts:
+
+- Focused passivation-synthesis and spawned-work restart regression:
+  `nix develop -c go test ./internal/runtime -run 'TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog|TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill|TestStartChildRunCompletesSpawnedWorkItem|TestStartSweepsAssignedOpenWorkItemsAfterPassivation' -count=1`
+  passed.
+- Adjacent coagent/spawn/slot/delivery sweep:
+  `nix develop -c go test ./internal/runtime -run 'TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork|TestProcessRestartRewarmsCoagentAfterOSKill|TestSpawnMintsTrajectoryAndChildJoinsIt|TestVSuperCoSuperSlotReusedByTrajectorySlot|TestUpdateCoagentDeliveryRequiresSuccessfulActivation|TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata' -count=1`
+  passed.
+- Runtime shard coverage:
+  `nix develop -c scripts/go-test-runtime-shards` passed.
+- New regression:
+  `TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog` seeds
+  the deployed Batch Q shape directly: a completed VText parent with trajectory
+  metadata, a running researcher child with trajectory metadata and parent
+  provenance, no `work_item_ids`, no pending updates, and no open work items.
+  Fresh runtime boot passivates the child, synthesizes exactly one assigned
+  spawned-work item, leaves `TrajectoryObligations` visibly not settled, and
+  starts a replacement researcher activation carrying the same work item ID.
+
+Expected Delta V: -1 for the local Batch Q missing-work-item passivation
+variant. Actual Delta V: -1 locally. Remaining error field: this code has not
+yet been committed, pushed, deployed, or rerun against the vmctl-routed staging
+restart oracle. M3 remains open; no continuation-level, promotion-level,
+zero-stranding, or final settlement is claimed.

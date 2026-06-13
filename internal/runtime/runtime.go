@@ -1174,6 +1174,12 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 				rec.FinishedAt = nil
 				rec.Metadata = cloneMetadata(rec.Metadata)
 				rec.Metadata["passivated_reason"] = "runtime_restarted"
+				if item, err := rt.createSpawnedChildWorkItem(ctx, rec, nil); err != nil {
+					log.Printf("runtime: boot passivation: create spawned work item for run %s: %v", rec.RunID, err)
+				} else if item.WorkItemID != "" {
+					rec.Metadata["work_item_ids"] = appendUniqueString(metadataStringSlice(rec.Metadata["work_item_ids"]), item.WorkItemID)
+					rec.Metadata["passivated_spawned_work_item_id"] = item.WorkItemID
+				}
 
 				if err := rt.store.UpdateRun(ctx, *rec); err != nil {
 					log.Printf("runtime: boot passivation: update run %s: %v", rec.RunID, err)
