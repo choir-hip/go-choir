@@ -2102,3 +2102,68 @@ researcher obligations in runtime control flow or another deterministic
 contract before VText can complete. No code fix in this checkpoint, and no
 continuation-level, promotion-level, zero-stranding, or final M3 settlement is
 claimed.
+
+## 2026-06-13 - Batch AB Problem Checkpoint: Worker-Woken VText Lost Researcher Intent
+
+Claim/scope: record the first deployed result after commit
+`15301fd00f59085d9b277e893cd4ae32cd19d555` reached staging, before any next
+code fix. This is problem documentation only. It does not change the runtime
+and does not claim acceptance.
+
+Receipts:
+
+- Commit `15301fd00f59085d9b277e893cd4ae32cd19d555` was pushed to
+  `origin/main`.
+- The code change made explicit researcher continuation no longer depend on a
+  user-authored base revision. It requires explicit researcher intent and no
+  existing researcher run/update on the same document trajectory.
+- Local construct checks before push passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation|TestEditVTextExplicitResearcherRequiresSpawnContinuation|TestEditVTextExplicitResearcherRequiresSpawnAfterSuperBase|TestEditVTextExplicitResearcherDoesNotDuplicateExistingResearcher' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestHandlePromptBarExplicitResearcherBypassesPersistentSuperShortcut|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestVTextPromptExplicitResearcherOverridesSuperFirstShortcut|TestVTextPromptSteersCurrentEventsToResearcherNotSuper|TestConductorCanSpawnVTextAndVTextCanSpawnResearcher|TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog|TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog|TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill|TestStartChildRunCompletesSpawnedWorkItem|TestStartSweepsAssignedOpenWorkItemsAfterPassivation' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestEditVTextExplicitResearcherRequiresSpawnContinuation|TestEditVTextExplicitResearcherRequiresSpawnAfterSuperBase|TestEditVTextExplicitResearcherDoesNotDuplicateExistingResearcher|TestRunToolLoopRequiredNextToolSatisfiedInSameBatchDoesNotRetry|TestRunToolLoopBoundsRequiredNextToolProviderCall' -count=1`;
+  and `nix develop -c scripts/go-test-runtime-shards`.
+- CI run `27467612158` completed successfully, including deploy job
+  `81192724078`; FlakeHub publish run `27467612166` completed successfully.
+- Public staging health after deploy reported proxy build commit
+  `15301fd00f59085d9b277e893cd4ae32cd19d555`, deployed commit
+  `15301fd00f59085d9b277e893cd4ae32cd19d555`, `vmctl_status=ok`, and
+  `vmctl_routing=enabled`. The proxy status was `degraded` because the default
+  upstream was unreachable, but vmctl routing was healthy.
+- Deployed probe command:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news node /tmp/m3_vmctl_refresh_probe.mjs > /tmp/m3_vmctl_refresh_probe.15301fd0.out.json`
+  exited nonzero.
+- Probe marker: `M3_VMCTL_REFRESH_1781356093374`; test account
+  `m3-vmctl-refresh-1781356094633-oesrr1@example.com`; owner
+  `b2b5bdb4-a6e8-486e-8a24-7d44ce87f33a`; submission/trajectory
+  `4355083f-28da-489e-92be-4b078ba00102`; VText document
+  `579d11f1-5bbd-4127-881f-420d4a0d27ce`.
+- VM target before any refresh: `vm-5ecdc6656b5fd9e1f4e58e73d99a996b`,
+  sandbox `http://10.200.22.2:8085`, epoch 1, deployed commit
+  `15301fd00f59085d9b277e893cd4ae32cd19d555`.
+- Failure again occurred before `POST /internal/vmctl/refresh`: the probe
+  timed out waiting for Trace roles `conductor`, `vtext`, `researcher`, and
+  `super`. Trace contained only `conductor`, `super`, and `vtext`.
+- The route regressed to the super-first shape for this deployed run:
+  `decision.initial_loop_id=d9c01209-82e2-4e0b-8af4-527db3cdae16` was a super
+  run. The only VText run,
+  `70149a0c-dbb6-4698-8182-0477d8d7ce6e`, was spawned from that super run
+  after `update_coagent`.
+- A diagnostic owner-routed trace read showed `agent_count=3`,
+  `delegation_count=0`, `finding_count=0`, and `message_count=0`. Super
+  invoked `write_file`, `write_file`, `update_coagent`, and a duplicate
+  `update_coagent` that errored. VText invoked `edit_vtext` twice in one turn.
+- Moment detail for the first VText `edit_vtext` result
+  `19eec8ba-a1c3-4fe2-bb2a-8b46f5c467bd` showed output
+  `{"base_revision_id":"43d1094f-ef2b-4518-83f1-f62400363157","doc_id":"579d11f1-5bbd-4127-881f-420d4a0d27ce","revision_id":"b50c7eac-a55d-42e8-b527-1c72bb9a3c26","status":"stored"}`.
+  It did not include `next_required_tool`. The second `edit_vtext` result
+  corresponded to the existing duplicate-edit guard.
+
+Expected Delta V after `15301fd0`: -1 on staging for the explicit researcher
+obligation subclaim when VText edits from a super/base or worker-woken state.
+Actual Delta V: 0 for deployed acceptance. Remaining error field: the explicit
+researcher signal did not reach the super-requested / worker-woken VText run,
+so the VText edit result never declared `next_required_tool=spawn_agent`.
+The next fix should preserve explicit researcher intent into that VText run or
+derive it from durable document/request metadata instead of transient run
+metadata. No code fix in this checkpoint, and no continuation-level,
+promotion-level, zero-stranding, or final M3 settlement is claimed.
