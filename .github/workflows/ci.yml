@@ -324,6 +324,21 @@ jobs:
               echo "    Phase ${phase}: $((now - phase_started_at))s (total $((now - deploy_started_at))s)"
               phase_started_at=$now
             }
+            dump_deploy_service_diagnostics() {
+              local reason="$1"
+              echo "==> Deploy service diagnostics: ${reason}" >&2
+              for service in go-choir-vmctl go-choir-sandbox go-choir-proxy; do
+                echo "-- systemctl status ${service}" >&2
+                systemctl --no-pager --full status "$service" >&2 || true
+                echo "-- journalctl -u ${service} -n 80" >&2
+                journalctl -u "$service" -n 80 --no-pager >&2 || true
+              done
+              echo "-- local health probes" >&2
+              for port in 8081 8082 8083 8084 8086 8087; do
+                echo "port ${port}" >&2
+                curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" >&2 || true
+              done
+            }
 
             if [ ! -d /opt/go-choir/.git ]; then
               echo "==> Cloning go-choir repository"
@@ -526,12 +541,18 @@ jobs:
                 run_switch || switch_status=$?
                 if [ "$switch_status" -ne 0 ]; then
                   echo "    Switch failed with status ${switch_status}; checking logind before one retry" >&2
+                  dump_deploy_service_diagnostics "nixos switch failed before retry"
                   if ! timeout 10 loginctl list-users >/dev/null 2>&1; then
                     echo "    logind did not answer; restarting systemd-logind before retry" >&2
                     systemctl restart systemd-logind.service || true
                     sleep 3
                   fi
-                  run_switch
+                  retry_status=0
+                  run_switch || retry_status=$?
+                  if [ "$retry_status" -ne 0 ]; then
+                    dump_deploy_service_diagnostics "nixos switch retry failed"
+                    exit "$retry_status"
+                  fi
                 fi
                 echo "    Switch complete"
               fi
@@ -662,22 +683,6 @@ jobs:
               sleep 5
             fi
             note_phase "service settle"
-
-            dump_deploy_service_diagnostics() {
-              local reason="$1"
-              echo "==> Deploy service diagnostics: ${reason}" >&2
-              for service in go-choir-vmctl go-choir-sandbox go-choir-proxy; do
-                echo "-- systemctl status ${service}" >&2
-                systemctl --no-pager --full status "$service" >&2 || true
-                echo "-- journalctl -u ${service} -n 80" >&2
-                journalctl -u "$service" -n 80 --no-pager >&2 || true
-              done
-              echo "-- local health probes" >&2
-              for port in 8081 8082 8083 8084 8086 8087; do
-                echo "port ${port}" >&2
-                curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" >&2 || true
-              done
-            }
 
             install_guest_image() {
               local src="$1"
