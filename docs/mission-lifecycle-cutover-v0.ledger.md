@@ -1215,3 +1215,65 @@ and `internal/runtime/runtime.go` boot order/resident skip behavior.
 Expected Delta V: 0 for full M3; actual Delta V: 0. The fix target expands from
 same-trajectory combined backlog to every distinct non-empty trajectory in the
 pending update batch for the same actor, with a two-trajectory regression.
+
+## 2026-06-13 - Batch K Fix: Combined Backlog Rewarm Includes Assigned Work
+
+Move: change cold `update_coagent` backlog rewarm so the replacement coagent
+activation includes assigned open work items for every distinct non-empty
+trajectory represented in the pending update batch. The activation metadata now
+records both `worker_update_ids` and `work_item_ids`, and the wake prompt
+contains both pending update content and assigned-work objectives. The work
+items remain open until the actor actually closes them; `TrajectoryObligations`
+continues to report open obligations.
+
+Receipts:
+
+- Problem checkpoints:
+  `96636bee89fe526158e81c29e685c3a2d0900fb1`
+  (`docs: record combined restart backlog gap`) and
+  `6abca2999b8a76e351abeb607b6267a44b5334c5`
+  (`docs: record multi-trajectory rewarm gap`).
+- Behavior commit:
+  `63767a43673007aaca27e926c74dd6e9ee7093f3`
+  (`runtime: include assigned work in coagent rewarm`).
+- Local focused proof:
+  `nix develop -c go test ./internal/runtime -run TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork -count=1`.
+- Local surrounding proof:
+  `nix develop -c go test ./internal/runtime -run 'TestStart(RewarmsCoagentWithPendingUpdatesAndAssignedWork|SweepsAssignedOpenWorkItemsAfterPassivation)|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TestCoagentRewarm|TestTrajectoryObligationsReportPendingUpdateCoagent|TestUpdateCoagentDelivery' -count=1`.
+- Independent review re-run by `/root/combined_rewarm_review` found no
+  findings after the multi-trajectory expansion. Its focused command passed:
+  `nix develop -c go test ./internal/runtime -run 'TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork|TestStartSweepsAssignedOpenWorkItemsAfterPassivation|TestCoagentRewarmUsesResidentActivationNotActiveRunProxy|TestCoagentRewarmIgnoresBlockedHistoricalActivation|TestUpdateCoagentWarmActivationInjectsPendingTurn' -count=1`.
+- Local batch proof:
+  `nix develop -c scripts/go-test-runtime-shards`;
+  `git diff --check`.
+
+Landing receipts:
+
+- Push CI run `27462963675` succeeded. The run included Go non-runtime tests,
+  all four `internal/runtime` shards, Go vet/build, integration-tagged smoke,
+  TLA+ model check, deploy-impact classification, and staging deploy.
+- FlakeHub publish run `27462963683` succeeded.
+- Staging deploy job `81180171763` succeeded.
+- Public `https://choir.news/health` reported `status=ok`, `upstream=ok`,
+  `vmctl_status=ok`, `vmctl_routing=enabled`, and proxy plus sandbox
+  build/deployed commit `63767a43673007aaca27e926c74dd6e9ee7093f3`.
+- Deployed lifecycle smoke passed:
+  `GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news pnpm --dir frontend exec playwright test tests/adaptive-lifecycle-control-deployed.spec.js --project=chromium --reporter=list`.
+- Browser-public acceptance synthesis used WebAuthn registration and product
+  APIs only. It submitted prompt-bar trajectory/run
+  `89ca3c23-3477-4e40-8ecb-1a738b3191ac`, opened VText document
+  `902ef3c2-e045-4acb-ad85-695ed0393e95`, and synthesized
+  RunAcceptanceRecord `runacc-e6f3ae1cde0f9536c812`. The record state was
+  `accepted`, level `staging-smoke-level`, deployment/health commit
+  `63767a43673007aaca27e926c74dd6e9ee7093f3`, checkpoints `submitted` and
+  `vtext_opened` passed.
+
+Landing Delta V: expected 0 and actual 0 for full M3. Batch K closes the
+combined update-plus-assigned-work restart backlog gap, including the
+multi-trajectory update batch variant, but it is still an in-process restart
+regression plus deployed product-path smoke. No continuation-level,
+promotion-level, or final M3 settlement is claimed. The next realism axis is a
+deployed kill/restart or equivalent actor rewarm falsifier with zero stranded
+messages and no zero-obligation stalls. Rollback reference for behavior is the
+previous deployed behavior commit
+`dd165ada20609f3dca0e2bd968f46e7796a83e5f`.
