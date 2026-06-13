@@ -32,9 +32,9 @@ the riskiest single migration — its own control interval and test.
 
 ## Parallax State
 
-status: settled (M2 deletion cutover implemented, pushed, CI/deployed on
-staging, and smoke-proven on 2026-06-13; M1 settled 2026-06-12; portfolio
-sequencing corrected to architecture-first)
+status: open_handoff (post-settlement review on 2026-06-13 falsified the
+M2 settlement claim; M1 settled 2026-06-12; portfolio sequencing corrected
+to architecture-first)
 
 **kind:** spine.
 
@@ -81,12 +81,21 @@ deletion batch.
 registered/called; per-turn inbox pollers still active; `notifyParent` still
 active; slot registry still keyed by parent run; restart exactly-once
 falsifier missing; silent-stall oracle missing; prompts/tests still name old
-tools. Current V=0 for the requested M2 deletion cutover. Last ΔV=-1:
-platform landing proof recorded for commit
-`8052d242afc80320b7cd1b34a2f7a4bb306f1f13`. Q1 remains decided: durable
-update append and kind-specific ledger effects belong in the runtime store
-transaction; the later kind-specific ledger writers remain a successor edge,
-not a blocker for this deletion cutover.
+tools; post-review falsifiers reopened after a false settlement claim.
+Current V=3:
+1. run completion and `worker_updates` delivery marking are separate writes,
+   so a terminal run can be observed while its waking update remains pending;
+2. the comprehensive persistent-super blocking provider still keys on the
+   old "pending inbox deliveries" prompt and the follow-up test times out
+   under the new `update_coagent` prompt;
+3. `/internal/runtime/channel-casts` still directly writes
+   `worker_updates`, bypassing `update_coagent` authority and shape checks,
+   so `update_coagent` is not yet the sole wake writer.
+Last ΔV=+3: post-settlement review reopened the mission with three concrete
+blockers. Q1 remains decided: durable update append and kind-specific ledger
+effects belong in the runtime store transaction; the later kind-specific
+ledger writers remain a successor edge, not a blocker for this deletion
+cutover unless the repair touches their kind semantics.
 
 **budget:** 1-2 overnight missions. Solvency rule: batch unambiguous deletion
 work, but stop for a full Parallax pass if the old and new messaging models
@@ -202,10 +211,16 @@ Blind spots from this position (edge classes named):
   `channel_messages` as a delivery mechanism (vs audit log)? Grep before
   deleting the pollers; channel_messages survives as replay-only log.
 
-**next move:** no M2 deletion-cutover work remains. Successor work may add
-kind-specific ledger effects for `assignment` and `verification` in the same
-runtime-store transaction, but should be scoped as its own mission/control
-interval. Do not detour into Universal Wire or review UI product behavior.
+**next move:** repair the M2 settlement blockers only. First make run
+completion and delivery marking atomic enough for the restart exactly-once
+claim (no terminal run visible with its `worker_update_ids` still pending,
+or an equivalent stronger store primitive). Then repair the comprehensive
+persistent-super follow-up test so it blocks on the new
+`update_coagent` prompt and proves queued updates drain in a follow-up run.
+Then remove or re-route `/internal/runtime/channel-casts` so it cannot be a
+second agent-to-agent wake writer that bypasses `update_coagent` authority.
+Re-run the focused falsifiers and the relevant comprehensive tests. Do not
+detour into Universal Wire or review UI product behavior.
 
 **ledger file:** `docs/mission-messaging-cutover-v0.ledger.md`.
 
@@ -221,36 +236,26 @@ vocabulary is `spawned_by` only (no parent/child, even in prose — glossary
 `runs.trajectory_id` column; the silent-stall oracle consumes M1's
 `TrajectoryObligations`.
 
-**settlement:** achieved for M2 deletion cutover.
-- Code commit: `8052d242afc80320b7cd1b34a2f7a4bb306f1f13`
-  (`runtime: cut over coagent updates`), fast-forward pushed to
-  `origin/main`.
-- CI/deploy: GitHub Actions CI run
-  `27453151153` succeeded, including runtime shards, non-runtime tests,
-  integration-tagged smoke, TLA+ model check, Go vet/build, and Node B staging
-  deploy. FlakeHub publish run `27453151152` also succeeded.
-- Deployed identity: `https://choir.news/health` reported proxy and sandbox
-  `deployed_commit` =
-  `8052d242afc80320b7cd1b34a2f7a4bb306f1f13`, deployed at
-  `2026-06-13T01:57:13Z`.
-- Staging smoke: public `https://choir.news/` returned HTTP 200 and served
-  Choir frontend asset `index-BAGuPoFu.js`; deploy job health checks reported
-  proxy, sandbox, vmctl, gateway, platformd, and maild OK.
-- Local falsifiers: restart exactly-once delivery
-  (`TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce`), no silent
-  stall (`TestTrajectoryObligationsReportPendingUpdateCoagent`), co-super slot
-  reuse by `(trajectory, slot)` (`TestVSuperCoSuperSlotReusedByTrajectorySlot`),
-  audit-only channel cast (`TestChannelCastDoesNotCreateWakeDelivery` under
-  `-tags comprehensive`), and matching slot release
-  (`TestReleaseCoSuperSlotClaimOnlyClearsMatchingRun`) passed.
-- Grep proof: no active callers/definitions of `cast_agent`,
-  `cast_agent_update`, `wait_agent`, `submit_coagent_update`, `notifyParent`,
-  `injectPendingInboxTurns`, `ListPendingInboxDeliveries`,
-  `MarkInboxDeliveriesDelivered`, or `EnqueueInboxDelivery` under
-  `internal`, `specs`, or `cmd`.
-- Rollback ref: pre-cutover `origin/main` was
-  `d188e88bfc33582bb9479d5d9c0511c599f077de`.
-- Residual risks: no promotion-level or continuation-level
-  `RunAcceptanceRecord` is claimed; kind-specific `assignment` and
-  `verification` ledger writers are deferred successor work, with Q1 requiring
-  the runtime store transaction when implemented.
+**settlement:** retracted. Commit
+`8052d242afc80320b7cd1b34a2f7a4bb306f1f13` did land and deploy, but the
+post-settlement review found the local falsifier evidence was incomplete and
+partly stale. New receipts:
+- Failed focused restart proof:
+  `nix develop -c go test ./internal/runtime -run 'Test(UpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TrajectoryObligationsReportPendingUpdateCoagent|VSuperCoSuperSlotReusedByTrajectorySlot)' -count=1`
+  failed because `TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce`
+  observed the super run terminal while the update still had empty
+  `DeliveredToRunID` / nil `DeliveredAt`.
+- Failed comprehensive prompt/follow-up proof:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'Test(PersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun|PersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery|InstallDefaultAgentToolsProfiles)' -count=1 -v`
+  failed because `TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun`
+  timed out waiting for the first super run. The blocking provider still
+  searches for the old "pending inbox deliveries" prompt while the runtime
+  now emits "pending update_coagent records".
+- Review found `/internal/runtime/channel-casts` registered and live, with
+  `HandleInternalChannelCast` directly constructing `WorkerUpdateRecord` and
+  calling `DispatchWorkerUpdate`; `tools_vmctl.go` posts to that route.
+  That is a second wake-writer path, not the `update_coagent` tool.
+- Rollback ref for the original cutover remains
+  `d188e88bfc33582bb9479d5d9c0511c599f077de`; current repair should be a
+  new documentation-first commit followed by code repair, not a history
+  rewrite.

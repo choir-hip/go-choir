@@ -151,3 +151,44 @@ in the same runtime store transaction as the durable update append. The M2
 deletion batch preserved `assignment` and `verification` as typed
 `update_coagent` kinds, but did not add new work-item or run-acceptance writers;
 that is a successor edge, not part of this deletion-cutover settlement.
+
+## 2026-06-13 — Post-Settlement Review Reopened M2
+
+Claim/scope: the previous M2 settlement claim was too strong. Scope is
+documentation of review evidence before any code repair, per the
+problem-documentation-first invariant.
+
+Move: review the landed M2 slice against the mission conjecture and run the
+focused falsifiers plus relevant comprehensive tests.
+
+Expected ΔV: +N if the review falsifies settlement; otherwise 0.
+
+Actual ΔV: +3. M2 is reopened with V=3:
+1. terminal run completion and delivered `worker_updates` marking are two
+   separate writes;
+2. the comprehensive persistent-super blocking provider still keys on the old
+   "pending inbox deliveries" prompt and the follow-up test fails under the
+   new prompt;
+3. `/internal/runtime/channel-casts` is a live second wake writer that directly
+   calls `DispatchWorkerUpdate` instead of the `update_coagent` authority path.
+
+Receipts:
+- `nix develop -c go test ./internal/runtime -run 'Test(UpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TrajectoryObligationsReportPendingUpdateCoagent|VSuperCoSuperSlotReusedByTrajectorySlot)' -count=1`
+  failed with `TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce`
+  observing the target run terminal while the update still had empty
+  `DeliveredToRunID` and nil `DeliveredAt`.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'Test(PersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun|PersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery|InstallDefaultAgentToolsProfiles)' -count=1 -v`
+  failed because `TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun`
+  timed out waiting for a prompt containing `Process the liquid package lane`.
+  Root cause: `blockingExecuteProvider` still recognizes only
+  `Process the pending inbox deliveries addressed to you as the user's
+  persistent super actor.`
+- `rg -n "HandleInternalChannelCast|internal/channel/cast|channel-cast|ChannelCast" internal cmd frontend scripts specs --glob '*.*'`
+  showed `HandleInternalChannelCast` is registered at `api.go` and called by
+  vmctl. Its addressed path constructs a `WorkerUpdateRecord` and calls
+  `DispatchWorkerUpdate` directly.
+
+Open edge: repair M2 in a follow-up code commit. The repair must preserve Q1:
+all durable update append, wake backlog, and any delivered-state transition
+needed for exactly-once semantics must live in the runtime store's transactional
+domain. Do not weaken the mission by accepting a second wake writer.
