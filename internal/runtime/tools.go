@@ -385,7 +385,6 @@ func toolRequiresSequentialTurnExecution(name string) bool {
 		"delegate_worker_vm",
 		"start_worker_delegation",
 		"observe_worker_delegation",
-		"redirect_worker_delegation",
 		"finish_worker_delegation",
 		"cancel_worker_delegation",
 		"publish_app_change_package",

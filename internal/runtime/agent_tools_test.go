@@ -73,10 +73,13 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	processor := rt.ToolRegistryForProfile(AgentProfileProcessor)
 	reconciler := rt.ToolRegistryForProfile(AgentProfileReconciler)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "update_coagent", "save_evidence", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "product_api_request", "start_worker_delegation", "observe_worker_delegation", "redirect_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "update_coagent", "save_evidence", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "product_api_request", "start_worker_delegation", "observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}
+	}
+	if _, ok := super.Lookup("redirect_worker_delegation"); ok {
+		t.Fatalf("super should not install removed redirect_worker_delegation tool")
 	}
 	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "update_coagent", "save_evidence", "publish_app_change_package"} {
 		if _, ok := coSuper.Lookup(name); !ok {
@@ -569,78 +572,14 @@ func TestChannelCastDoesNotCreateWakeDelivery(t *testing.T) {
 	}
 }
 
-func TestRedirectWorkerDelegationCannotBypassUpdateCoagent(t *testing.T) {
+func TestRedirectWorkerDelegationIsNotInstalled(t *testing.T) {
 	t.Parallel()
-	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
-	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
-		t.Fatalf("install active tools: %v", err)
+	rt, _, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default tools: %v", err)
 	}
-	workerDir := t.TempDir()
-	workerDB := filepath.Join(workerDir, "worker.db")
-	workerStore, err := openTestStore(workerDB)
-	if err != nil {
-		t.Fatalf("open worker store: %v", err)
-	}
-	workerRT := New(Config{
-		SandboxID:           "sandbox-worker-redirect",
-		StorePath:           workerDB,
-		ProviderTimeout:     5 * time.Second,
-		SupervisionInterval: time.Hour,
-	}, workerStore, events.NewEventBus(), NewStubProvider(10*time.Millisecond))
-	t.Cleanup(func() {
-		workerRT.Stop()
-		_ = workerStore.Close()
-	})
-	workerHandler := NewAPIHandler(workerRT)
-	workerMux := http.NewServeMux()
-	workerMux.HandleFunc("/internal/runtime/channel-casts", workerHandler.HandleInternalChannelCast)
-	workerSrv := httptest.NewServer(workerMux)
-	t.Cleanup(workerSrv.Close)
-
-	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "supervise worker", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
-		runMetadataAgentID:      "super:primary",
-		runMetadataChannelID:    "doc-super",
-		runMetadataTrajectoryID: "trajectory-super",
-	})
-	if err != nil {
-		t.Fatalf("start super run: %v", err)
-	}
-
-	args, err := json.Marshal(map[string]any{
-		"worker_sandbox_url": workerSrv.URL,
-		"worker_run_id":      "worker-run-redirect",
-		"channel_id":         "worker-doc",
-		"target_agent_id":    "vsuper:worker",
-		"message_class":      "redirection",
-		"message":            "Narrow scope to one human-readable VText checkpoint before continuing.",
-	})
-	if err != nil {
-		t.Fatalf("marshal redirect args: %v", err)
-	}
-	raw, err := activeRT.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(context.Background(), superRun), "redirect_worker_delegation", args)
-	if err == nil {
-		t.Fatalf("redirect_worker_delegation unexpectedly succeeded: %s", raw)
-	}
-	if !strings.Contains(err.Error(), "addressed internal channel casts are disabled") || !strings.Contains(err.Error(), "update_coagent") {
-		t.Fatalf("redirect_worker_delegation error = %v, want update_coagent bypass rejection", err)
-	}
-
-	messages, err := workerStore.ListChannelMessages(context.Background(), "user-alice", "worker-doc", 0, 10)
-	if err != nil {
-		t.Fatalf("list worker channel messages: %v", err)
-	}
-	if len(messages) != 0 {
-		t.Fatalf("worker channel messages = %d, want none from rejected addressed cast: %+v", len(messages), messages)
-	}
-
-	deliveries, err := workerStore.ListPendingWorkerUpdates(context.Background(), "user-alice", "vsuper:worker", 10)
-	if err != nil {
-		t.Fatalf("list worker inbox deliveries: %v", err)
-	}
-	if len(deliveries) != 0 {
-		t.Fatalf("pending deliveries = %d, want none from rejected addressed cast: %+v", len(deliveries), deliveries)
+	if _, ok := rt.ToolRegistryForProfile(AgentProfileSuper).Lookup("redirect_worker_delegation"); ok {
+		t.Fatalf("redirect_worker_delegation should be deleted, not advertised as a failing tool")
 	}
 }
 

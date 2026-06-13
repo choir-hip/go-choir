@@ -35,7 +35,6 @@ func RegisterVMControlTools(registry *ToolRegistry, rt *Runtime, cwd string) err
 		newRequestWorkerVMTool(rt),
 		newStartWorkerDelegationTool(rt, cwd),
 		newObserveWorkerDelegationTool(rt),
-		newRedirectWorkerDelegationTool(rt),
 		newFinishWorkerDelegationTool(rt),
 		newCancelWorkerDelegationTool(rt),
 		newDelegateWorkerVMTool(rt, cwd),
@@ -1186,74 +1185,6 @@ func shouldCheckpointActiveWorkerFinish(result map[string]any) bool {
 		}
 	}
 	return false
-}
-
-func newRedirectWorkerDelegationTool(rt *Runtime) Tool {
-	type args struct {
-		WorkerSandboxURL string `json:"worker_sandbox_url"`
-		WorkerRunID      string `json:"worker_run_id,omitempty"`
-		LoopID           string `json:"loop_id,omitempty"`
-		ChannelID        string `json:"channel_id"`
-		TargetAgentID    string `json:"target_agent_id"`
-		Message          string `json:"message"`
-		MessageClass     string `json:"message_class,omitempty"`
-	}
-	return Tool{
-		Name:        "redirect_worker_delegation",
-		Description: "Send a super-authored redirect directive to the worker vsuper's coordination channel without blocking. Direct worker control should target vsuper; vsuper remains responsible for coordinating its co-supers.",
-		Parameters: jsonSchemaObject(map[string]any{
-			"worker_sandbox_url": map[string]any{"type": "string"},
-			"worker_run_id":      map[string]any{"type": "string"},
-			"loop_id":            map[string]any{"type": "string"},
-			"channel_id":         map[string]any{"type": "string"},
-			"target_agent_id":    map[string]any{"type": "string"},
-			"message":            map[string]any{"type": "string"},
-			"message_class":      map[string]any{"type": "string"},
-		}, []string{"worker_sandbox_url", "channel_id", "target_agent_id", "message"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
-				return "", fmt.Errorf("redirect_worker_delegation is only available to super agents")
-			}
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode redirect_worker_delegation args: %w", err)
-			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
-			if ownerID == "" {
-				return "", fmt.Errorf("redirect_worker_delegation missing owner context")
-			}
-			workerRunID := firstNonEmpty(strings.TrimSpace(in.WorkerRunID), strings.TrimSpace(in.LoopID))
-			messageClass := strings.TrimSpace(in.MessageClass)
-			if messageClass == "" {
-				messageClass = "directive"
-			}
-			content := fmt.Sprintf("[message_class=%s]\n%s", messageClass, strings.TrimSpace(in.Message))
-			client := &http.Client{Timeout: 10 * time.Second}
-			cursor, err := postInternalWorkerChannelCast(ctx, client, in.WorkerSandboxURL, internalChannelCastRequest{
-				OwnerID:     ownerID,
-				ChannelID:   strings.TrimSpace(in.ChannelID),
-				ToAgentID:   strings.TrimSpace(in.TargetAgentID),
-				ToRunID:     workerRunID,
-				FromAgentID: firstNonEmpty(stringFromToolContext(ctx, toolCtxAgentID), AgentProfileSuper),
-				FromRunID:   stringFromToolContext(ctx, toolCtxRunID),
-				From:        firstNonEmpty(stringFromToolContext(ctx, toolCtxAgentID), AgentProfileSuper),
-				Role:        AgentProfileSuper,
-				Content:     content,
-			})
-			if err != nil {
-				return "", err
-			}
-			return toolResultJSON(map[string]any{
-				"status":          "worker_redirect_sent",
-				"worker_run_id":   workerRunID,
-				"loop_id":         workerRunID,
-				"target_agent_id": strings.TrimSpace(in.TargetAgentID),
-				"channel_id":      strings.TrimSpace(in.ChannelID),
-				"cursor":          cursor,
-				"message_class":   messageClass,
-			})
-		},
-	}
 }
 
 func (rt *Runtime) applyAsyncWorkerEvidence(ctx context.Context, client *http.Client, workerSandboxURL, ownerID, workerRunID string, mirrorTerminalPackages bool, superRec *types.RunRecord, result map[string]any) {
@@ -2501,57 +2432,6 @@ func cancelInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, 
 		return fmt.Errorf("cancel_worker_delegation failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
 	}
 	return nil
-}
-
-type internalChannelCastRequest struct {
-	OwnerID     string `json:"owner_id"`
-	ChannelID   string `json:"channel_id"`
-	ToAgentID   string `json:"to_agent_id,omitempty"`
-	ToRunID     string `json:"to_loop_id,omitempty"`
-	FromAgentID string `json:"from_agent_id,omitempty"`
-	FromRunID   string `json:"from_loop_id,omitempty"`
-	From        string `json:"from,omitempty"`
-	Role        string `json:"role,omitempty"`
-	Content     string `json:"content"`
-}
-
-type internalChannelCastResponse struct {
-	Status string `json:"status"`
-	Cursor uint64 `json:"cursor"`
-}
-
-func postInternalWorkerChannelCast(ctx context.Context, client *http.Client, baseURL string, reqBody internalChannelCastRequest) (uint64, error) {
-	endpoint, err := workerRuntimeURL(baseURL, "/internal/runtime/channel-casts", nil)
-	if err != nil {
-		return 0, err
-	}
-	payload, err := json.Marshal(reqBody)
-	if err != nil {
-		return 0, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(payload)))
-	if err != nil {
-		return 0, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("redirect_worker_delegation channel cast: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("redirect_worker_delegation channel cast failed: %s: %s", resp.Status, strings.TrimSpace(string(body)))
-	}
-	var out internalChannelCastResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		return 0, fmt.Errorf("decode redirect_worker_delegation response: %w", err)
-	}
-	return out.Cursor, nil
 }
 
 func followWorkerChildRuns(ctx context.Context, client *http.Client, baseURL, ownerID, rootRunID string, evidence workerRunEvidence, timeout time.Duration) workerRunEvidence {

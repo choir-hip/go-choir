@@ -267,3 +267,38 @@ Open edge: choose one architecture and finish it. Either remove/de-register
 `redirect_worker_delegation` and update prompts/docs/tests, or re-route it
 through the same `update_coagent` authority/delivery semantics without
 reviving addressed channel casts or adding a second wake writer.
+
+## 2026-06-13 — Dead Redirect Tool Surface Removed
+
+Claim/scope: close only the dead redirect tool surface. No Universal Wire,
+review UI, staging, or product-behavior detour.
+
+Move: chose deletion. `redirect_worker_delegation` had no clean M2-compliant
+transport because its implementation depended on addressed channel casts, and
+that route is intentionally audit-only now. Removed the super tool
+registration, deleted the vmctl implementation/client helper, moved the
+channel-cast request/response structs to the API file, and changed tests to
+assert the tool is not installed.
+
+Actual ΔV: -1. Current local V=0. Local M2 repair remains open_handoff until
+the platform landing loop is explicitly requested and recorded.
+
+Receipts:
+- `nix develop -c go test ./internal/store ./internal/runtime -run 'TestUpdateRunAndMarkWorkerUpdatesDelivered|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TestTrajectoryObligationsReportPendingUpdateCoagent|TestVSuperCoSuperSlotReusedByTrajectorySlot' -count=1`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'Test(PersistentSuperInboxBashRequiresCoagentUpdate|ChannelCastDoesNotCreateWakeDelivery|RedirectWorkerDelegationIsNotInstalled|PersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun|PersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery|InstallDefaultAgentToolsProfiles)' -count=1 -v`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'Test.*Prompt|TestWorkerBootstrapPrompt|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper' -count=1`
+  passed.
+- `rg -n '\b(cast_agent|cast_agent_update|wait_agent|submit_coagent_update|notifyParent|injectPendingInboxTurns|ListPendingInboxDeliveries|MarkInboxDeliveriesDelivered|EnqueueInboxDelivery)\b' internal specs cmd --glob '*.go' --glob '*.md' --glob '*.tla'`
+  returned no active-code matches.
+- `rg -n 'redirect_worker_delegation' internal/runtime internal/store cmd specs --glob '*.go' --glob '*.md' --glob '*.tla'`
+  returned only tests that assert the tool is absent.
+- `rg -n 'redirecting|redirect or finish|redirect the vsuper|observe, redirect|redirect, cancel|redirect/cancel|redirecting/cancelling|redirect_worker_delegation|postInternalWorkerChannelCast|worker_redirect_sent' internal/runtime/prompt_defaults internal/runtime/*.go internal/runtime/*_test.go`
+  returned only tests that assert `redirect_worker_delegation` is absent.
+- `rg -n 'HandleInternalChannelCast|/internal/runtime/channel-casts|DispatchWorkerUpdate|wakeUpdatedCoagent|postInternalWorkerChannelCast|worker_redirect_sent' internal/runtime internal/store --glob '*.go'`
+  showed no `postInternalWorkerChannelCast`, no `worker_redirect_sent`, and no
+  `DispatchWorkerUpdate` call inside `HandleInternalChannelCast`.
+
+Residual risk: local proof only. Final M2 settlement still requires push, CI,
+staging deploy identity, and deployed acceptance proof.

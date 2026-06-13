@@ -541,7 +541,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		if workerMessagesContainActiveDelegation(recentWorkerMessages) {
 			b.WriteString("\nAt least one recent worker message says a delegated worker is still active or lacks terminal evidence.")
 			b.WriteString("\nFor this case, write the next dashboard revision from the evidence and call request_super_execution with a concrete continuation objective for persistent super.")
-			b.WriteString("\nThe objective must tell super to continue the existing worker_run_id, not start a duplicate worker, and to observe, redirect, cancel, or finish only through super authority until there is an AppChangePackage, reviewable blocker, cancellation certificate, or bounded timeout certificate.")
+			b.WriteString("\nThe objective must tell super to continue the existing worker_run_id, not start a duplicate worker, and to observe, cancel, or finish only through super authority until there is an AppChangePackage, reviewable blocker, cancellation certificate, or bounded timeout certificate.")
 			b.WriteString("\nVText may ask for clarification or continuation; VText must not directly control worker/vsuper/co-super runs.")
 		}
 	}

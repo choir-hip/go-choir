@@ -205,9 +205,9 @@ func buildDelegateWorkerSuperContinuationMessage(update types.WorkerUpdateRecord
 	workerSandboxURL := stringMapValue(output, "worker_sandbox_url")
 	var b strings.Builder
 	b.WriteString("Runtime supervision continuation required for an active worker delegation.\n")
-	b.WriteString("This is a control request for persistent super, copied from the VText-visible worker checkpoint. VText may narrate or ask for clarification, but only super may observe, redirect, cancel, or finish this worker.\n\n")
+	b.WriteString("This is a control request for persistent super, copied from the VText-visible worker checkpoint. VText may narrate or ask for clarification, but only super may observe, cancel, or finish this worker.\n\n")
 	b.WriteString("Continue the existing worker; do not start a duplicate worker run.\n")
-	b.WriteString("Use observe_worker_delegation or finish_worker_delegation against the existing worker_run_id. If the worker remains active without terminal evidence, redirect the vsuper with a precise instruction. Stop only when there is an AppChangePackage, a reviewable blocker, a cancellation certificate, or a bounded timeout certificate, then report back to VText with update_coagent.\n\n")
+	b.WriteString("Use observe_worker_delegation or finish_worker_delegation against the existing worker_run_id. If the worker remains active without terminal evidence, keep the worker obligation open and report the precise pending evidence or blocker to VText with update_coagent. Stop only when there is an AppChangePackage, a reviewable blocker, a cancellation certificate, or a bounded timeout certificate.\n\n")
 	b.WriteString("Worker refs:\n")
 	b.WriteString("- worker_run_id: ")
 	b.WriteString(workerRunID)

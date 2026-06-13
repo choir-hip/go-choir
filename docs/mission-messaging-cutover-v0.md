@@ -32,8 +32,8 @@ the riskiest single migration — its own control interval and test.
 
 ## Parallax State
 
-status: open_handoff (local M2 repair reviewed on 2026-06-13; one
-tool-surface blocker remains before staging/landing proof)
+status: open_handoff (local M2 repair complete on 2026-06-13; staging/landing
+proof intentionally deferred by the current repair-only objective)
 
 **kind:** spine.
 
@@ -81,7 +81,7 @@ registered/called; per-turn inbox pollers still active; `notifyParent` still
 active; slot registry still keyed by parent run; restart exactly-once
 falsifier missing; silent-stall oracle missing; prompts/tests still name old
 tools; post-review falsifiers reopened after a false settlement claim.
-Current local V=1. The three post-settlement repair blockers are closed:
+Current local V=0. The three post-settlement repair blockers are closed:
 1. terminal update-woken run persistence now uses a runtime-store transaction
    that updates the run and marks its waking `worker_updates` delivered
    together;
@@ -91,17 +91,15 @@ Current local V=1. The three post-settlement repair blockers are closed:
 3. addressed `/internal/runtime/channel-casts` requests are rejected before
    writing `worker_updates`, leaving `update_coagent` as the only active
    agent-to-agent wake primitive in this cut.
-One blocker remains: `redirect_worker_delegation` is still advertised and
-installed, but its only transport is addressed `/internal/runtime/channel-casts`,
-which now intentionally returns 400. A dead advertised control tool violates
-the M2 quality bar: either remove/de-register it and update prompts/docs, or
-re-route it through a real `update_coagent`-equivalent worker update path with
-the same authority checks. Last ΔV=+1: review reopened the local repair for
-this tool-surface inconsistency. Q1 remains decided: durable update append,
-wake backlog, delivered-state transition, and kind-specific ledger effects
-belong in the runtime store transaction; the later kind-specific ledger writers
-remain a successor edge, not a blocker for this deletion cutover unless a later
-repair touches their kind semantics.
+4. `redirect_worker_delegation` is removed/de-registered instead of advertised
+   as a dead tool; worker supervision continues through
+   `observe_worker_delegation`, `finish_worker_delegation`, and
+   `cancel_worker_delegation`.
+Last ΔV=-1: deletion closed the dead redirect tool surface. Q1 remains
+decided: durable update append, wake backlog, delivered-state transition, and
+kind-specific ledger effects belong in the runtime store transaction; the later
+kind-specific ledger writers remain a successor edge, not a blocker for this
+deletion cutover unless a later repair touches their kind semantics.
 
 **budget:** 1-2 overnight missions. Solvency rule: batch unambiguous deletion
 work, but stop for a full Parallax pass if the old and new messaging models
@@ -217,15 +215,10 @@ Blind spots from this position (edge classes named):
   `channel_messages` as a delivery mechanism (vs audit log)? Grep before
   deleting the pollers; channel_messages survives as replay-only log.
 
-**next move:** close the dead `redirect_worker_delegation` surface. Choose one
-architecture and implement it completely: either remove/de-register the tool
-and update tests/prompts/docs so no agent is told it can redirect workers that
-way, or re-route it through the `update_coagent` authority/delivery path
-without reviving addressed channel casts or adding a second wake writer. Then
-rerun the focused M2 repair tests and grep for second wake writers. Do not
-claim final settlement until the platform landing loop runs: commit, push, CI,
-staging deploy identity, and deployed acceptance proof. Do not detour into
-Universal Wire or review UI product behavior as part of this M2 repair.
+**next move:** review and land the local repair if platform rollout is desired.
+Do not claim final settlement until the platform landing loop runs: commit,
+push, CI, staging deploy identity, and deployed acceptance proof. Do not detour
+into Universal Wire or review UI product behavior as part of this M2 repair.
 
 **ledger file:** `docs/mission-messaging-cutover-v0.ledger.md`.
 
@@ -285,3 +278,23 @@ Post-repair review receipt:
   The comprehensive test now expects that failure. This is not a settled
   surface: a tool exposed to super but designed to fail is a remaining M2
   blocker.
+
+Dead redirect tool surface repair receipts from 2026-06-13:
+- Removed `redirect_worker_delegation` from the super tool profile and deleted
+  its vmctl implementation/client helper. The internal channel-casts route
+  remains audit-only for unaddressed internal casts.
+- `nix develop -c go test ./internal/store ./internal/runtime -run 'TestUpdateRunAndMarkWorkerUpdatesDelivered|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TestTrajectoryObligationsReportPendingUpdateCoagent|TestVSuperCoSuperSlotReusedByTrajectorySlot' -count=1`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'Test(PersistentSuperInboxBashRequiresCoagentUpdate|ChannelCastDoesNotCreateWakeDelivery|RedirectWorkerDelegationIsNotInstalled|PersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun|PersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery|InstallDefaultAgentToolsProfiles)' -count=1 -v`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'Test.*Prompt|TestWorkerBootstrapPrompt|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper' -count=1`
+  passed.
+- `rg -n '\b(cast_agent|cast_agent_update|wait_agent|submit_coagent_update|notifyParent|injectPendingInboxTurns|ListPendingInboxDeliveries|MarkInboxDeliveriesDelivered|EnqueueInboxDelivery)\b' internal specs cmd --glob '*.go' --glob '*.md' --glob '*.tla'`
+  returned no active-code matches.
+- `rg -n 'redirect_worker_delegation' internal/runtime internal/store cmd specs --glob '*.go' --glob '*.md' --glob '*.tla'`
+  now returns only tests that assert the tool is absent.
+- `rg -n 'redirecting|redirect or finish|redirect the vsuper|observe, redirect|redirect, cancel|redirect/cancel|redirecting/cancelling|redirect_worker_delegation|postInternalWorkerChannelCast|worker_redirect_sent' internal/runtime/prompt_defaults internal/runtime/*.go internal/runtime/*_test.go`
+  returned only tests that assert `redirect_worker_delegation` is absent.
+- `rg -n 'HandleInternalChannelCast|/internal/runtime/channel-casts|DispatchWorkerUpdate|wakeUpdatedCoagent|postInternalWorkerChannelCast|worker_redirect_sent' internal/runtime internal/store --glob '*.go'`
+  showed no `postInternalWorkerChannelCast`, no `worker_redirect_sent`, and no
+  `DispatchWorkerUpdate` call inside `HandleInternalChannelCast`.

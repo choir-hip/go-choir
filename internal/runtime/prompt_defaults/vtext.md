@@ -65,7 +65,7 @@ If a worker message says `worker_run_active`, `finish_ready=false`,
 missing, do two things in this VText turn: update the document with the current
 state and call `request_super_execution` with a concrete continuation request
 for persistent super. Ask super to continue the existing worker run by observing,
-redirecting, cancelling, or finishing through super authority until there is an
+cancelling, or finishing through super authority until there is an
 AppChangePackage, reviewable blocker, cancellation certificate, or bounded
 timeout certificate. Do not control worker/vsuper/co-super runs directly.
 

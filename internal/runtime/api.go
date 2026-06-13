@@ -26,6 +26,23 @@ type apiError struct {
 	Error string `json:"error"`
 }
 
+type internalChannelCastRequest struct {
+	OwnerID     string `json:"owner_id"`
+	ChannelID   string `json:"channel_id"`
+	ToAgentID   string `json:"to_agent_id,omitempty"`
+	ToRunID     string `json:"to_loop_id,omitempty"`
+	FromAgentID string `json:"from_agent_id,omitempty"`
+	FromRunID   string `json:"from_loop_id,omitempty"`
+	From        string `json:"from,omitempty"`
+	Role        string `json:"role,omitempty"`
+	Content     string `json:"content"`
+}
+
+type internalChannelCastResponse struct {
+	Status string `json:"status"`
+	Cursor uint64 `json:"cursor"`
+}
+
 // runSubmitRequest is the JSON payload for POST /api/agent/loop.
 type runSubmitRequest struct {
 	Prompt   string         `json:"prompt"`
