@@ -1320,3 +1320,35 @@ evidence, not deployed Node B service-kill evidence, and it does not prove
 multi-agent staging load or week-old VText memory continuation. The next
 realism axis remains a deployed kill/restart or equivalent staging proof with
 zero stranded messages and no zero-obligation stalls.
+
+## 2026-06-13 - Batch M Problem Checkpoint: Staging Sandbox Restart Loop From Stray Diagnostic Process
+
+Claim/scope: the next Parallax move should shift from local OS-kill rehearsal to
+deployed restart evidence. Before running the intended kill/restart probe,
+inspect staging health and Node B service state so the probe does not confuse an
+existing substrate problem with an M3 lifecycle result.
+
+Move: staging preflight only; no code fix and no cleanup yet, to honor Problem
+Documentation First.
+
+Evidence:
+
+- Public `https://choir.news/health` returned `status=ok`, `upstream=ok`,
+  `vmctl_status=ok`, `vmctl_routing=enabled`, and proxy/sandbox build plus
+  deployed commit `63767a43673007aaca27e926c74dd6e9ee7093f3`.
+- Direct Node B service evidence showed `go-choir-sandbox.service` active with
+  `NRestarts=110` and a fresh main PID.
+- The sandbox journal repeated
+  `sandbox: failed to listen on 127.0.0.1:8085: listen tcp 127.0.0.1:8085: bind: address already in use`,
+  followed by `Main process exited` and scheduled restarts.
+- `ss -ltnp 'sport = :8085'` showed the port owned by PID `4079213`,
+  command `/var/lib/go-choir/services/sandbox/bin/sandbox -help`, while
+  systemd's current main process was a different PID.
+
+Expected Delta V: 0 for full M3; actual Delta V: 0. Observer evidence improved:
+the deployed proof preflight found that a binary help/diagnostic invocation can
+start a second sandbox, occupy the runtime port, and make systemd loop while
+public health still looks OK between restarts. Remaining error field: staging is
+not yet a clean substrate for the deployed kill/restart falsifier; first remove
+the stray diagnostic process and prove the service remains stable, then rerun
+public product-path smoke before attempting the M3 restart discriminator.

@@ -285,18 +285,34 @@ that carries both `worker_update_ids` and `work_item_ids`, while
 This is local process evidence, not staging service-kill evidence, but it moves
 the observer from seeded-row restart simulation to real process death and
 fresh-process boot.
+Batch M attempted to move from local process proof toward deployed restart
+evidence and found a staging substrate blocker before running the intended
+kill/restart probe. Public `https://choir.news/health` still reported
+`status=ok`, `upstream=ok`, `vmctl_status=ok`, `vmctl_routing=enabled`, and
+proxy/sandbox build plus deployed commit
+`63767a43673007aaca27e926c74dd6e9ee7093f3`, but direct Node B service evidence
+showed `go-choir-sandbox.service` had restarted 110 times. The journal repeated
+`failed to listen on 127.0.0.1:8085: bind: address already in use`; `ss` showed
+the port owned by a stray diagnostic process
+`/var/lib/go-choir/services/sandbox/bin/sandbox -help` outside the active
+systemd main process. This is a staging-proof blocker and a harness/ops
+discipline finding: a binary help probe can accidentally start a second
+sandbox, hold the runtime port, and force systemd restart loops while public
+health may still look OK between restarts.
 See "Lifecycle Inventory - 2026-06-13" below.
 
-**next move:** continue toward deployed kill/restart evidence. Keep M3 open as
-a lifecycle cutover mission, not a deployment recovery mission. The
-service-pointer execution gap is fixed and staging is healthy at
-`63767a43673007aaca27e926c74dd6e9ee7093f3`; public product-path smoke accepted
-RunAcceptanceRecord `runacc-e6f3ae1cde0f9536c812` at `staging-smoke-level`.
-The next discriminator is the durable-actor restart falsifier: kill/restart or
-equivalent deployed evidence that a cold actor rewarms from durable backlog/open
-assigned obligations with zero stranded messages or zero-obligation stalls.
-The new local OS-kill test is the rehearsal for that staging proof, not a
-substitute for it.
+**next move:** first discharge the staging substrate blocker without treating
+it as M3 settlement evidence: remove the stray diagnostic sandbox process,
+confirm `go-choir-sandbox.service` remains on one main PID with no new restart
+loop and public health still reports deployed commit
+`63767a43673007aaca27e926c74dd6e9ee7093f3`, then rerun a public product-path
+smoke if needed. After staging is stable, continue toward deployed
+kill/restart evidence. Keep M3 open as a lifecycle cutover mission, not a
+deployment recovery mission. The next discriminator is the durable-actor
+restart falsifier: kill/restart or equivalent deployed evidence that a cold
+actor rewarms from durable backlog/open assigned obligations with zero stranded
+messages or zero-obligation stalls. The local OS-kill test is the rehearsal for
+that staging proof, not a substitute for it.
 Cancellation's store-active fallback and `executeActivation` terminal run rows
 are accepted for v0 as compatibility/audit surfaces, not ordinary
 warm-residency or agent-liveness oracles.
