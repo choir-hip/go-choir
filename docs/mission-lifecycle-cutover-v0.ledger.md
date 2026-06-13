@@ -1739,3 +1739,61 @@ variant. Actual Delta V: -1 locally. Remaining error field: this code has not
 yet been committed, pushed, deployed, or rerun against the vmctl-routed staging
 restart oracle. M3 remains open; no continuation-level, promotion-level,
 zero-stranding, or final settlement is claimed.
+
+## 2026-06-13 - Batch U Problem Checkpoint: Deployed Sweep Still Leaves Researcher Pending
+
+Claim/scope: rerun the vmctl-routed restart discriminator after Batch T landed,
+and record the next falsifier before any further code fix. Scope is staging
+evidence only; this is a problem checkpoint under Problem Documentation First.
+
+Move: committed and pushed `aba8674961ca4c9f9f557bb713c323874253437f`
+(`runtime: sweep passivated spawned work`), monitored CI/deploy, confirmed
+staging identity, then reran the vmctl-routed refresh probe. The probe output
+is outside the repo at `/tmp/m3_vmctl_refresh_probe.aba86749.out.json`.
+
+Receipts:
+
+- CI run `27465708076` succeeded, including runtime shards, non-runtime tests,
+  integration smoke, TLA+, Go vet/build, and deploy job `81187644952`.
+- FlakeHub publish run `27465708082` succeeded.
+- Public `https://choir.news/health` reported `status=ok`, `upstream=ok`,
+  `vmctl_status=ok`, `vmctl_routing=enabled`, and proxy plus sandbox deployed
+  commit `aba8674961ca4c9f9f557bb713c323874253437f`.
+- Probe marker/account: `M3_VMCTL_REFRESH_1781350941837`,
+  `m3-vmctl-refresh-1781350942997-wq733p@example.com`.
+- Product IDs: owner `80beba93-9a74-4ecb-bc70-f3a21e7005d2`,
+  submission/trajectory `117ac858-4369-4d97-93cb-466261ce8066`, VText
+  document `5d7d1ddc-d180-4bc6-bc7f-f7ef7309f29e`, initial loop
+  `48fcee1d-0a0a-4b89-9eb8-61c230ece891`.
+- Correct target proof: vmctl ownership before refresh was
+  `vm-f7aea0d3796d4f367539a0ba8011f955` at
+  `http://10.200.16.2:8085`, epoch 1, deployed commit
+  `aba8674961ca4c9f9f557bb713c323874253437f`; refresh moved the same VM to
+  `http://10.200.17.2:8085`, epoch 2, still ready at the same deployed commit.
+- Product proof failure: final VText revision
+  `858d2821-077d-486e-96b9-f4c4f970a2a6` was created after refresh and its
+  content explicitly said the researcher finding was still pending. Durable
+  revision metadata consumed only the super worker update
+  `8b4d7b73-5e0c-4814-b91b-6241d053262d`; the acceptance predicate correctly
+  rejected this as not proving researcher rewarm/consumption.
+- Public Trace in the probe result showed researcher agent
+  `17a9b254-fc2c-429e-829a-acc3a119c362` in `passivated` state with one run
+  count and no researcher update consumed by VText by the probe deadline.
+- Direct VM reads through the post-refresh sandbox showed super activation
+  `48fcee1d-0a0a-4b89-9eb8-61c230ece891` completed with
+  `request_source=update_coagent`, trajectory
+  `117ac858-4369-4d97-93cb-466261ce8066`, channel
+  `5d7d1ddc-d180-4bc6-bc7f-f7ef7309f29e`, and one `worker_update_ids` entry.
+  The post-refresh VText activation
+  `f82ce157-607b-4d7c-93d0-c547cbf04948` completed from the same trajectory
+  and channel, but its associated revision consumed only the super update.
+
+Expected Delta V after Batch T: -1 if deployed boot swept the already
+passivated spawned researcher into an assigned work item and rewarm followed.
+Actual Delta V: 0 for staging. Remaining error field: Batch T's local
+regression and VText tool-surface guard are insufficient for the real deployed
+product path. After a correct vmctl refresh on the deployed commit, the
+researcher still ends passivated or otherwise non-delivering while VText
+consumes only super. No code fix in this checkpoint, and no
+continuation-level, promotion-level, zero-stranding, or final M3 settlement is
+claimed.
