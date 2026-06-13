@@ -663,6 +663,22 @@ jobs:
             fi
             note_phase "service settle"
 
+            dump_deploy_service_diagnostics() {
+              local reason="$1"
+              echo "==> Deploy service diagnostics: ${reason}" >&2
+              for service in go-choir-vmctl go-choir-sandbox go-choir-proxy; do
+                echo "-- systemctl status ${service}" >&2
+                systemctl --no-pager --full status "$service" >&2 || true
+                echo "-- journalctl -u ${service} -n 80" >&2
+                journalctl -u "$service" -n 80 --no-pager >&2 || true
+              done
+              echo "-- local health probes" >&2
+              for port in 8081 8082 8083 8084 8086 8087; do
+                echo "port ${port}" >&2
+                curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" >&2 || true
+              done
+            }
+
             install_guest_image() {
               local src="$1"
               local dst="$2"
@@ -707,7 +723,18 @@ jobs:
             if [ "${DEPLOY_VMCTL_RESTART}" = "true" ]; then
               echo "==> Restarting vmctl when selected classes require it"
               systemctl restart go-choir-vmctl
-              sleep 3
+              vmctl_ready=false
+              for attempt in $(seq 1 30); do
+                if curl -fsS --max-time 2 http://127.0.0.1:8083/health >/dev/null 2>&1; then
+                  vmctl_ready=true
+                  break
+                fi
+                sleep 1
+              done
+              if [ "$vmctl_ready" != "true" ]; then
+                dump_deploy_service_diagnostics "vmctl did not become healthy after restart"
+                exit 1
+              fi
             else
               echo "==> Skipping vmctl restart; selected classes do not affect vmctl or guest images"
             fi
@@ -744,17 +771,28 @@ jobs:
                 refresh_pids=()
                 refresh_status=0
                 max_parallel_refresh=4
+                if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ] || [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
+                  max_parallel_refresh=1
+                fi
                 for record in "${active_interactive[@]}"; do
                   IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id refresh_sandbox_url <<< "$record"
                   (
                     if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ] || [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
                       echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
                       payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
-                      timeout 240 curl -fsS --retry 2 --retry-delay 2 --retry-all-errors \
+                      refresh_body="/tmp/go-choir-vm-refresh-${refresh_vm_id}.json"
+                      refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' --retry 2 --retry-delay 2 --retry-all-errors \
                         -H "X-Internal-Caller: true" \
                         -H "Content-Type: application/json" \
                         -d "$payload" \
-                        http://127.0.0.1:8083/internal/vmctl/refresh >/dev/null
+                        http://127.0.0.1:8083/internal/vmctl/refresh || printf 'curl_error_%s' "$?")
+                      if [[ ! "$refresh_http_status" =~ ^2[0-9][0-9]$ ]]; then
+                        echo "    Refresh failed for ${refresh_vm_id} user ${refresh_user_id} desktop ${refresh_desktop_id}: ${refresh_http_status}" >&2
+                        if [ -s "$refresh_body" ]; then
+                          sed 's/^/      response: /' "$refresh_body" >&2
+                        fi
+                        exit 1
+                      fi
                       echo "    Refreshed ${refresh_vm_id}"
                     else
                       echo "    Hot-refreshing sandbox runtime in ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
@@ -799,6 +837,7 @@ jobs:
                 if [ "$refresh_status" -ne 0 ]; then
                   if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ] || [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
                     echo "One or more active computer refreshes failed" >&2
+                    dump_deploy_service_diagnostics "active computer refresh failed"
                     exit "$refresh_status"
                   fi
                   echo "One or more sandbox runtime hot-refreshes failed; continuing because host deploy and health checks remain authoritative" >&2
