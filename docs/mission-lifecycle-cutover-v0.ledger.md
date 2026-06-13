@@ -1797,3 +1797,46 @@ researcher still ends passivated or otherwise non-delivering while VText
 consumes only super. No code fix in this checkpoint, and no
 continuation-level, promotion-level, zero-stranding, or final M3 settlement is
 claimed.
+
+## 2026-06-13 - Batch V Construct: Preserve VText Requester Route On Spawned Work Rewarm
+
+Claim/scope: close the local requester-route hole exposed by Batch U. Scope is
+VText-spawned researcher/super/vsuper/co-super child work that is recovered
+from a spawned-child work item after boot passivation or already-passivated
+sweep. This is local construct evidence only; no deployed acceptance is claimed
+in this batch.
+
+Move: VText-spawned child runs now inherit explicit requester metadata from
+their VText parent: `requested_by_profile=vtext`,
+`requested_by_agent_id=vtext:<doc_id>`, and
+`requested_by_run_id=<vtext_loop_id>`. Spawned-child work-item creation stores
+that requester route in work-item details, including for passivation/sweep
+compatibility synthesis that loads the parent from `parent_loop_id` /
+`parent_id`. Assigned-work rewarm restores those requester fields onto the
+fresh activation metadata before starting the replacement run. This keeps
+researcher delivery target resolution from depending on `ParentRunID`, which a
+trajectory work-item sweep activation does not and should not use as its
+liveness/control identity.
+
+Receipts:
+
+- Focused lifecycle/restart/tool-surface tests:
+  `nix develop -c go test ./internal/runtime -run 'TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog|TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog|TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill|TestStartChildRunCompletesSpawnedWorkItem|TestStartSweepsAssignedOpenWorkItemsAfterPassivation|TestConductorCanSpawnVTextAndVTextCanSpawnResearcher' -count=1`
+  passed.
+- Adjacent coagent/spawn/slot/delivery tests:
+  `nix develop -c go test ./internal/runtime -run 'TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork|TestProcessRestartRewarmsCoagentAfterOSKill|TestSpawnMintsTrajectoryAndChildJoinsIt|TestVSuperCoSuperSlotReusedByTrajectorySlot|TestUpdateCoagentDeliveryRequiresSuccessfulActivation|TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata' -count=1`
+  passed.
+- Runtime shard coverage:
+  `nix develop -c scripts/go-test-runtime-shards` passed.
+- Regression strengthening:
+  `TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog` and
+  `TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog` now assert the
+  replacement activation carries `requested_by_profile=vtext`,
+  `requested_by_agent_id=vtext:<doc_id>`, and the original VText
+  `requested_by_run_id`.
+
+Expected Delta V: -1 for the local Batch U requester-route subclaim. Actual
+Delta V: -1 locally. Remaining error field: this code has not yet been
+committed, pushed, deployed, or rerun against the vmctl-routed staging restart
+oracle. M3 remains open; no continuation-level, promotion-level,
+zero-stranding, or final settlement is claimed.

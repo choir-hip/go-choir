@@ -589,6 +589,7 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		return nil, err
 	}
 	metadata = ensureDesktopID(metadata, &parentRec, metadataStringValue(metadata, runMetadataDesktopID))
+	metadata = inheritVTextRequesterMetadata(metadata, &parentRec)
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, &parentRec)
 	metadata = ensureTrajectoryID(metadata, &parentRec, runID)
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
@@ -715,6 +716,12 @@ func (rt *Runtime) createSpawnedChildWorkItem(ctx context.Context, rec *types.Ru
 	if parentID == "" {
 		return types.WorkItemRecord{}, nil
 	}
+	if parent == nil {
+		if loaded, err := rt.store.GetRun(ctx, parentID); err == nil && loaded.OwnerID == ownerID {
+			parent = &loaded
+			rec.Metadata = inheritVTextRequesterMetadata(rec.Metadata, parent)
+		}
+	}
 	details := map[string]any{
 		"kind":           "spawned_child_run",
 		"spawned_run_id": rec.RunID,
@@ -730,6 +737,9 @@ func (rt *Runtime) createSpawnedChildWorkItem(ctx context.Context, rec *types.Ru
 			details["parent_agent_profile"] = parentProfile
 		}
 	}
+	copyMetadataStringToDetails(rec.Metadata, details, "requested_by_profile")
+	copyMetadataStringToDetails(rec.Metadata, details, "requested_by_agent_id")
+	copyMetadataStringToDetails(rec.Metadata, details, "requested_by_run_id")
 	return rt.store.CreateWorkItem(ctx, types.WorkItemRecord{
 		OwnerID:              ownerID,
 		TrajectoryID:         trajectoryID,
@@ -741,6 +751,56 @@ func (rt *Runtime) createSpawnedChildWorkItem(ctx context.Context, rec *types.Ru
 		ObjectiveFingerprint: "spawned_child:" + objectiveFingerprint(ownerID, trajectoryID, rec.RunID, objective),
 		Details:              details,
 	})
+}
+
+func inheritVTextRequesterMetadata(metadata map[string]any, parent *types.RunRecord) map[string]any {
+	if parent == nil || canonicalAgentProfile(agentProfileForRun(parent)) != AgentProfileVText {
+		return metadata
+	}
+	metadata = cloneMetadata(metadata)
+	if metadataStringValue(metadata, "requested_by_profile") == "" {
+		metadata["requested_by_profile"] = AgentProfileVText
+	}
+	if metadataStringValue(metadata, "requested_by_agent_id") == "" {
+		metadata["requested_by_agent_id"] = agentIDForRun(parent)
+	}
+	if metadataStringValue(metadata, "requested_by_run_id") == "" {
+		metadata["requested_by_run_id"] = parent.RunID
+	}
+	return metadata
+}
+
+func copyMetadataStringToDetails(metadata map[string]any, details map[string]any, key string) {
+	if details == nil {
+		return
+	}
+	if value := metadataStringValue(metadata, key); value != "" {
+		details[key] = value
+	}
+}
+
+func inheritRequesterMetadataFromWorkItem(ctx context.Context, s *store.Store, ownerID string, metadata map[string]any, item types.WorkItemRecord) map[string]any {
+	metadata = cloneMetadata(metadata)
+	for _, key := range []string{"requested_by_profile", "requested_by_agent_id", "requested_by_run_id"} {
+		if metadataStringValue(metadata, key) != "" {
+			continue
+		}
+		if value := metadataStringValue(item.Details, key); value != "" {
+			metadata[key] = value
+		}
+	}
+	if metadataStringValue(metadata, "requested_by_profile") != "" && metadataStringValue(metadata, "requested_by_agent_id") != "" {
+		return metadata
+	}
+	parentID := strings.TrimSpace(firstNonEmpty(item.CreatedByRunID, metadataStringValue(item.Details, "parent_run_id")))
+	if s == nil || parentID == "" {
+		return metadata
+	}
+	parent, err := s.GetRun(ctx, parentID)
+	if err != nil || parent.OwnerID != ownerID {
+		return metadata
+	}
+	return inheritVTextRequesterMetadata(metadata, &parent)
 }
 
 func (rt *Runtime) ensureSpawnedChildWorkItem(ctx context.Context, rec *types.RunRecord, parent *types.RunRecord, metadataKey string) (types.WorkItemRecord, error) {
@@ -1344,6 +1404,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 	if channelID != "" {
 		metadata[runMetadataChannelID] = channelID
 	}
+	metadata = inheritRequesterMetadataFromWorkItem(ctx, rt.store, ownerID, metadata, first)
 	rec, err := rt.createRunWithMetadata(ctx, buildAssignedWorkItemPrompt(workItems), ownerID, metadata)
 	if err != nil {
 		return nil, err

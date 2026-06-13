@@ -413,6 +413,15 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 	if ids := metadataStringSlice(active.Metadata["work_item_ids"]); !containsString(ids, workItemIDs[0]) {
 		t.Fatalf("replacement work_item_ids = %+v, want %s", ids, workItemIDs[0])
 	}
+	if got := metadataStringValue(active.Metadata, "requested_by_profile"); got != AgentProfileVText {
+		t.Fatalf("replacement requested_by_profile = %q, want %q", got, AgentProfileVText)
+	}
+	if got := metadataStringValue(active.Metadata, "requested_by_agent_id"); got != "vtext:"+channelID {
+		t.Fatalf("replacement requested_by_agent_id = %q, want vtext:%s", got, channelID)
+	}
+	if got := metadataStringValue(active.Metadata, "requested_by_run_id"); got != parentID {
+		t.Fatalf("replacement requested_by_run_id = %q, want %s", got, parentID)
+	}
 	if !strings.Contains(active.Prompt, objective) {
 		t.Fatalf("replacement prompt missing objective %q: %q", objective, active.Prompt)
 	}
@@ -568,6 +577,15 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 	}
 	if ids := metadataStringSlice(active.Metadata["work_item_ids"]); !containsString(ids, workItemIDs[0]) {
 		t.Fatalf("replacement work_item_ids = %+v, want %s", ids, workItemIDs[0])
+	}
+	if got := metadataStringValue(active.Metadata, "requested_by_profile"); got != AgentProfileVText {
+		t.Fatalf("replacement requested_by_profile = %q, want %q", got, AgentProfileVText)
+	}
+	if got := metadataStringValue(active.Metadata, "requested_by_agent_id"); got != "vtext:"+channelID {
+		t.Fatalf("replacement requested_by_agent_id = %q, want vtext:%s", got, channelID)
+	}
+	if got := metadataStringValue(active.Metadata, "requested_by_run_id"); got != parentID {
+		t.Fatalf("replacement requested_by_run_id = %q, want %s", got, parentID)
 	}
 	if !strings.Contains(active.Prompt, objective) {
 		t.Fatalf("replacement prompt missing objective %q: %q", objective, active.Prompt)
