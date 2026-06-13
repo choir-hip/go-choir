@@ -2225,3 +2225,61 @@ recover or route around that staging substrate issue, then rerun the same
 deployed vmctl proof. No code or infrastructure fix in this checkpoint, and no
 continuation-level, promotion-level, zero-stranding, or final M3 settlement is
 claimed.
+
+## 2026-06-13 - Batch AD Problem Checkpoint: Durable Base Intent Still Did Not Attach Researcher Continuation
+
+Claim/scope: record the deployed rerun after the Batch AC desktop-readiness
+blocker was inspected, before any next code fix. This is problem documentation
+only. It does not change runtime or infrastructure and does not claim
+acceptance.
+
+Receipts:
+
+- Follow-up investigation of the Batch AC first-failure VM showed the
+  persistent image "full" signal was a host-side sparse file metric, not guest
+  filesystem saturation. Direct guest `/health` for
+  `vm-5e6d1e851839401dc3230e849623940b` later reported `status=ready`,
+  `runtime_health=ready`, and guest persistent disk `used_percent=6.88`.
+- The same deployed commit remained active for the rerun:
+  `5f38c437f0a9541feaf03a00c41e76e3ae2f0852`. The prior CI/deploy evidence
+  remains CI run `27468043199`, deploy job `81193874119`, and FlakeHub run
+  `27468043198`; staging `/health` reported that proxy/deployed commit with
+  `vmctl_status=ok` and `vmctl_routing=enabled`.
+- Deployed probe command:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news node /tmp/m3_vmctl_refresh_probe.mjs > /tmp/m3_vmctl_refresh_probe.5f38c437.retry1.out.json`
+  exited nonzero.
+- Probe marker: `M3_VMCTL_REFRESH_1781357892473`; test account
+  `m3-vmctl-refresh-1781357893807-vtv4x9@example.com`; owner
+  `498e1996-5760-4f92-a5ea-00cc768f3529`; submission/trajectory
+  `09dbcd65-3f14-4502-8a9e-14e42f531984`; VText document
+  `e7d7119d-40ee-4db3-b109-a2f72807ef2e`.
+- VM target before any refresh: `vm-a5e22e5bd9662584b90c8372bcf609fc`,
+  sandbox `http://10.200.39.2:8085`, epoch 1. Direct VM health reported
+  `status=ready`, `runtime_health=ready`, deployed commit
+  `5f38c437f0a9541feaf03a00c41e76e3ae2f0852`, and guest persistent disk
+  `used_percent=6.07`.
+- Failure occurred before `POST /internal/vmctl/refresh`: the probe timed out
+  waiting for Trace roles `conductor`, `vtext`, `researcher`, and `super`.
+  Trace contained only `conductor`, `super`, and `vtext`.
+- The trajectory completed with `agent_count=3`, `delegation_count=1`,
+  `message_count=2`, and `finding_count=0`. The super run sent an addressed
+  update with a `capability_requests` entry asking for
+  `requested_role=researcher`; the VText run consumed only that super update.
+- VText revision history showed the user base revision content and `seed_prompt`
+  both included the explicit `Ask researcher...` request. The appagent revision
+  also retained the same `seed_prompt`, consumed the super update, and wrote
+  `Researcher finding: pending`.
+- Trace logs for the first VText `edit_vtext` result showed output
+  `{"base_revision_id":"5fdb87aa-1ef0-494a-a70b-1626ea72f457","doc_id":"e7d7119d-40ee-4db3-b109-a2f72807ef2e","revision_id":"dc5155f1-82f8-4a82-86db-cdbf45881449","status":"stored"}`.
+  It did not include `next_required_tool`. The duplicate `edit_vtext` call was
+  skipped by the existing duplicate-edit guard.
+
+Expected Delta V after `5f38c437`: -1 on staging for the worker-woken VText
+explicit researcher-intent subclaim. Actual Delta V: 0 for deployed
+acceptance. Remaining error field: durable VText base content and revision
+metadata can contain the explicit researcher request, but the deployed
+`edit_vtext` result still does not attach `next_required_tool=spawn_agent`.
+The next fix should instrument or repair the deterministic tool-result
+continuation path, not rely on another prompt-only hint. No code fix in this
+checkpoint, and no continuation-level, promotion-level, zero-stranding, or
+final M3 settlement is claimed.
