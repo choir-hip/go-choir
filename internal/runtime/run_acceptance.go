@@ -1071,15 +1071,22 @@ func acceptanceContinuationEventDetails(ev types.EventRecord) map[string]any {
 
 func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types.RunAcceptanceLevel, types.RunAcceptanceState) {
 	has := map[string]bool{}
+	hasBlocked := false
 	for _, checkpoint := range checkpoints {
 		if checkpoint.State == "passed" {
 			has[checkpoint.Kind] = true
+		}
+		if checkpoint.State == "blocked" {
+			hasBlocked = true
 		}
 	}
 	level := types.RunAcceptanceDocsLevel
 	state := types.RunAcceptanceBlocked
 	if has["submitted"] && has["vtext_opened"] {
 		level = types.RunAcceptanceStagingSmokeLevel
+		if !hasBlocked {
+			state = types.RunAcceptanceAccepted
+		}
 	}
 	if has["submitted"] && has["vtext_opened"] && has["super_requested"] && has["worker_leased"] && has["worker_supervision_observed"] {
 		level = types.RunAcceptanceStagingSmokeLevel
@@ -1101,16 +1108,23 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 
 func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAcceptanceInvariantCheck {
 	kindSet := map[string]bool{}
+	blockedKindSet := map[string]bool{}
 	for _, checkpoint := range rec.Checkpoints {
 		if checkpoint.State == "passed" {
 			kindSet[checkpoint.Kind] = true
 		}
+		if checkpoint.State == "blocked" {
+			blockedKindSet[checkpoint.Kind] = true
+		}
 	}
-	promptPathObserved := kindSet["submitted"] && kindSet["vtext_opened"] && kindSet["super_requested"]
+	promptPathObserved := kindSet["submitted"] && kindSet["vtext_opened"]
 	adoptionPathObserved := kindSet["app_adoption_verified"] || kindSet["app_adoption_promoted"]
 	workerMutationBounded := kindSet["worker_leased"] && kindSet["worker_delegated"] && kindSet["app_package_published"]
 	workerSupervisionBounded := kindSet["worker_leased"] && kindSet["worker_delegated"] && kindSet["worker_supervision_observed"]
 	adoptionMutationBounded := kindSet["app_adoption_verified"] && kindSet["rollback_available"]
+	workerPathAttempted := kindSet["worker_leased"] || kindSet["worker_delegated"] || kindSet["worker_supervision_observed"] || kindSet["app_package_published"] || blockedKindSet["worker_delegated"]
+	adoptionPathAttempted := kindSet["app_adoption_verified"] || kindSet["app_adoption_promoted"]
+	workerMutationInvariant := (!workerPathAttempted && !adoptionPathAttempted) || workerMutationBounded || workerSupervisionBounded || adoptionMutationBounded
 	checks := []types.RunAcceptanceInvariantCheck{
 		{
 			Name:   "product_path_observed",
@@ -1119,7 +1133,7 @@ func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAc
 		},
 		{
 			Name:   "worker_mutation_bounded",
-			State:  stateForBool(workerMutationBounded || workerSupervisionBounded || adoptionMutationBounded),
+			State:  stateForBool(workerMutationInvariant),
 			Detail: "mutable coding work reached a worker VM/AppChangePackage boundary, runtime-only worker supervision stayed bounded with worker-update evidence, or recipient adoption had rollback before becoming accepted",
 		},
 		{

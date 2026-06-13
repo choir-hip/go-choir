@@ -569,6 +569,49 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	}
 }
 
+func TestRunAcceptanceSynthesizeAcceptsPromptVTextStagingSmoke(t *testing.T) {
+	t.Parallel()
+	_, handler := testAPISetup(t)
+
+	prompt := "Mission lifecycle cutover staging smoke creates a prompt-bar VText route."
+	submitBody := fmt.Sprintf(`{"text":%q}`, prompt)
+	submitW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/prompt-bar", submitBody, "user-alice")
+	if submitW.Code != http.StatusAccepted {
+		t.Fatalf("prompt-bar status = %d, body=%s", submitW.Code, submitW.Body.String())
+	}
+	var submitted promptBarSubmitResponse
+	if err := json.Unmarshal(submitW.Body.Bytes(), &submitted); err != nil {
+		t.Fatalf("decode prompt-bar response: %v", err)
+	}
+
+	body := fmt.Sprintf(`{"target_mission_id":"mission-lifecycle-cutover-v0","trajectory_id":%q,"source_prompt_or_objective":%q}`, submitted.SubmissionID, prompt)
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var rec types.RunAcceptanceRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("decode acceptance: %v", err)
+	}
+	if rec.AcceptanceLevel != types.RunAcceptanceStagingSmokeLevel || rec.State != types.RunAcceptanceAccepted {
+		t.Fatalf("acceptance = %s/%s, want staging-smoke-level/accepted; checkpoints=%+v invariants=%+v risks=%+v", rec.AcceptanceLevel, rec.State, rec.Checkpoints, rec.InvariantChecks, rec.FailureResidualRisks)
+	}
+	for _, want := range []string{"submitted", "vtext_opened"} {
+		if !acceptanceHasCheckpoint(rec, want) {
+			t.Fatalf("missing checkpoint %q in %+v", want, rec.Checkpoints)
+		}
+	}
+	for _, check := range rec.InvariantChecks {
+		if (check.Name == "product_path_observed" || check.Name == "worker_mutation_bounded") && check.State != "passed" {
+			t.Fatalf("%s = %+v, want passed", check.Name, check)
+		}
+	}
+	if strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "acceptance invariant product_path_observed is blocked") ||
+		strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "acceptance invariant worker_mutation_bounded is blocked") {
+		t.Fatalf("prompt/VText smoke should not carry invariant blocker risks: %+v", rec.FailureResidualRisks)
+	}
+}
+
 func TestRunAcceptanceSynthesizeCountsTimedOutDelegateWithReviewableExport(t *testing.T) {
 	t.Parallel()
 	rt, handler := testAPISetup(t)
