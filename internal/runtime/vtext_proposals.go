@@ -83,23 +83,23 @@ func (h *APIHandler) HandleInternalVTextProposalDelivery(w http.ResponseWriter, 
 		Content:     content,
 		Timestamp:   now,
 	}
-	if err := h.rt.store.AppendChannelMessage(r.Context(), &message, req.OwnerID); err != nil {
-		log.Printf("vtext proposal delivery: append channel message: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record author inbox message"})
-		return
+	update := types.WorkerUpdateRecord{
+		UpdateID:      req.DeliveryID,
+		OwnerID:       req.OwnerID,
+		AgentID:       message.FromAgentID,
+		TargetAgentID: superAgent.AgentID,
+		ChannelID:     superAgent.ChannelID,
+		MessageSeq:    message.Seq,
+		Role:          message.Role,
+		Kind:          "directive",
+		Summary:       "Publication proposal received.",
+		Notes:         []string{content},
+		Content:       content,
+		CreatedAt:     now,
 	}
-	if err := h.rt.store.EnqueueInboxDelivery(r.Context(), types.InboxDelivery{
-		DeliveryID:  req.DeliveryID,
-		OwnerID:     req.OwnerID,
-		ToAgentID:   superAgent.AgentID,
-		FromAgentID: message.FromAgentID,
-		ChannelID:   superAgent.ChannelID,
-		Role:        message.Role,
-		Content:     message.Content,
-		CreatedAt:   now,
-	}); err != nil {
-		log.Printf("vtext proposal delivery: enqueue inbox: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to enqueue author inbox delivery"})
+	if _, _, err := h.rt.store.DispatchWorkerUpdate(r.Context(), update, &message); err != nil {
+		log.Printf("vtext proposal delivery: dispatch update: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to enqueue author update"})
 		return
 	}
 

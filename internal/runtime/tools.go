@@ -377,9 +377,6 @@ func toolRequiresSequentialTurnExecution(name string) bool {
 		"write_file",
 		"edit_vtext",
 		"spawn_agent",
-		"cast_agent",
-		"cast_agent_update",
-		"wait_agent",
 		"cancel_agent",
 		"request_super_execution",
 		"request_email_draft",
@@ -392,7 +389,7 @@ func toolRequiresSequentialTurnExecution(name string) bool {
 		"finish_worker_delegation",
 		"cancel_worker_delegation",
 		"publish_app_change_package",
-		"submit_coagent_update",
+		"update_coagent",
 		"save_evidence":
 		return true
 	default:
@@ -661,7 +658,7 @@ func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]strin
 
 func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip func(index int, reason string)) {
 	seenVSuperSpawn := map[string]int{}
-	seenCast := map[string]int{}
+	seenCoagentUpdate := map[string]int{}
 	seenExport := map[string]int{}
 	seenBash := map[string]int{}
 	seenDelegateWorker := map[string]int{}
@@ -715,16 +712,6 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 				}
 				seenVSuperSpawn[key] = i
 			}
-		case "cast_agent":
-			key := normalizedToolCallArgs(call)
-			if key == "" {
-				continue
-			}
-			if previous, exists := seenCast[key]; exists {
-				setSkip(i, fmt.Sprintf("tool_error: duplicate cast_agent payload already planned in this turn at call %s; one addressed channel message is enough", calls[previous].ID))
-				continue
-			}
-			seenCast[key] = i
 		case "publish_app_change_package":
 			if profile != AgentProfileSuper && profile != AgentProfileVSuper && profile != AgentProfileCoSuper {
 				continue
@@ -738,6 +725,16 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 				continue
 			}
 			seenExport[key] = i
+		case "update_coagent":
+			key := normalizedToolCallArgs(call)
+			if key == "" {
+				continue
+			}
+			if previous, exists := seenCoagentUpdate[key]; exists {
+				setSkip(i, fmt.Sprintf("tool_error: duplicate update_coagent payload already planned in this turn at call %s; one addressed durable update is enough", calls[previous].ID))
+				continue
+			}
+			seenCoagentUpdate[key] = i
 		case "delegate_worker_vm", "start_worker_delegation":
 			if profile != AgentProfileSuper {
 				continue

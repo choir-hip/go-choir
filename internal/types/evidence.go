@@ -79,4 +79,6 @@ type WorkerUpdateRecord struct {
 	Notes              []string            `json:"notes,omitempty"`
 	Content            string              `json:"content"`
 	CreatedAt          time.Time           `json:"created_at"`
+	DeliveredToRunID   string              `json:"delivered_to_loop_id,omitempty"`
+	DeliveredAt        *time.Time          `json:"delivered_at,omitempty"`
 }

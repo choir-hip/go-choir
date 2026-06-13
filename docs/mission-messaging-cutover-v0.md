@@ -32,9 +32,9 @@ the riskiest single migration — its own control interval and test.
 
 ## Parallax State
 
-status: open_handoff (ready to start; M1 settled 2026-06-12; portfolio
-sequencing corrected to architecture-first; this is the next active spine
-mission)
+status: open_handoff (local M2 cutover batch implemented and locally proved;
+landing loop not yet run; M1 settled 2026-06-12; portfolio sequencing
+corrected to architecture-first)
 
 **kind:** spine.
 
@@ -78,8 +78,14 @@ atomic passivation).
 registered/called; per-turn inbox pollers still active; `notifyParent` still
 active; slot registry still keyed by parent run; restart exactly-once
 falsifier missing; silent-stall oracle missing; prompts/tests still name old
-tools. Current V=8. Last ΔV=-1: Q1 decided that the durable update append and
-kind-specific ledger effects must share the runtime store transaction.
+tools. Current V=1: the local code cutover blockers are closed, but settlement
+still requires the platform landing loop: commit, push, CI, deploy identity,
+and staging acceptance proof. Last ΔV=-7: the local batch promoted
+`update_coagent`, deleted the old message/wake paths, re-keyed co-super slots,
+and added the restart/no-stall falsifiers. Q1 remains decided: durable update
+append and kind-specific ledger effects belong in the runtime store
+transaction; this batch did not add new `assignment`/`verification` ledger
+effect writers beyond preserving their typed update records.
 
 **budget:** 1-2 overnight missions. Solvency rule: batch unambiguous deletion
 work, but stop for a full Parallax pass if the old and new messaging models
@@ -195,14 +201,10 @@ Blind spots from this position (edge classes named):
   `channel_messages` as a delivery mechanism (vs audit log)? Grep before
   deleting the pollers; channel_messages survives as replay-only log.
 
-**next move:** batch the send-path unification/deletion work supported by
-Q1: rename/promote `submit_coagent_update` to `update_coagent` with a
-temporary compatibility shim only if required inside the same landing batch;
-delete old tool registration/dispatch for `cast_agent`, `cast_agent_update`,
-and `wait_agent`; remove inbox polling and `notifyParent`; re-key co-super
-slots by (trajectory, slot); update prompts/tests; add restart exactly-once
-and silent-stall falsifiers. Do not detour into Universal Wire or review UI
-product behavior.
+**next move:** land the local M2 cutover batch through the platform loop:
+commit, push origin main/PR route as directed, monitor CI, monitor staging
+deploy, verify staging commit identity, and run deployed acceptance proof.
+Do not detour into Universal Wire or review UI product behavior.
 
 **ledger file:** `docs/mission-messaging-cutover-v0.ledger.md`.
 

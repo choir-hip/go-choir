@@ -2013,7 +2013,7 @@ func (h *APIHandler) HandleTestVTextResearchFindings(w http.ResponseWriter, r *h
 		return
 	}
 
-	raw, err := registry.Execute(WithToolExecutionContext(r.Context(), researcherRun), "submit_coagent_update", rawArgs)
+	raw, err := registry.Execute(WithToolExecutionContext(r.Context(), researcherRun), "update_coagent", rawArgs)
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
@@ -2138,7 +2138,7 @@ func (h *APIHandler) HandleTestVTextWorkerUpdate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	raw, err := registry.Execute(WithToolExecutionContext(r.Context(), workerRun), "submit_coagent_update", rawArgs)
+	raw, err := registry.Execute(WithToolExecutionContext(r.Context(), workerRun), "update_coagent", rawArgs)
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return

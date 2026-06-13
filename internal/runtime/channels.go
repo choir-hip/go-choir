@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -347,8 +346,9 @@ func (rt *Runtime) ChannelPost(ctx context.Context, channelID, from, role, conte
 	return rt.ChannelCast(ctx, channelID, "", "", from, role, content)
 }
 
-// ChannelCast posts an addressed message to the channel log, enqueues a
-// delivery for the target agent, and emits the corresponding event.
+// ChannelCast posts an addressed message to the channel log and emits the
+// corresponding event. Addressed wake/delivery is owned by update_coagent;
+// channel messages remain the audit/replay surface.
 func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunID, from, role, content string) (uint64, error) {
 	ch, err := rt.channelMgr.Channel(channelID)
 	if err != nil {
@@ -381,24 +381,6 @@ func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunI
 	if err := rt.store.AppendChannelMessage(ctx, &message, ownerID); err != nil {
 		return 0, err
 	}
-	if message.ToAgentID != "" {
-		if err := rt.store.EnqueueInboxDelivery(ctx, types.InboxDelivery{
-			DeliveryID:   uuid.New().String(),
-			OwnerID:      ownerID,
-			ToAgentID:    message.ToAgentID,
-			ToRunID:      message.ToRunID,
-			FromAgentID:  message.FromAgentID,
-			FromRunID:    message.FromRunID,
-			ChannelID:    message.ChannelID,
-			Role:         message.Role,
-			Content:      message.Content,
-			TrajectoryID: message.TrajectoryID,
-			CreatedAt:    message.Timestamp,
-		}); err != nil {
-			return 0, err
-		}
-	}
-
 	if _, err := ch.Post(message); err != nil {
 		return 0, err
 	}

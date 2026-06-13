@@ -2688,7 +2688,7 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherRun), "submit_coagent_update", json.RawMessage(`{
+	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherRun), "update_coagent", json.RawMessage(`{
 		"update_id":"finding-stream-001",
 		"findings":["A new release landed this week."],
 		"evidence":[
@@ -2702,16 +2702,16 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 		"notes":["Prefer a brief update in the next draft."]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_coagent_update: %v", err)
+		t.Fatalf("update_coagent: %v", err)
 	}
 	var findingResp struct {
 		Status string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(raw), &findingResp); err != nil {
-		t.Fatalf("decode submit_coagent_update: %v", err)
+		t.Fatalf("decode update_coagent: %v", err)
 	}
 	if findingResp.Status != "submitted" {
-		t.Fatalf("submit_coagent_update status = %q, want submitted", findingResp.Status)
+		t.Fatalf("update_coagent status = %q, want submitted", findingResp.Status)
 	}
 
 	clock.fireAll()
@@ -2796,7 +2796,7 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superRun), "submit_coagent_update", json.RawMessage(`{
+	raw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superRun), "update_coagent", json.RawMessage(`{
 		"update_id":"super-artifact-001",
 		"agent_id":"vtext:`+docID+`",
 		"artifacts":["artifacts/evolution-ca.html"],
@@ -2804,17 +2804,17 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 		"proposals":["Mention the generated visualization and verification result in the next version."]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_coagent_update: %v", err)
+		t.Fatalf("update_coagent: %v", err)
 	}
 	var updateResp struct {
 		Status string `json:"status"`
 		Cursor int64  `json:"cursor"`
 	}
 	if err := json.Unmarshal([]byte(raw), &updateResp); err != nil {
-		t.Fatalf("decode submit_coagent_update: %v", err)
+		t.Fatalf("decode update_coagent: %v", err)
 	}
 	if updateResp.Status != "submitted" || updateResp.Cursor == 0 {
-		t.Fatalf("submit_coagent_update response = %+v, want submitted with cursor", updateResp)
+		t.Fatalf("update_coagent response = %+v, want submitted with cursor", updateResp)
 	}
 
 	clock.fireAll()

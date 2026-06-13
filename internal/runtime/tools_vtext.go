@@ -285,14 +285,48 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 			"requested_by_run_id": requesterRunID,
 			"persistent":          true,
 			"state":               state,
-			"request_source":      "super_inbox",
+			"request_source":      "update_coagent",
 			"deduped":             true,
 			"dedupe_reason":       "vtext_run_already_requested_super",
 		}, nil
 	}
-	cursor, err := rt.ChannelCast(ctx, channelID, superAgent.AgentID, "", requesterAgentID, AgentProfileVText, objective)
+	now := time.Now().UTC()
+	trajectoryID := ""
+	if runRec := ctxRunRecord(ctx); runRec != nil {
+		trajectoryID = trajectoryIDForRun(runRec)
+	}
+	update := types.WorkerUpdateRecord{
+		UpdateID:      uuid.NewString(),
+		OwnerID:       ownerID,
+		AgentID:       requesterAgentID,
+		TargetAgentID: superAgent.AgentID,
+		ChannelID:     channelID,
+		TrajectoryID:  trajectoryID,
+		Role:          AgentProfileVText,
+		Kind:          "assignment",
+		Summary:       objective,
+		CreatedAt:     now,
+	}
+	update.Content = buildWorkerUpdateMessage(update)
+	message := &types.ChannelMessage{
+		ChannelID:    channelID,
+		From:         requesterRunID,
+		FromAgentID:  requesterAgentID,
+		FromRunID:    requesterRunID,
+		ToAgentID:    superAgent.AgentID,
+		TrajectoryID: trajectoryID,
+		Role:         AgentProfileVText,
+		Content:      update.Content,
+		Timestamp:    now,
+	}
+	stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message)
 	if err != nil {
 		return nil, err
+	}
+	if created {
+		message.Seq = stored.MessageSeq
+		rt.emitChannelMessageEvent(ctx, *message, ownerID)
+		rt.wakeUpdatedCoagent(ctx, stored)
 	}
 	superRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
 	if err != nil {
@@ -308,14 +342,15 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 		"agent_id":            superAgent.AgentID,
 		"loop_id":             loopID,
 		"channel_id":          channelID,
-		"cursor":              cursor,
+		"cursor":              stored.MessageSeq,
+		"update_id":           stored.UpdateID,
 		"profile":             superAgent.Profile,
 		"role":                superAgent.Role,
 		"requested_by":        requesterAgentID,
 		"requested_by_run_id": requesterRunID,
 		"persistent":          true,
 		"state":               state,
-		"request_source":      "super_inbox",
+		"request_source":      "update_coagent",
 	}, nil
 }
 
@@ -462,6 +497,9 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 			UpdatedAt:            time.Now().UTC(),
 		}); err != nil {
 			return types.Revision{}, fmt.Errorf("update vtext controller checkpoint: %w", err)
+		}
+		if err := rt.markVTextWorkerUpdatesDelivered(ctx, rec, docID, mutation.ScheduledMessageSeq); err != nil {
+			return types.Revision{}, fmt.Errorf("mark vtext worker updates delivered: %w", err)
 		}
 	}
 

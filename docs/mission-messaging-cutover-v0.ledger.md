@@ -56,3 +56,59 @@ Receipt:
 Open edge: implement the supported batch: `update_coagent` promotion, old
 tool deletion/shims, inbox/notify deletion, (trajectory, slot) slot key,
 prompt/test updates, restart exactly-once and silent-stall falsifiers.
+
+## 2026-06-12 — Local Cutover Batch Implemented
+
+Claim/scope: Q1-supported local deletion work is implemented. Scope is the
+runtime/store/prompts/test cutover, not platform settlement.
+
+Move: promote `update_coagent` as the sole structured message/wake primitive,
+delete the old tool registrations and runtime delivery hooks, make channel
+casts audit-only, replace pending inbox delivery with pending
+`worker_updates`, wake persistent super/VText/idle coagents from the update
+backlog, re-key co-super slots by `(trajectory_id, slot)`, and add the restart
+and silent-stall falsifiers.
+
+Expected ΔV: -7 by closing all local code cutover blockers after Q1.
+
+Actual ΔV: -7. Current V=1: local implementation proof is green, but platform
+settlement still requires commit, push, CI, deploy identity, and deployed
+staging acceptance. Q1 remains a transaction-domain decision; this batch keeps
+`assignment` and `verification` as typed `worker_updates` but does not yet add
+new kind-specific work-item or run-acceptance ledger writers.
+
+Receipt:
+- `update_coagent` is registered; `submit_coagent_update`,
+  `cast_agent`, `cast_agent_update`, and `wait_agent` are absent from active
+  runtime/tool/prompt code.
+- `DispatchWorkerUpdate` writes the addressed audit message and
+  `worker_updates` row in the runtime store transaction; pending delivery is
+  tracked by `worker_updates.delivered_at`.
+- `notifyParent` and per-turn inbox injection are removed; completed
+  update-woken runs mark their update IDs delivered only after completion.
+- `co_super_slots` keys live co-super slot claims by
+  `(owner_id, trajectory_id, slot)` and releases a matching claim if
+  post-claim run persistence fails.
+- `TrajectoryObligations` includes pending undelivered updates so a trajectory
+  with queued `update_coagent` work cannot silently appear settled.
+- Grep receipt:
+  `rg -n '\b(cast_agent|cast_agent_update|wait_agent|submit_coagent_update|notifyParent|injectPendingInboxTurns|ListPendingInboxDeliveries|MarkInboxDeliveriesDelivered|EnqueueInboxDelivery)\b' internal specs cmd --glob '*.go' --glob '*.md' --glob '*.tla'`
+  returned no matches.
+
+Local proof:
+- `nix develop -c scripts/go-test-runtime-shards` passed.
+- `nix develop -c go test ./internal/store` passed.
+- `nix develop -c go test ./internal/runtime -run '^$'` passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run '^$'`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'Test(UpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TrajectoryObligationsReportPendingUpdateCoagent|VSuperCoSuperSlotReusedByTrajectorySlot|CoagentCastCannotAddressEmailAppagentDirectly)$' -v`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run '^TestChannelCastDoesNotCreateWakeDelivery$' -v`
+  passed.
+- `nix develop -c go test ./internal/store -run 'TestReleaseCoSuperSlotClaimOnlyClearsMatchingRun' -v`
+  passed.
+- `git diff --check` passed.
+
+Open edge: platform acceptance is still unproven. Do not claim settlement
+until the landing loop records pushed SHA, CI result, staging deployed
+identity, and deployed acceptance proof.

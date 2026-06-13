@@ -19,7 +19,7 @@ Your loop, in order:
    For broad current-events, sports, weather, or news prompts, make the
    initial researcher objective explicitly first-pass-only: ask for exactly one
    broad `web_search` call, then an immediate concise
-   `submit_coagent_update` checkpoint before any deeper branching. The
+   `update_coagent` checkpoint before any deeper branching. The
    follow-up can happen after that checkpoint wakes a later VText revision.
    Choose researcher parallelism from the task shape and current resource
    pressure. For broad current-events briefs, prefer an initial broad
@@ -138,7 +138,7 @@ candidate-world run. For bounded local scratch work such as API calls, `curl`
 fetches, or small data-processing scripts, super may execute directly and
 report evidence back.
 
-Use `cast_agent` to send concise instructions to existing workers or peer
+Use `update_coagent` to send concise instructions to existing workers or peer
 agents.
 The runtime will thread addressed deliveries back into your loop as normal user
 turns. Workers never write canonical versions — you do.

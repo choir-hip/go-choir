@@ -73,12 +73,12 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	processor := rt.ToolRegistryForProfile(AgentProfileProcessor)
 	reconciler := rt.ToolRegistryForProfile(AgentProfileReconciler)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "product_api_request", "start_worker_delegation", "observe_worker_delegation", "redirect_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "update_coagent", "save_evidence", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "product_api_request", "start_worker_delegation", "observe_worker_delegation", "redirect_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "update_coagent", "save_evidence", "publish_app_change_package"} {
 		if _, ok := coSuper.Lookup(name); !ok {
 			t.Fatalf("co-super missing tool %q", name)
 		}
@@ -95,7 +95,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := coSuper.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("co-super should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "update_coagent", "save_evidence", "publish_app_change_package"} {
 		if _, ok := vSuper.Lookup(name); !ok {
 			t.Fatalf("vsuper missing tool %q", name)
 		}
@@ -112,7 +112,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := vSuper.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("vsuper should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"spawn_agent", "cast_agent", "wait_agent", "cancel_agent"} {
+	for _, name := range []string{"spawn_agent", "cancel_agent"} {
 		if _, ok := conductor.Lookup(name); !ok {
 			t.Fatalf("conductor missing tool %q", name)
 		}
@@ -145,7 +145,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("researcher should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
+	for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "update_coagent", "cancel_agent", "save_evidence"} {
 		if _, ok := researcher.Lookup(name); !ok {
 			t.Fatalf("researcher missing tool %q", name)
 		}
@@ -153,7 +153,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("spawn_agent"); ok {
 		t.Fatalf("researcher should not have spawn_agent")
 	}
-	for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update", "record_wire_processor_decision"} {
+	for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "spawn_agent", "update_coagent", "cancel_agent", "save_evidence", "record_wire_processor_decision"} {
 		if _, ok := processor.Lookup(name); !ok {
 			t.Fatalf("%s missing tool %q", AgentProfileProcessor, name)
 		}
@@ -163,7 +163,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 			t.Fatalf("%s should not have %s", AgentProfileProcessor, forbidden)
 		}
 	}
-	for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
+	for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "spawn_agent", "update_coagent", "cancel_agent", "save_evidence"} {
 		if _, ok := reconciler.Lookup(name); !ok {
 			t.Fatalf("%s missing tool %q", AgentProfileReconciler, name)
 		}
@@ -193,7 +193,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 			t.Fatalf("%s spawn_agent role enum = %#v, want only vtext", profile, got)
 		}
 	}
-	for _, name := range []string{"spawn_agent", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "read_evidence", "edit_vtext", "request_super_execution"} {
+	for _, name := range []string{"spawn_agent", "cancel_agent", "save_evidence", "read_evidence", "edit_vtext", "request_super_execution"} {
 		if _, ok := vtext.Lookup(name); !ok {
 			t.Fatalf("vtext missing tool %q", name)
 		}
@@ -207,8 +207,30 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := vtext.Lookup("source_search"); ok {
 		t.Fatalf("vtext should not have source_search")
 	}
-	if _, ok := vtext.Lookup("submit_coagent_update"); ok {
-		t.Fatalf("vtext should not have submit_coagent_update")
+	retiredToolNames := []string{
+		"cast_" + "agent",
+		"cast_" + "agent_update",
+		"wait_" + "agent",
+		"submit_" + "coagent_update",
+	}
+	for _, oldName := range retiredToolNames {
+		for profile, registry := range map[string]*ToolRegistry{
+			AgentProfileSuper:      super,
+			AgentProfileCoSuper:    coSuper,
+			AgentProfileVSuper:     vSuper,
+			AgentProfileConductor:  conductor,
+			AgentProfileResearcher: researcher,
+			AgentProfileProcessor:  processor,
+			AgentProfileReconciler: reconciler,
+			AgentProfileVText:      vtext,
+		} {
+			if _, ok := registry.Lookup(oldName); ok {
+				t.Fatalf("%s should not expose retired tool %s", profile, oldName)
+			}
+		}
+	}
+	if _, ok := vtext.Lookup("update_coagent"); ok {
+		t.Fatalf("vtext should not have update_coagent")
 	}
 	if _, ok := vtext.Lookup("publish_app_change_package"); ok {
 		t.Fatalf("vtext should not have publish_app_change_package")
@@ -279,7 +301,7 @@ func TestPersistentSuperInboxBashRequiresCoagentUpdate(t *testing.T) {
 			runMetadataAgentProfile: AgentProfileSuper,
 			runMetadataAgentRole:    AgentProfileSuper,
 			runMetadataAgentID:      persistentSuperAgentID(ownerID),
-			"request_source":        "super_inbox",
+			"request_source":        "update_coagent",
 		},
 	}
 	raw, err := newBashTool("").Func(WithToolExecutionContext(context.Background(), run), json.RawMessage(`{"command":"printf durable"}`))
@@ -352,15 +374,17 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 
 	postRaw, err := superRegistry.Execute(
 		WithToolExecutionContext(context.Background(), parent),
-		"cast_agent",
+		"update_coagent",
 		json.RawMessage(fmt.Sprintf(`{
+		"update_id":"shared-work-directive-1",
 		"agent_id":"%s",
 		"channel_id":"shared-work",
-		"content":"please inspect the runtime tool wiring"
+		"kind":"directive",
+		"summary":"Please inspect the runtime tool wiring."
 	}`, child.AgentID)),
 	)
 	if err != nil {
-		t.Fatalf("cast_agent: %v", err)
+		t.Fatalf("update_coagent: %v", err)
 	}
 	var postResp struct {
 		Cursor uint64 `json:"cursor"`
@@ -373,20 +397,20 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("channel read: %v", err)
 	}
-	if len(msgs) != 1 || msgs[0].Content != "please inspect the runtime tool wiring" {
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Content, "Please inspect the runtime tool wiring.") {
 		t.Fatalf("unexpected channel messages: %+v", msgs)
 	}
 	if msgs[0].ToAgentID != child.AgentID {
 		t.Fatalf("channel message to_agent_id = %q, want %q", msgs[0].ToAgentID, child.AgentID)
 	}
-	deliveries, err := s.ListPendingInboxDeliveries(context.Background(), "user-alice", child.AgentID, 10)
+	deliveries, err := s.ListPendingWorkerUpdates(context.Background(), "user-alice", child.AgentID, 10)
 	if err != nil {
 		t.Fatalf("list inbox deliveries: %v", err)
 	}
 	if len(deliveries) > 1 {
 		t.Fatalf("unexpected deliveries: %+v", deliveries)
 	}
-	if len(deliveries) == 1 && deliveries[0].Content != "please inspect the runtime tool wiring" {
+	if len(deliveries) == 1 && !strings.Contains(deliveries[0].Content, "Please inspect the runtime tool wiring.") {
 		t.Fatalf("unexpected delivery content: %+v", deliveries[0])
 	}
 }
@@ -466,248 +490,49 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 	}
 	registry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	toolCtx := WithToolExecutionContext(ctx, &superRun)
-	_, err := registry.Execute(toolCtx, "cast_agent", json.RawMessage(`{
+	_, err := registry.Execute(toolCtx, "update_coagent", json.RawMessage(`{
+		"update_id":"skip-level-private",
 		"agent_id":"agent-cosuper-skip",
-		"content":"change direction privately"
+		"kind":"directive",
+		"summary":"Change direction privately."
 	}`))
 	if err == nil || !strings.Contains(err.Error(), "skip-level directive") {
-		t.Fatalf("cast_agent error = %v, want skip-level directive rejection", err)
+		t.Fatalf("update_coagent error = %v, want skip-level directive rejection", err)
 	}
 
-	raw, err := registry.Execute(toolCtx, "cast_agent_update", json.RawMessage(`{
-		"message_class":"directive",
-		"content":"adjust the verifier scope with vsuper copied",
-		"recipients":[
-			{"agent_id":"agent-cosuper-skip","loop_id":"cosuper-skip-level"},
-			{"agent_id":"agent-vsuper-skip","loop_id":"vsuper-skip-level"}
-		]
+	raw, err := registry.Execute(toolCtx, "update_coagent", json.RawMessage(`{
+		"update_id":"skip-level-vsuper-forward",
+		"agent_id":"agent-vsuper-skip",
+		"kind":"directive",
+		"summary":"Forward this verifier scope adjustment to the implementation co-super."
 	}`))
 	if err != nil {
-		t.Fatalf("cast_agent_update copied directive: %v", err)
+		t.Fatalf("update_coagent owning vsuper directive: %v", err)
 	}
 	var resp struct {
-		CopyGroupID string   `json:"copy_group_id"`
-		Recipients  []string `json:"recipients"`
+		UpdateID string `json:"update_id"`
+		AgentID  string `json:"agent_id"`
+		Status   string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode cast_agent_update: %v\n%s", err, raw)
+		t.Fatalf("decode update_coagent: %v\n%s", err, raw)
 	}
-	if resp.CopyGroupID == "" || len(resp.Recipients) != 2 {
-		t.Fatalf("copy-aware response incomplete: %+v", resp)
+	if resp.UpdateID != "skip-level-vsuper-forward" || resp.AgentID != "agent-vsuper-skip" || resp.Status != "submitted" {
+		t.Fatalf("unexpected update response: %+v", resp)
 	}
 	messages, _, err := rt.ChannelRead("skip-level-channel", 0)
 	if err != nil {
 		t.Fatalf("read channel: %v", err)
 	}
-	if len(messages) != 2 {
-		t.Fatalf("messages = %d, want copied directive to both agents: %+v", len(messages), messages)
+	if len(messages) != 1 {
+		t.Fatalf("messages = %d, want directive to owning vsuper only: %+v", len(messages), messages)
 	}
-	for _, msg := range messages {
-		if !strings.Contains(msg.Content, "copy_group_id="+resp.CopyGroupID) {
-			t.Fatalf("message missing copy group %q: %+v", resp.CopyGroupID, msg)
-		}
+	if messages[0].ToAgentID != "agent-vsuper-skip" || !strings.Contains(messages[0].Content, "Forward this verifier scope adjustment") {
+		t.Fatalf("unexpected directive message: %+v", messages[0])
 	}
 }
 
-func TestWaitAgentToolReceivesChildResult(t *testing.T) {
-	t.Parallel()
-	rt, s, cwd := testRuntimeWithTempCWD(t)
-	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
-		t.Fatalf("install default agent tools: %v", err)
-	}
-
-	ctx := context.Background()
-	now := time.Now().UTC()
-	parent := types.RunRecord{
-		RunID:        "vsuper-wait-parent",
-		AgentID:      "agent-vsuper-wait",
-		ChannelID:    "worker-wait-channel",
-		AgentProfile: AgentProfileVSuper,
-		AgentRole:    AgentProfileVSuper,
-		OwnerID:      "user-alice",
-		SandboxID:    "sandbox-test",
-		State:        types.RunRunning,
-		Prompt:       "Coordinate implementation and verifier children.",
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVSuper,
-			runMetadataAgentRole:    AgentProfileVSuper,
-		},
-	}
-	if err := s.CreateRun(ctx, parent); err != nil {
-		t.Fatalf("create parent run: %v", err)
-	}
-	child := types.RunRecord{
-		RunID:        "co-super-wait-child",
-		AgentID:      "agent-impl-wait",
-		ChannelID:    parent.ChannelID,
-		ParentRunID:  parent.RunID,
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      parent.OwnerID,
-		SandboxID:    parent.SandboxID,
-		State:        types.RunRunning,
-		Prompt:       "Implement candidate and report terminal evidence.",
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
-			runMetadataCoSuperSlot:  "implementation",
-		},
-	}
-	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   child.AgentID,
-		OwnerID:   child.OwnerID,
-		SandboxID: child.SandboxID,
-		Profile:   child.AgentProfile,
-		Role:      child.AgentRole,
-		ChannelID: child.ChannelID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("create child agent: %v", err)
-	}
-	if err := s.CreateRun(ctx, child); err != nil {
-		t.Fatalf("create child run: %v", err)
-	}
-
-	go func() {
-		time.Sleep(25 * time.Millisecond)
-		_, _ = rt.PostChildResult(WithToolExecutionContext(context.Background(), &child), parent.ChannelID, child.RunID, "implementation committed abc123 and published a reviewable app change package")
-	}()
-
-	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "wait_agent", json.RawMessage(`{
-		"agent_id":"agent-impl-wait",
-		"channel_id":"worker-wait-channel",
-		"roles":["result"],
-		"timeout_ms":1000
-	}`))
-	if err != nil {
-		t.Fatalf("wait_agent: %v", err)
-	}
-	var resp struct {
-		Status   string `json:"status"`
-		AgentID  string `json:"agent_id"`
-		Cursor   uint64 `json:"cursor"`
-		Messages []struct {
-			FromAgentID string `json:"from_agent_id"`
-			FromLoopID  string `json:"from_loop_id"`
-			Role        string `json:"role"`
-			Content     string `json:"content"`
-		} `json:"messages"`
-	}
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode wait response: %v\n%s", err, raw)
-	}
-	if resp.Status != "messages" || resp.AgentID != child.AgentID || resp.Cursor == 0 {
-		t.Fatalf("unexpected wait response: %+v", resp)
-	}
-	if len(resp.Messages) != 1 {
-		t.Fatalf("messages = %d, want 1: %+v", len(resp.Messages), resp.Messages)
-	}
-	msg := resp.Messages[0]
-	if msg.FromAgentID != child.AgentID || msg.FromLoopID != child.RunID || msg.Role != "result" || !strings.Contains(msg.Content, "published a reviewable app change package") {
-		t.Fatalf("unexpected waited message: %+v", msg)
-	}
-}
-
-func TestWaitAgentToolTimesOutWithRunState(t *testing.T) {
-	t.Parallel()
-	rt, s, cwd := testRuntimeWithTempCWD(t)
-	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
-		t.Fatalf("install default agent tools: %v", err)
-	}
-
-	ctx := context.Background()
-	now := time.Now().UTC()
-	parent := types.RunRecord{
-		RunID:        "vsuper-timeout-parent",
-		AgentID:      "agent-vsuper-timeout",
-		ChannelID:    "worker-timeout-channel",
-		AgentProfile: AgentProfileVSuper,
-		AgentRole:    AgentProfileVSuper,
-		OwnerID:      "user-alice",
-		SandboxID:    "sandbox-test",
-		State:        types.RunRunning,
-		Prompt:       "Coordinate implementation and verifier children.",
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVSuper,
-			runMetadataAgentRole:    AgentProfileVSuper,
-		},
-	}
-	if err := s.CreateRun(ctx, parent); err != nil {
-		t.Fatalf("create parent run: %v", err)
-	}
-	child := types.RunRecord{
-		RunID:        "co-super-timeout-child",
-		AgentID:      "agent-impl-timeout",
-		ChannelID:    parent.ChannelID,
-		ParentRunID:  parent.RunID,
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      parent.OwnerID,
-		SandboxID:    parent.SandboxID,
-		State:        types.RunRunning,
-		Prompt:       "Implement candidate and report terminal evidence.",
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
-			runMetadataCoSuperSlot:  "implementation",
-		},
-	}
-	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   child.AgentID,
-		OwnerID:   child.OwnerID,
-		SandboxID: child.SandboxID,
-		Profile:   child.AgentProfile,
-		Role:      child.AgentRole,
-		ChannelID: child.ChannelID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("create child agent: %v", err)
-	}
-	if err := s.CreateRun(ctx, child); err != nil {
-		t.Fatalf("create child run: %v", err)
-	}
-
-	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "wait_agent", json.RawMessage(`{
-		"agent_id":"agent-impl-timeout",
-		"channel_id":"worker-timeout-channel",
-		"roles":["result"],
-		"timeout_ms":20
-	}`))
-	if err != nil {
-		t.Fatalf("wait_agent timeout: %v", err)
-	}
-	var resp struct {
-		Status          string `json:"status"`
-		Messages        []any  `json:"messages"`
-		LatestTargetRun struct {
-			LoopID string         `json:"loop_id"`
-			State  types.RunState `json:"state"`
-		} `json:"latest_target_run"`
-	}
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode wait timeout response: %v\n%s", err, raw)
-	}
-	if resp.Status != "timeout" || len(resp.Messages) != 0 {
-		t.Fatalf("unexpected timeout response: %+v", resp)
-	}
-	if resp.LatestTargetRun.LoopID != child.RunID || resp.LatestTargetRun.State != types.RunRunning {
-		t.Fatalf("latest run summary = %+v, want child running", resp.LatestTargetRun)
-	}
-}
-
-func TestChannelCastDedupesPendingAddressedDelivery(t *testing.T) {
+func TestChannelCastDoesNotCreateWakeDelivery(t *testing.T) {
 	t.Parallel()
 	rt, s, _ := testRuntimeWithTempCWD(t)
 	parent, err := rt.StartRunWithMetadata(context.Background(), "coordinate repeated work", "user-alice", map[string]any{
@@ -727,15 +552,12 @@ func TestChannelCastDedupesPendingAddressedDelivery(t *testing.T) {
 		}
 	}
 
-	deliveries, err := s.ListPendingInboxDeliveries(context.Background(), "user-alice", "agent-super-user-alice", 10)
+	deliveries, err := s.ListPendingWorkerUpdates(context.Background(), "user-alice", "agent-super-user-alice", 10)
 	if err != nil {
 		t.Fatalf("list pending deliveries: %v", err)
 	}
-	if len(deliveries) != 1 {
-		t.Fatalf("pending deliveries = %d, want one deduped delivery: %+v", len(deliveries), deliveries)
-	}
-	if deliveries[0].Content != "please run the same candidate-world probe" {
-		t.Fatalf("delivery content = %q", deliveries[0].Content)
+	if len(deliveries) != 0 {
+		t.Fatalf("pending deliveries = %d, want none because ChannelCast is audit-only: %+v", len(deliveries), deliveries)
 	}
 
 	messages, _, err := rt.ChannelRead("doc-repeat-work", 0)
@@ -832,15 +654,15 @@ func TestRedirectWorkerDelegationPostsSuperAuthoredWorkerInbox(t *testing.T) {
 		t.Fatalf("message content/role not typed super redirect: %+v", msg)
 	}
 
-	deliveries, err := workerStore.ListPendingInboxDeliveries(context.Background(), "user-alice", "vsuper:worker", 10)
+	deliveries, err := workerStore.ListPendingWorkerUpdates(context.Background(), "user-alice", "vsuper:worker", 10)
 	if err != nil {
 		t.Fatalf("list worker inbox deliveries: %v", err)
 	}
 	if len(deliveries) != 1 {
 		t.Fatalf("pending deliveries = %d, want 1: %+v", len(deliveries), deliveries)
 	}
-	if deliveries[0].FromAgentID != "super:primary" || deliveries[0].FromRunID != superRun.RunID {
-		t.Fatalf("delivery source = (%q,%q), want super source", deliveries[0].FromAgentID, deliveries[0].FromRunID)
+	if deliveries[0].AgentID != "super:primary" {
+		t.Fatalf("delivery source agent = %q, want super source", deliveries[0].AgentID)
 	}
 }
 
@@ -900,7 +722,7 @@ func TestRequestSuperExecutionDedupesSameVTextRun(t *testing.T) {
 	if superMessages != 1 {
 		t.Fatalf("super channel messages = %d, want one same-run request: %+v", superMessages, messages)
 	}
-	deliveries, err := s.ListPendingInboxDeliveries(context.Background(), "user-alice", first.AgentID, 20)
+	deliveries, err := s.ListPendingWorkerUpdates(context.Background(), "user-alice", first.AgentID, 20)
 	if err != nil {
 		t.Fatalf("list pending deliveries: %v", err)
 	}
@@ -971,7 +793,7 @@ func TestRequestSuperExecutionDedupesDifferentObjectivesInSameVTextRun(t *testin
 	if !strings.Contains(messages[0].Content, "onboarding copy") {
 		t.Fatalf("dedupe should preserve first privileged objective, got %q", messages[0].Content)
 	}
-	deliveries, err := s.ListPendingInboxDeliveries(context.Background(), "user-alice", first.AgentID, 20)
+	deliveries, err := s.ListPendingWorkerUpdates(context.Background(), "user-alice", first.AgentID, 20)
 	if err != nil {
 		t.Fatalf("list pending deliveries: %v", err)
 	}
@@ -1117,7 +939,7 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 			runMetadataAgentProfile: AgentProfileSuper,
 			runMetadataAgentRole:    AgentProfileSuper,
 			runMetadataAgentID:      superAgent.AgentID,
-			"request_source":        "super_inbox",
+			"request_source":        "update_coagent",
 		},
 	}
 	if err := s.CreateRun(context.Background(), blocked); err != nil {
@@ -1157,8 +979,9 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 	if fresh.AgentID != superAgent.AgentID || !strings.Contains(fresh.Prompt, "fresh Universal Wire product API handoff") {
 		t.Fatalf("fresh super run did not own new delivery: %+v", fresh)
 	}
+	waitForRuntimeRunTerminal(t, rt, fresh.RunID, fresh.OwnerID, 5*time.Second)
 	if pending := pendingDeliveriesForAgent(t, s, "user-alice", superAgent.AgentID); len(pending) != 0 {
-		t.Fatalf("fresh delivery should be assigned to new run, still pending: %+v", pending)
+		t.Fatalf("fresh delivery should be delivered after new run completes, still pending: %+v", pending)
 	}
 }
 
@@ -3118,7 +2941,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	}
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "submit_coagent_update", json.RawMessage(`{
+	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "update_coagent", json.RawMessage(`{
 		"update_id":"finding-001",
 		"kind":"findings",
 		"findings":["Model releases this week improved reasoning and tool use."],
@@ -3134,7 +2957,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 		"questions":["Should we mention the release date explicitly?"]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_coagent_update: %v", err)
+		t.Fatalf("update_coagent: %v", err)
 	}
 
 	var resp struct {
@@ -3145,7 +2968,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 		Status    string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_coagent_update: %v", err)
+		t.Fatalf("decode update_coagent: %v", err)
 	}
 	if resp.Status != "submitted" {
 		t.Fatalf("status = %q, want submitted", resp.Status)
@@ -3178,7 +3001,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 		t.Fatalf("unexpected coagent update role/kind: %+v", finding)
 	}
 
-	rawAgain, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "submit_coagent_update", json.RawMessage(`{
+	rawAgain, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "update_coagent", json.RawMessage(`{
 		"update_id":"finding-001",
 		"kind":"findings",
 		"findings":["Model releases this week improved reasoning and tool use."],
@@ -3194,14 +3017,14 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 		"questions":["Should we mention the release date explicitly?"]
 	}`))
 	if err != nil {
-		t.Fatalf("repeat submit_coagent_update: %v", err)
+		t.Fatalf("repeat update_coagent: %v", err)
 	}
 	var respAgain struct {
 		Cursor int64  `json:"cursor"`
 		Status string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(rawAgain), &respAgain); err != nil {
-		t.Fatalf("decode repeated submit_coagent_update: %v", err)
+		t.Fatalf("decode repeated update_coagent: %v", err)
 	}
 	if respAgain.Status != "existing" {
 		t.Fatalf("repeat status = %q, want existing", respAgain.Status)
@@ -3456,9 +3279,9 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		}],
 		"notes":["This is a structured worker update, not a document patch."]
 	}`)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", rawArgs)
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", rawArgs)
 	if err != nil {
-		t.Fatalf("submit_coagent_update: %v", err)
+		t.Fatalf("update_coagent: %v", err)
 	}
 	var resp struct {
 		UpdateID     string `json:"update_id"`
@@ -3469,10 +3292,10 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		Status       string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_coagent_update response: %v", err)
+		t.Fatalf("decode update_coagent response: %v", err)
 	}
 	if resp.UpdateID != "super-update-1" || resp.AgentID != "vtext:"+docID || resp.ChannelID != docID || resp.Cursor == 0 || resp.Status != "submitted" {
-		t.Fatalf("unexpected submit_coagent_update response: %+v", resp)
+		t.Fatalf("unexpected update_coagent response: %+v", resp)
 	}
 	if resp.TrajectoryID != "traj-structured-worker-update" {
 		t.Fatalf("trajectory_id = %q, want traj-structured-worker-update", resp.TrajectoryID)
@@ -3512,11 +3335,11 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		t.Fatalf("channel message should be a structured update, not a patch: %q", messages[0].Content)
 	}
 
-	deliveries, err := s.ListPendingInboxDeliveries(ctx, ownerID, "vtext:"+docID, 10)
+	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "vtext:"+docID, 10)
 	if err != nil {
 		t.Fatalf("list inbox deliveries: %v", err)
 	}
-	if len(deliveries) != 1 || deliveries[0].FromAgentID != "super:primary" || deliveries[0].ChannelID != docID {
+	if len(deliveries) != 1 || deliveries[0].AgentID != "super:primary" || deliveries[0].ChannelID != docID {
 		t.Fatalf("unexpected inbox deliveries: %+v", deliveries)
 	}
 
@@ -3528,9 +3351,9 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		t.Fatalf("trajectory updates = %+v", updates)
 	}
 
-	rawAgain, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", rawArgs)
+	rawAgain, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", rawArgs)
 	if err != nil {
-		t.Fatalf("repeat submit_coagent_update: %v", err)
+		t.Fatalf("repeat update_coagent: %v", err)
 	}
 	var repeat struct {
 		Cursor int64  `json:"cursor"`
@@ -3550,7 +3373,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		t.Fatalf("repeat submit should not duplicate messages, got %+v", messages)
 	}
 
-	_, err = superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", json.RawMessage(`{
+	_, err = superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
 		"update_id":"super-update-1",
 		"agent_id":"vtext:doc-structured-worker-update",
 		"tests":["different test payload"]
@@ -3606,7 +3429,7 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", json.RawMessage(`{
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
 		"update_id":"super-authoritative-channel",
 		"agent_id":"vtext:doc-authoritative-channel",
 		"channel_id":"not-the-vtext-doc-channel",
@@ -3614,14 +3437,14 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 		"tests":["verified authoritative channel routing"]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_coagent_update: %v", err)
+		t.Fatalf("update_coagent: %v", err)
 	}
 	var resp struct {
 		ChannelID string `json:"channel_id"`
 		Cursor    int64  `json:"cursor"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_coagent_update response: %v", err)
+		t.Fatalf("decode update_coagent response: %v", err)
 	}
 	if resp.ChannelID != docID || resp.Cursor == 0 {
 		t.Fatalf("response routed to channel %q cursor %d, want %q with cursor", resp.ChannelID, resp.Cursor, docID)
@@ -3708,21 +3531,21 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", json.RawMessage(`{
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
 		"update_id":"super-authoritative-parent",
 		"agent_id":"researcher:decoy",
 		"artifacts":["artifacts/parent.txt"],
 		"tests":["verified parent target routing"]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_coagent_update: %v", err)
+		t.Fatalf("update_coagent: %v", err)
 	}
 	var resp struct {
 		AgentID   string `json:"agent_id"`
 		ChannelID string `json:"channel_id"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_coagent_update response: %v", err)
+		t.Fatalf("decode update_coagent response: %v", err)
 	}
 	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID {
 		t.Fatalf("response target = %q channel = %q, want parent vtext target/channel", resp.AgentID, resp.ChannelID)
@@ -3810,21 +3633,21 @@ func TestSubmitWorkerUpdateUsesVTextRequesterOverExplicitAgent(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", json.RawMessage(`{
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
 		"update_id":"super-requester-target",
 		"agent_id":"researcher:decoy-requester",
 		"artifacts":["artifacts/requester.txt"],
 		"tests":["verified requester target routing"]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_coagent_update: %v", err)
+		t.Fatalf("update_coagent: %v", err)
 	}
 	var resp struct {
 		AgentID   string `json:"agent_id"`
 		ChannelID string `json:"channel_id"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_coagent_update response: %v", err)
+		t.Fatalf("decode update_coagent response: %v", err)
 	}
 	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID {
 		t.Fatalf("response target = %q channel = %q, want vtext requester target/channel", resp.AgentID, resp.ChannelID)
@@ -3864,13 +3687,13 @@ func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing
 	}
 
 	vSuperRegistry := rt.ToolRegistryForProfile(AgentProfileVSuper)
-	raw, err := vSuperRegistry.Execute(WithToolExecutionContext(ctx, workerRun), "submit_coagent_update", json.RawMessage(`{
+	raw, err := vSuperRegistry.Execute(WithToolExecutionContext(ctx, workerRun), "update_coagent", json.RawMessage(`{
 		"update_id":"remote-worker-update",
 		"findings":["Remote worker update should route through inherited VText metadata."],
 		"tests":["metadata-only requester routing passed"]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_coagent_update should not require local requester agent row: %v", err)
+		t.Fatalf("update_coagent should not require local requester agent row: %v", err)
 	}
 	var resp struct {
 		AgentID   string `json:"agent_id"`
@@ -3878,7 +3701,7 @@ func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing
 		Status    string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_coagent_update response: %v", err)
+		t.Fatalf("decode update_coagent response: %v", err)
 	}
 	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
 		t.Fatalf("response target/channel/status = %+v, want inherited vtext target", resp)
@@ -3891,7 +3714,7 @@ func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing
 	if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID || update.Role != AgentProfileVSuper {
 		t.Fatalf("worker update target/channel/role = %+v", update)
 	}
-	deliveries, err := s.ListPendingInboxDeliveries(ctx, ownerID, "vtext:"+docID, 10)
+	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "vtext:"+docID, 10)
 	if err != nil {
 		t.Fatalf("list vtext deliveries: %v", err)
 	}
@@ -3937,11 +3760,11 @@ func TestSubmitWorkerUpdateFallsBackToVTextChannelWhenExplicitTargetMissing(t *t
 				"agent_id":%q,
 				"kind":"blocker",
 				"summary":"Worker canceled after terminal evidence failed to publish.",
-				"findings":["submit_coagent_update should route to the VText channel when the explicit target is stale."]
+				"findings":["update_coagent should route to the VText channel when the explicit target is stale."]
 			}`, tc.updateID, tc.explicitAgentID))
-			raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", rawArgs)
+			raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", rawArgs)
 			if err != nil {
-				t.Fatalf("submit_coagent_update: %v", err)
+				t.Fatalf("update_coagent: %v", err)
 			}
 			var resp struct {
 				AgentID   string `json:"agent_id"`
@@ -3949,7 +3772,7 @@ func TestSubmitWorkerUpdateFallsBackToVTextChannelWhenExplicitTargetMissing(t *t
 				Status    string `json:"status"`
 			}
 			if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-				t.Fatalf("decode submit_coagent_update response: %v", err)
+				t.Fatalf("decode update_coagent response: %v", err)
 			}
 			if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
 				t.Fatalf("response target/channel/status = %+v, want vtext fallback", resp)
@@ -4668,7 +4491,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-worker-update",
-				Name: "submit_coagent_update",
+				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
 					"update_id":"worker-direct-update",
 					"findings":["WORKER_DIRECT_UPDATE: vsuper produced a substantive checkpoint."],
@@ -5065,7 +4888,7 @@ func TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete(t *t
 			Timestamp: now,
 			Kind:      types.EventToolResult,
 			Payload: json.RawMessage(`{
-				"tool":"submit_coagent_update",
+				"tool":"update_coagent",
 				"is_error":false,
 				"output":"{\"status\":\"completed\",\"summary\":\"implemented candidate work but did not publish\"}"
 			}`),
@@ -5596,7 +5419,7 @@ func TestDelegateWorkerVMReturnsFailedRunEvidence(t *testing.T) {
 			OwnerID:   "user-alice",
 			Timestamp: now.Add(2 * time.Second),
 			Kind:      types.EventToolResult,
-			Payload:   json.RawMessage(`{"tool":"submit_coagent_update","is_error":false,"output":"{\"status\":\"blocked\",\"summary\":\"tool loop exhausted before export\"}"}`),
+			Payload:   json.RawMessage(`{"tool":"update_coagent","is_error":false,"output":"{\"status\":\"blocked\",\"summary\":\"tool loop exhausted before export\"}"}`),
 		},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -6173,8 +5996,8 @@ func TestWorkerVSuperDelegateContractPreventsCheckoutRaces(t *testing.T) {
 		"exclusive writer for Source/candidate",
 		"do not run reset, clean, edit, or commit commands",
 		"verifier must inspect only after the implementation child has reported",
-		"missing tools, failed tests, or package publication failure must end in submit_coagent_update",
-		"both child runs finish without publish_app_change_package or submit_coagent_update",
+		"missing tools, failed tests, or package publication failure must end in update_coagent",
+		"both child runs finish without publish_app_change_package or update_coagent",
 		"publish_app_change_package",
 		"human proof is still evidence_pending",
 		"separate proof/adoption workers need a package id",
@@ -6465,9 +6288,9 @@ func (p *blockingExecuteProvider) releaseAll() {
 	})
 }
 
-func pendingDeliveriesForAgent(t *testing.T, s *store.Store, ownerID, agentID string) []types.InboxDelivery {
+func pendingDeliveriesForAgent(t *testing.T, s *store.Store, ownerID, agentID string) []types.WorkerUpdateRecord {
 	t.Helper()
-	deliveries, err := s.ListPendingInboxDeliveries(context.Background(), ownerID, agentID, 20)
+	deliveries, err := s.ListPendingWorkerUpdates(context.Background(), ownerID, agentID, 20)
 	if err != nil {
 		t.Fatalf("list pending deliveries for %s: %v", agentID, err)
 	}

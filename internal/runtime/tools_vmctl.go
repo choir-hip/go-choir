@@ -1292,7 +1292,7 @@ func (rt *Runtime) applyWorkerEvidenceToResult(ctx context.Context, client *http
 		if stringMapValue(result, "profile") == AgentProfileVSuper && vSuperDelegateIncomplete(evidence, packages) {
 			result["status"] = "worker_run_incomplete"
 			result["completion_blocker"] = "vsuper_completed_without_app_change_package_or_worker_update"
-			result["terminal_error"] = "worker vsuper completed after child coordination without publish_app_change_package or submit_coagent_update evidence"
+			result["terminal_error"] = "worker vsuper completed after child coordination without publish_app_change_package or update_coagent evidence"
 		}
 	}
 }
@@ -1364,7 +1364,7 @@ func (rt *Runtime) mirrorWorkerSubmitUpdates(ctx context.Context, superRec *type
 			"worker_run:"+sourceRunID,
 		))
 		update.Notes = trimDedupeNonEmpty(append(update.Notes,
-			"mirrored_from=worker_submit_coagent_update",
+			"mirrored_from=worker_update_coagent",
 			"super_run:"+superRec.RunID,
 		))
 		update.Content = buildWorkerUpdateMessage(update)
@@ -1380,19 +1380,7 @@ func (rt *Runtime) mirrorWorkerSubmitUpdates(ctx context.Context, superRec *type
 			Content:      update.Content,
 			Timestamp:    update.CreatedAt,
 		}
-		delivery := types.InboxDelivery{
-			DeliveryID:   uuid.NewString(),
-			OwnerID:      update.OwnerID,
-			ToAgentID:    update.TargetAgentID,
-			FromAgentID:  message.FromAgentID,
-			FromRunID:    message.FromRunID,
-			ChannelID:    update.ChannelID,
-			Role:         message.Role,
-			Content:      message.Content,
-			TrajectoryID: update.TrajectoryID,
-			CreatedAt:    update.CreatedAt,
-		}
-		stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message, delivery)
+		stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message)
 		if err != nil {
 			mirrorErrors = append(mirrorErrors, fmt.Sprintf("%s: %v", sourceUpdateID, err))
 			continue
@@ -1429,7 +1417,7 @@ func collectSuccessfulWorkerSubmitUpdates(events []types.EventRecord) []mirrored
 			CallID    string          `json:"call_id"`
 			Arguments json.RawMessage `json:"arguments"`
 		}
-		if err := json.Unmarshal(ev.Payload, &payload); err != nil || strings.TrimSpace(payload.Tool) != "submit_coagent_update" {
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil || strings.TrimSpace(payload.Tool) != "update_coagent" {
 			continue
 		}
 		callID := strings.TrimSpace(payload.CallID)
@@ -1460,7 +1448,7 @@ func collectSuccessfulWorkerSubmitUpdates(events []types.EventRecord) []mirrored
 			IsError bool   `json:"is_error"`
 		}
 		if err := json.Unmarshal(ev.Payload, &payload); err != nil ||
-			strings.TrimSpace(payload.Tool) != "submit_coagent_update" ||
+			strings.TrimSpace(payload.Tool) != "update_coagent" ||
 			strings.TrimSpace(payload.CallID) == "" ||
 			payload.IsError {
 			continue
@@ -1842,7 +1830,7 @@ func newLegacySynchronousDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 			} else if profile == AgentProfileVSuper && finalResp.State == types.RunCompleted && vSuperDelegateIncomplete(evidence, packages) {
 				result["status"] = "worker_run_incomplete"
 				result["completion_blocker"] = "vsuper_completed_without_app_change_package_or_worker_update"
-				result["terminal_error"] = "worker vsuper completed after child coordination without publish_app_change_package or submit_coagent_update evidence"
+				result["terminal_error"] = "worker vsuper completed after child coordination without publish_app_change_package or update_coagent evidence"
 			}
 			if finalResp.State != types.RunCompleted {
 				result["terminal_error"] = strings.TrimSpace(fmt.Sprintf("worker run %s ended in state %s: %s", finalResp.RunID, finalResp.State, strings.TrimSpace(finalResp.Error)))
@@ -2014,7 +2002,7 @@ func remoteWorkerRepoBootstrapPrompt(remoteURL, baseSHA string) string {
 		"Commit candidate changes before calling publish_app_change_package.",
 		"Use repo_path \"Source/candidate\" and base_sha " + baseSHA + " when publishing an AppChangePackage.",
 		"If external screenshots/video/benchmarks are still missing but the candidate commit and focused verification evidence exist, publish an honest evidence_pending AppChangePackage instead of ending with a commit-only report. The package is the transferable source artifact; a worker-local commit is not enough for another worker to inspect.",
-		"If clone, checkout, build, verification, or package publication fails, report diagnostics with submit_coagent_update instead of claiming repository work or ending with a plain narrative.",
+		"If clone, checkout, build, verification, or package publication fails, report diagnostics with update_coagent instead of claiming repository work or ending with a plain narrative.",
 	}, "\n")
 }
 
@@ -2033,14 +2021,14 @@ func workerVSuperDelegateContract(timeout time.Duration) string {
 		"- Do not cancel a child that has produced publish_app_change_package evidence. Incorporate the child package instead.",
 		"- The verifier must inspect only after the implementation child has reported a commit, package, or blocker; avoid racing the worker by repeatedly reading a checkout that is still being mutated.",
 		"- If the objective asks a helper to publish a package, do not override that with \"do not publish\"; let the helper publish, then report that child package.",
-		"- Tell the implementation child that missing tools, failed tests, or package publication failure must end in submit_coagent_update with exact command output refs, not a plain final answer.",
+		"- Tell the implementation child that missing tools, failed tests, or package publication failure must end in update_coagent with exact command output refs, not a plain final answer.",
 		"- Once a committed repo diff and focused verification evidence exist, make exactly one publish_app_change_package call for the candidate, even if human proof is still evidence_pending and needs a separate proof worker. If a child already published, do not parent-publish again.",
 		"- Do not leave the only source artifact as a worker-local Git commit; separate proof/adoption workers need a package id or package-derived candidate/adoption route, not an unreachable commit SHA.",
-		"- After package evidence exists, immediately produce the terminal summary or submit_coagent_update. Do not sleep, poll for narrative confirmation, or run broad discovery unless the package is invalid and you are doing one focused repair.",
-		"- Starting children, casting assignments, or receiving acknowledgement-only messages is not a terminal result; wait for commit/package/verifier/blocker evidence, or submit_coagent_update with the precise missing-evidence blocker.",
-		"- If both child runs finish without publish_app_change_package or submit_coagent_update evidence, inspect their final results and tool errors, then submit_coagent_update naming the child loop ids and the missing terminal evidence.",
-		"- Reserve the last " + reserve.String() + " of the delegate budget for exactly one terminal action: publish_app_change_package or submit_coagent_update with a precise blocker.",
-		"- A blocked submit_coagent_update is preferred to running until the parent delegate timeout.",
+		"- After package evidence exists, immediately produce the terminal summary or update_coagent. Do not sleep, poll for narrative confirmation, or run broad discovery unless the package is invalid and you are doing one focused repair.",
+		"- Starting children, sending assignments, or receiving acknowledgement-only messages is not a terminal result; continue only until commit/package/verifier/blocker evidence is present, or update_coagent with the precise missing-evidence blocker.",
+		"- If both child runs finish without publish_app_change_package or update_coagent evidence, inspect their final results and tool errors, then update_coagent naming the child loop ids and the missing terminal evidence.",
+		"- Reserve the last " + reserve.String() + " of the delegate budget for exactly one terminal action: publish_app_change_package or update_coagent with a precise blocker.",
+		"- A blocked update_coagent is preferred to running until the parent delegate timeout.",
 	}, "\n")
 }
 
@@ -2644,7 +2632,7 @@ func vSuperDelegateIncomplete(evidence workerRunEvidence, packages []map[string]
 	if len(evidence.ChildRunIDs) == 0 || len(packages) > 0 {
 		return false
 	}
-	return !hasSuccessfulToolResult(evidence.Events, "submit_coagent_update")
+	return !hasSuccessfulToolResult(evidence.Events, "update_coagent")
 }
 
 func delegateRequiresAppChangePackage(profile, objective string) bool {

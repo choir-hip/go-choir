@@ -960,20 +960,20 @@ func TestRunToolLoopBoundsRequiredNextToolProviderCall(t *testing.T) {
 		Description: "Search.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return `{"results":[{"url":"https://example.com"}],"next_required_tool":"submit_coagent_update"}`, nil
+			return `{"results":[{"url":"https://example.com"}],"next_required_tool":"update_coagent"}`, nil
 		},
 	}); err != nil {
 		t.Fatalf("register web_search: %v", err)
 	}
 	if err := registry.Register(Tool{
-		Name:        "submit_coagent_update",
+		Name:        "update_coagent",
 		Description: "Submit.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"submitted"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register submit_coagent_update: %v", err)
+		t.Fatalf("register update_coagent: %v", err)
 	}
 
 	var choices []string
@@ -997,10 +997,10 @@ func TestRunToolLoopBoundsRequiredNextToolProviderCall(t *testing.T) {
 		},
 		nil,
 	)
-	if err == nil || !strings.Contains(err.Error(), `required next tool "submit_coagent_update" was not called after 2 retries`) {
+	if err == nil || !strings.Contains(err.Error(), `required next tool "update_coagent" was not called after 2 retries`) {
 		t.Fatalf("err = %v, want bounded required next tool failure", err)
 	}
-	if len(choices) != 4 || choices[0] != "" || choices[1] != "function:submit_coagent_update" || choices[2] != "function:submit_coagent_update" || choices[3] != "function:submit_coagent_update" {
+	if len(choices) != 4 || choices[0] != "" || choices[1] != "function:update_coagent" || choices[2] != "function:update_coagent" || choices[3] != "function:update_coagent" {
 		t.Fatalf("choices = %#v, want exact required tool retries", choices)
 	}
 	if len(retryReasons) != 3 || retryReasons[0] != "tool_result_declared_required_next_tool" || retryReasons[1] != "provider_timed_out_before_required_tool" || retryReasons[2] != "provider_timed_out_before_required_tool" {

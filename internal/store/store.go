@@ -369,7 +369,21 @@ CREATE TABLE IF NOT EXISTS worker_updates (
 	notes_json        LONGTEXT NOT NULL DEFAULT '[]',
 	content           LONGTEXT NOT NULL DEFAULT '',
 	created_at        DATETIME NOT NULL,
+	delivered_to_loop_id VARCHAR(255) NOT NULL DEFAULT '',
+	delivered_at      DATETIME,
 	PRIMARY KEY (owner_id, update_id)
+);
+
+CREATE TABLE IF NOT EXISTS co_super_slots (
+	owner_id       VARCHAR(255) NOT NULL DEFAULT '',
+	trajectory_id  VARCHAR(255) NOT NULL DEFAULT '',
+	slot           VARCHAR(64) NOT NULL DEFAULT '',
+	run_id         VARCHAR(255) NOT NULL DEFAULT '',
+	agent_id       VARCHAR(255) NOT NULL DEFAULT '',
+	parent_loop_id VARCHAR(255) NOT NULL DEFAULT '',
+	claimed_at     DATETIME NOT NULL,
+	updated_at     DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, trajectory_id, slot)
 );
 
 CREATE TABLE IF NOT EXISTS media_progress (
@@ -455,6 +469,8 @@ CREATE INDEX IF NOT EXISTS idx_research_findings_target_agent_id ON research_fin
 CREATE INDEX IF NOT EXISTS idx_worker_updates_channel_id ON worker_updates(channel_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worker_updates_target_agent_id ON worker_updates(target_agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worker_updates_trajectory_id ON worker_updates(trajectory_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_worker_updates_pending_target ON worker_updates(owner_id, target_agent_id, delivered_at, created_at);
+CREATE INDEX IF NOT EXISTS idx_co_super_slots_run_id ON co_super_slots(run_id);
 CREATE INDEX IF NOT EXISTS idx_media_progress_owner_kind_updated ON media_progress(owner_id, media_kind, updated_at);
 CREATE INDEX IF NOT EXISTS idx_media_recents_owner_kind_opened ON media_recents(owner_id, media_kind, opened_at);
 CREATE INDEX IF NOT EXISTS idx_user_preferences_owner_updated ON user_preferences(owner_id, updated_at);
@@ -618,6 +634,8 @@ func (s *Store) bootstrap() error {
 		{"worker_updates", "kind", "VARCHAR(64) NOT NULL DEFAULT ''"},
 		{"worker_updates", "summary", "LONGTEXT NOT NULL DEFAULT ''"},
 		{"worker_updates", "capability_requests_json", "LONGTEXT NOT NULL DEFAULT '[]'"},
+		{"worker_updates", "delivered_to_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"worker_updates", "delivered_at", "DATETIME"},
 	} {
 		if err := s.ensureColumn(migration.table, migration.name, migration.ddl); err != nil {
 			return err
@@ -969,6 +987,143 @@ func (s *Store) ListChildRuns(ctx context.Context, parentRunID string, limit int
 		limit = 100
 	}
 	return s.listRunsWhere(ctx, "parent_loop_id = ?", []any{parentRunID}, limit)
+}
+
+// ClaimCoSuperSlot atomically claims (owner, trajectory, slot) for a co-super
+// run. If a live run already owns the slot, that run is returned and claimed is
+// false. If the previous owner is terminal, the slot is advanced to runID.
+func (s *Store) ClaimCoSuperSlot(ctx context.Context, ownerID, trajectoryID, slot, runID, agentID, parentRunID string) (types.RunRecord, bool, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	slot = strings.TrimSpace(slot)
+	runID = strings.TrimSpace(runID)
+	if ownerID == "" || trajectoryID == "" || slot == "" || runID == "" {
+		return types.RunRecord{}, false, fmt.Errorf("claim co-super slot: owner_id, trajectory_id, slot, and run_id are required")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO co_super_slots (owner_id, trajectory_id, slot, run_id, agent_id, parent_loop_id, claimed_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE run_id = run_id`,
+		ownerID, trajectoryID, slot, runID, agentID, parentRunID, now, now,
+	)
+	if err != nil {
+		return types.RunRecord{}, false, fmt.Errorf("insert co-super slot claim: %w", err)
+	}
+	if rows, err := res.RowsAffected(); err == nil && rows == 1 {
+		return types.RunRecord{}, true, nil
+	}
+
+	existingRunID, err := s.coSuperSlotRunID(ctx, ownerID, trajectoryID, slot)
+	if err != nil {
+		return types.RunRecord{}, false, err
+	}
+	existing, err := s.GetRun(ctx, existingRunID)
+	if err == nil && !existing.State.Terminal() {
+		return existing, false, nil
+	}
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return types.RunRecord{}, false, err
+	}
+
+	res, err = s.db.ExecContext(ctx,
+		`UPDATE co_super_slots
+		    SET run_id = ?,
+		        agent_id = ?,
+		        parent_loop_id = ?,
+		        claimed_at = ?,
+		        updated_at = ?
+		  WHERE owner_id = ?
+		    AND trajectory_id = ?
+		    AND slot = ?
+		    AND run_id = ?`,
+		runID, agentID, parentRunID, now, now, ownerID, trajectoryID, slot, existingRunID,
+	)
+	if err != nil {
+		return types.RunRecord{}, false, fmt.Errorf("advance co-super slot claim: %w", err)
+	}
+	if rows, err := res.RowsAffected(); err != nil {
+		return types.RunRecord{}, false, fmt.Errorf("check co-super slot claim rows: %w", err)
+	} else if rows == 0 {
+		existingRunID, err = s.coSuperSlotRunID(ctx, ownerID, trajectoryID, slot)
+		if err != nil {
+			return types.RunRecord{}, false, err
+		}
+		existing, err := s.GetRun(ctx, existingRunID)
+		return existing, false, err
+	}
+	return types.RunRecord{}, true, nil
+}
+
+// ReleaseCoSuperSlotClaim releases a newly claimed co-super slot only if it is
+// still owned by runID. It is used to avoid leaving a durable claim behind when
+// run creation fails after the slot claim succeeds.
+func (s *Store) ReleaseCoSuperSlotClaim(ctx context.Context, ownerID, trajectoryID, slot, runID string) error {
+	ownerID = strings.TrimSpace(ownerID)
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	slot = strings.TrimSpace(slot)
+	runID = strings.TrimSpace(runID)
+	if ownerID == "" || trajectoryID == "" || slot == "" || runID == "" {
+		return fmt.Errorf("release co-super slot: owner_id, trajectory_id, slot, and run_id are required")
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM co_super_slots
+		  WHERE owner_id = ?
+		    AND trajectory_id = ?
+		    AND slot = ?
+		    AND run_id = ?`,
+		ownerID,
+		trajectoryID,
+		slot,
+		runID,
+	); err != nil {
+		return fmt.Errorf("release co-super slot claim: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) coSuperSlotRunID(ctx context.Context, ownerID, trajectoryID, slot string) (string, error) {
+	var runID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT run_id
+		   FROM co_super_slots
+		  WHERE owner_id = ?
+		    AND trajectory_id = ?
+		    AND slot = ?`,
+		ownerID,
+		trajectoryID,
+		slot,
+	).Scan(&runID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("query co-super slot: %w", err)
+	}
+	return runID, nil
+}
+
+// ActiveCoSuperSlotRun returns the live run currently claiming a
+// (trajectory, slot), if any.
+func (s *Store) ActiveCoSuperSlotRun(ctx context.Context, ownerID, trajectoryID, slot string) (types.RunRecord, bool, error) {
+	runID, err := s.coSuperSlotRunID(ctx, ownerID, trajectoryID, slot)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return types.RunRecord{}, false, nil
+		}
+		return types.RunRecord{}, false, err
+	}
+	rec, err := s.GetRun(ctx, runID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return types.RunRecord{}, false, nil
+		}
+		return types.RunRecord{}, false, err
+	}
+	if rec.State.Terminal() {
+		return types.RunRecord{}, false, nil
+	}
+	return rec, true, nil
 }
 
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.
@@ -1412,127 +1567,6 @@ func (s *Store) ListChannelMessagesByTrajectory(ctx context.Context, ownerID, tr
 	return messages, nil
 }
 
-// EnqueueInboxDelivery persists a directed delivery for later runtime-owned
-// threading into an agent loop.
-func (s *Store) EnqueueInboxDelivery(ctx context.Context, delivery types.InboxDelivery) error {
-	var existingID string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT delivery_id
-		   FROM inbox_deliveries
-		  WHERE owner_id = ?
-		    AND to_agent_id = ?
-		    AND to_loop_id = ?
-		    AND from_agent_id = ?
-		    AND from_loop_id = ?
-		    AND channel_id = ?
-		    AND role = ?
-		    AND content = ?
-		    AND trajectory_id = ?
-		    AND delivered_at IS NULL
-		  LIMIT 1`,
-		delivery.OwnerID,
-		delivery.ToAgentID,
-		delivery.ToRunID,
-		delivery.FromAgentID,
-		delivery.FromRunID,
-		delivery.ChannelID,
-		delivery.Role,
-		delivery.Content,
-		delivery.TrajectoryID,
-	).Scan(&existingID)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("query existing inbox delivery: %w", err)
-	}
-
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO inbox_deliveries (delivery_id, owner_id, to_agent_id, to_loop_id, from_agent_id, from_loop_id, channel_id, role, content, trajectory_id, created_at, delivered_to_loop_id, delivered_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		delivery.DeliveryID,
-		delivery.OwnerID,
-		delivery.ToAgentID,
-		delivery.ToRunID,
-		delivery.FromAgentID,
-		delivery.FromRunID,
-		delivery.ChannelID,
-		delivery.Role,
-		delivery.Content,
-		delivery.TrajectoryID,
-		delivery.CreatedAt.UTC().Format(time.RFC3339Nano),
-		delivery.DeliveredToLoopID,
-		formatTimePtr(delivery.DeliveredAt),
-	)
-	if err != nil {
-		return fmt.Errorf("insert inbox delivery: %w", err)
-	}
-	return nil
-}
-
-// ListPendingInboxDeliveries returns undelivered inbox items for the given
-// target agent ordered by creation time.
-func (s *Store) ListPendingInboxDeliveries(ctx context.Context, ownerID, toAgentID string, limit int) ([]types.InboxDelivery, error) {
-	if limit <= 0 {
-		limit = 200
-	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT delivery_id, owner_id, to_agent_id, to_loop_id, from_agent_id, from_loop_id, channel_id, role, content, trajectory_id, created_at, delivered_to_loop_id, delivered_at
-		   FROM inbox_deliveries
-		  WHERE owner_id = ?
-		    AND to_agent_id = ?
-		    AND delivered_at IS NULL
-		  ORDER BY created_at ASC
-		  LIMIT ?`,
-		ownerID, toAgentID, limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query inbox deliveries: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var out []types.InboxDelivery
-	for rows.Next() {
-		rec, err := scanInboxDelivery(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate inbox deliveries: %w", err)
-	}
-	return out, nil
-}
-
-// MarkInboxDeliveriesDelivered marks the given deliveries as consumed by the
-// specified loop.
-func (s *Store) MarkInboxDeliveriesDelivered(ctx context.Context, deliveryIDs []string, loopID string) error {
-	if len(deliveryIDs) == 0 {
-		return nil
-	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(deliveryIDs)), ",")
-	args := make([]any, 0, len(deliveryIDs)+3)
-	args = append(args, loopID, now)
-	for _, id := range deliveryIDs {
-		args = append(args, id)
-	}
-	query := fmt.Sprintf(
-		`UPDATE inbox_deliveries
-		    SET delivered_to_loop_id = ?,
-		        delivered_at = ?
-		  WHERE delivery_id IN (%s)
-		    AND delivered_at IS NULL
-		    AND delivered_to_loop_id = ''`,
-		placeholders,
-	)
-	_, err := s.db.ExecContext(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("mark inbox deliveries delivered: %w", err)
-	}
-	return nil
-}
-
 // GetResearchFinding returns a previously dispatched researcher findings bundle.
 func (s *Store) GetResearchFinding(ctx context.Context, ownerID, findingID string) (types.ResearchFindingRecord, error) {
 	row := s.db.QueryRowContext(ctx,
@@ -1583,9 +1617,7 @@ func (s *Store) ListResearchFindingsByTrajectory(ctx context.Context, ownerID, t
 // GetWorkerUpdate returns a previously dispatched structured worker update.
 func (s *Store) GetWorkerUpdate(ctx context.Context, ownerID, updateID string) (types.WorkerUpdateRecord, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, kind, summary, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, capability_requests_json, notes_json, content, created_at
-		   FROM worker_updates
-		  WHERE owner_id = ? AND update_id = ?`,
+		workerUpdateSelectSQL()+` WHERE owner_id = ? AND update_id = ?`,
 		ownerID, updateID,
 	)
 	return scanWorkerUpdate(row)
@@ -1598,9 +1630,7 @@ func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, traj
 		limit = 500
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, kind, summary, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, capability_requests_json, notes_json, content, created_at
-		   FROM worker_updates
-		  WHERE owner_id = ?
+		workerUpdateSelectSQL()+` WHERE owner_id = ?
 		    AND trajectory_id = ?
 		  ORDER BY created_at ASC
 		  LIMIT ?`,
@@ -1625,6 +1655,88 @@ func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, traj
 		return nil, fmt.Errorf("iterate worker updates by trajectory: %w", err)
 	}
 	return updates, nil
+}
+
+// ListPendingWorkerUpdates returns undelivered update_coagent records for one
+// target actor. These records are the durable wake backlog; channel_messages is
+// only the audit/replay surface.
+func (s *Store) ListPendingWorkerUpdates(ctx context.Context, ownerID, targetAgentID string, limit int) ([]types.WorkerUpdateRecord, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := s.db.QueryContext(ctx,
+		workerUpdateSelectSQL()+` WHERE owner_id = ?
+		    AND target_agent_id = ?
+		    AND delivered_at IS NULL
+		  ORDER BY created_at ASC, update_id ASC
+		  LIMIT ?`,
+		ownerID,
+		targetAgentID,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query pending worker updates: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var updates []types.WorkerUpdateRecord
+	for rows.Next() {
+		rec, err := scanWorkerUpdate(rows)
+		if err != nil {
+			return nil, err
+		}
+		updates = append(updates, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate pending worker updates: %w", err)
+	}
+	return updates, nil
+}
+
+// CountPendingWorkerUpdatesByTrajectory returns undelivered updates for the
+// silent-stall oracle.
+func (s *Store) CountPendingWorkerUpdatesByTrajectory(ctx context.Context, ownerID, trajectoryID string) (int, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*)
+		   FROM worker_updates
+		  WHERE owner_id = ?
+		    AND trajectory_id = ?
+		    AND delivered_at IS NULL`,
+		ownerID,
+		trajectoryID,
+	).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count pending worker updates by trajectory: %w", err)
+	}
+	return count, nil
+}
+
+// MarkWorkerUpdatesDelivered marks update_coagent records as consumed by the
+// loop that woke for them.
+func (s *Store) MarkWorkerUpdatesDelivered(ctx context.Context, ownerID string, updateIDs []string, runID string) error {
+	if len(updateIDs) == 0 {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(updateIDs)), ",")
+	args := make([]any, 0, len(updateIDs)+3)
+	args = append(args, runID, now, ownerID)
+	for _, id := range updateIDs {
+		args = append(args, id)
+	}
+	query := fmt.Sprintf(
+		`UPDATE worker_updates
+		    SET delivered_to_loop_id = ?,
+		        delivered_at = ?
+		  WHERE owner_id = ?
+		    AND update_id IN (%s)
+		    AND delivered_at IS NULL
+		    AND delivered_to_loop_id = ''`,
+		placeholders,
+	)
+	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("mark worker updates delivered: %w", err)
+	}
+	return nil
 }
 
 // DispatchResearchFinding atomically persists the addressed channel message,
@@ -1754,10 +1866,10 @@ func (s *Store) DispatchResearchFinding(ctx context.Context, finding types.Resea
 }
 
 // DispatchWorkerUpdate atomically persists a structured worker update with its
-// addressed channel message and inbox delivery. The update_id is idempotent per
-// owner, so retries can return the existing update without duplicating the
-// channel delivery.
-func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpdateRecord, message *types.ChannelMessage, delivery types.InboxDelivery) (types.WorkerUpdateRecord, bool, error) {
+// addressed channel audit message. The worker_updates row is the durable wake
+// backlog; the update_id is idempotent per owner, so retries can return the
+// existing update without duplicating delivery.
+func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpdateRecord, message *types.ChannelMessage) (types.WorkerUpdateRecord, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return types.WorkerUpdateRecord{}, false, fmt.Errorf("begin worker update transaction: %w", err)
@@ -1765,9 +1877,7 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpd
 	defer func() { _ = tx.Rollback() }()
 
 	existing, err := scanWorkerUpdate(tx.QueryRowContext(ctx,
-		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, kind, summary, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, capability_requests_json, notes_json, content, created_at
-		   FROM worker_updates
-		  WHERE owner_id = ? AND update_id = ?`,
+		workerUpdateSelectSQL()+` WHERE owner_id = ? AND update_id = ?`,
 		update.OwnerID, update.UpdateID,
 	))
 	if err == nil {
@@ -1786,9 +1896,6 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpd
 	}
 	if message.Timestamp.IsZero() {
 		message.Timestamp = time.Now().UTC()
-	}
-	if delivery.CreatedAt.IsZero() {
-		delivery.CreatedAt = message.Timestamp
 	}
 	update.MessageSeq = message.Seq
 	if update.CreatedAt.IsZero() {
@@ -1813,27 +1920,6 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpd
 	)
 	if err != nil {
 		return types.WorkerUpdateRecord{}, false, fmt.Errorf("insert worker update channel message: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO inbox_deliveries (delivery_id, owner_id, to_agent_id, to_loop_id, from_agent_id, from_loop_id, channel_id, role, content, trajectory_id, created_at, delivered_to_loop_id, delivered_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		delivery.DeliveryID,
-		delivery.OwnerID,
-		delivery.ToAgentID,
-		delivery.ToRunID,
-		delivery.FromAgentID,
-		delivery.FromRunID,
-		delivery.ChannelID,
-		delivery.Role,
-		delivery.Content,
-		delivery.TrajectoryID,
-		delivery.CreatedAt.UTC().Format(time.RFC3339Nano),
-		delivery.DeliveredToLoopID,
-		formatTimePtr(delivery.DeliveredAt),
-	)
-	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("insert worker update inbox delivery: %w", err)
 	}
 
 	findingsJSON, err := marshalStringSliceJSON(update.Findings)
@@ -2162,6 +2248,7 @@ func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRe
 		capabilityRequestsJSON string
 		notesJSON              string
 		createdAt              string
+		deliveredAt            sql.NullString
 	)
 	err := row.Scan(
 		&rec.OwnerID,
@@ -2185,6 +2272,8 @@ func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRe
 		&notesJSON,
 		&rec.Content,
 		&createdAt,
+		&rec.DeliveredToRunID,
+		&deliveredAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -2220,7 +2309,23 @@ func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRe
 	if err != nil {
 		return types.WorkerUpdateRecord{}, fmt.Errorf("parse worker update created_at: %w", err)
 	}
+	if deliveredAt.Valid {
+		t, err := time.Parse(time.RFC3339Nano, deliveredAt.String)
+		if err != nil {
+			return types.WorkerUpdateRecord{}, fmt.Errorf("parse worker update delivered_at: %w", err)
+		}
+		rec.DeliveredAt = &t
+	}
 	return rec, nil
+}
+
+func workerUpdateSelectSQL() string {
+	return `SELECT owner_id, update_id, agent_id, target_agent_id, channel_id,
+	       message_seq, trajectory_id, role, kind, summary, findings_json,
+	       evidence_ids_json, artifacts_json, refs_json, tests_json,
+	       questions_json, proposals_json, capability_requests_json,
+	       notes_json, content, created_at, delivered_to_loop_id, delivered_at
+	  FROM worker_updates`
 }
 
 func marshalStringSliceJSON(items []string) ([]byte, error) {

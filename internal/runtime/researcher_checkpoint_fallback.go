@@ -20,7 +20,7 @@ func (rt *Runtime) synthesizeResearcherUpdateOnFailure(ctx context.Context, rec 
 	if err != nil {
 		return err
 	}
-	if hasSuccessfulToolResult(eventsForRun, "submit_coagent_update") {
+	if hasSuccessfulToolResult(eventsForRun, "update_coagent") {
 		return nil
 	}
 	toolEvent, toolName, output, ok := latestSuccessfulResearchToolResultOutput(eventsForRun)
@@ -44,11 +44,11 @@ func (rt *Runtime) synthesizeResearcherUpdateOnFailure(ctx context.Context, rec 
 	}
 	result := executeOneTool(WithToolExecutionContext(ctx, rec), registry, types.ToolCall{
 		ID:        "runtime-fallback-submit-coagent-update",
-		Name:      "submit_coagent_update",
+		Name:      "update_coagent",
 		Arguments: rawArgs,
 	}, "", emit)
 	if result.IsError {
-		return fmt.Errorf("fallback submit_coagent_update: %s", result.Output)
+		return fmt.Errorf("fallback update_coagent: %s", result.Output)
 	}
 	return nil
 }

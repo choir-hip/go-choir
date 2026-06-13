@@ -88,7 +88,7 @@ func TestVerifyVTextWorkflowDeterministicEventLog(t *testing.T) {
 	executeVerifierTools(t, rt, researcherRun, researcherRegistry, []types.ToolCall{
 		{
 			ID:   "research-findings",
-			Name: "submit_coagent_update",
+			Name: "update_coagent",
 			Arguments: json.RawMessage(`{
 				"update_id":"moss-finding-1",
 				"findings":["Moss prefers damp shade and steady humidity."],
@@ -153,7 +153,7 @@ func TestVerifyVTextWorkflowDeterministicEventLog(t *testing.T) {
 	updateResults := executeVerifierTools(t, rt, superRun, superRegistry, []types.ToolCall{
 		{
 			ID:   "worker-update",
-			Name: "submit_coagent_update",
+			Name: "update_coagent",
 			Arguments: json.RawMessage(`{
 					"update_id":"moss-worker-update-1",
 					"agent_id":"vtext:` + decision.DocID + `",
@@ -274,7 +274,7 @@ func TestVerifyVTextWorkflowSeededStochasticOrdering(t *testing.T) {
 		{at: time.Duration(5+rng.Intn(20)) * time.Millisecond, fn: func() int64 {
 			executeVerifierTools(t, rt, researcherRun, rt.ToolRegistryForProfile(AgentProfileResearcher), []types.ToolCall{{
 				ID:   "stochastic-research",
-				Name: "submit_coagent_update",
+				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
 					"update_id":"stochastic-finding-1",
 					"findings":["The stochastic order still preserves durable causality."],
@@ -286,7 +286,7 @@ func TestVerifyVTextWorkflowSeededStochasticOrdering(t *testing.T) {
 		{at: time.Duration(5+rng.Intn(20)) * time.Millisecond, fn: func() int64 {
 			results := executeVerifierTools(t, rt, superRun, rt.ToolRegistryForProfile(AgentProfileSuper), []types.ToolCall{{
 				ID:   "stochastic-worker-update",
-				Name: "submit_coagent_update",
+				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
 					"update_id":"stochastic-worker-update-1",
 					"agent_id":"vtext:` + decision.DocID + `",

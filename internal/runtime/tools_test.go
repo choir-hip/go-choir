@@ -660,7 +660,7 @@ func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
 		AgentProfile: AgentProfileSuper,
 	}
 	if shouldRequireResearchFindingsAfterTool(WithToolExecutionContext(ctx, superRec), rt) {
-		t.Fatalf("super search should not require submit_coagent_update")
+		t.Fatalf("super search should not require update_coagent")
 	}
 
 	appendToolResult := func(eventID, tool string) {
@@ -686,7 +686,7 @@ func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
 	if shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
 		t.Fatalf("second researcher search before findings should not repeatedly require another first checkpoint")
 	}
-	appendToolResult("ev-submit-1", "submit_coagent_update")
+	appendToolResult("ev-submit-1", "update_coagent")
 	if !shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
 		t.Fatalf("first research batch after a checkpoint should require the next findings update")
 	}
@@ -694,7 +694,7 @@ func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
 	if shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
 		t.Fatalf("additional research before the next findings update should not stack repeated required-tool reminders")
 	}
-	appendToolResult("ev-submit-2", "submit_coagent_update")
+	appendToolResult("ev-submit-2", "update_coagent")
 	if !shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
 		t.Fatalf("another post-checkpoint research batch should require another findings update")
 	}
@@ -957,7 +957,7 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 	if err := rt.synthesizeResearcherUpdateOnFailure(ctx, researcher, fmt.Errorf("required next tool timed out")); err != nil {
 		t.Fatalf("synthesize update: %v", err)
 	}
-	deliveries, err := s.ListPendingInboxDeliveries(ctx, ownerID, "vtext:"+docID, 10)
+	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "vtext:"+docID, 10)
 	if err != nil {
 		t.Fatalf("list deliveries: %v", err)
 	}
@@ -971,8 +971,8 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list events: %v", err)
 	}
-	if !hasSuccessfulToolResult(events, "submit_coagent_update") {
-		t.Fatalf("expected synthetic submit_coagent_update tool result")
+	if !hasSuccessfulToolResult(events, "update_coagent") {
+		t.Fatalf("expected synthetic update_coagent tool result")
 	}
 }
 
@@ -1183,7 +1183,7 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 		}
 	}
 	registerCountingTool("spawn_agent")
-	registerCountingTool("cast_agent")
+	registerCountingTool("update_coagent")
 	registerCountingTool("publish_app_change_package")
 
 	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
@@ -1195,8 +1195,8 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 		{ID: "spawn-implementation-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement"}`)},
 		{ID: "spawn-implementation-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement again"}`)},
 		{ID: "spawn-verifier", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"verifier","channel_id":"doc-1","objective":"verify"}`)},
-		{ID: "cast-1", Name: "cast_agent", Arguments: json.RawMessage(`{"agent_id":"agent-impl","content":"proceed with exact evidence"}`)},
-		{ID: "cast-2", Name: "cast_agent", Arguments: json.RawMessage(`{"agent_id":"agent-impl","content":"proceed with exact evidence"}`)},
+		{ID: "cast-1", Name: "update_coagent", Arguments: json.RawMessage(`{"agent_id":"agent-impl","content":"proceed with exact evidence"}`)},
+		{ID: "cast-2", Name: "update_coagent", Arguments: json.RawMessage(`{"agent_id":"agent-impl","content":"proceed with exact evidence"}`)},
 		{ID: "export-1", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
 		{ID: "export-2", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
 	}
@@ -1206,11 +1206,11 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	mu.Lock()
 	gotCounts := map[string]int{
 		"spawn_agent":                counts["spawn_agent"],
-		"cast_agent":                 counts["cast_agent"],
+		"update_coagent":             counts["update_coagent"],
 		"publish_app_change_package": counts["publish_app_change_package"],
 	}
 	mu.Unlock()
-	if gotCounts["spawn_agent"] != 2 || gotCounts["cast_agent"] != 1 || gotCounts["publish_app_change_package"] != 1 {
+	if gotCounts["spawn_agent"] != 2 || gotCounts["update_coagent"] != 1 || gotCounts["publish_app_change_package"] != 1 {
 		t.Fatalf("executed counts = %+v, want spawn=2 cast=1 export=1", gotCounts)
 	}
 	for _, idx := range []int{1, 4, 6} {

@@ -27,7 +27,7 @@ func (rt *Runtime) synthesizeDelegateWorkerUpdateOnSuperFailure(ctx context.Cont
 	if err != nil {
 		return err
 	}
-	if hasSuccessfulToolResult(eventsForRun, "submit_coagent_update") {
+	if hasSuccessfulToolResult(eventsForRun, "update_coagent") {
 		return nil
 	}
 	delegateEvent, delegateOutput, ok := latestSuccessfulWorkerDelegationResultOutput(eventsForRun)
@@ -60,7 +60,7 @@ func (rt *Runtime) synthesizeSuperFailureUpdate(ctx context.Context, rec *types.
 	if err != nil {
 		return err
 	}
-	if hasSuccessfulToolResult(eventsForRun, "submit_coagent_update") ||
+	if hasSuccessfulToolResult(eventsForRun, "update_coagent") ||
 		hasSuccessfulWorkerDelegationResult(eventsForRun) {
 		return nil
 	}
@@ -83,7 +83,7 @@ func (rt *Runtime) synthesizeDelegateWorkerUpdateCheckpoint(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	if hasSuccessfulToolResult(eventsForRun, "submit_coagent_update") {
+	if hasSuccessfulToolResult(eventsForRun, "update_coagent") {
 		return nil
 	}
 	now := time.Now().UTC()
@@ -129,19 +129,7 @@ func (rt *Runtime) dispatchDelegateWorkerUpdate(ctx context.Context, rec *types.
 		Content:      update.Content,
 		Timestamp:    update.CreatedAt,
 	}
-	delivery := types.InboxDelivery{
-		DeliveryID:   uuid.NewString(),
-		OwnerID:      rec.OwnerID,
-		ToAgentID:    update.TargetAgentID,
-		FromAgentID:  message.FromAgentID,
-		FromRunID:    rec.RunID,
-		ChannelID:    update.ChannelID,
-		Role:         message.Role,
-		Content:      message.Content,
-		TrajectoryID: message.TrajectoryID,
-		CreatedAt:    update.CreatedAt,
-	}
-	stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message, delivery)
+	stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message)
 	if err != nil {
 		return types.WorkerUpdateRecord{}, false, err
 	}
@@ -169,9 +157,39 @@ func (rt *Runtime) enqueueDelegateWorkerSuperContinuation(ctx context.Context, r
 	if strings.TrimSpace(content) == "" {
 		return nil
 	}
-	castCtx := WithToolExecutionContext(ctx, rec)
-	if _, err := rt.ChannelCast(castCtx, channelID, superAgent.AgentID, "", agentIDForRun(rec), "runtime-supervision", content); err != nil {
+	now := time.Now().UTC()
+	continuationUpdate := types.WorkerUpdateRecord{
+		UpdateID:      uuid.NewString(),
+		OwnerID:       ownerID,
+		AgentID:       agentIDForRun(rec),
+		TargetAgentID: superAgent.AgentID,
+		ChannelID:     channelID,
+		TrajectoryID:  trajectoryIDForRun(rec),
+		Role:          "runtime-supervision",
+		Kind:          "directive",
+		Summary:       "Runtime supervision continuation required for an active worker delegation.",
+		Content:       content,
+		CreatedAt:     now,
+	}
+	message := &types.ChannelMessage{
+		ChannelID:    channelID,
+		From:         rec.RunID,
+		FromAgentID:  continuationUpdate.AgentID,
+		FromRunID:    rec.RunID,
+		ToAgentID:    superAgent.AgentID,
+		TrajectoryID: continuationUpdate.TrajectoryID,
+		Role:         continuationUpdate.Role,
+		Content:      continuationUpdate.Content,
+		Timestamp:    now,
+	}
+	stored, created, err := rt.store.DispatchWorkerUpdate(ctx, continuationUpdate, message)
+	if err != nil {
 		return fmt.Errorf("enqueue active worker continuation: %w", err)
+	}
+	if created {
+		message.Seq = stored.MessageSeq
+		rt.emitChannelMessageEvent(ctx, *message, ownerID)
+		rt.wakeUpdatedCoagent(ctx, stored)
 	}
 	if _, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID); err != nil {
 		return fmt.Errorf("start active worker continuation super: %w", err)
@@ -189,7 +207,7 @@ func buildDelegateWorkerSuperContinuationMessage(update types.WorkerUpdateRecord
 	b.WriteString("Runtime supervision continuation required for an active worker delegation.\n")
 	b.WriteString("This is a control request for persistent super, copied from the VText-visible worker checkpoint. VText may narrate or ask for clarification, but only super may observe, redirect, cancel, or finish this worker.\n\n")
 	b.WriteString("Continue the existing worker; do not start a duplicate worker run.\n")
-	b.WriteString("Use observe_worker_delegation or finish_worker_delegation against the existing worker_run_id. If the worker remains active without terminal evidence, redirect the vsuper with a precise instruction. Stop only when there is an AppChangePackage, a reviewable blocker, a cancellation certificate, or a bounded timeout certificate, then report back to VText with submit_coagent_update.\n\n")
+	b.WriteString("Use observe_worker_delegation or finish_worker_delegation against the existing worker_run_id. If the worker remains active without terminal evidence, redirect the vsuper with a precise instruction. Stop only when there is an AppChangePackage, a reviewable blocker, a cancellation certificate, or a bounded timeout certificate, then report back to VText with update_coagent.\n\n")
 	b.WriteString("Worker refs:\n")
 	b.WriteString("- worker_run_id: ")
 	b.WriteString(workerRunID)
@@ -348,7 +366,7 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 		Artifacts:     trimDedupeNonEmpty(artifacts),
 		Refs:          trimDedupeNonEmpty(refs),
 		Proposals: []string{
-			"Continue with a termination/package probe that makes vsuper call publish_app_change_package or submit_coagent_update before delegation timeout.",
+			"Continue with a termination/package probe that makes vsuper call publish_app_change_package or update_coagent before delegation timeout.",
 		},
 		Notes:     trimDedupeNonEmpty(notes),
 		CreatedAt: now,
@@ -430,7 +448,7 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 		Artifacts:     trimDedupeNonEmpty(append(exportArtifactRefs(output), provenance.Artifacts...)),
 		Refs:          trimDedupeNonEmpty(refs),
 		Proposals: []string{
-			"Continue with a termination/package probe that prevents candidate checkout races and requires publish_app_change_package or submit_coagent_update before delegate timeout.",
+			"Continue with a termination/package probe that prevents candidate checkout races and requires publish_app_change_package or update_coagent before delegate timeout.",
 		},
 		Notes:     trimDedupeNonEmpty(notes),
 		CreatedAt: now,
@@ -484,7 +502,7 @@ func superFailureFallbackUpdate(rec *types.RunRecord, runErr error, eventsForRun
 		EvidenceIDs:   []string{"run:" + rec.RunID},
 		Refs:          trimDedupeNonEmpty(refs),
 		Proposals: []string{
-			"Resume with a smaller control step: either call request_worker_vm/start_worker_delegation immediately with the mission objective, or submit_coagent_update with the exact blocker before further repo exploration.",
+			"Resume with a smaller control step: either call request_worker_vm/start_worker_delegation immediately with the mission objective, or update_coagent with the exact blocker before further repo exploration.",
 		},
 		Notes:     trimDedupeNonEmpty(notes),
 		CreatedAt: now,

@@ -250,8 +250,8 @@ func verifyPersistentSuperPath(ownerID string, runs []types.RunRecord) error {
 		if run.AgentID != wantAgentID {
 			return fmt.Errorf("super run %s used agent_id %q, want persistent %q", run.RunID, run.AgentID, wantAgentID)
 		}
-		if metadataStringValue(run.Metadata, "request_source") != "super_inbox" {
-			return fmt.Errorf("super run %s request_source = %q, want super_inbox", run.RunID, metadataStringValue(run.Metadata, "request_source"))
+		if metadataStringValue(run.Metadata, "request_source") != "update_coagent" {
+			return fmt.Errorf("super run %s request_source = %q, want update_coagent", run.RunID, metadataStringValue(run.Metadata, "request_source"))
 		}
 		if metadataStringValue(run.Metadata, "requested_by_profile") == AgentProfileVText {
 			return nil

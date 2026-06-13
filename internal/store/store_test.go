@@ -782,6 +782,36 @@ func TestTaskRecoveryAcrossReopen(t *testing.T) {
 	}
 }
 
+func TestReleaseCoSuperSlotClaimOnlyClearsMatchingRun(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	if _, claimed, err := s.ClaimCoSuperSlot(ctx, "user-alice", "traj-slot", "implementation", "run-1", "agent-1", "parent-1"); err != nil {
+		t.Fatalf("claim slot: %v", err)
+	} else if !claimed {
+		t.Fatalf("claim slot: got claimed=false, want true")
+	}
+	if err := s.ReleaseCoSuperSlotClaim(ctx, "user-alice", "traj-slot", "implementation", "other-run"); err != nil {
+		t.Fatalf("release non-matching slot: %v", err)
+	}
+	if got, err := s.coSuperSlotRunID(ctx, "user-alice", "traj-slot", "implementation"); err != nil {
+		t.Fatalf("query slot after non-matching release: %v", err)
+	} else if got != "run-1" {
+		t.Fatalf("slot run after non-matching release = %q, want run-1", got)
+	}
+	if err := s.ReleaseCoSuperSlotClaim(ctx, "user-alice", "traj-slot", "implementation", "run-1"); err != nil {
+		t.Fatalf("release matching slot: %v", err)
+	}
+	if _, err := s.coSuperSlotRunID(ctx, "user-alice", "traj-slot", "implementation"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("query slot after matching release err = %v, want ErrNotFound", err)
+	}
+	if _, claimed, err := s.ClaimCoSuperSlot(ctx, "user-alice", "traj-slot", "implementation", "run-3", "agent-3", "parent-1"); err != nil {
+		t.Fatalf("claim slot after matching release: %v", err)
+	} else if !claimed {
+		t.Fatalf("claim slot after matching release: got claimed=false, want true")
+	}
+}
+
 func TestEventRecoveryAcrossReopen(t *testing.T) {
 	path := testStorePath(t)
 	cleanupTestStorePath(path)

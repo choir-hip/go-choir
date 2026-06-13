@@ -286,12 +286,13 @@ func TestCoagentCastCannotAddressEmailAppagentDirectly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create super run: %v", err)
 	}
-	_, err = rt.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(context.Background(), superRun), "cast_agent", mustJSON(t, map[string]any{
-		"agent_id": persistentEmailAgentID("user-alice"),
-		"content":  "send person@example.com hello",
+	_, err = rt.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(context.Background(), superRun), "update_coagent", mustJSON(t, map[string]any{
+		"update_id": "email-direct-update",
+		"agent_id":  persistentEmailAgentID("user-alice"),
+		"summary":   "send person@example.com hello",
 	}))
 	if err == nil {
-		t.Fatal("direct cast_agent to email appagent succeeded")
+		t.Fatal("direct update_coagent to email appagent succeeded")
 	}
 	if !strings.Contains(err.Error(), "request_email_draft") {
 		t.Fatalf("error should direct callers to VText artifact handoff, got %v", err)
@@ -340,10 +341,10 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 		AgentProfile: AgentProfileVText,
 		AgentRole:    AgentProfileVText,
 		Metadata: map[string]any{
-			"type":                      "vtext_agent_revision",
-			"doc_id":                    doc.DocID,
-			"current_revision_id":       userRev.RevisionID,
-			"original_prompt":           "Create a VText-backed Email appagent draft to yusefnathanson@me.com. Subject: Choir Email appagent bridge proof. Body: This is a deployed staging proof that VText requests an Email appagent draft. Do not send the email.",
+			"type":                  "vtext_agent_revision",
+			"doc_id":                doc.DocID,
+			"current_revision_id":   userRev.RevisionID,
+			"original_prompt":       "Create a VText-backed Email appagent draft to yusefnathanson@me.com. Subject: Choir Email appagent bridge proof. Body: This is a deployed staging proof that VText requests an Email appagent draft. Do not send the email.",
 			runMetadataAgentID:      "vtext:" + doc.DocID,
 			runMetadataChannelID:    doc.DocID,
 			runMetadataAgentRole:    AgentProfileVText,
@@ -477,11 +478,11 @@ func TestEditVTextGroundedEmailArtifactRequiresEmailAppagentContinuation(t *test
 		AgentProfile: AgentProfileVText,
 		AgentRole:    AgentProfileVText,
 		Metadata: map[string]any{
-			"type":                      "vtext_agent_revision",
-			"doc_id":                    doc.DocID,
-			"current_revision_id":       initialRev.RevisionID,
-			"request_intent":            "integrate_worker_findings",
-			"original_prompt":           "Look up the official title of https://example.com, then create an Email appagent draft to yusefnathanson@me.com with subject: Choir Email researched result proof. Body: a short plain-language summary of what you found. Draft only; do not send.",
+			"type":                  "vtext_agent_revision",
+			"doc_id":                doc.DocID,
+			"current_revision_id":   initialRev.RevisionID,
+			"request_intent":        "integrate_worker_findings",
+			"original_prompt":       "Look up the official title of https://example.com, then create an Email appagent draft to yusefnathanson@me.com with subject: Choir Email researched result proof. Body: a short plain-language summary of what you found. Draft only; do not send.",
 			runMetadataAgentID:      "vtext:" + doc.DocID,
 			runMetadataChannelID:    doc.DocID,
 			runMetadataAgentRole:    AgentProfileVText,

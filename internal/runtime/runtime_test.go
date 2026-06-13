@@ -411,7 +411,7 @@ func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
 		"start_worker_delegation` using the returned `start_args",
 		"observe_worker_delegation",
 		"finish_worker_delegation",
-		"Do not answer that class of request only with submit_coagent_update",
+		"Do not answer that class of request only with update_coagent",
 		"worker-small",
 	} {
 		if !strings.Contains(prompt, want) {
@@ -528,7 +528,7 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	if !strings.Contains(prompt, "prefer import_document_content, list_content_item_selectors, and read_content_item_selector") {
 		t.Fatalf("researcher system prompt should prefer document import/selector tools, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "call submit_coagent_update as a durable checkpoint") {
+	if !strings.Contains(prompt, "call update_coagent as a durable checkpoint") {
 		t.Fatalf("researcher system prompt should require early findings handoff, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "persistent communicating coagent") {
@@ -549,7 +549,7 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	if !strings.Contains(prompt, "verified final scores from live, pending, scheduled, or snippet-only states") {
 		t.Fatalf("researcher system prompt should distinguish final sports evidence from partial states, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "send another submit_coagent_update after each additional search/fetch batch") {
+	if !strings.Contains(prompt, "send another update_coagent after each additional search/fetch batch") {
 		t.Fatalf("researcher system prompt should require incremental checkpoints after continued research, got %q", prompt)
 	}
 }
@@ -572,7 +572,7 @@ func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testin
 				"`spawn_agent` with `role=vtext`",
 				"VText owns canonical article prose and researcher follow-up on the document channel",
 				"record_wire_processor_decision",
-				"submit_coagent_update",
+				"update_coagent",
 			},
 		},
 		{
@@ -583,7 +583,7 @@ func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testin
 				"existing published VTexts",
 				"`spawn_agent` with `role=vtext`",
 				"VText owns canonical article prose and researcher follow-up on the document channel",
-				"submit_coagent_update",
+				"update_coagent",
 			},
 		},
 	} {

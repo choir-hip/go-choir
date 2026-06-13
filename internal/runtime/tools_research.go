@@ -660,7 +660,7 @@ func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "web_search",
-		Description: "Search the web using the configured multi-provider search client. Researcher cadence: for a broad first pass, call one web_search, then submit_coagent_update on the next model turn before any additional search-only turn; deeper searches can run after or alongside that checkpoint.",
+		Description: "Search the web using the configured multi-provider search client. Researcher cadence: for a broad first pass, call one web_search, then update_coagent on the next model turn before any additional search-only turn; deeper searches can run after or alongside that checkpoint.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"query":       map[string]any{"type": "string"},
 			"max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
@@ -711,7 +711,7 @@ func shouldRequireResearchFindingsAfterTool(ctx context.Context, rt *Runtime) bo
 	if err != nil {
 		return false
 	}
-	latestSubmit := latestSuccessfulResearchToolSeq(events, "submit_coagent_update")
+	latestSubmit := latestSuccessfulResearchToolSeq(events, "update_coagent")
 	latestResearch := latestSuccessfulResearchToolSeq(events, "web_search", "source_search", "fetch_url", "import_url_content", "read_content_item")
 	if latestSubmit == 0 {
 		return latestResearch == 0

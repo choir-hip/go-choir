@@ -526,6 +526,8 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		return nil, fmt.Errorf("lookup parent run: %w", err)
 	}
 
+	runID := uuid.New().String()
+
 	// Build metadata from constraints and parent reference.
 	metadata := map[string]any{
 		"spawned_by": ownerID,
@@ -538,13 +540,14 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" {
 		metadata[runMetadataCoSuperSlot] = slot
 	}
+	metadata = ensureTrajectoryID(metadata, &parentRec, runID)
 
 	if rt.childSpawnBudgetApplies(&parentRec) {
 		rt.childSpawnMu.Lock()
 		defer rt.childSpawnMu.Unlock()
 		if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
 			canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile)) == AgentProfileCoSuper {
-			existing, found, err := rt.activeChildRunForCoSuperSlot(ctx, parentRec.RunID, slot)
+			existing, found, err := rt.activeCoSuperSlotRun(ctx, ownerID, metadataStringValue(metadata, runMetadataTrajectoryID), slot)
 			if err != nil {
 				return nil, err
 			}
@@ -566,21 +569,49 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	}
 
 	now := time.Now().UTC()
-	runID := uuid.New().String()
 	if err := rt.channelMgr.ensureParentChildChannels(parentID, runID); err != nil {
 		return nil, err
 	}
 	metadata = ensureDesktopID(metadata, &parentRec, metadataStringValue(metadata, runMetadataDesktopID))
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, &parentRec)
+	metadata = ensureTrajectoryID(metadata, &parentRec, runID)
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
 		agentRec.ChannelID = runID
 	}
-	metadata = ensureTrajectoryID(metadata, &parentRec, runID)
+	claimedCoSuperSlot := false
+	claimedCoSuperTrajectoryID := ""
+	claimedCoSuperSlotName := ""
+	if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
+		canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile)) == AgentProfileCoSuper &&
+		rt.childSpawnBudgetApplies(&parentRec) {
+		trajectoryID := metadataStringValue(metadata, runMetadataTrajectoryID)
+		existing, claimed, err := rt.store.ClaimCoSuperSlot(ctx, ownerID, trajectoryID, slot, runID, agentRec.AgentID, parentID)
+		if err != nil {
+			return nil, err
+		}
+		if !claimed {
+			existing.Metadata = cloneMetadata(existing.Metadata)
+			existing.Metadata[runMetadataSpawnReused] = true
+			return &existing, nil
+		}
+		claimedCoSuperSlot = true
+		claimedCoSuperTrajectoryID = trajectoryID
+		claimedCoSuperSlotName = slot
+	}
+	releaseCoSuperSlotClaim := func(cause error) error {
+		if !claimedCoSuperSlot {
+			return cause
+		}
+		if err := rt.store.ReleaseCoSuperSlotClaim(context.Background(), ownerID, claimedCoSuperTrajectoryID, claimedCoSuperSlotName, runID); err != nil {
+			return fmt.Errorf("%w (also failed to release co-super slot claim: %v)", cause, err)
+		}
+		return cause
+	}
 	metadata = rt.ensureResolvedLLMMetadata(ctx, ownerID, metadata)
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
 	if err := rt.store.UpsertAgent(ctx, agentRec); err != nil {
-		return nil, fmt.Errorf("persist child agent: %w", err)
+		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist child agent: %w", err))
 	}
 
 	// Create the runtime run record.
@@ -602,7 +633,7 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	rt.stampAndMintTrajectory(ctx, rec)
 
 	if err := rt.store.CreateRun(ctx, *rec); err != nil {
-		return nil, fmt.Errorf("persist child run: %w", err)
+		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist child run: %w", err))
 	}
 	rt.createAgentMutationForRun(ctx, rec)
 
@@ -665,37 +696,26 @@ func (rt *Runtime) enforceChildSpawnBudget(ctx context.Context, parentRec *types
 	return nil
 }
 
-func (rt *Runtime) activeChildRunForCoSuperSlot(ctx context.Context, parentRunID, slot string) (types.RunRecord, bool, error) {
+func (rt *Runtime) activeCoSuperSlotRun(ctx context.Context, ownerID, trajectoryID, slot string) (types.RunRecord, bool, error) {
 	if rt == nil || rt.store == nil {
 		return types.RunRecord{}, false, nil
 	}
-	children, err := rt.store.ListActiveChildRuns(ctx, parentRunID)
-	if err != nil {
-		return types.RunRecord{}, false, fmt.Errorf("list active child runs for co-super slot: %w", err)
-	}
 	slot = normalizeVSuperCoSuperSlot(slot)
-	if slot == "" {
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	if slot == "" || trajectoryID == "" {
 		return types.RunRecord{}, false, nil
 	}
-	for _, child := range children {
-		if canonicalAgentProfile(agentProfileForRun(&child)) != AgentProfileCoSuper {
-			continue
-		}
-		if normalizeVSuperCoSuperSlot(metadataStringValue(child.Metadata, runMetadataCoSuperSlot)) == slot {
-			return child, true, nil
-		}
-	}
-	return types.RunRecord{}, false, nil
+	return rt.store.ActiveCoSuperSlotRun(ctx, ownerID, trajectoryID, slot)
 }
 
 func (rt *Runtime) enforceVSuperVerifierSequencing(ctx context.Context, parentRec *types.RunRecord) error {
 	if rt == nil || rt.store == nil || parentRec == nil {
 		return nil
 	}
-	if impl, found, err := rt.activeChildRunForCoSuperSlot(ctx, parentRec.RunID, "implementation"); err != nil {
+	if impl, found, err := rt.activeCoSuperSlotRun(ctx, parentRec.OwnerID, trajectoryIDForRun(parentRec), "implementation"); err != nil {
 		return err
 	} else if found {
-		return fmt.Errorf("vsuper verifier spawn blocked until implementation co-super %s reports commit/package/blocker evidence and finishes; call wait_agent or observe the implementation result before spawning slot=\"verifier\"", impl.RunID)
+		return fmt.Errorf("vsuper verifier spawn blocked until implementation co-super %s reports commit/package/blocker evidence and finishes; wait for update_coagent evidence before spawning slot=\"verifier\"", impl.RunID)
 	}
 	children, err := rt.store.ListChildRuns(ctx, parentRec.RunID, 100)
 	if err != nil {
@@ -1174,12 +1194,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		))
 	}
 
-	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, func(finalCheckpoint bool) ([]json.RawMessage, error) {
-		if isPersistentSuperInboxRun(rec) {
-			return nil, nil
-		}
-		return rt.injectPendingInboxTurns(context.Background(), rec, finalCheckpoint)
-	}, toolLoopOptions...)
+	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, nil, toolLoopOptions...)
 	if err != nil {
 		if ctx.Err() != nil {
 			rt.handleExecutionError(ctx, rec, ctx.Err())
@@ -1236,10 +1251,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		"output_tokens": usage.OutputTokens,
 	})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
+	rt.markCompletedCoagentUpdateRunDelivered(persistCtx, rec)
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 
-	// Notify parent channel of child run completion (VAL-CHOIR-006, VAL-CHOIR-008).
-	rt.notifyParent(persistCtx, rec)
 	rt.maybeStartConfiguredContinuation(persistCtx, rec)
 }
 
@@ -1267,54 +1281,6 @@ func (rt *Runtime) CompactRunMemory(ctx context.Context, runID, ownerID, reason 
 		return fmt.Errorf("run memory compaction skipped: no compactable entries")
 	}
 	return nil
-}
-
-func (rt *Runtime) injectPendingInboxTurns(ctx context.Context, rec *types.RunRecord, finalCheckpoint bool) ([]json.RawMessage, error) {
-	if rec == nil || strings.TrimSpace(rec.AgentID) == "" || strings.TrimSpace(rec.OwnerID) == "" {
-		return nil, nil
-	}
-	deliveries, err := rt.store.ListPendingInboxDeliveries(ctx, rec.OwnerID, rec.AgentID, 100)
-	if err != nil {
-		return nil, err
-	}
-	if len(deliveries) == 0 {
-		return nil, nil
-	}
-	deliveryIDs := make([]string, 0, len(deliveries))
-	lines := make([]string, 0, len(deliveries)+2)
-	lines = append(lines, "New addressed deliveries arrived for you since the last step.")
-	if finalCheckpoint {
-		lines = append(lines, "These were queued before loop termination, so they belong to this same logical loop.")
-	}
-	for _, delivery := range deliveries {
-		deliveryIDs = append(deliveryIDs, delivery.DeliveryID)
-		label := strings.TrimSpace(delivery.FromAgentID)
-		if label == "" {
-			label = strings.TrimSpace(delivery.FromRunID)
-		}
-		if label == "" {
-			label = "unknown"
-		}
-		line := fmt.Sprintf("From %s", label)
-		if strings.TrimSpace(delivery.Role) != "" {
-			line += fmt.Sprintf(" [%s]", strings.TrimSpace(delivery.Role))
-		}
-		line += ":\n" + strings.TrimSpace(delivery.Content)
-		lines = append(lines, line)
-	}
-	if err := rt.store.MarkInboxDeliveriesDelivered(ctx, deliveryIDs, rec.RunID); err != nil {
-		return nil, err
-	}
-	msg, _ := json.Marshal(map[string]any{
-		"role": "user",
-		"content": []any{
-			map[string]string{
-				"type": "text",
-				"text": strings.Join(lines, "\n\n"),
-			},
-		},
-	})
-	return []json.RawMessage{msg}, nil
 }
 
 // executeWithProvider runs the run through the simple Provider.Execute path.
@@ -1370,10 +1336,9 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	rt.reconcileCompletedVTextRun(rec)
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
+	rt.markCompletedCoagentUpdateRunDelivered(persistCtx, rec)
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 
-	// Notify parent channel of child run completion (VAL-CHOIR-006, VAL-CHOIR-008).
-	rt.notifyParent(persistCtx, rec)
 	rt.maybeStartConfiguredContinuation(persistCtx, rec)
 
 }
@@ -1957,6 +1922,8 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 			UpdatedAt:            time.Now().UTC(),
 		}); err != nil {
 			log.Printf("runtime: vtext agent revision run %s: update no-edit checkpoint: %v", rec.RunID, err)
+		} else if err := rt.markVTextWorkerUpdatesDelivered(persistCtx, rec, docID, mutation.ScheduledMessageSeq); err != nil {
+			log.Printf("runtime: vtext agent revision run %s: mark worker updates delivered: %v", rec.RunID, err)
 		}
 	}
 	failPayload, _ := json.Marshal(map[string]string{
@@ -2302,6 +2269,32 @@ func summarizeWorkerUpdateForMetadata(message types.ChannelMessage, reason strin
 	}
 }
 
+func (rt *Runtime) markVTextWorkerUpdatesDelivered(ctx context.Context, rec *types.RunRecord, docID string, maxSeq int64) error {
+	if rt == nil || rt.store == nil || rec == nil || maxSeq <= 0 {
+		return nil
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	docID = strings.TrimSpace(docID)
+	if ownerID == "" || docID == "" {
+		return nil
+	}
+	targetAgentID := "vtext:" + docID
+	updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 500)
+	if err != nil {
+		return err
+	}
+	updateIDs := make([]string, 0, len(updates))
+	for _, update := range updates {
+		if strings.TrimSpace(update.ChannelID) == docID && update.MessageSeq > 0 && update.MessageSeq <= maxSeq {
+			updateIDs = append(updateIDs, update.UpdateID)
+		}
+	}
+	if len(updateIDs) == 0 {
+		return nil
+	}
+	return rt.store.MarkWorkerUpdatesDelivered(ctx, ownerID, updateIDs, rec.RunID)
+}
+
 // handleExecutionError transitions a run to failed/blocked and emits the
 // appropriate event. The runtime remains available for later runs
 // (VAL-RUNTIME-008).
@@ -2382,10 +2375,6 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 
 	log.Printf("runtime: run %s → %s: %v", rec.RunID, state, err)
 
-	// Notify parent channel of child run failure (VAL-CHOIR-006, VAL-CHOIR-009).
-	if state == types.RunFailed || state == types.RunCancelled {
-		rt.notifyParent(persistCtx, rec)
-	}
 }
 
 // providerResult returns fallback result text when a completed provider
@@ -2488,56 +2477,4 @@ func (rt *Runtime) removeRunning(runID string) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	delete(rt.running, runID)
-}
-
-// notifyParent posts a result or error message to the parent's channel when
-// a spawned child run reaches a terminal state. This enables the parent to
-// collect results from all its children via channels
-// (VAL-CHOIR-006, VAL-CHOIR-008).
-//
-// If the run has no parent run, this is a no-op.
-func (rt *Runtime) notifyParent(ctx context.Context, rec *types.RunRecord) {
-	parentID := strings.TrimSpace(rec.ParentRunID)
-	if parentID == "" {
-		parentID = metadataStringValue(rec.Metadata, "parent_id")
-	}
-	if parentID == "" {
-		return
-	}
-	parentRun, err := rt.store.GetRun(ctx, parentID)
-	if err != nil {
-		log.Printf("runtime: notify parent lookup %s for child %s: %v", parentID, rec.RunID, err)
-		return
-	}
-	parentChannelID := channelIDForRun(&parentRun)
-	if parentChannelID == "" {
-		parentChannelID = parentID
-	}
-	parentChannelIDs := []string{parentChannelID}
-	if parentID != parentChannelID {
-		parentChannelIDs = append(parentChannelIDs, parentID)
-	}
-
-	switch rec.State {
-	case types.RunCompleted:
-		result := rec.Result
-		if result == "" {
-			result = "(run completed with no result)"
-		}
-		for _, channelID := range parentChannelIDs {
-			if _, err := rt.PostChildResult(WithToolExecutionContext(ctx, rec), channelID, rec.RunID, result); err != nil {
-				log.Printf("runtime: notify parent %s channel %s of child %s completion: %v", parentID, channelID, rec.RunID, err)
-			}
-		}
-	case types.RunFailed:
-		errMsg := rec.Error
-		if errMsg == "" {
-			errMsg = "(run failed with no error message)"
-		}
-		for _, channelID := range parentChannelIDs {
-			if _, err := rt.PostChildError(WithToolExecutionContext(ctx, rec), channelID, rec.RunID, errMsg); err != nil {
-				log.Printf("runtime: notify parent %s channel %s of child %s failure: %v", parentID, channelID, rec.RunID, err)
-			}
-		}
-	}
 }

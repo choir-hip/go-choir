@@ -3,17 +3,17 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func RegisterCoagentUpdateTools(registry *ToolRegistry, rt *Runtime) error {
-	return registry.Register(newSubmitCoagentUpdateTool(rt))
+	return registry.Register(newUpdateCoagentTool(rt))
 }
 
 type submitCoagentUpdateArgs struct {
@@ -34,13 +34,13 @@ type submitCoagentUpdateArgs struct {
 	Notes              []string                       `json:"notes,omitempty"`
 }
 
-func newSubmitCoagentUpdateTool(rt *Runtime) Tool {
+func newUpdateCoagentTool(rt *Runtime) Tool {
 	return Tool{
-		Name:        "submit_coagent_update",
-		Description: "Persist one structured non-canonical coagent update and send one addressed delivery to the owning agent. Use this for research findings, execution results, verification results, artifacts, blockers, questions, proposals, and typed capability_requests. A capability request is a signal to the owner/supervisor, not automatic routing.",
+		Name:        "update_coagent",
+		Description: "Persist one structured non-canonical coagent update and wake the addressed owning agent. Use this for research findings, execution results, verification results, artifacts, blockers, directives, assignments, questions, proposals, and typed capability_requests. A capability request is a signal to the owner/supervisor, not automatic routing.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"update_id":    map[string]any{"type": "string"},
-			"kind":         map[string]any{"type": "string", "enum": []string{"findings", "evidence", "capability_request", "blocker", "proposal", "status", "verification", "artifact", "question"}},
+			"kind":         map[string]any{"type": "string", "enum": []string{"findings", "evidence", "capability_request", "blocker", "proposal", "status", "verification", "artifact", "question", "directive", "assignment"}},
 			"summary":      map[string]any{"type": "string"},
 			"agent_id":     map[string]any{"type": "string"},
 			"channel_id":   map[string]any{"type": "string"},
@@ -88,7 +88,7 @@ func newSubmitCoagentUpdateTool(rt *Runtime) Tool {
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var in submitCoagentUpdateArgs
 			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode submit_coagent_update args: %w", err)
+				return "", fmt.Errorf("decode update_coagent args: %w", err)
 			}
 			updateID := strings.TrimSpace(in.UpdateID)
 			if updateID == "" {
@@ -99,7 +99,7 @@ func newSubmitCoagentUpdateTool(rt *Runtime) Tool {
 			runID := stringFromToolContext(ctx, toolCtxRunID)
 			role := stringFromToolContext(ctx, toolCtxRole)
 			if ownerID == "" || agentID == "" || runID == "" {
-				return "", fmt.Errorf("submit_coagent_update missing coagent context")
+				return "", fmt.Errorf("update_coagent missing coagent context")
 			}
 
 			evidenceIDs := trimNonEmpty(in.EvidenceIDs)
@@ -130,16 +130,25 @@ func newSubmitCoagentUpdateTool(rt *Runtime) Tool {
 				CreatedAt:          time.Now().UTC(),
 			}
 			if workerUpdateEmpty(update) {
-				return "", fmt.Errorf("submit_coagent_update requires summary, findings, evidence, evidence_ids, artifacts, refs, tests, questions, proposals, capability_requests, or notes")
+				return "", fmt.Errorf("update_coagent requires summary, findings, evidence, evidence_ids, artifacts, refs, tests, questions, proposals, capability_requests, or notes")
 			}
 
 			targetAgentID, targetChannelID, err := resolveFindingsTarget(ctx, rt, strings.TrimSpace(in.AgentID))
 			if err != nil {
 				return "", err
 			}
+			if target, err := rt.store.GetAgent(ctx, targetAgentID); err == nil {
+				targetProfile := canonicalAgentProfile(target.Profile)
+				if targetProfile == AgentProfileEmail {
+					return "", fmt.Errorf("%s cannot send arbitrary coagent updates to Email appagent %s; use a VText-owned request_email_draft artifact handoff", canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)), target.AgentID)
+				}
+				if err := enforceCoagentUpdateAuthority(ctx, rt, target, targetProfile); err != nil {
+					return "", err
+				}
+			}
 			channelID := authoritativeDeliveryChannelID(targetChannelID, in.ChannelID, stringFromToolContext(ctx, toolCtxChannelID))
 			if channelID == "" {
-				return "", fmt.Errorf("submit_coagent_update could not resolve channel_id")
+				return "", fmt.Errorf("update_coagent could not resolve channel_id")
 			}
 
 			trajectoryID := ""
@@ -165,20 +174,7 @@ func newSubmitCoagentUpdateTool(rt *Runtime) Tool {
 				Content:      update.Content,
 				Timestamp:    update.CreatedAt,
 			}
-			delivery := types.InboxDelivery{
-				DeliveryID:   uuid.NewString(),
-				OwnerID:      ownerID,
-				ToAgentID:    targetAgentID,
-				FromAgentID:  agentID,
-				FromRunID:    runID,
-				ChannelID:    channelID,
-				Role:         message.Role,
-				Content:      message.Content,
-				TrajectoryID: trajectoryID,
-				CreatedAt:    update.CreatedAt,
-			}
-
-			stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message, delivery)
+			stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message)
 			if err != nil {
 				return "", err
 			}
@@ -188,6 +184,7 @@ func newSubmitCoagentUpdateTool(rt *Runtime) Tool {
 				}
 			} else {
 				rt.emitChannelMessageEvent(ctx, *message, ownerID)
+				rt.wakeUpdatedCoagent(ctx, stored)
 			}
 
 			return toolResultJSON(map[string]any{
@@ -200,6 +197,38 @@ func newSubmitCoagentUpdateTool(rt *Runtime) Tool {
 			})
 		},
 	}
+}
+
+func enforceCoagentUpdateAuthority(ctx context.Context, rt *Runtime, target types.AgentRecord, targetProfile string) error {
+	if rt == nil || rt.store == nil {
+		return nil
+	}
+	if canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)) != AgentProfileSuper || targetProfile != AgentProfileCoSuper {
+		return nil
+	}
+	ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+	if ownerID == "" {
+		return nil
+	}
+	run, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, target.AgentID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("lookup co-super active run: %w", err)
+	}
+	parentRunID := strings.TrimSpace(run.ParentRunID)
+	if parentRunID == "" {
+		return nil
+	}
+	parent, err := rt.store.GetRun(ctx, parentRunID)
+	if err != nil {
+		return fmt.Errorf("lookup co-super parent run: %w", err)
+	}
+	if canonicalAgentProfile(agentProfileForRun(&parent)) != AgentProfileVSuper {
+		return nil
+	}
+	return fmt.Errorf("skip-level directive blocked: super must address co-super %s through owning vsuper %s with update_coagent", target.AgentID, parent.AgentID)
 }
 
 func stringArraySchema() map[string]any {

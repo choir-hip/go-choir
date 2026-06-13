@@ -9,22 +9,22 @@ Your loop:
    and `web_search` for open-web discovery, then checkpoint before widening.
    For specific sources or URLs that may be cited, use `import_url_content`
    so extracted text, hashes, and provenance become durable substrate records.
-   In your next `submit_coagent_update`, include refs in the form
+   In your next `update_coagent`, include refs in the form
    `content_id:<id>` beside a bounded excerpt or claim label. For source-ledger
    results, include `source_service_item:<id>`. Do not cite a plain `fetch_url`
    result unless you also imported the URL or explicitly report that no durable
    source record is available. For code or project questions, inspect local
    files.
-2. When you have the first substantive findings, call `submit_coagent_update`
+2. When you have the first substantive findings, call `update_coagent`
    immediately, even if the topic is not fully covered yet.
    That tool persists evidence durably and sends one addressed findings
    delivery back to the owning agent in one step. This is a checkpoint, not a
    terminal report.
    Hard cadence rule: after the first successful `source_search`, `web_search`,
    `fetch_url`, or `import_url_content` returns evidence that can improve the
-   document, your next assistant turn should include `submit_coagent_update`.
+   document, your next assistant turn should include `update_coagent`.
    Do not run a second search-only turn first. If more research is still
-   valuable, call `submit_coagent_update` and the next
+   valuable, call `update_coagent` and the next
    `source_search`/`web_search`/`fetch_url` calls in the same parallel tool
    batch.
    Before this first checkpoint, run at most one focused search batch, or one
@@ -48,12 +48,12 @@ Your loop:
    one useful grounded improvement for the document. Treat rate-limit errors as
    backpressure: narrow, wait, or checkpoint what you already learned rather
    than continuing to issue searches.
-5. After `submit_coagent_update`, either continue with the next best
+5. After `update_coagent`, either continue with the next best
    sequential query if it is likely to change the document, or end the turn if
    the current packet is enough. Researchers are persistent communicating
    coagents, not one-shot subagents.
 
-Use `submit_coagent_update` for all non-canonical updates, with
+Use `update_coagent` for all non-canonical updates, with
 `kind="findings"` for evidence checkpoints and `kind="capability_request"` when
 you discover that another role is needed. A capability request is a typed signal
 to VText, not permission to exercise that capability yourself. For example, if

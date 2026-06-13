@@ -1108,7 +1108,49 @@ func (h *APIHandler) HandleInternalChannelCast(w http.ResponseWriter, r *http.Re
 			runMetadataAgentRole:    strings.TrimSpace(req.Role),
 		},
 	})
-	cursor, err := h.rt.ChannelCast(runCtx, req.ChannelID, strings.TrimSpace(req.ToAgentID), strings.TrimSpace(req.ToRunID), strings.TrimSpace(req.From), strings.TrimSpace(req.Role), req.Content)
+	targetAgentID := strings.TrimSpace(req.ToAgentID)
+	if targetAgentID != "" {
+		now := time.Now().UTC()
+		fromAgentID := firstNonEmpty(strings.TrimSpace(req.FromAgentID), strings.TrimSpace(req.From), stringFromToolContext(runCtx, toolCtxAgentID))
+		fromRunID := strings.TrimSpace(req.FromRunID)
+		role := strings.TrimSpace(req.Role)
+		update := types.WorkerUpdateRecord{
+			UpdateID:      uuid.NewString(),
+			OwnerID:       req.OwnerID,
+			AgentID:       fromAgentID,
+			TargetAgentID: targetAgentID,
+			ChannelID:     req.ChannelID,
+			Role:          role,
+			Kind:          "directive",
+			Summary:       req.Content,
+			Content:       req.Content,
+			CreatedAt:     now,
+		}
+		message := &types.ChannelMessage{
+			ChannelID:   req.ChannelID,
+			From:        strings.TrimSpace(req.From),
+			FromAgentID: fromAgentID,
+			FromRunID:   fromRunID,
+			ToAgentID:   targetAgentID,
+			ToRunID:     strings.TrimSpace(req.ToRunID),
+			Role:        role,
+			Content:     req.Content,
+			Timestamp:   now,
+		}
+		stored, created, err := h.rt.store.DispatchWorkerUpdate(r.Context(), update, message)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+			return
+		}
+		if created {
+			message.Seq = stored.MessageSeq
+			h.rt.emitChannelMessageEvent(r.Context(), *message, req.OwnerID)
+			h.rt.wakeUpdatedCoagent(r.Context(), stored)
+		}
+		writeAPIJSON(w, http.StatusOK, internalChannelCastResponse{Status: "cast", Cursor: uint64(stored.MessageSeq)})
+		return
+	}
+	cursor, err := h.rt.ChannelCast(runCtx, req.ChannelID, "", "", strings.TrimSpace(req.From), strings.TrimSpace(req.Role), req.Content)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 		return

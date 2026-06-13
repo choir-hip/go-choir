@@ -84,6 +84,7 @@ func (rt *Runtime) stampAndMintTrajectory(ctx context.Context, rec *types.RunRec
 type TrajectoryObligations struct {
 	Trajectory      types.TrajectoryRecord `json:"trajectory"`
 	OpenWorkItems   []types.WorkItemRecord `json:"open_work_items"`
+	PendingUpdates  int                    `json:"pending_updates"`
 	SettlementReady bool                   `json:"settlement_ready"`
 	WaitingOn       []string               `json:"waiting_on"`
 }
@@ -103,10 +104,19 @@ func (rt *Runtime) TrajectoryObligations(ctx context.Context, ownerID, trajector
 	if err != nil {
 		return TrajectoryObligations{}, err
 	}
+	pendingUpdates, err := rt.store.CountPendingWorkerUpdatesByTrajectory(ctx, ownerID, trajectoryID)
+	if err != nil {
+		return TrajectoryObligations{}, err
+	}
 	ready, waitingOn := EvaluateTrajectorySettlement(trajectory, len(open))
+	if pendingUpdates > 0 {
+		ready = false
+		waitingOn = append(waitingOn, fmt.Sprintf("%d pending update_coagent update(s)", pendingUpdates))
+	}
 	return TrajectoryObligations{
 		Trajectory:      trajectory,
 		OpenWorkItems:   open,
+		PendingUpdates:  pendingUpdates,
 		SettlementReady: ready,
 		WaitingOn:       waitingOn,
 	}, nil
