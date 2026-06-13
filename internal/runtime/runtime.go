@@ -646,6 +646,12 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		Metadata:     metadata,
 	}
 	rt.stampAndMintTrajectory(ctx, rec)
+	if item, err := rt.createSpawnedChildWorkItem(ctx, rec, &parentRec); err != nil {
+		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist spawned child work item: %w", err))
+	} else if item.WorkItemID != "" {
+		rec.Metadata = cloneMetadata(rec.Metadata)
+		rec.Metadata["work_item_ids"] = appendUniqueString(metadataStringSlice(rec.Metadata["work_item_ids"]), item.WorkItemID)
+	}
 
 	if err := rt.store.CreateRun(ctx, *rec); err != nil {
 		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist child run: %w", err))
@@ -684,6 +690,87 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	}
 
 	return rec, nil
+}
+
+func (rt *Runtime) createSpawnedChildWorkItem(ctx context.Context, rec *types.RunRecord, parent *types.RunRecord) (types.WorkItemRecord, error) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return types.WorkItemRecord{}, nil
+	}
+	profile := canonicalAgentProfile(agentProfileForRun(rec))
+	if !spawnedChildWorkItemProfile(profile) {
+		return types.WorkItemRecord{}, nil
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	trajectoryID := strings.TrimSpace(trajectoryIDForRun(rec))
+	agentID := strings.TrimSpace(rec.AgentID)
+	objective := strings.TrimSpace(rec.Prompt)
+	if ownerID == "" || trajectoryID == "" || agentID == "" || objective == "" {
+		return types.WorkItemRecord{}, nil
+	}
+	parentID := strings.TrimSpace(rec.ParentRunID)
+	if parentID == "" {
+		parentID = metadataStringValue(rec.Metadata, "parent_id")
+	}
+	if parentID == "" {
+		return types.WorkItemRecord{}, nil
+	}
+	details := map[string]any{
+		"kind":           "spawned_child_run",
+		"spawned_run_id": rec.RunID,
+		"parent_run_id":  parentID,
+		"agent_profile":  profile,
+		"agent_role":     agentRoleForRun(rec),
+	}
+	if channelID := strings.TrimSpace(rec.ChannelID); channelID != "" {
+		details["channel_id"] = channelID
+	}
+	if parent != nil {
+		if parentProfile := canonicalAgentProfile(agentProfileForRun(parent)); parentProfile != "" {
+			details["parent_agent_profile"] = parentProfile
+		}
+	}
+	return rt.store.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              ownerID,
+		TrajectoryID:         trajectoryID,
+		Objective:            objective,
+		Reason:               "spawn_agent child objective",
+		AuthorityProfile:     profile,
+		AssignedAgentID:      agentID,
+		CreatedByRunID:       parentID,
+		ObjectiveFingerprint: "spawned_child:" + objectiveFingerprint(ownerID, trajectoryID, rec.RunID, objective),
+		Details:              details,
+	})
+}
+
+func spawnedChildWorkItemProfile(profile string) bool {
+	switch canonicalAgentProfile(profile) {
+	case AgentProfileResearcher, AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper:
+		return true
+	default:
+		return false
+	}
+}
+
+func appendUniqueString(existing []string, values ...string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(existing)+len(values))
+	for _, value := range existing {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 const maxVSuperActiveCoSuperSlots = 2

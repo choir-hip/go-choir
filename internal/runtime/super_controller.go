@@ -159,9 +159,35 @@ func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx cont
 	}
 	updateIDs := coagentUpdateIDsForRun(rec)
 	if len(updateIDs) == 0 || rec.State != types.RunCompleted {
-		return rt.store.UpdateRun(ctx, *rec)
+		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+			return err
+		}
+		return rt.completeSuccessfulRunWorkItems(ctx, rec)
 	}
-	return rt.store.UpdateRunAndMarkWorkerUpdatesDelivered(ctx, *rec, rec.OwnerID, updateIDs)
+	if err := rt.store.UpdateRunAndMarkWorkerUpdatesDelivered(ctx, *rec, rec.OwnerID, updateIDs); err != nil {
+		return err
+	}
+	return rt.completeSuccessfulRunWorkItems(ctx, rec)
+}
+
+func (rt *Runtime) completeSuccessfulRunWorkItems(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil || rec.State != types.RunCompleted {
+		return nil
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	if ownerID == "" {
+		return nil
+	}
+	for _, workItemID := range metadataStringSlice(rec.Metadata["work_item_ids"]) {
+		workItemID = strings.TrimSpace(workItemID)
+		if workItemID == "" {
+			continue
+		}
+		if _, err := rt.store.UpdateWorkItemStatus(ctx, ownerID, workItemID, types.WorkItemCompleted); err != nil {
+			return fmt.Errorf("complete run work item %s: %w", workItemID, err)
+		}
+	}
+	return nil
 }
 
 func (rt *Runtime) maybeContinuePersistentSuperInbox(ctx context.Context, rec *types.RunRecord) {

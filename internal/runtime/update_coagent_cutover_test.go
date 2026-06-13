@@ -559,6 +559,125 @@ func TestProcessRestartRewarmsCoagentAfterOSKill(t *testing.T) {
 	}
 }
 
+func TestStartChildRunCompletesSpawnedWorkItem(t *testing.T) {
+	rt, s := testRuntimeWithProviderAndRegistry(t, NewStubProvider(200*time.Millisecond), nil)
+	ctx := context.Background()
+	ownerID := "user-alice"
+	trajectoryID := "traj-spawn-success"
+	parentID := "run-spawn-success-parent"
+	channelID := "doc-spawn-success"
+	seedSpawnedChildParent(t, ctx, s, ownerID, trajectoryID, parentID, channelID)
+
+	child, err := rt.StartChildRun(ctx, parentID, "research successful spawn work", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileResearcher,
+		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataChannelID:    channelID,
+	})
+	if err != nil {
+		t.Fatalf("start spawned child: %v", err)
+	}
+	workItemIDs := metadataStringSlice(child.Metadata["work_item_ids"])
+	if len(workItemIDs) != 1 {
+		t.Fatalf("spawned child work_item_ids = %+v, want exactly one", workItemIDs)
+	}
+	item, err := s.GetWorkItem(ctx, ownerID, workItemIDs[0])
+	if err != nil {
+		t.Fatalf("get spawned work item: %v", err)
+	}
+	if item.Status != types.WorkItemOpen || item.AssignedAgentID != child.AgentID || item.CreatedByRunID != parentID {
+		t.Fatalf("spawned work item = %+v, want open assigned item created by parent", item)
+	}
+
+	waitForRuntimeRunTerminal(t, rt, child.RunID, ownerID, 5*time.Second)
+	item = waitForWorkItemStatus(t, s, ownerID, workItemIDs[0], types.WorkItemCompleted, 2*time.Second)
+	if item.Status != types.WorkItemCompleted {
+		t.Fatalf("spawned work item status = %q, want completed", item.Status)
+	}
+}
+
+func TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill(t *testing.T) {
+	switch phase := os.Getenv("GO_CHOIR_M3_SPAWN_RESTART_HELPER"); phase {
+	case "start":
+		runM3SpawnRestartStartProcess(t)
+		return
+	case "recover":
+		runM3SpawnRestartRecoverProcess(t)
+		return
+	case "":
+	default:
+		t.Fatalf("unknown GO_CHOIR_M3_SPAWN_RESTART_HELPER phase %q", phase)
+	}
+
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "runtime.db")
+	readyPath := filepath.Join(dir, "ready.json")
+	proofPath := filepath.Join(dir, "proof.json")
+
+	startCmd := exec.Command(os.Args[0], "-test.run=^TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill$", "-test.v")
+	startCmd.Env = append(os.Environ(),
+		"GO_CHOIR_M3_SPAWN_RESTART_HELPER=start",
+		"GO_CHOIR_M3_SPAWN_RESTART_DB="+dbPath,
+		"GO_CHOIR_M3_SPAWN_RESTART_READY="+readyPath,
+	)
+	var startOutput bytes.Buffer
+	startCmd.Stdout = &startOutput
+	startCmd.Stderr = &startOutput
+	if err := startCmd.Start(); err != nil {
+		t.Fatalf("start child process: %v", err)
+	}
+	defer func() {
+		if startCmd.Process != nil {
+			_ = startCmd.Process.Kill()
+			_, _ = startCmd.Process.Wait()
+		}
+	}()
+
+	if !waitForFile(readyPath, 10*time.Second) {
+		t.Fatalf("start child did not report running spawned activation; output:\n%s", startOutput.String())
+	}
+	if err := startCmd.Process.Kill(); err != nil {
+		t.Fatalf("kill start child: %v", err)
+	}
+	_, _ = startCmd.Process.Wait()
+	startCmd.Process = nil
+
+	recoverCmd := exec.Command(os.Args[0], "-test.run=^TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill$", "-test.v")
+	recoverCmd.Env = append(os.Environ(),
+		"GO_CHOIR_M3_SPAWN_RESTART_HELPER=recover",
+		"GO_CHOIR_M3_SPAWN_RESTART_DB="+dbPath,
+		"GO_CHOIR_M3_SPAWN_RESTART_READY="+readyPath,
+		"GO_CHOIR_M3_SPAWN_RESTART_PROOF="+proofPath,
+	)
+	recoverOutput, err := recoverCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("recover child failed: %v\n%s", err, recoverOutput)
+	}
+
+	var proof m3SpawnRestartProof
+	raw, err := os.ReadFile(proofPath)
+	if err != nil {
+		t.Fatalf("read spawned restart proof: %v", err)
+	}
+	if err := json.Unmarshal(raw, &proof); err != nil {
+		t.Fatalf("decode spawned restart proof: %v\n%s", err, raw)
+	}
+	if proof.InterruptedRunID == "" || proof.ReplacementRunID == "" || proof.InterruptedRunID == proof.ReplacementRunID {
+		t.Fatalf("proof run ids = %+v, want distinct interrupted/replacement runs", proof)
+	}
+	if proof.PassivatedState != string(types.RunPassivated) {
+		t.Fatalf("passivated state = %q, want %q; proof=%+v", proof.PassivatedState, types.RunPassivated, proof)
+	}
+	if !containsString(proof.WorkItemIDs, proof.WorkItemID) {
+		t.Fatalf("replacement work_item_ids = %+v, want %s", proof.WorkItemIDs, proof.WorkItemID)
+	}
+	if proof.RequestSource != "trajectory_work_item_sweep" {
+		t.Fatalf("request_source = %q, want trajectory_work_item_sweep", proof.RequestSource)
+	}
+	if proof.PendingUpdates != 0 || proof.OpenWorkItems != 1 || proof.SettlementReady {
+		t.Fatalf("obligations proof = %+v, want open work item with no pending updates and unsettled", proof)
+	}
+}
+
 const (
 	m3RestartOwnerID     = "user-alice"
 	m3RestartAgentID     = "cosuper:process-restart"
@@ -575,6 +694,26 @@ type m3RestartProof struct {
 	PassivatedState  string   `json:"passivated_state"`
 	WorkerUpdateIDs  []string `json:"worker_update_ids"`
 	WorkItemIDs      []string `json:"work_item_ids"`
+	PendingUpdates   int      `json:"pending_updates"`
+	OpenWorkItems    int      `json:"open_work_items"`
+	SettlementReady  bool     `json:"settlement_ready"`
+}
+
+const (
+	m3SpawnRestartOwnerID    = "user-alice"
+	m3SpawnRestartTrajectory = "traj-spawn-restart"
+	m3SpawnRestartParentID   = "run-spawn-restart-parent"
+	m3SpawnRestartChannelID  = "doc-spawn-restart"
+)
+
+type m3SpawnRestartProof struct {
+	InterruptedRunID string   `json:"interrupted_run_id"`
+	ReplacementRunID string   `json:"replacement_run_id"`
+	AgentID          string   `json:"agent_id"`
+	WorkItemID       string   `json:"work_item_id"`
+	WorkItemIDs      []string `json:"work_item_ids"`
+	PassivatedState  string   `json:"passivated_state"`
+	RequestSource    string   `json:"request_source"`
 	PendingUpdates   int      `json:"pending_updates"`
 	OpenWorkItems    int      `json:"open_work_items"`
 	SettlementReady  bool     `json:"settlement_ready"`
@@ -629,6 +768,150 @@ func runM3RestartStartProcess(t *testing.T) {
 		t.Fatalf("write ready marker: %v", err)
 	}
 	select {}
+}
+
+func runM3SpawnRestartStartProcess(t *testing.T) {
+	t.Helper()
+	dbPath := requiredEnv(t, "GO_CHOIR_M3_SPAWN_RESTART_DB")
+	readyPath := requiredEnv(t, "GO_CHOIR_M3_SPAWN_RESTART_READY")
+	ctx := context.Background()
+
+	s, err := openTestStore(dbPath)
+	if err != nil {
+		t.Fatalf("open spawned start store: %v", err)
+	}
+	rt := New(Config{
+		SandboxID:           "sandbox-test",
+		StorePath:           dbPath,
+		ProviderTimeout:     5 * time.Minute,
+		SupervisionInterval: time.Hour,
+	}, s, events.NewEventBus(), NewStubProvider(5*time.Minute))
+
+	seedSpawnedChildParent(t, ctx, s, m3SpawnRestartOwnerID, m3SpawnRestartTrajectory, m3SpawnRestartParentID, m3SpawnRestartChannelID)
+	child, err := rt.StartChildRun(ctx, m3SpawnRestartParentID, "research restart-resilient spawned work", m3SpawnRestartOwnerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileResearcher,
+		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataChannelID:    m3SpawnRestartChannelID,
+	})
+	if err != nil {
+		t.Fatalf("start spawned restart child: %v", err)
+	}
+	waitForStoredRunState(t, s, child.RunID, types.RunRunning, 10*time.Second)
+	workItemIDs := metadataStringSlice(child.Metadata["work_item_ids"])
+	if len(workItemIDs) != 1 {
+		t.Fatalf("spawned restart work_item_ids = %+v, want exactly one", workItemIDs)
+	}
+	if err := writeJSONFile(readyPath, m3SpawnRestartProof{
+		InterruptedRunID: child.RunID,
+		AgentID:          child.AgentID,
+		WorkItemID:       workItemIDs[0],
+	}); err != nil {
+		t.Fatalf("write spawned ready marker: %v", err)
+	}
+	select {}
+}
+
+func runM3SpawnRestartRecoverProcess(t *testing.T) {
+	t.Helper()
+	dbPath := requiredEnv(t, "GO_CHOIR_M3_SPAWN_RESTART_DB")
+	readyPath := requiredEnv(t, "GO_CHOIR_M3_SPAWN_RESTART_READY")
+	proofPath := requiredEnv(t, "GO_CHOIR_M3_SPAWN_RESTART_PROOF")
+	ctx := context.Background()
+
+	var ready m3SpawnRestartProof
+	raw, err := os.ReadFile(readyPath)
+	if err != nil {
+		t.Fatalf("read spawned ready marker: %v", err)
+	}
+	if err := json.Unmarshal(raw, &ready); err != nil {
+		t.Fatalf("decode spawned ready marker: %v\n%s", err, raw)
+	}
+
+	s, err := openTestStore(dbPath)
+	if err != nil {
+		t.Fatalf("open spawned recovery store: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+	rt := New(Config{
+		SandboxID:           "sandbox-test",
+		StorePath:           dbPath,
+		ProviderTimeout:     5 * time.Minute,
+		SupervisionInterval: time.Hour,
+	}, s, events.NewEventBus(), NewStubProvider(5*time.Minute))
+	defer rt.Stop()
+
+	rt.Start(ctx)
+	passivated := waitForStoredRunState(t, s, ready.InterruptedRunID, types.RunPassivated, 10*time.Second)
+	replacement := waitForRunningReplacementRunByOwnerAgent(t, s, m3SpawnRestartOwnerID, ready.AgentID, ready.InterruptedRunID, 10*time.Second)
+	obligations, err := rt.TrajectoryObligations(ctx, m3SpawnRestartOwnerID, m3SpawnRestartTrajectory)
+	if err != nil {
+		t.Fatalf("trajectory obligations after spawned process restart: %v", err)
+	}
+
+	proof := m3SpawnRestartProof{
+		InterruptedRunID: ready.InterruptedRunID,
+		ReplacementRunID: replacement.RunID,
+		AgentID:          ready.AgentID,
+		WorkItemID:       ready.WorkItemID,
+		WorkItemIDs:      metadataStringSlice(replacement.Metadata["work_item_ids"]),
+		PassivatedState:  string(passivated.State),
+		RequestSource:    metadataStringValue(replacement.Metadata, "request_source"),
+		PendingUpdates:   obligations.PendingUpdates,
+		OpenWorkItems:    len(obligations.OpenWorkItems),
+		SettlementReady:  obligations.SettlementReady,
+	}
+	if err := writeJSONFile(proofPath, proof); err != nil {
+		t.Fatalf("write spawned restart proof: %v", err)
+	}
+}
+
+type spawnedChildParentStore interface {
+	CreateTrajectoryIfAbsent(context.Context, types.TrajectoryRecord) (types.TrajectoryRecord, error)
+	CreateRun(context.Context, types.RunRecord) error
+}
+
+func seedSpawnedChildParent(t *testing.T, ctx context.Context, s spawnedChildParentStore, ownerID, trajectoryID, parentID, channelID string) {
+	t.Helper()
+	now := time.Now().UTC()
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		OwnerID:        ownerID,
+		TrajectoryID:   trajectoryID,
+		Kind:           types.TrajectoryKindDocument,
+		Status:         types.TrajectoryLive,
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SubjectRefs: map[string]string{
+			"root_loop_id": parentID,
+			"channel_id":   channelID,
+		},
+	}); err != nil {
+		t.Fatalf("create spawned parent trajectory: %v", err)
+	}
+	if err := s.CreateRun(ctx, types.RunRecord{
+		RunID:        parentID,
+		AgentID:      "vtext:" + channelID,
+		ChannelID:    channelID,
+		TrajectoryID: trajectoryID,
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunCompleted,
+		Prompt:       "parent vtext revision loop",
+		Result:       "parent ready",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		FinishedAt:   &now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVText,
+			runMetadataAgentRole:    AgentProfileVText,
+			runMetadataAgentID:      "vtext:" + channelID,
+			runMetadataChannelID:    channelID,
+			runMetadataTrajectoryID: trajectoryID,
+			"doc_id":                channelID,
+		},
+	}); err != nil {
+		t.Fatalf("create spawned parent run: %v", err)
+	}
 }
 
 func runM3RestartRecoverProcess(t *testing.T) {
@@ -784,6 +1067,46 @@ func waitForRunningReplacementRunByAgent(t *testing.T, s interface {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("running replacement run for agent %s did not appear within %v; last=%+v", m3RestartAgentID, timeout, last)
+	return last
+}
+
+func waitForRunningReplacementRunByOwnerAgent(t *testing.T, s interface {
+	GetLatestActiveRunByAgent(context.Context, string, string) (types.RunRecord, error)
+}, ownerID, agentID, interruptedRunID string, timeout time.Duration) types.RunRecord {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var last types.RunRecord
+	for time.Now().Before(deadline) {
+		rec, err := s.GetLatestActiveRunByAgent(context.Background(), ownerID, agentID)
+		if err == nil {
+			last = rec
+			if rec.RunID != "" && rec.RunID != interruptedRunID && rec.State == types.RunRunning {
+				return rec
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("running replacement run for agent %s did not appear within %v; last=%+v", agentID, timeout, last)
+	return last
+}
+
+func waitForWorkItemStatus(t *testing.T, s interface {
+	GetWorkItem(context.Context, string, string) (types.WorkItemRecord, error)
+}, ownerID, workItemID string, status types.WorkItemStatus, timeout time.Duration) types.WorkItemRecord {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var last types.WorkItemRecord
+	for time.Now().Before(deadline) {
+		item, err := s.GetWorkItem(context.Background(), ownerID, workItemID)
+		if err == nil {
+			last = item
+			if item.Status == status {
+				return item
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("work item %s did not reach status %q within %v; last=%+v", workItemID, status, timeout, last)
 	return last
 }
 

@@ -1492,3 +1492,43 @@ killed, boot can passivate it without rewarming it and without a visible
 trajectory obligation for the missing result. Documented first under Problem
 Documentation First; no code fix in this commit, and no continuation-level,
 promotion-level, zero-stranding, or final M3 settlement is claimed.
+
+## 2026-06-13 - Batch P Construct: Spawned Work Becomes Assigned Rewarm Backlog
+
+Claim/scope: close the local spawned-work restart-amnesia shape exposed by
+Batch O before rerunning the vmctl-routed staging proof. Scope is runtime/store
+behavior for `StartChildRun` and successful activation bookkeeping; no deployed
+acceptance is claimed in this batch.
+
+Move: `StartChildRun` now creates a live trajectory work item for spawned
+researcher, super, vsuper, and co-super objectives, assigns it to the spawned
+durable agent, records the parent/run provenance in details, and carries the
+created `work_item_ids` on the activation metadata before the run row is
+stored. The terminal success path now marks metadata-named work items completed
+only when the activation reaches `RunCompleted`. If the process dies before
+success, boot passivation leaves the work item open and the existing assigned
+work-item sweep can rewarm the actor.
+
+Receipts:
+
+- Focused completion and restart regression:
+  `nix develop -c go test ./internal/runtime -run 'TestStartChildRunCompletesSpawnedWorkItem|TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill|TestStartSweepsAssignedOpenWorkItemsAfterPassivation|TestProcessRestartRewarmsCoagentAfterOSKill' -count=1`
+  passed.
+- Adjacent spawn/slot/delivery sweep:
+  `nix develop -c go test ./internal/runtime -run 'TestSpawnMintsTrajectoryAndChildJoinsIt|TestVSuperCoSuperSlotReusedByTrajectorySlot|TestUpdateCoagentDeliveryRequiresSuccessfulActivation|TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata|TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork' -count=1`
+  passed.
+- Runtime shard coverage:
+  `nix develop -c scripts/go-test-runtime-shards` passed.
+- New OS-kill regression:
+  `TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill` starts a real
+  child test process, creates a spawned researcher through `StartChildRun`,
+  kills the process, boots a fresh process over the same store, and proves the
+  original run is passivated while a replacement researcher activation starts
+  from `request_source=trajectory_work_item_sweep` with the same work item and
+  no pending worker updates.
+
+Expected Delta V: -1 for the local Batch O fix. Actual Delta V: -1 locally.
+Remaining error field: this code has not yet been committed, pushed, deployed,
+or rerun against the vmctl-routed staging restart oracle. M3 remains open; no
+continuation-level, promotion-level, zero-stranding, or final settlement is
+claimed.
