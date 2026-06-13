@@ -1133,3 +1133,39 @@ Expected Delta V: 0 for full M3; actual Delta V: 0. The active-run control
 fallback set is smaller, but the deployed restart falsifier, non-vSuper
 compatibility cancellation fallback, and permanent lifecycle-model deletion
 gates remain open.
+
+Landing receipts:
+
+- Problem checkpoint commit:
+  `d91d2a72f08bd5840c03687e90d15eb0bab79254c`
+  (`docs: record vsuper cancel authority gap`) documented the authority bug
+  before the code fix.
+- Behavior commit:
+  `dd165ada20609f3dca0e2bd968f46e7796a83e5f`
+  (`runtime: bind vsuper cancel to trajectory slots`).
+- Push CI run `27462568946` succeeded. The run included Go non-runtime tests,
+  all four `internal/runtime` shards, Go vet/build, integration-tagged smoke,
+  TLA+ model check, deploy-impact classification, and staging deploy.
+- FlakeHub publish run `27462568944` succeeded.
+- Staging deploy job `81179081886` succeeded. Public
+  `https://choir.news/health` reported `status=ok`, `upstream=ok`,
+  `vmctl_status=ok`, and proxy plus sandbox commit/deployed commit
+  `dd165ada20609f3dca0e2bd968f46e7796a83e5f`.
+- Deployed lifecycle smoke passed:
+  `GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news pnpm --dir frontend exec playwright test tests/adaptive-lifecycle-control-deployed.spec.js --project=chromium --reporter=list`.
+- Browser-public acceptance synthesis used WebAuthn registration and product
+  APIs only. It submitted prompt-bar trajectory/run
+  `cd07ccc4-f35c-4855-9e06-bdb9d2df99cb`, opened VText document
+  `a84a3aed-c463-4380-925c-fb46ca800a0a`, and synthesized
+  RunAcceptanceRecord `runacc-3326b96bd926f0ac5692`. The record state was
+  `accepted`, level `staging-smoke-level`, deployment/health commit
+  `dd165ada20609f3dca0e2bd968f46e7796a83e5f`, checkpoints `submitted` and
+  `vtext_opened` passed, invariants `product_path_observed`,
+  `worker_mutation_bounded`, `promotion_not_overclaimed`, and
+  `checkpoint_causal_order` passed, with residual risk:
+  `continuation-level acceptance is not proven until run-memory compaction and
+  continuation evidence are recorded`.
+
+Landing Delta V: expected 0 and actual 0 for full M3. The cross-trajectory
+vSuper cancel authority path is closed and deployed, but this is not the
+kill/restart rewarm falsifier and does not settle M3.

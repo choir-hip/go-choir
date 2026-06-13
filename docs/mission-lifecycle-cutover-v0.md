@@ -150,7 +150,15 @@ same-owner vSuper to cancel an agent activation in another trajectory. This is
 documented before the fix because it is a real authority-boundary problem, not
 just naming cleanup. The follow-up fix makes caller-trajectory co-super slot
 ownership the only vSuper `cancel_agent` authority; non-vSuper compatibility
-cancellation still retains its active-run fallback.
+cancellation still retains its active-run fallback. Commit
+`dd165ada20609f3dca0e2bd968f46e7796a83e5f` landed the fix: CI run
+`27462568946` and deploy job `81179081886` succeeded, public
+`https://choir.news/health` reported proxy and sandbox commit/deployed commit
+`dd165ada20609f3dca0e2bd968f46e7796a83e5f`, deployed lifecycle smoke passed,
+and browser-public prompt-bar/VText/RunAcceptance smoke accepted
+`runacc-3326b96bd926f0ac5692` at `staging-smoke-level` for trajectory/run
+`cd07ccc4-f35c-4855-9e06-bdb9d2df99cb` and VText document
+`a84a3aed-c463-4380-925c-fb46ca800a0a`.
 
 **budget:** 2 overnight missions. Solvency check: do not spend the first pass
 rewriting the whole LLM loop. First buy the map: classify lifecycle reads and
@@ -239,8 +247,8 @@ See "Lifecycle Inventory - 2026-06-13" below.
 
 **next move:** keep M3 open as a lifecycle cutover mission, not a deployment
 recovery mission. The service-pointer execution gap is fixed and staging is
-healthy at `a7b43100bf789480ee8da1a2ec4c78f0b0217e2b`; public product-path
-smoke accepted RunAcceptanceRecord `runacc-cd78deed35b77e23cddd` at
+healthy at `dd165ada20609f3dca0e2bd968f46e7796a83e5f`; public product-path
+smoke accepted RunAcceptanceRecord `runacc-3326b96bd926f0ac5692` at
 `staging-smoke-level` with `product_path_observed` and
 `worker_mutation_bounded` passed. The next discriminator is the durable-actor
 restart falsifier: kill/restart or equivalent deployed evidence that a cold
