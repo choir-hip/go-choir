@@ -984,3 +984,44 @@ levels.
 Expected Delta V: 0 for lifecycle semantics. It should allow the already-built
 runtime store bootstrap fix to actually start on Node B and unblock the public
 product-path acceptance rerun.
+
+## 2026-06-13 - Service Pointer Deploy Repair Recovered Staging Smoke
+
+Fix commit:
+`05f9a1507f5060ec92e2ff173c006d4be8fbbf88`
+(`deploy: run host services through pointer packages`) changed host service
+wrappers so systemd executes `/var/lib/go-choir/services/<service>/bin/<service>`
+when the pointer package exists, while retaining the baked Nix package as a
+fallback. Local proof before push:
+
+- `.github/scripts/deploy-impact-classify-test`
+- `nix eval .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-sandbox.serviceConfig.ExecStart --raw`
+- `git diff --check`
+
+Push CI run `27461596479` for SHA
+`05f9a1507f5060ec92e2ff173c006d4be8fbbf88` succeeded. Deploy job
+`81176429793` completed successfully at `2026-06-13T08:30:55Z`. Public
+`https://choir.news/health` then reported `status=ok`, `upstream=ok`,
+`vmctl_status=ok`, and proxy plus sandbox build/deployed commit
+`05f9a1507f5060ec92e2ff173c006d4be8fbbf88`.
+
+Deployed product-path smoke used browser WebAuthn registration and only
+browser-public product APIs. It submitted prompt-bar request
+`8502e863-ab64-41c7-836d-4c737a87e7cf`, opened VText document
+`958f8575-60b8-48d5-ac03-a67ebf69e28b`, and synthesized
+RunAcceptanceRecord `runacc-e2a8723d1f297b9d8389`. The record state was
+`accepted`, level `staging-smoke-level`, deployment/health commit
+`05f9a1507f5060ec92e2ff173c006d4be8fbbf88`, checkpoints `submitted` and
+`vtext_opened` passed, invariants `product_path_observed`,
+`worker_mutation_bounded`, `promotion_not_overclaimed`, and
+`checkpoint_causal_order` passed, with no residual risks and no observed
+forbidden browser-public routes.
+
+Claim/scope: staging recovery and the prompt/VText RunAcceptance semantics are
+proved at deployed smoke level for the repaired SHA. This does not prove the
+full M3 restart falsifier, continuation-level, promotion-level, or final M3
+settlement.
+
+Expected Delta V: 0 for lifecycle semantics, actual Delta V: 0 for lifecycle
+semantics. The staging recovery blocker is closed; the remaining discriminator
+is deployed restart/rewarm evidence for durable actor lifecycle behavior.

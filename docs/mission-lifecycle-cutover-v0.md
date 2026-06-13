@@ -113,15 +113,21 @@ the NixOS switch, and `/health` reported `status=degraded` with upstream 502s
 while the proxy build identity stayed at `25c498365221485cfe19bcb5d2a1992bb8bd6986`.
 Deploy diagnostic commit `68fd27e4dde77470a39c4b3071d937c9e63590ca` then
 proved the sandbox startup root cause in workflow dispatch run `27461068327`,
-deploy job `81174942714`: the sandbox journal repeats `runtime store:
+deploy job `81174942714`: the sandbox journal repeated `runtime store:
 bootstrap: apply schema: Error 1072: key column 'delivered_at' doesn't exist in
-table`. The deployed proxy/platformd identity moved to `68fd27e4`, but the
-sandbox remains down. This narrows the blocker from generic activation failure
-to runtime store schema bootstrap ordering: an existing `worker_updates` table
-can lack `delivered_at`, while the main schema tries to create
-`idx_worker_updates_pending_target` on that column before the compatibility
-migration adds it.
-The mission remains open on deployed acceptance proof and staging recovery; no
+table`. Commit `a08076eda2ac6ca9ebcacb27e466d0399e6a1db2` fixed the local
+runtime store bootstrap order, but the first staging deploy still ran the old
+baked Nix sandbox package. Commit `05f9a1507f5060ec92e2ff173c006d4be8fbbf88`
+fixed the host service execution contract so systemd service wrappers prefer
+the `/var/lib/go-choir/services/<service>` pointer package and retain the baked
+package as fallback. Main CI run `27461596479` and deploy job `81176429793`
+succeeded, public `https://choir.news/health` reported proxy and sandbox
+commit/deployed commit `05f9a1507f5060ec92e2ff173c006d4be8fbbf88`, and a
+browser-public prompt-bar/VText/RunAcceptance smoke accepted
+`runacc-e2a8723d1f297b9d8389` at `staging-smoke-level` for submission
+`8502e863-ab64-41c7-836d-4c737a87e7cf` and VText document
+`958f8575-60b8-48d5-ac03-a67ebf69e28b`.
+The mission remains open on full lifecycle/restart falsifier proof; no
 continuation-level, promotion-level, or final M3 settlement is claimed.
 
 **budget:** 2 overnight missions. Solvency check: do not spend the first pass
@@ -196,21 +202,15 @@ controllers to it; blocked/nonresident historical rows no longer suppress a
 fresh coagent activation when durable backlog exists.
 See "Lifecycle Inventory - 2026-06-13" below.
 
-**next move:** recover staging and prove the active product path on commit
-`25c498365221485cfe19bcb5d2a1992bb8bd6986`. First determine whether the
-forced active-VM-refresh deploy failure is transient operational state or a
-deploy-script/runtime bug. Do not weaken acceptance gates to route around it.
-Commit `a08076eda2ac6ca9ebcacb27e466d0399e6a1db2` deployed a first runtime
-store bootstrap ordering fix, but live Node B evidence shows the sandbox still
-crashing on `Error 1072: key column 'delivered_at' doesn't exist in table`.
-Read-only Node B inspection then showed the active sandbox systemd unit still
-comes from the `68fd27e4` NixOS closure, while the service-pointer directory
-does contain a newer fast-built sandbox package. The next fix is therefore the
-service-pointer execution contract: host service pointer deploys must cause
-systemd units to run the pointer package, not an older baked Nix package. Once
-`/health` is healthy for proxy and sandbox at the repaired SHA, rerun the
-public prompt-bar/VText/RunAcceptance synthesis proof and require an accepted
-`staging-smoke-level` record. Cancellation's store-active fallback and
+**next move:** keep M3 open as a lifecycle cutover mission, not a deployment
+recovery mission. The service-pointer execution gap is fixed and staging is
+healthy at `05f9a1507f5060ec92e2ff173c006d4be8fbbf88`; public product-path
+smoke accepted RunAcceptanceRecord `runacc-e2a8723d1f297b9d8389` at
+`staging-smoke-level` with `product_path_observed` and
+`worker_mutation_bounded` passed. The next discriminator is the durable-actor
+restart falsifier: kill/restart or equivalent deployed evidence that a cold
+actor rewarms from durable backlog/open assigned obligations with zero stranded
+messages or zero-obligation stalls. Cancellation's store-active fallback and
 `executeActivation` terminal run rows are accepted for v0 as compatibility/audit
 surfaces, not ordinary warm-residency or agent-liveness oracles.
 Preserve historical `parent_loop_id` compatibility surfaces for trace/API
