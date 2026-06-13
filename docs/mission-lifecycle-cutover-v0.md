@@ -255,15 +255,24 @@ obligation prompt. The open work item remains observable through
 it is a real rewarm incompleteness: the activation that was supposed to resume
 all durable backlog for that actor may not be told about the assigned
 obligation.
+Independent review of the first Batch K fix candidate widened the problem:
+`ListPendingWorkerUpdates` batches by target agent, not trajectory. A single
+replacement activation may carry pending updates for trajectories A and B, but
+the first candidate only attached assigned work from `updates[0].TrajectoryID`;
+the work-item sweep would then skip both trajectory groups because the actor was
+already resident. The fix must include assigned open work for every trajectory
+represented in the pending update batch, not only the first trajectory.
 See "Lifecycle Inventory - 2026-06-13" below.
 
 **next move:** fix and prove the combined restart backlog case before claiming
 the restart falsifier. A cold coagent with an interrupted activation, pending
 `update_coagent` rows, and assigned open work on the same trajectory should
 rewarm into one replacement activation whose prompt/metadata includes both the
-pending updates and the work item IDs, while `TrajectoryObligations` still shows
-the open work until the actor actually closes it. Then continue toward deployed
-kill/restart evidence. Keep M3 open as a lifecycle cutover mission, not a deployment
+pending updates and the work item IDs; the same must hold when the pending
+update batch spans multiple trajectories for the same durable actor. In both
+cases `TrajectoryObligations` must still show open work until the actor actually
+closes it. Then continue toward deployed kill/restart evidence. Keep M3 open as
+a lifecycle cutover mission, not a deployment
 recovery mission. The service-pointer execution gap is fixed and staging is
 healthy at `dd165ada20609f3dca0e2bd968f46e7796a83e5f`; public product-path
 smoke accepted RunAcceptanceRecord `runacc-3326b96bd926f0ac5692` at

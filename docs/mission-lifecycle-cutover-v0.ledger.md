@@ -1194,3 +1194,24 @@ combined restart regression and implementation path that makes the replacement
 activation carry both pending update IDs and assigned work item IDs for the
 same actor trajectory, without marking the work item complete or weakening the
 open-obligation query.
+
+## 2026-06-13 - Batch K Problem Checkpoint: Multi-Trajectory Backlog Batch
+
+Claim/scope: document the independent-review expansion of the combined restart
+backlog bug before the fix is committed. The first candidate fix attached
+assigned open work items only for `updates[0].TrajectoryID`, but
+`ListPendingWorkerUpdates` batches all undelivered updates for the target actor.
+If one durable coagent has pending updates for trajectories A and B, the cold
+replacement activation can carry both updates while only receiving assigned
+work from trajectory A; the later assigned-work sweep then sees the actor
+resident and skips trajectory B's assigned work group.
+
+Evidence: independent review of the uncommitted diff by
+`/root/combined_rewarm_review` found the mismatch between
+`internal/store/store.go:1925` batching by target agent,
+`internal/runtime/super_controller.go` using only the first update trajectory,
+and `internal/runtime/runtime.go` boot order/resident skip behavior.
+
+Expected Delta V: 0 for full M3; actual Delta V: 0. The fix target expands from
+same-trajectory combined backlog to every distinct non-empty trajectory in the
+pending update batch for the same actor, with a two-trajectory regression.
