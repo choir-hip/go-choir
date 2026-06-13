@@ -1532,3 +1532,56 @@ Remaining error field: this code has not yet been committed, pushed, deployed,
 or rerun against the vmctl-routed staging restart oracle. M3 remains open; no
 continuation-level, promotion-level, zero-stranding, or final settlement is
 claimed.
+
+## 2026-06-13 - Batch Q Problem Checkpoint: Deployed VText Spawn Still Lacks Work Item
+
+Claim/scope: rerun the vmctl-routed restart discriminator after Batch P landed,
+and record the next falsifier before any further code fix. Scope is staging
+evidence only; this is a problem checkpoint under Problem Documentation First.
+
+Move: committed and pushed `a9ef938d51d0f6a4d920393c0031d415d1709de8`
+(`runtime: make spawned work restart-rewarmable`), monitored CI/deploy, then
+reran the vmctl-routed refresh probe. The probe output is outside the repo at
+`/tmp/m3_vmctl_refresh_probe.a9ef938d.out.json`.
+
+Receipts:
+
+- CI run `27464702356` succeeded, including runtime shards, non-runtime tests,
+  integration smoke, TLA+, Go vet/build, and deploy job `81184935254`.
+- FlakeHub publish run `27464702377` succeeded.
+- Public `https://choir.news/health` reported `status=ok`, `upstream=ok`,
+  `vmctl_status=ok`, `vmctl_routing=enabled`, and proxy plus sandbox deployed
+  commit `a9ef938d51d0f6a4d920393c0031d415d1709de8`.
+- Probe marker/account: `M3_VMCTL_REFRESH_1781348104180`,
+  `m3-vmctl-refresh-1781348105508-crbn2c@example.com`.
+- Product IDs: owner `cdf41610-dfc5-4861-91a9-e7f293c65bf0`,
+  submission/trajectory `bbe415d8-2a79-45a4-a692-7634d55dbf6b`, VText document
+  `bcae971b-63ad-4b82-a65c-7fc514aeac9a`, initial loop
+  `e80743d3-0ff3-4f84-8a5d-dfe644213530`.
+- Correct target proof: vmctl ownership before refresh was
+  `vm-861e224b3619f023ec3b589d0fbe6af3` at
+  `http://10.200.12.2:8085`, epoch 1, deployed commit
+  `a9ef938d51d0f6a4d920393c0031d415d1709de8`; refresh moved the same VM to
+  `http://10.200.13.2:8085`, epoch 2, still ready at the same deployed commit.
+- Product proof failure: final VText revision
+  `1b671c52-cfbc-42b8-8abf-0ad8b7af3bdb` consumed only the super update and
+  still said the researcher finding was pending. Trace showed one researcher
+  agent `f8f5cc19-f725-41d7-b3e9-1154081b4968` in `passivated` state, with no
+  replacement researcher activation.
+- Direct VM investigation of the passivated researcher loop
+  `f8c76920-9dd0-46c8-afac-80dbae2a16a7` showed `agent_profile=researcher`,
+  `parent_loop_id=7c32f298-767c-463f-827a-5dc3e258e2c3`, and metadata
+  `trajectory_id=bbe415d8-2a79-45a4-a692-7634d55dbf6b`, but no
+  `work_item_ids`.
+- Direct VM trajectory obligations for
+  `bbe415d8-2a79-45a4-a692-7634d55dbf6b` showed `pending_updates=0`,
+  `settlement_ready=false`, and only one open work item:
+  Wire publication item `1870010a-7da6-408f-8820-88b8405e4b7e`.
+
+Expected Delta V after Batch P: -1 if the deployed vmctl proof passed. Actual
+Delta V: 0 for staging. Remaining error field: the direct `StartChildRun`
+regression is insufficient. The real deployed VText `spawn_agent` path can
+produce a researcher activation with trajectory metadata but without the
+assigned work item needed for boot rewarm. No code fix in this checkpoint, and
+no continuation-level, promotion-level, zero-stranding, or final M3 settlement
+is claimed.
