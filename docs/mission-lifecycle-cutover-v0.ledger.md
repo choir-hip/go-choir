@@ -1840,3 +1840,55 @@ Delta V: -1 locally. Remaining error field: this code has not yet been
 committed, pushed, deployed, or rerun against the vmctl-routed staging restart
 oracle. M3 remains open; no continuation-level, promotion-level,
 zero-stranding, or final settlement is claimed.
+
+## 2026-06-13 - Batch W Problem Checkpoint: Deployed Probe Skipped Researcher Before Refresh
+
+Claim/scope: record the first deployed result after Batch V reached staging,
+before any code fix. This is problem documentation only. It does not change the
+runtime and does not claim acceptance.
+
+Receipts:
+
+- Commit `17b70e70b03740f2502a27e1c8694c1925ba618c` was pushed to
+  `origin/main`.
+- CI run `27466179291` completed successfully, including deploy job
+  `81188874173`; FlakeHub publish run `27466179269` also completed
+  successfully.
+- Public health after deploy reported `status=ok`, `vmctl_status=ok`,
+  `vmctl_routing=enabled`, and both proxy and upstream sandbox deployed at
+  `17b70e70b03740f2502a27e1c8694c1925ba618c`.
+- Deployed probe command:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news node /tmp/m3_vmctl_refresh_probe.mjs > /tmp/m3_vmctl_refresh_probe.17b70e70.out.json`
+  exited nonzero.
+- Probe marker: `M3_VMCTL_REFRESH_1781352215222`; test account
+  `m3-vmctl-refresh-1781352216412-pnx480@example.com`; owner
+  `09b7a13c-edea-4aef-a732-2de4690316be`; submission/trajectory
+  `4f1dffd9-d4f8-4c5b-b5f5-7961baad0ea7`; VText document
+  `c84b154f-006c-4211-b539-952c0038775b`.
+- VM target before any refresh: `vm-8b2fc425bf1933fdc178e0ac1ea8ad62`,
+  sandbox `http://10.200.18.2:8085`, epoch 1, deployed commit
+  `17b70e70b03740f2502a27e1c8694c1925ba618c`.
+- Failure occurred before `POST /internal/vmctl/refresh`: the probe timed out
+  waiting for Trace roles `conductor`, `vtext`, `researcher`, and `super`.
+  Trace contained only `conductor`, `super`, and `vtext`.
+- Direct trace diagnosis with the deployed owner's authenticated runtime header
+  showed conductor created the document and a channel message to
+  `super:09b7a13c-edea-4aef-a732-2de4690316be`; super activation
+  `ecf93a6a-1ab6-4898-8905-714b7e087760` wrote a verification artifact and
+  called `update_coagent`; VText activation
+  `c19a91c3-673b-458d-8547-f112f18b575c` consumed that update and edited
+  revision `8dea92b7-0267-4f3a-8697-853744863319`.
+- No researcher agent, researcher delegation, researcher work item, or
+  researcher worker update was visible on trajectory
+  `4f1dffd9-d4f8-4c5b-b5f5-7961baad0ea7` by the 240-second pre-refresh
+  deadline.
+
+Expected Delta V after Batch V: -1 if the deployed probe created researcher
+and super work, refreshed the owning VM, and proved the reactivated researcher
+delivered back to VText. Actual Delta V: 0 for deployed acceptance, but not as
+a direct falsification of Batch V's requester-route fix. Remaining error
+field: the acceptance/product route can satisfy the prompt through
+conductor -> super -> VText and skip the explicit researcher branch entirely,
+so the vmctl restart oracle did not execute. No code fix in this checkpoint,
+and no continuation-level, promotion-level, zero-stranding, or final M3
+settlement is claimed.
