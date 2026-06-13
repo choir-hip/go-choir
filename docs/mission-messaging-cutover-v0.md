@@ -32,8 +32,8 @@ the riskiest single migration — its own control interval and test.
 
 ## Parallax State
 
-status: open_handoff (local M2 repair complete on 2026-06-13; staging/landing
-proof intentionally deferred by the current repair-only objective)
+status: settled (local repair plus platform landing proof complete on
+2026-06-13)
 
 **kind:** spine.
 
@@ -81,7 +81,7 @@ registered/called; per-turn inbox pollers still active; `notifyParent` still
 active; slot registry still keyed by parent run; restart exactly-once
 falsifier missing; silent-stall oracle missing; prompts/tests still name old
 tools; post-review falsifiers reopened after a false settlement claim.
-Current local V=0. The three post-settlement repair blockers are closed:
+Current V=0. The three post-settlement repair blockers are closed:
 1. terminal update-woken run persistence now uses a runtime-store transaction
    that updates the run and marks its waking `worker_updates` delivered
    together;
@@ -215,10 +215,9 @@ Blind spots from this position (edge classes named):
   `channel_messages` as a delivery mechanism (vs audit log)? Grep before
   deleting the pollers; channel_messages survives as replay-only log.
 
-**next move:** review and land the local repair if platform rollout is desired.
-Do not claim final settlement until the platform landing loop runs: commit,
-push, CI, staging deploy identity, and deployed acceptance proof. Do not detour
-into Universal Wire or review UI product behavior as part of this M2 repair.
+**next move:** M3 lifecycle cutover. Do not detour into Universal Wire or review
+UI product behavior; M5 and M7 remain downstream falsifier/surface work after
+the actor spine stands up.
 
 **ledger file:** `docs/mission-messaging-cutover-v0.ledger.md`.
 
@@ -234,10 +233,25 @@ vocabulary is `spawned_by` only (no parent/child, even in prose — glossary
 `runs.trajectory_id` column; the silent-stall oracle consumes M1's
 `TrajectoryObligations`.
 
-**settlement:** not yet re-claimed. Commit
-`8052d242afc80320b7cd1b34a2f7a4bb306f1f13` did land and deploy, but the
-post-settlement review found the local falsifier evidence was incomplete and
-partly stale. New receipts:
+**settlement:** settled on 2026-06-13 at
+`794d28dd76ff00a2ae27c98a14dbce9e34834695` after the reopened local falsifiers
+were repaired, reviewed, pushed to `origin/main`, passed CI, deployed to Node B,
+and passed deployed staging acceptance. CI run:
+`https://github.com/choir-hip/go-choir/actions/runs/27455953966`.
+Deploy job: `81160546255` (`Deploy to Staging (Node B)`). Staging health:
+`https://choir.news/health` reported proxy and sandbox
+`build.commit` / `deployed_commit`
+`794d28dd76ff00a2ae27c98a14dbce9e34834695`, deployed at
+`2026-06-13T04:03:19Z`. Deployed acceptance:
+`GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news pnpm --dir frontend exec playwright test tests/adaptive-lifecycle-control-deployed.spec.js --project=chromium --reporter=list`
+passed, exercising the public origin, WebAuthn registration/login, prompt-bar,
+VM bootstrap continuity, and deployed lifecycle health. Acceptance level:
+`staging-smoke-level`. Rollback ref: previous deployed main commit
+`760c42f0df5e1c0c096ae0bcbdb1b87ce9171c08` before the M2 repair set.
+
+Commit `8052d242afc80320b7cd1b34a2f7a4bb306f1f13` did land and deploy earlier,
+but the post-settlement review found the local falsifier evidence was
+incomplete and partly stale. Reopened receipts:
 - Failed focused restart proof:
   `nix develop -c go test ./internal/runtime -run 'Test(UpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TrajectoryObligationsReportPendingUpdateCoagent|VSuperCoSuperSlotReusedByTrajectorySlot)' -count=1`
   failed because `TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce`

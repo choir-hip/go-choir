@@ -32,3 +32,25 @@ Receipt:
 
 Open edge: execute M2 next and prove old messaging mechanisms are deleted or
 carried only as named temporary shims inside one landing batch.
+
+## 2026-06-13 - M2 Settled, M3 Prepared
+
+Claim/scope: portfolio spine advances only after M2's post-review repair lands
+on staging; no product-surface detour.
+
+Move: recorded M2 settlement in `docs/mission-messaging-cutover-v0.md`,
+updated portfolio V from 7 to 6, marked M2 done, and compiled the M3 lifecycle
+paradoc at `docs/mission-lifecycle-cutover-v0.md`.
+
+Actual Delta V: -1 at the portfolio level. Next spine mission is M3 lifecycle
+cutover.
+
+Receipts:
+- pushed/deployed M2 repair commit
+  `794d28dd76ff00a2ae27c98a14dbce9e34834695`;
+- CI run `27455953966` passed;
+- Node B deploy job `81160546255` passed;
+- `https://choir.news/health` reported proxy and sandbox deployed at the same
+  SHA;
+- deployed lifecycle/prompt-bar acceptance passed:
+  `GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news pnpm --dir frontend exec playwright test tests/adaptive-lifecycle-control-deployed.spec.js --project=chromium --reporter=list`.

@@ -52,13 +52,13 @@ only when it changes shared assertions, architecture, specs/tests, skills, or
 successor missions.
 
 **variant (ranking function) V:** count unsettled architecture spine and
-substrate gates: M2 messaging cutover; M3 lifecycle cutover; M4 continuation
-deletion; M5 durable-actor Wire falsifier; M6 route-profile consumer; M8
-Dolt rollback window; M7 review UI on real promotion substrate. Current V=7.
+substrate gates: M3 lifecycle cutover; M4 continuation deletion; M5
+durable-actor Wire falsifier; M6 route-profile consumer; M8 Dolt rollback
+window; M7 review UI on real promotion substrate. Current V=6.
 Side missions do not decrease this V unless they remove a heresy that blocks
 the spine.
 
-**next move:** M2. Do not spend owner attention on Universal Wire completeness
+**next move:** M3. Do not spend owner attention on Universal Wire completeness
 or review UI polish until M2-M4 remove the old coordination/lifecycle/
 continuation mechanisms.
 
@@ -173,7 +173,7 @@ adjudicates Parallax's promotion (see docs/parallax-design-2026-06-11.md §5).
 
 **Size:** 1 overnight mission.
 
-## M2 — Messaging cutover (cutover step 3)
+## M2 — Messaging cutover (cutover step 3) — DONE 2026-06-13
 
 **Kind:** spine.
 
@@ -192,7 +192,9 @@ that stops progressing while showing zero open obligations kills the design.
 
 **Settlement:** grep-level zero callers of the deleted mechanisms; a vsuper
 coordinating two co-supers sees every result exactly once across a process
-restart; prompts updated (co-super.md, vsuper.md, vtext.md).
+restart; prompts updated (co-super.md, vsuper.md, vtext.md). Settled by
+`docs/mission-messaging-cutover-v0.md` after post-review repairs and staging
+landing at `794d28dd76ff00a2ae27c98a14dbce9e34834695`.
 
 **Dependencies:** M1. **Size:** 1–2 overnight missions; the slot registry is
 the riskiest single migration — its own control interval and test.

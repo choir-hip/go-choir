@@ -302,3 +302,34 @@ Receipts:
 
 Residual risk: local proof only. Final M2 settlement still requires push, CI,
 staging deploy identity, and deployed acceptance proof.
+
+## 2026-06-13 - Platform Landing And Settlement
+
+Claim/scope: settle M2 after the repaired messaging cutover lands on staging.
+Scope remains the architecture spine; no Universal Wire product completeness or
+review UI claim.
+
+Move: pushed `794d28dd76ff00a2ae27c98a14dbce9e34834695` to `origin/main`,
+monitored CI and Node B deploy, verified staging health identity, and ran a
+deployed public-origin lifecycle/prompt-bar acceptance proof.
+
+Actual Delta V: 0 inside M2 because local V was already 0; evidence class
+increased from local repair to staging-smoke-level settlement. Portfolio Delta
+V is -1 because M2 is now done and M3 is next.
+
+Receipts:
+- `git push origin HEAD:main` advanced `main` from
+  `760c42f0df5e1c0c096ae0bcbdb1b87ce9171c08` to
+  `794d28dd76ff00a2ae27c98a14dbce9e34834695`.
+- CI run `27455953966` passed:
+  `https://github.com/choir-hip/go-choir/actions/runs/27455953966`.
+- Node B deploy job `81160546255` passed.
+- `curl -fsS https://choir.news/health | jq .` reported proxy and sandbox
+  `build.commit` / `deployed_commit`
+  `794d28dd76ff00a2ae27c98a14dbce9e34834695`, deployed at
+  `2026-06-13T04:03:19Z`.
+- Deployed acceptance passed:
+  `GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news pnpm --dir frontend exec playwright test tests/adaptive-lifecycle-control-deployed.spec.js --project=chromium --reporter=list`.
+
+Settlement: M2 is settled at staging-smoke-level for the cutover scope. M3
+lifecycle cutover now carries the next actor-spine descent.
