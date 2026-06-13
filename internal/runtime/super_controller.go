@@ -273,12 +273,86 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	if first.TrajectoryID != "" {
 		metadata[runMetadataTrajectoryID] = first.TrajectoryID
 	}
-	rec, err := rt.createRunWithMetadata(ctx, buildCoagentUpdatePrompt(updates), ownerID, metadata)
+	workItems, err := rt.assignedOpenWorkItemsForAgentUpdateBacklog(ctx, ownerID, agentID, updates)
+	if err != nil {
+		return nil, err
+	}
+	if workItemIDs := workItemIDsForMetadata(workItems); len(workItemIDs) > 0 {
+		metadata["work_item_ids"] = workItemIDs
+	}
+	rec, err := rt.createRunWithMetadata(ctx, buildCoagentBacklogPrompt(updates, workItems), ownerID, metadata)
 	if err != nil {
 		return nil, err
 	}
 	rt.startRunAsync(rec)
 	return rec, nil
+}
+
+func (rt *Runtime) assignedOpenWorkItemsForAgentUpdateBacklog(ctx context.Context, ownerID, agentID string, updates []types.WorkerUpdateRecord) ([]types.WorkItemRecord, error) {
+	seenTrajectories := map[string]bool{}
+	var out []types.WorkItemRecord
+	for _, update := range updates {
+		trajectoryID := strings.TrimSpace(update.TrajectoryID)
+		if trajectoryID == "" || seenTrajectories[trajectoryID] {
+			continue
+		}
+		seenTrajectories[trajectoryID] = true
+		items, err := rt.assignedOpenWorkItemsForAgentTrajectory(ctx, ownerID, agentID, trajectoryID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, items...)
+	}
+	return out, nil
+}
+
+func (rt *Runtime) assignedOpenWorkItemsForAgentTrajectory(ctx context.Context, ownerID, agentID, trajectoryID string) ([]types.WorkItemRecord, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	agentID = strings.TrimSpace(agentID)
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	if rt == nil || rt.store == nil || ownerID == "" || agentID == "" || trajectoryID == "" {
+		return nil, nil
+	}
+	items, err := rt.store.ListWorkItemsByTrajectory(ctx, ownerID, trajectoryID, true)
+	if err != nil {
+		return nil, fmt.Errorf("list assigned open work items for coagent wake: %w", err)
+	}
+	out := make([]types.WorkItemRecord, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.AssignedAgentID) == agentID {
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
+func workItemIDsForMetadata(workItems []types.WorkItemRecord) []string {
+	ids := make([]string, 0, len(workItems))
+	seen := map[string]bool{}
+	for _, item := range workItems {
+		id := strings.TrimSpace(item.WorkItemID)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func buildCoagentBacklogPrompt(updates []types.WorkerUpdateRecord, workItems []types.WorkItemRecord) string {
+	updatePrompt := buildCoagentUpdatePrompt(updates)
+	if len(workItems) == 0 {
+		return updatePrompt
+	}
+	workPrompt := buildAssignedWorkItemPrompt(workItems)
+	if updatePrompt == "" {
+		return workPrompt
+	}
+	if workPrompt == "" {
+		return updatePrompt
+	}
+	return updatePrompt + "\n\n" + workPrompt
 }
 
 func buildCoagentUpdatePrompt(updates []types.WorkerUpdateRecord) string {

@@ -237,6 +237,242 @@ func TestStartSweepsAssignedOpenWorkItemsAfterPassivation(t *testing.T) {
 	}
 }
 
+func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
+	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	dbPath := filepath.Join(dir, t.Name()+".db")
+	_ = os.Remove(dbPath)
+
+	ctx := context.Background()
+	ownerID := "user-alice"
+	agentID := "cosuper:combined-rewarm"
+	trajectoryID := "traj-combined-rewarm"
+	otherTrajectoryID := "traj-combined-rewarm-other"
+	channelID := "channel-combined-rewarm"
+	now := time.Now().UTC()
+
+	s1, err := openTestStore(dbPath)
+	if err != nil {
+		t.Fatalf("open store 1: %v", err)
+	}
+	if err := s1.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   agentID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileCoSuper,
+		Role:      AgentProfileCoSuper,
+		ChannelID: channelID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert agent: %v", err)
+	}
+	if _, err := s1.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		OwnerID:        ownerID,
+		TrajectoryID:   trajectoryID,
+		Kind:           types.TrajectoryKindTask,
+		Status:         types.TrajectoryLive,
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	if _, err := s1.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		OwnerID:        ownerID,
+		TrajectoryID:   otherTrajectoryID,
+		Kind:           types.TrajectoryKindTask,
+		Status:         types.TrajectoryLive,
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+	}); err != nil {
+		t.Fatalf("create second trajectory: %v", err)
+	}
+	interrupted := types.RunRecord{
+		RunID:        "interrupted-combined-rewarm",
+		AgentID:      agentID,
+		ChannelID:    channelID,
+		TrajectoryID: trajectoryID,
+		AgentProfile: AgentProfileCoSuper,
+		AgentRole:    AgentProfileCoSuper,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "interrupted combined restart backlog",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileCoSuper,
+			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentID:      agentID,
+			runMetadataChannelID:    channelID,
+			runMetadataTrajectoryID: trajectoryID,
+		},
+	}
+	if err := s1.CreateRun(ctx, interrupted); err != nil {
+		t.Fatalf("create interrupted run: %v", err)
+	}
+	item, err := s1.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:          ownerID,
+		TrajectoryID:     trajectoryID,
+		Objective:        "finish combined assigned obligation",
+		Reason:           "restart recovery must include assigned work with pending updates",
+		AuthorityProfile: AgentProfileCoSuper,
+		AssignedAgentID:  agentID,
+		CreatedByRunID:   interrupted.RunID,
+	})
+	if err != nil {
+		t.Fatalf("create work item: %v", err)
+	}
+	otherItem, err := s1.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:          ownerID,
+		TrajectoryID:     otherTrajectoryID,
+		Objective:        "finish second trajectory assigned obligation",
+		Reason:           "restart recovery must include every pending-update trajectory",
+		AuthorityProfile: AgentProfileCoSuper,
+		AssignedAgentID:  agentID,
+		CreatedByRunID:   interrupted.RunID,
+	})
+	if err != nil {
+		t.Fatalf("create second work item: %v", err)
+	}
+	update := types.WorkerUpdateRecord{
+		UpdateID:      "update-combined-rewarm",
+		OwnerID:       ownerID,
+		AgentID:       "co-super:verifier",
+		TargetAgentID: agentID,
+		ChannelID:     channelID,
+		TrajectoryID:  trajectoryID,
+		Role:          AgentProfileCoSuper,
+		Kind:          "verification",
+		Summary:       "combined restart update",
+		Content:       "pending update content for combined restart",
+		CreatedAt:     now.Add(time.Millisecond),
+	}
+	message := types.ChannelMessage{
+		ChannelID:    update.ChannelID,
+		FromAgentID:  update.AgentID,
+		ToAgentID:    update.TargetAgentID,
+		TrajectoryID: update.TrajectoryID,
+		Role:         update.Role,
+		Content:      update.Content,
+		Timestamp:    update.CreatedAt,
+	}
+	if _, _, err := s1.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+		t.Fatalf("dispatch update: %v", err)
+	}
+	otherUpdate := types.WorkerUpdateRecord{
+		UpdateID:      "update-combined-rewarm-other",
+		OwnerID:       ownerID,
+		AgentID:       "co-super:reviewer",
+		TargetAgentID: agentID,
+		ChannelID:     channelID,
+		TrajectoryID:  otherTrajectoryID,
+		Role:          AgentProfileCoSuper,
+		Kind:          "status",
+		Summary:       "second trajectory restart update",
+		Content:       "pending update content for second trajectory",
+		CreatedAt:     now.Add(2 * time.Millisecond),
+	}
+	otherMessage := types.ChannelMessage{
+		ChannelID:    otherUpdate.ChannelID,
+		FromAgentID:  otherUpdate.AgentID,
+		ToAgentID:    otherUpdate.TargetAgentID,
+		TrajectoryID: otherUpdate.TrajectoryID,
+		Role:         otherUpdate.Role,
+		Content:      otherUpdate.Content,
+		Timestamp:    otherUpdate.CreatedAt,
+	}
+	if _, _, err := s1.DispatchWorkerUpdate(ctx, otherUpdate, &otherMessage); err != nil {
+		t.Fatalf("dispatch second update: %v", err)
+	}
+	_ = s1.Close()
+
+	s2, err := openTestStore(dbPath)
+	if err != nil {
+		t.Fatalf("open store 2: %v", err)
+	}
+	rt := New(Config{
+		SandboxID:           "sandbox-test",
+		StorePath:           dbPath,
+		ProviderTimeout:     time.Second,
+		SupervisionInterval: time.Hour,
+	}, s2, events.NewEventBus(), NewStubProvider(2*time.Second))
+	t.Cleanup(func() {
+		rt.Stop()
+		_ = s2.Close()
+		_ = os.Remove(dbPath)
+	})
+
+	rt.Start(ctx)
+
+	passivated, err := s2.GetRun(ctx, interrupted.RunID)
+	if err != nil {
+		t.Fatalf("get interrupted run: %v", err)
+	}
+	if passivated.State != types.RunPassivated {
+		t.Fatalf("interrupted state = %q, want %q", passivated.State, types.RunPassivated)
+	}
+
+	var active types.RunRecord
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		active, err = s2.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
+		if err == nil && active.RunID != interrupted.RunID {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("get active replacement run: %v", err)
+	}
+	if active.RunID == "" || active.RunID == interrupted.RunID {
+		t.Fatalf("replacement run = %+v, want new active run", active)
+	}
+	if ids := metadataStringSlice(active.Metadata["worker_update_ids"]); !containsString(ids, update.UpdateID) {
+		t.Fatalf("worker_update_ids = %+v, want %s", ids, update.UpdateID)
+	} else if !containsString(ids, otherUpdate.UpdateID) {
+		t.Fatalf("worker_update_ids = %+v, want %s", ids, otherUpdate.UpdateID)
+	}
+	if ids := metadataStringSlice(active.Metadata["work_item_ids"]); !containsString(ids, item.WorkItemID) {
+		t.Fatalf("work_item_ids = %+v, want %s", ids, item.WorkItemID)
+	} else if !containsString(ids, otherItem.WorkItemID) {
+		t.Fatalf("work_item_ids = %+v, want %s", ids, otherItem.WorkItemID)
+	}
+	if !strings.Contains(active.Prompt, update.Content) {
+		t.Fatalf("replacement prompt missing update content: %q", active.Prompt)
+	}
+	if !strings.Contains(active.Prompt, otherUpdate.Content) {
+		t.Fatalf("replacement prompt missing second update content: %q", active.Prompt)
+	}
+	if !strings.Contains(active.Prompt, item.Objective) {
+		t.Fatalf("replacement prompt missing work item objective: %q", active.Prompt)
+	}
+	if !strings.Contains(active.Prompt, otherItem.Objective) {
+		t.Fatalf("replacement prompt missing second work item objective: %q", active.Prompt)
+	}
+
+	obligations, err := rt.TrajectoryObligations(ctx, ownerID, trajectoryID)
+	if err != nil {
+		t.Fatalf("trajectory obligations: %v", err)
+	}
+	if len(obligations.OpenWorkItems) != 1 || obligations.OpenWorkItems[0].WorkItemID != item.WorkItemID {
+		t.Fatalf("open work items = %+v, want %s still open", obligations.OpenWorkItems, item.WorkItemID)
+	}
+	if obligations.PendingUpdates != 1 || obligations.SettlementReady {
+		t.Fatalf("obligations = %+v, want pending update and unsettled open work", obligations)
+	}
+	otherObligations, err := rt.TrajectoryObligations(ctx, ownerID, otherTrajectoryID)
+	if err != nil {
+		t.Fatalf("second trajectory obligations: %v", err)
+	}
+	if len(otherObligations.OpenWorkItems) != 1 || otherObligations.OpenWorkItems[0].WorkItemID != otherItem.WorkItemID {
+		t.Fatalf("second open work items = %+v, want %s still open", otherObligations.OpenWorkItems, otherItem.WorkItemID)
+	}
+	if otherObligations.PendingUpdates != 1 || otherObligations.SettlementReady {
+		t.Fatalf("second obligations = %+v, want pending update and unsettled open work", otherObligations)
+	}
+}
+
 func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 	rt, s := testRuntimeWithProviderAndRegistry(t, NewStubProvider(2*time.Second), nil)
 	ctx := context.Background()
