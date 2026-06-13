@@ -85,6 +85,14 @@ cleanup.
 Historical mentions of Trace/Terminal/Browser in this portfolio are evidence
 labels or successor-scope handles, not target product ontology.
 
+**source-intake product wedge:** `docs/mission-conductor-url-source-routing-h029-v0.md`
+now carries the H029 Conductor URL repair plus the broader owner workflow:
+URLs/files become durable source artifacts transcluded into VText, with
+YouTube transcript import as the first personal-use slice and podcasts/PDFs/
+EPUBs/uploads staged after that. This is a side product wedge and future
+product falsifier, not architecture-spine descent, unless it removes a concrete
+Browser-as-source blocker for M3-M5.
+
 ## Dependency graph
 
 ```

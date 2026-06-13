@@ -126,5 +126,7 @@ These remain real after the doc pass:
    inspection. Non-goal: changing routing prompts or breaking existing source
    opening, iframe fallback, Web Lens inspection, or publication-carried reader
    snapshots inside this doctrine landing commit.
+   Prompt/default routing now has a dedicated problem-first successor paradoc:
+   `docs/mission-conductor-url-source-routing-h029-v0.md`.
 3. M4 continuation deletion: finish the architectural removal/re-pointing so
    `continuation-level` can leave current acceptance language entirely.
