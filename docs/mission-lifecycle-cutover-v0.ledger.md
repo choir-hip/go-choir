@@ -1025,3 +1025,37 @@ settlement.
 Expected Delta V: 0 for lifecycle semantics, actual Delta V: 0 for lifecycle
 semantics. The staging recovery blocker is closed; the remaining discriminator
 is deployed restart/rewarm evidence for durable actor lifecycle behavior.
+
+## 2026-06-13 - Batch I Actor Memory Snapshot Bridge
+
+Claim/scope: narrow the R2 run-memory blocker without inventing a second
+lifecycle model. Before this batch, `run_memory_entries` were only keyed and
+rehydrated by `loop_id`, so a cold replacement activation for the same durable
+agent could start from the wake prompt without the previous activation's
+compacted memory unless continuation machinery copied it. The target model says
+passivated actors rewarm from compacted memory plus durable log tail.
+
+Move: add a store query for the latest prior inactive activation memory log for
+the same `(owner_id, agent_id)`, and have `runMemoryManager.initialize` append a
+deterministic `actor_rewarm` compaction checkpoint into a fresh activation's
+memory log before appending the wake message. The bridge uses existing
+`run_memory_entries` and `runs` tables; it selects only prior
+`completed`/`passivated` activations and excludes the current run. `blocked`
+runs remain active/unresolved and are deliberately excluded.
+
+Receipts:
+
+- `nix develop -c go test ./internal/runtime -run TestRunMemoryInitializeSeedsPriorActorSnapshot -count=1`
+- `nix develop -c go test ./internal/store -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestRunMemoryInitializeSeedsPriorActorSnapshot|TestStartSweepsAssignedOpenWorkItemsAfterPassivation|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TestCoagentRewarmUsesResidentActivationNotActiveRunProxy|TestCoagentRewarmIgnoresBlockedHistoricalActivation' -count=1`
+- `nix develop -c scripts/go-test-runtime-shards`
+
+Expected Delta V: 0 for the whole mission variant because the deployed
+kill/restart falsifier and old lifecycle deletion gates remain open. Actual
+Delta V: 0 at mission level, but the run-memory subclaim narrowed: first
+provider-call context for a replacement tool-loop activation now carries the
+prior actor checkpoint and wake input under the new activation's evidence row.
+
+Open edge: this is a v0 bridge, not the final schema. The durable target is
+still an actor-scoped memory snapshot plus log tail; `loop_id` remains an
+activation/evidence key until that explicit schema cut lands.

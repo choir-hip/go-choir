@@ -428,6 +428,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_owner_id ON runs(owner_id);
 CREATE INDEX IF NOT EXISTS idx_runs_state ON runs(state);
 CREATE INDEX IF NOT EXISTS idx_runs_sandbox_id ON runs(sandbox_id);
 CREATE INDEX IF NOT EXISTS idx_runs_agent_id ON runs(agent_id);
+CREATE INDEX IF NOT EXISTS idx_runs_owner_agent_state_updated ON runs(owner_id, agent_id, state, updated_at);
 CREATE INDEX IF NOT EXISTS idx_runs_channel_id ON runs(channel_id);
 CREATE INDEX IF NOT EXISTS idx_runs_parent_loop_id ON runs(parent_loop_id);
 CREATE INDEX IF NOT EXISTS idx_trajectories_owner_status ON trajectories(owner_id, status, updated_at);
@@ -446,6 +447,7 @@ CREATE INDEX IF NOT EXISTS idx_channel_messages_trajectory_id ON channel_message
 CREATE INDEX IF NOT EXISTS idx_inbox_deliveries_created_at ON inbox_deliveries(created_at);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_loop_seq ON run_memory_entries(loop_id, seq);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_owner_loop_seq ON run_memory_entries(owner_id, loop_id, seq);
+CREATE INDEX IF NOT EXISTS idx_run_memory_entries_owner_agent_created ON run_memory_entries(owner_id, agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_parent ON run_memory_entries(parent_entry_id);
 CREATE INDEX IF NOT EXISTS idx_computer_source_lineages_owner_kind ON computer_source_lineages(owner_id, computer_kind, updated_at);
 CREATE INDEX IF NOT EXISTS idx_app_change_packages_owner_status ON app_change_packages(owner_id, status, updated_at);

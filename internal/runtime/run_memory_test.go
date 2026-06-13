@@ -1,10 +1,12 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -50,6 +52,162 @@ func TestBuildRunMemoryContextUsesLatestCompaction(t *testing.T) {
 	}
 	if string(messages[2]) != string(entries[3].Message) {
 		t.Fatalf("post-compaction message: got %s, want %s", messages[2], entries[3].Message)
+	}
+}
+
+func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
+	_, s := testRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "user-alice"
+	agentID := "coagent:memory-rewarm"
+
+	prior := types.RunRecord{
+		RunID:     "prior-memory-activation",
+		AgentID:   agentID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		State:     types.RunPassivated,
+		Prompt:    "remember durable actor context",
+		CreatedAt: now,
+		UpdatedAt: now,
+		Metadata: map[string]any{
+			runMetadataAgentID: agentID,
+		},
+	}
+	if err := s.CreateRun(ctx, prior); err != nil {
+		t.Fatalf("create prior run: %v", err)
+	}
+	priorMessage, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		RunID:   prior.RunID,
+		OwnerID: ownerID,
+		AgentID: agentID,
+		Kind:    types.RunMemoryEntryMessage,
+		Role:    "user",
+		Message: json.RawMessage(`{"role":"user","content":"remember sentinel actor memory"}`),
+	})
+	if err != nil {
+		t.Fatalf("append prior memory message: %v", err)
+	}
+	if _, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		RunID:            prior.RunID,
+		OwnerID:          ownerID,
+		AgentID:          agentID,
+		Kind:             types.RunMemoryEntryCompaction,
+		Summary:          "sentinel compacted actor memory",
+		FirstKeptEntryID: priorMessage.EntryID,
+		TokensBefore:     42,
+		Reason:           "threshold",
+	}); err != nil {
+		t.Fatalf("append prior memory compaction: %v", err)
+	}
+	olderFinishedAt := now.Add(-time.Minute)
+	olderCompleted := types.RunRecord{
+		RunID:      "older-completed-memory-activation",
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		SandboxID:  "sandbox-test",
+		State:      types.RunCompleted,
+		Prompt:     "older completed context",
+		Result:     "done",
+		CreatedAt:  now.Add(-time.Minute),
+		UpdatedAt:  now.Add(-time.Minute),
+		FinishedAt: &olderFinishedAt,
+	}
+	if err := s.CreateRun(ctx, olderCompleted); err != nil {
+		t.Fatalf("create older completed run: %v", err)
+	}
+	if _, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		RunID:   olderCompleted.RunID,
+		OwnerID: ownerID,
+		AgentID: agentID,
+		Kind:    types.RunMemoryEntryMessage,
+		Role:    "user",
+		Message: json.RawMessage(`{"role":"user","content":"older completed memory must not win by memory row time"}`),
+	}); err != nil {
+		t.Fatalf("append older completed memory: %v", err)
+	}
+	blocked := types.RunRecord{
+		RunID:     "blocked-memory-activation",
+		AgentID:   agentID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		State:     types.RunBlocked,
+		Prompt:    "blocked unresolved context",
+		Error:     "still unresolved",
+		CreatedAt: now.Add(2 * time.Second),
+		UpdatedAt: now.Add(2 * time.Second),
+	}
+	if err := s.CreateRun(ctx, blocked); err != nil {
+		t.Fatalf("create blocked run: %v", err)
+	}
+	if _, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		RunID:   blocked.RunID,
+		OwnerID: ownerID,
+		AgentID: agentID,
+		Kind:    types.RunMemoryEntryMessage,
+		Role:    "user",
+		Message: json.RawMessage(`{"role":"user","content":"blocked memory must not seed a new activation"}`),
+	}); err != nil {
+		t.Fatalf("append blocked memory: %v", err)
+	}
+
+	current := types.RunRecord{
+		RunID:     "rewarm-memory-activation",
+		AgentID:   agentID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		State:     types.RunPending,
+		Prompt:    "new wake update",
+		CreatedAt: now.Add(time.Second),
+		UpdatedAt: now.Add(time.Second),
+		Metadata: map[string]any{
+			runMetadataAgentID: agentID,
+		},
+	}
+	if err := s.CreateRun(ctx, current); err != nil {
+		t.Fatalf("create current run: %v", err)
+	}
+
+	memory := newRunMemoryManager(s, &current, Config{}, nil)
+	messages, err := memory.initialize(ctx, []json.RawMessage{
+		json.RawMessage(`{"role":"user","content":"new wake update"}`),
+	})
+	if err != nil {
+		t.Fatalf("initialize run memory: %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("messages = %d, want actor snapshot + wake message: %+v", len(messages), messages)
+	}
+	if !strings.Contains(string(messages[0]), "sentinel compacted actor memory") {
+		t.Fatalf("snapshot message missing prior memory: %s", messages[0])
+	}
+	if !strings.Contains(string(messages[0]), "remember sentinel actor memory") {
+		t.Fatalf("snapshot message missing raw message retained by prior checkpoint: %s", messages[0])
+	}
+	if strings.Contains(string(messages[0]), "older completed memory") ||
+		strings.Contains(string(messages[0]), "blocked memory") {
+		t.Fatalf("snapshot message crossed wrong prior activation: %s", messages[0])
+	}
+	if !strings.Contains(string(messages[1]), "new wake update") {
+		t.Fatalf("wake message missing: %s", messages[1])
+	}
+
+	entries, err := s.ListRunMemoryEntries(ctx, ownerID, current.RunID)
+	if err != nil {
+		t.Fatalf("list current entries: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("current entries = %+v, want snapshot + wake message", entries)
+	}
+	if entries[0].Kind != types.RunMemoryEntryCompaction || entries[0].Reason != "actor_rewarm" {
+		t.Fatalf("first entry = %+v, want actor_rewarm compaction", entries[0])
+	}
+	if entries[0].Details["source_loop_id"] != prior.RunID {
+		t.Fatalf("source_loop_id = %#v, want %s", entries[0].Details["source_loop_id"], prior.RunID)
+	}
+	if entries[1].Kind != types.RunMemoryEntryMessage {
+		t.Fatalf("second entry = %+v, want wake message", entries[1])
 	}
 }
 

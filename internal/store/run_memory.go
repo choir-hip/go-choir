@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -112,6 +113,53 @@ func (s *Store) AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryE
 		return types.RunMemoryEntry{}, fmt.Errorf("commit run memory append: %w", err)
 	}
 	return entry, nil
+}
+
+// LatestActorRunMemoryEntries returns the most recent durable memory log for a
+// prior inactive activation of the same actor identity.
+func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, agentID, excludeRunID string) (string, []types.RunMemoryEntry, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	agentID = strings.TrimSpace(agentID)
+	excludeRunID = strings.TrimSpace(excludeRunID)
+	if ownerID == "" {
+		return "", nil, fmt.Errorf("latest actor run memory: owner_id is required")
+	}
+	if agentID == "" {
+		return "", nil, fmt.Errorf("latest actor run memory: agent_id is required")
+	}
+	args := []any{ownerID, agentID}
+	excludeClause := ""
+	if excludeRunID != "" {
+		excludeClause = " AND r.loop_id <> ?"
+		args = append(args, excludeRunID)
+	}
+	args = append(args, ownerID, agentID)
+	query := `SELECT r.loop_id
+		   FROM runs r
+		  WHERE r.owner_id = ?
+		    AND r.agent_id = ?
+		    AND r.state IN ('completed', 'passivated')` + excludeClause + `
+		    AND EXISTS (
+		         SELECT 1
+		           FROM run_memory_entries rme
+		          WHERE rme.owner_id = ?
+		            AND rme.agent_id = ?
+		            AND rme.loop_id = r.loop_id
+		    )
+		  ORDER BY COALESCE(r.finished_at, r.updated_at, r.created_at) DESC, r.created_at DESC
+		  LIMIT 1`
+	var sourceRunID string
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&sourceRunID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil, ErrNotFound
+		}
+		return "", nil, fmt.Errorf("query latest actor run memory: %w", err)
+	}
+	entries, err := s.ListRunMemoryEntries(ctx, ownerID, sourceRunID)
+	if err != nil {
+		return "", nil, err
+	}
+	return sourceRunID, entries, nil
 }
 
 // ListRunMemoryEntries returns a run's durable memory log in sequence order.

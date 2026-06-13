@@ -96,8 +96,12 @@ index and renamed the hot path to `executeActivation`, so warm reuse no longer
 depends first on persisted active-run rows. Full mission V remains 1 because
 the activation body still records terminal run state as evidence, cancellation
 keeps active-row compatibility fallbacks, and deployed restart acceptance has
-not run. Landing then proved the code reached staging, but the deployed
-RunAcceptance smoke exposed the remaining acceptance-repointing blocker: a
+not run. Batch I then narrowed the run-memory blocker: fresh tool-loop
+activations seed their new `run_memory_entries` log with a deterministic
+`actor_rewarm` compaction checkpoint from the latest prior inactive activation
+for the same `(owner_id, agent_id)`, preserving prior compacted memory before
+the wake input is appended. Landing then proved the code reached staging, but
+the deployed RunAcceptance smoke exposed the remaining acceptance-repointing blocker: a
 prompt/VText trajectory at `https://choir.news` produced `staging-smoke-level`
 evidence at deployed commit `a2252af27b5db087cbbb931e8d1b5dc04e402285`, while
 the synthesized RunAcceptanceRecord `runacc-ffec1c9975f357724d29` stayed
@@ -200,6 +204,12 @@ generic actor after restart even without pending worker updates. Batch H added
 the product runtime's volatile resident-agent index and switched warm rewarm
 controllers to it; blocked/nonresident historical rows no longer suppress a
 fresh coagent activation when durable backlog exists.
+Batch I added the v0 actor-memory bridge: when a new tool-loop activation has
+no current run-memory entries, initialization looks up the latest prior
+completed/passivated activation for the same owner and agent, appends an
+`actor_rewarm` compaction checkpoint to the new activation's memory log, then
+appends the wake message. This keeps `loop_id` as activation evidence while
+making rewarm context actor-scoped for the first provider call.
 See "Lifecycle Inventory - 2026-06-13" below.
 
 **next move:** keep M3 open as a lifecycle cutover mission, not a deployment
@@ -249,6 +259,6 @@ atomic idle/backlog check, and boot recovery is sweep, not run failure.
 | `ParentRunID` / `parent_loop_id` | Stored on runs and exposed as `parent_loop_id`. Batch D removed vSuper co-super budget and verifier sequencing dependence on direct children; Batch E removed package reuse's direct-child selector. Trace graphs, VText verifier parent checks, root trajectory refs, tool prompts, skip-level/cancel active-run checks, and many tests still read it. | Rename to `spawned_by_run_id` provenance, with control reads removed. | Keep historical `parent_loop_id` data frozen for compatibility during the cut, but new semantics are provenance-only. Authority/budget checks move to trajectory membership, co-super slot records, explicit requester metadata, or work items. |
 | Active-run graph queries | vSuper co-super admission now counts active trajectory co-super slots, not active direct children. Persistent-super, coagent, assigned-work, and VText wake paths now use the volatile resident-agent index for warm reuse. `GetLatestActiveRunByAgent` remains for blocked-state evidence, requester provenance, and cancellation compatibility fallback. `RunningCount` / `RunningCountByProfile` still report running activation evidence for health/admission. | Port to trajectory/work item plus actor registry/residency. | Admission uses resident actor counts / per-owner caps and co-super slots; "waiting on work" uses trajectory obligations and pending update counts. Remaining active-run reads must stay audit/compatibility, not decide ordinary warm actor residency. |
 | Boot recovery | Boot now passivates interrupted activations, sweeps pending `worker_updates`, and sweeps live/open work items that already name an assigned durable agent. `TrajectoryObligations` still exposes unassigned open obligations without selecting an actor. | Delete old recovery, port to sweep. | Continue shrinking boot recovery toward an explicit actor-residency/backlog table. Assigned work items are rewarm backlog; unassigned obligations need owner/supervisor routing and must stay observable rather than silently spawning an arbitrary actor. |
-| Run-memory compaction | `run_memory_entries` are keyed by `loop_id`; `executeWithToolLoop` initializes `runMemoryManager`, compacts on thresholds/overflow, and `CompactRunMemory` is manual per-run. | Wrap in activation shim, then port to actor memory snapshot. | Reuse the existing compaction machinery inside the activation shim first. The durable target is actor memory snapshot plus log tail; `loop_id` becomes activation/run evidence, not the long-lived memory identity. |
+| Run-memory compaction | `run_memory_entries` are still physically keyed by `loop_id`, but new tool-loop activations now seed an `actor_rewarm` compaction checkpoint from the latest prior inactive activation for the same `(owner_id, agent_id)` before appending the wake message. `executeWithToolLoop` still initializes `runMemoryManager`, compacts on thresholds/overflow, and `CompactRunMemory` is manual per-run. | Wrap in activation shim, then port to actor memory snapshot. | The v0 bridge makes compacted context available across activations without a schema migration. The durable target remains an actor memory snapshot plus log tail; `loop_id` should stay activation/run evidence, not the long-lived memory identity. |
 | Update-woken delivery | `update_coagent` writes `worker_updates`; `wakeUpdatedCoagent` calls `reconcilePersistentSuperActor` / `reconcileUpdatedCoagentActor`; those create or reuse active runs and mark update IDs delivered at terminal run update. | Wrap in activation shim. | Cold delivery should activate from backlog; warm delivery should inject steering input at a step boundary. Delivery/incorporation should be tied to processing the update, not to a whole run ending. |
 | Acceptance evidence | `RunAcceptanceRecord` has `trajectory_id` but still carries `loop_id`; `continuation-level` is gated by a `continued` checkpoint after promotion, and AGENTS.md says this is transitional until M4. | Port to trajectory/work item / activation evidence. | M3 evidence should prove activation/sweep/rewarm and no stranded messages. M4 re-points `continuation-level` formally; this mission must avoid claiming continuation-level from old run continuation evidence. |

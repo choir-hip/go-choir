@@ -59,6 +59,9 @@ func (m *runMemoryManager) initialize(ctx context.Context, initialMessages []jso
 		return nil, err
 	}
 	if len(entries) == 0 {
+		if err := m.seedActorMemorySnapshot(ctx); err != nil {
+			return nil, err
+		}
 		for _, msg := range initialMessages {
 			if err := m.appendMessage(ctx, runMemoryMessageRole(msg), msg); err != nil {
 				return nil, err
@@ -66,6 +69,84 @@ func (m *runMemoryManager) initialize(ctx context.Context, initialMessages []jso
 		}
 	}
 	return m.contextMessages(ctx)
+}
+
+func (m *runMemoryManager) seedActorMemorySnapshot(ctx context.Context) error {
+	if m == nil || m.store == nil || m.rec == nil {
+		return nil
+	}
+	ownerID := strings.TrimSpace(m.rec.OwnerID)
+	agentID := strings.TrimSpace(m.rec.AgentID)
+	runID := strings.TrimSpace(m.rec.RunID)
+	if ownerID == "" || agentID == "" || runID == "" {
+		return nil
+	}
+	sourceRunID, priorEntries, err := m.store.LatestActorRunMemoryEntries(ctx, ownerID, agentID, runID)
+	if err != nil {
+		if errors.Is(err, runtimestore.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("load actor memory snapshot: %w", err)
+	}
+	if len(priorEntries) == 0 {
+		return nil
+	}
+	checkpoint, tail := latestRunMemoryCheckpointAndTail(priorEntries)
+	summary := summarizeRunMemoryMessages(checkpoint, tail, "actor_rewarm")
+	if strings.TrimSpace(summary) == "" {
+		return nil
+	}
+	sourceEntryIDs := make([]string, 0, len(priorEntries))
+	for _, entry := range priorEntries {
+		if id := strings.TrimSpace(entry.EntryID); id != "" {
+			sourceEntryIDs = append(sourceEntryIDs, id)
+		}
+	}
+	_, err = m.store.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		RunID:        runID,
+		OwnerID:      ownerID,
+		AgentID:      agentID,
+		Kind:         types.RunMemoryEntryCompaction,
+		Summary:      "Actor memory snapshot from prior activation " + sourceRunID + "\n\n" + summary,
+		TokensBefore: estimateRawMessagesTokens(buildRunMemoryContext(priorEntries)),
+		Reason:       "actor_rewarm",
+		Details: map[string]any{
+			"source_loop_id":    sourceRunID,
+			"source_entry_ids":  sourceEntryIDs,
+			"checkpoint_status": "deterministic_actor_snapshot",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("append actor memory snapshot: %w", err)
+	}
+	return nil
+}
+
+func latestRunMemoryCheckpointAndTail(entries []types.RunMemoryEntry) (string, []types.RunMemoryEntry) {
+	for i := len(entries) - 1; i >= 0; i-- {
+		if entries[i].Kind == types.RunMemoryEntryCompaction {
+			latest := entries[i]
+			tail := make([]types.RunMemoryEntry, 0, len(entries)-i-1)
+			if strings.TrimSpace(latest.FirstKeptEntryID) != "" {
+				keep := false
+				for _, entry := range entries[:i] {
+					if entry.EntryID == latest.FirstKeptEntryID {
+						keep = true
+					}
+					if keep && entry.Kind == types.RunMemoryEntryMessage && len(entry.Message) > 0 {
+						tail = append(tail, entry)
+					}
+				}
+			}
+			for _, entry := range entries[i+1:] {
+				if entry.Kind == types.RunMemoryEntryMessage && len(entry.Message) > 0 {
+					tail = append(tail, entry)
+				}
+			}
+			return strings.TrimSpace(latest.Summary), tail
+		}
+	}
+	return "", entries
 }
 
 func (m *runMemoryManager) hooks() ToolLoopMemoryHooks {
