@@ -1113,3 +1113,23 @@ Expected Delta V: 0 for full M3; actual Delta V: 0. The fix target is narrow:
 make co-super slot ownership in the caller trajectory the only vSuper
 `cancel_agent` authority, while leaving non-vSuper compatibility cancellation
 fallbacks out of scope for this batch.
+
+## 2026-06-13 - Batch J Fix: vSuper Cancel Uses Caller-Trajectory Slots Only
+
+Move: change `cancel_agent` so vSuper callers treat a missing co-super slot in
+the caller trajectory as `agent not active in caller trajectory` instead of
+falling through to `GetLatestActiveRunByAgent`. Slot-owned cancellation and
+exported-package protection still use the slot run; non-vSuper cancellation
+keeps the compatibility active-run fallback.
+
+Receipts:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run TestVSuperCancelAgentDoesNotCancelExportedChild -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestToolRegistry|TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects|TestCoagent' -count=1`
+- `nix develop -c scripts/go-test-runtime-shards`
+- `git diff --check`
+
+Expected Delta V: 0 for full M3; actual Delta V: 0. The active-run control
+fallback set is smaller, but the deployed restart falsifier, non-vSuper
+compatibility cancellation fallback, and permanent lifecycle-model deletion
+gates remain open.

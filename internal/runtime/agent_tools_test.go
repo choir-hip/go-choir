@@ -2799,6 +2799,60 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		t.Fatalf("same-agent other trajectory child state = %s, want running", storedSameAgentOther.State)
 	}
 
+	cancellableChild := types.RunRecord{
+		RunID:        "vsuper-cancel-cancellable-child",
+		AgentID:      "agent-cancellable-child",
+		ChannelID:    parent.ChannelID,
+		ParentRunID:  "candidate-world-spawner",
+		TrajectoryID: parent.TrajectoryID,
+		AgentProfile: AgentProfileCoSuper,
+		AgentRole:    AgentProfileCoSuper,
+		OwnerID:      parent.OwnerID,
+		SandboxID:    parent.SandboxID,
+		State:        types.RunRunning,
+		Prompt:       "Verify candidate change without package evidence.",
+		CreatedAt:    now.Add(3 * time.Second),
+		UpdatedAt:    now.Add(3 * time.Second),
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileCoSuper,
+			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataTrajectoryID: parent.TrajectoryID,
+			runMetadataCoSuperSlot:  "verifier",
+		},
+	}
+	if err := s.CreateRun(ctx, cancellableChild); err != nil {
+		t.Fatalf("create cancellable child: %v", err)
+	}
+	if _, claimed, err := s.ClaimCoSuperSlot(ctx, parent.OwnerID, parent.TrajectoryID, "verifier", cancellableChild.RunID, cancellableChild.AgentID, cancellableChild.ParentRunID); err != nil {
+		t.Fatalf("claim cancellable child slot: %v", err)
+	} else if !claimed {
+		t.Fatalf("claim cancellable child slot: got claimed=false, want true")
+	}
+	raw, err = registry.Execute(WithToolExecutionContext(ctx, &parent), "cancel_agent", json.RawMessage(`{
+		"agent_id":"agent-cancellable-child"
+	}`))
+	if err != nil {
+		t.Fatalf("cancel same-trajectory child: %v", err)
+	}
+	resp = struct {
+		Status string `json:"status"`
+		LoopID string `json:"loop_id"`
+		Reason string `json:"reason"`
+	}{}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode same-trajectory cancel response: %v", err)
+	}
+	if resp.Status != "cancelled" || resp.LoopID != cancellableChild.RunID {
+		t.Fatalf("same-trajectory cancel response = %+v, want cancelled", resp)
+	}
+	storedCancellable, err := s.GetRun(ctx, cancellableChild.RunID)
+	if err != nil {
+		t.Fatalf("get cancellable child: %v", err)
+	}
+	if storedCancellable.State != types.RunCancelled {
+		t.Fatalf("cancellable child state = %s, want cancelled", storedCancellable.State)
+	}
+
 	otherTrajectoryChild := types.RunRecord{
 		RunID:        "vsuper-cancel-other-trajectory-child",
 		AgentID:      "agent-exported-other-trajectory",
@@ -2837,26 +2891,18 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 	raw, err = registry.Execute(WithToolExecutionContext(ctx, &parent), "cancel_agent", json.RawMessage(`{
 		"agent_id":"agent-exported-other-trajectory"
 	}`))
-	if err != nil {
-		t.Fatalf("cancel other trajectory child: %v", err)
+	if err == nil {
+		t.Fatalf("cancel other trajectory child unexpectedly succeeded: %s", raw)
 	}
-	resp = struct {
-		Status string `json:"status"`
-		LoopID string `json:"loop_id"`
-		Reason string `json:"reason"`
-	}{}
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode other trajectory cancel response: %v", err)
-	}
-	if resp.Status != "cancelled" || resp.LoopID != otherTrajectoryChild.RunID {
-		t.Fatalf("other trajectory cancel response = %+v, want cancelled", resp)
+	if !strings.Contains(err.Error(), "agent not active in caller trajectory") {
+		t.Fatalf("cancel other trajectory child error = %v, want caller trajectory guard", err)
 	}
 	storedOther, err := s.GetRun(ctx, otherTrajectoryChild.RunID)
 	if err != nil {
 		t.Fatalf("get other trajectory child: %v", err)
 	}
-	if storedOther.State != types.RunCancelled {
-		t.Fatalf("other trajectory child state = %s, want cancelled", storedOther.State)
+	if storedOther.State != types.RunRunning {
+		t.Fatalf("other trajectory child state = %s, want running", storedOther.State)
 	}
 }
 

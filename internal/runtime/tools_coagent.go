@@ -851,17 +851,18 @@ func newCancelAgentTool(rt *Runtime) Tool {
 				if err != nil {
 					return "", fmt.Errorf("lookup co-super slot before cancel: %w", err)
 				}
-				if found {
-					slotRun, err := rt.store.GetRun(ctx, strings.TrimSpace(slot.RunID))
-					if err != nil {
-						return "", fmt.Errorf("lookup co-super slot run before cancel: %w", err)
-					}
-					if !slotRun.State.Active() {
-						return "", fmt.Errorf("agent not active in caller trajectory: %s", in.AgentID)
-					}
-					target = slotRun
-					targetFromCallerSlot = true
+				if !found {
+					return "", fmt.Errorf("agent not active in caller trajectory: %s", in.AgentID)
 				}
+				slotRun, err := rt.store.GetRun(ctx, strings.TrimSpace(slot.RunID))
+				if err != nil {
+					return "", fmt.Errorf("lookup co-super slot run before cancel: %w", err)
+				}
+				if !slotRun.State.Active() {
+					return "", fmt.Errorf("agent not active in caller trajectory: %s", in.AgentID)
+				}
+				target = slotRun
+				targetFromCallerSlot = true
 			}
 			if !targetFromCallerSlot {
 				if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
