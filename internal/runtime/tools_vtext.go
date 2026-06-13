@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -196,8 +197,8 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 			}, true
 		}
 	}
-	if baseRevision.AuthorKind == types.AuthorUser &&
-		(metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) || vtextPromptExplicitlyRequestsResearcher(prompt)) {
+	if (metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) || vtextPromptExplicitlyRequestsResearcher(prompt)) &&
+		!rt.vtextTrajectoryHasResearcherParticipation(ctx, rec, rev.DocID) {
 		objective := "Research the user's request for this VText document and send a concise finding with evidence via update_coagent."
 		if prompt != "" {
 			objective += " Focus on: " + truncateForToolInstruction(prompt, 420)
@@ -213,6 +214,42 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 		}, true
 	}
 	return vtextRequiredContinuation{}, false
+}
+
+func (rt *Runtime) vtextTrajectoryHasResearcherParticipation(ctx context.Context, rec *types.RunRecord, docID string) bool {
+	if rt == nil || rt.store == nil || rec == nil {
+		return false
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	docID = strings.TrimSpace(docID)
+	trajectoryID := strings.TrimSpace(rec.TrajectoryID)
+	if ownerID == "" || docID == "" || trajectoryID == "" {
+		return false
+	}
+	runs, err := rt.store.ListRunsByChannel(ctx, ownerID, docID, 500)
+	if err != nil {
+		log.Printf("runtime: vtext run %s: list channel runs for researcher obligation: %v", rec.RunID, err)
+		return false
+	}
+	for _, run := range runs {
+		if strings.TrimSpace(run.TrajectoryID) != trajectoryID {
+			continue
+		}
+		if agentProfileForRun(&run) == AgentProfileResearcher {
+			return true
+		}
+	}
+	updates, err := rt.store.ListWorkerUpdatesByTrajectory(ctx, ownerID, trajectoryID, 200)
+	if err != nil {
+		log.Printf("runtime: vtext run %s: list worker updates for researcher obligation: %v", rec.RunID, err)
+		return false
+	}
+	for _, update := range updates {
+		if strings.TrimSpace(update.ChannelID) == docID && strings.TrimSpace(update.Role) == AgentProfileResearcher {
+			return true
+		}
+	}
+	return false
 }
 
 func truncateForToolInstruction(text string, limit int) string {
