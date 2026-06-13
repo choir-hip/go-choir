@@ -17,27 +17,29 @@ in `specs/`, and `docs/mission-geometry.md` (the layer each mission serves).
 
 Already done (not missions): specs 0–4 + CI; actor core package
 (`internal/actor`, cutover step 1); promotion P2 guards (approval gate +
-freshness CAS); MissionGradient v2.0.0; Parallax v1.2.0 as candidate
+freshness CAS); MissionGradient v2.0.0; Parallax v1.3.1 as candidate
 mission discipline.
 
 ## Portfolio Parallax State
 
 **status:** working
 
-**mission conjecture:** If the portfolio lands the trajectory/work-item
-model, settlement-gated Wire, single-message actor cutover, real promotion
-route flip, review UI, Dolt rollback window, and capsule/corpus side tracks
-under the named invariants and staging proof requirements, then Choir's
-deeper rearchitecture goal advances: durable actors, evidence-bearing
-promotion, and self-development become operational instead of documentary.
+**mission conjecture:** If the portfolio first lands the durable-actor spine
+— trajectory/work-item records, one typed update/wake primitive, actor
+lifecycle/passivation, and deletion of continuation/parent-child control —
+then uses product paths only as falsifiers of that spine, Choir's deeper
+rearchitecture goal advances: durable actors, evidence-bearing promotion, and
+self-development become operational instead of documentary.
 
 **deeper goal (G):** make Choir a self-improving persistent-computer system
 whose agents can change code, data, docs, and method through typed
 conjectures, verifier evidence, owner gates, and rollback-aware promotion.
 
-**witness/spec (A/S):** M1–M8 are the core witness path; M10/M11 are side
-tracks. M9 is completed doctrine cleanup. The specs and docs named above are
-the source program.
+**witness/spec (A/S):** M1-M4 are the architectural cutover spine. M5 is the
+first product-path falsifier of that spine, not a product-polish mission.
+M6/M8 complete the promotion and rollback substrate; M7 is the review UI on
+top. M10/M11/M12 are side tracks. M9 is completed doctrine cleanup. The specs
+and docs named above are the source program.
 
 **bridge conjecture + sub-conjectures / position:** The bridge is not assumed:
 each mission must test whether its artifact advances the deeper goal or merely
@@ -49,27 +51,69 @@ and preserve their learning state in the mission doc.
 only when it changes shared assertions, architecture, specs/tests, skills, or
 successor missions.
 
+**variant (ranking function) V:** count unsettled architecture spine and
+substrate gates: M2 messaging cutover; M3 lifecycle cutover; M4 continuation
+deletion; M5 durable-actor Wire falsifier; M6 route-profile consumer; M8
+Dolt rollback window; M7 review UI on real promotion substrate. Current V=7.
+Side missions do not decrease this V unless they remove a heresy that blocks
+the spine.
+
+**next move:** M2. Do not spend owner attention on Universal Wire completeness
+or review UI polish until M2-M4 remove the old coordination/lifecycle/
+continuation mechanisms.
+
+**ledger file:** `docs/mission-portfolio-2026-06-11.ledger.md`.
+
 ## Dependency graph
 
 ```
 M1 trajectory model ──► M2 messaging cutover ──► M3 lifecycle cutover ──► M4 continuation deletion ──► M5 wire on settlement
                                                                                          (M5 = route-switch evidence gate)
 
-M6 route-flip consumer ──► M7 changes-app review loop ──► M8 dolt branching + rollback window
+M4 continuation deletion ──► M6 route-flip consumer ──► M8 dolt branching + rollback window ──► M7 changes-app review loop
 
 M9 docs revision ─ independent, do early
 M10 capsule design ─ independent research, parallel anytime
 M11 corpusd rename ─ independent side PR, anytime
+M12 dead-export sweep ─ independent, coordinate with M4/M7
 ```
 
 Recommended order of *execution* after the 2026-06-12 sequencing correction:
-M9 → M1 (proof mission) → M2 → M3 → M4 → M5 → M6+M7 → M8, with M10/M11
-parallel. Earlier text treated M5 as runnable immediately after M1 because
-settlement accounting can be modeled before the messaging/lifecycle cutover.
-That remains true for substrate work, but not for the product gate: do not
-spend owner attention on whether Universal Wire is empty or complete until
-durable actors are working and the old continuation/parent-child code has
-been removed. M5 remains the route-switch evidence gate, now after M2-M4.
+M9 → M1 (proof mission) → M2 → M3 → M4 → M5 → M6 → M8 → M7, with
+M10/M11/M12 parallel only when they remove architectural ambiguity rather
+than distract from the spine. Earlier text treated M5 as runnable immediately
+after M1 because settlement accounting can be modeled before the
+messaging/lifecycle cutover. That remains true for substrate work, but not
+for the product gate: do not spend owner attention on whether Universal Wire
+is empty or complete until durable actors are working and the old
+continuation/parent-child code has been removed. M5 remains the route-switch
+evidence gate, now after M2-M4. M7 moves after M8 because owner review without
+a real activate/rollback substrate is another product mirage.
+
+## Architecture-first revision — 2026-06-12
+
+This portfolio now treats product surfaces as **falsifiers after substrate**,
+not as the substrate. The automatic newspaper and review UI are valuable only
+when they reveal whether durable actors, work items, promotion, and rollback
+actually hold. Until then, product success is low-information and product
+failure is ambiguous.
+
+Operating rules for the remaining missions:
+
+- Numbered core missions are dependency order unless explicitly marked as a
+  side track. M9 ran early because stale doctrine is a heresy vector; it was
+  preflight cleanup, not an argument for arbitrary ordering.
+- Old-code deletion is settlement, not cleanup. A mission that leaves a
+  permanent dual model must carry the surviving old path as open variant.
+- Product-path acceptance can falsify architecture, but it cannot substitute
+  for deletion of old coordination, lifecycle, continuation, promotion, or
+  rollback mechanisms.
+- Side missions may run early only when they remove a blocker to the spine
+  or are cheap independent research; they should not consume owner attention
+  needed by M2-M8 gates.
+- Every paradoc should name whether it is `spine`, `falsifier`, `promotion
+  substrate`, `review surface`, or `side track`, so future agents do not
+  confuse visible product work with architectural descent.
 
 ---
 
@@ -131,6 +175,8 @@ adjudicates Parallax's promotion (see docs/parallax-design-2026-06-11.md §5).
 
 ## M2 — Messaging cutover (cutover step 3)
 
+**Kind:** spine.
+
 **Real artifact:** `update_coagent` (renamed, promoted `submit_coagent_update`)
 as the sole agent-to-agent primitive over the `internal/actor` send path;
 deletion of `cast_agent`, `cast_agent_update`, `wait_agent`, `notifyParent`,
@@ -153,6 +199,8 @@ the riskiest single migration — its own control interval and test.
 
 ## M3 — Lifecycle cutover (cutover step 4)
 
+**Kind:** spine.
+
 **Real artifact:** `executeRun` goroutine closures replaced by actor
 activation loops; `recoverInterruptedRuns` blanket-fail deleted (boot = cold
 actors + sweep); cancel-by-trajectory replaces `CancelRunGraph`;
@@ -173,11 +221,18 @@ test sites migrated with their features; acceptance evidence re-pointed.
 
 ## M4 — Continuation deletion (cutover step 5)
 
-**Real artifact:** `SynthesizeRunContinuation` and the decision layer
-removed; app-adoption progression event-driven (adoption state change → 
-update to the owning actor's mailbox); acceptance-evidence
-"continuation-level" re-pointed at work items; `/api/continuations` shimmed
-or 410.
+**Kind:** spine.
+
+**Real artifact:** the residual RunContinuation record/API/event surface is
+removed or explicitly shimmed to trajectory work items; app-adoption
+progression is event-driven (adoption state change -> update to the owning
+actor's mailbox); acceptance-evidence "continuation-level" is re-pointed at
+work items; `/api/continuations` returns 410 or a compatibility response that
+names the replacement. M1a already deleted the synthesis decision layer
+(`SynthesizeRunContinuation`, `SelectSynthesizedRunContinuation`, hardcoded
+mission fallback, adoption-ID substring policy, lease defaults). M4 finishes
+the ontology cut: no remaining product or verifier path depends on
+RunContinuation as the way work continues.
 
 **Bridge conjecture (R3):** nothing of proven value is lost — every behavior
 the synthesis layer provided is unproven (autonomous self-development) or
@@ -192,6 +247,8 @@ mission or verifier discipline silently weakens.
 
 ## M5 — Wire on settlement (cutover step 6; the route-switch evidence gate)
 
+**Kind:** falsifier.
+
 **Real artifact:** `sourcecycled` reconciles on trajectory settlement instead
 of `isTerminalRuntimeState && ActiveChildRuns == 0` (main.go:590); processor
 opens publication trajectories carrying coverage/publish decisions; `maxProc`
@@ -205,8 +262,11 @@ accounting leak, or a trajectory that settles while coagent work is still
 mutating its artifact (the settlement-rule edge from N2′).
 
 **Settlement:** one real multi-story production cycle, parallel processors,
-front page honest and full, settlement queryable. **This run is the evidence
-gate for calling the rearchitecture's core claim supported.**
+front page honest and full enough to expose accounting errors, settlement
+queryable. This is an architecture falsifier, not a newsroom polish pass:
+if Universal Wire is empty or ugly, record only the architectural predicate it
+does or does not reveal. **This run is the evidence gate for calling the
+durable-actor core claim supported.**
 
 **Dependencies:** M4 for the production evidence gate. Substrate work can
 consume M1 earlier, but the product-facing Universal Wire proof should wait
@@ -215,6 +275,8 @@ coordination/continuation paths. **Size:** 1 overnight mission + 1 observed
 production cycle.
 
 ## M6 — Route-flip consumer (promotion P1's load-bearing unknown)
+
+**Kind:** promotion substrate.
 
 **Real artifact:** something real consumes `RouteProfile`: vmctl/proxy route
 resolution honors the lineage's route pointer, so PromoteAppAdoption's flip
@@ -237,6 +299,8 @@ product path. **Size:** 1–2 overnight missions.
 
 ## M7 — Changes app review loop
 
+**Kind:** review surface.
+
 **Real artifact:** `FeaturesApp.svelte` upgraded to the S1–S5 review loop:
 headline; **Try-it-now wired to the existing preview endpoint** (cheapest
 high-value fix in the system); plan view with destructive items flagged and
@@ -251,11 +315,14 @@ reading a diff or a hash. *Edge (frame_lock):* the headline/plan author has a
 conflict of interest if it is the authoring agent; use an independent
 summarizer or deterministic plan-diff, and say which in the plan view.
 
-**Dependencies:** M6 for the activate-means-something half; the preview
-wiring and plan view need nothing and can start immediately. **Size:** 1
-overnight mission (UI) after a half-day design pass.
+**Dependencies:** M6 and M8 for settlement. Small preview/plan-view probes
+can be sketched earlier, but the mission should not settle before activate,
+rollback, and shared-state conflict semantics are real. **Size:** 1 overnight
+mission (UI) after a half-day design pass.
 
 ## M8 — Shared-state promotion: Dolt branching + rollback window (P3/P4)
+
+**Kind:** promotion substrate.
 
 **Real artifact:** promotions create real Dolt branches at fork, three-way
 merge at commit with legible conflict surfacing; rollback window as explicit
@@ -276,6 +343,8 @@ escalation point.
 
 ## M9 — Docs revision + heresy sweep (grand synthesis §6.1) — DONE 2026-06-11
 
+**Kind:** side track / doctrine preflight.
+
 **Completed**: see `docs/mission-docs-revision-v1.md` for the run record and
 evidence ledger.
 
@@ -295,6 +364,8 @@ parallel with M1.** **Size:** 1 session, agent-heavy.
 
 ## M10 — Capsule substrate design (research mission, not code)
 
+**Kind:** side track / research.
+
 **Real artifact:** a design doc + decision record answering the hybrid
 handoff research backlog: Nucleus maturity audit vs bubblewrap/nsjail/gVisor;
 effect-capture mechanism (overlay diff vs fanotify vs eBPF vs seccomp trace);
@@ -311,6 +382,8 @@ running a real parser job in strict-agent mode with effect capture.
 unblocks the curl|bash story and hybrid Milestones 1–3.
 
 ## M12 — Dead-export and dead-endpoint sweep (side mission, M9-class)
+
+**Kind:** side track / heresy sweep.
 
 **Real artifact:** the codex ruins accounted for: an export-level sweep of
 frontend JS/TS (dead exports inside live files — the `synthesizeContinuation`
@@ -331,6 +404,8 @@ that ruins remain is refuted and the mission settles immediately.
 coordinate to avoid double deletion. **Size:** half a session, agent-heavy.
 
 ## M11 — corpusd rename (side PR)
+
+**Kind:** side track / naming.
 
 `platformd → corpusd` with config-key aliases; zero behavior change;
 SMALL-MEDIUM radius per review v2. Promote "canonical publication_id minted
@@ -355,18 +430,24 @@ mission. **Dependencies:** none. **Size:** half a session.
 
 *Claim:* this portfolio, executed with Parallax mission documents, converts
 the rearchitecture from documents into a system whose causality, messaging,
-lifecycle, and promotion are each backed by a machine-checked spec, scoped
-runtime conformance, and at least one production falsifier run.
+lifecycle, continuation deletion, promotion, and rollback are each backed by
+a machine-checked spec where applicable, scoped runtime conformance, deletion
+of the old competing code paths, and product-path falsifiers only after the
+architecture can carry their meaning.
 
 *Bridge edge:* the portfolio can still succeed locally while failing the
 deeper goal if missions ship isolated scaffolding, silently abandon partial
-learning, or replace hard conjectures with new mission names. Each mission
-therefore preserves lineage, retained learning state, and successor links
-when it is blocked or superseded.
+learning, leave old control paths alive beside the new model, or replace hard
+conjectures with new mission names. Each mission therefore preserves lineage,
+retained learning state, and successor links when it is blocked or
+superseded. Each spine mission must also state the old-code deletion ledger:
+which mechanisms are gone, which remain as temporary shims, and why.
 
 *Resource edge:* this remains ~10–14 overnight missions. The bound is owner
-attention at the gates (M5's evidence gate, M6's escalation, M7's dogfood,
-M8's policy decision), not agent capacity.
+attention at the gates (M5's evidence gate, M6's route-consumer decision,
+M8's data-conflict/rollback policy, M7's dogfood), not agent capacity. Owner
+attention should be reserved for architectural gates and falsifiers; product
+polish waits until the bones stand up.
 
 *Scope:* asserted only for the missions as defined; each mission re-scopes at
 start inside its own Parallax State.

@@ -32,7 +32,11 @@ the riskiest single migration — its own control interval and test.
 
 ## Parallax State
 
-status: proposed (blocked on M1 settlement)
+status: open_handoff (ready to start; M1 settled 2026-06-12; portfolio
+sequencing corrected to architecture-first; this is the next active spine
+mission)
+
+**kind:** spine.
 
 **mission conjecture:** if `update_coagent` becomes the sole agent-to-agent
 message and wake primitive over the `internal/actor` send path, and the four
@@ -68,6 +72,17 @@ atomic passivation).
   vsuper outbox, actor_protocol_xvm.tla) is explicitly out of scope —
   deferred until the first real cross-VM pair is live. The restart
   falsifier must run on a real process, not only unit tests.
+
+**variant (ranking function) V:** count remaining M2 blockers: transactional
+domain for durable update log undecided; `update_coagent` rename/promotion
+not done; old coordination tools still registered/called; per-turn inbox
+pollers still active; `notifyParent` still active; slot registry still keyed
+by parent run; restart exactly-once falsifier missing; silent-stall oracle
+missing; prompts/tests still name old tools. Current V=9.
+
+**budget:** 1-2 overnight missions. Solvency rule: batch unambiguous deletion
+work, but stop for a full Parallax pass if the old and new messaging models
+would coexist beyond a temporary shim inside the same landing batch.
 
 **authority / bounds:** repo changes on a branch; behavior changes gated on
 the full suite + the named falsifiers; prompts (co-super.md, vsuper.md,
@@ -175,12 +190,18 @@ Blind spots from this position (edge classes named):
   `channel_messages` as a delivery mechanism (vs audit log)? Grep before
   deleting the pollers; channel_messages survives as replay-only log.
 
-**ledger / move log:** (empty — mission not started; M1 must settle first)
+**next move:** first pass should decide Q1 (same-transaction durable update
+log + ledger effects) and then batch the send-path unification/deletion work
+only as far as that decision supports. Do not detour into Universal Wire or
+review UI product behavior.
+
+**ledger file:** `docs/mission-messaging-cutover-v0.ledger.md`.
 
 **version / lineage:** v0, compiled 2026-06-12 from portfolio M2 + code
-inventory, while M1 was in flight (line numbers may drift; re-verify at
-start). Predecessor: M1 (`docs/mission-trajectory-model-v0.md`).
-Successors gated on this: M3 (lifecycle), M6/M7 indirectly.
+inventory, then reopened after M1 settlement and the portfolio
+architecture-first correction. Line numbers may drift; re-verify at start.
+Predecessor: M1 (`docs/mission-trajectory-model-v0.md`). Successors gated on
+this: M3 (lifecycle), M4 (continuation deletion), M5 (Wire falsifier).
 
 **learning state:** retained here. Inherited from M1's circuit: provenance
 vocabulary is `spawned_by` only (no parent/child, even in prose — glossary
