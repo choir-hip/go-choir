@@ -273,9 +273,10 @@ Code-present/current foundations:
    revisions, user edits, worker update integration, stale-result protection,
    source entities, source repairs, attachments, diagnosis, import, export,
    blame, diff, and history.
-4. URL/content ingestion, content items, podcast routes, browser sessions, PDF,
-   EPUB, image, audio, video, and ContentViewer-style source surfaces exist at
-   varying quality levels. Current app state is tracked in
+4. URL/content ingestion, content items, podcast routes, Web Lens/browser-session
+   implementation state, PDF, EPUB, image, audio, video, and
+   ContentViewer-style source surfaces exist at varying quality levels. Current
+   app state is tracked in
    [platform-os-app-state.md](platform-os-app-state.md).
 5. Platform publication has `platformd`, proxy publish/read APIs, public
    `/pub/vtext/...` routes, sanitized publication bundles, export, retrieval
@@ -364,9 +365,9 @@ Every embedded snippet should have two forms:
 
 For example, an embedded video expands into the Video app, a podcast excerpt
 expands into Podcast, a PDF source excerpt expands into PDF, an image expands
-into Image, a Trace excerpt expands into Trace, and an embedded VText expands
-into another VText window. This preserves app boundaries while making VText the
-composition and reentry surface.
+into Image, trace evidence expands into an evidence artifact or Super Console
+diagnosis path, and an embedded VText expands into another VText window. This
+preserves app boundaries while making VText the composition and reentry surface.
 
 The multi-window desktop is part of the reading model. Sources, demos, and
 media should be worth opening because opening them does not destroy the current
@@ -380,16 +381,17 @@ sources, interactive graphics, animations, multimedia clips, generated or
 uploaded media, and reviewable evidence. The generated VText should not flatten
 those materials into links at the bottom. It should arrange them as readable
 snippets in the essay, with sources and media tempting enough to open because
-the desktop preserves context. Clicking a source opens Browser/Web Lens or the
-appropriate reader; clicking a graphic opens the owning interactive app or
-viewer; clicking a nested argument opens another VText; clicking a candidate
-demo opens the review/approval context. This is one reason VText must stay a
-composition surface over typed artifacts instead of becoming a monolithic media
-app.
+the desktop preserves context. Clicking a source opens Source Viewer by default;
+explicit live/original inspection opens Web Lens; clicking a graphic opens the
+owning interactive app or viewer; clicking a nested argument opens another
+VText; clicking a candidate demo opens the review/approval context. This is one
+reason VText must stay a composition surface over typed artifacts instead of
+becoming a monolithic media app.
 
 Not every app is an appagent. Apps can be simple desktop surfaces. An app becomes
 an appagent when it needs durable domain ownership, prompts, or dynamic agentic
-UI. Likely sequence: `vtext` first, browser next, then mail, then calendar.
+UI. Likely sequence: `vtext` first, then source/Web Lens ownership if it needs
+durable domain agency, then mail, then calendar.
 Trace is no longer a product app direction. Trace remains evidence: structured
 events, unified logs, run bundles, acceptance records, and diagnosis artifacts.
 Humans should not be expected to browse a Trace app to debug Choir.
@@ -508,9 +510,10 @@ may mutate candidate state within scope and may spawn local cosupers inside that
 VM boundary. It cannot promote canonical state.
 
 `cosuper` is a durable execution co-agent, usually running inside a background
-computer or under a vsuper. Only `super`/`vsuper` authority can lease cosuper work.
-Cosupers should not be treated as one-shot subagents that disappear without live
-coordination.
+computer or under a vsuper. Only `super`/`vsuper` authority can request or assign
+cosuper work. Legacy lease wording is H019 residue unless it is explicitly about
+capacity/QoS rather than actor control. Cosupers should not be treated as
+one-shot subagents that disappear without live coordination.
 
 `worker` is the general category for delegated agents such as researcher, super,
 cosuper, and future specialized workers with their own tools.
@@ -812,10 +815,13 @@ window when the conductor opens it.
 
 All apps should eventually support true fullscreen, not only maximized windows.
 
-The browser app currently depends on frontend iframe behavior. Backend-browser
-work can be deferred, but the eventual browser app should run browsing on the
-backend so it can bypass iframe blockers and so users can inspect previews from
-background/candidate computers, including Choir running inside a browser app.
+Web Lens currently still carries browser-session implementation names and
+frontend iframe behavior. The product ontology is narrower: durable web-derived
+sources should default to Source Viewer/reader artifacts, and Web Lens is an
+explicit live/original inspection surface reached from a source object. Backend
+browsing work can support Web Lens, source acquisition, and candidate-computer
+inspection, but it should not reintroduce a manual general browser as the
+primary source-gathering workflow.
 
 Trace should stay out of the default `vtext` writing UI and should not remain a
 human-facing product app. Relevant evidence should be available as unified logs,

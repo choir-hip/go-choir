@@ -6,7 +6,7 @@
 with the shipped `features` app (frontend/src/lib/FeaturesApp.svelte) after
 the 2026-05-28/31 frontend redesign cutover, the 2026-06-11 owner-approval
 gate (commit `77f65651`), and the freshness CAS guard; moved unshipped
-design intentions (Uninstall/Disable/portfolio review/Trace UI/Try-preview)
+design intentions (Uninstall/Disable/portfolio review/trace evidence/Try-preview)
 to a clearly labeled "Design intent, not shipped" section with pointers to
 `mission-portfolio-2026-06-11.md` (M6, M7) and
 `choir-promotion-protocol-conjecture-2026-06-11.md`.
@@ -216,7 +216,7 @@ Known gaps:
 | **Files** | First-class file browser with navigation, upload, text-to-VText open, known media routing to Image/Audio/Video/PDF/EPUB apps, and live file-change notifications for the current directory. Unknown binaries still download. | Keep proving that PDF/EPUB/media open in apps instead of downloading. Add richer previews only through app boundaries and broaden live file events into richer change history. |
 | **VText** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. Target direction is a multimedia computational-essay surface with typed snippets for sources, media, evidence, candidate demo videos, interactive graphics, and nested VTexts. | Continue version-advancement stability hardening. Add durable snippet/embed records, Pretext-powered responsive reading/layout, expansion into owning app windows, and video-first candidate approval reports without mixing worker patches directly into canonical text. |
 | **Trace Evidence** | Trace remains as structured evidence, unified logs, run bundles, acceptance records, and diagnosis artifacts. The visual Trace app is no longer a product direction and should be unshipped rather than redesigned. | Preserve machine-readable evidence for zot, VText reports, run acceptance, and operator diagnosis. Do not keep an emergency human Trace UI. |
-| **Web Lens / Browser** | Browser-style URL input with backend Web Lens snapshots when authenticated/configured and iframe fallback for guest/external pages. | Backend control/screenshot support remains a distinct substrate frontier. Browser should remain an app, not a bypass around product APIs. |
+| **Web Lens** | Explicit live/original web inspection surface. It still carries legacy `browser` implementation IDs, data attributes, session tables, and iframe behavior, but the product object is Web Lens, not a general manual Browser app. Durable web-derived sources should default to Source Viewer/reader artifacts before live/original inspection. | Rename or quarantine browser-session implementation residue over time. Backend control/screenshot support remains a distinct substrate frontier for Web Lens, source acquisition, and candidate-computer inspection; it must not become a bypass around product APIs or the primary source-gathering workflow. |
 | **Super Console** | Target replacement for Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It reads unified logs/source/files/process state, can run command-actuation such as `!` commands, patches/rebuilds/restarts locally, verifies, and writes markdown diagnosis reports that VText can open. | Do not expose raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple chat-agent sessions. It is repair mode when VText/MAS malfunctions. |
 | **Settings** | Account, runtime health, server-backed theme presets/editing, and low-level promotion/adoption evidence. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Settings should not be the main owner-facing install surface; Features owns ordinary change discovery and adoption. Runtime health still needs a true push source rather than opportunistic event refreshes. |
 | **Compute Monitor** | First-class app for user-computer health and recovery. It uses authenticated product APIs to show only the current user's current computer, background candidate computers, warmness/protection, current runtime health, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. Manual refresh UI has been removed. | Add true event-backed computer status updates, trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
@@ -258,10 +258,9 @@ behavior.
   to surface run-acceptance/evidence refs and open a Trace view without a
   separate Trace app. In the shipped Features app, "Open Trace" is wired but
   returns the literal string `"Trace UI is unshipped"` (plus the evidence id)
-  when a trace ref exists. The visual Trace app remains, per the App Catalog
-  above, "no longer a product direction and should be unshipped rather than
-  redesigned" — Features' Trace button is consistent with that direction, but
-  the button itself does nothing useful yet.
+  when a trace ref exists. That button/copy is now product-surface residue:
+  the visual Trace app is not a product direction, and future Features work
+  should replace the affordance with evidence/Super Console-oriented actions.
 - **Try/preview flow.** The pre-cutover design described an internal-frame
   preview of a candidate before installing. A preview endpoint already EXISTS
   server-side at `/api/adoptions/{id}/preview/*` (requires a verified
@@ -292,7 +291,7 @@ behavior.
 - VText may embed snippets from other apps, but the full-control surface remains
   the owning app. Embedded snippets are durable artifact references and layout
   intent; they are not a reason to collapse Image, Audio, Video, Podcast, PDF,
-  EPUB, Trace, Features, or Browser back into a generic viewer.
+  EPUB, Trace Evidence, Features, or Web Lens back into a generic viewer.
 - Each VText snippet should expose an expansion target that opens the relevant
   app/window while preserving the reader's VText position. Multi-window reading
   is a core affordance for sources, demos, media, nested VTexts, and evidence.
@@ -323,8 +322,8 @@ behavior.
   progress, media recents, desktop/window state, theme state, Files listings,
   or candidate/promotion queues.
 - Product apps should not expose manual Refresh/Reload controls to repair
-  stale data. Browser page reload remains a browser app navigation command, not
-  Choir state synchronization.
+  stale data. Web Lens page reload remains live-web navigation, not Choir state
+  synchronization.
 - Existing VText and Trace SSE streams remain valid scoped transports where
   they preserve stronger revision/trajectory catch-up semantics.
 

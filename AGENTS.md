@@ -2,6 +2,12 @@
 
 This file is the repo-level contract for coding agents working on Choir.
 
+[docs/choir-doctrine.md](docs/choir-doctrine.md) is the apex architecture and
+doctrine document. `AGENTS.md` is the operating contract for agents; it inherits
+Choir Doctrine and must not become a competing doctrine source. When they
+conflict, follow Choir Doctrine unless this file is carrying a newer explicitly
+promoted operating update.
+
 ## Default Environment
 
 Staging is the acceptance environment: `https://choir.news`.
@@ -48,6 +54,24 @@ and scraping only after its auth, action, screenshot, video, and extraction
 capabilities are explicitly verified for the task at hand.
 
 Read [docs/computer-ontology.md](docs/computer-ontology.md) before changing VM, sandbox, candidate-world, promotion, package, or persistent-state behavior. The product object is a persistent user computer. `sandbox` is an implementation/service name, not the product ontology.
+
+Classify every mission/change by mutation class before editing:
+
+- `green`: docs, comments, labels, and prompt/default text with no runtime
+  behavior change;
+- `yellow`: tests, detector manifests, or prompt framing that change future
+  optimization pressure but not product behavior directly;
+- `orange`: runtime behavior, product APIs, app state, database queries, or
+  provider/model routing;
+- `red`: protected surfaces such as VText canonical writes, Trace/evidence,
+  promotion/rollback, candidate computers, auth/session renewal, vmctl,
+  gateway/provider calls, run acceptance, and deployment routing;
+- `black`: irreversible or production-destructive work.
+
+Before touching an orange or red protected surface, name the conjecture delta,
+protected surfaces, admissible evidence class, rollback path, and heresy delta
+(`discovered`, `introduced`, `repaired`). Do not count newly discovered heresies
+as regressions, and do not count discovery alone as repair.
 
 ## Worktree Hygiene
 
@@ -146,6 +170,16 @@ tool calls, LLM content, and agent-to-agent messages; feature-specific live
 surfaces such as Chyron may show granular activity streams; VText is the human
 supervision narrative.
 
+Read [docs/vtext-agentic-invariants-2026-06-13.md](docs/vtext-agentic-invariants-2026-06-13.md)
+before changing VText tools, prompts, routing, revision creation, coagent wake
+behavior, Trace/VText projection, run acceptance involving VText, or missions
+that use VText as their owner-readable narrative. VText is the canonical
+document/versioning core and must remain an agentic participant in a multi-agent
+system, not a workflow runner. Runtime may expose affordances and durable
+obligations, but it must not force VText to call researcher, super, verifier, or
+any semantic appagent merely because prompt text, revision metadata, or an
+acceptance probe mentions that role.
+
 ## Authority Boundaries
 
 - `conductor` routes exogenous user/app/connector input. It is not the semantic babysitter.
@@ -153,10 +187,17 @@ supervision narrative.
 - `researcher` writes structured findings/evidence, not canonical text or code.
 - `super` is the foreground orchestration root. It can request workers and candidate worlds.
 - `vsuper` owns a background/candidate computer or candidate world.
-- `cosuper` is subordinate to the super/vsuper that leased it.
+- `cosuper` is subordinate to the super/vsuper that requested or assigned it.
 - Verification is a contract over evidence, not a separate privileged caste.
 
 Foreground/canonical state stays stable. Background/candidate computers mutate. Canonical state changes only by promotion.
+
+VText delegation is agentic. VText may write, ask researcher, ask super, ask
+both, ask neither, wait for more evidence, or report a blocker within its
+authority envelope. `edit_vtext` stores a canonical revision; it must not become
+a semantic workflow gate that requires a subsequent researcher/super/verifier
+tool call. Exact required-tool continuation is reserved for narrow mechanical
+tool protocols, not appagent policy.
 
 Prefer asynchronous supervision. A delegation, worker VM run, candidate preview,
 or verification job should leave durable status/evidence and return a handle
@@ -237,7 +278,9 @@ Browser or Playwright acceptance may use public authenticated product APIs such 
 - `/api/computers/*/source-lineage`
 - `/api/computers/*/adoptions`
 - `/api/adoptions/*`
-- `/api/continuations/*`
+- `/api/continuations/*` (transitional H007/H008 residue; prefer
+  trajectory/work-item product evidence when available and do not add new
+  continuation-shaped acceptance)
 - `/api/run-acceptances/*`
 
 Do not use browser-public internal or test-only routes to bypass the product path:
@@ -258,16 +301,24 @@ For long-running self-development proof, synthesize a durable `RunAcceptanceReco
 POST /api/run-acceptances/synthesize
 ```
 
-Required evidence should include trajectory/run ids, authority profile, build/deploy identity, vmctl worker lease, AppChangePackage/adoption evidence or a precise blocker, verifier contracts, rollback refs, and residual risks. Use explicit levels: `docs-level`, `staging-smoke-level`, `export-level`, `promotion-level`, `continuation-level`.
+Required evidence should include trajectory/run ids, authority profile,
+build/deploy identity, worker/candidate handle evidence, AppChangePackage/
+adoption evidence or a precise blocker, verifier contracts, rollback refs,
+heresy delta, conjecture delta, and residual risks. Existing records may still
+carry legacy lease vocabulary; treat that as transitional H019 residue, not the
+target actor model. Use explicit levels: `docs-level`, `staging-smoke-level`,
+`export-level`, `promotion-level`, `continuation-level`.
 
 Do not claim `promotion-level` without AppChangePackage adoption verifier contract evidence plus owner review and promote/rollback evidence. Do not claim `continuation-level` without run-memory/compaction and continuation evidence.
 
-`continuation-level` is transitional: the durable-actors rearchitecture
+`continuation-level` is transitional H008/H014 residue: the durable-actors rearchitecture
 (`docs/choir-rearchitecture-durable-actors-2026-06-11.md`) re-points this
 acceptance level at trajectory/work-item settlement evidence (portfolio M4).
 Until that cutover lands, `continuation-level` keeps its current meaning and
 evidence requirement above — do not weaken it and do not claim trajectory
 settlement evidence in its place before the level is formally re-pointed.
+Do not introduce new `continuation-level` claims or APIs as doctrine; M4 must
+delete or explicitly shim the old surface.
 
 ## Git And Staging
 
@@ -298,4 +349,7 @@ A final report for behavior-changing missions should name:
 - acceptance level reached;
 - verifier contracts and evidence refs;
 - rollback refs;
+- mutation class and protected surfaces touched;
+- heresy delta: `discovered`, `introduced`, `repaired`;
+- conjecture delta and human-learning digest;
 - residual risks and the next realism axis.

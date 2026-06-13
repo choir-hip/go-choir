@@ -84,7 +84,7 @@ retries (api_compaction_eval.go:369-401).
 | **Autonomous mission resumption** | the mission-gradient fallback is what keeps long missions moving without manual re-prompting | critical |
 | **Acceptance evidence** | "continuation-level" acceptance requires compaction + child-spawn proof (run_acceptance.go:1012-1014; AGENTS.md rule) | high |
 | **Compaction-recall evals** | failed evals retry via researcher continuations | medium |
-| **Trace UI / API** | continuation events render as moments (api_trace.go:1421-1430) | low |
+| **Trace evidence / API** | continuation events still project into trace evidence moments (api_trace.go:1421-1430); do not treat this as a Trace app direction | low |
 
 The valuable ideas inside it: deterministic next-goal selection, compaction
 before handoff, fingerprint dedup, bounded authority. (Lease clamps are NOT

@@ -404,8 +404,8 @@ substrate it can actually work on.
   the binary.
 - **Hyperthesis edge:** there may be quiet dependencies on continuation events
   in acceptance evidence ("continuation-level", run_acceptance.go:1012-1014,
-  AGENTS.md) and the Trace UI; these must be re-pointed at work items in the
-  same cutover or verifier discipline silently weakens.
+  AGENTS.md) and trace evidence projections; these must be re-pointed at work
+  items in the same cutover or verifier discipline silently weakens.
 - **Scope:** the synthesis/decision layer. Compaction, fingerprints, bounded
   profiles are retained under the actor model (lease clamps are not — v1
   has no lease concept; budgets and activation caps bound work).
@@ -484,8 +484,9 @@ This program is also the §15 ConjectureRecord proof mission (review v2, N5).
    caps instead); cancel-by-trajectory replaces
    CancelRunGraph.
 5. **Continuation deletion.** Remove SynthesizeRunContinuation and friends;
-   event-driven adoption wiring; re-point acceptance evidence and Trace UI at
-   work items; `/api/continuations` returns 410 or shims to work items.
+   event-driven adoption wiring; re-point acceptance evidence and trace
+   evidence projections at work items; `/api/continuations` returns 410 or
+   shims to work items.
 6. **Wire on settlement.** sourcecycled reconciles on trajectory settlement;
    raise `maxProc`; run the multi-story falsifier cycle. **This run is the
    evidence gate for the route switch.**

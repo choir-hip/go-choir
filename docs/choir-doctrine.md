@@ -1,0 +1,1031 @@
+# Choir Doctrine
+
+## Status
+
+Canonical doctrine and architecture control document as of 2026-06-13.
+
+This document states:
+
+- what Choir is;
+- what all agents are optimizing;
+- the current coalesced conjecture set;
+- the derived architectural invariants;
+- the evidence semantics that bound claims;
+- the live heresy set: concrete patterns that violate the intended system;
+- the cutover rule that dual-path state is itself a bug.
+
+This document is normative. Supporting docs may explain or justify it, but they
+do not override it. This is doctrine, not a granular requirements spec: it
+defines the conjectures, invariants, heresies, evidence semantics, and authority
+boundaries that agents optimize.
+
+Primary support docs:
+
+- [current-architecture.md](./current-architecture.md)
+- [computer-ontology.md](./computer-ontology.md)
+- [choir-rearchitecture-durable-actors-2026-06-11.md](./choir-rearchitecture-durable-actors-2026-06-11.md)
+- [conjecture-learning-proof-theory-2026-06-11.md](./conjecture-learning-proof-theory-2026-06-11.md)
+- [conjecture-assertion-ledger-2026-06.md](./conjecture-assertion-ledger-2026-06.md)
+- [vtext-agentic-invariants-2026-06-13.md](./vtext-agentic-invariants-2026-06-13.md)
+- [mission-portfolio-2026-06-11.md](./mission-portfolio-2026-06-11.md)
+- [mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md)
+- [mission-source-system-simplify-secure-smart-v0.md](./mission-source-system-simplify-secure-smart-v0.md)
+
+Reading order for architecture or behavior work:
+
+1. this document;
+2. [AGENTS.md](../AGENTS.md) for operating procedure;
+3. the relevant domain invariant doc;
+4. the current mission paradoc;
+5. historical reviews and proof artifacts as evidence only.
+
+Supersession rule: when this document conflicts with a support doc, this
+document wins unless the support doc is a newer explicitly promoted doctrine
+update. Historical specs, master-spec reviews, MissionGradient reports, and
+mission ledgers are evidence. They do not silently override Choir Doctrine.
+
+## System Thesis
+
+Choir is a self-improving mainframe: a persistent-computer system for owned
+learning over versioned artifacts, evidence, provenance, and promotion history.
+
+The primary optimization target is not chat quality, local test passage, or
+short-term product smoothness. The target is:
+
+1. truth from facts;
+2. correct ontology;
+3. recognition of heresies;
+4. durable causality;
+5. evidence-bounded claims;
+6. deletion of heretical legacy control paths;
+7. safe self-improvement by typed conjecture.
+
+Product surfaces matter, but they are downstream projections and falsifiers of
+the substrate, not substitutes for it.
+
+## Doctrine Of Doctrine
+
+The first best thing is to recognize a heresy: to see and name a real flaw in
+the code, docs, tests, prompts, product path, or operating process. A newly
+recognized heresy can make the system look worse by increasing the open heresy
+count, but epistemically it is progress. Invisible debt cannot be optimized.
+
+The second best thing is to eliminate a named heresy: delete the bad path, fix
+the code, invert the test, update the docs, or otherwise remove the false
+affordance.
+
+The worse move is to preserve a clean story by hiding evidence, refusing to name
+a flaw, shipping around it, or treating product motion as a substitute for
+contact with facts. Choir optimizes the conjecture set of the system. Product
+shipping is valuable only when it is downstream of truth, ontology, evidence,
+and deletion pressure.
+
+Heresy accounting therefore has three separate deltas:
+
+- `discovered`: flaws newly recognized from facts;
+- `introduced`: new bad paths created by the current change;
+- `repaired`: named heresies reduced or eliminated.
+
+A mission may make epistemic progress by increasing `discovered`. It must not
+claim repair progress from discovery alone. A mission regresses if it increases
+`introduced` without an explicit conjecture delta and human-readable acceptance
+of that new debt.
+
+## Framing Doctrine
+
+Current framing: Choir is a self-improving mainframe made of persistent
+computers. Older framings such as personal writing system, publishing system, AI
+workspace, sandbox, workflow app, StoryGraph app, or chat interface are
+historical, surface-specific, or deprecated unless this document explicitly
+promotes them.
+
+Framing drift is doctrine drift. If a document, prompt, test, or UI label teaches
+agents to optimize an older product story, it can pull code back toward the old
+ontology. Reconciliation must therefore include sentiment and narrative
+alignment, not only technical symbol deletion.
+
+Preferred vocabulary:
+
+- self-improving mainframe;
+- persistent computer;
+- durable artifact;
+- trajectory and work item;
+- evidence, provenance, verifier contract, and acceptance class;
+- candidate world / candidate computer;
+- promotion and rollback.
+
+Avoid making these the root frame unless the sentence is explicitly about a
+surface: personal workspace, AI workspace, publishing system, sandbox, workflow,
+chat, StoryGraph, or demo app.
+
+## Conjecture Set
+
+Each conjecture is tagged as one of:
+
+- `asserted`: supported enough to serve as current doctrine;
+- `active`: a live system conjecture under continued construction;
+- `hyperthesis`: a named blind edge or incompleteness boundary.
+
+### Object-Level Conjectures
+
+`C1 asserted` Choir's primary product object is a persistent computer composed
+of multiple ledgers, not a disposable sandbox and not a chat session.
+
+`C2 asserted` Canonical user-facing truth is versioned artifact state. VText is
+the canonical document core; other appagents own their own typed artifact
+domains.
+
+`C3 asserted` Canonical state remains stable. Risky or long-running mutation
+happens in candidate computers or candidate worlds and becomes canonical only
+by promotion.
+
+`C4 active` Wire, publication, review, and later economic surfaces are
+projections of the artifact-and-provenance substrate, not independent product
+ontologies.
+
+### Meta-Level Conjectures
+
+`C5 asserted` Roles are authority envelopes, not identities. Actors should be
+given obligations, evidence, scope, and settlement criteria, not persona-heavy
+workflow scripts.
+
+`C6 active` The runtime should converge on durable actors: the database
+remembers, Go delivers, actors passivate and rewarm, and polling, parent/child
+control, and continuation synthesis disappear.
+
+`C7 active` Trajectories and work items are the intended causality model.
+Settlement is rule-as-data over durable obligations and subject refs, not root
+run completion.
+
+`C8 active` Promotion should be one typed mutation transaction with approval,
+freshness, rollback, and per-ledger evidence, rather than ad hoc lineage flips
+or verifier-only admission.
+
+`C9 asserted` Shared-platform claims are evidence-scoped. Staging, verifier
+contracts, and owner review define the admissible strength of a claim.
+
+### Meta-Meta Conjectures
+
+`C10 asserted` Choir should evolve by conjecture learning rather than by
+checklist completion. Claims must name scope, test, and blind edge.
+
+`C11 asserted` Self-improvement must be stratified: object claims, architectural
+claims, and method/doctrine claims are different levels and require different
+gates.
+
+`C12 hyperthesis` Conjecture machinery can become decorative unless it changes
+route choice, deletion pressure, evidence semantics, and stopping conditions in
+practice.
+
+### Open Hyperthesis Edges
+
+`HYP1` Settlement rules may still be wrong in ways current vocabulary does not
+state cleanly.
+
+`HYP2` Durable-actor cutover may still hide control loss at the boundary
+between agent identity, trajectory identity, and rewarm semantics.
+
+`HYP3` Promotion semantics may still be below the computer ontology even when
+approval and freshness checks pass.
+
+`HYP4` Verified harnesses do not imply verified cognition. Residual semantic
+risk remains real even when protocol gates pass.
+
+## Derived Architectural Invariants
+
+These are hard consequences of the conjecture set.
+
+`I1` VText owns canonical document versions. Findings, worker updates, search
+results, and verifier output are non-canonical until VText incorporates them.
+
+`I2` VText must not be forced into semantic delegation. Runtime may expose
+affordances and durable obligations; it must not convert role mentions or
+metadata into a required semantic next step.
+
+`I3` Parent/child is not a control ontology. Provenance-only spawned-by edges
+may remain temporarily, but control, liveness, settlement, cancellation,
+budgeting, and recovery must not depend on parent/child semantics.
+
+`I4` Work items are trajectory obligations, not child-run artifacts. A work
+item may record provenance about who requested it, but its meaning is
+assignment-on-trajectory, not descent-from-parent.
+
+`I5` Dual paths are bugs. A replacement path does not settle a mission while
+the old path remains available for new accretion unless that residual path is
+explicitly frozen, gated, and on a named deletion clock.
+
+`I6` No new dependencies may be introduced on a live heresy. Existing
+dependencies are debt; new dependencies are regressions.
+
+`I7` If a blocker, assignment, question, or verification result matters for
+settlement or rewarm, it must become durable obligation state rather than
+remaining only narrative or trace text.
+
+`I8` Acceptance names must not outrun evidence class. Smoke, architectural
+proof, export proof, promotion proof, and continuation/settlement proof must be
+distinguished.
+
+`I9` Shared-platform behavior claims require staging truth. Local proof is
+insufficient for vmctl, auth/session renewal, provider behavior, promotion,
+rollback, or Choir-in-Choir claims.
+
+`I10` Architectural mode changes require an explicit conjecture delta. An agent
+must not silently pivot the system from agentic to workflow, from trajectory to
+run-tree, or from promotion protocol to shortcut behavior in order to satisfy a
+probe.
+
+`I11` Problem documentation comes before behavior-changing fix commits for new
+reliable failures.
+
+`I12` Supporting docs and tests must not normalize retired ontology.
+
+`I13` Trace, Terminal, and Browser are not normal user-facing product apps.
+Trace is an evidence substrate for agentic tracing. Raw Terminal is replaced by
+singleton Super Console/zot as an exceptional repair surface. Manual Browser is
+replaced in the source path by Source Viewer/reader artifacts plus explicit Web
+Lens live/original inspection.
+
+## Proof-Carrying Autonomy
+
+Autonomy increases at the mutation layer only when accountability increases at
+the conjecture/evidence layer. A stronger agent must carry a stronger proof
+object, not merely move faster.
+
+Mutation classes:
+
+- `green`: docs, comments, labels, and prompt/default text that do not change
+  runtime behavior.
+- `yellow`: tests, detector manifests, or prompt framing that can change what
+  future agents optimize but does not change product behavior directly.
+- `orange`: runtime behavior, product APIs, app state, database queries, or
+  provider/model routing.
+- `red`: protected surfaces: VText canonical writes, Trace/evidence semantics,
+  promotion/rollback, candidate-computer state, auth/session renewal, vmctl,
+  gateway/provider calls, run acceptance, and deployment routing.
+- `black`: irreversible or production-destructive operations. These require
+  explicit human authority and rollback/restore evidence before execution.
+
+Protected-surface conjecture detour: before an orange or red change lands, the
+mission must name the conjecture delta, affected protected surfaces, admissible
+evidence class, rollback path, and whether the change discovers, introduces, or
+repairs heresy. If the intended fix requires weakening a protected invariant,
+the invariant change is the mission, not an implementation detail.
+
+Evidence packet contract:
+
+- mutation class and protected surfaces touched;
+- claims made and evidence class for each claim;
+- tests, probes, staging/deploy identity when applicable;
+- rollback refs or precise rollback blocker;
+- heresy delta: `discovered`, `introduced`, `repaired`;
+- conjecture delta and remaining blind edge;
+- residual risks and a short human-learning digest.
+
+## Evidence Semantics
+
+Claim classes:
+
+- `docs-level`: doctrine and design only.
+- `smoke-level`: narrow product-path proof that a surface still opens or a
+  minimal path still executes.
+- `architectural-level`: proof of the intended causal invariant.
+- `export-level`: transferable candidate/source evidence exists.
+- `promotion-level`: owner-gated promotion and rollback evidence exists.
+- `settlement-level`: trajectory/work-item settlement evidence exists for the
+  relevant mission.
+
+Rules:
+
+1. `accepted` at smoke level must not be summarized as architectural success.
+2. `continuation-level` is transitional and should be deleted or re-pointed to
+   trajectory/work-item settlement, not preserved as doctrine.
+3. Every acceptance claim must name its evidence class in reports.
+4. A weaker evidence class can falsify a stronger claim, but cannot satisfy it.
+
+## Live Heresies
+
+Each heresy entry includes:
+
+- `heresy_id`
+- `bad pattern`
+- `detectors`
+- `why it violates the spec`
+- `successor pattern`
+- `deletion gate`
+
+Reduction rule: a heresy is `reduced` only when its detector count decreases or
+when explicit non-countable evidence shows the bad pattern can no longer be
+used. A replacement path working is not reduction while the old path remains
+available. Discovery of a new detector or uncited site is epistemic progress,
+not repair progress.
+
+Heresy ledger rule: missions that touch doctrine, runtime control, VText,
+Trace/evidence, promotion, source/Web Lens, or app-state ontology must report
+`discovered`, `introduced`, and `repaired` separately. `Delta V` may not count
+as progress when introduced heresy count rises unless a human-readable
+conjecture delta accepts that debt. Discovery alone never counts as repair.
+
+### Parent/Child And Spawn Residue
+
+#### H001 - Parent/Child API Residue
+
+`bad pattern:` live API/request/response shapes still make `parent_id` the
+normal way to create work and still serialize `parent_loop_id` / `ParentRunID`
+as ordinary control-facing fields.
+
+`detectors:` `parent_id`, `parent_loop_id`, `ParentRunID`, `StartChildRun`,
+`active_child_runs`.
+
+`evidence:` [internal/runtime/api.go](../internal/runtime/api.go),
+[internal/runtime/runtime.go](../internal/runtime/runtime.go),
+[internal/types/task.go](../internal/types/task.go),
+[internal/runtime/api_spawn_test.go](../internal/runtime/api_spawn_test.go).
+
+`why it violates the spec:` it teaches humans and agents to think in parent and
+child lifecycles rather than trajectories, assignments, and provenance-only
+spawn.
+
+`successor pattern:` trajectory-aware delegation surfaces, provenance-only
+`spawned_by_run_id`, and explicit `requested_by_*` metadata.
+
+`deletion gate:` M3 / M3.1.
+
+#### H002 - Parent/Child Store Residue
+
+`bad pattern:` durable schema and helper APIs still normalize parent/child
+control queries and slot state around `parent_loop_id`.
+
+`detectors:` `parent_loop_id`, `CountActiveChildRuns`, `ListChildRuns`, direct
+store helpers that expose child-run control semantics.
+
+`evidence:` [internal/store/store.go](../internal/store/store.go).
+
+`why it violates the spec:` even after trajectories landed, the store still
+offers old causal affordances that new code can easily copy.
+
+`successor pattern:` trajectory- and slot-scoped queries plus provenance-only
+spawn references.
+
+`deletion gate:` M3.
+
+#### H003 - Researcher Parent-Target Routing
+
+`bad pattern:` researcher output routing still dereferences `ParentRunID` to
+decide where findings should go.
+
+`detectors:` `resolveFindingsTarget`, parent lookup from researcher runs.
+
+`evidence:` [internal/runtime/tools_researcher.go](../internal/runtime/tools_researcher.go).
+
+`why it violates the spec:` recipient identity is inferred from ancestry rather
+than from explicit requester metadata, update addressing, or work-item
+ownership.
+
+`successor pattern:` stamp requester agent/run/work-item identity when the
+obligation is created and route results by addressed update or owning work
+item.
+
+`deletion gate:` M3 / VText hardening.
+
+#### H004 - Trace And Verifier Parent Topology
+
+`bad pattern:` trace and verifier logic still treat `ParentRunID` as live
+causal structure rather than frozen provenance.
+
+`detectors:` verifier checks over parent runs, trace edge inference from root
+and child runs.
+
+`evidence:` [internal/runtime/vtext_workflow_verifier.go](../internal/runtime/vtext_workflow_verifier.go),
+[internal/runtime/api_trace.go](../internal/runtime/api_trace.go).
+
+`why it violates the spec:` operator-facing and test-facing truth surfaces keep
+rendering the wrong graph, so legacy ontology remains cognitively primary.
+
+`successor pattern:` derive causality from `trajectory_id`, work items,
+`requested_by_*`, co-super slots, and update/message edges.
+
+`deletion gate:` M3 / M4.
+
+#### H005 - Work Items Modeled As Spawned Child Artifacts
+
+`bad pattern:` work items are created and labeled as spawned-child artifacts,
+including `kind="spawned_child_run"`, `parent_run_id`, `spawned_child:`
+fingerprints, and “spawn_agent child objective” reasoning.
+
+`detectors:` `spawned_child_run`, `spawned_child:`, `spawned_work_item_id`,
+`passivated_spawned_work_item_id`, `spawned child work`.
+
+`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go).
+
+`why it violates the spec:` it writes the wrong ontology into the durable
+obligation substrate. A work item is supposed to mean assignment on a
+trajectory, not descent from a parent.
+
+`successor pattern:` assigned trajectory obligations with provenance fields
+like `requested_by_agent_id` and `requested_by_run_id`.
+
+`deletion gate:` M3.1 before further lifecycle work.
+
+### Continuation Residue
+
+#### H006 - Live Continuation Runtime
+
+`bad pattern:` the runtime still has a first-class continuation control plane:
+selection, compaction-before-handoff, bounded authority, lease clamping, dedupe
+by source run, and child-run launch.
+
+`detectors:` `run_continuations`, `RunContinuation`, `ContinuationProposal`,
+`SelectRunContinuation`, `StartRunContinuation`,
+`maybeStartConfiguredContinuation`, `"request_source": "run_continuation"`,
+`request_source.*run_continuation`.
+
+`evidence:` [internal/runtime/continuation.go](../internal/runtime/continuation.go),
+[internal/store/continuations.go](../internal/store/continuations.go),
+[internal/store/store.go](../internal/store/store.go).
+
+`why it violates the spec:` it preserves the old continuation orchestration
+model in parallel with work items and trajectories.
+
+`successor pattern:` work items + passivation evidence + update-driven warm/cold
+actor wake.
+
+`deletion gate:` M4.
+
+#### H007 - Continuation Product Path
+
+`bad pattern:` `/api/continuations/*` remains blessed in repo-level contracts,
+allowlists, and handlers.
+
+`detectors:` `/api/continuations`, `HandleRunContinuationsRoot`,
+`HandleRunContinuationDetail`, continuation allowlist entries.
+
+`evidence:` [AGENTS.md](../AGENTS.md),
+[internal/runtime/tools_product_api.go](../internal/runtime/tools_product_api.go),
+[internal/runtime/api.go](../internal/runtime/api.go).
+
+`why it violates the spec:` it keeps “continuation” alive as a legitimate
+product noun and gives new agents an easy old path to copy.
+
+`successor pattern:` work-item- and trajectory-based product/control routes, or
+temporary `410 Gone` shims during cutover.
+
+`deletion gate:` M4.
+
+#### H008 - Continuation Acceptance Semantics
+
+`bad pattern:` acceptance and trace still treat continuation events as proof of
+progress, and `continuation-level` remains a live acceptance concept.
+
+`detectors:` `continuation-level`, `continued`, continuation events in
+acceptance synthesis and trace.
+
+`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
+[internal/types/acceptance.go](../internal/types/acceptance.go),
+[internal/runtime/api_trace.go](../internal/runtime/api_trace.go),
+[AGENTS.md](../AGENTS.md).
+
+`why it violates the spec:` the verifier surface still encodes old run and
+continuation machinery instead of trajectory/work-item settlement.
+
+`successor pattern:` acceptance should pivot to passivation checkpoints, open
+work items, rewarm evidence, and trajectory settlement; `continuation-level`
+should be retired or formally renamed.
+
+`deletion gate:` M4.
+
+### Tool Forcing And VText Agency Residue
+
+#### H009 - Generic Required-Next-Tool Trust Channel
+
+`bad pattern:` any successful tool result that emits `next_required_tool` or
+`next_tool` can force exact next-step behavior in the tool loop.
+
+`detectors:` `next_required_tool`, `next_tool`, `required_next_tool`.
+
+`evidence:` [internal/runtime/toolloop.go](../internal/runtime/toolloop.go),
+[internal/runtime/toolloop_test.go](../internal/runtime/toolloop_test.go).
+
+`why it violates the spec:` arbitrary tool JSON becomes workflow control policy
+instead of staying a narrow mechanical protocol.
+
+`successor pattern:` typed, allowlisted continuation envelopes used only for
+bounded mechanical transitions.
+
+`deletion gate:` M3.1.
+
+#### H010 - VText Semantic Delegation Forcing
+
+`bad pattern:` `edit_vtext` can require `spawn_agent` for researcher follow-up
+after a canonical write.
+
+`detectors:` `requiredContinuationAfterVTextEdit`, `explicitResearcher`,
+`runMetadataExplicitResearcher`, `explicit_researcher_request`,
+`durableMetadataKeys`, `vtextEditResearcherIntentText`,
+`vtextTrajectoryHasResearcherParticipation`,
+`next_required_tool=spawn_agent`.
+
+`evidence:` [internal/runtime/tools_vtext.go](../internal/runtime/tools_vtext.go),
+[internal/runtime/vtext_test.go](../internal/runtime/vtext_test.go),
+[docs/vtext-agentic-invariants-2026-06-13.md](./vtext-agentic-invariants-2026-06-13.md).
+
+`why it violates the spec:` it turns VText from an appagent into a workflow
+stepper.
+
+`successor pattern:` `edit_vtext` stores the revision and stops; VText decides
+what semantic delegation, if any, to perform.
+
+`deletion gate:` M3.1.
+
+#### H011 - Conductor Super-Bypass Heuristics
+
+`bad pattern:` conductor still routes some VText-adjacent work directly to
+super based on prompt heuristics rather than always giving VText the document
+turn first.
+
+`detectors:` prompt-bar routing heuristics that select super for VText-class
+objectives.
+
+`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
+[docs/vtext-agentic-invariants-2026-06-13.md](./vtext-agentic-invariants-2026-06-13.md).
+
+`why it violates the spec:` conductor becomes a policy engine for VText/super
+authority rather than a router of exogenous input.
+
+`successor pattern:` conductor creates or resolves the document route; VText
+decides whether to call `request_super_execution`.
+
+`deletion gate:` M3.1 / VText routing cleanup.
+
+#### H012 - Researcher Intent By Substring Oracle
+
+`bad pattern:` narrative text containing “researcher” can act as control-plane
+signal.
+
+`detectors:` substring-based intent inference for researcher or super routing,
+`vtextPromptExplicitlyRequestsResearcher`, `promptBarExplicitResearcherIntent`,
+`vtextPromptNeedsSuperExecution`, keyword lists that force super execution.
+
+`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
+[internal/runtime/tools_vtext.go](../internal/runtime/tools_vtext.go).
+
+`why it violates the spec:` prose is treated as authority metadata and silently
+changes routing semantics.
+
+`successor pattern:` structured intent metadata or explicit VText-authored
+delegation state; no substring oracles.
+
+`deletion gate:` M3.1.
+
+### Acceptance And Authority Residue
+
+#### H013 - Acceptance Overclaim
+
+`bad pattern:` smoke-level accepted states can read as stronger proof than they
+are, and some levels are still grounded in old run/continuation semantics.
+
+`detectors:` `staging-smoke-level`, `accepted` on minimal prompt/VText
+evidence, `continuation-level`.
+
+`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
+[AGENTS.md](../AGENTS.md),
+[docs/mission-lifecycle-cutover-v0.md](./mission-lifecycle-cutover-v0.md).
+
+`why it violates the spec:` architectural missions can appear settled on
+surface health rather than causal proof.
+
+`successor pattern:` explicit smoke vs architectural vs settlement evidence
+classes, with hard reporting discipline.
+
+`deletion gate:` M3 / M4.
+
+#### H014 - Continuation-Level Without Compaction
+
+`bad pattern:` the code can upgrade to `continuation-level` without the full
+compaction evidence the doctrine requires.
+
+`detectors:` `continuation-level` granted without a compaction gate, including
+paths where `continued` plus another weaker level substitutes for compaction
+evidence.
+
+`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
+[docs/runtime-invariants.md](./runtime-invariants.md).
+
+`why it violates the spec:` the name outruns the evidence class and keeps the
+old continuation proof shape alive.
+
+`successor pattern:` until repoint lands, continuation-grade proof must require
+both compaction and continued evidence; afterward it should be renamed.
+
+`deletion gate:` M4.
+
+#### H015 - Agent-Scoped Residency Short-Circuit
+
+`bad pattern:` resident-run reuse can short-circuit trajectory-scoped
+obligation delivery.
+
+`detectors:` resident return before work-item merge or update injection in
+trajectory-specific reconciliation.
+
+`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
+[docs/mission-lifecycle-cutover-v0.md](./mission-lifecycle-cutover-v0.md).
+
+`why it violates the spec:` authority lives on trajectory and work item, but
+delivery can be skipped because “some activation of this agent exists.”
+
+`successor pattern:` if the actor is resident, inject the new work item or
+update into its durable mailbox path rather than returning early.
+
+`deletion gate:` M3.
+
+#### H016 - Agent-Wide Active-Run Fallback
+
+`bad pattern:` cancellation and super-controller provenance still fall back to
+latest-active-run selection.
+
+`detectors:` `GetLatestActiveRunByAgent`, active-run control fallback,
+requester provenance recovered from latest active run.
+
+`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
+[internal/runtime/super_controller.go](../internal/runtime/super_controller.go),
+[internal/store/store.go](../internal/store/store.go).
+
+`why it violates the spec:` it preserves cross-trajectory authority bleed and
+ambient lineage inference as compatibility truth.
+
+`successor pattern:` resolve through resident activation when present, or via
+trajectory/work-item/slot authority; requester provenance should be stamped at
+dispatch time.
+
+`deletion gate:` M3.
+
+### Durable Obligation Residue
+
+#### H017 - Blockers And Questions Not Durable As Obligations
+
+`bad pattern:` blockers and questions are meaningful coordination objects but
+usually remain only typed updates or narrative text, not durable obligation
+state.
+
+`detectors:` `kind=\"blocker\"`, blocker synthesis, absence from
+`TrajectoryObligations`.
+
+`evidence:` [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
+[internal/runtime/researcher_checkpoint_fallback.go](../internal/runtime/researcher_checkpoint_fallback.go),
+[internal/runtime/delegate_worker_update_fallback.go](../internal/runtime/delegate_worker_update_fallback.go),
+[internal/runtime/trajectory.go](../internal/runtime/trajectory.go),
+[docs/glossary.md](./glossary.md).
+
+`why it violates the spec:` the docs say blockers and questions are
+obligations, but the control substrate does not fully express them that way.
+
+`successor pattern:` blockers/questions that matter for settlement, re-entry,
+or supervision become durable obligation state.
+
+`deletion gate:` post-M3 substrate hardening.
+
+#### H018 - Assignment Semantics Not Universally Materialized
+
+`bad pattern:` the architecture intends assignment updates to create durable
+work items, but the generic update append path does not universally do that.
+
+`detectors:` `kind=\"assignment\"` without corresponding `CreateWorkItem`.
+
+`evidence:` [internal/store/store.go](../internal/store/store.go),
+[internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
+[docs/choir-rearchitecture-durable-actors-2026-06-11.md](./choir-rearchitecture-durable-actors-2026-06-11.md).
+
+`why it violates the spec:` the one-message/one-obligation model remains only
+partially realized.
+
+`successor pattern:` transactional update append plus work-item materialization
+for assignment-class messages.
+
+`deletion gate:` post-M3 messaging/lifecycle hardening.
+
+### Naming And Doctrine Residue
+
+#### H019 - Lease Vocabulary Drift
+
+`bad pattern:` docs and contracts still use lease language even though v1
+explicitly rejects lease as an architectural control concept.
+
+`detectors:` `lease`, `leased`, `worker lease`, `lease_seconds`.
+
+`evidence:` [AGENTS.md](../AGENTS.md),
+[docs/current-architecture.md](./current-architecture.md),
+[docs/glossary.md](./glossary.md),
+[internal/runtime/continuation.go](../internal/runtime/continuation.go),
+[internal/runtime/tools_vmctl.go](../internal/runtime/tools_vmctl.go).
+
+`why it violates the spec:` it invites agents to smuggle lease-shaped control
+back into the actor model.
+
+`successor pattern:` activation caps, eviction safety, budget, worker handle,
+trajectory obligation, and explicit evidence classes.
+
+`deletion gate:` doctrine cleanup concurrent with M4/M6.
+
+#### H020 - Mixed Current/Target Onboarding
+
+`bad pattern:` foundational docs deliberately mix target doctrine and live
+legacy surfaces in a way that still gives both apparent authority.
+
+`detectors:` current/target sections without hard deprecation banners for
+retired ontology in onboarding docs.
+
+`evidence:` [docs/current-architecture.md](./current-architecture.md),
+[docs/README.md](./README.md) if present, and other first-read architecture
+docs.
+
+`why it violates the spec:` agents can cite either model as sanctioned and keep
+building on the old one.
+
+`successor pattern:` sharp separation between live surfaces, target doctrine,
+and explicitly retired ontology.
+
+`deletion gate:` ongoing doctrine maintenance.
+
+#### H021 - Stale Or Self-Contradictory Doctrine
+
+`bad pattern:` assertions and architecture notes remain live after code or
+newer doctrine falsifies them.
+
+`detectors:` assertion/doc claims contradicted by current code.
+
+`evidence:` [docs/conjecture-assertion-ledger-2026-06.md](./conjecture-assertion-ledger-2026-06.md),
+[docs/current-architecture.md](./current-architecture.md),
+[docs/vtext-agentic-invariants-2026-06-13.md](./vtext-agentic-invariants-2026-06-13.md).
+
+`why it violates the spec:` stale doctrine is a heresy vector; agents optimize
+what they read.
+
+`successor pattern:` assertions die when their axioms die; doctrine updates are
+part of architecture missions, not post-hoc polish.
+
+`deletion gate:` continuous maintenance; mandatory on architecture missions.
+
+### Multi-Step Forcing And Polling Residue
+
+#### H022 - Forced Multi-Step Worker Delegation Script
+
+`bad pattern:` worker delegation can return scripted next-tool chains such as
+observe/finish/cancel sequences.
+
+`detectors:` `delegation_required`, `chained_required_tool`, `next_tools`,
+worker-delegation results that encode exact semantic tool choreography.
+
+`evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
+`internal/runtime/tools_vmctl.go`, `internal/runtime/tools.go`.
+
+`why it violates the spec:` it preserves H009's vice under worker-specific
+names and makes exact role choreography look like tool protocol.
+
+`successor pattern:` narrow mechanical envelopes only; semantic worker progress
+is durable evidence and obligations, not exact next-tool scripts.
+
+`deletion gate:` M3.1/M4 depending on whether the site is generic forcing or
+continuation/progress plumbing.
+
+#### H023 - Synchronous Control-Plane Polling
+
+`bad pattern:` foreground runtime code polls internal worker run state until a
+terminal condition.
+
+`detectors:` `pollInternalWorkerRun`, polling loops over worker run state,
+`time.After(500 * time.Millisecond)` control waits.
+
+`evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
+`internal/runtime/tools_vmctl.go`.
+
+`why it violates the spec:` it keeps run-tree blocking semantics under the
+actor surface and works against asynchronous supervision.
+
+`successor pattern:` durable work items, updates, evidence handles, and wakeable
+actors; foreground supervision receives a handle instead of waiting on a poll
+loop.
+
+`deletion gate:` M3 lifecycle cutover plus M4 continuation deletion.
+
+#### H024 - VText First-Tool Forcing By Super-Keyword Oracle
+
+`bad pattern:` prompt keywords can force VText's initial tool choice to
+`request_super_execution`.
+
+`detectors:` `initialVTextToolChoice`, `WithInitialToolChoice`,
+`exactRequiredToolChoice`, super-keyword routing lists.
+
+`evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
+`internal/runtime/runtime.go`.
+
+`why it violates the spec:` even if conductor routes to VText, the tool loop can
+still replace VText agency with a hidden workflow edge.
+
+`successor pattern:` VText receives owner intent and available affordances, then
+chooses the next semantic move.
+
+`deletion gate:` M3.1.
+
+#### H025 - Dead Parent/Child Result-Channel API
+
+`bad pattern:` dead or test-only parent/child result-channel APIs remain in the
+codebase and model the forbidden ontology.
+
+`detectors:` `PostChildResult`, `PostChildError`, `WaitForChildResult`,
+parent/child channel APIs with no production callers.
+
+`evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
+`internal/runtime/channels.go`.
+
+`why it violates the spec:` unused compatibility surfaces still teach future
+agents the old causal model and become easy copy targets.
+
+`successor pattern:` delete dead parent/child channel APIs; keep only
+trajectory/work-item/update semantics.
+
+`deletion gate:` M3.
+
+#### H026 - Prompt-Pipeline Forcing
+
+`bad pattern:` prompt defaults or revision-request builders tell VText to call
+specific semantic workers as a required sequence.
+
+`detectors:` prompt text mandating `spawn_agent` or `request_super_execution`,
+`buildAgentRevisionRequest`, "call spawn_agent now", numbered role-sequence
+scripts in VText prompt defaults.
+
+`evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
+`internal/runtime/prompt_defaults/vtext.md`,
+`internal/runtime/vtext_agent_revision.go`.
+
+`why it violates the spec:` prompt text is architecture when it controls agent
+behavior. Moving forcing from runtime code into prompts still violates VText
+agency.
+
+`successor pattern:` prompts describe obligations, authority, evidence, and
+available affordances; they do not mandate semantic role choreography.
+
+`deletion gate:` M3.1.
+
+### Retired App Surface Residue
+
+#### H027 - Trace App Residue
+
+`bad pattern:` Trace is presented as a user-facing desktop app, dashboard, or
+manual navigation destination.
+
+`detectors:` `Trace app`, `Trace UI`, `Open Trace`, desktop registry entries or
+launchers for `trace`, tests expecting a Trace icon, copy that tells users to
+manually browse Trace as the debugging surface.
+
+`evidence:` [docs/mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md),
+[docs/platform-os-app-state.md](./platform-os-app-state.md),
+[frontend/src/lib/FeaturesApp.svelte](../frontend/src/lib/FeaturesApp.svelte),
+[frontend/tests/desktop-shell-core.spec.js](../frontend/tests/desktop-shell-core.spec.js).
+
+`why it violates the spec:` Trace became a misleading user-facing surface. The
+right object is agentic tracing: causal/evidence records that agents, VText,
+run-acceptance synthesis, and Super Console can summarize or open when needed.
+
+`successor pattern:` keep trace evidence APIs, run bundles, acceptance records,
+diagnosis artifacts, and machine-readable causal ledgers; do not expose Trace
+as a normal desktop app.
+
+`deletion gate:` doctrine upgrade plus a Trace-surface cleanup mission: no
+desktop launcher, no "Open Trace" UI copy, and no current docs directing humans
+to use a Trace app.
+
+#### H028 - Raw Terminal App Residue
+
+`bad pattern:` Terminal is presented as a user-facing app or ordinary manual
+shell workflow.
+
+`detectors:` `Terminal app`, `terminal` app IDs in product-facing registry or
+desktop-state tests, comments that say users open Terminal, routes that keep
+`/api/terminal/ws` as a live product affordance rather than a compatibility
+shim.
+
+`evidence:` [docs/mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md),
+[internal/sandbox/terminal.go](../internal/sandbox/terminal.go),
+[frontend/tests/terminal-app.spec.js](../frontend/tests/terminal-app.spec.js),
+[internal/store/desktop_test.go](../internal/store/desktop_test.go).
+
+`why it violates the spec:` nobody should be using a manual terminal as the
+normal operating model for a persistent computer. Semi-manual diagnosis and
+repair belongs in Super Console, backed by zot as a coding agent inside the
+computer.
+
+`successor pattern:` singleton Super Console per user computer, backed by zot,
+with terminal/PTY terminology allowed only as hidden implementation detail.
+
+`deletion gate:` Super Console cleanup mission: product-facing tests, comments,
+copy, routes, and app state use Super Console language; any surviving terminal
+route is explicitly compatibility-only or removed.
+
+#### H029 - Browser As Source-Gathering App Residue
+
+`bad pattern:` Browser is presented as the source-gathering app or default
+source reader for web material.
+
+`detectors:` `Browser for source gathering`, `Browser app`, `BrowserApp`,
+`browser_sessions`, `AppHint: "browser"`, source-open plans that choose Browser
+or Web Lens merely because a URL exists, docs that say users manually browse
+for sources.
+
+`evidence:` [README.md](../README.md),
+[docs/current-architecture.md](./current-architecture.md),
+[docs/platform-os-app-state.md](./platform-os-app-state.md),
+[docs/mission-web-surface-rationalization-v0.md](./mission-web-surface-rationalization-v0.md),
+[docs/mission-source-system-simplify-secure-smart-v0.md](./mission-source-system-simplify-secure-smart-v0.md),
+[internal/runtime/content_extract.go](../internal/runtime/content_extract.go),
+[internal/store/browser.go](../internal/store/browser.go),
+[internal/types/browser.go](../internal/types/browser.go),
+[frontend/src/lib/BrowserApp.svelte](../frontend/src/lib/BrowserApp.svelte),
+[frontend/src/lib/apps/registry.ts](../frontend/src/lib/apps/registry.ts),
+[frontend/tests/browser-app.spec.js](../frontend/tests/browser-app.spec.js).
+
+`why it violates the spec:` web-origin sources should become durable source
+objects with reader artifacts and provenance. A manual browser app makes live
+page viewing look like the primary source workflow and keeps source evidence
+too close to transient iframe/session state.
+
+`successor pattern:` VText source marker -> inline/transcluded expansion ->
+Source Viewer/reader window -> explicit Web Lens live/original inspection when
+needed. Browser/backend-session names may remain only as transitional
+implementation names until the source/Web Lens contract is renamed.
+
+`deletion gate:` source/Web Lens cleanup mission: default web-source opens use
+Source Viewer/reader artifacts, explicit live/original opens use Web Lens, and
+user-facing docs/tests/copy no longer call this a Browser app or source
+gathering workflow.
+
+## Banned Patterns
+
+Agents must not introduce:
+
+1. new `ParentRunID` or `parent_id` control reads;
+2. new `spawned_child_*` work-item semantics;
+3. new uses of `run_continuations` or continuation-shaped APIs for active
+   control;
+4. new semantic `next_required_tool` or `next_tool` forcing;
+5. new semantic first-tool forcing or prompt-pipeline role choreography;
+6. new durable metadata that re-derives a semantic delegation obligation across
+   turns;
+7. new synchronous control-plane polling when a durable handle/update can carry
+   the state;
+8. new acceptance language that calls smoke evidence architectural success;
+9. new authority logic based on latest active run when trajectory- or
+   slot-scoped authority exists;
+10. new blocker-or-assignment semantics that remain narrative-only while being
+   used in settlement reasoning;
+11. new docs that normalize retired ontology without labeling it transitional;
+12. new Trace desktop/app/dashboard surfaces;
+13. new raw Terminal app affordances outside Super Console implementation
+    internals;
+14. new Browser-as-source-gathering or URL-means-Web-Lens defaults.
+
+## Active Cutover Order
+
+Near-term architectural order:
+
+1. M3.1 - remove VText workflow forcing and document the invariant.
+2. M3 - complete lifecycle cutover, especially parent/child residue and
+   rewarm/authority cleanup.
+3. M4 - delete continuation substrate and re-point acceptance semantics.
+4. M5 - use product-path substrate falsifiers only after the above deletion
+   work reduces dual-path ambiguity.
+5. M6+ - promotion/route semantics and review surfaces on top of the cleaned
+   substrate.
+
+Rule: an architectural mission is not settled merely because the replacement
+path works. It settles when the replacement works and the named heresy set for
+that mission is reduced. Discovery of new heresies is epistemic progress, not
+repair progress; keep discovered, introduced, and repaired counts separate.
+
+## Change Protocol
+
+When changing architecture, doctrine, or mission structure:
+
+1. name the conjecture delta;
+2. name which invariant changes, if any;
+3. name which heresy is discovered, reduced, introduced, or retired;
+4. name the evidence class required;
+5. refuse silent mode changes.
+
+If a proposed change would alter the system from agentic to workflow, from
+trajectory to run-tree, from durable obligation to narrative only, or from
+promotion protocol to shortcut path, that change requires an explicit
+conjecture and a human-reviewable doctrine update before code lands.
+
+## Short Rule For Agents
+
+Optimize the conjecture set of Choir, not merely the local tests.
+
+When in doubt:
+
+- preserve ontology over convenience;
+- seek truth from facts before preserving a nice story;
+- name real heresies even when the count looks worse;
+- prefer deleting a heresy to adding a bridge around it;
+- treat dual paths as bugs;
+- do not let a probe or test invent the architecture;
+- document the problem before fixing it.

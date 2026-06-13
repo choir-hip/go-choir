@@ -9,6 +9,12 @@ settlement, and dependencies. At mission start, `/goal docs/<mission>.md`
 compiles the relevant entry and references into a mutable mission document
 with `Parallax State`.
 
+This portfolio inherits [choir-doctrine.md](./choir-doctrine.md). Read it as a
+heresy-reduction and conjecture-learning program, not a roadmap whose visible
+product smoke can settle architecture. Each mission must report evidence class,
+blocked-by relationships, detector-count target when countable, and heresy
+delta split into `discovered`, `introduced`, and `repaired`.
+
 Sources of truth these missions execute against:
 `docs/choir-rearchitecture-durable-actors-2026-06-11.md` (the cutover
 program), `docs/choir-promotion-protocol-conjecture-2026-06-11.md`,
@@ -63,6 +69,19 @@ or review UI polish until M2-M4 remove the old coordination/lifecycle/
 continuation mechanisms.
 
 **ledger file:** `docs/mission-portfolio-2026-06-11.ledger.md`.
+
+**portfolio heresy accounting:** discovered heresies increase open inventory
+but are epistemic progress. They do not count as repaired. A mission decreases
+portfolio V only when its named detector count decreases, a non-countable
+heresy is explicitly proven unavailable, or a successor paradoc accepts a
+remaining edge without pretending it is fixed.
+
+**surface-ontology cleanup cascade:** H027 Trace app residue, H028 raw Terminal
+app residue, and H029 Browser-as-source-gathering residue are doctrine-upgrade
+discoveries. They are not regressions introduced by this portfolio. Code-bearing
+cleanup is deferred to successor missions: Trace evidence/Features cleanup,
+Super Console/terminal compatibility cleanup, and Source Viewer/Web Lens naming
+cleanup.
 
 ## Dependency graph
 
@@ -124,7 +143,7 @@ principle that a deletion costing nothing proven and requiring no replacement
 should not wait for its cutover step: `SynthesizeRunContinuation`,
 `SelectSynthesizedRunContinuation`, the app-adoption→objective mapping with
 its adoption-ID substring match, the hardcoded mission-doc fallback, the
-synthesis lease defaults, and the synonym folding inside the fingerprint
+synthesis legacy lease defaults, and the synonym folding inside the fingerprint
 normalizer. `POST /api/continuations` now requires an explicit objective (the
 caller decides; the record layer only records). The record layer —
 `SelectRunContinuation`, `StartRunContinuation`, fingerprint dedup,
@@ -203,6 +222,12 @@ the riskiest single migration — its own control interval and test.
 
 **Kind:** spine.
 
+**Heresies / evidence:** repairs H001-H005, H015-H016, and H025. Evidence class:
+architectural-level locally plus staging proof for any vmctl/product-path claim.
+Countable target: no new parent/child control reads, no `spawned_child_*` work
+item semantics, and dead parent/child result-channel APIs deleted or explicitly
+quarantined.
+
 **Real artifact:** `executeRun` goroutine closures replaced by actor
 activation loops; `recoverInterruptedRuns` blanket-fail deleted (boot = cold
 actors + sweep); cancel-by-trajectory replaces `CancelRunGraph`;
@@ -219,7 +244,9 @@ for a shim layer rather than distorting the actor semantics.
 **Settlement:** restart amnesia gone (the falsifier passes); ~50 ParentRunID
 test sites migrated with their features; acceptance evidence re-pointed.
 
-**Dependencies:** M2. **Size:** 2 overnight missions; the big one.
+**Dependencies / blocked by:** M2, and M3.1 must first remove VText/prompt
+forcing regressions H009-H012/H024/H026 so lifecycle proof is not defined by
+role choreography. **Size:** 2 overnight missions; the big one.
 
 ## M4 — Continuation deletion (cutover step 5)
 
@@ -232,17 +259,23 @@ actor's mailbox); acceptance-evidence "continuation-level" is re-pointed at
 work items; `/api/continuations` returns 410 or a compatibility response that
 names the replacement. M1a already deleted the synthesis decision layer
 (`SynthesizeRunContinuation`, `SelectSynthesizedRunContinuation`, hardcoded
-mission fallback, adoption-ID substring policy, lease defaults). M4 finishes
+mission fallback, adoption-ID substring policy, legacy lease defaults). M4 finishes
 the ontology cut: no remaining product or verifier path depends on
 RunContinuation as the way work continues.
+
+**Heresies / evidence:** repairs H006-H008, H014, and the continuation/progress
+portion of H022. Evidence class: architectural-level plus staging product proof
+for any public API or run-acceptance claim. Countable target: continuation API
+deleted or 410 shimmed, `continuation-level` retired or explicitly transitional,
+and no acceptance record uses continuation events as architecture proof.
 
 **Bridge conjecture (R3):** nothing of proven value is lost — every behavior
 the synthesis layer provided is unproven (autonomous self-development) or
 better expressed as events + work items. *Falsifier:* one app-adoption flow
 end-to-end (propose → verify → approve → promote/rollback) with no
 SynthesizeRunContinuation in the binary. *Edge (independence):* quiet
-dependencies in Trace UI and acceptance records; sweep them in the same
-mission or verifier discipline silently weakens.
+dependencies in trace evidence projections and acceptance records; sweep them
+in the same mission or verifier discipline silently weakens.
 
 **Dependencies:** M3 (work items must exist as the replacement first — M1).
 **Size:** 1 overnight mission.
@@ -276,6 +309,11 @@ until M2-M4 have made durable actors operational and removed the old
 coordination/continuation paths. **Size:** 1 overnight mission + 1 observed
 production cycle.
 
+**Heresies / evidence:** blocked by substrate ambiguity from H001-H008/H014.
+Evidence class: falsifier/product-path evidence only after architectural
+detectors have decreased. Product smoke or an attractive front page does not
+settle M5 unless settlement accounting is the thing being proven.
+
 ## M6 — Route-flip consumer (promotion P1's load-bearing unknown)
 
 **Kind:** promotion substrate.
@@ -298,6 +336,11 @@ the founder may need to arbitrate (escalation point, not silent choice).
 **Settlement:** one end-to-end promotion on a real computer where activate →
 new behavior served → rollback → old behavior served, all through the
 product path. **Size:** 1–2 overnight missions.
+
+**Heresies / evidence:** promotion/route semantics mission. Evidence class:
+promotion-level only with owner approval, served behavior change, rollback, and
+freshness evidence. Blocked by M4; may discover route-profile heresies without
+claiming repair until the route consumer works.
 
 ## M7 — Changes app review loop
 
@@ -322,6 +365,11 @@ can be sketched earlier, but the mission should not settle before activate,
 rollback, and shared-state conflict semantics are real. **Size:** 1 overnight
 mission (UI) after a half-day design pass.
 
+**Heresies / evidence:** includes H027 cleanup in Features: replace `Open Trace`
+and Trace UI copy with trace-evidence/run-acceptance/Super-Console-oriented
+affordances. Evidence class: review-surface smoke can prove UI opens; it cannot
+settle promotion architecture.
+
 ## M8 — Shared-state promotion: Dolt branching + rollback window (P3/P4)
 
 **Kind:** promotion substrate.
@@ -342,6 +390,10 @@ candidate-wins per data class) is an owner decision, not a default —
 escalation point.
 
 **Dependencies:** M6. **Size:** 2 overnight missions.
+
+**Heresies / evidence:** evidence class is promotion-level only when conflicting
+foreground/candidate data is preserved, surfaced, or blocked with rollback
+state. Product smoke does not settle merge semantics.
 
 ## M9 — Docs revision + heresy sweep (grand synthesis §6.1) — DONE 2026-06-11
 
@@ -404,6 +456,12 @@ the sweep tooling reports zero dead exports/endpoints — then the conjecture
 that ruins remain is refuted and the mission settles immediately.
 **Dependencies:** none; M4/M7 retire some Trace/continuation surface anyway —
 coordinate to avoid double deletion. **Size:** half a session, agent-heavy.
+
+**Heresies / evidence:** includes code-bearing H027-H029 detector cleanup where
+safe: Trace app residue, raw Terminal app residue, Browser-as-source-gathering
+residue, plus dead continuation endpoints. Evidence class: detector/export-level
+only unless runtime behavior changes, in which case use the relevant protected
+surface proof.
 
 ## M11 — corpusd rename (side PR)
 

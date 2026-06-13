@@ -2,9 +2,9 @@
 
 Last reviewed: 2026-06-13
 
-This directory contains canonical architecture docs, active Parallax paradocs,
-proof artifacts, and a small number of historical pointers. Do not
-treat every file here as equally current.
+This directory contains Choir Doctrine, operating contracts, active Parallax
+paradocs, domain invariant docs, descriptive architecture docs, proof artifacts,
+and historical pointers. Do not treat every file here as equally current.
 
 The old documentation audit was pruned during the Campaign Compiler cleanup.
 Current docs should point at `choir.news`, AppChangePackage/adoption source
@@ -15,7 +15,17 @@ rearchitecture spine.
 
 Use these buckets when reading or editing docs:
 
-- **Canonical current docs** define present operating context and implementation invariants. They override older proof, mission, and project-state files.
+- **Canonical doctrine** defines the current optimization target, protected
+  invariants, evidence semantics, heresy inventory, and supersession rule.
+- **Operating contract** defines how agents work in this repo and inherits
+  canonical doctrine.
+- **Active mission portfolio / paradocs** define executable work. They inherit
+  doctrine; they do not override it unless explicitly promoted.
+- **Domain invariants** define durable rules for specific subsystems such as
+  computers, VText, source, promotion, or runtime authority.
+- **Current descriptive architecture** describes code/staging reality and
+  labeled target hardening. It should be corrected when it conflicts with code,
+  staging, or doctrine.
 - **Current mission docs / paradocs** define active or recently stopped
   Parallax work. They are runnable/inspectable mission context, not global
   architecture unless promoted into canonical docs.
@@ -23,8 +33,34 @@ Use these buckets when reading or editing docs:
 - **Historical signal** may contain useful design history or old constraints, but must be read through the current architecture.
 - **Stale/dangerous docs** contain outdated operational instructions, provider/credential references, or old continuation flows. Extract any live signal, then replace or delete them.
 
+Supersession rule: `docs/choir-doctrine.md` is the apex doctrine. `AGENTS.md`
+is the operating contract. Mission docs and reviews are evidence unless their
+learning has been promoted into doctrine or a domain invariant. Old
+MissionGradient docs are historical for new work unless a current paradoc
+explicitly promotes one as source form.
+
+## Authority Layers
+
+- **Canonical doctrine:** `docs/choir-doctrine.md`.
+- **Operating contract:** `../AGENTS.md`.
+- **Active mission portfolio:** `docs/mission-portfolio-2026-06-11.md` and the
+  current mission paradoc.
+- **Domain invariants:** `docs/computer-ontology.md`,
+  `docs/vtext-agentic-invariants-2026-06-13.md`,
+  `docs/runtime-invariants.md`, `docs/source-external-data-publication.md`,
+  and promotion/source-specific doctrine where explicitly current.
+- **Current descriptive architecture:** `docs/current-architecture.md` and
+  `docs/platform-os-app-state.md`.
+- **Historical evidence:** dated proof, review, dogfood, MissionGradient, and
+  superseded mission reports.
+- **Superseded/dangerous-if-current:** docs that normalize retired root
+  ontologies such as StoryGraph-as-root, personal writing/publishing system as
+  root, Trace app, raw Terminal app, Browser-as-source-gathering, parent/child
+  control, or continuation-level as target doctrine.
+
 ## Canonical Current Docs
 
+- `docs/choir-doctrine.md` - apex doctrine and architecture control document.
 - `../README.md` - operational entrypoint for humans and agents.
 - `../AGENTS.md` - repo-level agent operating contract.
 - `docs/mission-geometry.md` - high-level mission geometry: Choir as statistical/symbolic/evolutionary learner and automatic computer -> newspaper -> radio -> capital vector.
@@ -135,7 +171,7 @@ Use these buckets when reading or editing docs:
   self-development mission surface.
 - `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.
 - `docs/mission-run-memory-v0.md` - run-memory/compaction mission.
-- `docs/mission-web-surface-rationalization-v0.md` - Obscura/browser surface rationalization mission.
+- `docs/mission-web-surface-rationalization-v0.md` - Obscura/Web Lens surface rationalization mission.
 - `docs/mission-universal-wire-style-vtext-collaborative-storygraph-v0.md` -
   historical draft mission for the superseded Universal Wire / Style.vtext
   collaborative StoryGraph trajectory. Do not use it as current ontology.
