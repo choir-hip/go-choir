@@ -103,7 +103,16 @@ evidence at deployed commit `a2252af27b5db087cbbb931e8d1b5dc04e402285`, while
 the synthesized RunAcceptanceRecord `runacc-ffec1c9975f357724d29` stayed
 `blocked` because `product_path_observed` still requires `super_requested` and
 `worker_mutation_bounded` still requires worker/export/adoption evidence even
-when no worker mutation was attempted.
+when no worker mutation was attempted. Commit
+`25c498365221485cfe19bcb5d2a1992bb8bd6986` fixed that local semantics and its
+push CI/deploy succeeded, but the first deployed acceptance rerun still saw the
+old invariant semantics from an active interactive computer. A forced staging
+workflow dispatch with `DEPLOY_ACTIVE_VM_REFRESH=true` and `DEPLOY_HOST_OS=true`
+then failed during Node B activation: `go-choir-sandbox.service` exited during
+the NixOS switch, and `/health` reported `status=degraded` with upstream 502s
+while the proxy build identity stayed at `25c498365221485cfe19bcb5d2a1992bb8bd6986`.
+The mission remains open on deployed acceptance proof and staging recovery; no
+continuation-level, promotion-level, or final M3 settlement is claimed.
 
 **budget:** 2 overnight missions. Solvency check: do not spend the first pass
 rewriting the whole LLM loop. First buy the map: classify lifecycle reads and
@@ -177,12 +186,13 @@ controllers to it; blocked/nonresident historical rows no longer suppress a
 fresh coagent activation when durable backlog exists.
 See "Lifecycle Inventory - 2026-06-13" below.
 
-**next move:** repair the acceptance smoke semantics documented in the
-2026-06-13 staging proof: prompt/VText-only deployed smoke should be accepted
-as `staging-smoke-level` when no worker mutation was attempted, while
-worker/export/promotion/continuation claims remain gated by their existing
-evidence. Then rerun focused acceptance tests, push, monitor CI/deploy, and
-rerun deployed acceptance synthesis. Cancellation's store-active fallback and
+**next move:** recover staging and prove the active product path on commit
+`25c498365221485cfe19bcb5d2a1992bb8bd6986`. First determine whether the
+forced active-VM-refresh deploy failure is transient operational state or a
+deploy-script/runtime bug. Do not weaken acceptance gates to route around it.
+Once `/health` is healthy for proxy and sandbox at `25c49836`, rerun the public
+prompt-bar/VText/RunAcceptance synthesis proof and require an accepted
+`staging-smoke-level` record. Cancellation's store-active fallback and
 `executeActivation` terminal run rows are accepted for v0 as compatibility/audit
 surfaces, not ordinary warm-residency or agent-liveness oracles.
 Preserve historical `parent_loop_id` compatibility surfaces for trace/API

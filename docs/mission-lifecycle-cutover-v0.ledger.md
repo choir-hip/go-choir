@@ -773,3 +773,66 @@ Expected Delta V: -1 if the same deployed smoke can synthesize an accepted
 `staging-smoke-level` record after CI/deploy, while existing tests still prove
 worker delegate blockers remain blocked and runtime-supervision/export paths
 keep their stronger gates.
+
+## 2026-06-13 - Forced Active Refresh Deploy Failed Sandbox Activation
+
+Post-fix code commit:
+`25c498365221485cfe19bcb5d2a1992bb8bd6986` (`runtime: accept prompt vtext smoke evidence`).
+Local proof before push:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestRunAcceptanceSynthesizeAcceptsPromptVTextStagingSmoke|TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker|TestRunAcceptanceSynthesizeRecordsPendingWorkerDelegateInvocation|TestRunAcceptanceSynthesizeAcceptsRuntimeSupervisionWithoutAppPackage|TestRunAcceptanceSynthesizeDerivesExportLevelRecord' -count=1`
+- `nix develop -c scripts/go-test-runtime-shards`
+- `nix develop -c go test ./internal/types ./internal/store`
+- `git diff --check`
+
+Push CI/deploy run `27460486381` succeeded for SHA
+`25c498365221485cfe19bcb5d2a1992bb8bd6986`, and staging `/health` reported
+proxy plus upstream sandbox deployed at that SHA. A fresh public product-path
+acceptance proof used real browser/WebAuthn staging user
+`qa-1781336201345-chxecv@example.com`, created prompt-bar submission
+`dfc758a2-dceb-4cc3-b767-3bcb0c72f8c9`, and observed completed VText doc
+`b20de060-ba35-41ff-9c3c-6147b8564f58` with initial loop
+`2ece0826-129a-4ab0-bb66-6cea4f9ee8cd`. However
+`POST /api/run-acceptances/synthesize` returned
+`runacc-2a9f454e6978d2df3a5d` as `staging-smoke-level` but still `blocked`,
+with the old `product_path_observed` and `worker_mutation_bounded` invariant
+semantics. Inference: the host deploy reached proxy/sandbox identity, but at
+least one active interactive computer serving the authenticated product path
+had not refreshed onto the new runtime semantics.
+
+To test that inference without changing code, workflow dispatch run
+`27460579519` was started at the same SHA with `force_staging_deploy=true`.
+All code gates passed, and the deploy-impact job set:
+
+- `DEPLOY_ACTIVE_VM_REFRESH=true`
+- `DEPLOY_HOST_OS=true`
+- `deploy_host=true`
+
+The Node B deploy then failed in job `81173547329` with exit code 4 during
+NixOS activation. The deploy log shows the switch stopped and restarted
+`go-choir-gateway.service`, `go-choir-proxy.service`,
+`go-choir-sandbox.service`, `go-choir-sourcecycled.service`, and
+`go-choir-vmctl.service`; `go-choir-sandbox.service` exited from
+`go-choir-sandbox-exec` with status 1 on both the initial switch and the retry.
+After that failed deploy, `https://choir.news/health` reported:
+
+- `status=degraded`
+- `service=proxy`
+- `upstream=unreachable`
+- `vmctl_status=ok`
+- proxy build/deployed commit
+  `25c498365221485cfe19bcb5d2a1992bb8bd6986`
+- lifecycle `api.upstream` errors as HTTP 502s
+
+Observed problem: the stronger active-refresh path needed to prove the
+acceptance fix cannot currently complete, because forced deploy can leave the
+sandbox runtime service down even though the proxy reports the target commit.
+This blocks deployed acceptance proof and staging recovery. It does not justify
+weakening RunAcceptance gates, claiming continuation-level, or claiming M3
+settlement.
+
+Next proof move: recover staging to healthy proxy+sandbox identity at
+`25c498365221485cfe19bcb5d2a1992bb8bd6986`, then rerun the public
+prompt-bar/VText/RunAcceptance synthesis proof. If recovery requires a code
+change, this section is the Problem Documentation First checkpoint for that
+fix.
