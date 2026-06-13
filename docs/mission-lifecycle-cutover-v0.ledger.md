@@ -2039,3 +2039,66 @@ obligation. The next fix should make explicit researcher obligations executable
 from VText before super-only completion can close the document. No code fix in
 this checkpoint, and no continuation-level, promotion-level, zero-stranding, or
 final M3 settlement is claimed.
+
+## 2026-06-13 - Batch AA Problem Checkpoint: Required Continuation Hint Still Did Not Spawn Researcher
+
+Claim/scope: record the first deployed result after commit
+`d74e60617db0b4d48daadbb6286b72f7fa326504` reached staging, before any next
+code fix. This is problem documentation only. It does not change the runtime
+and does not claim acceptance.
+
+Receipts:
+
+- Commit `d74e60617db0b4d48daadbb6286b72f7fa326504` was pushed to
+  `origin/main`.
+- The code change made `edit_vtext` return `next_required_tool=spawn_agent`
+  with researcher arguments and a follow-up instruction when an initial
+  user-authored VText revision carries explicit researcher intent.
+- Local construct checks before push passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandlePromptBarExplicitResearcherBypassesPersistentSuperShortcut|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestVTextPromptExplicitResearcherOverridesSuperFirstShortcut|TestVTextPromptSteersCurrentEventsToResearcherNotSuper' -count=1`;
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation|TestEditVTextExplicitResearcherRequiresSpawnContinuation' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestConductorCanSpawnVTextAndVTextCanSpawnResearcher|TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog|TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog|TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill|TestStartChildRunCompletesSpawnedWorkItem|TestStartSweepsAssignedOpenWorkItemsAfterPassivation' -count=1`;
+  and `nix develop -c scripts/go-test-runtime-shards`.
+- CI run `27467234086` completed successfully, including deploy job
+  `81191719843`; FlakeHub publish run `27467234071` completed successfully.
+- Public staging health after deploy reported proxy build commit
+  `d74e60617db0b4d48daadbb6286b72f7fa326504`, deployed commit
+  `d74e60617db0b4d48daadbb6286b72f7fa326504`, `vmctl_status=ok`, and
+  `vmctl_routing=enabled`. The proxy status was `degraded` because the default
+  upstream was unreachable, but vmctl routing was healthy.
+- Deployed probe command:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news node /tmp/m3_vmctl_refresh_probe.mjs > /tmp/m3_vmctl_refresh_probe.d74e6061.out.json`
+  exited nonzero.
+- Probe marker: `M3_VMCTL_REFRESH_1781355099704`; test account
+  `m3-vmctl-refresh-1781355101188-dlm2ct@example.com`; owner
+  `6bc028a5-ad5e-4810-aef6-9400c39c71cb`; submission/trajectory
+  `535c54c2-cd4f-4541-9e26-1c8149fb20aa`; VText document
+  `76468684-39bf-4e85-b3ab-8fbc46c8bc87`.
+- VM target before any refresh: `vm-d25cfca4740e90695d25b7802302afc6`,
+  sandbox `http://10.200.21.2:8085`, epoch 1, deployed commit
+  `d74e60617db0b4d48daadbb6286b72f7fa326504`.
+- Failure again occurred before `POST /internal/vmctl/refresh`: the probe
+  timed out waiting for Trace roles `conductor`, `vtext`, `researcher`, and
+  `super`. Trace contained only `conductor`, `super`, and `vtext`.
+- A diagnostic owner-routed sandbox trace read showed `agent_count=3`,
+  `delegation_count=0`, `finding_count=0`, and `message_count=0`. Agents were
+  conductor, super, and VText. Super invoked `grep`, `search_wire_corpus`,
+  `read_file`, `write_file`, and `update_coagent`; VText invoked `edit_vtext`,
+  created revision `53543c7c`, received the tool result, made one more provider
+  call, and completed. No researcher agent, `spawn_agent` moment, researcher
+  finding, researcher work item, or researcher worker update appeared by the
+  240-second pre-refresh deadline.
+- Direct VM health during the failed probe reported `status=ready`,
+  `running_runs=1` before failure, and deployed commit
+  `d74e60617db0b4d48daadbb6286b72f7fa326504`.
+
+Expected Delta V after `d74e6061`: -1 on staging for the explicit researcher
+obligation subclaim by forcing VText to call `spawn_agent` after its initial
+edit. Actual Delta V: 0 for deployed acceptance. Remaining error field: a
+model-visible required-continuation hint in the `edit_vtext` result is not a
+durable control contract; deployed VText can still complete after the edit
+without opening the researcher branch. The next fix should enforce explicit
+researcher obligations in runtime control flow or another deterministic
+contract before VText can complete. No code fix in this checkpoint, and no
+continuation-level, promotion-level, zero-stranding, or final M3 settlement is
+claimed.
