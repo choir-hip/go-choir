@@ -1433,3 +1433,62 @@ user computer that owns the product trajectory, or use an equivalent product
 handle that proves the killed runtime and the observed trajectory share the same
 computer/store. No continuation-level, promotion-level, zero-stranding, or final
 M3 settlement is claimed.
+
+## 2026-06-13 - Batch O Problem Checkpoint: VM Refresh Strands Spawned Researcher Work
+
+Claim/scope: rerun the restart discriminator with the correct target: a fresh
+throwaway user computer owned by the product trajectory, not the host fallback
+sandbox. Bound the mutation to that test account's primary computer.
+
+Move: product-path prompt-bar/VText run plus internal vmctl `refresh` for the
+same owner/desktop. The script lived outside the repo at
+`/tmp/m3_vmctl_refresh_probe.mjs`; output was captured outside the repo at
+`/tmp/m3_vmctl_refresh_probe.out.json`. This is a fault-injection probe, not a
+code fix.
+
+Receipts:
+
+- Marker/account: `M3_VMCTL_REFRESH_1781346435788`,
+  `m3-vmctl-refresh-1781346437098-4m7h17@example.com`.
+- Product IDs: owner `e6d80890-2439-4d4d-a1a4-c46ae3fbc0b0`,
+  submission/trajectory `de77291f-2354-4fb5-bad2-d0cabd243ca2`, VText document
+  `b02b1da1-ea42-483d-86fa-59ccbc532bdf`, initial loop
+  `47800cdd-e03f-4c52-b5cd-189c0d8f0c1d`.
+- Route-target proof before fault injection: vmctl ownership
+  `vm-5d3ca0a2a3bdd8e8a402a598822fc4db`, sandbox
+  `http://10.200.10.2:8085`, state active, epoch 1; direct VM health ready,
+  `running_runs=1`, deployed commit
+  `63767a43673007aaca27e926c74dd6e9ee7093f3`; public Trace had conductor,
+  super, researcher, and VText roles.
+- Fault injection: `POST /internal/vmctl/refresh` for that owner/primary
+  desktop at `2026-06-13T10:28:17Z`. vmmanager logged the Firecracker process
+  exiting with `signal: killed`, marked the VM failed, booted the same VM ID at
+  sandbox `http://10.200.11.2:8085`, and vmctl reported state active, epoch 2.
+- Guest restart evidence: boot log recorded
+  `runtime: passivated run 57ce8389-5482-4a25-aa85-419b1e6002d3 (was running) after restart`,
+  then `runtime: started (sandbox=vm-5d3ca0a2a3bdd8e8a402a598822fc4db)`.
+- Product/control recovery: public Compute Monitor for the authenticated test
+  user reported current computer active/reachable at epoch 2 with runtime
+  ready; direct VM health after refresh was ready at deployed commit
+  `63767a43673007aaca27e926c74dd6e9ee7093f3`.
+- Product proof failure: final VText predicate timed out. The head revision
+  `a85d04bc-3032-4b02-8d67-74625bfc9151` was created at
+  `2026-06-13T10:28:16Z`, just before the refresh, and consumed only the super
+  update. Its content explicitly said the researcher finding was pending.
+- Post-restart trajectory evidence: Trace showed researcher agent
+  `cd13692e-46c9-4b57-84b4-35cba8c8373d` as `passivated`, first/latest seen
+  at `2026-06-13T10:28:26Z`; the VText revisions still had no researcher
+  update consumed, and `TrajectoryObligations` showed `pending_updates=0`,
+  `settlement_ready=false`, and only one open Wire publication work item
+  created by the partial VText revision.
+
+Expected Delta V: 0 or -1 if the vmctl-routed restart falsifier passed; actual
+Delta V: 0 and C3 is falsified for this spawned-work shape. Observer evidence
+improved substantially: the route-target oracle is now correct, and the failure
+is no longer host/VM mismatch. Remaining error field: spawned researcher/coagent
+tasks whose requester expects a result are not necessarily represented as
+durable assigned work or pending update backlog. If such an activation is
+killed, boot can passivate it without rewarming it and without a visible
+trajectory obligation for the missing result. Documented first under Problem
+Documentation First; no code fix in this commit, and no continuation-level,
+promotion-level, zero-stranding, or final M3 settlement is claimed.
