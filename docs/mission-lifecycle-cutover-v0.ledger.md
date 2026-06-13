@@ -1979,3 +1979,63 @@ prompt-bar route metadata or another non-ambiguous route signal instead of
 depending only on later free-text inspection. No code fix in this checkpoint,
 and no continuation-level, promotion-level, zero-stranding, or final M3
 settlement is claimed.
+
+## 2026-06-13 - Batch Z Problem Checkpoint: Durable Researcher Intent Still Completed Super-Only
+
+Claim/scope: record the first deployed result after commit
+`93fc3ada07e4a5e3c94169cb92c6daaee4ac46d4` reached staging, before any next
+code fix. This is problem documentation only. It does not change the runtime
+and does not claim acceptance.
+
+Receipts:
+
+- Commit `93fc3ada07e4a5e3c94169cb92c6daaee4ac46d4` was pushed to
+  `origin/main`.
+- Local construct checks before push passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandlePromptBarExplicitResearcherBypassesPersistentSuperShortcut|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestVTextPromptExplicitResearcherOverridesSuperFirstShortcut|TestVTextPromptSteersCurrentEventsToResearcherNotSuper' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestConductorCanSpawnVTextAndVTextCanSpawnResearcher|TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog|TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog|TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill|TestStartChildRunCompletesSpawnedWorkItem|TestStartSweepsAssignedOpenWorkItemsAfterPassivation' -count=1`;
+  and `nix develop -c scripts/go-test-runtime-shards`.
+- CI run `27466853268` completed successfully, including deploy job
+  `81190664423`; FlakeHub publish run `27466853276` completed successfully.
+- Public staging health after deploy reported proxy build commit
+  `93fc3ada07e4a5e3c94169cb92c6daaee4ac46d4`, deployed commit
+  `93fc3ada07e4a5e3c94169cb92c6daaee4ac46d4`, `vmctl_status=ok`, and
+  `vmctl_routing=enabled`. The proxy status was `degraded` because the default
+  upstream was unreachable, but vmctl routing was healthy.
+- Deployed probe command:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news node /tmp/m3_vmctl_refresh_probe.mjs > /tmp/m3_vmctl_refresh_probe.93fc3ada.out.json`
+  exited nonzero.
+- Probe marker: `M3_VMCTL_REFRESH_1781354046143`; test account
+  `m3-vmctl-refresh-1781354047430-anqazg@example.com`; owner
+  `476df81b-1b02-4864-b75d-779316bbbe3f`; submission/trajectory
+  `b83b80b0-f81c-4c12-9fd2-3e16f4a42b32`; VText document
+  `788b2f9b-687b-4718-a665-42d2d6c75ae1`.
+- VM target before any refresh: `vm-516253a97cfa407b1424533676f1b349`,
+  sandbox `http://10.200.20.2:8085`, epoch 1, deployed commit
+  `93fc3ada07e4a5e3c94169cb92c6daaee4ac46d4`.
+- The route changed in the expected direction: decision `initial_loop_id`
+  `acf35ca3-b81e-4485-b744-4761160413ff` was no longer a persistent-super
+  initial route. The probe reached an initial VText route.
+- Failure still occurred before `POST /internal/vmctl/refresh`: the probe
+  timed out waiting for Trace roles `conductor`, `vtext`, `researcher`, and
+  `super`. Trace contained only `conductor`, `super`, and `vtext`.
+- A diagnostic owner-routed sandbox trace read showed trajectory state
+  `completed`, `agent_count=3`, `delegation_count=1`, `finding_count=0`, and
+  `message_count=2`. Agents were conductor, super, and VText. Super invoked
+  `search_wire_corpus`, `list_evidence`, shell/file tools, and
+  `update_coagent`. VText invoked `edit_vtext` and completed. No researcher
+  agent, `spawn_agent` moment, researcher finding, researcher work item, or
+  researcher worker update appeared by the 240-second pre-refresh deadline.
+- Direct VM health after failure reported `status=ready`, zero running runs,
+  and deployed commit `93fc3ada07e4a5e3c94169cb92c6daaee4ac46d4`.
+
+Expected Delta V after `93fc3ada`: -1 on staging for the route-signal subclaim
+and -1 for reaching the researcher branch before refresh. Actual Delta V: -1
+for the route-signal subclaim, 0 for the researcher branch. Remaining error
+field: durable prompt-bar metadata can get the vmctl proof prompt onto the
+initial VText route, but the initial VText route can still satisfy the document
+through super-only work and complete without opening the explicit researcher
+obligation. The next fix should make explicit researcher obligations executable
+from VText before super-only completion can close the document. No code fix in
+this checkpoint, and no continuation-level, promotion-level, zero-stranding, or
+final M3 settlement is claimed.
