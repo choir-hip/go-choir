@@ -1352,3 +1352,33 @@ public health still looks OK between restarts. Remaining error field: staging is
 not yet a clean substrate for the deployed kill/restart falsifier; first remove
 the stray diagnostic process and prove the service remains stable, then rerun
 public product-path smoke before attempting the M3 restart discriminator.
+
+## 2026-06-13 - Batch M Cleanup: Staging Substrate Restored
+
+Claim/scope: cleanup of the documented staging substrate blocker. This is not a
+runtime behavior fix and not M3 settlement evidence; it restores the acceptance
+environment so the deployed restart falsifier can be attempted honestly.
+
+Move: killed only the stray non-systemd PID that owned `127.0.0.1:8085`
+(`/var/lib/go-choir/services/sandbox/bin/sandbox -help`). No tracked file,
+service unit, or deployed package was edited.
+
+Receipts:
+
+- Before cleanup: port PID `4079213`, systemd main PID `42640`; killed PID
+  `4079213`.
+- Stability watch after cleanup: `go-choir-sandbox.service` active/running,
+  main PID `42640`, `NRestarts=117`, `ExecMainStartTimestamp=Sat 2026-06-13
+  10:03:26 UTC`; `ss -ltnp 'sport = :8085'` showed PID `42640` as the sole
+  listener.
+- Public health after cleanup returned `status=ok`, `upstream=ok`,
+  `vmctl_status=ok`, `vmctl_routing=enabled`, and proxy/sandbox build plus
+  deployed commit `63767a43673007aaca27e926c74dd6e9ee7093f3`.
+- Product-path smoke after cleanup passed:
+  `GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news pnpm --dir frontend exec playwright test tests/adaptive-lifecycle-control-deployed.spec.js --project=chromium --reporter=list`.
+
+Expected Delta V: 0 for full M3; actual Delta V: 0. The cleanup discharges the
+substrate blocker found by the Batch M preflight. The mission's next
+discriminator returns to deployed kill/restart or equivalent staging evidence
+that actor rewarm from durable backlog/open obligations leaves zero stranded
+messages and no zero-obligation stalls.

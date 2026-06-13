@@ -299,20 +299,22 @@ systemd main process. This is a staging-proof blocker and a harness/ops
 discipline finding: a binary help probe can accidentally start a second
 sandbox, hold the runtime port, and force systemd restart loops while public
 health may still look OK between restarts.
+The immediate cleanup removed only the stray non-systemd process. A later
+sample showed `go-choir-sandbox.service` active/running with main PID `42640`,
+`NRestarts=117` unchanged through the watch window, and `ss` showing PID
+`42640` as the sole listener on `127.0.0.1:8085`. Public health still reported
+proxy/sandbox deployed commit `63767a43673007aaca27e926c74dd6e9ee7093f3`, and
+the deployed adaptive lifecycle Playwright smoke passed. This restores staging
+as a usable proof substrate, but it is not M3 restart-falsifier evidence.
 See "Lifecycle Inventory - 2026-06-13" below.
 
-**next move:** first discharge the staging substrate blocker without treating
-it as M3 settlement evidence: remove the stray diagnostic sandbox process,
-confirm `go-choir-sandbox.service` remains on one main PID with no new restart
-loop and public health still reports deployed commit
-`63767a43673007aaca27e926c74dd6e9ee7093f3`, then rerun a public product-path
-smoke if needed. After staging is stable, continue toward deployed
-kill/restart evidence. Keep M3 open as a lifecycle cutover mission, not a
-deployment recovery mission. The next discriminator is the durable-actor
-restart falsifier: kill/restart or equivalent deployed evidence that a cold
-actor rewarms from durable backlog/open assigned obligations with zero stranded
-messages or zero-obligation stalls. The local OS-kill test is the rehearsal for
-that staging proof, not a substitute for it.
+**next move:** continue toward deployed kill/restart evidence now that the
+staging substrate blocker is discharged. Keep M3 open as a lifecycle cutover
+mission, not a deployment recovery mission. The next discriminator is the
+durable-actor restart falsifier: kill/restart or equivalent deployed evidence
+that a cold actor rewarms from durable backlog/open assigned obligations with
+zero stranded messages or zero-obligation stalls. The local OS-kill test is the
+rehearsal for that staging proof, not a substitute for it.
 Cancellation's store-active fallback and `executeActivation` terminal run rows
 are accepted for v0 as compatibility/audit surfaces, not ordinary
 warm-residency or agent-liveness oracles.
