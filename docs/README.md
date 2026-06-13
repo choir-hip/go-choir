@@ -93,8 +93,9 @@ Use these buckets when reading or editing docs:
   requirements contract: Universal Wire, Private Wire reuse, platform/user
   computer authority, VText ownership, source artifacts, and deletion of legacy
   graph/source-maxxing behavior.
-- `docs/mission-lifecycle-cutover-v0.md` - current next spine paradoc: M3
-  lifecycle cutover after M2 settlement.
+- `docs/mission-*-v*.md` - mission paradocs. Use the portfolio's Parallax
+  State to identify the current spine mission instead of updating this index
+  for every mission transition.
 - `docs/mission-wire-community-news-v0.md` - older Universal Wire product
   mission. Do not resume it as the architecture spine; current Wire proof is
   downstream of M2-M4 in the portfolio.
@@ -112,7 +113,8 @@ Use these buckets when reading or editing docs:
 - `docs/implementation-scope.md` - near-term implementation scope.
 - `docs/north-star.md` - long-range product direction.
 - `docs/mission-campaign-compiler-selfdev-v0.md` - retained Choir-in-Choir
-  benchmark input. Do not treat it as the current spine while M3/M4 are open.
+  benchmark input. Do not treat it as the current spine when the portfolio
+  names an architecture-spine mission.
 - `docs/legacy-promotion-experiments-learnings.md` - consolidated lessons from
   pruned patchset-promotion experiments.
 - `docs/old-docs-review-2026-06-06.md` - cleanup ledger for old docs reviewed
