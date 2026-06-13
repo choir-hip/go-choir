@@ -177,31 +177,40 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 	if prompt == "" {
 		prompt = strings.TrimSpace(baseRevision.Content)
 	}
-	if prompt == "" {
-		return vtextRequiredContinuation{}, false
-	}
-	if intent, ok := extractEmailDraftIntent(prompt, rev.Content); ok {
-		if baseRevision.AuthorKind == types.AuthorUser || grounded {
-			return vtextRequiredContinuation{
-				Tool: "request_email_draft",
-				Args: map[string]any{
-					"doc_id":              rev.DocID,
-					"revision_id":         rev.RevisionID,
-					"source_content_hash": emailSourceContentHash(rev.DocID, rev.RevisionID, rev.Content),
-					"to_addresses":        intent.ToAddresses,
-					"subject":             intent.Subject,
-					"body_text":           intent.BodyText,
-					"approval_mode":       "owner_click_or_email_reply",
-				},
-				Instruction: "The VText email artifact is now stored. Call request_email_draft next with the provided arguments before ending this run; stopping now leaves the Email appagent handoff incomplete. Do not call request_super_execution for this simple email draft handoff, and do not send mail directly.",
-			}, true
+	baseRevisionMeta := decodeRevisionMetadata(baseRevision.Metadata)
+	if prompt != "" {
+		if intent, ok := extractEmailDraftIntent(prompt, rev.Content); ok {
+			if baseRevision.AuthorKind == types.AuthorUser || grounded {
+				return vtextRequiredContinuation{
+					Tool: "request_email_draft",
+					Args: map[string]any{
+						"doc_id":              rev.DocID,
+						"revision_id":         rev.RevisionID,
+						"source_content_hash": emailSourceContentHash(rev.DocID, rev.RevisionID, rev.Content),
+						"to_addresses":        intent.ToAddresses,
+						"subject":             intent.Subject,
+						"body_text":           intent.BodyText,
+						"approval_mode":       "owner_click_or_email_reply",
+					},
+					Instruction: "The VText email artifact is now stored. Call request_email_draft next with the provided arguments before ending this run; stopping now leaves the Email appagent handoff incomplete. Do not call request_super_execution for this simple email draft handoff, and do not send mail directly.",
+				}, true
+			}
 		}
 	}
-	if (metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) || vtextPromptExplicitlyRequestsResearcher(prompt)) &&
+	explicitResearcher := metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) ||
+		metadataBoolValue(baseRevisionMeta, runMetadataExplicitResearcher) ||
+		vtextPromptExplicitlyRequestsResearcher(vtextEditResearcherIntentText(prompt, baseRevision, baseRevisionMeta))
+	if explicitResearcher &&
 		!rt.vtextTrajectoryHasResearcherParticipation(ctx, rec, rev.DocID) {
 		objective := "Research the user's request for this VText document and send a concise finding with evidence via update_coagent."
-		if prompt != "" {
-			objective += " Focus on: " + truncateForToolInstruction(prompt, 420)
+		if focus := firstNonEmpty(
+			metadataStringValue(baseRevisionMeta, "seed_prompt"),
+			metadataStringValue(baseRevisionMeta, "original_prompt"),
+			metadataStringValue(baseRevisionMeta, "request_intent"),
+			baseRevision.Content,
+			prompt,
+		); strings.TrimSpace(focus) != "" {
+			objective += " Focus on: " + truncateForToolInstruction(focus, 420)
 		}
 		return vtextRequiredContinuation{
 			Tool: "spawn_agent",
@@ -214,6 +223,17 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 		}, true
 	}
 	return vtextRequiredContinuation{}, false
+}
+
+func vtextEditResearcherIntentText(prompt string, baseRevision types.Revision, baseRevisionMeta map[string]any) string {
+	parts := []string{
+		prompt,
+		baseRevision.Content,
+		metadataStringValue(baseRevisionMeta, "seed_prompt"),
+		metadataStringValue(baseRevisionMeta, "original_prompt"),
+		metadataStringValue(baseRevisionMeta, "request_intent"),
+	}
+	return strings.Join(parts, "\n")
 }
 
 func (rt *Runtime) vtextTrajectoryHasResearcherParticipation(ctx context.Context, rec *types.RunRecord, docID string) bool {

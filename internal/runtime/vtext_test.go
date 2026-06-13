@@ -6735,6 +6735,95 @@ func TestEditVTextExplicitResearcherRequiresSpawnAfterSuperBase(t *testing.T) {
 	}
 }
 
+func TestEditVTextExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt(t *testing.T) {
+	t.Parallel()
+	_, s, rt := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+	doc := types.Document{
+		DocID:     "doc-explicit-researcher-base-content",
+		OwnerID:   "user-1",
+		Title:     "Restart route proof",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	userRev := types.Revision{
+		RevisionID:  "rev-user-explicit-researcher-base-content",
+		DocID:       doc.DocID,
+		OwnerID:     doc.OwnerID,
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "user",
+		Content:     "Create a VText document for the M3 route proof. Ask researcher for route evidence, then ask super for a verification note.",
+		CreatedAt:   time.Now().UTC(),
+	}
+	if err := s.CreateRevision(ctx, userRev); err != nil {
+		t.Fatalf("create user revision: %v", err)
+	}
+	run := types.RunRecord{
+		RunID:        "run-vtext-explicit-researcher-base-content",
+		AgentID:      "vtext:" + doc.DocID,
+		ChannelID:    doc.DocID,
+		OwnerID:      doc.OwnerID,
+		SandboxID:    "sandbox-vtext-test",
+		State:        types.RunRunning,
+		TrajectoryID: "traj-explicit-researcher-base-content",
+		Prompt:       "Revise from worker update.",
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		Metadata: map[string]any{
+			"type":                  "vtext_agent_revision",
+			"doc_id":                doc.DocID,
+			"current_revision_id":   userRev.RevisionID,
+			"original_prompt":       "Revise from worker update.",
+			runMetadataAgentID:      "vtext:" + doc.DocID,
+			runMetadataChannelID:    doc.DocID,
+			runMetadataAgentRole:    AgentProfileVText,
+			runMetadataAgentProfile: AgentProfileVText,
+		},
+	}
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID:     doc.DocID,
+		RunID:     run.RunID,
+		OwnerID:   doc.OwnerID,
+		State:     "pending",
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("create mutation: %v", err)
+	}
+
+	registry := rt.ToolRegistryForProfile(AgentProfileVText)
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_vtext", json.RawMessage(`{
+		"doc_id":"doc-explicit-researcher-base-content",
+		"base_revision_id":"rev-user-explicit-researcher-base-content",
+		"operation":"replace_all",
+		"content":"# Restart route proof\n\nWorking revision from worker update."
+	}`))
+	if err != nil {
+		t.Fatalf("edit_vtext: %v", err)
+	}
+	var editResult map[string]any
+	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
+		t.Fatalf("decode edit result: %v", err)
+	}
+	if got := editResult["next_required_tool"]; got != "spawn_agent" {
+		t.Fatalf("next_required_tool = %#v, want spawn_agent from base revision content; result=%s", got, editRaw)
+	}
+	args, _ := editResult["next_required_args"].(map[string]any)
+	if args["role"] != AgentProfileResearcher || args["channel_id"] != doc.DocID {
+		t.Fatalf("next_required_args = %#v, want researcher on doc channel", args)
+	}
+	if !strings.Contains(fmt.Sprint(args["objective"]), "Ask researcher for route evidence") {
+		t.Fatalf("objective = %#v, want durable base revision prompt", args["objective"])
+	}
+}
+
 func TestEditVTextExplicitResearcherDoesNotDuplicateExistingResearcher(t *testing.T) {
 	t.Parallel()
 	_, s, rt := vtextAPISetupWithRuntime(t)
