@@ -1169,3 +1169,28 @@ Landing receipts:
 Landing Delta V: expected 0 and actual 0 for full M3. The cross-trajectory
 vSuper cancel authority path is closed and deployed, but this is not the
 kill/restart rewarm falsifier and does not settle M3.
+
+## 2026-06-13 - Batch K Problem Checkpoint: Combined Restart Backlog Rewarm
+
+Claim/scope: document a newly confirmed restart-falsifier gap before the fix.
+On boot, `Runtime.Start` passivates interrupted activations, then calls
+`sweepPendingUpdateActors`, then `sweepOpenWorkItemActors`. The first sweep can
+start a cold coagent activation from pending `update_coagent` rows. Because the
+resident-agent index is keyed by owner and agent, the subsequent assigned-work
+sweep for the same actor returns the resident activation without attaching the
+assigned work item IDs or the work-item recovery prompt to that activation.
+
+Evidence: code inspection of `internal/runtime/runtime.go` and
+`internal/runtime/super_controller.go` shows the update-created activation
+records `request_source=update_coagent` and `worker_update_ids`, while
+`reconcileAssignedWorkItemActor` returns the resident run before building the
+`trajectory_work_item_sweep` prompt/metadata. `TrajectoryObligations` still
+counts the open work item, so the bug is not invisible settlement; it is that
+the cold rewarm activation may not receive all durable backlog for its assigned
+actor/trajectory.
+
+Expected Delta V: 0 for full M3; actual Delta V: 0. The next bounded fix is a
+combined restart regression and implementation path that makes the replacement
+activation carry both pending update IDs and assigned work item IDs for the
+same actor trajectory, without marking the work item complete or weakening the
+open-obligation query.

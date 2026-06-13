@@ -243,9 +243,27 @@ path: a missing or inactive caller-trajectory slot now fails with `agent not
 active in caller trajectory`, and the comprehensive regression keeps the
 different-trajectory run running. Non-vSuper compatibility cancellation retains
 its active-run fallback for now.
+Batch K probe found the next restart falsifier gap: boot sweeps pending
+`update_coagent` backlog before assigned open work items, and actor residency
+is keyed by `(owner_id, agent_id)` rather than `(owner_id, agent_id,
+trajectory_id)`. If a cold coagent has both pending updates and assigned open
+work on the same trajectory after restart, the update sweep starts a replacement
+activation with only `worker_update_ids`; the later work-item sweep sees the
+actor resident and returns without attaching `work_item_ids` or the assigned
+obligation prompt. The open work item remains observable through
+`TrajectoryObligations`, so this is not a zero-obligation invisibility bug, but
+it is a real rewarm incompleteness: the activation that was supposed to resume
+all durable backlog for that actor may not be told about the assigned
+obligation.
 See "Lifecycle Inventory - 2026-06-13" below.
 
-**next move:** keep M3 open as a lifecycle cutover mission, not a deployment
+**next move:** fix and prove the combined restart backlog case before claiming
+the restart falsifier. A cold coagent with an interrupted activation, pending
+`update_coagent` rows, and assigned open work on the same trajectory should
+rewarm into one replacement activation whose prompt/metadata includes both the
+pending updates and the work item IDs, while `TrajectoryObligations` still shows
+the open work until the actor actually closes it. Then continue toward deployed
+kill/restart evidence. Keep M3 open as a lifecycle cutover mission, not a deployment
 recovery mission. The service-pointer execution gap is fixed and staging is
 healthy at `dd165ada20609f3dca0e2bd968f46e7796a83e5f`; public product-path
 smoke accepted RunAcceptanceRecord `runacc-3326b96bd926f0ac5692` at
