@@ -93,7 +93,7 @@ func (rt *Runtime) markPersistentSuperRunUpdatesDelivered(ctx context.Context, r
 	if rec == nil || strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.RunID) == "" {
 		return nil
 	}
-	updateIDs := metadataStringSlice(rec.Metadata["worker_update_ids"])
+	updateIDs := coagentUpdateIDsForRun(rec)
 	if len(updateIDs) == 0 {
 		return nil
 	}
@@ -101,6 +101,24 @@ func (rt *Runtime) markPersistentSuperRunUpdatesDelivered(ctx context.Context, r
 		return fmt.Errorf("mark persistent super updates delivered: %w", err)
 	}
 	return nil
+}
+
+func coagentUpdateIDsForRun(rec *types.RunRecord) []string {
+	if rec == nil || metadataStringValue(rec.Metadata, "request_source") != "update_coagent" {
+		return nil
+	}
+	return metadataStringSlice(rec.Metadata["worker_update_ids"])
+}
+
+func (rt *Runtime) updateTerminalRunAndMarkCoagentUpdatesDelivered(ctx context.Context, rec *types.RunRecord) error {
+	if rec == nil {
+		return nil
+	}
+	updateIDs := coagentUpdateIDsForRun(rec)
+	if len(updateIDs) == 0 || !rec.State.Terminal() {
+		return rt.store.UpdateRun(ctx, *rec)
+	}
+	return rt.store.UpdateRunAndMarkWorkerUpdatesDelivered(ctx, *rec, rec.OwnerID, updateIDs)
 }
 
 func (rt *Runtime) maybeContinuePersistentSuperInbox(ctx context.Context, rec *types.RunRecord) {
@@ -241,15 +259,6 @@ func buildCoagentUpdatePrompt(updates []types.WorkerUpdateRecord) string {
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())
-}
-
-func (rt *Runtime) markCompletedCoagentUpdateRunDelivered(ctx context.Context, rec *types.RunRecord) {
-	if rec == nil || metadataStringValue(rec.Metadata, "request_source") != "update_coagent" {
-		return
-	}
-	if err := rt.markPersistentSuperRunUpdatesDelivered(ctx, rec); err != nil {
-		log.Printf("runtime: mark update_coagent records delivered after %s: %v", rec.RunID, err)
-	}
 }
 
 func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.WorkerUpdateRecord) {

@@ -32,9 +32,8 @@ the riskiest single migration — its own control interval and test.
 
 ## Parallax State
 
-status: open_handoff (post-settlement review on 2026-06-13 falsified the
-M2 settlement claim; M1 settled 2026-06-12; portfolio sequencing corrected
-to architecture-first)
+status: open_handoff (local M2 repair complete on 2026-06-13; staging/landing
+proof intentionally deferred by the current repair-only objective)
 
 **kind:** spine.
 
@@ -82,20 +81,21 @@ registered/called; per-turn inbox pollers still active; `notifyParent` still
 active; slot registry still keyed by parent run; restart exactly-once
 falsifier missing; silent-stall oracle missing; prompts/tests still name old
 tools; post-review falsifiers reopened after a false settlement claim.
-Current V=3:
-1. run completion and `worker_updates` delivery marking are separate writes,
-   so a terminal run can be observed while its waking update remains pending;
-2. the comprehensive persistent-super blocking provider still keys on the
-   old "pending inbox deliveries" prompt and the follow-up test times out
-   under the new `update_coagent` prompt;
-3. `/internal/runtime/channel-casts` still directly writes
-   `worker_updates`, bypassing `update_coagent` authority and shape checks,
-   so `update_coagent` is not yet the sole wake writer.
-Last ΔV=+3: post-settlement review reopened the mission with three concrete
-blockers. Q1 remains decided: durable update append and kind-specific ledger
-effects belong in the runtime store transaction; the later kind-specific
-ledger writers remain a successor edge, not a blocker for this deletion
-cutover unless the repair touches their kind semantics.
+Current local V=0 for the three post-settlement repair blockers:
+1. terminal update-woken run persistence now uses a runtime-store transaction
+   that updates the run and marks its waking `worker_updates` delivered
+   together;
+2. the comprehensive persistent-super blocking provider keys on the
+   `update_coagent` prompt and the follow-up test proves queued updates drain
+   after the follow-up run completes;
+3. addressed `/internal/runtime/channel-casts` requests are rejected before
+   writing `worker_updates`, leaving `update_coagent` as the only active
+   agent-to-agent wake primitive in this cut.
+Last ΔV=-3: local repair eliminated the reopened blockers. Q1 remains
+decided: durable update append, wake backlog, delivered-state transition, and
+kind-specific ledger effects belong in the runtime store transaction; the later
+kind-specific ledger writers remain a successor edge, not a blocker for this
+deletion cutover unless a later repair touches their kind semantics.
 
 **budget:** 1-2 overnight missions. Solvency rule: batch unambiguous deletion
 work, but stop for a full Parallax pass if the old and new messaging models
@@ -211,16 +211,10 @@ Blind spots from this position (edge classes named):
   `channel_messages` as a delivery mechanism (vs audit log)? Grep before
   deleting the pollers; channel_messages survives as replay-only log.
 
-**next move:** repair the M2 settlement blockers only. First make run
-completion and delivery marking atomic enough for the restart exactly-once
-claim (no terminal run visible with its `worker_update_ids` still pending,
-or an equivalent stronger store primitive). Then repair the comprehensive
-persistent-super follow-up test so it blocks on the new
-`update_coagent` prompt and proves queued updates drain in a follow-up run.
-Then remove or re-route `/internal/runtime/channel-casts` so it cannot be a
-second agent-to-agent wake writer that bypasses `update_coagent` authority.
-Re-run the focused falsifiers and the relevant comprehensive tests. Do not
-detour into Universal Wire or review UI product behavior.
+**next move:** review and land the local repair if platform rollout is desired.
+Do not claim final settlement until the platform landing loop runs: commit,
+push, CI, staging deploy identity, and deployed acceptance proof. Do not detour
+into Universal Wire or review UI product behavior as part of this M2 repair.
 
 **ledger file:** `docs/mission-messaging-cutover-v0.ledger.md`.
 
@@ -236,7 +230,7 @@ vocabulary is `spawned_by` only (no parent/child, even in prose — glossary
 `runs.trajectory_id` column; the silent-stall oracle consumes M1's
 `TrajectoryObligations`.
 
-**settlement:** retracted. Commit
+**settlement:** not yet re-claimed. Commit
 `8052d242afc80320b7cd1b34a2f7a4bb306f1f13` did land and deploy, but the
 post-settlement review found the local falsifier evidence was incomplete and
 partly stale. New receipts:
@@ -259,3 +253,15 @@ partly stale. New receipts:
   `d188e88bfc33582bb9479d5d9c0511c599f077de`; current repair should be a
   new documentation-first commit followed by code repair, not a history
   rewrite.
+
+Local repair receipts from 2026-06-13:
+- `nix develop -c go test ./internal/store ./internal/runtime -run 'TestUpdateRunAndMarkWorkerUpdatesDelivered|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TestTrajectoryObligationsReportPendingUpdateCoagent|TestVSuperCoSuperSlotReusedByTrajectorySlot' -count=1`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'Test(PersistentSuperInboxBashRequiresCoagentUpdate|ChannelCastDoesNotCreateWakeDelivery|RedirectWorkerDelegationCannotBypassUpdateCoagent|PersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun|PersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery|InstallDefaultAgentToolsProfiles)' -count=1 -v`
+  passed.
+- `rg -n '\b(cast_agent|cast_agent_update|wait_agent|submit_coagent_update|notifyParent|injectPendingInboxTurns|ListPendingInboxDeliveries|MarkInboxDeliveriesDelivered|EnqueueInboxDelivery)\b' internal specs cmd --glob '*.go' --glob '*.md' --glob '*.tla'`
+  returned no active-code matches.
+- `rg -n 'HandleInternalChannelCast|/internal/runtime/channel-casts|DispatchWorkerUpdate|wakeUpdatedCoagent' internal/runtime internal/store --glob '*.go'`
+  showed `HandleInternalChannelCast` remains registered and posted to, but no
+  longer calls `DispatchWorkerUpdate`; the remaining dispatch callers are the
+  intended update/backlog paths.

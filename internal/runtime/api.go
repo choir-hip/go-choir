@@ -1071,8 +1071,9 @@ func (h *APIHandler) HandleInternalRunCancel(w http.ResponseWriter, r *http.Requ
 }
 
 // HandleInternalChannelCast handles POST /internal/runtime/channel-casts.
-// It lets a supervising runtime redirect a worker-vsuper through the worker
-// runtime's durable inbox without exposing browser-public mutation routes.
+// It accepts unaddressed audit casts from trusted runtime callers. Addressed
+// agent-to-agent wakes must use update_coagent so authority and delivery shape
+// checks stay on the single durable wake primitive.
 func (h *APIHandler) HandleInternalChannelCast(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -1109,45 +1110,8 @@ func (h *APIHandler) HandleInternalChannelCast(w http.ResponseWriter, r *http.Re
 		},
 	})
 	targetAgentID := strings.TrimSpace(req.ToAgentID)
-	if targetAgentID != "" {
-		now := time.Now().UTC()
-		fromAgentID := firstNonEmpty(strings.TrimSpace(req.FromAgentID), strings.TrimSpace(req.From), stringFromToolContext(runCtx, toolCtxAgentID))
-		fromRunID := strings.TrimSpace(req.FromRunID)
-		role := strings.TrimSpace(req.Role)
-		update := types.WorkerUpdateRecord{
-			UpdateID:      uuid.NewString(),
-			OwnerID:       req.OwnerID,
-			AgentID:       fromAgentID,
-			TargetAgentID: targetAgentID,
-			ChannelID:     req.ChannelID,
-			Role:          role,
-			Kind:          "directive",
-			Summary:       req.Content,
-			Content:       req.Content,
-			CreatedAt:     now,
-		}
-		message := &types.ChannelMessage{
-			ChannelID:   req.ChannelID,
-			From:        strings.TrimSpace(req.From),
-			FromAgentID: fromAgentID,
-			FromRunID:   fromRunID,
-			ToAgentID:   targetAgentID,
-			ToRunID:     strings.TrimSpace(req.ToRunID),
-			Role:        role,
-			Content:     req.Content,
-			Timestamp:   now,
-		}
-		stored, created, err := h.rt.store.DispatchWorkerUpdate(r.Context(), update, message)
-		if err != nil {
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
-			return
-		}
-		if created {
-			message.Seq = stored.MessageSeq
-			h.rt.emitChannelMessageEvent(r.Context(), *message, req.OwnerID)
-			h.rt.wakeUpdatedCoagent(r.Context(), stored)
-		}
-		writeAPIJSON(w, http.StatusOK, internalChannelCastResponse{Status: "cast", Cursor: uint64(stored.MessageSeq)})
+	if targetAgentID != "" || strings.TrimSpace(req.ToRunID) != "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "addressed internal channel casts are disabled; use update_coagent for agent-to-agent wake delivery"})
 		return
 	}
 	cursor, err := h.rt.ChannelCast(runCtx, req.ChannelID, "", "", strings.TrimSpace(req.From), strings.TrimSpace(req.Role), req.Content)

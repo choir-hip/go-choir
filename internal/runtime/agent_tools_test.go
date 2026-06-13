@@ -569,7 +569,7 @@ func TestChannelCastDoesNotCreateWakeDelivery(t *testing.T) {
 	}
 }
 
-func TestRedirectWorkerDelegationPostsSuperAuthoredWorkerInbox(t *testing.T) {
+func TestRedirectWorkerDelegationCannotBypassUpdateCoagent(t *testing.T) {
 	t.Parallel()
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
@@ -620,49 +620,27 @@ func TestRedirectWorkerDelegationPostsSuperAuthoredWorkerInbox(t *testing.T) {
 		t.Fatalf("marshal redirect args: %v", err)
 	}
 	raw, err := activeRT.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(context.Background(), superRun), "redirect_worker_delegation", args)
-	if err != nil {
-		t.Fatalf("redirect_worker_delegation: %v", err)
+	if err == nil {
+		t.Fatalf("redirect_worker_delegation unexpectedly succeeded: %s", raw)
 	}
-	var result struct {
-		Status        string `json:"status"`
-		WorkerRunID   string `json:"worker_run_id"`
-		TargetAgentID string `json:"target_agent_id"`
-		Cursor        uint64 `json:"cursor"`
-	}
-	if err := json.Unmarshal([]byte(raw), &result); err != nil {
-		t.Fatalf("decode redirect result: %v\n%s", err, raw)
-	}
-	if result.Status != "worker_redirect_sent" || result.WorkerRunID != "worker-run-redirect" || result.TargetAgentID != "vsuper:worker" || result.Cursor == 0 {
-		t.Fatalf("unexpected redirect result: %+v\nraw=%s", result, raw)
+	if !strings.Contains(err.Error(), "addressed internal channel casts are disabled") || !strings.Contains(err.Error(), "update_coagent") {
+		t.Fatalf("redirect_worker_delegation error = %v, want update_coagent bypass rejection", err)
 	}
 
 	messages, err := workerStore.ListChannelMessages(context.Background(), "user-alice", "worker-doc", 0, 10)
 	if err != nil {
 		t.Fatalf("list worker channel messages: %v", err)
 	}
-	if len(messages) != 1 {
-		t.Fatalf("worker channel messages = %d, want 1: %+v", len(messages), messages)
-	}
-	msg := messages[0]
-	if msg.FromAgentID != "super:primary" || msg.FromRunID != superRun.RunID {
-		t.Fatalf("message source = (%q,%q), want super source (%q,%q)", msg.FromAgentID, msg.FromRunID, "super:primary", superRun.RunID)
-	}
-	if msg.ToAgentID != "vsuper:worker" || msg.ToRunID != "worker-run-redirect" {
-		t.Fatalf("message target = (%q,%q), want worker vsuper target", msg.ToAgentID, msg.ToRunID)
-	}
-	if msg.Role != AgentProfileSuper || !strings.Contains(msg.Content, "[message_class=redirection]") {
-		t.Fatalf("message content/role not typed super redirect: %+v", msg)
+	if len(messages) != 0 {
+		t.Fatalf("worker channel messages = %d, want none from rejected addressed cast: %+v", len(messages), messages)
 	}
 
 	deliveries, err := workerStore.ListPendingWorkerUpdates(context.Background(), "user-alice", "vsuper:worker", 10)
 	if err != nil {
 		t.Fatalf("list worker inbox deliveries: %v", err)
 	}
-	if len(deliveries) != 1 {
-		t.Fatalf("pending deliveries = %d, want 1: %+v", len(deliveries), deliveries)
-	}
-	if deliveries[0].AgentID != "super:primary" {
-		t.Fatalf("delivery source agent = %q, want super source", deliveries[0].AgentID)
+	if len(deliveries) != 0 {
+		t.Fatalf("pending deliveries = %d, want none from rejected addressed cast: %+v", len(deliveries), deliveries)
 	}
 }
 
@@ -857,8 +835,8 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 		t.Fatalf("decode first response: %v\n%s", err, firstRaw)
 	}
 	_ = provider.waitForRun(t, "Process the liquid package lane.")
-	if pending := pendingDeliveriesForAgent(t, s, "user-alice", firstResp.AgentID); len(pending) != 0 {
-		t.Fatalf("initial super delivery should be owned by first run, still pending: %+v", pending)
+	if pending := pendingDeliveriesForAgent(t, s, "user-alice", firstResp.AgentID); len(pending) != 1 || !strings.Contains(pending[0].Content, "liquid package lane") {
+		t.Fatalf("initial super delivery should stay pending until first run completes, got %+v", pending)
 	}
 
 	secondVText, err := rt.StartRunWithMetadata(context.Background(), "request python lane", "user-alice", map[string]any{
@@ -890,8 +868,8 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 		t.Fatalf("second request should attach to active persistent super: first=%+v second=%+v", firstResp, secondResp)
 	}
 	pending := pendingDeliveriesForAgent(t, s, "user-alice", firstResp.AgentID)
-	if len(pending) != 1 || !strings.Contains(pending[0].Content, "python package lane") {
-		t.Fatalf("python delivery should remain pending for follow-up run, got %+v", pending)
+	if len(pending) != 2 || !workerUpdatesContain(pending, "liquid package lane") || !workerUpdatesContain(pending, "python package lane") {
+		t.Fatalf("liquid and python deliveries should remain pending while first super run is active, got %+v", pending)
 	}
 
 	provider.releaseOne()
@@ -906,8 +884,13 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 	if !strings.Contains(secondSuperRun.Prompt, "Process the python package lane.") || strings.Contains(secondSuperRun.Prompt, "Process the liquid package lane.") {
 		t.Fatalf("follow-up prompt did not isolate python delivery:\n%s", secondSuperRun.Prompt)
 	}
+	if pending := pendingDeliveriesForAgent(t, s, "user-alice", firstResp.AgentID); len(pending) != 1 || !strings.Contains(pending[0].Content, "python package lane") {
+		t.Fatalf("follow-up delivery should stay pending until second run completes, got %+v", pending)
+	}
+	provider.releaseOne()
+	waitForRuntimeRunTerminal(t, rt, active.RunID, active.OwnerID, 5*time.Second)
 	if pending := pendingDeliveriesForAgent(t, s, "user-alice", firstResp.AgentID); len(pending) != 0 {
-		t.Fatalf("follow-up super delivery should be owned by second run, still pending: %+v", pending)
+		t.Fatalf("follow-up super delivery should be delivered after second run completes, still pending: %+v", pending)
 	}
 }
 
@@ -6242,7 +6225,7 @@ func (p *blockingExecuteProvider) RuntimeProviderPolicy() ProviderPolicy {
 
 func (p *blockingExecuteProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"blocking-test"}`))
-	if !strings.Contains(task.Prompt, "Process the pending inbox deliveries addressed to you as the user's persistent super actor.") {
+	if !strings.Contains(task.Prompt, "Process the pending update_coagent records addressed to you as the user's persistent super actor.") {
 		task.Result = "non-super test run completed"
 		return nil
 	}
@@ -6295,4 +6278,13 @@ func pendingDeliveriesForAgent(t *testing.T, s *store.Store, ownerID, agentID st
 		t.Fatalf("list pending deliveries for %s: %v", agentID, err)
 	}
 	return deliveries
+}
+
+func workerUpdatesContain(updates []types.WorkerUpdateRecord, content string) bool {
+	for _, update := range updates {
+		if strings.Contains(update.Content, content) {
+			return true
+		}
+	}
+	return false
 }

@@ -192,3 +192,39 @@ Open edge: repair M2 in a follow-up code commit. The repair must preserve Q1:
 all durable update append, wake backlog, and any delivered-state transition
 needed for exactly-once semantics must live in the runtime store's transactional
 domain. Do not weaken the mission by accepting a second wake writer.
+
+## 2026-06-13 — Local Repair Of Reopened M2 Blockers
+
+Claim/scope: repair only the three reopened M2 blockers. No Universal Wire,
+review UI, staging, or product-behavior detour.
+
+Move:
+- Added `Store.UpdateRunAndMarkWorkerUpdatesDelivered`, a single runtime-store
+  transaction for terminal run persistence plus delivered marking of the
+  run's waking `worker_update_ids`.
+- Routed terminal update-woken completions, failures, cancellations, and
+  restart recovery through that store primitive.
+- Updated the comprehensive persistent-super provider/test to key on the
+  `update_coagent` prompt and prove queued updates drain after a follow-up run.
+- Rejected addressed `/internal/runtime/channel-casts` requests before they can
+  write `worker_updates`; the route remains audit-only for unaddressed casts.
+
+Actual ΔV: -3. Local M2 repair blockers are at V=0. Settlement remains open
+until a platform landing loop is explicitly run and recorded.
+
+Receipts:
+- `nix develop -c go test ./internal/store ./internal/runtime -run 'TestUpdateRunAndMarkWorkerUpdatesDelivered|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TestTrajectoryObligationsReportPendingUpdateCoagent|TestVSuperCoSuperSlotReusedByTrajectorySlot' -count=1`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'Test(PersistentSuperInboxBashRequiresCoagentUpdate|ChannelCastDoesNotCreateWakeDelivery|RedirectWorkerDelegationCannotBypassUpdateCoagent|PersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun|PersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery|InstallDefaultAgentToolsProfiles)' -count=1 -v`
+  passed.
+- `rg -n '\b(cast_agent|cast_agent_update|wait_agent|submit_coagent_update|notifyParent|injectPendingInboxTurns|ListPendingInboxDeliveries|MarkInboxDeliveriesDelivered|EnqueueInboxDelivery)\b' internal specs cmd --glob '*.go' --glob '*.md' --glob '*.tla'`
+  returned no active-code matches.
+- `rg -n 'HandleInternalChannelCast|/internal/runtime/channel-casts|DispatchWorkerUpdate|wakeUpdatedCoagent' internal/runtime internal/store --glob '*.go'`
+  showed no `DispatchWorkerUpdate` call inside `HandleInternalChannelCast`.
+  The remaining dispatch callers are the intended update/backlog paths:
+  `tools_worker_update.go`, `tools_vtext.go`, `delegate_worker_update_fallback.go`,
+  `tools_vmctl.go`, `vtext_proposals.go`, and tests.
+
+Residual risk: local proof only. The mission's platform-behavior settlement
+standard still requires commit, push, CI, staging deploy identity, and deployed
+acceptance proof before final settlement can be re-claimed.

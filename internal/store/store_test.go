@@ -400,6 +400,75 @@ func TestUpdateRun(t *testing.T) {
 	}
 }
 
+func TestUpdateRunAndMarkWorkerUpdatesDelivered(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	rec := types.RunRecord{
+		RunID:        "task-update-coagent-terminal",
+		AgentID:      "cosuper:impl",
+		ChannelID:    "doc-m2",
+		AgentProfile: "cosuper",
+		AgentRole:    "implementation",
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-dev",
+		State:        types.RunRunning,
+		Prompt:       "process update_coagent delivery",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	update := types.WorkerUpdateRecord{
+		UpdateID:      "update-terminal-1",
+		OwnerID:       rec.OwnerID,
+		AgentID:       "super:primary",
+		TargetAgentID: rec.AgentID,
+		ChannelID:     rec.ChannelID,
+		Role:          "super",
+		Kind:          "directive",
+		Summary:       "finish M2",
+		Content:       "finish M2",
+		CreatedAt:     now,
+	}
+	message := types.ChannelMessage{
+		ChannelID:   rec.ChannelID,
+		FromAgentID: update.AgentID,
+		ToAgentID:   update.TargetAgentID,
+		Role:        update.Role,
+		Content:     update.Content,
+		Timestamp:   now,
+	}
+	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+		t.Fatalf("dispatch worker update: %v", err)
+	}
+
+	finishedAt := now.Add(time.Second)
+	rec.State = types.RunCompleted
+	rec.Result = "done"
+	rec.UpdatedAt = finishedAt
+	rec.FinishedAt = &finishedAt
+	if err := s.UpdateRunAndMarkWorkerUpdatesDelivered(ctx, rec, rec.OwnerID, []string{update.UpdateID}); err != nil {
+		t.Fatalf("update run and mark delivered: %v", err)
+	}
+	got, err := s.GetRun(ctx, rec.RunID)
+	if err != nil {
+		t.Fatalf("get run: %v", err)
+	}
+	if got.State != types.RunCompleted || got.Result != "done" {
+		t.Fatalf("run not updated: %+v", got)
+	}
+	pending, err := s.ListPendingWorkerUpdates(ctx, rec.OwnerID, rec.AgentID, 10)
+	if err != nil {
+		t.Fatalf("list pending worker updates: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("pending worker updates = %d, want none: %+v", len(pending), pending)
+	}
+}
+
 func TestUpdateRunNotFound(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

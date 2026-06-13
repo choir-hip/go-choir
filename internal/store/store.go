@@ -915,6 +915,86 @@ func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
 	return nil
 }
 
+// UpdateRunAndMarkWorkerUpdatesDelivered updates a run and marks its waking
+// update_coagent records delivered in the same runtime-store transaction.
+func (s *Store) UpdateRunAndMarkWorkerUpdatesDelivered(ctx context.Context, rec types.RunRecord, ownerID string, updateIDs []string) error {
+	if len(updateIDs) == 0 {
+		return s.UpdateRun(ctx, rec)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin run/update delivery transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := updateRunInTx(ctx, tx, rec); err != nil {
+		return err
+	}
+	if err := markWorkerUpdatesDeliveredWithExec(ctx, tx, ownerID, updateIDs, rec.RunID); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit run/update delivery transaction: %w", err)
+	}
+	return nil
+}
+
+func updateRunInTx(ctx context.Context, tx *sql.Tx, rec types.RunRecord) error {
+	metadata, err := marshalJSON(rec.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal run metadata: %w", err)
+	}
+	prompt := sanitizeStoreText(rec.Prompt)
+	runResult := sanitizeStoreText(rec.Result)
+	runErr := sanitizeStoreText(rec.Error)
+
+	result, err := tx.ExecContext(ctx,
+		`UPDATE runs
+		    SET agent_id = ?,
+		        channel_id = ?,
+		        parent_loop_id = ?,
+		        agent_profile = ?,
+		        agent_role = ?,
+		        owner_id = ?,
+		        sandbox_id = ?,
+		        state = ?,
+		        prompt = ?,
+		        result = ?,
+		        error = ?,
+		        updated_at = ?,
+		        finished_at = ?,
+		        metadata_json = ?
+		  WHERE loop_id = ?`,
+		rec.AgentID,
+		rec.ChannelID,
+		rec.ParentRunID,
+		rec.AgentProfile,
+		rec.AgentRole,
+		rec.OwnerID,
+		rec.SandboxID,
+		rec.State,
+		prompt,
+		runResult,
+		runErr,
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		formatTimePtr(rec.FinishedAt),
+		string(metadata),
+		rec.RunID,
+	)
+	if err != nil {
+		return fmt.Errorf("update run: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check updated run rows: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("%w: run %s", ErrNotFound, rec.RunID)
+	}
+	return nil
+}
+
 // ListRunsByOwner returns runs for the given owner, ordered by created_at
 // descending, limited to the given count.
 func (s *Store) ListRunsByOwner(ctx context.Context, ownerID string, limit int) ([]types.RunRecord, error) {
@@ -1716,6 +1796,14 @@ func (s *Store) MarkWorkerUpdatesDelivered(ctx context.Context, ownerID string, 
 	if len(updateIDs) == 0 {
 		return nil
 	}
+	return markWorkerUpdatesDeliveredWithExec(ctx, s.db, ownerID, updateIDs, runID)
+}
+
+type workerUpdateDeliveryExecer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func markWorkerUpdatesDeliveredWithExec(ctx context.Context, exec workerUpdateDeliveryExecer, ownerID string, updateIDs []string, runID string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(updateIDs)), ",")
 	args := make([]any, 0, len(updateIDs)+3)
@@ -1733,7 +1821,7 @@ func (s *Store) MarkWorkerUpdatesDelivered(ctx context.Context, ownerID string, 
 		    AND delivered_to_loop_id = ''`,
 		placeholders,
 	)
-	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
+	if _, err := exec.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("mark worker updates delivered: %w", err)
 	}
 	return nil

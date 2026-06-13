@@ -833,7 +833,7 @@ func (rt *Runtime) CancelRun(ctx context.Context, runID, ownerID string) error {
 		rec.State = types.RunCancelled
 		rec.UpdatedAt = now
 		rec.FinishedAt = &now
-		if err := rt.store.UpdateRun(ctx, rec); err != nil {
+		if err := rt.updateTerminalRunAndMarkCoagentUpdatesDelivered(ctx, &rec); err != nil {
 			return fmt.Errorf("update cancelled run: %w", err)
 		}
 
@@ -1053,7 +1053,7 @@ func (rt *Runtime) recoverInterruptedRuns(ctx context.Context) {
 			rec.UpdatedAt = now
 			rec.FinishedAt = &now
 
-			if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+			if err := rt.updateTerminalRunAndMarkCoagentUpdatesDelivered(ctx, rec); err != nil {
 				log.Printf("runtime: recovery: update run %s: %v", rec.RunID, err)
 				continue
 			}
@@ -1233,7 +1233,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// completed-run transition or parent notification.
 	persistCtx := context.Background()
 
-	if err := rt.store.UpdateRun(persistCtx, *rec); err != nil {
+	if err := rt.updateTerminalRunAndMarkCoagentUpdatesDelivered(persistCtx, rec); err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
 	}
@@ -1251,7 +1251,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		"output_tokens": usage.OutputTokens,
 	})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
-	rt.markCompletedCoagentUpdateRunDelivered(persistCtx, rec)
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 
 	rt.maybeStartConfiguredContinuation(persistCtx, rec)
@@ -1329,14 +1328,13 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	// completed-run transition or parent notification.
 	persistCtx := context.Background()
 
-	if err := rt.store.UpdateRun(persistCtx, *rec); err != nil {
+	if err := rt.updateTerminalRunAndMarkCoagentUpdatesDelivered(persistCtx, rec); err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
 	}
 	rt.reconcileCompletedVTextRun(rec)
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
-	rt.markCompletedCoagentUpdateRunDelivered(persistCtx, rec)
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 
 	rt.maybeStartConfiguredContinuation(persistCtx, rec)
@@ -2339,7 +2337,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	// Use background context for persistence so that cancelled-run state
 	// transitions are persisted even when the run context is cancelled.
 	persistCtx := context.Background()
-	if updateErr := rt.store.UpdateRun(persistCtx, *rec); updateErr != nil {
+	if updateErr := rt.updateTerminalRunAndMarkCoagentUpdatesDelivered(persistCtx, rec); updateErr != nil {
 		log.Printf("runtime: update run %s to %s: %v", rec.RunID, state, updateErr)
 	}
 
