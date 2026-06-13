@@ -2167,3 +2167,61 @@ The next fix should preserve explicit researcher intent into that VText run or
 derive it from durable document/request metadata instead of transient run
 metadata. No code fix in this checkpoint, and no continuation-level,
 promotion-level, zero-stranding, or final M3 settlement is claimed.
+
+## 2026-06-13 - Batch AC Problem Checkpoint: Desktop Readiness Blocked By Full Persistent Image
+
+Claim/scope: record the first deployed result after commit
+`5f38c437f0a9541feaf03a00c41e76e3ae2f0852` reached staging, before any
+next fix or staging recovery action. This is problem documentation only. It
+does not change runtime or infrastructure and does not claim acceptance.
+
+Receipts:
+
+- Commit `5f38c437f0a9541feaf03a00c41e76e3ae2f0852` was pushed to
+  `origin/main`.
+- The code change made `requiredContinuationAfterVTextEdit` detect explicit
+  researcher intent from run metadata, base revision metadata, or combined
+  worker prompt plus durable base revision content/metadata. It also uses
+  durable base revision request text as the researcher objective focus when
+  available.
+- Local construct checks before push passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation|TestEditVTextExplicitResearcherRequiresSpawnContinuation|TestEditVTextExplicitResearcherRequiresSpawnAfterSuperBase|TestEditVTextExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|TestEditVTextExplicitResearcherDoesNotDuplicateExistingResearcher' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestEditVTextExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|TestEditVTextExplicitResearcherRequiresSpawnContinuation|TestEditVTextExplicitResearcherRequiresSpawnAfterSuperBase|TestEditVTextExplicitResearcherDoesNotDuplicateExistingResearcher|TestRunToolLoopRequiredNextToolSatisfiedInSameBatchDoesNotRetry|TestRunToolLoopBoundsRequiredNextToolProviderCall' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestHandlePromptBarExplicitResearcherBypassesPersistentSuperShortcut|TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|TestHandlePromptBarVTextRouteCompletesConductorSynchronously|TestVTextPromptExplicitResearcherOverridesSuperFirstShortcut|TestVTextPromptSteersCurrentEventsToResearcherNotSuper|TestConductorCanSpawnVTextAndVTextCanSpawnResearcher|TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog|TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog|TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill|TestStartChildRunCompletesSpawnedWorkItem|TestStartSweepsAssignedOpenWorkItemsAfterPassivation' -count=1`;
+  `nix develop -c scripts/go-test-runtime-shards`;
+  and `git diff --check`.
+- CI run `27468043199` completed successfully, including deploy job
+  `81193874119`; FlakeHub publish run `27468043198` completed successfully.
+- Public staging health after deploy reported proxy build commit
+  `5f38c437f0a9541feaf03a00c41e76e3ae2f0852`, deployed commit
+  `5f38c437f0a9541feaf03a00c41e76e3ae2f0852`, `vmctl_status=ok`, and
+  `vmctl_routing=enabled`. The proxy status was `degraded` because the default
+  upstream was unreachable, but vmctl routing was healthy.
+- Deployed probe command:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news node /tmp/m3_vmctl_refresh_probe.mjs > /tmp/m3_vmctl_refresh_probe.5f38c437.out.json`
+  exited nonzero.
+- Probe marker: `M3_VMCTL_REFRESH_1781357266995`; test account
+  `m3-vmctl-refresh-1781357268397-ncifw8@example.com`.
+- Failure occurred before prompt submission, Trace role collection, or
+  `POST /internal/vmctl/refresh`: Playwright timed out after 180 seconds
+  waiting for
+  `[data-desktop][data-authenticated="true"][data-desktop-ready="true"]`.
+- The probe's Compute Monitor fallback reported status `ok` for
+  `compute-monitor`, current computer `primary` active/recovery-eligible, and
+  one primary computer active at epoch 2, but runtime health was unreachable:
+  `runtime.reachable=false`, `observation_error="runtime health unavailable"`.
+- The same Compute Monitor result reported the persistent data image was
+  critically full: `used_bytes=17179869184`, `total_bytes=17179869184`,
+  `avail_bytes=0`, `used_percent=100`, `warning=true`, `critical=true`,
+  `default_cap_bytes=8589934592`.
+
+Expected Delta V after `5f38c437`: -1 on staging for the worker-woken VText
+explicit researcher-intent subclaim, then proceed to the vmctl-routed restart
+falsifier. Actual Delta V: 0 for deployed acceptance; the proof did not reach
+the researcher route or refresh predicates. Remaining error field: staging
+desktop readiness is blocked by an owner primary computer whose runtime health
+is unavailable while its persistent data image is full. The next move should
+recover or route around that staging substrate issue, then rerun the same
+deployed vmctl proof. No code or infrastructure fix in this checkpoint, and no
+continuation-level, promotion-level, zero-stranding, or final M3 settlement is
+claimed.
