@@ -112,3 +112,42 @@ Local proof:
 Open edge: platform acceptance is still unproven. Do not claim settlement
 until the landing loop records pushed SHA, CI result, staging deployed
 identity, and deployed acceptance proof.
+
+## 2026-06-13 — Landing Loop Completed And M2 Settled
+
+Claim/scope: the requested M2 deletion cutover is settled. Scope is the
+agent-to-agent message/wake primitive cutover, slot re-key, prompts/tests, and
+staging smoke proof. It does not claim promotion-level or continuation-level
+acceptance.
+
+Move: record the completed landing loop after the behavior-changing commit was
+fast-forward pushed to `origin/main`, CI passed, Node B deployed, and staging
+reported the deployed code identity.
+
+Expected ΔV: -1 by closing the remaining platform landing proof blocker.
+
+Actual ΔV: -1. Current V=0 for M2 deletion cutover.
+
+Receipt:
+- Code commit pushed and deployed:
+  `8052d242afc80320b7cd1b34a2f7a4bb306f1f13`
+  (`runtime: cut over coagent updates`).
+- Pre-cutover rollback ref:
+  `d188e88bfc33582bb9479d5d9c0511c599f077de`.
+- GitHub Actions CI run `27453151153` succeeded:
+  runtime shards, non-runtime Go tests, integration-tagged smoke, TLA+ model
+  check, Go vet/build, and Node B staging deploy all passed.
+- FlakeHub publish run `27453151152` succeeded.
+- `curl -fsS https://choir.news/health | jq '{status, service, upstream, build, upstream_build}'`
+  reported `status=ok`, proxy `deployed_commit` =
+  `8052d242afc80320b7cd1b34a2f7a4bb306f1f13`, and sandbox
+  `deployed_commit` =
+  `8052d242afc80320b7cd1b34a2f7a4bb306f1f13`.
+- `curl -fsS https://choir.news/` returned HTTP 200 and served the Choir
+  frontend asset `index-BAGuPoFu.js`.
+
+Settlement note: Q1 decided that future kind-specific ledger effects must live
+in the same runtime store transaction as the durable update append. The M2
+deletion batch preserved `assignment` and `verification` as typed
+`update_coagent` kinds, but did not add new work-item or run-acceptance writers;
+that is a successor edge, not part of this deletion-cutover settlement.

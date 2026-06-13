@@ -32,9 +32,9 @@ the riskiest single migration — its own control interval and test.
 
 ## Parallax State
 
-status: open_handoff (local M2 cutover batch implemented and locally proved;
-landing loop not yet run; M1 settled 2026-06-12; portfolio sequencing
-corrected to architecture-first)
+status: settled (M2 deletion cutover implemented, pushed, CI/deployed on
+staging, and smoke-proven on 2026-06-13; M1 settled 2026-06-12; portfolio
+sequencing corrected to architecture-first)
 
 **kind:** spine.
 
@@ -49,15 +49,18 @@ structurally unrepresentable rather than merely less likely.
 **deeper goal (G):** durable actors, evidence-bearing promotion, and
 self-development operational instead of documentary (portfolio G).
 
-**witness/spec (A/S):** one send path (`actor.Runtime.Send` semantics:
-idempotent durable append + deliver-or-activate); `update_coagent` tool
-(rename + promotion of `submit_coagent_update`, kind enum grown with
-`directive` and `assignment`; `assignment` writes a work item,
-`verification` writes acceptance evidence — message and control record are
-one act); deletions per the source form; slot registry keyed
-(trajectory, slot) with atomic claim. Spec conformance:
+**witness/spec (A/S):** one runtime-store-backed send/wake path for agent
+updates: `update_coagent` (rename + promotion of `submit_coagent_update`,
+kind enum grown with `directive` and `assignment`) appends an idempotent
+`worker_updates` row plus addressed channel audit message, then wakes the
+target actor from that durable backlog. Deletions per the source form; slot
+registry keyed (trajectory, slot) with atomic claim and matching-claim release
+on post-claim persistence failure. Spec conformance:
 `specs/actor_protocol.tla` invariants (no lost wake, idempotent delivery,
-atomic passivation).
+atomic passivation). Successor edge: kind-specific ledger writers for
+`assignment` -> work item and `verification` -> run-acceptance evidence must
+use the same runtime store transaction, per Q1, but were not part of this M2
+deletion batch.
 
 **invariants / qualities / domain ramp (I/Q/D):**
 - I: exactly-once ledger effects committed transactionally at send;
@@ -78,14 +81,12 @@ atomic passivation).
 registered/called; per-turn inbox pollers still active; `notifyParent` still
 active; slot registry still keyed by parent run; restart exactly-once
 falsifier missing; silent-stall oracle missing; prompts/tests still name old
-tools. Current V=1: the local code cutover blockers are closed, but settlement
-still requires the platform landing loop: commit, push, CI, deploy identity,
-and staging acceptance proof. Last ΔV=-7: the local batch promoted
-`update_coagent`, deleted the old message/wake paths, re-keyed co-super slots,
-and added the restart/no-stall falsifiers. Q1 remains decided: durable update
-append and kind-specific ledger effects belong in the runtime store
-transaction; this batch did not add new `assignment`/`verification` ledger
-effect writers beyond preserving their typed update records.
+tools. Current V=0 for the requested M2 deletion cutover. Last ΔV=-1:
+platform landing proof recorded for commit
+`8052d242afc80320b7cd1b34a2f7a4bb306f1f13`. Q1 remains decided: durable
+update append and kind-specific ledger effects belong in the runtime store
+transaction; the later kind-specific ledger writers remain a successor edge,
+not a blocker for this deletion cutover.
 
 **budget:** 1-2 overnight missions. Solvency rule: batch unambiguous deletion
 work, but stop for a full Parallax pass if the old and new messaging models
@@ -201,10 +202,10 @@ Blind spots from this position (edge classes named):
   `channel_messages` as a delivery mechanism (vs audit log)? Grep before
   deleting the pollers; channel_messages survives as replay-only log.
 
-**next move:** land the local M2 cutover batch through the platform loop:
-commit, push origin main/PR route as directed, monitor CI, monitor staging
-deploy, verify staging commit identity, and run deployed acceptance proof.
-Do not detour into Universal Wire or review UI product behavior.
+**next move:** no M2 deletion-cutover work remains. Successor work may add
+kind-specific ledger effects for `assignment` and `verification` in the same
+runtime-store transaction, but should be scoped as its own mission/control
+interval. Do not detour into Universal Wire or review UI product behavior.
 
 **ledger file:** `docs/mission-messaging-cutover-v0.ledger.md`.
 
@@ -220,10 +221,36 @@ vocabulary is `spawned_by` only (no parent/child, even in prose — glossary
 `runs.trajectory_id` column; the silent-stall oracle consumes M1's
 `TrajectoryObligations`.
 
-**settlement:** not started. Exit requires: grep-level zero callers of
-`cast_agent`, `cast_agent_update`, `wait_agent`, `notifyParent`,
-`injectPendingInboxTurns` (and the super_controller poller); C2 restart
-falsifier passes on a real process; C3 slot test under concurrency; C4
-stall probe shows the obligation model is honest; prompts updated; full
-suite green; landing proof (commit, push, CI, staging acceptance) recorded
-here.
+**settlement:** achieved for M2 deletion cutover.
+- Code commit: `8052d242afc80320b7cd1b34a2f7a4bb306f1f13`
+  (`runtime: cut over coagent updates`), fast-forward pushed to
+  `origin/main`.
+- CI/deploy: GitHub Actions CI run
+  `27453151153` succeeded, including runtime shards, non-runtime tests,
+  integration-tagged smoke, TLA+ model check, Go vet/build, and Node B staging
+  deploy. FlakeHub publish run `27453151152` also succeeded.
+- Deployed identity: `https://choir.news/health` reported proxy and sandbox
+  `deployed_commit` =
+  `8052d242afc80320b7cd1b34a2f7a4bb306f1f13`, deployed at
+  `2026-06-13T01:57:13Z`.
+- Staging smoke: public `https://choir.news/` returned HTTP 200 and served
+  Choir frontend asset `index-BAGuPoFu.js`; deploy job health checks reported
+  proxy, sandbox, vmctl, gateway, platformd, and maild OK.
+- Local falsifiers: restart exactly-once delivery
+  (`TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce`), no silent
+  stall (`TestTrajectoryObligationsReportPendingUpdateCoagent`), co-super slot
+  reuse by `(trajectory, slot)` (`TestVSuperCoSuperSlotReusedByTrajectorySlot`),
+  audit-only channel cast (`TestChannelCastDoesNotCreateWakeDelivery` under
+  `-tags comprehensive`), and matching slot release
+  (`TestReleaseCoSuperSlotClaimOnlyClearsMatchingRun`) passed.
+- Grep proof: no active callers/definitions of `cast_agent`,
+  `cast_agent_update`, `wait_agent`, `submit_coagent_update`, `notifyParent`,
+  `injectPendingInboxTurns`, `ListPendingInboxDeliveries`,
+  `MarkInboxDeliveriesDelivered`, or `EnqueueInboxDelivery` under
+  `internal`, `specs`, or `cmd`.
+- Rollback ref: pre-cutover `origin/main` was
+  `d188e88bfc33582bb9479d5d9c0511c599f077de`.
+- Residual risks: no promotion-level or continuation-level
+  `RunAcceptanceRecord` is claimed; kind-specific `assignment` and
+  `verification` ledger writers are deferred successor work, with Q1 requiring
+  the runtime store transaction when implemented.
