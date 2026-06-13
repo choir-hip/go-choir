@@ -185,13 +185,13 @@ decisions are transient in-run reasoning
 `vtext_handoff.go:43-102`). The ledger is absorbed into the trajectory model
 (§3.3) rather than built as a Wire-only special case.
 
-### G (conjecture-native MissionGradient) — SUPPORTED at skill layer
+### G (conjecture-native MissionGradient) - superseded by Parallax at skill layer
 
-Prose-only today (`skills/mission-gradient/SKILL.md`, injected via
-`skill_context.go:10-14`). Per conjecture handoff §12 ("start small, do not
-overbuild") and §15, v0 is a SKILL.md template change plus one proof mission —
-which should be the §5 program itself. Typed records only after the proof
-mission shows changed action/verifier/stopping-condition.
+Historical wording: this review called for a conjecture-native
+MissionGradient. That work became Parallax/paradocs. Per conjecture handoff
+section 12 ("start small, do not overbuild") and section 15, the proof vehicle
+is now the ordered rearchitecture portfolio run through Parallax. Typed records
+only after proof missions show changed action/verifier/stopping-condition.
 
 Side finding: the mission-gradient fallback objective hardcodes a mission doc
 path in Go (continuation.go:48) — control state living in a code constant
@@ -308,8 +308,8 @@ re-derive invariants from structure.
 
 ## 5. The program (one mission, ordered)
 
-Run as a MissionGradient mission with a conjecture ledger (this is also the
-§15 proof mission — one mission discharges N5 and the rearchitecture's first
+Run through Parallax with a paradoc and ledger (this is also the section 15
+proof mission: one mission family discharges N5 and the rearchitecture's first
 slice).
 
 1. **Docs first** (grand synthesis §6.1): ontology chapter — trajectory,

@@ -1,11 +1,11 @@
 # MissionGradient Method
 
-Last updated: 2026-06-09
+Last updated: 2026-06-13
 
-Canonical skill file: local Codex skill
-`~/.codex/skills/mission-gradient/SKILL.md`. If this repo carries a synced copy
-in the future, keep it byte-for-byte equivalent or clearly mark which one is
-canonical.
+Status: legacy baseline. New broad Choir missions use Parallax/paradocs; see
+`docs/parallax-design-2026-06-11.md` and `AGENTS.md`. Keep this document for
+historical MissionGradient mission documents and for the orientation-field
+ideas Parallax superseded rather than deleting.
 
 MissionGradient is a way to give long-running agents a **sense of direction** without pretending the route is already known.
 

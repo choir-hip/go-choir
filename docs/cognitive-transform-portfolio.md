@@ -55,8 +55,10 @@ Common failure mode:
 Operational implication:
 ```
 
-## Relationship to MissionGradient
+## Relationship to Parallax
 
-MissionGradient defines run geometry for long-running agent work. Cognitive transforms are optional lenses that can improve a mission's route, invariants, verifier, scope, or stopping rule.
+Parallax defines the conjecture circuit for long-running agent work. Cognitive
+transforms are optional lenses that can improve a mission's route, observer,
+variant, verifier, scope, or stopping rule.
 
 For the full transform menu, use the canonical skill file.

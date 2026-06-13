@@ -8,8 +8,8 @@ discipline succeeding MissionGradient for new work. Its literal shape is a
 then alternate construction, probing, observer shifts, and settlement.
 
 MissionGradient remains a baseline/fallback for old mission docs. Parallax is
-candidate state until real missions prove that it changes routes, narrows
-claims, and improves handoff quality.
+the active mission discipline for new broad work; its first durable-actor
+missions are the live adoption evidence.
 
 ## 1. Mission as conjecture
 
@@ -132,9 +132,9 @@ v1 is markdown discipline invoked by `/goal docs/<mission>.md`. v2 keys the
 mission document to trajectory/work-item records. v3 makes the circuit the
 native actor prompt core.
 
-## 5. Adoption gate
+## 5. Adoption status
 
-Promote Parallax only if its first real missions show:
+Keep Parallax as the active discipline while real missions show:
 
 - the bridge conjecture changed the route, not just the wording;
 - a shift narrowed a claim's scope or upgraded the observer;
@@ -144,9 +144,10 @@ Promote Parallax only if its first real missions show:
 - no canonical mutation was admitted without scoped evidence and rollback or
   owner acceptance.
 
-Demote or revise it if fields get filled while moves stay unchanged.
+Revise it if fields get filled while moves stay unchanged.
 
 ## 6. Name
 
 **Conjecture Circuit** is the literal name. **Parallax** is the shorter
-working name: observer displacement as the measurement method.
+working name: observer displacement as the measurement method. A Parallax
+mission document is a **paradoc**.

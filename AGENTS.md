@@ -114,13 +114,27 @@ and no lost foreground updates.
 
 Docs-only commits are different. The CI workflow intentionally ignores `docs/**` and top-level `*.md`. Do not weaken those path filters to force docs-only CI. If documentation needs validation, run the specific check directly or use a manual workflow dispatch when one exists.
 
-## MissionGradient
+## Parallax
 
-For multi-hour, overnight, staging, self-development, or broad architectural work, use MissionGradient: define the real artifact, invariants, value criterion, homotopy axes, dense feedback, forbidden shortcuts, rollback, learning side-channel, and stopping condition.
+For multi-hour, overnight, staging, self-development, or broad architectural
+work, use Parallax. A Parallax mission document is a **paradoc**: it states the
+mission conjecture, deeper goal, witness/spec, invariants and qualities,
+domain ramp, variant, budget, authority bounds, live conjectures/open edges,
+next move, ledger, lineage, learning state, and settlement requirement.
 
-Read [docs/missiongradient-method.md](docs/missiongradient-method.md) before authoring or executing broad MissionGradient runs.
+Read [docs/parallax-design-2026-06-11.md](docs/parallax-design-2026-06-11.md)
+and the available Parallax skill before authoring or executing broad missions.
+When a legacy MissionGradient document is still the best source form, compile
+it in place into a Parallax State section instead of starting a disconnected
+control file. Preserve historical MissionGradient reports as evidence; do not
+treat them as current operating doctrine unless a newer paradoc promotes the
+claim.
 
-Do not turn MissionGradient into a brittle checklist. Preserve the invariant and increase realism as evidence arrives.
+Do not turn Parallax into a brittle checklist. Treat the bridge from artifact
+completion to deeper-goal progress as suspect until evidence supports it.
+Select moves by expected variant decrease per budget, force observer shifts
+when probes stop changing decisions, and exit only as settled, open_handoff,
+blocked, or superseded.
 
 For long-running Choir-in-Choir missions, maintain an owner-readable VText
 narrative. Each substantive change in plan, evidence, blocker, or result should

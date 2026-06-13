@@ -1,21 +1,24 @@
 # Choir Documentation Index
 
-Last reviewed: 2026-06-09
+Last reviewed: 2026-06-13
 
-This directory contains canonical architecture docs, active MissionGradient
-missions, proof artifacts, and a small number of historical pointers. Do not
+This directory contains canonical architecture docs, active Parallax paradocs,
+proof artifacts, and a small number of historical pointers. Do not
 treat every file here as equally current.
 
 The old documentation audit was pruned during the Campaign Compiler cleanup.
 Current docs should point at `choir.news`, AppChangePackage/adoption source
-movement, and Campaign Compiler as the next Choir-in-Choir benchmark.
+movement, and the durable-actor mission portfolio as the active
+rearchitecture spine.
 
 ## Documentation State Taxonomy
 
 Use these buckets when reading or editing docs:
 
 - **Canonical current docs** define present operating context and implementation invariants. They override older proof, mission, and project-state files.
-- **Current mission docs** define active or recently stopped MissionGradient work. They are runnable/inspectable mission context, not global architecture unless promoted into canonical docs.
+- **Current mission docs / paradocs** define active or recently stopped
+  Parallax work. They are runnable/inspectable mission context, not global
+  architecture unless promoted into canonical docs.
 - **Evidence artifacts** preserve proof, dogfood, blocker, or next-frontier findings from specific runs. Keep them as evidence, but do not treat them as current instructions when they contradict canonical docs.
 - **Historical signal** may contain useful design history or old constraints, but must be read through the current architecture.
 - **Stale/dangerous docs** contain outdated operational instructions, provider/credential references, or old continuation flows. Extract any live signal, then replace or delete them.
@@ -25,8 +28,16 @@ Use these buckets when reading or editing docs:
 - `../README.md` - operational entrypoint for humans and agents.
 - `../AGENTS.md` - repo-level agent operating contract.
 - `docs/mission-geometry.md` - high-level mission geometry: Choir as statistical/symbolic/evolutionary learner and automatic computer -> newspaper -> radio -> capital vector.
-- `docs/choir-agentic-depth-canonical.md` - canonical run-depth vocabulary for MissionGradient, MissionBag, Sweep, Leap, Fly, Cycle, and worker/verifier/orchestrator roles.
-- `docs/missiongradient-method.md` - run-geometry method entrypoint for long-running agent work; canonical skill lives at `skills/mission-gradient/SKILL.md`.
+- `docs/parallax-design-2026-06-11.md` - current mission-discipline design:
+  Parallax conjecture circuits and paradocs for new broad work.
+- `docs/mission-portfolio-2026-06-11.md` - current durable-actor
+  rearchitecture mission portfolio and execution order.
+- `docs/choir-agentic-depth-canonical.md` - canonical run-depth vocabulary for
+  MissionGradient-era MissionBag, Sweep, Leap, Fly, Cycle, and
+  worker/verifier/orchestrator roles; read through Parallax for new missions.
+- `docs/missiongradient-method.md` - legacy run-geometry method. Use only as
+  historical baseline/fallback for old mission documents; new broad work uses
+  Parallax.
 - `docs/cognitive-transform-portfolio.md` - transform portfolio entrypoint for route-changing reframes; canonical skill lives at `skills/cognitive-transform-portfolio/SKILL.md`.
 - `docs/computer-ontology.md` - canonical vocabulary for persistent user computers, ledger split, personal promotion, platform/public promotion, and update algebra.
 - `docs/wire-news-system-learning-saga-2026-06-09.md` - current learning record
@@ -82,8 +93,11 @@ Use these buckets when reading or editing docs:
   requirements contract: Universal Wire, Private Wire reuse, platform/user
   computer authority, VText ownership, source artifacts, and deletion of legacy
   graph/source-maxxing behavior.
-- `docs/mission-wire-community-news-v0.md` - current MissionGradient for landing
-  the public Universal Wire news product on the corrected ontology.
+- `docs/mission-lifecycle-cutover-v0.md` - current next spine paradoc: M3
+  lifecycle cutover after M2 settlement.
+- `docs/mission-wire-community-news-v0.md` - older Universal Wire product
+  mission. Do not resume it as the architecture spine; current Wire proof is
+  downstream of M2-M4 in the portfolio.
 - `docs/choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md` -
   historical product/architecture spec for the superseded Universal Wire +
   StoryGraph/VText framing. Do not use it as current ontology.
@@ -97,10 +111,8 @@ Use these buckets when reading or editing docs:
   outlier breakdown.
 - `docs/implementation-scope.md` - near-term implementation scope.
 - `docs/north-star.md` - long-range product direction.
-- `docs/mission-campaign-compiler-selfdev-v0.md` - current next
-  Choir-in-Choir benchmark: Campaign Compiler as a Choir-native control layer
-  over campaigns, mission geometry, work orders, evidence packets, cognitive
-  transform invocations, candidate computers, promotion, and reentry.
+- `docs/mission-campaign-compiler-selfdev-v0.md` - retained Choir-in-Choir
+  benchmark input. Do not treat it as the current spine while M3/M4 are open.
 - `docs/legacy-promotion-experiments-learnings.md` - consolidated lessons from
   pruned patchset-promotion experiments.
 - `docs/old-docs-review-2026-06-06.md` - cleanup ledger for old docs reviewed
@@ -123,12 +135,12 @@ Use these buckets when reading or editing docs:
 - `docs/mission-run-memory-v0.md` - run-memory/compaction mission.
 - `docs/mission-web-surface-rationalization-v0.md` - Obscura/browser surface rationalization mission.
 - `docs/mission-universal-wire-style-vtext-collaborative-storygraph-v0.md` -
-  historical draft MissionGradient for the superseded Universal Wire / Style.vtext
+  historical draft mission for the superseded Universal Wire / Style.vtext
   collaborative StoryGraph trajectory. Do not use it as current ontology.
 
-Read the current Campaign Compiler mission first. Older promotion-queue mission
-docs have been pruned; use the consolidated learnings doc when that context is
-needed.
+Read the mission portfolio and the current paradoc first. Older
+promotion-queue mission docs have been pruned; use the consolidated learnings
+doc when that context is needed.
 
 ## Proof And Evidence Artifacts
 

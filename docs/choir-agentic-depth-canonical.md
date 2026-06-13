@@ -1,10 +1,14 @@
 # Choir Agentic Depth: Sweeps, Flys, and Cycles
 
-**Status:** canonical architecture vocabulary
-**Last updated:** 2026-05-29
+**Status:** canonical architecture vocabulary, pre-Parallax terminology
+**Last updated:** 2026-06-13
 **Scope:** campaign compiler, agentic run geometry, mission bags, sweeps, flys, cycles, and verification roles
 
 This document names the core run geometry for Choir.
+
+2026-06-13 note: this document predates Parallax. For new broad missions, use
+Parallax/paradocs as the active mission discipline and read `MissionGradient`
+below as the older orientation-field vocabulary retained for continuity.
 
 Choir should not be built primarily around goals. Goals are useful, but they are too discrete to serve as the top-level ontology for long-running agentic work. Real work accumulates unordered small tasks, partial repairs, research questions, speculative branches, stale docs, weak tests, ambiguous signals, and opportunities for improvement. These do not naturally form one clean goal. They form a bag.
 

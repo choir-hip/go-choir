@@ -114,7 +114,7 @@ contracts:
 | `docs/mission-runtime-human-proof-experiment-rerun-v1.md` | Keep deferred | Still the best detailed record of the human-proof self-development gate. |
 | `docs/mission-runtime-test-pyramid-hardening-v0.md` | Keep deferred | Still the live test-pyramid hardening direction. |
 | `docs/mission-ux-full-bag-sweep-v0.md` | Mined then deleted | Mobile desktop, app boundary, and product-path proof lessons retained above. |
-| `docs/missiongradient-method.md` | Keep canonical | Referenced by `AGENTS.md`; current MissionGradient method. |
+| `docs/missiongradient-method.md` | Keep historical baseline | Superseded for new work by Parallax/paradocs; retain as context for legacy mission documents. |
 | `docs/podcast-radio-brief-proof-2026-05-13.md` | Mined then deleted | Feed-to-VText radio brief proof retained above and in the Automatic Radio plan. |
 | `docs/publication-path-skeleton-2026-05-12.md` | Mined then deleted | Publication trust-domain copy and platform ledger boundary retained above. |
 | `docs/publication-reader-retrieval-pretext-research-2026-05-16.md` | Mined then deleted | Pretext/provenance distinction and source-publication insights retained above. |
