@@ -114,6 +114,14 @@ func newEditVTextTool(rt *Runtime) Tool {
 					result["email_draft_request"] = emailResult
 					result["email_draft_request_status"] = emailResult["status"]
 					result["next_instruction"] = "Email appagent draft handoff completed from the stored VText revision. Do not send mail directly; owner approval remains required."
+				} else {
+					result["next_required_tool"] = continuation.Tool
+					if len(continuation.Args) > 0 {
+						result["next_required_args"] = continuation.Args
+					}
+					if strings.TrimSpace(continuation.Instruction) != "" {
+						result["next_instruction"] = continuation.Instruction
+					}
 				}
 			}
 			return toolResultJSON(result)
@@ -188,7 +196,31 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 			}, true
 		}
 	}
+	if baseRevision.AuthorKind == types.AuthorUser &&
+		(metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) || vtextPromptExplicitlyRequestsResearcher(prompt)) {
+		objective := "Research the user's request for this VText document and send a concise finding with evidence via update_coagent."
+		if prompt != "" {
+			objective += " Focus on: " + truncateForToolInstruction(prompt, 420)
+		}
+		return vtextRequiredContinuation{
+			Tool: "spawn_agent",
+			Args: map[string]any{
+				"role":       AgentProfileResearcher,
+				"channel_id": rev.DocID,
+				"objective":  objective,
+			},
+			Instruction: "The owner explicitly asked for a researcher. Call spawn_agent next with role=\"researcher\" and the provided arguments before ending this run. If the owner also asked for generated artifacts, execution, or verification, call request_super_execution after the researcher spawn succeeds.",
+		}, true
+	}
 	return vtextRequiredContinuation{}, false
+}
+
+func truncateForToolInstruction(text string, limit int) string {
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if limit <= 0 || len(text) <= limit {
+		return text
+	}
+	return strings.TrimSpace(text[:limit]) + "..."
 }
 
 func newRequestSuperExecutionTool(rt *Runtime) Tool {
