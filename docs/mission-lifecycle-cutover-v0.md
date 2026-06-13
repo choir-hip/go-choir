@@ -306,15 +306,35 @@ sample showed `go-choir-sandbox.service` active/running with main PID `42640`,
 proxy/sandbox deployed commit `63767a43673007aaca27e926c74dd6e9ee7093f3`, and
 the deployed adaptive lifecycle Playwright smoke passed. This restores staging
 as a usable proof substrate, but it is not M3 restart-falsifier evidence.
+Batch N then ran the first deployed SIGKILL probe against a live prompt/VText
+trajectory, but the probe killed the host `go-choir-sandbox.service` rather
+than the vmctl-routed user computer that owned the trajectory. The product path
+created submission/trajectory `3e69d4ca-e629-450f-891f-ea3a21c795c3`, VText
+document `ce4f4e4f-9cab-4d2f-a27b-c1b91d3db9ff`, owner
+`9e4400f6-8101-4f71-a5d5-e18dcefe9155`, and initial loop
+`cab77c12-c773-4784-a8c9-e529e48c71d4`; Trace observed conductor, super,
+researcher, and VText before the kill. Host service PID `42640` was killed at
+2026-06-13T10:11:17Z and systemd restarted it as PID `42992`
+(`NRestarts` 117 -> 118); public health recovered and still reported deployed
+commit `63767a43673007aaca27e926c74dd6e9ee7093f3`. The probe later failed
+waiting for the trajectory to produce the expected `web_search`. Follow-up
+route evidence explains why this cannot settle C3: vmctl listed an active
+interactive computer for that owner at `http://10.200.9.2:8085`, while direct
+host Dolt queries found zero rows for the owner, document, initial loop, and
+trajectory in the host runtime store. This is host restart-under-load evidence
+plus a route-target mismatch, not durable-actor rewarm proof for the user's
+computer.
 See "Lifecycle Inventory - 2026-06-13" below.
 
-**next move:** continue toward deployed kill/restart evidence now that the
-staging substrate blocker is discharged. Keep M3 open as a lifecycle cutover
-mission, not a deployment recovery mission. The next discriminator is the
-durable-actor restart falsifier: kill/restart or equivalent deployed evidence
-that a cold actor rewarms from durable backlog/open assigned obligations with
-zero stranded messages or zero-obligation stalls. The local OS-kill test is the
-rehearsal for that staging proof, not a substitute for it.
+**next move:** run a deliberately vmctl-routed deployed restart probe, or first
+build the missing oracle for that probe, so the killed runtime is the user
+computer that owns the product trajectory rather than the host fallback
+sandbox. Keep M3 open as a lifecycle cutover mission, not a deployment recovery
+mission. The next discriminator is still the durable-actor restart falsifier:
+kill/restart or equivalent deployed evidence that a cold actor rewarms from
+durable backlog/open assigned obligations with zero stranded messages or
+zero-obligation stalls. The local OS-kill test and Batch N host-service kill are
+rehearsal/instrument evidence, not substitutes for user-computer staging proof.
 Cancellation's store-active fallback and `executeActivation` terminal run rows
 are accepted for v0 as compatibility/audit surfaces, not ordinary
 warm-residency or agent-liveness oracles.

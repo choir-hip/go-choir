@@ -1382,3 +1382,54 @@ substrate blocker found by the Batch M preflight. The mission's next
 discriminator returns to deployed kill/restart or equivalent staging evidence
 that actor rewarm from durable backlog/open obligations leaves zero stranded
 messages and no zero-obligation stalls.
+
+## 2026-06-13 - Batch N Probe: Host-Service Kill Exposes Route-Target Mismatch
+
+Claim/scope: attempt the deployed restart discriminator against a live
+prompt/VText product trajectory after the staging substrate cleanup. The
+intended falsifier was to kill the runtime that owned an in-flight multi-agent
+trajectory, then observe rewarm/no-stranding through product/control evidence.
+
+Move: instrumented product-path prompt-bar/VText run plus direct Node B
+host-service SIGKILL. The script lived outside the repo at
+`/tmp/m3_deployed_restart_probe.mjs`; output was captured outside the repo at
+`/tmp/m3_deployed_restart_probe.out.json`.
+
+Receipts:
+
+- Product-path trajectory marker `M3_DEPLOYED_RESTART_1781345354770`, account
+  `m3-restart-1781345356624-y4zrtu@example.com`, owner
+  `9e4400f6-8101-4f71-a5d5-e18dcefe9155`, submission/trajectory
+  `3e69d4ca-e629-450f-891f-ea3a21c795c3`, VText document
+  `ce4f4e4f-9cab-4d2f-a27b-c1b91d3db9ff`, initial loop
+  `cab77c12-c773-4784-a8c9-e529e48c71d4`.
+- Before the kill, public Trace had observed conductor, super, researcher, and
+  VText roles for the trajectory.
+- Host service pre-kill: `go-choir-sandbox.service` main PID `42640`,
+  `NRestarts=117`, host local health ready, running runs `5`, deployed commit
+  `63767a43673007aaca27e926c74dd6e9ee7093f3`.
+- Kill: `kill -9` of systemd `MainPID=42640` at
+  `2026-06-13T10:11:17Z`.
+- Host service recovery: systemd restarted the service as PID `42992`,
+  `NRestarts=118`; host local health became ready with running runs `17` at
+  recovery and later `0`; public `https://choir.news/health` returned
+  `status=ok`, `upstream=ok`, `vmctl_status=ok`, `vmctl_routing=enabled`, and
+  proxy/upstream deployed commit
+  `63767a43673007aaca27e926c74dd6e9ee7093f3`.
+- Probe outcome: failed while waiting for trajectory
+  `3e69d4ca-e629-450f-891f-ea3a21c795c3` to produce the expected
+  `web_search`.
+- Route-target check: vmctl listed an active interactive computer for owner
+  `9e4400f6-8101-4f71-a5d5-e18dcefe9155` at
+  `http://10.200.9.2:8085`, while direct host runtime Dolt queries found zero
+  rows for that owner, VText document, initial loop, and trajectory in the host
+  store.
+
+Expected Delta V: 0 for full M3 unless the killed runtime was proven to own the
+trajectory; actual Delta V: 0. Observer evidence improved: the host fallback
+sandbox recovers from a SIGKILL under live staging load, and the missing oracle
+is now precise. The deployed restart falsifier must target the vmctl-routed
+user computer that owns the product trajectory, or use an equivalent product
+handle that proves the killed runtime and the observed trajectory share the same
+computer/store. No continuation-level, promotion-level, zero-stranding, or final
+M3 settlement is claimed.
