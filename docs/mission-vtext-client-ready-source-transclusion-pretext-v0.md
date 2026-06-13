@@ -11,6 +11,11 @@ Requirements contracts:
 Related mission:
 [mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md](mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md)
 
+Doctrine note (2026-06-13): this checkpoint uses `BrowserApp` as a then-current
+implementation name. Current product doctrine is Source Viewer/reader artifacts
+first, with explicit Web Lens live/original inspection only when the original
+page itself must be inspected.
+
 ## Run Checkpoint & Resumption State
 
 status: checkpoint_incomplete

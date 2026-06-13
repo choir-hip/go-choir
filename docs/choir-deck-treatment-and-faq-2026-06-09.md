@@ -88,8 +88,9 @@ slide copy, and it should not import external handoff text verbatim.
 ### Isn't this just another chatbot or AI workspace?
 
 No. Choir is a persistent computer for AI work. Chat can route intent, but the
-work lives in durable VTexts, source artifacts, agent notes, candidate
-computers, publications, and promotion records.
+`AI workspace` phrasing is used here only as a contrast class, not as Choir's
+root ontology. The work lives in durable VTexts, source artifacts, agent
+notes, candidate computers, publications, and promotion records.
 
 ### Why not use GPT or Claude?
 
@@ -150,4 +151,3 @@ sources, and agents.
 
 The contribution/identity model, public social dynamics, private/public egress
 review, and the feel of live voice interruption are active design frontiers.
-

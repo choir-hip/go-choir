@@ -8,6 +8,10 @@
 VText stability, Trace removal, Super Console, real Zot, gateway routing, source
 mounts, candidate repair, and platform promotion.
 
+Doctrine note (2026-06-13): Trace and Terminal terms in this report are kept as
+historical evidence of the cutover. Current doctrine is Trace as evidence and
+Super Console/zot as the repair surface.
+
 ## 0. Executive Summary
 
 The night started with the VText version-advancement regression and a deeper

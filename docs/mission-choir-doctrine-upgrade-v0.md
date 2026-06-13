@@ -340,3 +340,8 @@ report names:
 - new doctrine authority path;
 - remaining heresies or detector gaps;
 - next code-bearing paramission.
+
+Follow-on note (2026-06-13): the subsequent doctrine-conformance sweep updated
+the flagged docs corpus so current readers do not inherit retired ontology from
+high-read and historical mission docs. Remaining H027-H029 work is code-bearing
+and stays deferred to successor paradocs.

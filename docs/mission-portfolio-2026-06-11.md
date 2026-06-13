@@ -82,6 +82,8 @@ discoveries. They are not regressions introduced by this portfolio. Code-bearing
 cleanup is deferred to successor missions: Trace evidence/Features cleanup,
 Super Console/terminal compatibility cleanup, and Source Viewer/Web Lens naming
 cleanup.
+Historical mentions of Trace/Terminal/Browser in this portfolio are evidence
+labels or successor-scope handles, not target product ontology.
 
 ## Dependency graph
 
@@ -266,7 +268,8 @@ RunContinuation as the way work continues.
 **Heresies / evidence:** repairs H006-H008, H014, and the continuation/progress
 portion of H022. Evidence class: architectural-level plus staging product proof
 for any public API or run-acceptance claim. Countable target: continuation API
-deleted or 410 shimmed, `continuation-level` retired or explicitly transitional,
+deleted or 410 shimmed, `continuation-level` retired or explicitly transitional
+only during cutover,
 and no acceptance record uses continuation events as architecture proof.
 
 **Bridge conjecture (R3):** nothing of proven value is lost — every behavior

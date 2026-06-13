@@ -8,6 +8,10 @@ Target environment: staging-first acceptance at `https://choir.news` for
 platform-enabling changes; once Super Console exists, the repair loop itself
 runs inside the affected user computer without GitHub Actions.
 
+Doctrine note (2026-06-13): this mission records the cutover away from Trace
+app and raw Terminal surfaces. Those names remain here as historical evidence,
+not current product ontology.
+
 ## Goal Prompt Draft
 
 ```text

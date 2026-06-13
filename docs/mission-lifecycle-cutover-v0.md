@@ -8,6 +8,9 @@ Discipline: `skills/parallax/SKILL.md`. Predecessors: M1
 (`docs/mission-trajectory-model-v0.md`) and M2
 (`docs/mission-messaging-cutover-v0.md`) are settled.
 
+Doctrine note (2026-06-13): `continuation-level` references in this cutover
+mission are transitional acceptance-language residue, not target doctrine.
+
 ## Source Form
 
 **Kind:** spine.

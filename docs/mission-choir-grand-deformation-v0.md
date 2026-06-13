@@ -3,6 +3,11 @@
 Status: proposed grand 8-24h+ mission
 Date: 2026-05-13
 
+Doctrine note (2026-06-13): browser, continuation, and other legacy surface
+names in this older mission are historical evidence of then-current design
+thinking. Current doctrine is persistent computers, trace evidence, Super
+Console/zot repair, and Source Viewer before explicit Web Lens inspection.
+
 ## Real Artifact
 
 Choir as a durable self-developing computer: a learning-control system that receives user/world signals, maintains semantic artifacts, speculates in candidate worlds, verifies deltas, promotes canonical improvements, compacts operational memory, and automatically continues toward higher-value objectives without relying on Codex to choose the next step.

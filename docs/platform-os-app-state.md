@@ -255,12 +255,12 @@ behavior.
   restore-point timeline) is the direction of portfolio mission M7 ("Changes
   app review loop") — see `docs/mission-portfolio-2026-06-11.md`.
 - **Trace integration.** The pre-cutover design intended the selected Change
-  to surface run-acceptance/evidence refs and open a Trace view without a
-  separate Trace app. In the shipped Features app, "Open Trace" is wired but
-  returns the literal string `"Trace UI is unshipped"` (plus the evidence id)
-  when a trace ref exists. That button/copy is now product-surface residue:
-  the visual Trace app is not a product direction, and future Features work
-  should replace the affordance with evidence/Super Console-oriented actions.
+  to surface run-acceptance/evidence refs and expose evidence without a separate
+  visual Trace app. In the shipped Features app, this path is still a
+  compatibility stub and may return `"Trace UI is unshipped"` when a trace ref
+  exists. That behavior is a known bug-shaped gap: the visual Trace app is not a
+  product direction, and product-ready behavior should replace this stub with a
+  trace-evidence/provenance action and run-acceptance linkage.
 - **Try/preview flow.** The pre-cutover design described an internal-frame
   preview of a candidate before installing. A preview endpoint already EXISTS
   server-side at `/api/adoptions/{id}/preview/*` (requires a verified

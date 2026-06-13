@@ -13,6 +13,8 @@ evidence, doctrine detector text, or explicit transitional compatibility. A
 count increase is `introduced` unless the mission records an explicit
 conjecture delta and acceptance of the new debt. Discovery of a new detector or
 site is `discovered`, not `repaired`.
+Pattern strings quoted below are detector vocabulary, not endorsed product
+framing.
 
 ## Detector Manifest
 

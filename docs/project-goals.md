@@ -238,7 +238,8 @@ Read [adr-dolt-as-canonical-state.md](adr-dolt-as-canonical-state.md).
    than anecdote.
 5. Keep documentation canonical enough that long-running agents do not follow
    stale mission files.
-6. Make run acceptance cover promotion-level and continuation-level self
+6. Make run acceptance cover promotion-level and the current transitional
+   continuation-level self
    development, not just export-level evidence. `continuation-level` is
    transitional: it is being re-pointed at trajectory/work-item settlement
    evidence under the durable-actors rearchitecture

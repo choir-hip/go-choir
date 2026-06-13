@@ -252,6 +252,19 @@ and sentiment as well as facts. Choir Doctrine is the apex: self-improving
 mainframe, persistent computers, truth from facts, conjecture learning,
 evidence-bounded claims, protected invariants, and deletion pressure.
 
+Apply the H027-H029 guardrail while in doctrine-touch mode:
+
+- `Trace` language in docs is evidence/topology only unless the section is
+  explicitly historical and marked as such. `Trace app`, `Trace UI`, and
+  `Open Trace` are not normal user surfaces and should not be framed as product
+  surfaces.
+- `raw Terminal`, `Terminal app`, and terminal-shim surface framing are invalid
+  in user-facing doctrine except for explicit historical or implementation
+  residue labels. Super Console/zot is the replacement repair surface.
+- `Browser`/`Browser app`/`source-gathering` mentions are valid only when they
+  resolve to Source Viewer/reader artifacts plus explicit Web Lens live/original
+  inspection.
+
 **The retention rule.** Every mission leaves its mission document and ledger
 file as the durable learning artifacts, even when it fails or is superseded.
 Promote learning outward only when it changes shared doctrine, assertions,

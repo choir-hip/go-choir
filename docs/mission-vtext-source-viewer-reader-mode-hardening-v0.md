@@ -17,6 +17,11 @@ Related current-state review:
 Final mission review:
 [vtext-source-viewer-mission-review-2026-06-06.md](vtext-source-viewer-mission-review-2026-06-06.md)
 
+Doctrine note (2026-06-13): this mission may quote `BrowserApp` or `Browser
+app` as then-current implementation naming. Current source doctrine is Source
+Viewer/reader artifacts first, with explicit Web Lens live/original inspection
+when needed.
+
 ## Run Checkpoint & Resumption State
 
 status: deployed_review_checkpoint_complete

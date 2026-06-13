@@ -1,5 +1,8 @@
 # Mission M3 - Lifecycle Cutover Ledger
 
+Doctrine note (2026-06-13): `continuation-level` mentions in this ledger are
+historical evidence labels from the transition period, not target doctrine.
+
 ## 2026-06-13 - Paradoc Compiled
 
 Claim/scope: compile M3 from the portfolio and durable-actors cutover program

@@ -5,6 +5,11 @@
 **Primary contract:** [source-external-data-publication.md](source-external-data-publication.md)  
 **Related evidence:** [vtext-source-viewer-mission-review-2026-06-06.md](vtext-source-viewer-mission-review-2026-06-06.md), [mission-vtext-source-viewer-reader-mode-hardening-v0.md](mission-vtext-source-viewer-reader-mode-hardening-v0.md), [mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md](mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md)
 
+Doctrine note (2026-06-13): historical references in this mission to
+`BrowserApp` or browser-shaped source surfaces refer to implementation residue.
+Current doctrine is Source Viewer/reader artifacts first, with explicit Web Lens
+only for live/original inspection.
+
 ## Mission Scope
 
 This mission is the next comprehensive source-system mission, not a narrow

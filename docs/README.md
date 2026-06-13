@@ -57,6 +57,8 @@ explicitly promotes one as source form.
   ontologies such as StoryGraph-as-root, personal writing/publishing system as
   root, Trace app, raw Terminal app, Browser-as-source-gathering, parent/child
   control, or continuation-level as target doctrine.
+  Historical docs may still quote those terms as evidence, but they should
+  label them as retired vocabulary rather than present-tense product ontology.
 
 ## Canonical Current Docs
 

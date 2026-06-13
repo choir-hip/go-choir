@@ -349,7 +349,8 @@ Recommendation:
 - make sourcecycled standalone for v0;
 - expose CLI/API/WebSocket and export contracts;
 - treat Choir integration as a later adapter;
-- do not let sourcecycled become a second publishing system.
+- do not let sourcecycled become a second publication-control surface or
+  competing root ontology.
 
 ### P0: Build Provenance Before More Feeds
 
@@ -417,7 +418,8 @@ The attached legal cloud draft should become a real VText/publication proof:
 5. copy/download the full text from the product path;
 6. verify the public link and export artifacts.
 
-This becomes a concrete dogfood loop for the publishing system.
+This becomes a concrete dogfood loop for publication as a persistent-computer
+output surface.
 
 ## Recommended Next Mission
 
@@ -502,4 +504,3 @@ VText draft/versioning repair
   -> sourcecycled standalone provenance substrate
   -> news/econ VText/publication projection
 ```
-

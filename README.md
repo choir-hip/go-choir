@@ -35,6 +35,8 @@ historical or surface-specific language unless a current doctrine document
 explicitly promotes it. The current framing is self-improving mainframe,
 persistent computers, durable artifacts, evidence, trajectories, candidate
 worlds, and promotion.
+Where those older terms appear below, they are contrast classes or transition
+labels, not endorsed root framing.
 
 Choir is not trying to optimize for chat smoothness, local test passage, or a
 short-term product demo. The architecture is currently optimizing for:
@@ -338,7 +340,7 @@ Acceptance levels are explicit so the system does not overclaim:
 - `export-level`
 - `promotion-level`
 - `continuation-level` (transitional H008/H014 residue until M4 re-points or
-  deletes it)
+  deletes it; not a target permanent doctrine term)
 
 Do not claim `promotion-level` without AppChangePackage adoption verifier
 contract evidence plus owner review and promote/rollback evidence. Do not claim

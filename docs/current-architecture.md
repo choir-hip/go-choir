@@ -31,6 +31,10 @@ When this document says "current," it should be backed by one of:
 
 If code, staging, and this document disagree, code/staging evidence wins and
 this document should be fixed.
+When older browser/Trace/continuation language appears here, read it as
+implementation or evidence residue. Current doctrine is Source Viewer before
+explicit Web Lens inspection, Trace as evidence rather than a user app, and
+`continuation-level` as transitional residue only.
 
 ## Ontology (2026-06-11 Revision)
 

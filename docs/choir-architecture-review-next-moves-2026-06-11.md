@@ -18,6 +18,11 @@ re-derives the wrong invariant, and every mission pays the tax. v1's
 Method: claims checked against `internal/`, `cmd/`, `skills/`, prompts, and
 tests, with file:line receipts.
 
+Doctrine note (2026-06-13): terms such as `continuation-level` and Trace
+references are preserved here as evidence labels from the reviewed system. They
+are not current target ontology; current doctrine treats `continuation-level`
+as transitional residue and Trace as evidence rather than a user app surface.
+
 ---
 
 ## 0. Process finding — the companion handoffs were truncated (RESOLVED)

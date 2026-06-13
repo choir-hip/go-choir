@@ -98,6 +98,8 @@ computers. Older framings such as personal writing system, publishing system, AI
 workspace, sandbox, workflow app, StoryGraph app, or chat interface are
 historical, surface-specific, or deprecated unless this document explicitly
 promotes them.
+Where those terms reappear below, they are quoted as detector vocabulary or
+historical evidence, not endorsed naming.
 
 Framing drift is doctrine drift. If a document, prompt, test, or UI label teaches
 agents to optimize an older product story, it can pull code back toward the old
@@ -489,7 +491,8 @@ continuation machinery instead of trajectory/work-item settlement.
 
 `successor pattern:` acceptance should pivot to passivation checkpoints, open
 work items, rewarm evidence, and trajectory settlement; `continuation-level`
-should be retired or formally renamed.
+should be retired or explicitly re-pointed. A rename alone does not count as
+repair.
 
 `deletion gate:` M4.
 

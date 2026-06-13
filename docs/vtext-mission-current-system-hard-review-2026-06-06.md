@@ -13,6 +13,10 @@ Reviewed scope:
   - `frontend/src/lib/vtext-source-renderer.ts`
   - `frontend/src/lib/BrowserApp.svelte`
   - `internal/proxy/platform_publish.go`
+- Doctrine note (2026-06-13): `BrowserApp` is quoted here as the then-current
+  implementation name. Current source doctrine is Source Viewer/reader
+  artifacts first, with explicit Web Lens inspection only when the original page
+  itself must be inspected.
 - Deployed proof target: `https://choir.news`
 - Owner artifact: `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`
 

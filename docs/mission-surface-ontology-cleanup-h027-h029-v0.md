@@ -17,6 +17,8 @@ ontology becomes harder for future agents and users to regress.
 deeper goal (G): keep the desktop/app surface aligned with Choir Doctrine:
 Trace is evidence, repair is Super Console/zot, and source reading defaults to
 Source Viewer/reader artifacts with explicit Web Lens live/original inspection.
+Historical implementation names may remain in evidence documents only when they
+are explicitly labeled as such.
 
 witness/spec (A/S): code-bearing cleanup for H027-H029.
 

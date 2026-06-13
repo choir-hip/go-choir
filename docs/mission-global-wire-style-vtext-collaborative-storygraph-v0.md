@@ -7,6 +7,10 @@ after publication-artifact slice
 `docs/vtext-styleguide-system-research-2026-06-06.md`,
 `docs/intended-architecture-next-2026-06-06.md`
 
+Doctrine note (2026-06-13): StoryGraph and `continuation-level` terminology in
+this historical mission is preserved as evidence of an older product frame, not
+as current doctrine.
+
 ## Goal String
 
 ```text

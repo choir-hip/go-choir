@@ -7,6 +7,10 @@
 during Campaign Compiler cleanup. The retained current path is
 AppChangePackage -> adoption -> recipient build -> verify -> promote/rollback.
 
+Doctrine note (2026-06-13): any continuation- or Trace-shaped language in this
+older mission is historical evidence of the reviewed product state, not target
+doctrine.
+
 ## One-Line Goal String
 
 ```text

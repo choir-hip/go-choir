@@ -1,5 +1,8 @@
 # Mission M2 — Messaging Cutover Ledger
 
+Doctrine note (2026-06-13): any `continuation-level` mention in this ledger is
+transitional acceptance residue, not endorsed steady-state doctrine.
+
 ## 2026-06-12 — Ready After M1, Architecture-First Route
 
 Claim/scope: M2 is now the next active spine mission. Scope is mission state,

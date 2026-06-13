@@ -7,6 +7,10 @@ benchmark is Choir-in-Choir: Choir compiling and executing its own campaigns
 through staging, product-path proof, candidate computers, app change packages,
 promotion, VText, Trace, and run acceptance.
 
+Doctrine note (2026-06-13): Trace and continuation terms in this older mission
+are historical evidence labels. Current doctrine treats Trace as evidence and
+`continuation-level` as transitional residue rather than target architecture.
+
 ## One-Line Goal String
 
 ```text

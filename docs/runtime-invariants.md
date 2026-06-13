@@ -257,6 +257,8 @@ Acceptance levels are explicit:
 Do not claim `promotion-level` without verifier contract evidence plus owner
 review and promotion or rollback evidence. Do not claim `continuation-level`
 without run-memory/compaction and bounded continuation evidence.
+`continuation-level` remains transitional residue, not a target permanent
+acceptance class.
 
 `continuation-level` is transitional: per
 `docs/choir-rearchitecture-durable-actors-2026-06-11.md`, this acceptance

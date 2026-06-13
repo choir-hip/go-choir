@@ -6,6 +6,11 @@
 **Meta-goal:** prove Choir-in-Choir can accelerate platform work by producing
 reviewable PR/package artifacts without owning platform promotion.
 
+Doctrine note (2026-06-13): if this mission refers to browser-shaped source
+surfaces, read those as transitional implementation names. Current source
+doctrine is Source Viewer/reader artifacts first, then explicit Web Lens
+live/original inspection when needed.
+
 ## Goal String
 
 ```text

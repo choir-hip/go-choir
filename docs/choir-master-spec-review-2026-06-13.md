@@ -17,6 +17,11 @@ analysis) plus four parallel codebase reviews (VText architecture, durable
 actors, docs corpus, heresy/dead-code), plus a positional analysis of how the
 spec competes for an agent's attention, plus spot re-verification.
 
+Doctrine note (2026-06-13): this review preserves older `master spec`,
+`continuation-level`, and StoryGraph-era naming when quoting the reviewed
+material. Those terms are evidence of legacy ontology, not endorsed current
+framing.
+
 ---
 
 ## Executive Summary

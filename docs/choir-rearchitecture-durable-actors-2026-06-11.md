@@ -403,7 +403,8 @@ substrate it can actually work on.
   (propose → verify → promote/rollback) with no SynthesizeRunContinuation in
   the binary.
 - **Hyperthesis edge:** there may be quiet dependencies on continuation events
-  in acceptance evidence ("continuation-level", run_acceptance.go:1012-1014,
+  in acceptance evidence (the transitional label "continuation-level" in
+  run_acceptance.go:1012-1014,
   AGENTS.md) and trace evidence projections; these must be re-pointed at work
   items in the same cutover or verifier discipline silently weakens.
 - **Scope:** the synthesis/decision layer. Compaction, fingerprints, bounded

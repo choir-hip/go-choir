@@ -3,6 +3,10 @@
 Status: proposed next 8-24h mission
 Date: 2026-05-13
 
+Doctrine note (2026-06-13): the quoted `Browser app` framing below is
+historical problem language. The target doctrine is an explicit split between
+Source Viewer/reader artifacts and Web Lens live/original inspection.
+
 ## Real Artifact
 
 Choir web surface rationalization: one coherent product and architecture boundary for two different things that have been collapsing into the word "browser":
@@ -12,7 +16,8 @@ Choir web surface rationalization: one coherent product and architecture boundar
 
 The artifact is not a full Chrome replacement inside Choir. The goal is to let Choir understand, inspect, cite, import, and act on the web without taking on remote-browser streaming as the product promise.
 
-The mission must turn the current confusing "Browser app" surface into an honest, verifiable product path:
+The mission must turn the current confusing browser-shaped surface into an
+honest, verifiable product path:
 
 ```text
 external URL/search result -> iframe attempt or Obscura snapshot -> text/html/links/forms/visual proof -> bounded action or import -> vtext/content/radio artifact

@@ -53,6 +53,11 @@ or DOM metrics. Obscura-style extraction can be used for lightweight browsing
 and scraping only after its auth, action, screenshot, video, and extraction
 capabilities are explicitly verified for the task at hand.
 
+For source-opening doctrine, default durable web-derived reading to Source
+Viewer/reader artifacts and use Web Lens only for explicit live/original
+inspection. Do not reintroduce Browser-as-source-gathering framing in docs,
+prompts, or tests.
+
 Read [docs/computer-ontology.md](docs/computer-ontology.md) before changing VM, sandbox, candidate-world, promotion, package, or persistent-state behavior. The product object is a persistent user computer. `sandbox` is an implementation/service name, not the product ontology.
 
 Classify every mission/change by mutation class before editing:

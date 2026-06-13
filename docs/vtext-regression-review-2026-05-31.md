@@ -8,6 +8,10 @@ does not claim staging reproduction of the current owner-visible failure. It
 uses commit history, mission docs, and current code to identify why VText keeps
 regressing and where "versions are not advancing" is most likely to recur.
 
+Doctrine note (2026-06-13): any Trace, Terminal, or browser-shaped terms in
+this report are historical evidence of the reviewed system state, not current
+product ontology.
+
 ## Executive Read
 
 VText is not failing because of one missing fix. The last seven weeks show an
