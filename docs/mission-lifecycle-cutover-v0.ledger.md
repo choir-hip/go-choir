@@ -1277,3 +1277,46 @@ deployed kill/restart or equivalent actor rewarm falsifier with zero stranded
 messages and no zero-obligation stalls. Rollback reference for behavior is the
 previous deployed behavior commit
 `dd165ada20609f3dca0e2bd968f46e7796a83e5f`.
+
+## 2026-06-13 - Batch L Probe: OS-Kill Restart Rewarm Oracle
+
+Claim/scope: add a stronger local restart oracle before attempting a staging
+service-kill proof. Prior Batch G/K restart regressions reopened the same
+store and called `Runtime.Start`, but they seeded interrupted rows directly.
+The new probe starts a real child test process with a running coagent
+activation against a persistent runtime store, kills that process with
+`SIGKILL`, then boots a fresh child process over the same store.
+
+Move: add `TestProcessRestartRewarmsCoagentAfterOSKill` in
+`internal/runtime/update_coagent_cutover_test.go`. The start child seeds a
+live trajectory with one pending `worker_update`, one assigned open work item,
+and a running activation for the assigned coagent. The parent waits until the
+store reports the activation as `running`, kills the process, then starts a
+recovery child. The recovery child calls `Runtime.Start`, proves the killed
+activation becomes `passivated`, waits for a replacement run for the same
+durable actor to reach `running`, and writes proof that the replacement run
+metadata contains both `worker_update_ids` and `work_item_ids`. It also checks
+`TrajectoryObligations` still reports one pending update and one open work item,
+so the proof does not collapse open obligations into false settlement.
+
+Receipts:
+
+- Focused OS-kill proof:
+  `nix develop -c go test ./internal/runtime -run TestProcessRestartRewarmsCoagentAfterOSKill -count=1 -v`.
+- Focused surrounding restart/rewarm proof:
+  `nix develop -c go test ./internal/runtime -run 'Test(ProcessRestartRewarmsCoagentAfterOSKill|StartRewarmsCoagentWithPendingUpdatesAndAssignedWork|StartSweepsAssignedOpenWorkItemsAfterPassivation|UpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|CoagentRewarmUsesResidentActivationNotActiveRunProxy|CoagentRewarmIgnoresBlockedHistoricalActivation)' -count=1`.
+- Independent review by `/root/process_restart_test_review` first found that
+  the probe could pass on a pending replacement row; the test was tightened to
+  require the replacement run to reach `running`. Re-review found no findings.
+- Batch-boundary proof:
+  `nix develop -c scripts/go-test-runtime-shards`.
+- `git diff --check`.
+
+Expected Delta V: 0 for full M3; actual Delta V: 0. Observer evidence
+improved: the restart proof now crosses an actual OS process-death and
+fresh-process store reopen boundary, including killed-process store state. This
+still does not settle the R1/R2 falsifier because it is local test-process
+evidence, not deployed Node B service-kill evidence, and it does not prove
+multi-agent staging load or week-old VText memory continuation. The next
+realism axis remains a deployed kill/restart or equivalent staging proof with
+zero stranded messages and no zero-obligation stalls.

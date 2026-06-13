@@ -1,9 +1,11 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -471,6 +473,346 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 	if otherObligations.PendingUpdates != 1 || otherObligations.SettlementReady {
 		t.Fatalf("second obligations = %+v, want pending update and unsettled open work", otherObligations)
 	}
+}
+
+func TestProcessRestartRewarmsCoagentAfterOSKill(t *testing.T) {
+	switch phase := os.Getenv("GO_CHOIR_M3_RESTART_HELPER"); phase {
+	case "start":
+		runM3RestartStartProcess(t)
+		return
+	case "recover":
+		runM3RestartRecoverProcess(t)
+		return
+	case "":
+	default:
+		t.Fatalf("unknown GO_CHOIR_M3_RESTART_HELPER phase %q", phase)
+	}
+
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "runtime.db")
+	readyPath := filepath.Join(dir, "ready.json")
+	proofPath := filepath.Join(dir, "proof.json")
+
+	startCmd := exec.Command(os.Args[0], "-test.run=^TestProcessRestartRewarmsCoagentAfterOSKill$", "-test.v")
+	startCmd.Env = append(os.Environ(),
+		"GO_CHOIR_M3_RESTART_HELPER=start",
+		"GO_CHOIR_M3_RESTART_DB="+dbPath,
+		"GO_CHOIR_M3_RESTART_READY="+readyPath,
+		"GO_CHOIR_M3_RESTART_PROOF="+proofPath,
+	)
+	var startOutput bytes.Buffer
+	startCmd.Stdout = &startOutput
+	startCmd.Stderr = &startOutput
+	if err := startCmd.Start(); err != nil {
+		t.Fatalf("start child process: %v", err)
+	}
+	defer func() {
+		if startCmd.Process != nil {
+			_ = startCmd.Process.Kill()
+			_, _ = startCmd.Process.Wait()
+		}
+	}()
+
+	if !waitForFile(readyPath, 10*time.Second) {
+		t.Fatalf("start child did not report running activation; output:\n%s", startOutput.String())
+	}
+	if err := startCmd.Process.Kill(); err != nil {
+		t.Fatalf("kill start child: %v", err)
+	}
+	_, _ = startCmd.Process.Wait()
+	startCmd.Process = nil
+
+	recoverCmd := exec.Command(os.Args[0], "-test.run=^TestProcessRestartRewarmsCoagentAfterOSKill$", "-test.v")
+	recoverCmd.Env = append(os.Environ(),
+		"GO_CHOIR_M3_RESTART_HELPER=recover",
+		"GO_CHOIR_M3_RESTART_DB="+dbPath,
+		"GO_CHOIR_M3_RESTART_READY="+readyPath,
+		"GO_CHOIR_M3_RESTART_PROOF="+proofPath,
+	)
+	recoverOutput, err := recoverCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("recover child failed: %v\n%s", err, recoverOutput)
+	}
+
+	var proof m3RestartProof
+	raw, err := os.ReadFile(proofPath)
+	if err != nil {
+		t.Fatalf("read restart proof: %v", err)
+	}
+	if err := json.Unmarshal(raw, &proof); err != nil {
+		t.Fatalf("decode restart proof: %v\n%s", err, raw)
+	}
+	if proof.InterruptedRunID == "" || proof.ReplacementRunID == "" || proof.InterruptedRunID == proof.ReplacementRunID {
+		t.Fatalf("proof run ids = %+v, want distinct interrupted/replacement runs", proof)
+	}
+	if proof.PassivatedState != string(types.RunPassivated) {
+		t.Fatalf("passivated state = %q, want %q; proof=%+v", proof.PassivatedState, types.RunPassivated, proof)
+	}
+	if !containsString(proof.WorkerUpdateIDs, m3RestartUpdateID) {
+		t.Fatalf("worker_update_ids = %+v, want %s", proof.WorkerUpdateIDs, m3RestartUpdateID)
+	}
+	if !containsString(proof.WorkItemIDs, m3RestartWorkItemID) {
+		t.Fatalf("work_item_ids = %+v, want %s", proof.WorkItemIDs, m3RestartWorkItemID)
+	}
+	if proof.PendingUpdates != 1 || proof.OpenWorkItems != 1 || proof.SettlementReady {
+		t.Fatalf("obligations proof = %+v, want pending update + open work item and unsettled", proof)
+	}
+}
+
+const (
+	m3RestartOwnerID     = "user-alice"
+	m3RestartAgentID     = "cosuper:process-restart"
+	m3RestartTrajectory  = "traj-process-restart"
+	m3RestartChannelID   = "channel-process-restart"
+	m3RestartUpdateID    = "update-process-restart"
+	m3RestartWorkItemID  = "wi-process-restart"
+	m3RestartInterruptID = "run-process-restart-interrupted"
+)
+
+type m3RestartProof struct {
+	InterruptedRunID string   `json:"interrupted_run_id"`
+	ReplacementRunID string   `json:"replacement_run_id"`
+	PassivatedState  string   `json:"passivated_state"`
+	WorkerUpdateIDs  []string `json:"worker_update_ids"`
+	WorkItemIDs      []string `json:"work_item_ids"`
+	PendingUpdates   int      `json:"pending_updates"`
+	OpenWorkItems    int      `json:"open_work_items"`
+	SettlementReady  bool     `json:"settlement_ready"`
+}
+
+func runM3RestartStartProcess(t *testing.T) {
+	t.Helper()
+	dbPath := requiredEnv(t, "GO_CHOIR_M3_RESTART_DB")
+	readyPath := requiredEnv(t, "GO_CHOIR_M3_RESTART_READY")
+	ctx := context.Background()
+
+	s, err := openTestStore(dbPath)
+	if err != nil {
+		t.Fatalf("open start store: %v", err)
+	}
+	rt := New(Config{
+		SandboxID:           "sandbox-test",
+		StorePath:           dbPath,
+		ProviderTimeout:     5 * time.Minute,
+		SupervisionInterval: time.Hour,
+	}, s, events.NewEventBus(), NewStubProvider(5*time.Minute))
+
+	seedM3RestartBacklog(t, ctx, s)
+	now := time.Now().UTC()
+	interrupted := &types.RunRecord{
+		RunID:        m3RestartInterruptID,
+		AgentID:      m3RestartAgentID,
+		ChannelID:    m3RestartChannelID,
+		TrajectoryID: m3RestartTrajectory,
+		AgentProfile: AgentProfileCoSuper,
+		AgentRole:    AgentProfileCoSuper,
+		OwnerID:      m3RestartOwnerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunPending,
+		Prompt:       "running activation that will be killed by the parent process",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileCoSuper,
+			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentID:      m3RestartAgentID,
+			runMetadataChannelID:    m3RestartChannelID,
+			runMetadataTrajectoryID: m3RestartTrajectory,
+		},
+	}
+	if err := s.CreateRun(ctx, *interrupted); err != nil {
+		t.Fatalf("create interrupted activation: %v", err)
+	}
+	rt.startRunAsync(interrupted)
+	waitForStoredRunState(t, s, interrupted.RunID, types.RunRunning, 10*time.Second)
+	if err := writeJSONFile(readyPath, m3RestartProof{InterruptedRunID: interrupted.RunID}); err != nil {
+		t.Fatalf("write ready marker: %v", err)
+	}
+	select {}
+}
+
+func runM3RestartRecoverProcess(t *testing.T) {
+	t.Helper()
+	dbPath := requiredEnv(t, "GO_CHOIR_M3_RESTART_DB")
+	proofPath := requiredEnv(t, "GO_CHOIR_M3_RESTART_PROOF")
+	ctx := context.Background()
+
+	s, err := openTestStore(dbPath)
+	if err != nil {
+		t.Fatalf("open recovery store: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+	rt := New(Config{
+		SandboxID:           "sandbox-test",
+		StorePath:           dbPath,
+		ProviderTimeout:     5 * time.Minute,
+		SupervisionInterval: time.Hour,
+	}, s, events.NewEventBus(), NewStubProvider(5*time.Minute))
+	defer rt.Stop()
+
+	rt.Start(ctx)
+	passivated := waitForStoredRunState(t, s, m3RestartInterruptID, types.RunPassivated, 10*time.Second)
+	replacement := waitForRunningReplacementRunByAgent(t, s, m3RestartInterruptID, 10*time.Second)
+	obligations, err := rt.TrajectoryObligations(ctx, m3RestartOwnerID, m3RestartTrajectory)
+	if err != nil {
+		t.Fatalf("trajectory obligations after process restart: %v", err)
+	}
+
+	proof := m3RestartProof{
+		InterruptedRunID: m3RestartInterruptID,
+		ReplacementRunID: replacement.RunID,
+		PassivatedState:  string(passivated.State),
+		WorkerUpdateIDs:  metadataStringSlice(replacement.Metadata["worker_update_ids"]),
+		WorkItemIDs:      metadataStringSlice(replacement.Metadata["work_item_ids"]),
+		PendingUpdates:   obligations.PendingUpdates,
+		OpenWorkItems:    len(obligations.OpenWorkItems),
+		SettlementReady:  obligations.SettlementReady,
+	}
+	if err := writeJSONFile(proofPath, proof); err != nil {
+		t.Fatalf("write restart proof: %v", err)
+	}
+}
+
+func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
+	t.Helper()
+	now := time.Now().UTC()
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   m3RestartAgentID,
+		OwnerID:   m3RestartOwnerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileCoSuper,
+		Role:      AgentProfileCoSuper,
+		ChannelID: m3RestartChannelID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert process-restart agent: %v", err)
+	}
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		OwnerID:        m3RestartOwnerID,
+		TrajectoryID:   m3RestartTrajectory,
+		Kind:           types.TrajectoryKindTask,
+		Status:         types.TrajectoryLive,
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+	}); err != nil {
+		t.Fatalf("create process-restart trajectory: %v", err)
+	}
+	update := types.WorkerUpdateRecord{
+		UpdateID:      m3RestartUpdateID,
+		OwnerID:       m3RestartOwnerID,
+		AgentID:       "co-super:process-verifier",
+		TargetAgentID: m3RestartAgentID,
+		ChannelID:     m3RestartChannelID,
+		TrajectoryID:  m3RestartTrajectory,
+		Role:          AgentProfileCoSuper,
+		Kind:          "verification",
+		Summary:       "process restart update",
+		Content:       "pending update content from the killed process proof",
+		CreatedAt:     now.Add(time.Millisecond),
+	}
+	message := types.ChannelMessage{
+		ChannelID:    update.ChannelID,
+		FromAgentID:  update.AgentID,
+		ToAgentID:    update.TargetAgentID,
+		TrajectoryID: update.TrajectoryID,
+		Role:         update.Role,
+		Content:      update.Content,
+		Timestamp:    update.CreatedAt,
+	}
+	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+		t.Fatalf("dispatch process-restart update: %v", err)
+	}
+	item, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		WorkItemID:       m3RestartWorkItemID,
+		OwnerID:          m3RestartOwnerID,
+		TrajectoryID:     m3RestartTrajectory,
+		Objective:        "finish process restart assigned obligation",
+		Reason:           "process restart proof should rewarm this durable work",
+		AuthorityProfile: AgentProfileCoSuper,
+		AssignedAgentID:  m3RestartAgentID,
+		CreatedByRunID:   m3RestartInterruptID,
+	})
+	if err != nil {
+		t.Fatalf("create process-restart work item: %v", err)
+	}
+	if item.WorkItemID != m3RestartWorkItemID {
+		t.Fatalf("created work item id = %q, want %q", item.WorkItemID, m3RestartWorkItemID)
+	}
+}
+
+type storeWriter interface {
+	UpsertAgent(context.Context, types.AgentRecord) error
+	CreateTrajectoryIfAbsent(context.Context, types.TrajectoryRecord) (types.TrajectoryRecord, error)
+	DispatchWorkerUpdate(context.Context, types.WorkerUpdateRecord, *types.ChannelMessage) (types.WorkerUpdateRecord, bool, error)
+	CreateWorkItem(context.Context, types.WorkItemRecord) (types.WorkItemRecord, error)
+}
+
+func waitForStoredRunState(t *testing.T, s interface {
+	GetRun(context.Context, string) (types.RunRecord, error)
+}, runID string, state types.RunState, timeout time.Duration) types.RunRecord {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var last types.RunRecord
+	for time.Now().Before(deadline) {
+		rec, err := s.GetRun(context.Background(), runID)
+		if err == nil {
+			last = rec
+			if rec.State == state {
+				return rec
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("run %s did not reach state %q within %v; last=%+v", runID, state, timeout, last)
+	return last
+}
+
+func waitForRunningReplacementRunByAgent(t *testing.T, s interface {
+	GetLatestActiveRunByAgent(context.Context, string, string) (types.RunRecord, error)
+}, interruptedRunID string, timeout time.Duration) types.RunRecord {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var last types.RunRecord
+	for time.Now().Before(deadline) {
+		rec, err := s.GetLatestActiveRunByAgent(context.Background(), m3RestartOwnerID, m3RestartAgentID)
+		if err == nil {
+			last = rec
+			if rec.RunID != "" && rec.RunID != interruptedRunID && rec.State == types.RunRunning {
+				return rec
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("running replacement run for agent %s did not appear within %v; last=%+v", m3RestartAgentID, timeout, last)
+	return last
+}
+
+func waitForFile(path string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return false
+}
+
+func requiredEnv(t *testing.T, key string) string {
+	t.Helper()
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		t.Fatalf("%s is required", key)
+	}
+	return value
+}
+
+func writeJSONFile(path string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
 }
 
 func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
