@@ -73,12 +73,13 @@ atomic passivation).
   deferred until the first real cross-VM pair is live. The restart
   falsifier must run on a real process, not only unit tests.
 
-**variant (ranking function) V:** count remaining M2 blockers: transactional
-domain for durable update log undecided; `update_coagent` rename/promotion
-not done; old coordination tools still registered/called; per-turn inbox
-pollers still active; `notifyParent` still active; slot registry still keyed
-by parent run; restart exactly-once falsifier missing; silent-stall oracle
-missing; prompts/tests still name old tools. Current V=9.
+**variant (ranking function) V:** count remaining M2 blockers:
+`update_coagent` rename/promotion not done; old coordination tools still
+registered/called; per-turn inbox pollers still active; `notifyParent` still
+active; slot registry still keyed by parent run; restart exactly-once
+falsifier missing; silent-stall oracle missing; prompts/tests still name old
+tools. Current V=8. Last ΔV=-1: Q1 decided that the durable update append and
+kind-specific ledger effects must share the runtime store transaction.
 
 **budget:** 1-2 overnight missions. Solvency rule: batch unambiguous deletion
 work, but stop for a full Parallax pass if the old and new messaging models
@@ -91,7 +92,7 @@ heresy vectors. Landing proof (commit, push, CI, staging acceptance)
 required in this document before settlement; this is a
 platform-behavior-changing mission, so local proof is not settlement.
 
-### Position — code inventory (compiled 2026-06-12, pre-start)
+### Position — code inventory (re-verified at M2 start)
 
 What this observer can already see cheaply (receipts from grep; re-verify at
 mission start, M1 may shift lines):
@@ -109,10 +110,13 @@ mission start, M1 may shift lines):
      super controller is a polling consumer the portfolio entry does not
      name; sweep it in the same cut or the deletion is incomplete.**
 2. **The survivor:** `submit_coagent_update` (tools_worker_update.go;
-   registry tools.go:395). Consumers that key off its tool name:
-   tools_research.go:714, delegate_worker_update_fallback.go:30 — the
-   rename must sweep these literals (and any event payloads carrying the
-   tool name).
+   registry tools.go:395) is already the structured, idempotent append
+   path. Q1 names its target form `update_coagent` and keeps it in the
+   runtime store transaction. Consumers that key off its old tool name:
+   researcher/tool cadence checks, delegate-worker fallback checks,
+   vmctl evidence checks, live workflow tests, and prompt defaults — the
+   rename must sweep literals and any event payloads carrying the tool
+   name.
 3. **The slot registry:** today keyed (spawning run, slot) via
    `activeChildRunForCoSuperSlot(parentRec.RunID, slot)` under
    `childSpawnMu` (runtime.go:529–556 region; sequencing logic through
@@ -123,16 +127,16 @@ mission start, M1 may shift lines):
    stated explicitly (the check-then-act race at runtime.go:534–545 is one
    of the bug classes this mission exists to delete; do not reproduce it
    keyed differently).
-4. **The actor core is built and tested:** `internal/actor` — idempotent
-   `Log.Append` on UpdateID, Send with atomic {residency check + delivery},
-   Sweep for backlog, Evict crash-equivalent; `actor.Update` already
-   carries `TrajectoryID`. SQLiteLog exists. **Open question Q1: the
-   runtime store is Dolt/MySQL while actor's Log implementation is SQLite —
-   decide whether the durable update log lands in the runtime store (new
-   Log impl over Dolt) or stays a separate SQLite file; exactly-once ledger
-   effects (work items, acceptance evidence in the same transaction as
-   append) require the log and the ledger in the same transactional
-   domain.**
+4. **Q1 decision:** the durable update log for M2 lands in the runtime store
+   transaction, not a separate actor SQLite file. Receipt: `worker_updates`,
+   `channel_messages`, current `inbox_deliveries`, `work_items`, and
+   `run_acceptances` are runtime-store tables. `DispatchWorkerUpdate` already
+   gives idempotent append plus channel/inbox rows in one transaction. The
+   M2 implementation must extend that same transaction for `assignment` ->
+   work item and `verification` -> acceptance evidence. The `internal/actor`
+   SQLite log remains protocol-core/test scaffolding unless it is backed by
+   the same runtime DB; using a separate file would split append from ledger
+   effects and falsify exactly-once ledger semantics.
 5. **Prompts naming deleted tools:** vsuper.md, vtext.md, co-super.md
    (prompt_defaults). Settlement includes their update.
 6. **M1 hooks available:** work items (`assignment` kind writes one),
@@ -177,9 +181,10 @@ Blind spots from this position (edge classes named):
 
 ### Open questions (first probes)
 
-- **Q1:** transactional domain for the durable update log (Dolt store vs
-  actor's SQLite) — exactly-once ledger effects need same-transaction
-  append+effect. Probe: where does `assignment` → work item write commit?
+- **Q1 (decided):** transactional domain for the durable update log is the
+  runtime store. The implementation obligation is to put update append,
+  audit message, wake/backlog record, and kind-specific ledger effects in one
+  runtime-store transaction.
 - **Q2:** wake-into-runtime integration — `actor.Handler.HandleUpdate` vs
   the existing `executeRun` LLM loop: M2 needs delivery/steering into live
   loops (replacing `injectPendingInboxTurns`), but full activation-loop
@@ -190,10 +195,14 @@ Blind spots from this position (edge classes named):
   `channel_messages` as a delivery mechanism (vs audit log)? Grep before
   deleting the pollers; channel_messages survives as replay-only log.
 
-**next move:** first pass should decide Q1 (same-transaction durable update
-log + ledger effects) and then batch the send-path unification/deletion work
-only as far as that decision supports. Do not detour into Universal Wire or
-review UI product behavior.
+**next move:** batch the send-path unification/deletion work supported by
+Q1: rename/promote `submit_coagent_update` to `update_coagent` with a
+temporary compatibility shim only if required inside the same landing batch;
+delete old tool registration/dispatch for `cast_agent`, `cast_agent_update`,
+and `wait_agent`; remove inbox polling and `notifyParent`; re-key co-super
+slots by (trajectory, slot); update prompts/tests; add restart exactly-once
+and silent-stall falsifiers. Do not detour into Universal Wire or review UI
+product behavior.
 
 **ledger file:** `docs/mission-messaging-cutover-v0.ledger.md`.
 
