@@ -32,8 +32,8 @@ the riskiest single migration — its own control interval and test.
 
 ## Parallax State
 
-status: open_handoff (local M2 repair complete on 2026-06-13; staging/landing
-proof intentionally deferred by the current repair-only objective)
+status: open_handoff (local M2 repair reviewed on 2026-06-13; one
+tool-surface blocker remains before staging/landing proof)
 
 **kind:** spine.
 
@@ -81,7 +81,7 @@ registered/called; per-turn inbox pollers still active; `notifyParent` still
 active; slot registry still keyed by parent run; restart exactly-once
 falsifier missing; silent-stall oracle missing; prompts/tests still name old
 tools; post-review falsifiers reopened after a false settlement claim.
-Current local V=0 for the three post-settlement repair blockers:
+Current local V=1. The three post-settlement repair blockers are closed:
 1. terminal update-woken run persistence now uses a runtime-store transaction
    that updates the run and marks its waking `worker_updates` delivered
    together;
@@ -91,11 +91,17 @@ Current local V=0 for the three post-settlement repair blockers:
 3. addressed `/internal/runtime/channel-casts` requests are rejected before
    writing `worker_updates`, leaving `update_coagent` as the only active
    agent-to-agent wake primitive in this cut.
-Last ΔV=-3: local repair eliminated the reopened blockers. Q1 remains
-decided: durable update append, wake backlog, delivered-state transition, and
-kind-specific ledger effects belong in the runtime store transaction; the later
-kind-specific ledger writers remain a successor edge, not a blocker for this
-deletion cutover unless a later repair touches their kind semantics.
+One blocker remains: `redirect_worker_delegation` is still advertised and
+installed, but its only transport is addressed `/internal/runtime/channel-casts`,
+which now intentionally returns 400. A dead advertised control tool violates
+the M2 quality bar: either remove/de-register it and update prompts/docs, or
+re-route it through a real `update_coagent`-equivalent worker update path with
+the same authority checks. Last ΔV=+1: review reopened the local repair for
+this tool-surface inconsistency. Q1 remains decided: durable update append,
+wake backlog, delivered-state transition, and kind-specific ledger effects
+belong in the runtime store transaction; the later kind-specific ledger writers
+remain a successor edge, not a blocker for this deletion cutover unless a later
+repair touches their kind semantics.
 
 **budget:** 1-2 overnight missions. Solvency rule: batch unambiguous deletion
 work, but stop for a full Parallax pass if the old and new messaging models
@@ -211,10 +217,15 @@ Blind spots from this position (edge classes named):
   `channel_messages` as a delivery mechanism (vs audit log)? Grep before
   deleting the pollers; channel_messages survives as replay-only log.
 
-**next move:** review and land the local repair if platform rollout is desired.
-Do not claim final settlement until the platform landing loop runs: commit,
-push, CI, staging deploy identity, and deployed acceptance proof. Do not detour
-into Universal Wire or review UI product behavior as part of this M2 repair.
+**next move:** close the dead `redirect_worker_delegation` surface. Choose one
+architecture and implement it completely: either remove/de-register the tool
+and update tests/prompts/docs so no agent is told it can redirect workers that
+way, or re-route it through the `update_coagent` authority/delivery path
+without reviving addressed channel casts or adding a second wake writer. Then
+rerun the focused M2 repair tests and grep for second wake writers. Do not
+claim final settlement until the platform landing loop runs: commit, push, CI,
+staging deploy identity, and deployed acceptance proof. Do not detour into
+Universal Wire or review UI product behavior as part of this M2 repair.
 
 **ledger file:** `docs/mission-messaging-cutover-v0.ledger.md`.
 
@@ -265,3 +276,12 @@ Local repair receipts from 2026-06-13:
   showed `HandleInternalChannelCast` remains registered and posted to, but no
   longer calls `DispatchWorkerUpdate`; the remaining dispatch callers are the
   intended update/backlog paths.
+
+Post-repair review receipt:
+- `redirect_worker_delegation` remains registered in `tools.go` and implemented
+  in `tools_vmctl.go`, but it posts addressed `/internal/runtime/channel-casts`
+  requests. `HandleInternalChannelCast` now rejects addressed requests with
+  "addressed internal channel casts are disabled; use update_coagent...".
+  The comprehensive test now expects that failure. This is not a settled
+  surface: a tool exposed to super but designed to fail is a remaining M2
+  blocker.

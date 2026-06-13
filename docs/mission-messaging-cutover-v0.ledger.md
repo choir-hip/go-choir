@@ -228,3 +228,42 @@ Receipts:
 Residual risk: local proof only. The mission's platform-behavior settlement
 standard still requires commit, push, CI, staging deploy identity, and deployed
 acceptance proof before final settlement can be re-claimed.
+
+## 2026-06-13 — Review Found Dead Redirect Tool Surface
+
+Claim/scope: the local repair closed the original V=3 blockers but left one
+tool-surface inconsistency. Scope is documentation before code repair.
+
+Move: review `bb295012` and run the claimed focused/local tests.
+
+Expected ΔV: +1 if a real M2 blocker remains, otherwise 0.
+
+Actual ΔV: +1. Current local V=1. `redirect_worker_delegation` remains exposed
+to super, but its only transport posts an addressed
+`/internal/runtime/channel-casts` request. The repaired handler intentionally
+rejects addressed channel casts, and the comprehensive test now expects
+`redirect_worker_delegation` to fail. A dead advertised control tool is not a
+settled M2 surface.
+
+Receipts:
+- `internal/runtime/tools.go` still includes `redirect_worker_delegation` in
+  the super tool profile.
+- `internal/runtime/tools_vmctl.go` implements `redirect_worker_delegation` by
+  calling `postInternalWorkerChannelCast` with `ToAgentID` / `ToRunID`.
+- `internal/runtime/api.go` rejects any addressed internal channel cast with
+  `addressed internal channel casts are disabled; use update_coagent for
+  agent-to-agent wake delivery`.
+- `internal/runtime/agent_tools_test.go`
+  `TestRedirectWorkerDelegationCannotBypassUpdateCoagent` now asserts that the
+  tool fails.
+- Focused tests passed:
+  `nix develop -c go test ./internal/store ./internal/runtime -run 'TestUpdateRunAndMarkWorkerUpdatesDelivered|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TestTrajectoryObligationsReportPendingUpdateCoagent|TestVSuperCoSuperSlotReusedByTrajectorySlot' -count=1`
+- Relevant comprehensive tests passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'Test(PersistentSuperInboxBashRequiresCoagentUpdate|ChannelCastDoesNotCreateWakeDelivery|RedirectWorkerDelegationCannotBypassUpdateCoagent|PersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun|PersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery|InstallDefaultAgentToolsProfiles)' -count=1 -v`
+- Retired primitive grep returned no active-code matches:
+  `rg -n '\b(cast_agent|cast_agent_update|wait_agent|submit_coagent_update|notifyParent|injectPendingInboxTurns|ListPendingInboxDeliveries|MarkInboxDeliveriesDelivered|EnqueueInboxDelivery)\b' internal specs cmd --glob '*.go' --glob '*.md' --glob '*.tla'`
+
+Open edge: choose one architecture and finish it. Either remove/de-register
+`redirect_worker_delegation` and update prompts/docs/tests, or re-route it
+through the same `update_coagent` authority/delivery semantics without
+reviving addressed channel casts or adding a second wake writer.
