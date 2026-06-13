@@ -1929,3 +1929,53 @@ subclaim. Actual Delta V: -1 locally. Remaining error field: this code has not
 yet been committed, pushed, deployed, or rerun against the vmctl-routed staging
 restart oracle. M3 remains open; no continuation-level, promotion-level,
 zero-stranding, or final settlement is claimed.
+
+## 2026-06-13 - Batch Y Problem Checkpoint: Batch X Still Skipped Researcher On Staging
+
+Claim/scope: record the first deployed result after Batch X reached staging,
+before any next code fix. This is problem documentation only. It does not
+change the runtime and does not claim acceptance.
+
+Receipts:
+
+- Commit `2f64ac09807052833bd0be1b5008ebaa25931db7` was pushed to
+  `origin/main`.
+- CI run `27466513026` completed successfully, including deploy job
+  `81189760069`; FlakeHub publish run `27466513005` completed successfully.
+- Public health after deploy reported `status=ok`, `vmctl_status=ok`,
+  `vmctl_routing=enabled`, and both proxy and upstream sandbox deployed at
+  `2f64ac09807052833bd0be1b5008ebaa25931db7`.
+- Deployed probe command:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news node /tmp/m3_vmctl_refresh_probe.mjs > /tmp/m3_vmctl_refresh_probe.2f64ac09.out.json`
+  exited nonzero.
+- Probe marker: `M3_VMCTL_REFRESH_1781353148536`; test account
+  `m3-vmctl-refresh-1781353149690-fze0nf@example.com`; owner
+  `fea954a8-cd64-4266-9297-a948707f3143`; submission/trajectory
+  `fc7ae24a-62ae-49bf-b0dd-d740dfc202ba`; VText document
+  `2edcb9fd-0f88-468e-ba10-5fd8a68b86cb`.
+- VM target before any refresh: `vm-8bef0f8e83c462e8b4479b86226e42ce`,
+  sandbox `http://10.200.19.2:8085`, epoch 1, deployed commit
+  `2f64ac09807052833bd0be1b5008ebaa25931db7`.
+- Failure again occurred before `POST /internal/vmctl/refresh`: the probe
+  timed out waiting for Trace roles `conductor`, `vtext`, `researcher`, and
+  `super`. Trace contained only `conductor`, `super`, and `vtext`.
+- Direct VM read showed decision `initial_loop_id`
+  `e354a0f4-f065-40b9-93ef-9317e9e528bc` was a `super` activation, not a VText
+  activation. Its metadata had `request_source=update_coagent`,
+  `requested_by_profile=vtext`, channel `2edcb9fd-0f88-468e-ba10-5fd8a68b86cb`,
+  and trajectory `fc7ae24a-62ae-49bf-b0dd-d740dfc202ba`.
+- Trace showed super invoked file/search/read/write tools and `update_coagent`;
+  the subsequent VText activation
+  `f2ec5260-596f-4aad-9fda-0856ceb63c18` invoked only `edit_vtext`. No
+  `spawn_agent`, researcher actor, researcher work item, or researcher worker
+  update appeared by the pre-refresh deadline.
+
+Expected Delta V after Batch X: -1 on staging for the pre-refresh
+researcher-omission subclaim. Actual Delta V: 0 for staging. Remaining error
+field: the local text-pattern bypass did not prevent the deployed prompt-bar
+route from setting `initial_loop_id` to persistent super for the vmctl proof
+prompt. The next fix should promote explicit researcher intent into durable
+prompt-bar route metadata or another non-ambiguous route signal instead of
+depending only on later free-text inspection. No code fix in this checkpoint,
+and no continuation-level, promotion-level, zero-stranding, or final M3
+settlement is claimed.
