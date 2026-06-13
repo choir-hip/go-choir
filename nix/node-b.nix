@@ -43,6 +43,13 @@ let
   serviceExec = name: package: pkgs.writeShellScript "go-choir-${name}-exec" ''
     set -euo pipefail
     export LD_LIBRARY_PATH="${goServiceLibraryPath}''${LD_LIBRARY_PATH:+:}''${LD_LIBRARY_PATH:-}"
+    pointer="/var/lib/go-choir/services/${name}/bin/${name}"
+    if [ -x "$pointer" ]; then
+      if [ "${name}" = "sandbox" ] && [ -d "/var/lib/go-choir/services/sandbox/share/go-choir/skills" ]; then
+        export RUNTIME_SKILLS_ROOT="/var/lib/go-choir/services/sandbox/share/go-choir/skills"
+      fi
+      exec "$pointer" "$@"
+    fi
     exec "${package}/bin/${name}" "$@"
   '';
   diskRetentionSweep = pkgs.writeShellScript "go-choir-disk-retention-sweep" ''
