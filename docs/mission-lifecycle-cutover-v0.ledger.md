@@ -1625,3 +1625,67 @@ variant. Actual Delta V: -1 locally. Remaining error field: this code has not
 yet been committed, pushed, deployed, or rerun against the vmctl-routed staging
 restart oracle. M3 remains open; no continuation-level, promotion-level,
 zero-stranding, or final settlement is claimed.
+
+## 2026-06-13 - Batch S Problem Checkpoint: Deployed Passivation Synthesis Still Skips Researcher
+
+Claim/scope: rerun the vmctl-routed restart discriminator after Batch R landed,
+and record the next falsifier before any further code fix. Scope is staging
+evidence only; this is a problem checkpoint under Problem Documentation First.
+
+Move: committed and pushed `2fe64f91c48f415ca48b484ca242be167765fe66`
+(`runtime: synthesize spawned work on passivation`), monitored CI/deploy, then
+reran the vmctl-routed refresh probe. The probe output is outside the repo at
+`/tmp/m3_vmctl_refresh_probe.2fe64f91.out.json`.
+
+Receipts:
+
+- CI run `27465173151` succeeded, including runtime shards, non-runtime tests,
+  integration smoke, TLA+, Go vet/build, and deploy job `81186246062`.
+- FlakeHub publish run `27465173148` succeeded.
+- Public `https://choir.news/health` initially reported the proxy at the
+  correct commit with a temporarily unreachable default upstream, then settled
+  to `status=ok`, `upstream=ok`, `vmctl_status=ok`, `vmctl_routing=enabled`,
+  and proxy plus sandbox deployed commit
+  `2fe64f91c48f415ca48b484ca242be167765fe66`.
+- Probe marker/account: `M3_VMCTL_REFRESH_1781349432607`,
+  `m3-vmctl-refresh-1781349433730-xzza8j@example.com`.
+- Product IDs: owner `1f77cd78-5a0d-440b-896e-e0031084f454`,
+  submission/trajectory `c3416099-2a04-4462-82a5-1bfba3fb69d0`, VText document
+  `103ae132-7841-4782-8973-ec58837e7c1f`, initial loop
+  `8a08aad2-af0c-47d0-a7a1-d27e7f506592`.
+- Correct target proof: vmctl ownership before refresh was
+  `vm-bfa54fb29cf43ce40fe79062955305e4` at
+  `http://10.200.14.2:8085`, epoch 1, deployed commit
+  `2fe64f91c48f415ca48b484ca242be167765fe66`; refresh moved the same VM to
+  `http://10.200.15.2:8085`, epoch 2, still ready at the same deployed commit.
+- Product proof failure: final VText revision
+  `2eda1c0d-c09b-4279-ab62-05f33b91007f` was created after refresh and its
+  content included a researcher-looking section plus the super artifact note,
+  but durable revision metadata consumed only the super worker update. The
+  acceptance predicate correctly rejected this as not proving researcher
+  rewarm/consumption.
+- Public Trace showed researcher agent `c8268626-c3d0-4ec9-a84a-7021151f998d`
+  in `passivated` state with no replacement researcher activation. The
+  passivated loop was `3de3105b-6631-436b-ad6f-7dcb7612a6bd`.
+- Direct VM run inspection for loop
+  `3de3105b-6631-436b-ad6f-7dcb7612a6bd` showed
+  `agent_profile=researcher`, `parent_loop_id=17f91256-4f9e-4d56-baca-fdadf6878937`,
+  metadata `trajectory_id=c3416099-2a04-4462-82a5-1bfba3fb69d0`,
+  `parent_id=17f91256-4f9e-4d56-baca-fdadf6878937`,
+  `spawned_by=1f77cd78-5a0d-440b-896e-e0031084f454`, and
+  `passivated_reason=runtime_restarted`, but no `work_item_ids` or
+  `passivated_spawned_work_item_id`.
+- Direct VM trajectory obligations for
+  `c3416099-2a04-4462-82a5-1bfba3fb69d0` showed `pending_updates=0`,
+  `settlement_ready=false`, and only one open work item:
+  Wire publication item `d1f89324-023c-48bd-80cd-9f48e5b649bc`.
+
+Expected Delta V after Batch R: -1 if deployed boot passivation synthesized
+the missing spawned researcher work item and rewarm followed. Actual Delta V:
+0 for staging. Remaining error field: Batch R's local regression was
+insufficient. The real deployed VText-spawned researcher can be passivated with
+the required owner/trajectory/parent/agent/objective metadata but still produce
+no assigned spawned-work item, leaving no durable researcher rewarm obligation
+and no consumed researcher update. No code fix in this checkpoint, and no
+continuation-level, promotion-level, zero-stranding, or final M3 settlement is
+claimed.
