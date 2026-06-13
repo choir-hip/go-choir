@@ -12,7 +12,7 @@ Discipline: `skills/parallax/SKILL.md`. Predecessors: M1
 
 **Kind:** spine.
 
-**Real artifact:** `executeRun` goroutine closures replaced by actor activation
+**Real artifact:** run-shaped goroutine closures replaced by actor activation
 loops; `recoverInterruptedRuns` blanket-fail deleted (boot = cold actors +
 sweep); cancel-by-trajectory replaces `CancelRunGraph`; `ParentRunID` becomes
 `spawned_by_run_id` provenance-only.
@@ -49,7 +49,7 @@ self-development operational instead of documentary.
 
 **witness/spec (A/S):** a runtime lifecycle cutover in which:
 - live agent work is represented as an activation over an agent identity, not
-  as the lifetime of an `executeRun` closure;
+  as the durable lifetime of a run row;
 - incoming `update_coagent` records activate cold actors or steer warm actors
   at step boundaries;
 - passivation compacts memory and releases residency without losing messages;
@@ -75,14 +75,28 @@ self-development operational instead of documentary.
   touches super/vsuper across computers.
 
 **variant (ranking function) V:** count remaining lifecycle blockers:
-`executeRun` closure owns lifecycle; `recoverInterruptedRuns` blanket-fails
-active work; cancel graph still depends on parent/run trees; ParentRunID still
-used as control input; passivation/rewarm does not drive real LLM loop memory;
-warm update steering at step boundaries missing; cold wake/sweep proof missing;
-kill -9 restart falsifier missing; acceptance evidence still points at run
+activation shim not yet wrapped around the real LLM loop and run-memory path;
+interrupted activation passivation is only a compatibility state, not the final
+actor residency model; residual `ParentRunID` control reads still need
+`spawned_by_run_id` provenance-only semantics; active-run queries still stand
+in for resident actor / trajectory obligation queries outside the vSuper
+co-super slot guard; cold wake/sweep covers pending `update_coagent` backlog
+and generic warm step-boundary steering, but not all live trajectory
+obligations; restart falsifier missing; acceptance evidence still points at run
 continuation/lifecycle state instead of trajectory/work-item/activation
-evidence. Current V=8. Expected first pass should decrease V by at least 1 by
-inventorying and classifying the control reads before code motion.
+evidence. Current V=1. Last Delta V: Batch F expected -1 and actual -1:
+super-to-co-super skip-level blocking and vSuper exported-package cancel
+protection now read co-super slot records instead of `ParentRunID` authority,
+and regressions prove slot-owned same-trajectory co-supers are protected while
+same-parent other-trajectory co-supers are ignored. Batch G then closed the
+assigned-open-work silent-stall subclaim: boot now rewarms cold assigned work
+items after passivating interrupted activations, even when there are zero
+pending `update_coagent` rows. Batch H added an in-process resident-agent
+index and renamed the hot path to `executeActivation`, so warm reuse no longer
+depends first on persisted active-run rows. Full mission V remains 1 because
+the activation body still records terminal run state as evidence, cancellation
+keeps active-row compatibility fallbacks, and deployed restart acceptance has
+not run.
 
 **budget:** 2 overnight missions. Solvency check: do not spend the first pass
 rewriting the whole LLM loop. First buy the map: classify lifecycle reads and
@@ -119,13 +133,52 @@ before its fix.
   actors, cold backlog, open obligations, and rewarm reasons should be
   queryable enough to diagnose stalls.
 
-**next move:** inventory lifecycle control reads and tests:
-`executeRun`, `recoverInterruptedRuns`, `CancelRunGraph`, `ParentRunID`,
-active-run graph queries, boot recovery, run-memory compaction, update-woken
-delivery, and acceptance evidence. Classify each as delete, rename to
-spawned_by provenance, port to trajectory/work item, or wrap in the activation
-shim. Then update this paradoc with the first concrete construct batch and
-expected Delta V.
+Inventory result plus constructs so far: current code starts
+`executeActivation` goroutines from `startRunAsync` / `StartChildRun`, and
+registers resident `(owner, agent)` entries for warm/cold decisions. Boot no
+longer blanket-fails pending/running runs. It passivates interrupted activations with
+`RunPassivated`, emits `activation.passivated`, clears stale VText mutation
+blockers, and sweeps pending `update_coagent` backlog through the existing wake
+logic. Batch C deleted the `CancelRunGraph` parent-tree cancellation entry
+point; VText mutation cancellation now uses trajectory cancellation and its
+regression proves spawned-by-only provenance does not control cancellation.
+The Batch B probe found a sharper bug in the compatibility shim:
+generic super/coagent `update_coagent` records are marked delivered by terminal
+run update, including failed/cancelled activations, so an activation can consume
+the only durable wake record without successfully incorporating the update.
+That lost-wake failure mode is now fixed for the generic super/coagent shim:
+only completed update-woken activations mark `worker_update_ids` delivered,
+while failed/cancelled/blocked activations leave the backlog pending. Warm
+generic super/coagent activations also poll pending updates through
+`RunToolLoop`'s injection seam after tool turns and at final checkpoint; those
+updates are appended as user turns, scoped to the addressed actor, and become
+delivered only on successful activation completion. Batch D then moved vSuper
+co-super slot budget and verifier sequencing to trajectory slot ownership:
+active slot counts and implementation-slot history decide admission, while
+direct parent-child ancestry is no longer a vSuper co-super liveness oracle.
+Batch E then moved vSuper package reuse to the same trajectory slot authority:
+the implementation slot's `publish_app_change_package` evidence is reused even
+when the implementing co-super is not a direct child, and direct children on
+other trajectories no longer select the package. Batch F then moved skip-level
+co-super directive blocking and exported-package cancel protection to the
+trajectory slot registry: direct parent-child ancestry no longer decides those
+authority guards. Batch G added the missing assigned open-obligation boot
+sweep: live/open work items with an assigned durable agent now rewarm a cold
+generic actor after restart even without pending worker updates. Batch H added
+the product runtime's volatile resident-agent index and switched warm rewarm
+controllers to it; blocked/nonresident historical rows no longer suppress a
+fresh coagent activation when durable backlog exists.
+See "Lifecycle Inventory - 2026-06-13" below.
+
+**next move:** resolve whether the remaining compatibility fallbacks block v0
+settlement: cancellation still has store-active fallback behavior for
+legacy/manual active rows, and `executeActivation` still writes terminal run
+state as activation evidence. If those are acceptable as compatibility/audit
+surfaces, move to commit, push, CI/deploy monitoring, and deployed restart
+acceptance; if not, document the exact blocker before another construct.
+Preserve historical `parent_loop_id` compatibility surfaces for trace/API
+evidence until the rename cut is explicit, but do not let spawned-run
+provenance decide liveness or authority.
 
 **ledger file:** `docs/mission-lifecycle-cutover-v0.ledger.md`.
 
@@ -143,3 +196,22 @@ stands.
 CI, Node B deploy, staging health identity, and deployed acceptance proof. The
 behavioral gate is the restart/amnesia falsifier plus no stranded messages or
 zero-obligation stalls after rewarm.
+
+## Lifecycle Inventory - 2026-06-13
+
+Classification is against durable-actor sections 2.1/2.4/3/R1/R2 and
+`specs/actor_protocol.tla`: send appends a durable update, warm actors steer at
+a step boundary, cold actors activate from backlog, passivation requires an
+atomic idle/backlog check, and boot recovery is sweep, not run failure.
+
+| Surface | Current evidence | Classification | Cutover action |
+|---|---|---|---|
+| `executeActivation` | `Runtime.startRunAsync` and `StartChildRun` register `rt.running[runID]` plus `residentAgents[(owner, agent)]` and launch `go rt.executeActivation`; `executeActivation` transitions one activation's run-evidence row pending -> running -> terminal and owns `executeWithToolLoop` / `executeWithProvider`. | Compatibility activation body. | Keep the existing tool loop as the activation body for v0 while residency and wake decisions move to actor identity. Do not treat terminal run state as agent completion; it is activation evidence. |
+| `recoverInterruptedRuns` | Deleted in this pass. `Runtime.Start` now calls `passivateInterruptedActivations` and `sweepPendingUpdateActors`; pending/running rows become `RunPassivated` instead of failed. | Delete. | Continue shrinking the compatibility passivation state into true actor residency: no resident actors on boot, pending backlog/open obligations are queryable and reactivated. Tests that asserted blanket failure were rewritten around passivation/rewarm. |
+| `CancelRunGraph` | Deleted in Batch C. VText mutation cancel calls `CancelRunTrajectory`, which cancels open trajectory work items, marks the trajectory cancelled, and terminalizes active activations on that `trajectory_id`. Direct `CancelRun` remains activation termination evidence. | Delete / port to trajectory-work item. | Continue removing parent-tree cancellation assumptions from tests and callers. Cancellation reach is trajectory membership, not `parent_loop_id` recursion. |
+| `ParentRunID` / `parent_loop_id` | Stored on runs and exposed as `parent_loop_id`. Batch D removed vSuper co-super budget and verifier sequencing dependence on direct children; Batch E removed package reuse's direct-child selector. Trace graphs, VText verifier parent checks, root trajectory refs, tool prompts, skip-level/cancel active-run checks, and many tests still read it. | Rename to `spawned_by_run_id` provenance, with control reads removed. | Keep historical `parent_loop_id` data frozen for compatibility during the cut, but new semantics are provenance-only. Authority/budget checks move to trajectory membership, co-super slot records, explicit requester metadata, or work items. |
+| Active-run graph queries | vSuper co-super admission now counts active trajectory co-super slots, not active direct children. Persistent-super, coagent, assigned-work, and VText wake paths now use the volatile resident-agent index for warm reuse. `GetLatestActiveRunByAgent` remains for blocked-state evidence, requester provenance, and cancellation compatibility fallback. `RunningCount` / `RunningCountByProfile` still report running activation evidence for health/admission. | Port to trajectory/work item plus actor registry/residency. | Admission uses resident actor counts / per-owner caps and co-super slots; "waiting on work" uses trajectory obligations and pending update counts. Remaining active-run reads must stay audit/compatibility, not decide ordinary warm actor residency. |
+| Boot recovery | Boot now passivates interrupted activations, sweeps pending `worker_updates`, and sweeps live/open work items that already name an assigned durable agent. `TrajectoryObligations` still exposes unassigned open obligations without selecting an actor. | Delete old recovery, port to sweep. | Continue shrinking boot recovery toward an explicit actor-residency/backlog table. Assigned work items are rewarm backlog; unassigned obligations need owner/supervisor routing and must stay observable rather than silently spawning an arbitrary actor. |
+| Run-memory compaction | `run_memory_entries` are keyed by `loop_id`; `executeWithToolLoop` initializes `runMemoryManager`, compacts on thresholds/overflow, and `CompactRunMemory` is manual per-run. | Wrap in activation shim, then port to actor memory snapshot. | Reuse the existing compaction machinery inside the activation shim first. The durable target is actor memory snapshot plus log tail; `loop_id` becomes activation/run evidence, not the long-lived memory identity. |
+| Update-woken delivery | `update_coagent` writes `worker_updates`; `wakeUpdatedCoagent` calls `reconcilePersistentSuperActor` / `reconcileUpdatedCoagentActor`; those create or reuse active runs and mark update IDs delivered at terminal run update. | Wrap in activation shim. | Cold delivery should activate from backlog; warm delivery should inject steering input at a step boundary. Delivery/incorporation should be tied to processing the update, not to a whole run ending. |
+| Acceptance evidence | `RunAcceptanceRecord` has `trajectory_id` but still carries `loop_id`; `continuation-level` is gated by a `continued` checkpoint after promotion, and AGENTS.md says this is transitional until M4. | Port to trajectory/work item / activation evidence. | M3 evidence should prove activation/sweep/rewarm and no stranded messages. M4 re-points `continuation-level` formally; this mission must avoid claiming continuation-level from old run continuation evidence. |
