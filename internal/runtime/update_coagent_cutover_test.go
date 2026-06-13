@@ -418,6 +418,162 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 	}
 }
 
+func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
+	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	dbPath := filepath.Join(dir, t.Name()+".db")
+	_ = os.Remove(dbPath)
+
+	ctx := context.Background()
+	ownerID := "user-alice"
+	trajectoryID := "traj-passivated-spawn-sweep"
+	parentID := "vtext-passivated-spawn-sweep-parent"
+	childID := "researcher-passivated-spawn-sweep-child"
+	agentID := "researcher:passivated-spawn-sweep"
+	channelID := "doc-passivated-spawn-sweep"
+	objective := "research restart-resilient spawned work after passivation"
+
+	s1, err := openTestStore(dbPath)
+	if err != nil {
+		t.Fatalf("open store 1: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := s1.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		OwnerID:        ownerID,
+		TrajectoryID:   trajectoryID,
+		Kind:           types.TrajectoryKindDocument,
+		Status:         types.TrajectoryLive,
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	if err := s1.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   agentID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileResearcher,
+		Role:      AgentProfileResearcher,
+		ChannelID: channelID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert researcher agent: %v", err)
+	}
+	if err := s1.CreateRun(ctx, types.RunRecord{
+		RunID:        parentID,
+		AgentID:      "vtext:" + channelID,
+		ChannelID:    channelID,
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunCompleted,
+		Prompt:       "parent vtext revision",
+		Result:       "parent complete",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		FinishedAt:   &now,
+		Metadata: map[string]any{
+			"type":                  "vtext_agent_revision",
+			runMetadataAgentProfile: AgentProfileVText,
+			runMetadataAgentRole:    AgentProfileVText,
+			runMetadataAgentID:      "vtext:" + channelID,
+			runMetadataChannelID:    channelID,
+			runMetadataTrajectoryID: trajectoryID,
+			"doc_id":                channelID,
+		},
+	}); err != nil {
+		t.Fatalf("create parent run: %v", err)
+	}
+	alreadyPassivated := types.RunRecord{
+		RunID:        childID,
+		AgentID:      agentID,
+		ChannelID:    channelID,
+		ParentRunID:  parentID,
+		AgentProfile: AgentProfileResearcher,
+		AgentRole:    AgentProfileResearcher,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunPassivated,
+		Prompt:       objective,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileResearcher,
+			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataAgentID:      agentID,
+			runMetadataChannelID:    channelID,
+			runMetadataTrajectoryID: trajectoryID,
+			"parent_id":             parentID,
+			"passivated_reason":     "runtime_restarted",
+			"spawned_by":            ownerID,
+		},
+	}
+	if err := s1.CreateRun(ctx, alreadyPassivated); err != nil {
+		t.Fatalf("create already-passivated spawned run: %v", err)
+	}
+	if obligations, err := (&Runtime{store: s1}).TrajectoryObligations(ctx, ownerID, trajectoryID); err != nil {
+		t.Fatalf("initial obligations: %v", err)
+	} else if len(obligations.OpenWorkItems) != 0 || obligations.PendingUpdates != 0 {
+		t.Fatalf("initial obligations = %+v, want no backlog before passivated sweep", obligations)
+	}
+	_ = s1.Close()
+
+	s2, err := openTestStore(dbPath)
+	if err != nil {
+		t.Fatalf("open store 2: %v", err)
+	}
+	rt := New(Config{
+		SandboxID:           "sandbox-test",
+		StorePath:           dbPath,
+		ProviderTimeout:     time.Second,
+		SupervisionInterval: time.Hour,
+	}, s2, events.NewEventBus(), NewStubProvider(2*time.Second))
+	t.Cleanup(func() {
+		rt.Stop()
+		_ = s2.Close()
+		_ = os.Remove(dbPath)
+	})
+
+	rt.Start(ctx)
+
+	passivated, err := s2.GetRun(ctx, childID)
+	if err != nil {
+		t.Fatalf("get passivated child: %v", err)
+	}
+	workItemIDs := metadataStringSlice(passivated.Metadata["work_item_ids"])
+	if len(workItemIDs) != 1 {
+		t.Fatalf("passivated work_item_ids = %+v, want synthesized item", workItemIDs)
+	}
+
+	var active types.RunRecord
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		active, err = s2.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
+		if err == nil && active.RunID != childID {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("get active replacement run: %v", err)
+	}
+	if active.RunID == "" || active.RunID == childID {
+		t.Fatalf("replacement run = %+v, want new active run", active)
+	}
+	if got := metadataStringValue(active.Metadata, "request_source"); got != "trajectory_work_item_sweep" {
+		t.Fatalf("request_source = %q, want trajectory_work_item_sweep", got)
+	}
+	if ids := metadataStringSlice(active.Metadata["work_item_ids"]); !containsString(ids, workItemIDs[0]) {
+		t.Fatalf("replacement work_item_ids = %+v, want %s", ids, workItemIDs[0])
+	}
+	if !strings.Contains(active.Prompt, objective) {
+		t.Fatalf("replacement prompt missing objective %q: %q", objective, active.Prompt)
+	}
+}
+
 func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

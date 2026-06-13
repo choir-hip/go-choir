@@ -1882,6 +1882,21 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	if researchSpawn.ChannelID != vtextSpawn.ChannelID {
 		t.Fatalf("research spawn channel_id = %q, want %q", researchSpawn.ChannelID, vtextSpawn.ChannelID)
 	}
+	researchRun, err := s.GetRun(context.Background(), researchSpawn.RunID)
+	if err != nil {
+		t.Fatalf("get research run: %v", err)
+	}
+	researchWorkItemIDs := metadataStringSlice(researchRun.Metadata["work_item_ids"])
+	if len(researchWorkItemIDs) != 1 {
+		t.Fatalf("research work_item_ids = %+v, want spawned work item", researchWorkItemIDs)
+	}
+	researchObligations, err := rt.TrajectoryObligations(context.Background(), "user-alice", trajectoryIDForRun(&researchRun))
+	if err != nil {
+		t.Fatalf("research trajectory obligations: %v", err)
+	}
+	if len(researchObligations.OpenWorkItems) == 0 || researchObligations.OpenWorkItems[0].WorkItemID != researchWorkItemIDs[0] {
+		t.Fatalf("research open work items = %+v, want %s", researchObligations.OpenWorkItems, researchWorkItemIDs[0])
+	}
 
 	researchAliasSpawnRaw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "spawn_agent", json.RawMessage(`{
 		"objective":"research current facts for the document",

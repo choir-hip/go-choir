@@ -327,6 +327,7 @@ func withVTextWakeAfterFuncForTest(after func(time.Duration, func()) vtextWakeTi
 // assigned open trajectory work are swept to re-warm cold actors.
 func (rt *Runtime) Start(ctx context.Context) {
 	rt.passivateInterruptedActivations(ctx)
+	rt.sweepPassivatedSpawnedChildWork(ctx)
 	rt.sweepPendingUpdateActors(ctx)
 	rt.sweepOpenWorkItemActors(ctx)
 	rt.reconcileAllVTextDocuments(ctx)
@@ -646,11 +647,11 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		Metadata:     metadata,
 	}
 	rt.stampAndMintTrajectory(ctx, rec)
-	if item, err := rt.createSpawnedChildWorkItem(ctx, rec, &parentRec); err != nil {
+	if item, err := rt.ensureSpawnedChildWorkItem(ctx, rec, &parentRec, "spawned_work_item_id"); err != nil {
 		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist spawned child work item: %w", err))
-	} else if item.WorkItemID != "" {
-		rec.Metadata = cloneMetadata(rec.Metadata)
-		rec.Metadata["work_item_ids"] = appendUniqueString(metadataStringSlice(rec.Metadata["work_item_ids"]), item.WorkItemID)
+	} else if item.WorkItemID == "" && spawnedChildWorkItemProfile(agentProfileForRun(rec)) {
+		log.Printf("runtime: spawned child work item not created for run=%s profile=%s trajectory=%s agent=%s parent=%s",
+			rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.ParentRunID)
 	}
 
 	if err := rt.store.CreateRun(ctx, *rec); err != nil {
@@ -740,6 +741,19 @@ func (rt *Runtime) createSpawnedChildWorkItem(ctx context.Context, rec *types.Ru
 		ObjectiveFingerprint: "spawned_child:" + objectiveFingerprint(ownerID, trajectoryID, rec.RunID, objective),
 		Details:              details,
 	})
+}
+
+func (rt *Runtime) ensureSpawnedChildWorkItem(ctx context.Context, rec *types.RunRecord, parent *types.RunRecord, metadataKey string) (types.WorkItemRecord, error) {
+	item, err := rt.createSpawnedChildWorkItem(ctx, rec, parent)
+	if err != nil || item.WorkItemID == "" || rec == nil {
+		return item, err
+	}
+	rec.Metadata = cloneMetadata(rec.Metadata)
+	rec.Metadata["work_item_ids"] = appendUniqueString(metadataStringSlice(rec.Metadata["work_item_ids"]), item.WorkItemID)
+	if strings.TrimSpace(metadataKey) != "" {
+		rec.Metadata[metadataKey] = item.WorkItemID
+	}
+	return item, nil
 }
 
 func spawnedChildWorkItemProfile(profile string) bool {
@@ -1174,11 +1188,11 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 				rec.FinishedAt = nil
 				rec.Metadata = cloneMetadata(rec.Metadata)
 				rec.Metadata["passivated_reason"] = "runtime_restarted"
-				if item, err := rt.createSpawnedChildWorkItem(ctx, rec, nil); err != nil {
+				if item, err := rt.ensureSpawnedChildWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id"); err != nil {
 					log.Printf("runtime: boot passivation: create spawned work item for run %s: %v", rec.RunID, err)
-				} else if item.WorkItemID != "" {
-					rec.Metadata["work_item_ids"] = appendUniqueString(metadataStringSlice(rec.Metadata["work_item_ids"]), item.WorkItemID)
-					rec.Metadata["passivated_spawned_work_item_id"] = item.WorkItemID
+				} else if item.WorkItemID == "" && spawnedChildWorkItemProfile(agentProfileForRun(rec)) {
+					log.Printf("runtime: boot passivation: spawned work item skipped for run=%s profile=%s trajectory=%s agent=%s parent=%s",
+						rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.ParentRunID)
 				}
 
 				if err := rt.store.UpdateRun(ctx, *rec); err != nil {
@@ -1252,6 +1266,34 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 			first := workItems[0]
 			log.Printf("runtime: boot work-item sweep owner=%s agent=%s trajectory=%s: %v",
 				first.OwnerID, first.AssignedAgentID, first.TrajectoryID, err)
+		}
+	}
+}
+
+func (rt *Runtime) sweepPassivatedSpawnedChildWork(ctx context.Context) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	runs, err := rt.store.ListRunsByState(ctx, types.RunPassivated, 1000)
+	if err != nil {
+		log.Printf("runtime: boot passivated spawned-work sweep: %v", err)
+		return
+	}
+	for i := range runs {
+		rec := &runs[i]
+		item, err := rt.ensureSpawnedChildWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id")
+		if err != nil {
+			log.Printf("runtime: boot passivated spawned-work sweep run=%s: %v", rec.RunID, err)
+			continue
+		}
+		if item.WorkItemID == "" || item.Status != types.WorkItemOpen {
+			continue
+		}
+		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+			log.Printf("runtime: boot passivated spawned-work annotate run=%s work_item=%s: %v", rec.RunID, item.WorkItemID, err)
+		}
+		if _, err := rt.reconcileAssignedWorkItemActor(ctx, []types.WorkItemRecord{item}); err != nil {
+			log.Printf("runtime: boot passivated spawned-work rewarm run=%s work_item=%s: %v", rec.RunID, item.WorkItemID, err)
 		}
 	}
 }

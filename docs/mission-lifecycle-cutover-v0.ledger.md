@@ -1689,3 +1689,53 @@ no assigned spawned-work item, leaving no durable researcher rewarm obligation
 and no consumed researcher update. No code fix in this checkpoint, and no
 continuation-level, promotion-level, zero-stranding, or final M3 settlement is
 claimed.
+
+## 2026-06-13 - Batch T Construct: Sweep Already-Passivated Spawned Children
+
+Claim/scope: close the local Batch S shape where the only durable evidence of
+an unfinished spawned researcher is an already-passivated run row with
+owner/trajectory/parent/agent/objective metadata, but no `work_item_ids`, no
+pending update, and no open work item. Scope is runtime boot recovery plus the
+VText `spawn_agent` tool-surface regression; no deployed acceptance is claimed
+in this batch.
+
+Move: boot now runs a passivated spawned-child sweep after passivating
+interrupted activations and before pending-update/open-work sweeps. The sweep
+scans passivated spawned researcher/super/vsuper/co-super activations, ensures
+a spawned child work item exists, annotates the passivated run with
+`work_item_ids` and `passivated_spawned_work_item_id`, then hands that item to
+the existing assigned-work reconciler so a replacement durable agent activation
+starts from `request_source=trajectory_work_item_sweep`. The work-item creation
+path is factored into a shared idempotent helper used by upfront `StartChildRun`
+and both boot recovery paths. The VText `spawn_agent` tool-surface test now
+asserts that a researcher spawned through the actual tool path immediately
+carries exactly one spawned work item and exposes it through trajectory
+obligations.
+
+Receipts:
+
+- Focused tool-surface plus restart regressions:
+  `nix develop -c go test ./internal/runtime -run 'TestConductorCanSpawnVTextAndVTextCanSpawnResearcher|TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog|TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog|TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill|TestStartChildRunCompletesSpawnedWorkItem|TestStartSweepsAssignedOpenWorkItemsAfterPassivation' -count=1`
+  passed.
+- Adjacent coagent/spawn/slot/delivery sweep:
+  `nix develop -c go test ./internal/runtime -run 'TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork|TestProcessRestartRewarmsCoagentAfterOSKill|TestSpawnMintsTrajectoryAndChildJoinsIt|TestVSuperCoSuperSlotReusedByTrajectorySlot|TestUpdateCoagentDeliveryRequiresSuccessfulActivation|TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata' -count=1`
+  passed.
+- Runtime shard coverage:
+  `nix develop -c scripts/go-test-runtime-shards` passed.
+- New regression:
+  `TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog` seeds the
+  deployed Batch S shape directly: a completed VText parent, an already
+  passivated researcher child with trajectory metadata and parent provenance,
+  no `work_item_ids`, no pending updates, and no open work items. Fresh runtime
+  boot synthesizes exactly one spawned-work item on the passivated run and
+  starts a replacement researcher activation carrying the same work item ID.
+- Tool-surface guard:
+  `TestConductorCanSpawnVTextAndVTextCanSpawnResearcher` now verifies the real
+  VText `spawn_agent` researcher path creates a work item immediately, rather
+  than relying only on direct `StartChildRun` tests.
+
+Expected Delta V: -1 for the local Batch S already-passivated spawned-child
+variant. Actual Delta V: -1 locally. Remaining error field: this code has not
+yet been committed, pushed, deployed, or rerun against the vmctl-routed staging
+restart oracle. M3 remains open; no continuation-level, promotion-level,
+zero-stranding, or final settlement is claimed.
