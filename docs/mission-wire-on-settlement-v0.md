@@ -8,8 +8,10 @@ EveryItemSettles, EditionConverges — model-checked in CI). Discipline:
 `skills/parallax/SKILL.md`. Predecessor: M1
 (`docs/mission-trajectory-model-v0.md`, settled 2026-06-12) — publication
 trajectories, work items, the obligations query, and `runs.trajectory_id`
-all exist. M2–M4 are explicitly NOT prerequisites: settlement accounting
-does not require the messaging cutover.
+all exist. Sequencing correction, 2026-06-12: M2-M4 are now prerequisites
+for the product-facing M5 evidence gate. M5 substrate can consume M1 early,
+but Universal Wire product proof should wait until durable actors are working
+and the old coordination/continuation paths have been removed.
 
 ## Source form (from the portfolio, verbatim intent)
 
@@ -29,19 +31,21 @@ mutating its artifact (the settlement-rule edge from N2′).
 front page honest and full, settlement queryable. **This run is the evidence
 gate for calling the rearchitecture's core claim supported.**
 
-**Dependencies:** M1. **Size:** 1 overnight mission + 1 observed production
-cycle.
+**Dependencies:** M4 for the product evidence gate; M1 only for substrate
+work. **Size:** 1 overnight mission + 1 observed production cycle.
 
 ## Parallax State
 
-status: blocked (2026-06-12; route-switch substrate and the
+status: deferred (2026-06-12; route-switch substrate and the
 independent-review metadata-merge fix are committed, pushed, CI-green, and
-deployed to staging at `4b4562a2`; product-path wire-cycle proof is narrowed
-but blocked on an authenticated owner session; public publication/retrieval
+deployed to staging at `4b4562a2`; the owner corrected the portfolio route:
+finish durable actors and old-code deletion before spending attention on
+whether Universal Wire is product-complete. Product-path wire-cycle proof is
+therefore parked, not the next active blocker. Public publication/retrieval
 surfaces are live but do not expose the cycle predicate; the production
-maxProc>1 evidence gate remains open. Blocking authority: owner. Smallest
-discharge: open or provide an authenticated owner session on
-`https://choir.news`, then run one real Universal Wire product-path cycle.)
+maxProc>1 evidence gate remains open. Blocking authority: portfolio
+sequencing. Smallest discharge: complete M2-M4, then run one real Universal
+Wire product-path cycle.)
 
 **mission conjecture:** if publication trajectories carry coverage/publish
 decisions as durable work items and subject refs, settlement is evaluated
@@ -53,8 +57,8 @@ is supported by a production run, not a document.
 
 **deeper goal (G):** durable actors, evidence-bearing promotion, and
 self-development operational instead of documentary (portfolio G). M5 is
-the program's first production falsifier — the portfolio names it the
-highest-information pairing with M1.
+the route-switch production falsifier after durable actors and old-code
+deletion, not the next product-debug lane after M1 alone.
 
 **witness/spec (A/S):** the reconcile flip in sourcecycled; work items
 opened/completed at publication decision points; `publish_ref` recorded
@@ -87,24 +91,23 @@ independent review falsifier: `PatchRevisionMetadata` now uses
 `Store.jsonPatchMu`, and
 `TestVTextRevisionMetadataConcurrentMergePatchesPreserveKeys` verifies
 concurrent revision metadata patches preserve all keys. Last observed ΔV: 0
-from Chrome owner-session probe: the visible `https://choir.news/` page still
-renders the signed-out preview (`Local preview - sign in to save`), so the
-product-proof observer is still missing. The pushed deployed stack now ends at
-`4b4562a2`; CI run `27449221402` passed and `/health` reports proxy+sandbox
-build/deployed commit `4b4562a2e01549291a3ff2080ec2a187ef5f365f`.
+from owner correction: an authenticated browser session can be supplied, and
+the owner observed Universal Wire showing no articles, but that should not
+be chased before M2-M4. The pushed deployed stack now ends at `4b4562a2`; CI
+run `27449221402` passed and `/health` reports proxy+sandbox build/deployed
+commit `4b4562a2e01549291a3ff2080ec2a187ef5f365f`.
 
-**budget:** next run should assume one owner-authenticated product-proof
-session plus one production-cycle observation window. Solvency verdict:
-landing is done; the next uncertainty is authenticated product proof and
-whether source traffic/cycle timing can produce a real maxProc>1 cycle.
+**budget:** next M5 run should assume one owner-authenticated product-proof
+session plus one production-cycle observation window, but only after M2-M4.
+Solvency verdict: landing is done; the next active portfolio uncertainty is
+durable-actor cutover and deletion of the old coordination/continuation code,
+not Universal Wire front-page completeness.
 
 **authority / bounds:** repo changes on a branch; production observation
-requires deploy — note the deploy gate is currently red on two known
-pre-existing CI failures (M1 settlement, residual 1; accepted by founder
-2026-06-12 as known-heresy fallout). The production cycle is an owner-
-attention gate per the portfolio (resource edge: owner attention, not
-agent capacity). Landing proof (commit, push, CI, deploy identity, the
-observed cycle's receipts) required in this document before settlement.
+requires deploy. The production cycle is an owner-attention gate per the
+portfolio, but that attention should be spent only after M2-M4. Landing proof
+(commit, push, CI, deploy identity, the observed cycle's receipts) remains
+required in this document before settlement.
 
 **position / live conjectures / open edges:** M5a's substrate work has
 locally produced durable publication obligations, per-source-item processor
@@ -141,28 +144,32 @@ returns publication `pub-09e4bf03-7cf8-43ea-88f1-191c6f68bc1b`, version
 `4390`, `private_material_omitted=true`, and source revision hash
 `9a1f53d16ada1e0bd3f1683b11ba16a04995695325c00bbf90d120aadbcb1fa1`.
 The same public search also shows duplicate-looking titles with distinct
-publication ids and source revision hashes; that is a next honest-and-full
+publication ids and source revision hashes; that is a later honest-and-full
 discriminator for the authenticated edition/front-page proof, not yet an M5
-accounting verdict. Chrome owner-session probe after landing still rendered
-the signed-out preview (`Local preview - sign in to save`). Open edge:
-product-path cycle proof is blocked because authenticated owner APIs are
-unavailable; public platformd corpus health cannot settle the production
+accounting verdict. Later owner login made an authenticated browser session
+available and the owner observed Universal Wire showing no articles; that
+observation is now parked because the corrected portfolio route defers
+Universal Wire product proof until after M2-M4. Open edge: product-path cycle
+proof remains unrun by choice, not because current owner auth is the active
+blocker. Public platformd corpus health cannot settle the production
 route-switch conjecture.
 
-**next move:** owner opens or provides an authenticated session on
-`https://choir.news`; then resume from this paradoc and run the smallest
-product-path wire-cycle observation that can link a real Universal Wire cycle
-to trace/vtext/publication/front-page receipts and show source traffic,
-sourcecycled cycle timing, honest-and-full front-page instrumentation,
-duplicate/stale publication handling, and production maxProc policy. Do not
-use internal/test routes to compensate for missing auth.
+**next move:** do not chase the Universal Wire empty-state now. Advance M2,
+then M3, then M4 so durable actors are operational and old continuation /
+parent-child control paths are removed. After that, resume from this paradoc
+and run the smallest product-path wire-cycle observation that can link a real
+Universal Wire cycle to trace/vtext/publication/front-page receipts and show
+source traffic, sourcecycled cycle timing, honest-and-full front-page
+instrumentation, duplicate/stale publication handling, and production maxProc
+policy. Do not use internal/test routes to compensate for missing product
+proof.
 
 **ledger file:** `docs/mission-wire-on-settlement-v0.ledger.md` for future
 append-only Parallax pass entries. Historical passes before this checkpoint
 remain embedded below under `ledger / move log` and should not be
 transcribed unless auditing requires it.
 
-**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State and append to docs/mission-wire-on-settlement-v0.ledger.md. Current status is blocked, V=6: the revision-metadata JSON merge serialization gap found by independent review is fixed, pushed, CI-green, and deployed at 4b4562a2e01549291a3ff2080ec2a187ef5f365f; staging /health identity is proven; public platformd publication search/export still works; /api/universal-wire/stories and POST /api/prompt-bar are auth-gated without an owner session; Chrome still shows the signed-out preview. First obtain an authenticated owner session on https://choir.news. Then run only browser-public product paths to observe the smallest Universal Wire cycle evidence available: session/provenance proof, trace/vtext/publication/front-page receipts, sourcecycled cycle timing, duplicate/stale-publication interpretation, and whether a real multi-story cycle at maxProc>1 can be observed. Do not use /api/agent, /internal, /api/test, raw event mutation, or manual success seeding. If auth, source traffic, or instrumentation blocks the proof, update the paradoc/ledger with exact blocker receipts and next discriminator. Do not call M5 settled without production multi-story maxProc>1 evidence, honest-and-full front-page proof, rollback refs, and a verdict on the durable-actors core claim.`
+**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State and append to docs/mission-wire-on-settlement-v0.ledger.md. Current status is deferred, V=6: the revision-metadata JSON merge serialization gap found by independent review is fixed, pushed, CI-green, and deployed at 4b4562a2e01549291a3ff2080ec2a187ef5f365f; staging /health identity is proven; public platformd publication search/export works; an authenticated browser session can be supplied and the owner observed Universal Wire showing no articles, but the owner corrected the portfolio route: do not spend attention on Universal Wire product completeness until durable actors are working and old coordination/continuation code has been removed. First complete M2-M4, then return here. When M5 resumes, run only browser-public product paths to observe the smallest Universal Wire cycle evidence available: session/provenance proof, trace/vtext/publication/front-page receipts, sourcecycled cycle timing, duplicate/stale-publication interpretation, and whether a real multi-story cycle at maxProc>1 can be observed. Do not use /api/agent, /internal, /api/test, raw event mutation, or manual success seeding. If auth, source traffic, or instrumentation blocks the proof after M2-M4, update the paradoc/ledger with exact blocker receipts and next discriminator. Do not call M5 settled without production multi-story maxProc>1 evidence, honest-and-full front-page proof, rollback refs, and a verdict on the durable-actors core claim.`
 
 ### Position — code inventory (compiled 2026-06-12, post-M1)
 

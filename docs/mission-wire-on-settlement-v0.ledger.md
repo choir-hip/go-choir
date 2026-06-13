@@ -404,3 +404,41 @@ Blocked obligation: owner must open or provide an authenticated
 `https://choir.news` session, then run one real product-path Universal Wire
 cycle. Public platformd corpus health and signed-out preview state remain
 insufficient for M5 settlement.
+
+## 2026-06-12 — Portfolio Sequencing Correction: Defer Wire Product Gate
+
+Claim/scope: M5 should not spend owner attention on whether Universal Wire is
+currently product-complete if the portfolio's real next move is durable actors
+and old-code deletion. Scope is mission sequencing and proof authority, not a
+code change and not a Universal Wire bug verdict.
+
+Move: update the portfolio and this paradoc. The previous route treated M5 as
+the next active gate after M1 because settlement accounting can be modeled
+before M2-M4. The owner corrected the operating expectation: get durable
+actors working and remove the old coordination/continuation code before
+worrying about Universal Wire product completeness.
+
+Expected ΔV: 0. The M5 settlement blockers remain, but they are parked behind
+M2-M4 instead of being chased through the current empty front page.
+
+Actual ΔV: 0. Current V remains 6; status changes from blocked-on-auth to
+deferred-on-portfolio-sequencing. The metadata fix remains landed at
+`4b4562a2e01549291a3ff2080ec2a187ef5f365f`. The authenticated Universal Wire
+empty-state observation is retained as a later discriminator, not an active
+mission blocker.
+
+Receipt:
+- Updated `docs/mission-portfolio-2026-06-11.md` so the recommended order is
+  M9 -> M1 -> M2 -> M3 -> M4 -> M5 -> M6+M7 -> M8.
+- Updated M5 dependencies: substrate work can consume M1, but the
+  product-facing route-switch evidence gate depends on M4.
+- Updated this paradoc's status to `deferred` and rewrote the resume goal
+  string to send future agents through M2-M4 before Universal Wire product
+  proof.
+- Owner-provided discriminator: an authenticated browser session can be
+  supplied, and the owner observed Universal Wire showing no articles; this
+  does not settle or falsify M5 before durable actors/old-code deletion.
+
+Open edge: compile or resume M2 as the next active mission. Return to M5 only
+after M2-M4 make durable actors operational and remove the old continuation /
+parent-child control paths.

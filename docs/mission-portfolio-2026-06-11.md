@@ -52,9 +52,8 @@ successor missions.
 ## Dependency graph
 
 ```
-M1 trajectory model ──► M2 messaging cutover ──► M3 lifecycle cutover ──► M4 continuation deletion
-        │                                                                        │
-        └────────────► M5 wire on settlement ◄──────────────────────────────────┘   (M5 = route-switch evidence gate)
+M1 trajectory model ──► M2 messaging cutover ──► M3 lifecycle cutover ──► M4 continuation deletion ──► M5 wire on settlement
+                                                                                         (M5 = route-switch evidence gate)
 
 M6 route-flip consumer ──► M7 changes-app review loop ──► M8 dolt branching + rollback window
 
@@ -63,10 +62,14 @@ M10 capsule design ─ independent research, parallel anytime
 M11 corpusd rename ─ independent side PR, anytime
 ```
 
-Recommended order of *execution*: M9 → M1 (proof mission) → M5 → M2 → M6+M7
-→ M3 → M4 → M8, with M10/M11 parallel. M1 and M5 are the highest-information
-pair: together they test whether the trajectory model actually retires the
-leaked invariant on real production traffic.
+Recommended order of *execution* after the 2026-06-12 sequencing correction:
+M9 → M1 (proof mission) → M2 → M3 → M4 → M5 → M6+M7 → M8, with M10/M11
+parallel. Earlier text treated M5 as runnable immediately after M1 because
+settlement accounting can be modeled before the messaging/lifecycle cutover.
+That remains true for substrate work, but not for the product gate: do not
+spend owner attention on whether Universal Wire is empty or complete until
+durable actors are working and the old continuation/parent-child code has
+been removed. M5 remains the route-switch evidence gate, now after M2-M4.
 
 ---
 
@@ -205,8 +208,10 @@ mutating its artifact (the settlement-rule edge from N2′).
 front page honest and full, settlement queryable. **This run is the evidence
 gate for calling the rearchitecture's core claim supported.**
 
-**Dependencies:** M1 (can run before M2–M4 — settlement accounting does not
-require the messaging cutover). **Size:** 1 overnight mission + 1 observed
+**Dependencies:** M4 for the production evidence gate. Substrate work can
+consume M1 earlier, but the product-facing Universal Wire proof should wait
+until M2-M4 have made durable actors operational and removed the old
+coordination/continuation paths. **Size:** 1 overnight mission + 1 observed
 production cycle.
 
 ## M6 — Route-flip consumer (promotion P1's load-bearing unknown)
