@@ -106,7 +106,7 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			}
 			runID := stringFromToolContext(ctx, toolCtxRunID)
 			if profile == AgentProfileVSuper && rt != nil && runID != "" {
-				if childPackage, found, err := rt.latestChildAppChangePackage(ctx, runID); err != nil {
+				if childPackage, found, err := rt.latestTrajectoryCoSuperAppChangePackage(ctx, ctxRunRecord(ctx)); err != nil {
 					return "", err
 				} else if found {
 					childPackage["parent_loop_id"] = runID

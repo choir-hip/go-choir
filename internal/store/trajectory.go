@@ -348,6 +348,45 @@ func (s *Store) ListWorkItemsByTrajectory(ctx context.Context, ownerID, trajecto
 	return out, rows.Err()
 }
 
+// ListOpenAssignedWorkItems returns open work items on live trajectories that
+// already name the durable agent responsible for processing them. This is the
+// boot-recovery query for cold actors whose update_coagent backlog is empty but
+// whose trajectory still has assigned work.
+func (s *Store) ListOpenAssignedWorkItems(ctx context.Context, limit int) ([]types.WorkItemRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.queryDB().QueryContext(ctx,
+		`SELECT `+workItemColumns+`
+		   FROM work_items
+		  WHERE status = 'open'
+		    AND TRIM(COALESCE(assigned_agent_id, '')) <> ''
+		    AND EXISTS (
+		      SELECT 1
+		        FROM trajectories
+		       WHERE trajectories.trajectory_id = work_items.trajectory_id
+		         AND trajectories.owner_id = work_items.owner_id
+		         AND trajectories.status = 'live'
+		    )
+		  ORDER BY updated_at ASC, created_at ASC, work_item_id ASC
+		  LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list open assigned work items: %w", err)
+	}
+	defer rows.Close()
+	var out []types.WorkItemRecord
+	for rows.Next() {
+		rec, err := scanWorkItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
 // UpdateWorkItemStatus transitions a work item's lifecycle status.
 func (s *Store) UpdateWorkItemStatus(ctx context.Context, ownerID, workItemID string, status types.WorkItemStatus) (types.WorkItemRecord, error) {
 	result, err := s.db.ExecContext(ctx,

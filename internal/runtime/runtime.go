@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -34,6 +35,9 @@ type Runtime struct {
 	mu      sync.Mutex
 	health  types.RuntimeHealthState
 	running map[string]context.CancelFunc // loop_id → cancel function
+	// residentAgents is the volatile actor-residency index for this process.
+	// Durable run rows remain evidence; warm/cold decisions use this map.
+	residentAgents map[string]string // owner_id + NUL + agent_id → loop_id
 
 	wg           sync.WaitGroup
 	toolRegistry *ToolRegistry
@@ -79,6 +83,7 @@ func New(cfg Config, s *store.Store, bus *events.EventBus, provider Provider, op
 		provider:         provider,
 		health:           types.HealthReady,
 		running:          make(map[string]context.CancelFunc),
+		residentAgents:   make(map[string]string),
 		channelMgr:       NewChannelManager(),
 		promptStore:      NewPromptStore(cfg.PromptRoot),
 		vtextWakePending: make(map[string]pendingVTextWake),
@@ -317,10 +322,13 @@ func withVTextWakeAfterFuncForTest(after func(time.Duration, func()) vtextWakeTi
 	}
 }
 
-// Start begins runtime recovery and resumes runs that were interrupted by a
-// previous sandbox process exit.
+// Start begins runtime boot recovery. On boot, no actors are resident; previous
+// in-process activations are marked passivated, then durable update backlog and
+// assigned open trajectory work are swept to re-warm cold actors.
 func (rt *Runtime) Start(ctx context.Context) {
-	rt.recoverInterruptedRuns(ctx)
+	rt.passivateInterruptedActivations(ctx)
+	rt.sweepPendingUpdateActors(ctx)
+	rt.sweepOpenWorkItemActors(ctx)
 	rt.reconcileAllVTextDocuments(ctx)
 	go func() {
 		<-ctx.Done()
@@ -336,7 +344,7 @@ func (rt *Runtime) Stop() {
 	rt.mu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()
-		delete(rt.running, runID)
+		rt.removeRunningLocked(runID)
 	}
 	rt.mu.Unlock()
 
@@ -434,12 +442,10 @@ func (rt *Runtime) startRunAsync(rec *types.RunRecord) {
 	runRec := *rec
 
 	runCtx, cancel := context.WithCancel(context.Background())
-	rt.mu.Lock()
-	rt.running[rec.RunID] = cancel
-	rt.mu.Unlock()
+	rt.registerRunActivation(rec, cancel)
 
 	rt.wg.Add(1)
-	go rt.executeRun(runCtx, &runRec)
+	go rt.executeActivation(runCtx, &runRec)
 }
 
 // completePromptBarDecisionRun records a server-owned conductor decision that
@@ -543,10 +549,20 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	metadata = ensureTrajectoryID(metadata, &parentRec, runID)
 
 	if rt.childSpawnBudgetApplies(&parentRec) {
+		childProfile := canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile))
+		if childProfile == "" {
+			childProfile = canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentRole))
+		}
+		slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot))
+		if strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot)) != "" && slot == "" && childProfile == AgentProfileCoSuper {
+			return nil, fmt.Errorf("vsuper co-super child requires co_super_slot to be implementation or verifier")
+		}
+		if childProfile == AgentProfileCoSuper && slot == "" {
+			return nil, fmt.Errorf("vsuper co-super child requires co_super_slot=\"implementation\" or co_super_slot=\"verifier\"")
+		}
 		rt.childSpawnMu.Lock()
 		defer rt.childSpawnMu.Unlock()
-		if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
-			canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile)) == AgentProfileCoSuper {
+		if slot != "" && childProfile == AgentProfileCoSuper {
 			existing, found, err := rt.activeCoSuperSlotRun(ctx, ownerID, metadataStringValue(metadata, runMetadataTrajectoryID), slot)
 			if err != nil {
 				return nil, err
@@ -557,11 +573,10 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 				return &existing, nil
 			}
 		}
-		if err := rt.enforceChildSpawnBudget(ctx, &parentRec); err != nil {
+		if err := rt.enforceCoSuperSlotBudget(ctx, &parentRec); err != nil {
 			return nil, err
 		}
-		if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot == "verifier" &&
-			canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile)) == AgentProfileCoSuper {
+		if slot == "verifier" && childProfile == AgentProfileCoSuper {
 			if err := rt.enforceVSuperVerifierSequencing(ctx, &parentRec); err != nil {
 				return nil, err
 			}
@@ -652,12 +667,10 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	runRec := *rec
 
 	runCtx, cancel := context.WithCancel(context.Background())
-	rt.mu.Lock()
-	rt.running[rec.RunID] = cancel
-	rt.mu.Unlock()
+	rt.registerRunActivation(rec, cancel)
 
 	rt.wg.Add(1)
-	go rt.executeRun(runCtx, &runRec)
+	go rt.executeActivation(runCtx, &runRec)
 
 	log.Printf("runtime: started child run %s for parent %s (owner=%s)", rec.RunID, parentID, ownerID)
 
@@ -673,7 +686,7 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	return rec, nil
 }
 
-const maxVSuperActiveChildRuns = 2
+const maxVSuperActiveCoSuperSlots = 2
 
 func (rt *Runtime) childSpawnBudgetApplies(parentRec *types.RunRecord) bool {
 	if parentRec == nil {
@@ -682,16 +695,17 @@ func (rt *Runtime) childSpawnBudgetApplies(parentRec *types.RunRecord) bool {
 	return canonicalAgentProfile(agentProfileForRun(parentRec)) == AgentProfileVSuper
 }
 
-func (rt *Runtime) enforceChildSpawnBudget(ctx context.Context, parentRec *types.RunRecord) error {
+func (rt *Runtime) enforceCoSuperSlotBudget(ctx context.Context, parentRec *types.RunRecord) error {
 	if rt == nil || rt.store == nil || parentRec == nil {
 		return nil
 	}
-	active, err := rt.store.CountActiveChildRuns(ctx, parentRec.RunID)
+	trajectoryID := trajectoryIDForRun(parentRec)
+	active, err := rt.store.CountActiveCoSuperSlots(ctx, parentRec.OwnerID, trajectoryID)
 	if err != nil {
-		return fmt.Errorf("check active child runs for vsuper budget: %w", err)
+		return fmt.Errorf("check active co-super slots for vsuper trajectory budget: %w", err)
 	}
-	if active >= maxVSuperActiveChildRuns {
-		return fmt.Errorf("vsuper active child-run limit reached (%d/%d); coordinate existing worker/verifier agents over channels, cancel or wait for a child run, or submit a precise blocker instead of spawning more", active, maxVSuperActiveChildRuns)
+	if active >= maxVSuperActiveCoSuperSlots {
+		return fmt.Errorf("vsuper active co-super slot limit reached for trajectory %s (%d/%d); coordinate existing worker/verifier agents over channels, cancel or wait for a co-super slot, or submit a precise blocker instead of spawning more", trajectoryID, active, maxVSuperActiveCoSuperSlots)
 	}
 	return nil
 }
@@ -712,65 +726,53 @@ func (rt *Runtime) enforceVSuperVerifierSequencing(ctx context.Context, parentRe
 	if rt == nil || rt.store == nil || parentRec == nil {
 		return nil
 	}
-	if impl, found, err := rt.activeCoSuperSlotRun(ctx, parentRec.OwnerID, trajectoryIDForRun(parentRec), "implementation"); err != nil {
-		return err
-	} else if found {
+	trajectoryID := trajectoryIDForRun(parentRec)
+	impl, found, err := rt.store.CoSuperSlotRun(ctx, parentRec.OwnerID, trajectoryID, "implementation")
+	if err != nil {
+		return fmt.Errorf("lookup implementation co-super slot for verifier sequencing: %w", err)
+	}
+	if found && impl.State.Active() {
 		return fmt.Errorf("vsuper verifier spawn blocked until implementation co-super %s reports commit/package/blocker evidence and finishes; wait for update_coagent evidence before spawning slot=\"verifier\"", impl.RunID)
 	}
-	children, err := rt.store.ListChildRuns(ctx, parentRec.RunID, 100)
-	if err != nil {
-		return fmt.Errorf("list child runs for verifier sequencing: %w", err)
-	}
-	for _, child := range children {
-		if canonicalAgentProfile(agentProfileForRun(&child)) != AgentProfileCoSuper {
-			continue
-		}
-		if normalizeVSuperCoSuperSlot(metadataStringValue(child.Metadata, runMetadataCoSuperSlot)) != "implementation" {
-			continue
-		}
-		if child.State.Terminal() {
-			return nil
-		}
+	if found && impl.State.Terminal() {
+		return nil
 	}
 	return fmt.Errorf("vsuper verifier spawn requires prior implementation co-super evidence; spawn slot=\"implementation\" first, wait for commit/package/blocker evidence, then spawn slot=\"verifier\" with the exact evidence to inspect")
 }
 
-func (rt *Runtime) latestChildAppChangePackage(ctx context.Context, parentRunID string) (map[string]any, bool, error) {
+func (rt *Runtime) latestTrajectoryCoSuperAppChangePackage(ctx context.Context, parentRec *types.RunRecord) (map[string]any, bool, error) {
 	if rt == nil || rt.store == nil {
 		return nil, false, nil
 	}
-	children, err := rt.store.ListChildRuns(ctx, parentRunID, 100)
+	if parentRec == nil {
+		return nil, false, nil
+	}
+	trajectoryID := trajectoryIDForRun(parentRec)
+	if trajectoryID == "" || strings.TrimSpace(parentRec.OwnerID) == "" {
+		return nil, false, nil
+	}
+	child, found, err := rt.store.CoSuperSlotRun(ctx, parentRec.OwnerID, trajectoryID, "implementation")
 	if err != nil {
-		return nil, false, fmt.Errorf("list child runs for app package reuse: %w", err)
+		return nil, false, fmt.Errorf("lookup implementation co-super slot for app package reuse: %w", err)
 	}
-	var latestEvent types.EventRecord
-	var latestOutput map[string]any
-	found := false
-	for _, child := range children {
-		if canonicalAgentProfile(agentProfileForRun(&child)) != AgentProfileCoSuper {
-			continue
-		}
-		childEvents, err := rt.store.ListEvents(ctx, child.RunID, 1000)
-		if err != nil {
-			return nil, false, fmt.Errorf("list child run events for export reuse: %w", err)
-		}
-		ev, output, ok := latestSuccessfulToolResultOutput(childEvents, "publish_app_change_package")
-		if !ok {
-			continue
-		}
-		if !found || ev.Timestamp.After(latestEvent.Timestamp) || (ev.Timestamp.Equal(latestEvent.Timestamp) && ev.StreamSeq > latestEvent.StreamSeq) {
-			latestEvent = ev
-			latestOutput = output
-			latestOutput["loop_id"] = child.RunID
-			latestOutput["child_loop_id"] = child.RunID
-			latestOutput["child_agent_id"] = child.AgentID
-			if slot := metadataStringValue(child.Metadata, runMetadataCoSuperSlot); slot != "" {
-				latestOutput["child_slot"] = slot
-			}
-			found = true
-		}
+	if !found {
+		return nil, false, nil
 	}
-	return latestOutput, found, nil
+	childEvents, err := rt.store.ListEvents(ctx, child.RunID, 1000)
+	if err != nil {
+		return nil, false, fmt.Errorf("list implementation co-super events for export reuse: %w", err)
+	}
+	_, output, ok := latestSuccessfulToolResultOutput(childEvents, "publish_app_change_package")
+	if !ok {
+		return nil, false, nil
+	}
+	output["loop_id"] = child.RunID
+	output["child_loop_id"] = child.RunID
+	output["child_agent_id"] = child.AgentID
+	if slot := metadataStringValue(child.Metadata, runMetadataCoSuperSlot); slot != "" {
+		output["child_slot"] = slot
+	}
+	return output, true, nil
 }
 
 func (rt *Runtime) createAgentMutationForRun(ctx context.Context, rec *types.RunRecord) {
@@ -822,7 +824,7 @@ func (rt *Runtime) CancelRun(ctx context.Context, runID, ownerID string) error {
 	cancel, ok := rt.running[runID]
 	if ok {
 		cancel()
-		delete(rt.running, runID)
+		rt.removeRunningLocked(runID)
 	}
 	rt.mu.Unlock()
 
@@ -833,7 +835,7 @@ func (rt *Runtime) CancelRun(ctx context.Context, runID, ownerID string) error {
 		rec.State = types.RunCancelled
 		rec.UpdatedAt = now
 		rec.FinishedAt = &now
-		if err := rt.updateTerminalRunAndMarkCoagentUpdatesDelivered(ctx, &rec); err != nil {
+		if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx, &rec); err != nil {
 			return fmt.Errorf("update cancelled run: %w", err)
 		}
 
@@ -847,6 +849,11 @@ func (rt *Runtime) CancelRun(ctx context.Context, runID, ownerID string) error {
 
 // CancelAgent cancels the most recent non-terminal run owned by the given agent.
 func (rt *Runtime) CancelAgent(ctx context.Context, agentID, ownerID string) error {
+	if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+		return fmt.Errorf("lookup resident agent run: %w", err)
+	} else if found {
+		return rt.CancelRun(ctx, resident.RunID, ownerID)
+	}
 	rec, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
 	if err != nil {
 		if err == store.ErrNotFound {
@@ -857,48 +864,69 @@ func (rt *Runtime) CancelAgent(ctx context.Context, agentID, ownerID string) err
 	return rt.CancelRun(ctx, rec.RunID, ownerID)
 }
 
-// CancelRunGraph cancels a run and its direct/indirect child runs. It skips
-// terminal runs and preserves all existing event/package/evidence records.
-func (rt *Runtime) CancelRunGraph(ctx context.Context, runID, ownerID string) ([]string, error) {
-	seen := map[string]bool{}
-	var cancelled []string
-	var cancelOne func(string) error
-	cancelOne = func(id string) error {
-		id = strings.TrimSpace(id)
-		if id == "" || seen[id] {
-			return nil
-		}
-		seen[id] = true
-		rec, err := rt.store.GetRun(ctx, id)
-		if err != nil {
-			return err
-		}
-		if rec.OwnerID != ownerID {
-			return store.ErrNotFound
-		}
-		children, err := rt.store.ListChildRuns(ctx, id, 200)
-		if err != nil {
-			return err
-		}
-		for _, child := range children {
-			if err := cancelOne(child.RunID); err != nil {
-				return err
-			}
-		}
-		if rec.State.Terminal() {
-			return nil
-		}
-		if err := rt.CancelRun(ctx, id, ownerID); err != nil {
-			if strings.Contains(err.Error(), "cannot cancel run in") {
-				return nil
-			}
-			return err
-		}
-		cancelled = append(cancelled, id)
-		return nil
+// CancelRunTrajectory cancels the trajectory that contains runID. The
+// trajectory/work-item record is the authority; run cancellation is activation
+// termination evidence, not a parent_loop_id graph walk.
+func (rt *Runtime) CancelRunTrajectory(ctx context.Context, runID, ownerID string) ([]string, error) {
+	if rt == nil || rt.store == nil {
+		return nil, fmt.Errorf("cancel trajectory: runtime store is unavailable")
 	}
-	if err := cancelOne(runID); err != nil {
-		return cancelled, err
+	runID = strings.TrimSpace(runID)
+	ownerID = strings.TrimSpace(ownerID)
+	if runID == "" || ownerID == "" {
+		return nil, fmt.Errorf("cancel trajectory: run_id and owner_id are required")
+	}
+	rec, err := rt.store.GetRun(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if rec.OwnerID != ownerID {
+		return nil, store.ErrNotFound
+	}
+	trajectoryID := trajectoryIDForRun(&rec)
+	if trajectoryID == "" {
+		trajectoryID = rec.RunID
+	}
+	rec.Metadata = ensureTrajectoryID(rec.Metadata, nil, trajectoryID)
+	rec.TrajectoryID = trajectoryID
+	rt.stampAndMintTrajectory(ctx, &rec)
+	if err := rt.store.UpdateRun(ctx, rec); err != nil {
+		return nil, fmt.Errorf("persist trajectory identity on run %s: %w", rec.RunID, err)
+	}
+
+	openItems, err := rt.store.ListWorkItemsByTrajectory(ctx, ownerID, trajectoryID, true)
+	if err != nil {
+		return nil, fmt.Errorf("list open trajectory work items: %w", err)
+	}
+	for _, item := range openItems {
+		if _, err := rt.store.UpdateWorkItemStatus(ctx, ownerID, item.WorkItemID, types.WorkItemCancelled); err != nil {
+			return nil, fmt.Errorf("cancel trajectory work item %s: %w", item.WorkItemID, err)
+		}
+	}
+	if _, err := rt.store.UpdateTrajectoryStatus(ctx, ownerID, trajectoryID, types.TrajectoryCancelled); err != nil {
+		return nil, fmt.Errorf("cancel trajectory status: %w", err)
+	}
+
+	cancelled := []string{}
+	excluded := []string{}
+	for {
+		active, err := rt.store.ListActiveRunsByTrajectoryExcluding(ctx, ownerID, trajectoryID, excluded, 200)
+		if err != nil {
+			return cancelled, fmt.Errorf("list active trajectory activations: %w", err)
+		}
+		if len(active) == 0 {
+			break
+		}
+		for _, run := range active {
+			excluded = append(excluded, run.RunID)
+			if err := rt.CancelRun(ctx, run.RunID, ownerID); err != nil {
+				if strings.Contains(err.Error(), "cannot cancel run in") {
+					continue
+				}
+				return cancelled, err
+			}
+			cancelled = append(cancelled, run.RunID)
+		}
 	}
 	return cancelled, nil
 }
@@ -1034,42 +1062,200 @@ func (rt *Runtime) ChannelManager() *ChannelManager {
 	return rt.channelMgr
 }
 
-// recoverInterruptedRuns finds runs that were in non-terminal states when
-// the runtime previously stopped and resolves them to explicit outcomes
-// (VAL-RUNTIME-010).
-func (rt *Runtime) recoverInterruptedRuns(ctx context.Context) {
+// passivateInterruptedActivations releases runs that were active in a previous
+// process without converting the durable agent's work into a failure. A later
+// update_coagent send or trajectory sweep may re-warm the actor.
+func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 	states := []types.RunState{types.RunPending, types.RunRunning}
 	for _, state := range states {
-		runs, err := rt.store.ListRunsByState(ctx, state, 100)
-		if err != nil {
-			log.Printf("runtime: recovery: query %s runs: %v", state, err)
-			continue
-		}
-		for i := range runs {
-			rec := &runs[i]
-			now := time.Now().UTC()
-			rec.State = types.RunFailed
-			rec.Error = "runtime restarted, run interrupted"
-			rec.UpdatedAt = now
-			rec.FinishedAt = &now
+		for {
+			runs, err := rt.store.ListRunsByState(ctx, state, 100)
+			if err != nil {
+				log.Printf("runtime: boot passivation: query %s runs: %v", state, err)
+				break
+			}
+			if len(runs) == 0 {
+				break
+			}
+			progressed := false
+			for i := range runs {
+				rec := &runs[i]
+				now := time.Now().UTC()
+				rec.State = types.RunPassivated
+				rec.Error = ""
+				rec.UpdatedAt = now
+				rec.FinishedAt = nil
+				rec.Metadata = cloneMetadata(rec.Metadata)
+				rec.Metadata["passivated_reason"] = "runtime_restarted"
 
-			if err := rt.updateTerminalRunAndMarkCoagentUpdatesDelivered(ctx, rec); err != nil {
-				log.Printf("runtime: recovery: update run %s: %v", rec.RunID, err)
-				continue
-			}
-			if metadataString(rec.Metadata, "type") == "vtext_agent_revision" {
-				if err := rt.store.FailAgentMutation(ctx, rec.RunID); err != nil {
-					log.Printf("runtime: recovery: fail mutation %s: %v", rec.RunID, err)
+				if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+					log.Printf("runtime: boot passivation: update run %s: %v", rec.RunID, err)
+					continue
 				}
+				progressed = true
+				if metadataString(rec.Metadata, "type") == "vtext_agent_revision" {
+					if err := rt.store.MarkAgentMutationStale(ctx, rec.RunID); err != nil {
+						log.Printf("runtime: boot passivation: stale mutation %s: %v", rec.RunID, err)
+					}
+				}
+				rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseSupervisorRecovery,
+					json.RawMessage(`{"recovery":"passivated_on_restart"}`))
+				log.Printf("runtime: passivated run %s (was %s) after restart", rec.RunID, state)
 			}
-			rt.emitEvent(ctx, rec, types.EventRunFailed, events.CauseSupervisorRecovery,
-				json.RawMessage(`{"recovery":"interrupted_on_restart"}`))
-			log.Printf("runtime: recovered run %s (was %s) -> failed", rec.RunID, state)
+			if !progressed {
+				break
+			}
 		}
 	}
 }
 
-// executeRun runs a run to completion using the configured provider.
+func (rt *Runtime) sweepPendingUpdateActors(ctx context.Context) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	updates, err := rt.store.ListPendingWorkerUpdatesAll(ctx, 1000)
+	if err != nil {
+		log.Printf("runtime: boot update sweep: %v", err)
+		return
+	}
+	seen := map[string]bool{}
+	for _, update := range updates {
+		ownerID := strings.TrimSpace(update.OwnerID)
+		target := strings.TrimSpace(update.TargetAgentID)
+		if ownerID == "" || target == "" {
+			continue
+		}
+		key := ownerID + "\x00" + target
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		rt.wakeUpdatedCoagent(ctx, update)
+	}
+}
+
+func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	items, err := rt.store.ListOpenAssignedWorkItems(ctx, 1000)
+	if err != nil {
+		log.Printf("runtime: boot work-item sweep: %v", err)
+		return
+	}
+	grouped := map[string][]types.WorkItemRecord{}
+	for _, item := range items {
+		ownerID := strings.TrimSpace(item.OwnerID)
+		agentID := strings.TrimSpace(item.AssignedAgentID)
+		trajectoryID := strings.TrimSpace(item.TrajectoryID)
+		if ownerID == "" || agentID == "" || trajectoryID == "" {
+			continue
+		}
+		key := ownerID + "\x00" + agentID + "\x00" + trajectoryID
+		grouped[key] = append(grouped[key], item)
+	}
+	for _, workItems := range grouped {
+		if _, err := rt.reconcileAssignedWorkItemActor(ctx, workItems); err != nil {
+			first := workItems[0]
+			log.Printf("runtime: boot work-item sweep owner=%s agent=%s trajectory=%s: %v",
+				first.OwnerID, first.AssignedAgentID, first.TrajectoryID, err)
+		}
+	}
+}
+
+func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems []types.WorkItemRecord) (*types.RunRecord, error) {
+	if rt == nil || rt.store == nil || len(workItems) == 0 {
+		return nil, nil
+	}
+	first := workItems[0]
+	ownerID := strings.TrimSpace(first.OwnerID)
+	agentID := strings.TrimSpace(first.AssignedAgentID)
+	trajectoryID := strings.TrimSpace(first.TrajectoryID)
+	if ownerID == "" || agentID == "" || trajectoryID == "" {
+		return nil, nil
+	}
+	if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+		return nil, fmt.Errorf("check resident assigned work-item actor: %w", err)
+	} else if found {
+		return &resident, nil
+	}
+	agent, err := rt.store.GetAgent(ctx, agentID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("lookup assigned work-item actor: %w", err)
+	}
+	profile := canonicalAgentProfile(firstNonEmpty(agent.Profile, first.AuthorityProfile))
+	if profile == "" || profile == AgentProfileEmail || profile == AgentProfileConductor || profile == AgentProfileVText {
+		return nil, nil
+	}
+	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
+	channelID := strings.TrimSpace(agent.ChannelID)
+	ids := make([]string, 0, len(workItems))
+	for _, item := range workItems {
+		if id := strings.TrimSpace(item.WorkItemID); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	metadata := map[string]any{
+		runMetadataAgentProfile: profile,
+		runMetadataAgentRole:    role,
+		runMetadataAgentID:      agentID,
+		runMetadataTrajectoryID: trajectoryID,
+		"request_source":        "trajectory_work_item_sweep",
+		"work_item_ids":         ids,
+	}
+	if channelID != "" {
+		metadata[runMetadataChannelID] = channelID
+	}
+	rec, err := rt.createRunWithMetadata(ctx, buildAssignedWorkItemPrompt(workItems), ownerID, metadata)
+	if err != nil {
+		return nil, err
+	}
+	rt.startRunAsync(rec)
+	return rec, nil
+}
+
+func buildAssignedWorkItemPrompt(workItems []types.WorkItemRecord) string {
+	var b strings.Builder
+	b.WriteString("Resume the open trajectory work item records assigned to you.\n")
+	b.WriteString("These durable obligations were discovered during runtime boot recovery; process them or report blockers with update_coagent.\n")
+	for i, item := range workItems {
+		b.WriteString("\nWork item ")
+		b.WriteString(fmt.Sprintf("%d", i+1))
+		if item.WorkItemID != "" {
+			b.WriteString(" id=")
+			b.WriteString(item.WorkItemID)
+		}
+		if item.TrajectoryID != "" {
+			b.WriteString(" trajectory=")
+			b.WriteString(item.TrajectoryID)
+		}
+		if item.AuthorityProfile != "" {
+			b.WriteString(" authority=")
+			b.WriteString(item.AuthorityProfile)
+		}
+		if item.StepBudget > 0 {
+			b.WriteString(" step_budget=")
+			b.WriteString(fmt.Sprintf("%d", item.StepBudget))
+		}
+		if item.TokenBudget > 0 {
+			b.WriteString(" token_budget=")
+			b.WriteString(fmt.Sprintf("%d", item.TokenBudget))
+		}
+		b.WriteString(":\nObjective: ")
+		b.WriteString(strings.TrimSpace(item.Objective))
+		if reason := strings.TrimSpace(item.Reason); reason != "" {
+			b.WriteString("\nReason: ")
+			b.WriteString(reason)
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// executeActivation runs one activation body using the configured provider.
 // It transitions the run through pending → running → completed/failed/blocked,
 // emitting events at each transition.
 //
@@ -1078,7 +1264,7 @@ func (rt *Runtime) recoverInterruptedRuns(ctx context.Context) {
 // invoking registered Go function-call tools and feeding results back to the
 // provider. When no tool registry is configured, the run uses the simpler
 // Provider.Execute path (stub or bridge provider).
-func (rt *Runtime) executeRun(ctx context.Context, rec *types.RunRecord) {
+func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) {
 	defer rt.wg.Done()
 	defer rt.removeRunning(rec.RunID)
 
@@ -1194,7 +1380,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		))
 	}
 
-	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, nil, toolLoopOptions...)
+	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, rt.coagentUpdateTurnInjector(rec), toolLoopOptions...)
 	if err != nil {
 		if ctx.Err() != nil {
 			rt.handleExecutionError(ctx, rec, ctx.Err())
@@ -1233,7 +1419,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// completed-run transition or parent notification.
 	persistCtx := context.Background()
 
-	if err := rt.updateTerminalRunAndMarkCoagentUpdatesDelivered(persistCtx, rec); err != nil {
+	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(persistCtx, rec); err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
 	}
@@ -1328,7 +1514,7 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	// completed-run transition or parent notification.
 	persistCtx := context.Background()
 
-	if err := rt.updateTerminalRunAndMarkCoagentUpdatesDelivered(persistCtx, rec); err != nil {
+	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(persistCtx, rec); err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
 	}
@@ -2290,7 +2476,7 @@ func (rt *Runtime) markVTextWorkerUpdatesDelivered(ctx context.Context, rec *typ
 	if len(updateIDs) == 0 {
 		return nil
 	}
-	return rt.store.MarkWorkerUpdatesDelivered(ctx, ownerID, updateIDs, rec.RunID)
+	return rt.store.MarkWorkerUpdatesDelivered(ctx, ownerID, targetAgentID, updateIDs, rec.RunID)
 }
 
 // handleExecutionError transitions a run to failed/blocked and emits the
@@ -2337,7 +2523,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	// Use background context for persistence so that cancelled-run state
 	// transitions are persisted even when the run context is cancelled.
 	persistCtx := context.Background()
-	if updateErr := rt.updateTerminalRunAndMarkCoagentUpdatesDelivered(persistCtx, rec); updateErr != nil {
+	if updateErr := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(persistCtx, rec); updateErr != nil {
 		log.Printf("runtime: update run %s to %s: %v", rec.RunID, state, updateErr)
 	}
 
@@ -2418,7 +2604,13 @@ func ensureTrajectoryID(metadata map[string]any, parent *types.RunRecord, selfRu
 }
 
 func trajectoryIDForRun(rec *types.RunRecord) string {
-	if rec == nil || rec.Metadata == nil {
+	if rec == nil {
+		return ""
+	}
+	if trajectoryID := strings.TrimSpace(rec.TrajectoryID); trajectoryID != "" {
+		return trajectoryID
+	}
+	if rec.Metadata == nil {
 		return ""
 	}
 	if inherited, _ := rec.Metadata[runMetadataTrajectoryID].(string); strings.TrimSpace(inherited) != "" {
@@ -2470,9 +2662,65 @@ func (rt *Runtime) persistEvent(ctx context.Context, rec *types.RunRecord, kind 
 	return rt.store.AppendEvent(ctx, evRec)
 }
 
-// removeRunning removes a run from the running map.
+func agentResidencyKey(ownerID, agentID string) string {
+	return strings.TrimSpace(ownerID) + "\x00" + strings.TrimSpace(agentID)
+}
+
+func (rt *Runtime) registerRunActivation(rec *types.RunRecord, cancel context.CancelFunc) {
+	if rt == nil || rec == nil {
+		return
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.running[rec.RunID] = cancel
+	if key := agentResidencyKey(rec.OwnerID, rec.AgentID); key != "\x00" {
+		rt.residentAgents[key] = rec.RunID
+	}
+}
+
+func (rt *Runtime) removeRunningLocked(runID string) {
+	delete(rt.running, runID)
+	for key, residentRunID := range rt.residentAgents {
+		if residentRunID == runID {
+			delete(rt.residentAgents, key)
+		}
+	}
+}
+
+func (rt *Runtime) residentRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, bool, error) {
+	if rt == nil || rt.store == nil {
+		return types.RunRecord{}, false, nil
+	}
+	key := agentResidencyKey(ownerID, agentID)
+	if key == "\x00" {
+		return types.RunRecord{}, false, nil
+	}
+	rt.mu.Lock()
+	runID := rt.residentAgents[key]
+	rt.mu.Unlock()
+	if strings.TrimSpace(runID) == "" {
+		return types.RunRecord{}, false, nil
+	}
+	rec, err := rt.store.GetRun(ctx, runID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			rt.removeRunning(runID)
+			return types.RunRecord{}, false, nil
+		}
+		return types.RunRecord{}, false, err
+	}
+	if strings.TrimSpace(rec.OwnerID) != strings.TrimSpace(ownerID) ||
+		strings.TrimSpace(rec.AgentID) != strings.TrimSpace(agentID) ||
+		!rec.State.Active() {
+		rt.removeRunning(runID)
+		return types.RunRecord{}, false, nil
+	}
+	return rec, true, nil
+}
+
+// removeRunning removes a run from the running and resident-agent maps.
 func (rt *Runtime) removeRunning(runID string) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
-	delete(rt.running, runID)
+	rt.removeRunningLocked(runID)
 }

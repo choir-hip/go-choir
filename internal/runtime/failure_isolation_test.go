@@ -976,10 +976,10 @@ func TestCancellation_CancelViaAPI(t *testing.T) {
 
 // --- VAL-CHOIR-014: Recovery After Sandbox Restart ---
 
-// TestRecovery_InterruptedTasksMarkedFailedOnRestart verifies that runs in
-// non-terminal states when the runtime stops are recovered and marked as
-// failed on restart (VAL-CHOIR-014).
-func TestRecovery_InterruptedTasksMarkedFailedOnRestart(t *testing.T) {
+// TestRecovery_InterruptedTasksPassivatedOnRestart verifies that runs in
+// non-terminal states when the runtime stops are released as passivated
+// activations, not failed work.
+func TestRecovery_InterruptedTasksPassivatedOnRestart(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	dbPath := fmt.Sprintf("%s/%s.db", dir, t.Name())
@@ -1052,34 +1052,37 @@ func TestRecovery_InterruptedTasksMarkedFailedOnRestart(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Check the parent task is now failed.
+	// Check the parent activation is now passivated.
 	parentTask, err := rt2.Store().GetRun(ctx, "parent-recovery-test")
 	if err != nil {
 		t.Fatalf("get parent task after recovery: %v", err)
 	}
-	if parentTask.State != types.RunFailed {
-		t.Errorf("recovered parent state: got %q, want failed", parentTask.State)
+	if parentTask.State != types.RunPassivated {
+		t.Errorf("recovered parent state: got %q, want passivated", parentTask.State)
 	}
-	if !strings.Contains(parentTask.Error, "interrupted") {
-		t.Errorf("recovered parent error: got %q, want to contain 'interrupted'", parentTask.Error)
+	if parentTask.Error != "" {
+		t.Errorf("recovered parent error: got %q, want empty", parentTask.Error)
+	}
+	if parentTask.FinishedAt != nil {
+		t.Errorf("recovered parent finished_at = %v, want nil", parentTask.FinishedAt)
 	}
 
-	// Check the child task is now failed.
+	// Check the child activation is now passivated.
 	childTask, err := rt2.Store().GetRun(ctx, "child-recovery-test")
 	if err != nil {
 		t.Fatalf("get child task after recovery: %v", err)
 	}
-	if childTask.State != types.RunFailed {
-		t.Errorf("recovered child state: got %q, want failed", childTask.State)
+	if childTask.State != types.RunPassivated {
+		t.Errorf("recovered child state: got %q, want passivated", childTask.State)
 	}
-	if !strings.Contains(childTask.Error, "interrupted") {
-		t.Errorf("recovered child error: got %q, want to contain 'interrupted'", childTask.Error)
+	if childTask.Error != "" {
+		t.Errorf("recovered child error: got %q, want empty", childTask.Error)
 	}
 }
 
-// TestRecovery_RecoveredTasksEmitFailedEvents verifies that recovered runs
-// emit loop.failed events (VAL-CHOIR-014).
-func TestRecovery_RecoveredTasksEmitFailedEvents(t *testing.T) {
+// TestRecovery_RecoveredTasksEmitPassivatedEvents verifies that recovered
+// activations emit activation.passivated events.
+func TestRecovery_RecoveredTasksEmitPassivatedEvents(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	dbPath := fmt.Sprintf("%s/%s.db", dir, t.Name())
@@ -1134,15 +1137,15 @@ func TestRecovery_RecoveredTasksEmitFailedEvents(t *testing.T) {
 	// Wait for recovery.
 	time.Sleep(200 * time.Millisecond)
 
-	// Check for loop.failed event from recovery.
+	// Check for activation.passivated event from recovery.
 	found := false
 	timeout := time.After(3 * time.Second)
 	for !found {
 		select {
 		case <-timeout:
-			t.Fatal("timeout waiting for recovery loop.failed event")
+			t.Fatal("timeout waiting for recovery activation.passivated event")
 		case ev := <-ch:
-			if ev.Record.Kind == types.EventRunFailed && ev.Record.RunID == "recovery-event-test" {
+			if ev.Record.Kind == types.EventRunPassivated && ev.Record.RunID == "recovery-event-test" {
 				found = true
 			}
 		default:

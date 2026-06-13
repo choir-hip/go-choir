@@ -369,11 +369,12 @@ func TestVTextAPICreateDocumentAuth(t *testing.T) {
 	}
 }
 
-func TestVTextCancelAgentRevisionCancelsRunGraphAndLeavesMutationResumable(t *testing.T) {
+func TestVTextCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t *testing.T) {
 	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
+	trajectoryID := "traj-cancel-agent"
 	doc := types.Document{
 		DocID:     "doc-cancel-agent",
 		OwnerID:   "user-1",
@@ -393,34 +394,67 @@ func TestVTextCancelAgentRevisionCancelsRunGraphAndLeavesMutationResumable(t *te
 		SandboxID:    "sandbox-vtext-test",
 		State:        types.RunRunning,
 		Prompt:       "Revise document.",
+		TrajectoryID: trajectoryID,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileSuper,
 			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataTrajectoryID: trajectoryID,
 		},
 	}
 	child := types.RunRecord{
 		RunID:        "run-cancel-child",
 		AgentID:      "agent-vsuper-cancel",
-		ParentRunID:  parent.RunID,
+		ParentRunID:  "spawned-by-other-run",
 		AgentProfile: AgentProfileVSuper,
 		AgentRole:    AgentProfileVSuper,
 		OwnerID:      "user-1",
 		SandboxID:    "sandbox-vtext-test",
 		State:        types.RunRunning,
 		Prompt:       "Background candidate.",
+		TrajectoryID: trajectoryID,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileVSuper,
 			runMetadataAgentRole:    AgentProfileVSuper,
+			runMetadataTrajectoryID: trajectoryID,
 		},
 	}
-	for _, run := range []types.RunRecord{parent, child} {
+	graphChildDifferentTrajectory := types.RunRecord{
+		RunID:        "run-cancel-graph-child-other-trajectory",
+		AgentID:      "agent-other-trajectory",
+		ParentRunID:  parent.RunID,
+		AgentProfile: AgentProfileVSuper,
+		AgentRole:    AgentProfileVSuper,
+		OwnerID:      "user-1",
+		SandboxID:    "sandbox-vtext-test",
+		State:        types.RunRunning,
+		Prompt:       "Different trajectory despite spawned-by provenance.",
+		TrajectoryID: "traj-other-cancel-agent",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVSuper,
+			runMetadataAgentRole:    AgentProfileVSuper,
+			runMetadataTrajectoryID: "traj-other-cancel-agent",
+		},
+	}
+	for _, run := range []types.RunRecord{parent, child, graphChildDifferentTrajectory} {
 		if err := s.CreateRun(ctx, run); err != nil {
 			t.Fatalf("create run %s: %v", run.RunID, err)
 		}
+	}
+	item, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              "user-1",
+		TrajectoryID:         trajectoryID,
+		Objective:            "finish the pending VText revision",
+		ObjectiveFingerprint: "fp-cancel-vtext-revision",
+		CreatedByRunID:       parent.RunID,
+	})
+	if err != nil {
+		t.Fatalf("create trajectory work item: %v", err)
 	}
 	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
 		DocID:               doc.DocID,
@@ -446,12 +480,29 @@ func TestVTextCancelAgentRevisionCancelsRunGraphAndLeavesMutationResumable(t *te
 	if resp.Status != "cancelled" || !resp.Resumable || !containsString(resp.CancelledRunIDs, parent.RunID) || !containsString(resp.CancelledRunIDs, child.RunID) {
 		t.Fatalf("unexpected cancel response: %+v", resp)
 	}
+	if containsString(resp.CancelledRunIDs, graphChildDifferentTrajectory.RunID) {
+		t.Fatalf("cancel response = %+v, should not include spawned-by run on another trajectory", resp)
+	}
 	mutation, err := s.GetAgentMutationByRun(ctx, parent.RunID)
 	if err != nil {
 		t.Fatalf("get mutation: %v", err)
 	}
 	if mutation.State != "cancelled" {
 		t.Fatalf("mutation state = %q, want cancelled", mutation.State)
+	}
+	cancelledItem, err := s.GetWorkItem(ctx, "user-1", item.WorkItemID)
+	if err != nil {
+		t.Fatalf("get work item: %v", err)
+	}
+	if cancelledItem.Status != types.WorkItemCancelled {
+		t.Fatalf("work item status = %s, want cancelled", cancelledItem.Status)
+	}
+	trajectory, err := s.GetTrajectory(ctx, "user-1", trajectoryID)
+	if err != nil {
+		t.Fatalf("get trajectory: %v", err)
+	}
+	if trajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("trajectory status = %s, want cancelled", trajectory.Status)
 	}
 	for _, runID := range []string{parent.RunID, child.RunID} {
 		run, err := s.GetRun(ctx, runID)
@@ -461,6 +512,13 @@ func TestVTextCancelAgentRevisionCancelsRunGraphAndLeavesMutationResumable(t *te
 		if run.State != types.RunCancelled {
 			t.Fatalf("run %s state = %s, want cancelled", runID, run.State)
 		}
+	}
+	graphChild, err := s.GetRun(ctx, graphChildDifferentTrajectory.RunID)
+	if err != nil {
+		t.Fatalf("get graph child: %v", err)
+	}
+	if graphChild.State != types.RunRunning {
+		t.Fatalf("spawned-by child on other trajectory state = %s, want running", graphChild.State)
 	}
 }
 
@@ -3178,19 +3236,19 @@ func TestRestartRecoveryClearsInterruptedVTextMutationAndRelaunches(t *testing.T
 	if err != nil {
 		t.Fatalf("get interrupted run after restart: %v", err)
 	}
-	if gotInterrupted.State != types.RunFailed {
-		t.Fatalf("interrupted run state = %q, want %q", gotInterrupted.State, types.RunFailed)
+	if gotInterrupted.State != types.RunPassivated {
+		t.Fatalf("interrupted run state = %q, want %q", gotInterrupted.State, types.RunPassivated)
 	}
-	if gotInterrupted.Error != "runtime restarted, run interrupted" {
-		t.Fatalf("interrupted run error = %q, want runtime restarted, run interrupted", gotInterrupted.Error)
+	if gotInterrupted.Error != "" {
+		t.Fatalf("interrupted run error = %q, want empty", gotInterrupted.Error)
 	}
 
 	mutation, err := s2.GetAgentMutationByRun(ctx, interruptedRun.RunID)
 	if err != nil {
 		t.Fatalf("get interrupted mutation: %v", err)
 	}
-	if mutation == nil || mutation.State != "failed" {
-		t.Fatalf("expected interrupted mutation to be failed after recovery, got %+v", mutation)
+	if mutation == nil || mutation.State != "stale_activation" {
+		t.Fatalf("expected interrupted mutation to be stale after recovery, got %+v", mutation)
 	}
 	pending, err := s2.GetPendingAgentMutationByDoc(ctx, doc.DocID, "user-1")
 	if err != nil {

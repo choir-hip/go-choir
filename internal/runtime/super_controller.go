@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -10,6 +11,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+const runMetadataWorkerUpdatesInjected = "worker_updates_injected"
 
 // reconcilePersistentSuperActor is the durable controller boundary for the
 // user's privileged execution actor. update_coagent can append addressed work
@@ -25,13 +28,17 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		agentID = persistentSuperAgentID(ownerID)
 	}
 	var blockedActive *types.RunRecord
+	if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+		return nil, fmt.Errorf("check resident super run: %w", err)
+	} else if found {
+		return &resident, nil
+	}
 	if active, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID); err == nil {
-		if active.State != types.RunBlocked {
-			return &active, nil
+		if active.State == types.RunBlocked {
+			blockedActive = &active
 		}
-		blockedActive = &active
 	} else if !errors.Is(err, store.ErrNotFound) {
-		return nil, fmt.Errorf("check active super run: %w", err)
+		return nil, fmt.Errorf("check blocked super run: %w", err)
 	}
 
 	updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, agentID, 100)
@@ -97,25 +104,61 @@ func (rt *Runtime) markPersistentSuperRunUpdatesDelivered(ctx context.Context, r
 	if len(updateIDs) == 0 {
 		return nil
 	}
-	if err := rt.store.MarkWorkerUpdatesDelivered(ctx, rec.OwnerID, updateIDs, rec.RunID); err != nil {
+	if err := rt.store.MarkWorkerUpdatesDelivered(ctx, rec.OwnerID, rec.AgentID, updateIDs, rec.RunID); err != nil {
 		return fmt.Errorf("mark persistent super updates delivered: %w", err)
 	}
 	return nil
 }
 
 func coagentUpdateIDsForRun(rec *types.RunRecord) []string {
-	if rec == nil || metadataStringValue(rec.Metadata, "request_source") != "update_coagent" {
+	if rec == nil {
+		return nil
+	}
+	if !runSupportsCoagentUpdateInjection(rec) {
+		return nil
+	}
+	if metadataStringValue(rec.Metadata, "request_source") != "update_coagent" &&
+		!metadataBoolValue(rec.Metadata, runMetadataWorkerUpdatesInjected) {
 		return nil
 	}
 	return metadataStringSlice(rec.Metadata["worker_update_ids"])
 }
 
-func (rt *Runtime) updateTerminalRunAndMarkCoagentUpdatesDelivered(ctx context.Context, rec *types.RunRecord) error {
+func appendCoagentUpdateIDsForRun(rec *types.RunRecord, updateIDs []string) {
+	if rec == nil || len(updateIDs) == 0 {
+		return
+	}
+	if rec.Metadata == nil {
+		rec.Metadata = map[string]any{}
+	}
+	seen := map[string]bool{}
+	merged := make([]string, 0, len(updateIDs))
+	for _, id := range metadataStringSlice(rec.Metadata["worker_update_ids"]) {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		merged = append(merged, id)
+	}
+	for _, id := range updateIDs {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		merged = append(merged, id)
+	}
+	rec.Metadata["worker_update_ids"] = merged
+	rec.Metadata[runMetadataWorkerUpdatesInjected] = true
+}
+
+func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx context.Context, rec *types.RunRecord) error {
 	if rec == nil {
 		return nil
 	}
 	updateIDs := coagentUpdateIDsForRun(rec)
-	if len(updateIDs) == 0 || !rec.State.Terminal() {
+	if len(updateIDs) == 0 || rec.State != types.RunCompleted {
 		return rt.store.UpdateRun(ctx, *rec)
 	}
 	return rt.store.UpdateRunAndMarkWorkerUpdatesDelivered(ctx, *rec, rec.OwnerID, updateIDs)
@@ -123,6 +166,9 @@ func (rt *Runtime) updateTerminalRunAndMarkCoagentUpdatesDelivered(ctx context.C
 
 func (rt *Runtime) maybeContinuePersistentSuperInbox(ctx context.Context, rec *types.RunRecord) {
 	if !isPersistentSuperInboxRun(rec) {
+		return
+	}
+	if rec.State != types.RunCompleted {
 		return
 	}
 	if err := rt.markPersistentSuperRunUpdatesDelivered(ctx, rec); err != nil {
@@ -182,10 +228,10 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	if ownerID == "" || agentID == "" {
 		return nil, nil
 	}
-	if active, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID); err == nil {
-		return &active, nil
-	} else if !errors.Is(err, store.ErrNotFound) {
-		return nil, fmt.Errorf("check active coagent run: %w", err)
+	if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+		return nil, fmt.Errorf("check resident coagent run: %w", err)
+	} else if found {
+		return &resident, nil
 	}
 	agent, err := rt.store.GetAgent(ctx, agentID)
 	if err != nil {
@@ -242,6 +288,100 @@ func buildCoagentUpdatePrompt(updates []types.WorkerUpdateRecord) string {
 	for i, update := range updates {
 		b.WriteString("\nUpdate ")
 		b.WriteString(fmt.Sprintf("%d", i+1))
+		if update.ChannelID != "" {
+			b.WriteString(" channel=")
+			b.WriteString(update.ChannelID)
+		}
+		if update.AgentID != "" {
+			b.WriteString(" from=")
+			b.WriteString(update.AgentID)
+		}
+		if update.Kind != "" {
+			b.WriteString(" kind=")
+			b.WriteString(update.Kind)
+		}
+		b.WriteString(":\n")
+		b.WriteString(strings.TrimSpace(update.Content))
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) InjectUserTurnsFunc {
+	if rt == nil || rt.store == nil || rec == nil || !runSupportsCoagentUpdateInjection(rec) {
+		return nil
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	agentID := strings.TrimSpace(rec.AgentID)
+	if ownerID == "" || agentID == "" {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, id := range coagentUpdateIDsForRun(rec) {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			seen[id] = true
+		}
+	}
+	return func(finalCheckpoint bool) ([]json.RawMessage, error) {
+		updates, err := rt.store.ListPendingWorkerUpdates(context.Background(), ownerID, agentID, 100)
+		if err != nil {
+			return nil, fmt.Errorf("list pending update_coagent turns: %w", err)
+		}
+		fresh := make([]types.WorkerUpdateRecord, 0, len(updates))
+		updateIDs := make([]string, 0, len(updates))
+		for _, update := range updates {
+			id := strings.TrimSpace(update.UpdateID)
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			fresh = append(fresh, update)
+			updateIDs = append(updateIDs, id)
+		}
+		if len(fresh) == 0 {
+			return nil, nil
+		}
+		appendCoagentUpdateIDsForRun(rec, updateIDs)
+		content := buildCoagentInjectedUpdateTurn(fresh, finalCheckpoint)
+		msg, _ := json.Marshal(map[string]any{
+			"role": "user",
+			"content": []map[string]string{{
+				"type": "text",
+				"text": content,
+			}},
+		})
+		return []json.RawMessage{msg}, nil
+	}
+}
+
+func runSupportsCoagentUpdateInjection(rec *types.RunRecord) bool {
+	if rec == nil {
+		return false
+	}
+	switch agentProfileForRun(rec) {
+	case AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher:
+		return strings.TrimSpace(rec.AgentID) != ""
+	default:
+		return false
+	}
+}
+
+func buildCoagentInjectedUpdateTurn(updates []types.WorkerUpdateRecord, finalCheckpoint bool) string {
+	var b strings.Builder
+	if finalCheckpoint {
+		b.WriteString("New update_coagent records arrived before this activation finished. Process them before ending the turn.\n")
+	} else {
+		b.WriteString("New update_coagent records arrived while this activation was running. Treat them as the next user turn.\n")
+	}
+	b.WriteString("Do not ignore these updates. If they change the work, incorporate them; if they are blocked, report the blocker with update_coagent.\n")
+	for i, update := range updates {
+		b.WriteString("\nUpdate ")
+		b.WriteString(fmt.Sprintf("%d", i+1))
+		if update.UpdateID != "" {
+			b.WriteString(" id=")
+			b.WriteString(update.UpdateID)
+		}
 		if update.ChannelID != "" {
 			b.WriteString(" channel=")
 			b.WriteString(update.ChannelID)

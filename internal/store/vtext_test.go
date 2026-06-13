@@ -1389,8 +1389,8 @@ func TestVTextAgentMutationMarkStaleClearsPending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAgentMutationByRun: %v", err)
 	}
-	if got.State != "stale_terminal_run" {
-		t.Fatalf("State = %q, want stale_terminal_run", got.State)
+	if got.State != "stale_activation" {
+		t.Fatalf("State = %q, want stale_activation", got.State)
 	}
 	if got.CompletedAt == nil {
 		t.Fatal("CompletedAt is nil, want a timestamp")

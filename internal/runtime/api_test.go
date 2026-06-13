@@ -695,8 +695,8 @@ func TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker(t *testing.T) {
 		t.Fatalf("blocked checkpoint evidence refs = %+v, want 2 refs", blocked.EvidenceRefIDs)
 	}
 	lastError, _ := blocked.Details["last_error"].(string)
-	if !strings.Contains(lastError, "runtime restarted") {
-		t.Fatalf("last_error = %q, want runtime restart detail", lastError)
+	if !strings.Contains(lastError, "worker exited before acceptance evidence") {
+		t.Fatalf("last_error = %q, want worker exit detail", lastError)
 	}
 	if !strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "worker VM delegation did not complete") {
 		t.Fatalf("missing delegation residual risk: %+v", rec.FailureResidualRisks)
@@ -1571,7 +1571,7 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 		},
 	})
 	appendAcceptanceToolError(t, rt, "event-delegate-timeout-acceptance", "run-super-acceptance", "agent-super-acceptance", now.Add(9*time.Second), "delegate_worker_vm", `tool_error: delegate_worker_vm status: context deadline exceeded`)
-	appendAcceptanceToolError(t, rt, "event-delegate-restart-acceptance", "run-super-acceptance", "agent-super-acceptance", now.Add(10*time.Second), "delegate_worker_vm", `tool_error: worker run run-worker-acceptance ended in state failed: runtime restarted, run interrupted`)
+	appendAcceptanceToolError(t, rt, "event-delegate-worker-failed-acceptance", "run-super-acceptance", "agent-super-acceptance", now.Add(10*time.Second), "delegate_worker_vm", `tool_error: worker run run-worker-acceptance ended in state failed: worker exited before acceptance evidence`)
 }
 
 func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {

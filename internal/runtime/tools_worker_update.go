@@ -3,12 +3,10 @@ package runtime
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -210,25 +208,18 @@ func enforceCoagentUpdateAuthority(ctx context.Context, rt *Runtime, target type
 	if ownerID == "" {
 		return nil
 	}
-	run, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, target.AgentID)
+	slot, found, err := rt.store.CoSuperSlotByAgent(ctx, ownerID, target.AgentID)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return nil
-		}
-		return fmt.Errorf("lookup co-super active run: %w", err)
+		return fmt.Errorf("lookup co-super slot: %w", err)
 	}
-	parentRunID := strings.TrimSpace(run.ParentRunID)
-	if parentRunID == "" {
+	if !found {
 		return nil
 	}
-	parent, err := rt.store.GetRun(ctx, parentRunID)
-	if err != nil {
-		return fmt.Errorf("lookup co-super parent run: %w", err)
+	owningVSuper := strings.TrimSpace(slot.TrajectoryID)
+	if owningVSuper == "" {
+		owningVSuper = strings.TrimSpace(slot.Slot)
 	}
-	if canonicalAgentProfile(agentProfileForRun(&parent)) != AgentProfileVSuper {
-		return nil
-	}
-	return fmt.Errorf("skip-level directive blocked: super must address co-super %s through owning vsuper %s with update_coagent", target.AgentID, parent.AgentID)
+	return fmt.Errorf("skip-level directive blocked: super must address co-super %s through owning vsuper trajectory %s with update_coagent", target.AgentID, owningVSuper)
 }
 
 func stringArraySchema() map[string]any {

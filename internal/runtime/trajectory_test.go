@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -197,6 +199,113 @@ func TestTrajectoryObligationsAnswersWaitingOn(t *testing.T) {
 	// is evaluated as data, not satisfied by run state.
 	if obligations.SettlementReady {
 		t.Fatalf("publication trajectory settled without publish_ref: %+v", obligations)
+	}
+}
+
+func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	now := time.Now().UTC()
+	trajectoryID := "traj-legacy-metadata-only"
+	run := types.RunRecord{
+		RunID:        "run-legacy-metadata-only",
+		AgentID:      "agent-legacy",
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunPending,
+		Prompt:       "legacy row with metadata trajectory",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVText,
+			runMetadataAgentRole:    AgentProfileVText,
+			runMetadataTrajectoryID: trajectoryID,
+		},
+	}
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create legacy run: %v", err)
+	}
+
+	cancelled, err := rt.CancelRunTrajectory(ctx, run.RunID, run.OwnerID)
+	if err != nil {
+		t.Fatalf("cancel trajectory: %v", err)
+	}
+	if len(cancelled) != 1 || cancelled[0] != run.RunID {
+		t.Fatalf("cancelled = %+v, want only %s", cancelled, run.RunID)
+	}
+	stored, err := s.GetRun(ctx, run.RunID)
+	if err != nil {
+		t.Fatalf("get cancelled run: %v", err)
+	}
+	if stored.TrajectoryID != trajectoryID {
+		t.Fatalf("stored trajectory_id = %q, want %q", stored.TrajectoryID, trajectoryID)
+	}
+	if stored.State != types.RunCancelled {
+		t.Fatalf("state = %s, want cancelled", stored.State)
+	}
+	trajectory, err := s.GetTrajectory(ctx, run.OwnerID, trajectoryID)
+	if err != nil {
+		t.Fatalf("get trajectory: %v", err)
+	}
+	if trajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("trajectory status = %s, want cancelled", trajectory.Status)
+	}
+}
+
+func TestCancelRunTrajectoryDrainsMoreThanOneActivePage(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	now := time.Now().UTC()
+	trajectoryID := "traj-cancel-many"
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID:   trajectoryID,
+		OwnerID:        "user-alice",
+		Kind:           types.TrajectoryKindTask,
+		Status:         types.TrajectoryLive,
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	const totalRuns = 1001
+	for i := 0; i < totalRuns; i++ {
+		runID := fmt.Sprintf("run-cancel-many-%04d", i)
+		if err := s.CreateRun(ctx, types.RunRecord{
+			RunID:        runID,
+			AgentID:      fmt.Sprintf("agent-cancel-many-%04d", i),
+			AgentProfile: AgentProfileCoSuper,
+			AgentRole:    AgentProfileCoSuper,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunPending,
+			Prompt:       "pending trajectory activation",
+			TrajectoryID: trajectoryID,
+			CreatedAt:    now.Add(time.Duration(i) * time.Millisecond),
+			UpdatedAt:    now.Add(time.Duration(i) * time.Millisecond),
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileCoSuper,
+				runMetadataAgentRole:    AgentProfileCoSuper,
+				runMetadataTrajectoryID: trajectoryID,
+			},
+		}); err != nil {
+			t.Fatalf("create run %d: %v", i, err)
+		}
+	}
+
+	cancelled, err := rt.CancelRunTrajectory(ctx, "run-cancel-many-0000", "user-alice")
+	if err != nil {
+		t.Fatalf("cancel trajectory: %v", err)
+	}
+	if len(cancelled) != totalRuns {
+		t.Fatalf("cancelled count = %d, want %d", len(cancelled), totalRuns)
+	}
+	active, err := s.ListActiveRunsByTrajectory(ctx, "user-alice", trajectoryID, totalRuns+1)
+	if err != nil {
+		t.Fatalf("list active runs: %v", err)
+	}
+	if len(active) != 0 {
+		t.Fatalf("active runs after cancellation = %d, want 0", len(active))
 	}
 }
 

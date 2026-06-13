@@ -842,15 +842,44 @@ func newCancelAgentTool(rt *Runtime) Tool {
 			if ownerID == "" {
 				return "", fmt.Errorf("cancel_agent missing owner context")
 			}
-			target, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, strings.TrimSpace(in.AgentID))
-			if err != nil {
-				if err == store.ErrNotFound {
-					return "", fmt.Errorf("agent not found: %s", in.AgentID)
+			agentID := strings.TrimSpace(in.AgentID)
+			var target types.RunRecord
+			targetFromCallerSlot := false
+			if stringFromToolContext(ctx, toolCtxProfile) == AgentProfileVSuper {
+				callerTrajectoryID := trajectoryIDForRun(ctxRunRecord(ctx))
+				slot, found, err := rt.store.CoSuperSlotByAgentAndTrajectory(ctx, ownerID, callerTrajectoryID, agentID)
+				if err != nil {
+					return "", fmt.Errorf("lookup co-super slot before cancel: %w", err)
 				}
-				return "", fmt.Errorf("lookup active agent run: %w", err)
+				if found {
+					slotRun, err := rt.store.GetRun(ctx, strings.TrimSpace(slot.RunID))
+					if err != nil {
+						return "", fmt.Errorf("lookup co-super slot run before cancel: %w", err)
+					}
+					if !slotRun.State.Active() {
+						return "", fmt.Errorf("agent not active in caller trajectory: %s", in.AgentID)
+					}
+					target = slotRun
+					targetFromCallerSlot = true
+				}
 			}
-			if stringFromToolContext(ctx, toolCtxProfile) == AgentProfileVSuper &&
-				strings.TrimSpace(target.ParentRunID) == stringFromToolContext(ctx, toolCtxRunID) {
+			if !targetFromCallerSlot {
+				if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+					return "", fmt.Errorf("lookup resident agent run: %w", err)
+				} else if found {
+					target = resident
+				} else {
+					latest, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
+					if err != nil {
+						if err == store.ErrNotFound {
+							return "", fmt.Errorf("agent not found: %s", in.AgentID)
+						}
+						return "", fmt.Errorf("lookup active agent run: %w", err)
+					}
+					target = latest
+				}
+			}
+			if targetFromCallerSlot {
 				eventsForRun, err := rt.store.ListEvents(ctx, target.RunID, 1000)
 				if err != nil {
 					return "", fmt.Errorf("check child export evidence before cancel: %w", err)

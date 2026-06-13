@@ -881,6 +881,148 @@ func TestReleaseCoSuperSlotClaimOnlyClearsMatchingRun(t *testing.T) {
 	}
 }
 
+func TestCoSuperSlotRunAndActiveSlotCountUseTrajectorySlots(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	runs := []types.RunRecord{
+		{
+			RunID:        "slot-implementation-run",
+			AgentID:      "agent-implementation",
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunRunning,
+			Prompt:       "implement",
+			TrajectoryID: "traj-slot",
+			ParentRunID:  "not-the-vsuper-parent",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+			Metadata:     map[string]any{"trajectory_id": "traj-slot", "co_super_slot": "implementation"},
+		},
+		{
+			RunID:        "slot-verifier-run",
+			AgentID:      "agent-verifier",
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunRunning,
+			Prompt:       "verify",
+			TrajectoryID: "traj-slot",
+			ParentRunID:  "not-the-vsuper-parent",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+			Metadata:     map[string]any{"trajectory_id": "traj-slot", "co_super_slot": "verifier"},
+		},
+		{
+			RunID:        "other-trajectory-child-run",
+			AgentID:      "agent-other",
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunRunning,
+			Prompt:       "other trajectory",
+			TrajectoryID: "traj-other",
+			ParentRunID:  "vsuper-parent",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+			Metadata:     map[string]any{"trajectory_id": "traj-other", "co_super_slot": "implementation"},
+		},
+		{
+			RunID:        "same-agent-other-trajectory-run",
+			AgentID:      "agent-implementation",
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunRunning,
+			Prompt:       "same agent other trajectory",
+			TrajectoryID: "traj-other-same-agent",
+			ParentRunID:  "vsuper-parent",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+			Metadata:     map[string]any{"trajectory_id": "traj-other-same-agent", "co_super_slot": "implementation"},
+		},
+	}
+	for _, run := range runs {
+		if err := s.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create run %s: %v", run.RunID, err)
+		}
+	}
+	if _, claimed, err := s.ClaimCoSuperSlot(ctx, "user-alice", "traj-slot", "implementation", "slot-implementation-run", "agent-implementation", "not-the-vsuper-parent"); err != nil {
+		t.Fatalf("claim implementation slot: %v", err)
+	} else if !claimed {
+		t.Fatalf("claim implementation slot: got claimed=false, want true")
+	}
+	if _, claimed, err := s.ClaimCoSuperSlot(ctx, "user-alice", "traj-slot", "verifier", "slot-verifier-run", "agent-verifier", "not-the-vsuper-parent"); err != nil {
+		t.Fatalf("claim verifier slot: %v", err)
+	} else if !claimed {
+		t.Fatalf("claim verifier slot: got claimed=false, want true")
+	}
+	if _, claimed, err := s.ClaimCoSuperSlot(ctx, "user-alice", "traj-other", "implementation", "other-trajectory-child-run", "agent-other", "vsuper-parent"); err != nil {
+		t.Fatalf("claim other trajectory slot: %v", err)
+	} else if !claimed {
+		t.Fatalf("claim other trajectory slot: got claimed=false, want true")
+	}
+	if _, claimed, err := s.ClaimCoSuperSlot(ctx, "user-alice", "traj-other-same-agent", "implementation", "same-agent-other-trajectory-run", "agent-implementation", "vsuper-parent"); err != nil {
+		t.Fatalf("claim same-agent other trajectory slot: %v", err)
+	} else if !claimed {
+		t.Fatalf("claim same-agent other trajectory slot: got claimed=false, want true")
+	}
+
+	active, err := s.CountActiveCoSuperSlots(ctx, "user-alice", "traj-slot")
+	if err != nil {
+		t.Fatalf("count active slots: %v", err)
+	}
+	if active != 2 {
+		t.Fatalf("active slots = %d, want implementation+verifier", active)
+	}
+	rec, found, err := s.CoSuperSlotRun(ctx, "user-alice", "traj-slot", "implementation")
+	if err != nil {
+		t.Fatalf("lookup implementation slot: %v", err)
+	}
+	if !found || rec.RunID != "slot-implementation-run" {
+		t.Fatalf("implementation slot = %+v found=%v, want slot-implementation-run", rec, found)
+	}
+	slotRec, found, err := s.CoSuperSlotByAgentAndTrajectory(ctx, "user-alice", "traj-slot", "agent-implementation")
+	if err != nil {
+		t.Fatalf("lookup implementation slot by agent and trajectory: %v", err)
+	}
+	if !found || slotRec.RunID != "slot-implementation-run" {
+		t.Fatalf("agent trajectory slot = %+v found=%v, want slot-implementation-run", slotRec, found)
+	}
+	slotRec, found, err = s.CoSuperSlotByAgentAndTrajectory(ctx, "user-alice", "traj-other-same-agent", "agent-implementation")
+	if err != nil {
+		t.Fatalf("lookup same-agent other trajectory slot: %v", err)
+	}
+	if !found || slotRec.RunID != "same-agent-other-trajectory-run" {
+		t.Fatalf("same-agent other trajectory slot = %+v found=%v, want same-agent-other-trajectory-run", slotRec, found)
+	}
+	if _, found, err := s.CoSuperSlotByAgentAndTrajectory(ctx, "user-alice", "traj-missing", "agent-implementation"); err != nil {
+		t.Fatalf("lookup missing trajectory slot: %v", err)
+	} else if found {
+		t.Fatalf("missing trajectory slot found=true, want false")
+	}
+
+	finishedAt := now.Add(time.Second)
+	rec.State = types.RunCompleted
+	rec.FinishedAt = &finishedAt
+	rec.UpdatedAt = finishedAt
+	if err := s.UpdateRun(ctx, rec); err != nil {
+		t.Fatalf("complete implementation slot run: %v", err)
+	}
+	active, err = s.CountActiveCoSuperSlots(ctx, "user-alice", "traj-slot")
+	if err != nil {
+		t.Fatalf("count active slots after completion: %v", err)
+	}
+	if active != 1 {
+		t.Fatalf("active slots after completion = %d, want verifier only", active)
+	}
+	rec, found, err = s.CoSuperSlotRun(ctx, "user-alice", "traj-slot", "implementation")
+	if err != nil {
+		t.Fatalf("lookup terminal implementation slot: %v", err)
+	}
+	if !found || rec.State != types.RunCompleted {
+		t.Fatalf("terminal implementation slot = %+v found=%v, want completed history", rec, found)
+	}
+}
+
 func TestEventRecoveryAcrossReopen(t *testing.T) {
 	path := testStorePath(t)
 	cleanupTestStorePath(path)

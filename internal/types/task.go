@@ -43,6 +43,11 @@ const (
 	// RunBlocked means the run is blocked (e.g., provider failure)
 	// and may be retried or resolved later.
 	RunBlocked RunState = "blocked"
+
+	// RunPassivated means the in-process activation ended without a terminal
+	// work verdict. The durable agent identity may be re-warmed by backlog or
+	// trajectory obligations.
+	RunPassivated RunState = "passivated"
 )
 
 // Terminal returns true if the state is a terminal state that will not
@@ -56,10 +61,22 @@ func (s RunState) Terminal() bool {
 	}
 }
 
+// Active returns true when the run represents current runtime residency or an
+// unresolved blocked activation. Passivated runs are non-terminal but no longer
+// own live actor slots.
+func (s RunState) Active() bool {
+	switch s {
+	case RunPending, RunRunning, RunBlocked:
+		return true
+	default:
+		return false
+	}
+}
+
 // Valid returns true if the RunState value is a recognized state.
 func (s RunState) Valid() bool {
 	switch s {
-	case RunPending, RunRunning, RunCompleted, RunFailed, RunCancelled, RunBlocked:
+	case RunPending, RunRunning, RunCompleted, RunFailed, RunCancelled, RunBlocked, RunPassivated:
 		return true
 	default:
 		return false
@@ -158,6 +175,10 @@ const (
 
 	// EventRunBlocked is emitted when a run is blocked (e.g., provider failure).
 	EventRunBlocked EventKind = "loop.blocked"
+
+	// EventRunPassivated is emitted when recovery releases an activation without
+	// converting the agent's durable work into failure.
+	EventRunPassivated EventKind = "activation.passivated"
 
 	// EventRunCompactionStarted is emitted before the runtime compacts a run's
 	// persisted context into an operational memory checkpoint.

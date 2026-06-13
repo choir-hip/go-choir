@@ -25,7 +25,6 @@ import (
 const (
 	defaultDelegateWorkerVMTimeout = 15 * time.Minute
 	maxDelegateWorkerVMTimeout     = 15 * time.Minute
-	maxDelegateWorkerRunAttempts   = 2
 )
 
 func RegisterVMControlTools(registry *ToolRegistry, rt *Runtime, cwd string) error {
@@ -1620,98 +1619,79 @@ func newLegacySynchronousDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 			}
 			var startResp *runStatusResponse
 			var finalResp *runStatusResponse
-			for attempt := 1; attempt <= maxDelegateWorkerRunAttempts; attempt++ {
-				attemptMetadata := copyMetadataMap(metadata)
-				attemptObjective := objective
-				if attempt > 1 && finalResp != nil {
-					attemptMetadata["retry_of_run_id"] = finalResp.RunID
-					attemptMetadata["retry_reason"] = strings.TrimSpace(finalResp.Error)
-					attemptObjective = strings.Join([]string{
-						"Previous delegated worker run was interrupted before completion.",
-						"Retry once on the same worker VM. If a Source/candidate checkout already exists, reset it to the requested base SHA before editing.",
-						objective,
-					}, "\n")
-				}
-				startResp, err = submitInternalWorkerRun(ctx, client, in.WorkerSandboxURL, internalRunSubmitRequest{
-					OwnerID:  ownerID,
-					Prompt:   attemptObjective,
-					Metadata: attemptMetadata,
-				})
-				if err != nil {
-					result := baseResult("worker_run_submit_failed")
-					result["error"] = err.Error()
-					result["terminal_error"] = err.Error()
-					result["attempt"] = attempt
-					result = rt.invalidateWorkerVMRequestCacheForDelegateResult(ctx, result)
-					result = checkpointDelegateResult(result, "submit_failed")
-					return toolResultJSON(result)
-				}
-				finalResp, err = pollInternalWorkerRun(ctx, client, in.WorkerSandboxURL, ownerID, startResp.RunID, timeout)
-				if err != nil {
-					var pollErr *workerRunPollError
-					if errors.As(err, &pollErr) {
-						status := "worker_run_status_failed"
-						if pollErr.TimedOut {
-							status = "worker_run_timeout"
-						}
-						workerRunID := firstNonEmpty(pollErr.RunID, startResp.RunID)
-						result := baseResult(status)
-						result["loop_id"] = workerRunID
-						result["agent_id"] = pollErr.Last.AgentID
-						result["profile"] = pollErr.Last.AgentProfile
-						result["state"] = pollErr.Last.State
-						result["result"] = pollErr.Last.Result
-						result["error"] = err.Error()
-						result["terminal_error"] = err.Error()
-						result["attempt"] = attempt
-						result["timeout_seconds"] = int(timeout.Seconds())
-						evidence, eventsErr := fetchWorkerRunEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
-						if eventsErr != nil {
-							result["worker_event_error"] = eventsErr.Error()
-						} else {
-							applyWorkerRunEvidence(result, evidence)
-							packages := collectAppChangePackageResults(evidence.Events)
-							if len(packages) > 0 {
-								var mirrorErrors []string
-								packages, mirrorErrors = rt.mirrorWorkerAppChangePackages(ctx, client, in.WorkerSandboxURL, ownerID, packages)
-								result["app_change_packages"] = packages
-								annotateWorkerPackageMirrorResult(result, packages, mirrorErrors)
-								result["reviewable_package_observed"] = true
-								if pollErr.TimedOut {
-									result["completion_blocker"] = "vsuper_timed_out_after_reviewable_package"
-								}
-							}
-							if summary := summarizeWorkerRunEvents(evidence.Events); len(summary) > 0 {
-								result["worker_event_summary"] = summary
-							}
-							if profiles := collectWorkerSpawnProfiles(evidence.Events); len(profiles) > 0 {
-								result["worker_spawned_profiles"] = profiles
-							}
-							if count := countWorkerChannelMessages(evidence.Events); count > 0 {
-								result["worker_channel_message_count"] = count
-							}
-						}
-						result = rt.invalidateWorkerVMRequestCacheForDelegateResult(ctx, result)
-						result = checkpointDelegateResult(result, status)
-						return toolResultJSON(result)
+			attempt := 1
+			startResp, err = submitInternalWorkerRun(ctx, client, in.WorkerSandboxURL, internalRunSubmitRequest{
+				OwnerID:  ownerID,
+				Prompt:   objective,
+				Metadata: copyMetadataMap(metadata),
+			})
+			if err != nil {
+				result := baseResult("worker_run_submit_failed")
+				result["error"] = err.Error()
+				result["terminal_error"] = err.Error()
+				result["attempt"] = attempt
+				result = rt.invalidateWorkerVMRequestCacheForDelegateResult(ctx, result)
+				result = checkpointDelegateResult(result, "submit_failed")
+				return toolResultJSON(result)
+			}
+			finalResp, err = pollInternalWorkerRun(ctx, client, in.WorkerSandboxURL, ownerID, startResp.RunID, timeout)
+			if err != nil {
+				var pollErr *workerRunPollError
+				if errors.As(err, &pollErr) {
+					status := "worker_run_status_failed"
+					if pollErr.TimedOut {
+						status = "worker_run_timeout"
 					}
-					result := baseResult("worker_run_status_failed")
-					result["loop_id"] = startResp.RunID
+					workerRunID := firstNonEmpty(pollErr.RunID, startResp.RunID)
+					result := baseResult(status)
+					result["loop_id"] = workerRunID
+					result["agent_id"] = pollErr.Last.AgentID
+					result["profile"] = pollErr.Last.AgentProfile
+					result["state"] = pollErr.Last.State
+					result["result"] = pollErr.Last.Result
 					result["error"] = err.Error()
 					result["terminal_error"] = err.Error()
 					result["attempt"] = attempt
-					result = resultWithWorkerEvents(result, startResp.RunID)
+					result["timeout_seconds"] = int(timeout.Seconds())
+					evidence, eventsErr := fetchWorkerRunEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
+					if eventsErr != nil {
+						result["worker_event_error"] = eventsErr.Error()
+					} else {
+						applyWorkerRunEvidence(result, evidence)
+						packages := collectAppChangePackageResults(evidence.Events)
+						if len(packages) > 0 {
+							var mirrorErrors []string
+							packages, mirrorErrors = rt.mirrorWorkerAppChangePackages(ctx, client, in.WorkerSandboxURL, ownerID, packages)
+							result["app_change_packages"] = packages
+							annotateWorkerPackageMirrorResult(result, packages, mirrorErrors)
+							result["reviewable_package_observed"] = true
+							if pollErr.TimedOut {
+								result["completion_blocker"] = "vsuper_timed_out_after_reviewable_package"
+							}
+						}
+						if summary := summarizeWorkerRunEvents(evidence.Events); len(summary) > 0 {
+							result["worker_event_summary"] = summary
+						}
+						if profiles := collectWorkerSpawnProfiles(evidence.Events); len(profiles) > 0 {
+							result["worker_spawned_profiles"] = profiles
+						}
+						if count := countWorkerChannelMessages(evidence.Events); count > 0 {
+							result["worker_channel_message_count"] = count
+						}
+					}
 					result = rt.invalidateWorkerVMRequestCacheForDelegateResult(ctx, result)
-					result = checkpointDelegateResult(result, "status_failed")
+					result = checkpointDelegateResult(result, status)
 					return toolResultJSON(result)
 				}
-				if finalResp.State == types.RunCompleted {
-					break
-				}
-				if attempt < maxDelegateWorkerRunAttempts && isInterruptedWorkerRun(finalResp) {
-					continue
-				}
-				break
+				result := baseResult("worker_run_status_failed")
+				result["loop_id"] = startResp.RunID
+				result["error"] = err.Error()
+				result["terminal_error"] = err.Error()
+				result["attempt"] = attempt
+				result = resultWithWorkerEvents(result, startResp.RunID)
+				result = rt.invalidateWorkerVMRequestCacheForDelegateResult(ctx, result)
+				result = checkpointDelegateResult(result, "status_failed")
+				return toolResultJSON(result)
 			}
 			if finalResp == nil || startResp == nil {
 				return "", fmt.Errorf("delegate_worker_vm missing worker run status")
@@ -2115,17 +2095,6 @@ func copyMetadataMap(in map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
-}
-
-func isInterruptedWorkerRun(resp *runStatusResponse) bool {
-	if resp == nil {
-		return false
-	}
-	if resp.State != types.RunFailed {
-		return false
-	}
-	errText := strings.ToLower(strings.TrimSpace(resp.Error))
-	return strings.Contains(errText, "runtime restarted") && strings.Contains(errText, "interrupted")
 }
 
 func submitInternalWorkerRun(ctx context.Context, client *http.Client, baseURL string, body internalRunSubmitRequest) (*runStatusResponse, error) {

@@ -1737,15 +1737,15 @@ func (s *Store) CancelAgentMutation(ctx context.Context, runID string) error {
 	return nil
 }
 
-// MarkAgentMutationStale clears a pending mutation whose owning run has already
-// reached a terminal state. This prevents stale pending rows from keeping the
-// VText editor in a perpetual "Revising..." state after recovery or missed
-// completion reconciliation.
+// MarkAgentMutationStale clears a pending mutation whose owning activation is
+// no longer active. This prevents stale pending rows from keeping the VText
+// editor in a perpetual "Revising..." state after recovery or missed completion
+// reconciliation.
 func (s *Store) MarkAgentMutationStale(ctx context.Context, runID string) error {
 	now := time.Now().UTC()
 	_, err := s.vtextHandle().ExecContext(ctx,
 		`UPDATE vtext_agent_mutations
-		    SET state = 'stale_terminal_run',
+		    SET state = 'stale_activation',
 		        completed_at = ?
 		  WHERE loop_id = ? AND state = 'pending'`,
 		now.Format(time.RFC3339Nano),

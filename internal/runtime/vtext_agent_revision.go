@@ -126,7 +126,7 @@ func (h *APIHandler) HandleVTextAgentRevision(w http.ResponseWriter, r *http.Req
 
 // HandleVTextCancelAgentRevision handles POST
 // /api/vtext/documents/{id}/cancel. It cancels the pending VText appagent
-// revision graph without changing the canonical document head.
+// revision trajectory without changing the canonical document head.
 func (h *APIHandler) HandleVTextCancelAgentRevision(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -160,9 +160,9 @@ func (h *APIHandler) HandleVTextCancelAgentRevision(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusOK, vtextCancelRevisionResponse{DocID: docID, Status: "no_pending_revision", Resumable: true})
 		return
 	}
-	cancelled, err := h.rt.CancelRunGraph(r.Context(), mutation.RunID, ownerID)
+	cancelled, err := h.rt.CancelRunTrajectory(r.Context(), mutation.RunID, ownerID)
 	if err != nil {
-		log.Printf("vtext api: cancel revision graph: %v", err)
+		log.Printf("vtext api: cancel revision trajectory: %v", err)
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 		return
 	}

@@ -1017,10 +1017,10 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 	}
 }
 
-func TestInterruptedRunningTasksRecoveredOnStart(t *testing.T) {
+func TestInterruptedRunningTasksPassivatedOnStart(t *testing.T) {
 	t.Parallel()
-	// When the sandbox restarts, runs that were running should be resolved
-	// to an explicit terminal outcome (VAL-RUNTIME-010).
+	// When the sandbox restarts, runs that were running should be passivated:
+	// the in-process activation is gone, but durable agent work is not failed.
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create temp dir: %v", err)
@@ -1052,7 +1052,7 @@ func TestInterruptedRunningTasksRecoveredOnStart(t *testing.T) {
 	_ = s1.Close()
 
 	// Simulate restart: open new store and runtime, then call Start()
-	// which should recover interrupted runs.
+	// which should passivate interrupted activations.
 	s2, err := openTestStore(dbPath)
 	if err != nil {
 		t.Fatalf("open store 2: %v", err)
@@ -1075,19 +1075,84 @@ func TestInterruptedRunningTasksRecoveredOnStart(t *testing.T) {
 	})
 	rt.Start(ctx)
 
-	// The interrupted run should now be in failed state with a clear error.
+	// The interrupted run should now be passivated, not failed.
 	got, err := rt.GetRun(ctx, "interrupted-task-001", "user-alice")
 	if err != nil {
 		t.Fatalf("get interrupted task: %v", err)
 	}
-	if got.State != types.RunFailed {
-		t.Errorf("state: got %q, want %q", got.State, types.RunFailed)
+	if got.State != types.RunPassivated {
+		t.Errorf("state: got %q, want %q", got.State, types.RunPassivated)
 	}
-	if got.Error != "runtime restarted, run interrupted" {
-		t.Errorf("error: got %q, want runtime restarted, run interrupted", got.Error)
+	if got.Error != "" {
+		t.Errorf("error: got %q, want empty", got.Error)
 	}
-	if got.FinishedAt == nil {
-		t.Error("finished_at should be set for recovered task")
+	if got.FinishedAt != nil {
+		t.Errorf("finished_at = %v, want nil", got.FinishedAt)
+	}
+	if metadataStringValue(got.Metadata, "passivated_reason") != "runtime_restarted" {
+		t.Errorf("passivated_reason = %q, want runtime_restarted", metadataStringValue(got.Metadata, "passivated_reason"))
+	}
+}
+
+func TestInterruptedActivationPassivationDrainsBatches(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	dbPath := filepath.Join(dir, t.Name()+".db")
+	_ = os.Remove(dbPath)
+
+	ctx := context.Background()
+	s, err := openTestStore(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = s.Close()
+		_ = os.Remove(dbPath)
+	})
+
+	now := time.Now().UTC()
+	states := []types.RunState{types.RunPending, types.RunRunning}
+	for _, state := range states {
+		for i := 0; i < 105; i++ {
+			rec := types.RunRecord{
+				RunID:     fmt.Sprintf("interrupted-%s-%03d", state, i),
+				OwnerID:   "user-alice",
+				SandboxID: "sandbox-test",
+				State:     state,
+				Prompt:    "interrupted prompt",
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			if err := s.CreateRun(ctx, rec); err != nil {
+				t.Fatalf("create %s run %d: %v", state, i, err)
+			}
+		}
+	}
+
+	rt := New(Config{SandboxID: "sandbox-test"}, s, events.NewEventBus(), NewStubProvider(0))
+	rt.passivateInterruptedActivations(ctx)
+
+	for _, state := range states {
+		remaining, err := s.ListRunsByState(ctx, state, 200)
+		if err != nil {
+			t.Fatalf("list remaining %s runs: %v", state, err)
+		}
+		if len(remaining) != 0 {
+			t.Fatalf("remaining %s runs = %d, want 0", state, len(remaining))
+		}
+		for i := 0; i < 105; i++ {
+			runID := fmt.Sprintf("interrupted-%s-%03d", state, i)
+			got, err := s.GetRun(ctx, runID)
+			if err != nil {
+				t.Fatalf("get passivated run %s: %v", runID, err)
+			}
+			if got.State != types.RunPassivated {
+				t.Fatalf("%s state = %q, want %q", runID, got.State, types.RunPassivated)
+			}
+		}
 	}
 }
 

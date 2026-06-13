@@ -1401,6 +1401,8 @@ func traceEventSummary(ev types.EventRecord, payload map[string]any) string {
 		return fmt.Sprintf("browser %s failed", action)
 	case types.EventRunCompleted:
 		return "loop completed"
+	case types.EventRunPassivated:
+		return "activation passivated"
 	case types.EventRunCompactionStarted:
 		if tokens := payloadInt64(payload, "tokens_before"); tokens > 0 {
 			return fmt.Sprintf("compacting context (%d tokens)", tokens)
@@ -1492,7 +1494,7 @@ func traceEventTone(ev types.EventRecord) string {
 		return "error"
 	case types.EventRunCompleted, types.EventRunCompactionCompleted, types.EventRunContinuationStarted, types.EventAppAdoptionVerified, types.EventAppAdoptionPromoted, types.EventVTextAgentRevisionCompleted, types.EventVTextDocumentRevisionCreated, types.EventBrowserNavigationCompleted, types.EventBrowserControlCompleted, types.EventBrowserSessionClosed:
 		return "success"
-	case types.EventRunCompactionStarted, types.EventRunRetry, types.EventRunContinuationSelected, types.EventAppChangePackagePublished, types.EventAppAdoptionProposed, types.EventAppAdoptionVerificationStarted, types.EventBrowserSessionCreated:
+	case types.EventRunPassivated, types.EventRunCompactionStarted, types.EventRunRetry, types.EventRunContinuationSelected, types.EventAppChangePackagePublished, types.EventAppAdoptionProposed, types.EventAppAdoptionVerificationStarted, types.EventBrowserSessionCreated:
 		return "active"
 	case types.EventAppAdoptionBlocked, types.EventAppAdoptionRolledBack, types.EventBrowserNavigationFailed, types.EventBrowserControlFailed:
 		return "error"

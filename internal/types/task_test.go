@@ -14,7 +14,7 @@ func TestTaskStateTerminal(t *testing.T) {
 		}
 	}
 
-	nonTerminalStates := []RunState{RunPending, RunRunning, RunBlocked}
+	nonTerminalStates := []RunState{RunPending, RunRunning, RunBlocked, RunPassivated}
 	for _, s := range nonTerminalStates {
 		if s.Terminal() {
 			t.Errorf("expected %q to not be terminal", s)
@@ -22,10 +22,26 @@ func TestTaskStateTerminal(t *testing.T) {
 	}
 }
 
+func TestTaskStateActive(t *testing.T) {
+	activeStates := []RunState{RunPending, RunRunning, RunBlocked}
+	for _, s := range activeStates {
+		if !s.Active() {
+			t.Errorf("expected %q to be active", s)
+		}
+	}
+
+	inactiveStates := []RunState{RunCompleted, RunFailed, RunCancelled, RunPassivated}
+	for _, s := range inactiveStates {
+		if s.Active() {
+			t.Errorf("expected %q to not be active", s)
+		}
+	}
+}
+
 func TestTaskStateValid(t *testing.T) {
 	validStates := []RunState{
 		RunPending, RunRunning, RunCompleted,
-		RunFailed, RunCancelled, RunBlocked,
+		RunFailed, RunCancelled, RunBlocked, RunPassivated,
 	}
 	for _, s := range validStates {
 		if !s.Valid() {

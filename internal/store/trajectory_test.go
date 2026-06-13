@@ -264,6 +264,68 @@ func TestWorkItemFingerprintDedupAndOpenObligationsQuery(t *testing.T) {
 	}
 }
 
+func TestListOpenAssignedWorkItemsOnlyReturnsLiveAssignedOpenItems(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for _, rec := range []types.TrajectoryRecord{
+		{OwnerID: "user-alice", TrajectoryID: "traj-live", Kind: types.TrajectoryKindTask},
+		{OwnerID: "user-alice", TrajectoryID: "traj-settled", Kind: types.TrajectoryKindTask},
+	} {
+		if _, err := s.CreateTrajectoryIfAbsent(ctx, rec); err != nil {
+			t.Fatalf("create trajectory %s: %v", rec.TrajectoryID, err)
+		}
+	}
+	if _, err := s.UpdateTrajectoryStatus(ctx, "user-alice", "traj-settled", types.TrajectorySettled); err != nil {
+		t.Fatalf("settle trajectory: %v", err)
+	}
+
+	keeper, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:         "user-alice",
+		TrajectoryID:    "traj-live",
+		Objective:       "resume assigned open work",
+		AssignedAgentID: "cosuper:assigned",
+	})
+	if err != nil {
+		t.Fatalf("create keeper: %v", err)
+	}
+	if _, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-live",
+		Objective:    "unassigned work remains observable only",
+	}); err != nil {
+		t.Fatalf("create unassigned: %v", err)
+	}
+	completed, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:         "user-alice",
+		TrajectoryID:    "traj-live",
+		Objective:       "completed assigned work",
+		AssignedAgentID: "cosuper:assigned",
+	})
+	if err != nil {
+		t.Fatalf("create completed: %v", err)
+	}
+	if _, err := s.UpdateWorkItemStatus(ctx, "user-alice", completed.WorkItemID, types.WorkItemCompleted); err != nil {
+		t.Fatalf("complete work item: %v", err)
+	}
+	if _, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:         "user-alice",
+		TrajectoryID:    "traj-settled",
+		Objective:       "settled trajectory work",
+		AssignedAgentID: "cosuper:settled",
+	}); err != nil {
+		t.Fatalf("create settled work item: %v", err)
+	}
+
+	got, err := s.ListOpenAssignedWorkItems(ctx, 20)
+	if err != nil {
+		t.Fatalf("list open assigned work items: %v", err)
+	}
+	if len(got) != 1 || got[0].WorkItemID != keeper.WorkItemID {
+		t.Fatalf("open assigned work items = %+v, want only %s", got, keeper.WorkItemID)
+	}
+}
+
 func TestWorkItemDetailsMergePatch(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
