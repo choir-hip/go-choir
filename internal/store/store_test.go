@@ -190,6 +190,79 @@ func TestOpenImportsLegacySQLiteRuntimeState(t *testing.T) {
 	}
 }
 
+func TestOpenMigratesWorkerUpdatesBeforeDeliveryIndex(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatalf("write store marker: %v", err)
+	}
+	db, _, connector, err := openVTextWorkspaceDB(path)
+	if err != nil {
+		t.Fatalf("open legacy dolt workspace: %v", err)
+	}
+	if _, err := db.Exec(`
+CREATE TABLE worker_updates (
+	owner_id          VARCHAR(255) NOT NULL DEFAULT '',
+	update_id         VARCHAR(255) NOT NULL DEFAULT '',
+	agent_id          VARCHAR(255) NOT NULL DEFAULT '',
+	target_agent_id   VARCHAR(255) NOT NULL DEFAULT '',
+	channel_id        VARCHAR(255) NOT NULL DEFAULT '',
+	message_seq       BIGINT NOT NULL DEFAULT 0,
+	trajectory_id     VARCHAR(255) NOT NULL DEFAULT '',
+	role              VARCHAR(64) NOT NULL DEFAULT '',
+	findings_json     LONGTEXT NOT NULL DEFAULT '[]',
+	evidence_ids_json LONGTEXT NOT NULL DEFAULT '[]',
+	artifacts_json    LONGTEXT NOT NULL DEFAULT '[]',
+	refs_json         LONGTEXT NOT NULL DEFAULT '[]',
+	tests_json        LONGTEXT NOT NULL DEFAULT '[]',
+	questions_json    LONGTEXT NOT NULL DEFAULT '[]',
+	proposals_json    LONGTEXT NOT NULL DEFAULT '[]',
+	notes_json        LONGTEXT NOT NULL DEFAULT '[]',
+	content           LONGTEXT NOT NULL DEFAULT '',
+	created_at        DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, update_id)
+)`); err != nil {
+		_ = db.Close()
+		_ = connector.Close()
+		t.Fatalf("create legacy worker_updates: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		_ = connector.Close()
+		t.Fatalf("close legacy dolt db: %v", err)
+	}
+	if err := connector.Close(); err != nil {
+		t.Fatalf("close legacy dolt connector: %v", err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open migrated worker_updates store: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	for _, column := range []string{"kind", "summary", "capability_requests_json", "delivered_to_loop_id", "delivered_at"} {
+		if !testDoltColumnExists(t, s, "worker_updates", column) {
+			t.Fatalf("expected worker_updates.%s to be added before delivery index creation", column)
+		}
+	}
+}
+
+func testDoltColumnExists(t *testing.T, s *Store, table, column string) bool {
+	t.Helper()
+	var count int
+	if err := s.db.QueryRow(`
+SELECT COUNT(*)
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = ?
+  AND column_name = ?`, table, column).Scan(&count); err != nil {
+		t.Fatalf("query information_schema.columns: %v", err)
+	}
+	return count > 0
+}
+
 func TestCloseIdempotent(t *testing.T) {
 	s := openTestStore(t)
 	// Close twice should not panic.

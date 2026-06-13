@@ -443,7 +443,6 @@ CREATE INDEX IF NOT EXISTS idx_channel_messages_owner_id ON channel_messages(own
 CREATE INDEX IF NOT EXISTS idx_channel_messages_created_at ON channel_messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_channel_messages_to_agent_id ON channel_messages(to_agent_id);
 CREATE INDEX IF NOT EXISTS idx_channel_messages_trajectory_id ON channel_messages(trajectory_id);
-CREATE INDEX IF NOT EXISTS idx_inbox_deliveries_owner_target ON inbox_deliveries(owner_id, to_agent_id, delivered_at);
 CREATE INDEX IF NOT EXISTS idx_inbox_deliveries_created_at ON inbox_deliveries(created_at);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_loop_seq ON run_memory_entries(loop_id, seq);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_owner_loop_seq ON run_memory_entries(owner_id, loop_id, seq);
@@ -469,7 +468,6 @@ CREATE INDEX IF NOT EXISTS idx_research_findings_target_agent_id ON research_fin
 CREATE INDEX IF NOT EXISTS idx_worker_updates_channel_id ON worker_updates(channel_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worker_updates_target_agent_id ON worker_updates(target_agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worker_updates_trajectory_id ON worker_updates(trajectory_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_worker_updates_pending_target ON worker_updates(owner_id, target_agent_id, delivered_at, created_at);
 CREATE INDEX IF NOT EXISTS idx_co_super_slots_run_id ON co_super_slots(run_id);
 CREATE INDEX IF NOT EXISTS idx_co_super_slots_agent_id ON co_super_slots(owner_id, agent_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_media_progress_owner_kind_updated ON media_progress(owner_id, media_kind, updated_at);
@@ -622,6 +620,8 @@ func (s *Store) bootstrap() error {
 		{"channel_messages", "to_agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"channel_messages", "to_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"channel_messages", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"inbox_deliveries", "delivered_to_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"inbox_deliveries", "delivered_at", "DATETIME"},
 		{"browser_sessions", "html_snapshot", "LONGTEXT NOT NULL DEFAULT ''"},
 		{"browser_sessions", "links_json", "LONGTEXT NOT NULL DEFAULT '[]'"},
 		{"browser_sessions", "screenshot_png_base64", "LONGTEXT NOT NULL DEFAULT ''"},
@@ -651,6 +651,12 @@ func (s *Store) bootstrap() error {
 	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_trajectory_stream_seq ON events(trajectory_id, stream_seq)`); err != nil {
 		return fmt.Errorf("create idx_events_trajectory_stream_seq: %w", err)
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_inbox_deliveries_owner_target ON inbox_deliveries(owner_id, to_agent_id, delivered_at)`); err != nil {
+		return fmt.Errorf("create idx_inbox_deliveries_owner_target: %w", err)
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_worker_updates_pending_target ON worker_updates(owner_id, target_agent_id, delivered_at, created_at)`); err != nil {
+		return fmt.Errorf("create idx_worker_updates_pending_target: %w", err)
 	}
 	return s.backfillDerivedRuntimeState()
 }
