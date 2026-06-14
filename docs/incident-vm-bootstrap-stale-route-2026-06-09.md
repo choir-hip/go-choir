@@ -425,3 +425,82 @@ removed.
 - Node B still needs a bounded stale-rule cleanup plan after a backup.
 - VM state retention still needs follow-up policy: stale data-image snapshots
   and warm Nix cache can keep disk usage near 85% even when no VM is active.
+
+### Remediation evidence (2026-06-14 13:17Z)
+
+Two commits landed after the problem record:
+
+- `2dcbf525` recorded this incident before runtime repair.
+- `dd429f25` replaced the shell-based iptables deletion pipeline with exact
+  `iptables -S` parsing and regression tests for NAT/filter deletion args.
+
+Verification before push:
+
+- `nix develop -c go test ./internal/vmmanager`
+- `scripts/doccheck` (`193` docs, `796` report-only warnings, about `1.1s`)
+- `.github/scripts/deploy-impact-classify-test`
+
+GitHub Actions run `27499667615` passed and deployed `dd429f25` to staging.
+The deploy impact classifier skipped frontend/image jobs and ran the Node B
+deploy because `internal/vmmanager` changed. Staging `/health` reports proxy
+and sandbox deployed at `dd429f25`.
+
+Live cleanup used these rollback snapshots before mutation:
+
+- `/root/iptables-backup-20260614T130134Z.rules`
+- `/var/lib/go-choir/vm-state/ownerships.json.backup-20260614T130134Z`
+
+The first one-by-one cleanup attempt was stopped because deleting thousands of
+rules individually was too slow for a live recovery window. The final cleanup
+generated `/root/iptables-current-20260614T131611Z.rules` and loaded filtered
+rules from `/root/iptables-filtered-20260614T131611Z.rules`, preserving the
+only active Firecracker tap and removing stale Choir VM rules:
+
+- ruleset lines: `14854` -> `387`
+- stale lines skipped: `14467`
+- Choir VM iptables rules after cleanup: `196`
+- stale tap links deleted:
+  - `vm-vm-fcd91-tap`
+  - `vm-vm-a6274-tap`
+  - `vm-vm-ccecb-tap`
+  - `vm-vm-931fc-tap`
+  - `vm-vm-5b0c1-tap`
+
+Owner primary recovery proof:
+
+```json
+{
+  "vm_id": "vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19",
+  "user_id": "5bd6de97-3b58-408c-bf89-c42c81b083de",
+  "desktop_id": "primary",
+  "sandbox_url": "http://10.200.0.2:8085",
+  "state": "active"
+}
+```
+
+Guest health at `http://10.200.0.2:8085/health` returned `ready`, runtime
+health `ready`, deployed commit `dd429f25`, and persistent disk usage about
+`8.1%` (`1.37G` used of `16.8G`).
+
+### Updated belief-state and remaining error field
+
+The owner-facing inaccessible-VM incident is repaired. The root cause was not
+only the accidental image rebuild; the rebuild exposed an existing vmctl
+iptables cleanup leak, and the accumulated rules made recovery fragile.
+
+Remaining risks:
+
+- The public Universal Wire platform computer remains `booting` against stale
+  route `http://10.203.181.2:8085`. Generic owner refresh/resolve endpoints
+  reject that identity, so platform-computer recovery needs its own handler or
+  an explicit vmctl restart/ensure procedure.
+- Node B disk remains high at about `406G/476G` (`86%`). This is dominated by
+  `/nix/store` and VM state retention, not `/var/log`. Retention currently
+  preserves warm Nix cache above `40GiB` free and protects primary/public
+  ownerships, so this will repeat unless a separate retention policy changes.
+- Historical operator `data.img` snapshots from prior recovery are still
+  retained and should be pruned only after a specific data-preservation review.
+
+Heresy delta after remediation: discovered `1`, introduced `0`, repaired `1`
+for owner primary VM recovery; public platform booting and storage retention
+remain open follow-up findings.
