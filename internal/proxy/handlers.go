@@ -416,6 +416,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/compute/recovery":
 		h.HandleComputeRecovery(w, r)
 		return
+	case path == "/api/pulse/summary":
+		h.HandlePulseSummary(w, r)
+		return
 	case path == "/api/app-change-packages/pull":
 		h.HandleAppChangePackagePull(w, r)
 		return
@@ -470,6 +473,27 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	}
+}
+
+// HandlePulseSummary returns public-safe aggregate launch usage and health
+// facts. It is intentionally unauthenticated and must not expose raw user IDs,
+// email lists, content, IPs, devices, referrers, or per-user timelines.
+func (h *Handler) HandlePulseSummary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	if h.vmctlClient == nil {
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "pulse summary requires vmctl routing"})
+		return
+	}
+	summary, err := h.vmctlClient.PulseSummaryContext(r.Context())
+	if err != nil {
+		log.Printf("proxy: pulse summary: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load pulse summary"})
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
 }
 
 // HandleWS handles GET /api/ws. It validates the access JWT cookie, denies
@@ -698,7 +722,6 @@ func protectedAPIResolveTarget(r *http.Request, userID, desktopID string) (owner
 	}
 	return userID, desktopID
 }
-
 
 // resolveSandboxURL resolves the sandbox URL for an authenticated user.
 // When vmctl routing is enabled, it consults the vmctl ownership registry

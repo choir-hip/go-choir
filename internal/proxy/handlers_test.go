@@ -945,6 +945,60 @@ func TestHandleAPIReturnsNotFoundForUnknownRoutes(t *testing.T) {
 	}
 }
 
+func TestHandlePulseSummaryIsPublicAndAggregateOnly(t *testing.T) {
+	h, _, _ := testProxyEnv(t)
+	vmctlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/vmctl/pulse" {
+			t.Fatalf("vmctl path = %s, want /internal/vmctl/pulse", r.URL.Path)
+		}
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("missing internal caller header")
+		}
+		_ = json.NewEncoder(w).Encode(vmctl.PulseSummary{
+			Status:      "ok",
+			GeneratedAt: "2026-06-14T12:00:00Z",
+			Privacy: vmctl.PulsePrivacyStatement{
+				Surface:              "public-readonly",
+				DataMode:             "aggregate-only",
+				NoPrivateSuperset:    true,
+				NoRowLevelAnalytics:  true,
+				NoUserIdentityOutput: true,
+			},
+			Accounts: vmctl.PulseAccountSummary{
+				Total: 3,
+				ByClass: map[string]int{
+					vmctl.PulseAccountReal:             1,
+					vmctl.PulseAccountCodexAgenticTest: 1,
+					vmctl.PulseAccountProtectedTest:    1,
+				},
+				AuthDataAvailable: true,
+			},
+		})
+	}))
+	t.Cleanup(func() { vmctlSrv.Close() })
+	h.vmctlClient = vmctl.NewClient(vmctlSrv.URL)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/pulse/summary", nil)
+	w := httptest.NewRecorder()
+	h.HandleAPI(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("pulse summary status = %d, want 200 body=%s", w.Code, w.Body.String())
+	}
+	var summary vmctl.PulseSummary
+	if err := json.NewDecoder(w.Body).Decode(&summary); err != nil {
+		t.Fatalf("decode pulse summary: %v", err)
+	}
+	if summary.Accounts.ByClass[vmctl.PulseAccountReal] != 1 {
+		t.Fatalf("real users = %d, want 1", summary.Accounts.ByClass[vmctl.PulseAccountReal])
+	}
+	body := w.Body.String()
+	for _, forbidden := range []string{"@", "user_id", "ip_address"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("pulse public response leaked forbidden marker %q in %s", forbidden, body)
+		}
+	}
+}
+
 // TestHandleAPIForwardsPromptBarRoutes verifies that prompt-bar product
 // routes are forwarded to the sandbox through the proxy
 // rather than hitting the generic 404 fallback.
@@ -2583,14 +2637,14 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 			"researcher_count": 1,
 			"persistent_disk": map[string]interface{}{
 				"source":            "guest",
-				"used_bytes":          2 * 1024 * 1024 * 1024,
-				"total_bytes":         8 * 1024 * 1024 * 1024,
-				"avail_bytes":         6 * 1024 * 1024 * 1024,
-				"cap_bytes":           8 * 1024 * 1024 * 1024,
-				"used_percent":        25,
-				"warning":             false,
-				"critical":            false,
-				"default_cap_bytes":   8 * 1024 * 1024 * 1024,
+				"used_bytes":        2 * 1024 * 1024 * 1024,
+				"total_bytes":       8 * 1024 * 1024 * 1024,
+				"avail_bytes":       6 * 1024 * 1024 * 1024,
+				"cap_bytes":         8 * 1024 * 1024 * 1024,
+				"used_percent":      25,
+				"warning":           false,
+				"critical":          false,
+				"default_cap_bytes": 8 * 1024 * 1024 * 1024,
 			},
 		})
 	})
@@ -2953,7 +3007,7 @@ func TestProtectedAPIResolveTarget_VTextReadsNotRoutedThroughSandbox(t *testing.
 
 func TestIsPlatformVTextReadRequest(t *testing.T) {
 	// Positive cases — read-only VText reads with read_owner param.
-	cases := []struct{
+	cases := []struct {
 		method string
 		path   string
 		want   bool

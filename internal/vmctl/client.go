@@ -370,6 +370,43 @@ func (c *Client) ListOwnershipsContext(ctx context.Context) ([]ownershipResponse
 	return result.Ownerships, nil
 }
 
+// PulseSummaryContext returns the public-safe aggregate Pulse summary from
+// vmctl. The response contains no raw user IDs or email addresses.
+func (c *Client) PulseSummaryContext(ctx context.Context) (*PulseSummary, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, PulseEndpoint(c.baseURL), nil)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: create pulse request: %w", err)
+	}
+	req.Header.Set("X-Internal-Caller", "true")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: pulse call failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: read pulse response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		var errResp vmctlErrorResponse
+		if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
+			return nil, fmt.Errorf("vmctl client: pulse failed: %s", errResp.Error)
+		}
+		return nil, fmt.Errorf("vmctl client: pulse failed with status %s", resp.Status)
+	}
+
+	var result PulseSummary
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("vmctl client: decode pulse response: %w", err)
+	}
+	return &result, nil
+}
+
 // Stop requests vmctl to stop the VM for the given user.
 func (c *Client) Stop(userID string) error {
 	return c.StopDesktop(userID, PrimaryDesktopID)

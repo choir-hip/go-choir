@@ -2806,8 +2806,93 @@ func TestEndpointURLs(t *testing.T) {
 	if got := RetentionShadowPlanEndpoint(base); got != "http://localhost:8083/internal/vmctl/retention-shadow-plan" {
 		t.Errorf("RetentionShadowPlanEndpoint = %s", got)
 	}
+	if got := PulseEndpoint(base); got != "http://localhost:8083/internal/vmctl/pulse" {
+		t.Errorf("PulseEndpoint = %s", got)
+	}
 	if got := PruneEndpoint(base); got != "http://localhost:8083/internal/vmctl/prune" {
 		t.Errorf("PruneEndpoint = %s", got)
+	}
+}
+
+func TestPulseAccountClassifier(t *testing.T) {
+	tests := []struct {
+		email string
+		want  string
+	}{
+		{"owner@choir.news", PulseAccountReal},
+		{"YusefNathanson@me.com", PulseAccountReal},
+		{"codex-proof@example.com", PulseAccountCodexAgenticTest},
+		{"matrix@example.test", PulseAccountCodexAgenticTest},
+		{"a@b.com", PulseAccountProtectedTest},
+		{"b@c.com", PulseAccountProtectedTest},
+		{"system@choir.local", PulseAccountInternal},
+		{"", PulseAccountUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.email, func(t *testing.T) {
+			if got := ClassifyPulseAccount(tt.email); got != tt.want {
+				t.Fatalf("ClassifyPulseAccount(%q) = %q, want %q", tt.email, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPulseSummaryAggregatesWithoutIdentityOutput(t *testing.T) {
+	now := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
+	stateDir := t.TempDir()
+	users := []pulseAccountRecord{
+		{UserID: "real-1", Email: "alpha@choir.news", CreatedAt: now.Add(-2 * time.Hour)},
+		{UserID: "real-2", Email: "beta@me.com", CreatedAt: now.Add(-10 * 24 * time.Hour)},
+		{UserID: "codex-1", Email: "proof@example.com", CreatedAt: now.Add(-time.Hour)},
+		{UserID: "protected-a", Email: "a@b.com", CreatedAt: now.Add(-time.Hour)},
+	}
+	userByID := map[string]pulseAccountRecord{}
+	for _, user := range users {
+		userByID[user.UserID] = user
+	}
+	ownerships := []*VMOwnership{
+		{VMID: "vm-real-1", UserID: "real-1", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, Published: true, State: VMStateActive, LastActiveAt: now.Add(-time.Hour)},
+		{VMID: "vm-real-2", UserID: "real-2", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, Published: true, State: VMStateFailed, LastActiveAt: now.Add(-8 * 24 * time.Hour)},
+		{VMID: "vm-codex-1", UserID: "codex-1", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, Published: true, State: VMStateHibernated, LastActiveAt: now.Add(-time.Hour)},
+		{VMID: "vm-protected-a", UserID: "protected-a", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, Published: true, State: VMStateHibernated, LastActiveAt: now.Add(-time.Hour)},
+	}
+	for _, own := range ownerships {
+		dir := filepath.Join(stateDir, own.VMID)
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("mkdir %s: %v", own.VMID, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "data"), []byte("state"), 0o600); err != nil {
+			t.Fatalf("write %s: %v", own.VMID, err)
+		}
+	}
+
+	summary := pulseSummaryFromSnapshot(now, stateDir, users, userByID, ownerships, true, nil)
+	if summary.Accounts.ByClass[PulseAccountReal] != 2 {
+		t.Fatalf("real account count = %d, want 2", summary.Accounts.ByClass[PulseAccountReal])
+	}
+	if summary.Accounts.ByClass[PulseAccountCodexAgenticTest] != 1 {
+		t.Fatalf("codex account count = %d, want 1", summary.Accounts.ByClass[PulseAccountCodexAgenticTest])
+	}
+	if summary.Accounts.ByClass[PulseAccountProtectedTest] != 1 {
+		t.Fatalf("protected account count = %d, want 1", summary.Accounts.ByClass[PulseAccountProtectedTest])
+	}
+	if summary.Accounts.NewRealLast24h != 1 || summary.Accounts.NewRealLast7d != 1 || summary.Accounts.NewRealLast30d != 2 {
+		t.Fatalf("new real buckets = %d/%d/%d, want 1/1/2", summary.Accounts.NewRealLast24h, summary.Accounts.NewRealLast7d, summary.Accounts.NewRealLast30d)
+	}
+	if summary.Activity.RealActiveLast24h != 1 || summary.Activity.RealActiveLast7d != 1 || summary.Activity.RealActiveLast30d != 2 {
+		t.Fatalf("active real buckets = %d/%d/%d, want 1/1/2", summary.Activity.RealActiveLast24h, summary.Activity.RealActiveLast7d, summary.Activity.RealActiveLast30d)
+	}
+	if summary.Reliability.RealPrimaryFailed != 1 {
+		t.Fatalf("failed real primary = %d, want 1", summary.Reliability.RealPrimaryFailed)
+	}
+	data, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatalf("marshal summary: %v", err)
+	}
+	for _, forbidden := range []string{"alpha@choir.news", "beta@me.com", "proof@example.com", "a@b.com", "real-1", "codex-1"} {
+		if strings.Contains(string(data), forbidden) {
+			t.Fatalf("Pulse summary leaked identity %q in %s", forbidden, string(data))
+		}
 	}
 }
 
@@ -3446,6 +3531,7 @@ func TestHandler_LifecycleEndpointsDenyExternalCallers(t *testing.T) {
 		{"/internal/vmctl/reclaim", "POST", ""},
 		{"/internal/vmctl/retention-plan", "GET", ""},
 		{"/internal/vmctl/retention-shadow-plan", "GET", ""},
+		{"/internal/vmctl/pulse", "GET", ""},
 		{"/internal/vmctl/prune", "POST", ""},
 	}
 

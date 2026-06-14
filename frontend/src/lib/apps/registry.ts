@@ -97,6 +97,17 @@ export const APP_REGISTRY = [
     theme: { surface: 'standard', shellDataAttr: 'data-compute-monitor-window', contentClass: 'compute-monitor-content' },
   },
   {
+    id: 'pulse',
+    name: 'Pulse',
+    icon: '📈',
+    description: 'Public aggregate Choir health',
+    component: () => import('../PulseApp.svelte'),
+    launcher: { desk: true, desktopIcon: true, mobileSwitcher: true, order: 45 },
+    window: { singleton: true, heavy: false, desktop: { width: 980, height: 720, minWidth: 700, minHeight: 520 }, compact: compactDefault },
+    auth: { preview: 'public-readonly', requiresAuthFor: [] },
+    theme: { surface: 'standard', shellDataAttr: 'data-pulse-window', contentClass: 'pulse-content' },
+  },
+  {
     id: 'vtext',
     name: 'VText',
     icon: '📝',

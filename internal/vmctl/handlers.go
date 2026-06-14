@@ -859,6 +859,25 @@ func (h *Handler) HandleRetentionShadowPlan(w http.ResponseWriter, r *http.Reque
 	writeVMCTLJSON(w, http.StatusOK, h.registry.RetentionShadowPlan())
 }
 
+// HandlePulse handles GET /internal/vmctl/pulse. It returns public-safe
+// aggregate usage and health facts without raw users, emails, prompts,
+// documents, traces, IPs, or per-user timelines.
+func (h *Handler) HandlePulse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
+			Error: "vmctl control endpoints are not publicly accessible",
+		})
+		return
+	}
+
+	writeVMCTLJSON(w, http.StatusOK, h.registry.PulseSummary())
+}
+
 // HandlePrune handles POST /internal/vmctl/prune. It applies the bounded
 // retention policy for orphan and explicitly ephemeral VM state.
 func (h *Handler) HandlePrune(w http.ResponseWriter, r *http.Request) {
@@ -1203,6 +1222,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/reclaim", h.HandleReclaim)
 	s.HandleFunc("/internal/vmctl/retention-plan", h.HandleRetentionPlan)
 	s.HandleFunc("/internal/vmctl/retention-shadow-plan", h.HandleRetentionShadowPlan)
+	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
 	s.HandleFunc("/internal/vmctl/prune", h.HandlePrune)
 	s.HandleFunc("/internal/vmctl/runtime-package/sandbox", h.HandleRuntimePackage)
 	s.HandleFunc("/internal/vmctl/sandbox-proxy/", h.HandleSandboxProxy)
@@ -1314,6 +1334,12 @@ func RetentionPlanEndpoint(baseURL string) string {
 // URL for the vmctl service at the given base URL.
 func RetentionShadowPlanEndpoint(baseURL string) string {
 	return fmt.Sprintf("%s/internal/vmctl/retention-shadow-plan", baseURL)
+}
+
+// PulseEndpoint returns the full Pulse aggregate endpoint URL for the vmctl
+// service at the given base URL.
+func PulseEndpoint(baseURL string) string {
+	return fmt.Sprintf("%s/internal/vmctl/pulse", baseURL)
 }
 
 // PruneEndpoint returns the full prune endpoint URL for the vmctl service at
