@@ -113,7 +113,7 @@ variant (ranking function) V: 7 open obligations:
 5. host config implemented and parsed;
 6. CI/deploy and staging identity captured;
 7. post-cleanup proof shows protected surfaces intact and routine policy
-   active. Current V=3. Completed: 1-4. Remaining: 5-7.
+   active. Current V=2. Completed: 1-5. Remaining: 6-7.
 
 budget: one focused implementation mission after this paradoc. Solvency:
 fits if the first pass is read-only inventory plus a small host-config patch;
@@ -158,13 +158,19 @@ roots to formalize/delete after identity proof: `/tmp/go-choir-*result`,
 four-generation retention, daily off-peak retention sweep targeting 180 GiB
 free with a 120 GiB emergency floor, Nix daemon `min-free=120 GiB` and
 `max-free=180 GiB`, weekly off-peak `nix-store --optimise`, and typed TTL/owner
-rules for ad hoc result roots. Open edge: do not manually delete roots or run
+rules for ad hoc result roots. Host config has been patched and locally parsed:
+`nix.settings.min-free=128849018880`, `max-free=193273528320`,
+`auto-optimise-store=false`, `nix.optimise.automatic=true`, `dates=["Sun
+03:30"]`, and disk sweep env target/floor `188743680/125829120` KiB. Deploy
+impact for the patch is host OS only with no ordinary/playwright guest image
+builds and no active VM refresh. Open edge: do not manually delete roots or run
 ad hoc GC from the report alone; root cleanup must happen through the reviewed
 service path or a separate owner-approved manual action.
 
-next move: implement the selected routine retention policy in `nix/node-b.nix`
-and deployment preflight without manual live GC/root deletion; keep operator
-report tooling ignored by deploy-impact; then run focused tests and deploy.
+next move: commit and push the host policy patch, monitor CI/deploy, verify
+deployed timers/Nix config/service journal on Node B, run the declared
+retention service once if CI has not already done so, and prove disk headroom
+plus protected current/rollback and guest-image paths.
 
 ledger file: docs/mission-node-b-nix-store-retention-v0.ledger.md
 

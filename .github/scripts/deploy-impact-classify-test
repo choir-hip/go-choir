@@ -50,6 +50,7 @@ doccheck_tooling_output="$(
     ".gitignore" \
     "cmd/doccheck/main.go" \
     "scripts/doccheck" \
+    "scripts/node-b-deploy-disk-preflight" \
     "docs/doc-authority-manifest.yaml" \
     "AGENTS.md"
 )"
@@ -57,6 +58,7 @@ assert_contains "$doccheck_tooling_output" "deploy_needed=false"
 assert_contains "$doccheck_tooling_output" ".gitignore -> ignored (repo metadata or docs checker tooling)"
 assert_contains "$doccheck_tooling_output" "cmd/doccheck/main.go -> ignored (repo metadata or docs checker tooling)"
 assert_contains "$doccheck_tooling_output" "scripts/doccheck -> ignored (repo metadata or docs checker tooling)"
+assert_contains "$doccheck_tooling_output" "scripts/node-b-deploy-disk-preflight -> ignored (repo metadata or docs checker tooling)"
 assert_contains "$doccheck_tooling_output" "docs/doc-authority-manifest.yaml -> ignored (docs/workflow/test artifact)"
 assert_contains "$doccheck_tooling_output" "AGENTS.md -> ignored (top-level markdown)"
 assert_not_contains "$doccheck_tooling_output" "conservative Go impact"

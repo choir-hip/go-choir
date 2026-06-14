@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-min_free_kib="${DEPLOY_MIN_FREE_KIB:-20971520}"
+min_free_kib="${DEPLOY_MIN_FREE_KIB:-125829120}"
 avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
 
 echo "==> Deploy disk preflight"
@@ -18,7 +18,7 @@ if ! curl -fsS -X POST -H 'X-Internal-Caller: true' http://127.0.0.1:8083/intern
   curl -fsS -X POST -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/idle-check || true
 fi
 journalctl --vacuum-size=256M || true
-nix-env -p /nix/var/nix/profiles/system --delete-generations +8 || true
+nix-env -p /nix/var/nix/profiles/system --delete-generations +4 || true
 nix store gc || true
 
 avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"

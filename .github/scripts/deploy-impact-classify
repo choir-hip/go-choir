@@ -118,7 +118,7 @@ mark_host_os_only() {
 
 for path in "${changed[@]}"; do
   case "$path" in
-    .gitignore|cmd/doccheck/*|scripts/doccheck)
+    .gitignore|cmd/doccheck/*|scripts/doccheck|scripts/node-b-deploy-disk-preflight)
       add_explanation "$path -> ignored (repo metadata or docs checker tooling)"
       continue
       ;;

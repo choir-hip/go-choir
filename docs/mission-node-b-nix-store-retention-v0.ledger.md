@@ -52,3 +52,34 @@
 - Expected ΔV: 4, covering root classification, generation target, GC/free-space
   thresholds, and optimisation cadence.
 - Actual ΔV: 4. Remaining V=3: host config, CI/deploy, post-cleanup proof.
+
+## 2026-06-14 — host retention policy patch
+
+- Claim tested: the selected policy can be represented declaratively as host
+  config/deploy-helper changes without touching guest images or manually
+  deleting roots.
+- Move: patched `nix/node-b.nix` to keep four system generations in the disk
+  sweep, raise the sweep free-space floor/target to 120/180 GiB, set Nix daemon
+  `min-free=128849018880` and `max-free=193273528320`, disable per-build
+  `auto-optimise-store`, and enable weekly `nix.optimise` at `Sun 03:30` with a
+  45-minute randomized delay. Patched `scripts/node-b-deploy-disk-preflight` to
+  use the same four-generation and 120 GiB preflight floor. Marked that deploy
+  helper as non-deployed workflow/operator tooling in deploy-impact.
+- Parse evidence:
+  - `nix eval --json .#nixosConfigurations.go-choir-b.config.nix.settings`
+    confirmed `min-free=128849018880`, `max-free=193273528320`, and
+    `auto-optimise-store=false`.
+  - `nix eval --json .#nixosConfigurations.go-choir-b.config.nix.optimise`
+    confirmed weekly optimiser settings.
+  - `nix eval --json .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-disk-gc.serviceConfig.Environment`
+    confirmed `GO_CHOIR_DISK_GC_MIN_FREE_KIB=125829120` and
+    `GO_CHOIR_DISK_GC_TARGET_FREE_KIB=188743680`.
+- Deploy-impact evidence: current diff classified as
+  `deploy_host=true`, `deploy_host_os=true`, `deploy_vmctl_restart=true`,
+  `deploy_ordinary_guest=false`, `deploy_playwright_guest=false`, and
+  `deploy_active_vm_refresh=false`.
+- Safety boundary: no live root deletion, generation pruning, Nix GC, guest
+  image deletion, service restart, or Node B mutation was performed locally.
+  The patch will deploy through the normal host OS path.
+- Expected ΔV: 1 for host config implemented and parsed.
+- Actual ΔV: 1. Remaining V=2: CI/deploy and post-cleanup proof.

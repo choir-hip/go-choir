@@ -56,15 +56,15 @@ let
     set -euo pipefail
     export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.curl pkgs.gnugrep pkgs.nix pkgs.systemd ]}:$PATH"
 
-    emergency_min_free_kib="''${GO_CHOIR_DISK_GC_MIN_FREE_KIB:-41943040}"
-    target_free_kib="''${GO_CHOIR_DISK_GC_TARGET_FREE_KIB:-104857600}"
+    emergency_min_free_kib="''${GO_CHOIR_DISK_GC_MIN_FREE_KIB:-125829120}"
+    target_free_kib="''${GO_CHOIR_DISK_GC_TARGET_FREE_KIB:-188743680}"
     avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
     echo "go-choir disk retention: root_available_kib=''${avail_kib} emergency_min_free_kib=''${emergency_min_free_kib} target_free_kib=''${target_free_kib}"
     df -h / /var/lib/go-choir 2>/dev/null || df -h /
 
     curl -fsS -X POST -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/reclaim || true
     journalctl --vacuum-size=256M || true
-    nix-env -p /nix/var/nix/profiles/system --delete-generations +8 || true
+    nix-env -p /nix/var/nix/profiles/system --delete-generations +4 || true
 
     avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
     if [ -z "''${avail_kib}" ] || [ "''${avail_kib}" -lt "''${emergency_min_free_kib}" ]; then
@@ -525,8 +525,8 @@ in
       Environment = [
         # Emergency floor remains the lower bound. The higher target runs
         # routine Nix GC before storage pressure reaches recovery territory.
-        "GO_CHOIR_DISK_GC_MIN_FREE_KIB=41943040"
-        "GO_CHOIR_DISK_GC_TARGET_FREE_KIB=104857600"
+        "GO_CHOIR_DISK_GC_MIN_FREE_KIB=125829120"
+        "GO_CHOIR_DISK_GC_TARGET_FREE_KIB=188743680"
       ];
     };
   };
@@ -714,7 +714,16 @@ in
   # Nix settings
   nix.settings = {
     experimental-features = [ "nix-command" "flakes" ];
-    auto-optimise-store = true;
+    auto-optimise-store = false;
+    min-free = 128849018880;
+    max-free = 193273528320;
+  };
+
+  nix.optimise = {
+    automatic = true;
+    dates = [ "Sun 03:30" ];
+    randomizedDelaySec = "45min";
+    persistent = true;
   };
 
   # System packages
