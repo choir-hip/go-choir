@@ -901,6 +901,75 @@ func TestTapHostServiceInputRuleSpec(t *testing.T) {
 	}
 }
 
+func TestIPTablesDeleteArgsForListedRuleNat(t *testing.T) {
+	line := "-A POSTROUTING -s 10.200.3.2/30 -o lo -m comment --comment \"go-choir-vm-vm-vm-5b0c1-tap\" -j MASQUERADE"
+	got, ok := iptablesDeleteArgsForListedRule("nat", "POSTROUTING", line, "go-choir-vm-vm-vm-5b0c1-tap")
+	if !ok {
+		t.Fatal("expected matching nat rule")
+	}
+	want := []string{
+		"-t", "nat",
+		"-D", "POSTROUTING",
+		"-s", "10.200.3.2/30",
+		"-o", "lo",
+		"-m", "comment", "--comment", "go-choir-vm-vm-vm-5b0c1-tap",
+		"-j", "MASQUERADE",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("iptablesDeleteArgsForListedRule() = %#v, want %#v", got, want)
+	}
+}
+
+func TestIPTablesDeleteArgsForListedRuleLegacyFilter(t *testing.T) {
+	line := "-A FORWARD -i vm-vm-5b0c1-tap -j ACCEPT"
+	got, ok := iptablesDeleteArgsForListedRule("", "FORWARD", line, "vm-vm-5b0c1-tap")
+	if !ok {
+		t.Fatal("expected matching filter rule")
+	}
+	want := []string{
+		"-D", "FORWARD",
+		"-i", "vm-vm-5b0c1-tap",
+		"-j", "ACCEPT",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("iptablesDeleteArgsForListedRule() = %#v, want %#v", got, want)
+	}
+}
+
+func TestIPTablesDeleteArgsForListedRuleRejectsNonMatchingRule(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		chain string
+		line  string
+		match string
+	}{
+		{
+			name:  "chain mismatch",
+			chain: "POSTROUTING",
+			line:  "-A OUTPUT -p tcp --dport 9001 -m comment --comment go-choir-vm-vm-deadbeef-tap -j DNAT --to-destination 10.200.3.2:8085",
+			match: "go-choir-vm-vm-deadbeef-tap",
+		},
+		{
+			name:  "comment mismatch",
+			chain: "INPUT",
+			line:  "-A INPUT -i vm-vm-deadbeef-tap -m comment --comment go-choir-vm-vm-deadbeef-tap -j ACCEPT",
+			match: "go-choir-vm-vm-other-tap",
+		},
+		{
+			name:  "policy line",
+			chain: "INPUT",
+			line:  "-P INPUT ACCEPT",
+			match: "INPUT",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, ok := iptablesDeleteArgsForListedRule("", tc.chain, tc.line, tc.match); ok {
+				t.Fatalf("iptablesDeleteArgsForListedRule() matched %#v", got)
+			}
+		})
+	}
+}
+
 func TestTapNameForVMID(t *testing.T) {
 	if got := tapNameForVMID("vm-abcdef012345"); got != "vm-vm-abcde-tap" {
 		t.Fatalf("tapNameForVMID() = %q", got)
@@ -1122,7 +1191,6 @@ func TestBuildFirecrackerConfig_GuestPortInBootArgs(t *testing.T) {
 		}
 	}
 }
-
 
 func TestBuildFirecrackerConfig_LegacyBootIncludesRuntimeServiceURLs(t *testing.T) {
 	cfg := DefaultManagerConfig()

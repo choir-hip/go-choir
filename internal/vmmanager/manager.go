@@ -1939,40 +1939,118 @@ func (m *Manager) createTapDevice(name string) error {
 }
 
 // deleteTapDevice removes a TAP network device and its associated
-// deleteTapDevice removes a TAP network device and its associated
 // iptables rules after a VM stops.
 func (m *Manager) deleteTapDevice(name string) {
 	ipBin := findBinary("ip", "/run/current-system/sw/bin/ip")
 	iptBin := findBinary("iptables", "/run/current-system/sw/bin/iptables")
 
-	comment := fmt.Sprintf("go-choir-vm-%s", name)
-
-	// Remove all iptables rules associated with this VM's comment tag.
-	// We clean up PREROUTING, OUTPUT, POSTROUTING, FORWARD, and INPUT chains
-	// to ensure no stale rules leak between VM lifecycles.
-	for _, chain := range []string{"PREROUTING", "OUTPUT", "POSTROUTING"} {
-		_ = exec.Command("sh", "-c",
-			fmt.Sprintf("%s -t nat -S %s | grep '%s' | cut -d' ' -f2- | while read rule; do %s -t nat -D %s $rule 2>/dev/null; done", iptBin, chain, comment, iptBin, chain)).Run()
-	}
-	for _, chain := range []string{"FORWARD", "INPUT"} {
-		_ = exec.Command("sh", "-c",
-			fmt.Sprintf("%s -S %s | grep '%s' | cut -d' ' -f2- | while read rule; do %s -D %s $rule 2>/dev/null; done", iptBin, chain, comment, iptBin, chain)).Run()
-	}
-	// Also remove rules by tap device name for older rules that may not
-	// have the comment tag.
-	for _, chain := range []string{"PREROUTING", "OUTPUT", "POSTROUTING"} {
-		_ = exec.Command("sh", "-c",
-			fmt.Sprintf("%s -t nat -S %s | grep '%s' | cut -d' ' -f2- | while read rule; do %s -t nat -D %s $rule 2>/dev/null; done", iptBin, chain, name, iptBin, chain)).Run()
-	}
-	_ = exec.Command("sh", "-c",
-		fmt.Sprintf("%s -S FORWARD | grep '%s' | cut -d' ' -f2- | while read rule; do %s -D FORWARD $rule 2>/dev/null; done", iptBin, name, iptBin)).Run()
-	_ = exec.Command("sh", "-c",
-		fmt.Sprintf("%s -S INPUT | grep '%s' | cut -d' ' -f2- | while read rule; do %s -D INPUT $rule 2>/dev/null; done", iptBin, name, iptBin)).Run()
+	deleteIPTablesRulesForTap(iptBin, name)
 
 	cmd := exec.Command(ipBin, "link", "del", name)
 	if err := cmd.Run(); err != nil {
 		log.Printf("vmmanager: warning: could not delete tap device %s: %v", name, err)
 	}
+}
+
+func deleteIPTablesRulesForTap(iptBin, name string) {
+	comment := fmt.Sprintf("go-choir-vm-%s", name)
+
+	// Remove rules by comment first, then by tap device name for older FORWARD
+	// rules that predate comment tagging.
+	for _, chain := range []string{"PREROUTING", "OUTPUT", "POSTROUTING"} {
+		deleteMatchingIPTablesRules(iptBin, "nat", chain, comment)
+		deleteMatchingIPTablesRules(iptBin, "nat", chain, name)
+	}
+	for _, chain := range []string{"FORWARD", "INPUT"} {
+		deleteMatchingIPTablesRules(iptBin, "", chain, comment)
+		deleteMatchingIPTablesRules(iptBin, "", chain, name)
+	}
+}
+
+func deleteMatchingIPTablesRules(iptBin, table, chain, match string) {
+	if strings.TrimSpace(match) == "" {
+		return
+	}
+	listArgs := make([]string, 0, 4)
+	if table != "" {
+		listArgs = append(listArgs, "-t", table)
+	}
+	listArgs = append(listArgs, "-S", chain)
+	output, err := exec.Command(iptBin, listArgs...).Output()
+	if err != nil {
+		log.Printf("vmmanager: warning: could not list iptables rules for %s/%s: %v", table, chain, err)
+		return
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		deleteArgs, ok := iptablesDeleteArgsForListedRule(table, chain, line, match)
+		if !ok {
+			continue
+		}
+		if deleteOutput, err := exec.Command(iptBin, deleteArgs...).CombinedOutput(); err != nil {
+			log.Printf("vmmanager: warning: could not delete iptables rule %q with args %v: %v (%s)", line, deleteArgs, err, strings.TrimSpace(string(deleteOutput)))
+		}
+	}
+}
+
+func iptablesDeleteArgsForListedRule(table, chain, line, match string) ([]string, bool) {
+	if strings.TrimSpace(match) == "" || !strings.Contains(line, match) {
+		return nil, false
+	}
+	fields := iptablesRuleFields(line)
+	if len(fields) < 2 || fields[0] != "-A" || fields[1] != chain {
+		return nil, false
+	}
+	args := make([]string, 0, len(fields)+2)
+	if table != "" {
+		args = append(args, "-t", table)
+	}
+	args = append(args, "-D", chain)
+	args = append(args, fields[2:]...)
+	return args, true
+}
+
+func iptablesRuleFields(line string) []string {
+	fields := make([]string, 0)
+	var current strings.Builder
+	var quote rune
+	escaped := false
+	flush := func() {
+		if current.Len() == 0 {
+			return
+		}
+		fields = append(fields, current.String())
+		current.Reset()
+	}
+	for _, r := range line {
+		if escaped {
+			current.WriteRune(r)
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			escaped = true
+			continue
+		}
+		if quote != 0 {
+			if r == quote {
+				quote = 0
+				continue
+			}
+			current.WriteRune(r)
+			continue
+		}
+		if r == '"' || r == '\'' {
+			quote = r
+			continue
+		}
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			flush()
+			continue
+		}
+		current.WriteRune(r)
+	}
+	flush()
+	return fields
 }
 
 // setupHostNetworking configures the host-side networking for a VM's
