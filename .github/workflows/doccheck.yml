@@ -1,0 +1,49 @@
+name: Docs Truth Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '*.md'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '*.md'
+
+concurrency:
+  group: doccheck-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  doccheck:
+    name: Docs Truth Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Run doccheck
+        shell: bash
+        run: scripts/doccheck
+
+      - name: Confirm reports were produced
+        shell: bash
+        run: test -s doccheck-report.md && test -s doccheck.json
+
+      - name: Upload doccheck reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: doccheck-report
+          path: |
+            doccheck-report.md
+            doccheck.json

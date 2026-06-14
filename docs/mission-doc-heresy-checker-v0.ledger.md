@@ -223,3 +223,34 @@ normal CI's doccheck job for non-doc pushes.
 
 Expected Delta V: -1 by turning the CI slowdown into a named classifier defect
 and a reconciled operating rule instead of silently weakening the full CI path.
+
+## 2026-06-14 - Docs-Only Checker CI Fix
+
+Claim: the reconciled contract can be implemented without weakening the full
+CI/deploy filter: docs-only pushes trigger a separate report-only checker
+workflow, while normal CI still runs doccheck for non-doc changes.
+
+Move: add `.github/workflows/doccheck.yml` scoped to `docs/**` and top-level
+`*.md`, keep the existing full CI `paths-ignore`, and teach
+`.github/scripts/deploy-impact-classify` that `.gitignore`, `cmd/doccheck/*`,
+and `scripts/doccheck` are non-deployed checker/metadata paths. Extend the
+classifier regression test so the exact slow-commit path shape selects no
+deploy and a real deployed command such as `cmd/proxy/main.go` still selects
+the proxy host service.
+
+Actual Delta V: -1. The doccheck-only path is explicit, and doccheck tooling
+edits no longer trigger host/guest deploy classes.
+
+Receipts:
+
+- `.github/scripts/deploy-impact-classify-test` passes.
+- Simulating the slow commit's changed paths now emits `deploy_needed=false`
+  with all deploy class flags false.
+- `nix develop -c scripts/doccheck` still exits 0, scans 193 docs, emits both
+  reports, and reports 796 warn-only findings in under 10 seconds.
+
+Open edge: current Node B disk attribution remains limited to deploy-log
+evidence until an authorized Node B directory-usage probe can run. The observed
+state is 85% used with 72G free, above the deploy preflight and daily retention
+headroom thresholds, so this may repeat as high steady-state disk usage unless
+the retained Nix/VM/artifact state is measured and policy-adjusted.

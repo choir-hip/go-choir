@@ -45,4 +45,26 @@ assert_contains "$sourcecontract_runtime_output" "deploy_active_vm_refresh=true"
 assert_contains "$sourcecontract_runtime_output" "host_services=gateway,platformd,proxy,sandbox,sourcecycled"
 assert_contains "$sourcecontract_runtime_output" "internal/sourcecontract/evidence.go -> shared source contract dependency: runtime/platform service pointers + active VM refresh"
 
+doccheck_tooling_output="$(
+  run_classifier \
+    ".gitignore" \
+    "cmd/doccheck/main.go" \
+    "scripts/doccheck" \
+    "docs/doc-authority-manifest.yaml" \
+    "AGENTS.md"
+)"
+assert_contains "$doccheck_tooling_output" "deploy_needed=false"
+assert_contains "$doccheck_tooling_output" ".gitignore -> ignored (repo metadata or docs checker tooling)"
+assert_contains "$doccheck_tooling_output" "cmd/doccheck/main.go -> ignored (repo metadata or docs checker tooling)"
+assert_contains "$doccheck_tooling_output" "scripts/doccheck -> ignored (repo metadata or docs checker tooling)"
+assert_contains "$doccheck_tooling_output" "docs/doc-authority-manifest.yaml -> ignored (docs/workflow/test artifact)"
+assert_contains "$doccheck_tooling_output" "AGENTS.md -> ignored (top-level markdown)"
+assert_not_contains "$doccheck_tooling_output" "conservative Go impact"
+assert_not_contains "$doccheck_tooling_output" "unknown deployed path"
+
+proxy_runtime_output="$(run_classifier "cmd/proxy/main.go")"
+assert_contains "$proxy_runtime_output" "deploy_needed=true"
+assert_contains "$proxy_runtime_output" "host_services=proxy"
+assert_contains "$proxy_runtime_output" "cmd/proxy/main.go -> proxy host service"
+
 printf 'deploy-impact-classify-test: ok\n'

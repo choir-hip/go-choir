@@ -118,6 +118,10 @@ mark_host_os_only() {
 
 for path in "${changed[@]}"; do
   case "$path" in
+    .gitignore|cmd/doccheck/*|scripts/doccheck)
+      add_explanation "$path -> ignored (repo metadata or docs checker tooling)"
+      continue
+      ;;
     start-services.sh)
       add_explanation "$path -> ignored (local developer service harness)"
       continue
