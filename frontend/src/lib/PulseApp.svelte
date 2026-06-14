@@ -19,6 +19,11 @@
   $: realComputerTotal = Number(computers?.real_primary_total || 0);
   $: realComputerUsable = Number(computers?.real_primary_usable || 0);
   $: realComputerHealth = realComputerTotal > 0 ? Math.round((realComputerUsable / realComputerTotal) * 100) : 0;
+  $: realAccountCount = Number(accountClasses?.real || 0);
+  $: codexAccountCount = Number(accountClasses?.codex_agentic_test || 0);
+  $: protectedTestAccountCount = Number(accountClasses?.protected_test || 0);
+  $: internalAccountCount = Number(accountClasses?.internal || 0);
+  $: unknownAccountCount = Number(accountClasses?.unknown || 0);
 
   onMount(() => {
     refresh();
@@ -34,10 +39,6 @@
     } finally {
       loading = false;
     }
-  }
-
-  function count(name: string) {
-    return Number(accountClasses?.[name] || 0);
   }
 
   function formatNumber(value: unknown) {
@@ -104,14 +105,14 @@
   <section class="metric-strip" data-pulse-metrics>
     <article class="metric-card">
       <span class="metric-label">Real users</span>
-      <strong>{formatNumber(count('real'))}</strong>
-      <div class="meter real"><span style="width:{barWidth(count('real'), Math.max(accounts?.total || 1, 1))}"></span></div>
+      <strong>{formatNumber(realAccountCount)}</strong>
+      <div class="meter real"><span style="width:{barWidth(realAccountCount, Math.max(accounts?.total || 1, 1))}"></span></div>
       <small>+{formatNumber(accounts?.new_real_last_24h)} 24h / +{formatNumber(accounts?.new_real_last_7d)} 7d / +{formatNumber(accounts?.new_real_last_30d)} 30d</small>
     </article>
     <article class="metric-card">
       <span class="metric-label">Active real users</span>
       <strong>{formatNumber(activity?.real_active_last_24h)}</strong>
-      <div class="meter activity"><span style="width:{barWidth(activity?.real_active_last_24h, Math.max(count('real'), 1))}"></span></div>
+      <div class="meter activity"><span style="width:{barWidth(activity?.real_active_last_24h, Math.max(realAccountCount, 1))}"></span></div>
       <small>{formatNumber(activity?.real_active_last_7d)} 7d / {formatNumber(activity?.real_active_last_30d)} 30d</small>
     </article>
     <article class="metric-card">
@@ -141,11 +142,11 @@
         <span class="chip">{accounts?.auth_data_available ? 'live auth db' : 'partial'}</span>
       </div>
       <dl class="facts">
-        <div><dt>Real</dt><dd>{formatNumber(count('real'))}</dd></div>
-        <div><dt>Codex test</dt><dd>{formatNumber(count('codex_agentic_test'))}</dd></div>
-        <div><dt>Protected test</dt><dd>{formatNumber(count('protected_test'))}</dd></div>
-        <div><dt>Internal</dt><dd>{formatNumber(count('internal'))}</dd></div>
-        <div><dt>Unknown</dt><dd>{formatNumber(count('unknown'))}</dd></div>
+        <div><dt>Real</dt><dd>{formatNumber(realAccountCount)}</dd></div>
+        <div><dt>Codex test</dt><dd>{formatNumber(codexAccountCount)}</dd></div>
+        <div><dt>Protected test</dt><dd>{formatNumber(protectedTestAccountCount)}</dd></div>
+        <div><dt>Internal</dt><dd>{formatNumber(internalAccountCount)}</dd></div>
+        <div><dt>Unknown</dt><dd>{formatNumber(unknownAccountCount)}</dd></div>
         <div><dt>Total</dt><dd>{formatNumber(accounts?.total)}</dd></div>
       </dl>
       <p class="compact-copy">{classifier?.version || 'classifier pending'} / {classifier?.unknown_policy || 'unknowns excluded from real counts'}</p>
