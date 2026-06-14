@@ -71,19 +71,24 @@ pressure from converting agents into brittle procedural workflows.
   staging proof. Local tests cannot settle vmctl, deployed actor rewarm, or
   Choir-in-Choir behavior.
 
-**variant (ranking function) V:** current V=1 after deployed acceptance
-evidence. The local rollback batch removed or accepted all eight known edges:
+**variant (ranking function) V:** current local V=0 after the deployed
+acceptance overclaim repair was implemented in the deploy-impact classifier;
+deployed V remains un-settled until the repair is pushed, CI/deploy restarts
+vmctl, staging identity matches the new commit, and the deployed acceptance
+synthesis probe returns blocked. The local rollback batch removed or accepted
+all eight known edges:
 1 forced VText researcher continuation removed; 2 generic
 required-next-tool semantic trust narrowed to a typed mechanical protocol; 3
 prompt-bar researcher intent removed from runtime routing; 4 tests rewritten to
 protect VText choice/non-forcing semantics; 5 M3 handoff corrected away from
 hardening the deterministic continuation; 6 browser-public run status exposes
 trajectory/work evidence; 7 prompt/VText-only smoke no longer accepts a run
-acceptance record locally but still overclaims on the deployed synthesis path;
-8 actor memory cross-trajectory policy is named as a successor edge rather than
-a blocker for this rollback. Settlement still requires repairing the deployed
-acceptance overclaim, CI/deploy, staging identity, and deployed lifecycle
-evidence.
+acceptance record locally and the deploy classifier now restarts vmctl when
+sandbox runtime package sources change; 8 actor memory cross-trajectory policy
+is named as a successor edge rather than a blocker for this rollback.
+Settlement still requires CI/deploy, staging identity, deployed lifecycle
+evidence, and a deployed acceptance synthesis probe proving the overclaim is
+gone.
 
 **budget:** one recovery mission before further M3 implementation. Solvency:
 first pass must buy the doctrine fix plus remove the forced continuation path.
@@ -114,6 +119,14 @@ and staging proof for any vmctl/product-path claim.
   `runacc-94d318d49e2ba66a99ce` at `staging-smoke-level/accepted` from only
   submitted + VText-opened checkpoints. This is the exact M3.1 forbidden shape,
   even though local tests covered the older lifecycle mission path.
+- C5 active: the overclaim came from deploy topology rather than the
+  run-acceptance code in the pushed commit. The deployed product-path response
+  was served through an authenticated user computer whose sandbox package can
+  be supplied by vmctl's `/internal/vmctl/runtime-package/sandbox` endpoint;
+  the deploy impact for `27af4f2f6cf9caddc8fc3ae0ea96d5dbbdc1428a` refreshed
+  sandbox/gateway but did not restart vmctl. The classifier now marks sandbox
+  runtime package changes as requiring vmctl restart so newly booted user
+  computers receive the updated runtime package.
 - Edge/deployed_oracle: CI/deploy and staging identity succeeded for
   `27af4f2f6cf9caddc8fc3ae0ea96d5dbbdc1428a`, and the deployed adaptive
   lifecycle Playwright proof passed. Settlement remains blocked by the deployed
@@ -121,11 +134,10 @@ and staging proof for any vmctl/product-path claim.
 - Edge/successor: actor memory cross-trajectory scope still needs a dedicated
   policy/test pass, but is not required to settle this regression rollback.
 
-**next move:** repair the deployed run-acceptance synthesis path so
-prompt/VText-only smoke remains `staging-smoke-level/blocked` for M3.1 as well
-as M3, then rerun focused run-acceptance tests, runtime shards, CI/deploy,
-staging identity, deployed adaptive lifecycle proof, and deployed acceptance
-synthesis.
+**next move:** commit and push the deploy-impact repair, verify CI/deploy
+restarts vmctl, verify staging identity, rerun deployed adaptive lifecycle
+proof, and rerun deployed acceptance synthesis to prove prompt/VText-only smoke
+is `staging-smoke-level/blocked` for M3.1.
 
 **ledger file:** `docs/mission-lifecycle-cutover-m3.1-v0.ledger.md`.
 
@@ -144,7 +156,9 @@ stays here and in the ledger.
 **settlement:** not claimed. Local code/docs and tests repaired the original
 rollback batch, CI/deploy reached staging, and adaptive lifecycle Playwright
 passed, but deployed acceptance synthesis overclaimed M3.1 from prompt/VText
-smoke. Final settlement requires that overclaim repaired and redeployed.
+smoke. The deploy-impact repair is implemented locally; final settlement
+requires redeploying it, proving vmctl restart happened, and proving deployed
+acceptance synthesis blocks the prompt/VText-only shape.
 
 ## Review Findings
 

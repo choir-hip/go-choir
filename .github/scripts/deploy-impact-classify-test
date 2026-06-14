@@ -89,4 +89,12 @@ assert_contains "$proxy_runtime_output" "deploy_needed=true"
 assert_contains "$proxy_runtime_output" "host_services=proxy"
 assert_contains "$proxy_runtime_output" "cmd/proxy/main.go -> proxy host service"
 
+sandbox_runtime_output="$(run_classifier "internal/runtime/run_acceptance.go")"
+assert_contains "$sandbox_runtime_output" "deploy_needed=true"
+assert_contains "$sandbox_runtime_output" "deploy_host=true"
+assert_contains "$sandbox_runtime_output" "deploy_host_service=true"
+assert_contains "$sandbox_runtime_output" "deploy_vmctl_restart=true"
+assert_contains "$sandbox_runtime_output" "host_services=gateway,sandbox"
+assert_contains "$sandbox_runtime_output" "internal/runtime/run_acceptance.go -> gateway/sandbox service pointers + vmctl runtime-package endpoint restart"
+
 printf 'deploy-impact-classify-test: ok\n'

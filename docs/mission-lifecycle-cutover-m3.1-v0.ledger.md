@@ -133,3 +133,34 @@ Receipts:
 Open edge: first next move is a code fix, but only after this documentation
 checkpoint commit. Add local coverage for the M3.1 target mission id and rerun
 the deployed acceptance synthesis to verify `staging-smoke-level/blocked`.
+
+## 2026-06-14 - Repair Runtime Package Deploy Impact Locally
+
+Claim: the deployed overclaim was caused by deploy topology, not by the
+run-acceptance logic in the pushed source. Authenticated product-path runs can
+exercise a user computer whose sandbox runtime package is served through
+vmctl's `/internal/vmctl/runtime-package/sandbox` endpoint. The deploy for
+`27af4f2f6cf9caddc8fc3ae0ea96d5dbbdc1428a` refreshed sandbox/gateway and
+reported matching build identity, but did not restart vmctl, so newly booted
+user computers could still receive the old sandbox runtime package.
+
+Move: repair / contain. Changed deploy-impact classification so sandbox runtime
+package changes, including `internal/runtime/*`, mark `deploy_vmctl_restart`.
+Added classifier coverage for `internal/runtime/run_acceptance.go`, and widened
+the comprehensive run-acceptance test to protect both
+`mission-lifecycle-cutover-v0` and `mission-lifecycle-cutover-m3.1-v0` against
+prompt/VText-only acceptance.
+
+Expected Delta V: -1 locally. Actual Delta V: -1 locally. M3.1 local V is 0,
+but settlement remains pending until the repair is committed, pushed, deployed
+with vmctl restart, and re-proved through the deployed acceptance synthesis
+probe.
+
+Receipts:
+- `.github/scripts/deploy-impact-classify-test` passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'Test(RunAcceptanceSynthesizeDoesNotAcceptPromptVTextOnlySmoke|HandleRunStatusPublicIncludesTrajectoryEvidence)' -count=1` passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed.
+
+Open edge: deploy and product-path proof remain mandatory. The next deployed
+acceptance synthesis probe must return `staging-smoke-level/blocked` for M3.1
+prompt/VText-only smoke before this mission can settle.
