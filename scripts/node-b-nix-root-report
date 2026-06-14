@@ -1,0 +1,404 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+host="${NODE_B_HOST:-node-b}"
+mode="ssh"
+report_format="${NODE_B_NIX_ROOT_REPORT_FORMAT:-${REPORT_FORMAT:-markdown}}"
+out_dir=""
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/node-b-nix-root-report [--host node-b|--local] [--format markdown|json] [--out-dir DIR]
+
+Read-only Node B Nix root classifier. It collects GC roots, system
+generations, Nix config, filesystem headroom, and deployment result roots,
+then groups roots into current/booted systems, retained generations, active
+service/guest-image roots, temporary build-result roots, invalid roots,
+running-process roots, and unknown roots.
+
+This command does not run Nix GC, delete roots, delete generations, delete
+guest images, restart services, or edit host configuration.
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --host)
+      host="${2:?missing --host value}"
+      mode="ssh"
+      shift 2
+      ;;
+    --local)
+      mode="local"
+      shift
+      ;;
+    --format)
+      report_format="${2:?missing --format value}"
+      case "$report_format" in
+        markdown|json) ;;
+        *)
+          echo "unknown --format value: $report_format" >&2
+          usage >&2
+          exit 2
+          ;;
+      esac
+      shift 2
+      ;;
+    --out-dir)
+      out_dir="${2:?missing --out-dir value}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ -z "$out_dir" ]; then
+  out_dir="$(mktemp -d "${TMPDIR:-/tmp}/node-b-nix-root-report.XXXXXX")"
+else
+  mkdir -p "$out_dir"
+fi
+
+collect_script='
+set -euo pipefail
+out="$(mktemp -d /tmp/node-b-nix-root-report.XXXXXX)"
+{
+  echo "captured_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "hostname=$(hostname)"
+} > "$out/meta.txt"
+df -B1 -P / /nix/store /var/lib/go-choir/vm-state > "$out/df-B1.txt" 2>&1 || true
+du -sh /nix/store /var/lib/go-choir/vm-state > "$out/du-sh.txt" 2>&1 || true
+readlink -f /run/current-system > "$out/current-system.txt" 2>&1 || true
+readlink -f /run/booted-system > "$out/booted-system.txt" 2>&1 || true
+nix-env --list-generations -p /nix/var/nix/profiles/system > "$out/system-generations.txt" 2>&1 || true
+nix-store --gc --print-roots > "$out/gc-roots.txt" 2>&1 || true
+nix-store --gc --print-dead > "$out/gc-dead.txt" 2>&1 || true
+nix show-config > "$out/nix-show-config.txt" 2>&1 || true
+find /tmp -maxdepth 1 -mindepth 1 \( -name "go-choir-*result" -o -name "go-choir-guest-image-new" -o -name "guest-image-*" \) -printf "%p\t%l\t%TY-%Tm-%TdT%TH:%TM:%TSZ\n" > "$out/tmp-result-roots.txt" 2>&1 || true
+find /opt/go-choir -maxdepth 1 -mindepth 1 \( -name "result" -o -name "result-*" \) -printf "%p\t%l\t%TY-%Tm-%TdT%TH:%TM:%TSZ\n" > "$out/opt-result-roots.txt" 2>&1 || true
+find /var/lib/go-choir/services -maxdepth 3 -type f -path "*/bin/*" -printf "%p\t%TY-%Tm-%TdT%TH:%TM:%TSZ\n" > "$out/service-pointers.txt" 2>&1 || true
+find /var/lib/go-choir/guest /var/lib/go-choir/guest-playwright -maxdepth 1 -type f -printf "%p\t%s\t%TY-%Tm-%TdT%TH:%TM:%TSZ\n" > "$out/guest-image-files.txt" 2>&1 || true
+awk -F" -> " "/ -> \\/nix\\/store\\// { print \$2 }" "$out/gc-roots.txt" | sort -u > "$out/root-targets.txt" || true
+awk "/^skipping invalid root from / { gsub(q, \"\", \$5); gsub(q, \"\", \$7); print \$5 \"\\t\" \$7 }" q="'"'"'" "$out/gc-roots.txt" > "$out/invalid-roots.tsv" || true
+while IFS= read -r target; do
+  [ -n "$target" ] || continue
+  if [ -e "$target" ]; then
+    bytes="$(du -sxB1 "$target" 2>/dev/null | awk "{print \$1}")"
+    printf "%s\ttrue\t%s\n" "$target" "${bytes:-0}"
+  else
+    printf "%s\tfalse\t0\n" "$target"
+  fi
+done < "$out/root-targets.txt" > "$out/root-target-status.tsv"
+tar -C "$out" -czf - .
+'
+
+if [ "$mode" = "ssh" ]; then
+  ssh "$host" "bash -s" <<<"$collect_script" | tar -xzf - -C "$out_dir"
+else
+  bash -s <<<"$collect_script" | tar -xzf - -C "$out_dir"
+fi
+
+REPORT_FORMAT="$report_format" REPORT_DIR="$out_dir" perl <<'PERL'
+use strict;
+use warnings;
+use JSON::PP qw(encode_json);
+
+my $dir = $ENV{REPORT_DIR};
+my $format = $ENV{REPORT_FORMAT} || "markdown";
+
+sub read_file {
+  my ($name) = @_;
+  my $path = "$dir/$name";
+  open my $fh, "<", $path or return "";
+  local $/;
+  my $s = <$fh>;
+  close $fh;
+  $s =~ s/\s+\z//;
+  return $s;
+}
+
+sub read_lines {
+  my ($name) = @_;
+  my $s = read_file($name);
+  return grep { length($_) } split(/\n/, $s);
+}
+
+sub fmt_bytes {
+  my ($bytes) = @_;
+  $bytes ||= 0;
+  my @units = qw(B KiB MiB GiB TiB);
+  my $n = $bytes + 0;
+  my $i = 0;
+  while ($n >= 1024 && $i < $#units) {
+    $n /= 1024;
+    $i++;
+  }
+  return $i == 0 ? sprintf("%d %s", $n, $units[$i]) : sprintf("%.2f %s", $n, $units[$i]);
+}
+
+sub config_value {
+  my ($config, $key) = @_;
+  return $1 if $config =~ /^$key = (.*)$/m;
+  return "";
+}
+
+sub classify_root {
+  my ($root) = @_;
+  return "current_system_root" if $root eq "/run/current-system";
+  return "booted_system_root" if $root eq "/run/booted-system";
+  return "retained_system_generation" if $root =~ m{^/nix/var/nix/profiles/system-\d+-link$};
+  return "current_deploy_result_root" if $root eq "/opt/go-choir/result";
+  return "temporary_host_system_build_root" if $root eq "/tmp/go-choir-nixos-result";
+  return "temporary_service_build_root" if $root =~ m{^/tmp/go-choir-service-[^/]+-result$} || $root eq "/tmp/go-choir-frontend-result";
+  return "temporary_guest_image_build_root" if $root eq "/tmp/guest-image-result" || $root eq "/tmp/go-choir-guest-image-new";
+  return "temporary_playwright_guest_image_build_root" if $root eq "/tmp/guest-image-playwright-result";
+  return "active_service_runtime_root" if $root =~ m{^/var/lib/go-choir/services/};
+  return "active_guest_image_runtime_root" if $root =~ m{^/var/lib/go-choir/guest};
+  return "running_process_root" if $root =~ m{^/proc/};
+  return "automatic_gcroot" if $root =~ m{^/nix/var/nix/gcroots/};
+  return "root_user_nix_cache_root" if $root =~ m{^/root/\.cache/nix/};
+  return "unknown_root";
+}
+
+sub policy_for_class {
+  my ($class) = @_;
+  return "keep: current system must never be a prune candidate" if $class eq "current_system_root";
+  return "keep until reboot catches current; mismatch is rollback evidence" if $class eq "booted_system_root";
+  return "keep newest 3-4 after rollback rationale; prune older generations through declared service only" if $class eq "retained_system_generation";
+  return "formalize or delete: invalid old result root after deploy identity proof" if $class eq "invalid_root";
+  return "formalize TTL/owner or delete after latest deploy/rollback manifest" if $class =~ /^temporary_/;
+  return "keep while service/guest path is active" if $class =~ /^active_/;
+  return "keep: process runtime root disappears when process exits/restarts" if $class eq "running_process_root";
+  return "keep or ignore: small root-owned Nix cache root, not deploy rollback state" if $class eq "root_user_nix_cache_root";
+  return "review: unknown roots block automatic deletion until classified";
+}
+
+my %meta = map { /^([^=]+)=(.*)$/ ? ($1 => $2) : () } read_lines("meta.txt");
+my @df = read_lines("df-B1.txt");
+my @du = read_lines("du-sh.txt");
+my $current_system = read_file("current-system.txt");
+my $booted_system = read_file("booted-system.txt");
+my @generation_lines = read_lines("system-generations.txt");
+my @root_lines = read_lines("gc-roots.txt");
+my @dead_lines = read_lines("gc-dead.txt");
+my $nix_config = read_file("nix-show-config.txt");
+
+my %target_status;
+for my $line (read_lines("root-target-status.tsv")) {
+  my ($target, $exists, $bytes) = split(/\t/, $line);
+  next unless $target;
+  $target_status{$target} = {
+    exists => ($exists || "") eq "true" ? JSON::PP::true : JSON::PP::false,
+    bytes => int($bytes || 0),
+  };
+}
+
+my @roots;
+my %class_counts;
+my %class_bytes;
+for my $line (@root_lines) {
+  next unless $line =~ /^(.*?) -> (\/nix\/store\/\S+)$/;
+  my ($root, $target) = ($1, $2);
+  my $class = classify_root($root);
+  my $status = $target_status{$target} || { exists => JSON::PP::false, bytes => 0 };
+  $class_counts{$class}++;
+  $class_bytes{$class} += $status->{bytes} || 0;
+  push @roots, {
+    root => $root,
+    target => $target,
+    class => $class,
+    target_exists => $status->{exists},
+    target_bytes => $status->{bytes} + 0,
+    policy => policy_for_class($class),
+  };
+}
+
+my @invalid_roots;
+for my $line (read_lines("invalid-roots.tsv")) {
+  my ($root, $target) = split(/\t/, $line);
+  next unless $root;
+  $class_counts{invalid_root}++;
+  push @invalid_roots, {
+    root => $root,
+    target => $target || "",
+    class => "invalid_root",
+    target_exists => JSON::PP::false,
+    target_bytes => 0,
+    policy => policy_for_class("invalid_root"),
+  };
+}
+
+my @generations;
+my $current_generation = 0;
+for my $line (@generation_lines) {
+  next unless $line =~ /^\s*(\d+)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(.*)$/;
+  my ($generation, $date, $tail) = ($1 + 0, $2, $3 || "");
+  my $current = $tail =~ /\(current\)/ ? JSON::PP::true : JSON::PP::false;
+  $current_generation = $generation if $current;
+  push @generations, { generation => $generation, date => $date, current => $current };
+}
+my @sorted_generations = sort { $b->{generation} <=> $a->{generation} } @generations;
+my %keep_generation = map { $_->{generation} => 1 } @sorted_generations[0 .. (@sorted_generations < 4 ? $#sorted_generations : 3)];
+for my $g (@generations) {
+  if ($g->{current}) {
+    $g->{policy} = "keep current";
+  } elsif ($keep_generation{$g->{generation}}) {
+    $g->{policy} = "keep as recent rollback candidate";
+  } else {
+    $g->{policy} = "prune after rollback review";
+  }
+}
+
+my $dead_count = scalar(grep { m{^/nix/store/} } @dead_lines);
+my %dead_name_counts;
+for my $path (grep { m{^/nix/store/} } @dead_lines) {
+  my ($name) = $path =~ m{/nix/store/[a-z0-9]+-(.+)$};
+  $name ||= "unknown";
+  my $bucket =
+    $name =~ /guest-image-playwright/ ? "go-choir-guest-image-playwright" :
+    $name =~ /guest-image/ ? "go-choir-guest-image" :
+    $name =~ /runtime-deps/ ? "runtime-deps" :
+    $name =~ /closure-info/ ? "closure-info" :
+    $name =~ /nixos-system/ ? "nixos-system" :
+    $name =~ /go-choir-frontend/ ? "go-choir-frontend" :
+    $name =~ /(proxy|sandbox|vmctl|gateway|platformd|sourcecycled|maild|auth)-0\.1\.0/ ? "go-choir-service" :
+    $name =~ /\.drv$/ ? "derivation" :
+    "other";
+  $dead_name_counts{$bucket}++;
+}
+
+my @class_summary = map {
+  {
+    class => $_,
+    roots => $class_counts{$_} + 0,
+    direct_target_bytes => ($class_bytes{$_} || 0) + 0,
+    policy => policy_for_class($_),
+  }
+} sort { ($class_counts{$b} <=> $class_counts{$a}) || $a cmp $b } keys %class_counts;
+
+my @dead_summary = map {
+  { bucket => $_, paths => $dead_name_counts{$_} + 0 }
+} sort { ($dead_name_counts{$b} <=> $dead_name_counts{$a}) || $a cmp $b } keys %dead_name_counts;
+
+my $root_used = "";
+my $root_avail = "";
+for my $line (@df) {
+  next if $line =~ /^Filesystem/;
+  my @parts = split(/\s+/, $line);
+  next unless @parts >= 6 && $parts[5] eq "/";
+  $root_used = $parts[2];
+  $root_avail = $parts[3];
+  last;
+}
+
+my $doc = {
+  mode => "report-only; no root deletion, generation pruning, nix gc, service restart, or guest image deletion",
+  captured_at => $meta{captured_at} || "",
+  hostname => $meta{hostname} || "",
+  evidence_dir => $dir,
+  df => \@df,
+  du => \@du,
+  root_used_bytes => int($root_used || 0),
+  root_available_bytes => int($root_avail || 0),
+  current_system => $current_system,
+  booted_system => $booted_system,
+  nix_config => {
+    min_free => config_value($nix_config, "min-free"),
+    max_free => config_value($nix_config, "max-free"),
+    auto_optimise_store => config_value($nix_config, "auto-optimise-store"),
+    keep_outputs => config_value($nix_config, "keep-outputs"),
+    keep_derivations => config_value($nix_config, "keep-derivations"),
+  },
+  system_generations => \@generations,
+  root_classes => \@class_summary,
+  roots => \@roots,
+  invalid_roots => \@invalid_roots,
+  dead_path_count => $dead_count,
+  dead_path_buckets => \@dead_summary,
+  temporary_result_roots => [read_lines("tmp-result-roots.txt")],
+  opt_result_roots => [read_lines("opt-result-roots.txt")],
+  service_pointers => [read_lines("service-pointers.txt")],
+  guest_image_files => [read_lines("guest-image-files.txt")],
+  proposed_policy => {
+    generations => "keep 4 latest system generations by default; require named incident pin with expiry for older rollback",
+    scheduled_gc => "daily off-peak generation pruning plus nix store gc through a systemd service, not ad hoc operator GC",
+    nix_daemon_backstop => "min-free 120 GiB, max-free 180 GiB",
+    optimise => "weekly off-peak nix store optimise or keep current auto-optimise-store if service evidence proves no deploy IO risk",
+    ad_hoc_roots => "temporary /tmp and /opt result roots require owner, type, and TTL; otherwise delete root symlink before scheduled GC",
+  },
+};
+
+if ($format eq "json") {
+  print encode_json($doc), "\n";
+  exit 0;
+}
+
+print "# Node B Nix Root Classification Report\n\n";
+print "- mode: `$doc->{mode}`\n";
+print "- captured_at: `$doc->{captured_at}`\n";
+print "- hostname: `$doc->{hostname}`\n";
+print "- evidence_dir: `$doc->{evidence_dir}`\n";
+print "- root_available: `" . fmt_bytes($doc->{root_available_bytes}) . "`\n";
+print "- root_used: `" . fmt_bytes($doc->{root_used_bytes}) . "`\n";
+print "- current_system: `$current_system`\n";
+print "- booted_system: `$booted_system`\n";
+print "- dead_store_paths: `$dead_count`\n";
+print "- nix min-free/max-free: `$doc->{nix_config}{min_free}` / `$doc->{nix_config}{max_free}`\n";
+print "- auto-optimise-store: `$doc->{nix_config}{auto_optimise_store}`\n\n";
+
+print "## Root Classes\n\n";
+print "| class | roots | direct target allocation | policy |\n";
+print "| --- | ---: | ---: | --- |\n";
+for my $row (@class_summary) {
+  print "| `$row->{class}` | $row->{roots} | " . fmt_bytes($row->{direct_target_bytes}) . " | $row->{policy} |\n";
+}
+print "\n";
+
+print "## System Generations\n\n";
+print "| generation | date | current | policy |\n";
+print "| ---: | --- | --- | --- |\n";
+for my $g (@generations) {
+  print "| $g->{generation} | `$g->{date}` | " . ($g->{current} ? "`true`" : "`false`") . " | $g->{policy} |\n";
+}
+print "\n";
+
+print "## Invalid Roots\n\n";
+if (@invalid_roots) {
+  print "| root | target | policy |\n";
+  print "| --- | --- | --- |\n";
+  for my $r (@invalid_roots) {
+    print "| `$r->{root}` | `$r->{target}` | $r->{policy} |\n";
+  }
+} else {
+  print "No invalid roots reported.\n";
+}
+print "\n\n";
+
+print "## Temporary Result Roots\n\n";
+print "| root record |\n| --- |\n";
+for my $line (@{$doc->{temporary_result_roots}}) {
+  print "| `$line` |\n";
+}
+print "\n";
+
+print "## Dead Path Buckets\n\n";
+print "| bucket | paths |\n| --- | ---: |\n";
+for my $row (@dead_summary) {
+  print "| `$row->{bucket}` | $row->{paths} |\n";
+}
+print "\n";
+
+print "## Proposed Keep/Delete/Formalize Policy\n\n";
+print "- keep: current system, booted system until reboot convergence is understood, four newest system generations, active service pointers, active guest image files, and running-process roots.\n";
+print "- formalize: `/tmp/go-choir-*result`, `/tmp/guest-image-*`, and `/opt/go-choir/result` roots must have type, owner, TTL, and rollback purpose if they survive a deploy.\n";
+print "- delete after explicit approval and identity proof: invalid `/opt/go-choir/result`, temporary service/frontend roots from old deploys, and guest-image build result roots superseded by installed guest paths and rollback manifest.\n";
+print "- configure: Nix daemon `min-free=120GiB`, `max-free=180GiB`; routine scheduled GC before low-space emergencies; weekly off-peak optimise or keep auto-optimise only if IO evidence stays acceptable.\n";
+print "- refuse: no manual GC, generation pruning, or root deletion from this report alone.\n";
+PERL

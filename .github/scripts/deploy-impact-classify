@@ -122,7 +122,7 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> ignored (repo metadata or docs checker tooling)"
       continue
       ;;
-    scripts/node-b-storage-*|scripts/node-b-data-img-snapshot)
+    scripts/node-b-storage-*|scripts/node-b-data-img-snapshot|scripts/node-b-nix-root-report)
       add_explanation "$path -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
       continue
       ;;
