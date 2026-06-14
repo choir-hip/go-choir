@@ -347,3 +347,81 @@ PROBLEM 0 **resolved** for boot/sandbox readiness. Operator primary computer
 runs again with VText store intact. Follow-on missions: Dolt compaction,
 proactive `data.img` growth alerts, platform VM disk policy (see community-news
 v1 Platform Computer Requirements).
+
+## Eighth Finding: image rebuild exposed VM iptables cleanup leak (2026-06-14)
+
+### Symptom timeline
+
+- A docs/checker push unexpectedly rebuilt guest images before the docs-only CI
+  classifier was corrected.
+- After the image rebuild, the owner-facing boot surface showed:
+  - `COMPUTER BOOT IS STILL PENDING`
+  - repeated bootstrap probes still waiting
+  - `Requesting computer recovery`
+- Node B reported vmctl, sandbox, gateway, and proxy services active, but no
+  stable Firecracker process for the affected owner computer.
+- vmctl listed the public platform computer as `booting` and the operator
+  primary computer as `hibernated`; recovery attempts advanced the operator
+  epoch but timed out waiting for guest health.
+
+### Evidence
+
+- Node B disk pressure is high but not yet at the configured pressure threshold:
+  `/` is about 406G used of 476G (86%), with about 68G free.
+- The retained state is dominated by `/nix/store` (~237G) and
+  `/var/lib/go-choir/vm-state` (~176G). This is recurring retention behavior,
+  not a one-time log leak.
+- The operator VM directory includes the live 16G `data.img` plus stale recovery
+  snapshots from the prior incident:
+  - `data.img.pre-prune-20260609T224644Z`
+  - `data.img.pre-prune-20260610T064824Z`
+  - `data.img.corrupted-20260610T065012Z`
+- vmctl logs repeat Firecracker timeout/kill cycles and warnings that tap
+  devices cannot be deleted.
+- Host iptables contains thousands of stale Choir VM rules:
+  - NAT `PREROUTING`: 7743 rules
+  - NAT `OUTPUT`: 2648 rules
+  - NAT `POSTROUTING`: 5288 rules
+  - filter `INPUT`: 4232 rules
+  - rules mentioning `vm-vm-5b0c1-tap`: 2718
+  - rules mentioning `vm-vm-unive-tap`: 533
+- Code inspection found `deleteTapDevice` converting `iptables -S CHAIN` output
+  into deletion commands by stripping only the first field. For an output line
+  such as `-A POSTROUTING ...`, this yields `POSTROUTING ...`, and the service
+  then runs an invalid command equivalent to:
+  `iptables -t nat -D POSTROUTING POSTROUTING ...`.
+
+### Belief-state update
+
+The docs-only CI image rebuild was a trigger, not the whole root cause. The
+durable issue is that VM lifecycle cleanup leaks iptables rules, so every failed
+boot/recovery can make the next boot slower and more fragile. Combined with
+large retained VM/Nix state, this makes the failure likely to repeat after
+future deploys or image refreshes unless cleanup is repaired and stale rules are
+removed.
+
+### Mutation classification
+
+- Class: `red` for vmctl/live-computer recovery if live cleanup or service
+  restart is performed; `orange` for the code path that changes VM lifecycle
+  cleanup behavior.
+- Protected surfaces: vmctl, Firecracker guest routing, active user computers,
+  public platform computer, persistent VM data images.
+- Conjecture delta: repairing exact iptables rule deletion prevents stale VM
+  networking rules from accumulating across boot/recovery cycles and restores a
+  bounded recovery path after image rebuilds.
+- Admissible evidence: Node B iptables counts before/after, vmctl journal,
+  vmctl health/list, guest `/health`, staging boot surface, CI/deploy identity.
+- Rollback path: restore the pre-cleanup `iptables-save` snapshot, restore any
+  backed-up ownership registry before state mutation, revert the cleanup commit,
+  and redeploy the previous vmctl build.
+- Heresy delta: discovered `1` cleanup/retention incident; introduced `0`;
+  repaired `0` until the cleanup fix is deployed and live VM recovery is proven.
+
+### Remaining error field
+
+- `deleteTapDevice` still needs a code fix that deletes exact matching
+  `iptables -S` rules without duplicating chain names.
+- Node B still needs a bounded stale-rule cleanup plan after a backup.
+- VM state retention still needs follow-up policy: stale data-image snapshots
+  and warm Nix cache can keep disk usage near 85% even when no VM is active.
