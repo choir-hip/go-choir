@@ -533,3 +533,38 @@
   verified, and deployed Node B proof observes the target.
 - Open edge: push/monitor CI and deploy, then verify deployed Node B reports
   the 100 GiB target and did not request ordinary/Playwright guest image builds.
+
+## 2026-06-14 — deployed Nix timer target proof
+
+- Claim: the active Nix timer target implementation is proven on Node B when CI
+  passes, deploy identity matches the commit, guest image builds stay skipped,
+  systemd exposes the 100 GiB target, and the read-only storage proof observes
+  the target and protected-account gates.
+- Move: pushed `c04e9649d28d2e163d7c0eb9d0d3e9e506af649e`, monitored GitHub
+  Actions, checked staging health/build identity, inspected the Node B timer
+  service environment, and ran a post-deploy storage proof.
+- Evidence: CI run `27505328627` completed successfully; `Deploy to Staging
+  (Node B)` completed in 29 seconds. Deploy-impact output was host OS only:
+  `deploy_ordinary_guest=false`, `deploy_playwright_guest=false`,
+  `deploy_active_vm_refresh=false`. Deploy logs show the host NixOS closure
+  build took 9 seconds, ordinary and Playwright guest image builds were skipped,
+  and guest image installs were skipped. Staging `/health` reports deployed
+  commit `c04e9649d28d2e163d7c0eb9d0d3e9e506af649e`. Node B systemd shows
+  `GO_CHOIR_DISK_GC_TARGET_FREE_KIB=104857600` on
+  `go-choir-disk-gc.service`. Post-deploy
+  `scripts/node-b-storage-proof --host node-b --top 10 --out-dir
+  /tmp/node-b-storage-proof-20260614T164148Z` completed in 6.873 seconds and
+  verifier passed.
+- Storage proof details: Nix pressure `below_target_headroom`, timer action
+  `run_nix_store_gc_from_timer`, current generation 495, rollback generation
+  494, 9 stale generation review candidates, 1 broken root, active vmctl
+  retention projected delete bytes `0`, and protected accounts
+  `yusefnathanson@me.com`, `a@b.com`, and `b@c.com` remain `refuse_delete`.
+- Safety evidence: no manual live `nix store gc`, generation deletion, root
+  deletion, service restart, VM mutation, snapshot deletion, or active prune
+  expansion was run by this agent. The behavior change is the deployed timer
+  target; actual GC will occur on the scheduled timer when still below target.
+- Expected ΔV: 1.
+- Actual ΔV: 1; active Nix GC/rollback enforcement is deployed and proven.
+- Open edge: active VM fake-user cleanup and snapshot cleanup enforcement remain
+  unsettled.

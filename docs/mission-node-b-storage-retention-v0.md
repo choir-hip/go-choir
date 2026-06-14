@@ -383,31 +383,35 @@ rollback closures remain protected by Nix roots. The plan records:
 - delete and GC gates requiring deployed identity, rollback manifest,
   owner-reviewed stale generation/root decision, and a dry-run report.
 
-Live Node B evidence from
-`/tmp/node-b-storage-proof-20260614T163631Z/node-b-storage-report.json`:
+Post-deploy Node B evidence from
+`/tmp/node-b-storage-proof-20260614T164148Z/node-b-storage-report.json`:
 
 - `policy_status`: report-only; no generation deletion, root deletion, or ad
   hoc `nix-store` GC authorized by the report;
-- current available space: 78,564,284 KiB;
+- current available space: 78,536,292 KiB;
 - active sweep emergency floor: 41,943,040 KiB;
 - active sweep target headroom: 104,857,600 KiB;
 - pressure: `below_target_headroom`;
 - timer action: `run_nix_store_gc_from_timer`;
-- current generation: 494;
-- rollback generation: 493;
-- stale generation review candidates: 8;
+- current generation: 495;
+- rollback generation: 494;
+- stale generation review candidates: 9;
 - broken roots: 1.
 
-The worktree now changes the Node B daily disk sweep so routine timer
-maintenance runs `nix store gc` below 100 GiB free space instead of preserving
-the warm cache until the 40 GiB emergency floor. It does not delete Nix roots or
-manual generations beyond the existing `+8` generation policy, and no live GC,
-root deletion, service restart, or VM mutation was run during this pass.
+Commit `c04e9649d28d2e163d7c0eb9d0d3e9e506af649e` deployed this timer policy.
+GitHub Actions run `27505328627` passed; deploy-impact classified the change as
+host OS only with `deploy_ordinary_guest=false` and
+`deploy_playwright_guest=false`; `Deploy to Staging (Node B)` completed in
+29 seconds. The deploy built the host NixOS closure in 9 seconds, skipped
+ordinary and Playwright guest image builds and installs, and activated the new
+`go-choir-disk-gc.service` environment with
+`GO_CHOIR_DISK_GC_TARGET_FREE_KIB=104857600`. No manual live GC, root deletion,
+snapshot deletion, or active prune expansion was run during this pass.
 
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-node-b-storage-retention-v0.md. Treat it as the source program for preventing Node B storage recurrence after the 2026-06-14 VM recovery incident. Current status is open_handoff: read-only classifier, JSON verifier, single-command proof runner, deployed vmctl shadow dry-run retention reporting, typed manual snapshot sidecar reporting, a dry-run-by-default snapshot metadata helper, and a Nix GC/current+rollback plan exist. The worktree now changes the Node B daily disk sweep to run routine `nix store gc` below 100 GiB free space while preserving rooted current/rollback closures and not deleting Nix roots beyond the existing system generation policy. CI/deploy passed for 32e754208e2a332165f3bce13ecbdf2ab17c5d97, and deployed Node B proof completed in 7.160 seconds with active retention deleting 0 bytes while shadow dry-run reports 46 candidates / 30.89 GiB. Commit ce52c115cd03bc07bcf40a3a95a2f31ccd8a7cc8 proved storage-tooling edits now run CI without host/guest deploy. The latest read-only proof `/tmp/node-b-storage-proof-20260614T163631Z` completed in 7.193 seconds and shows Nix pressure `below_target_headroom`, timer action `run_nix_store_gc_from_timer`, current generation 494, rollback generation 493, 8 stale generation review candidates, and 1 broken root, with no generation/root deletion or ad hoc GC authorized by the report. Mutation class is red for any live cleanup and orange for future vmctl/Nix retention behavior; do not run manual live deletion, ad hoc Nix GC, manual snapshot cleanup, service restarts, or active prune expansion without explicit approval. Preserve real user yusefnathanson@me.com and protected test accounts a@b.com and b@c.com. Do not delete VM state, data.img snapshots, Nix roots, or guest images without a typed retention candidate, rollback/refusal reason, owner-visible report, and explicit approval. First next move: push and monitor the host-OS-only Nix timer change, then verify deployed Node B reports the 100 GiB target; if already landed, implement snapshot cleanup gates over typed sidecars. Ledger: docs/mission-node-b-storage-retention-v0.ledger.md. Settlement requires staging-proven retention/reporting, CI/deploy evidence for behavior changes, a reviewed baseline cleanup plan, and explicit evidence that owner/test real accounts remain protected.
+/goal Use Parallax on docs/mission-node-b-storage-retention-v0.md. Treat it as the source program for preventing Node B storage recurrence after the 2026-06-14 VM recovery incident. Current status is open_handoff: read-only classifier, JSON verifier, single-command proof runner, deployed vmctl shadow dry-run retention reporting, typed manual snapshot sidecar reporting, a dry-run-by-default snapshot metadata helper, and deployed Nix GC/current+rollback timer policy exist. Commit c04e9649d28d2e163d7c0eb9d0d3e9e506af649e deployed the Node B daily disk sweep target: routine `nix store gc` below 100 GiB free space while preserving rooted current/rollback closures and not deleting Nix roots beyond the existing system generation policy. CI run 27505328627 passed; deploy impact was host OS only with ordinary/Playwright guest images false; deploy completed in 29 seconds and skipped guest image builds/installs. Latest post-deploy read-only proof `/tmp/node-b-storage-proof-20260614T164148Z` completed in 6.873 seconds and shows Nix pressure `below_target_headroom`, timer action `run_nix_store_gc_from_timer`, current generation 495, rollback generation 494, 9 stale generation review candidates, and 1 broken root, with no generation/root deletion or ad hoc GC authorized by the report. Mutation class is red for any live cleanup and orange for future vmctl/Nix retention behavior; do not run manual live deletion, ad hoc Nix GC, manual snapshot cleanup, service restarts, or active prune expansion without explicit approval. Preserve real user yusefnathanson@me.com and protected test accounts a@b.com and b@c.com. Do not delete VM state, data.img snapshots, Nix roots, or guest images without a typed retention candidate, rollback/refusal reason, owner-visible report, and explicit approval. First next move: implement snapshot cleanup gates over typed sidecars, or convert deployed vmctl shadow fake-user candidates into owner-approved active cleanup while retaining protected-account evidence. Ledger: docs/mission-node-b-storage-retention-v0.ledger.md. Settlement requires staging-proven retention/reporting, CI/deploy evidence for behavior changes, a reviewed baseline cleanup plan, and explicit evidence that owner/test real accounts remain protected.
 ```
 
 ## Parallax State
@@ -437,19 +441,18 @@ staging report, then active bounded cleanup only after explicit approval.
 
 variant (ranking function) V: active VM retention implementation `1` +
 snapshot cleanup enforcement over typed sidecars `1` + active Nix GC/rollback
-enforcement `1` = `3`; last ΔV: active Nix timer target implementation `0`
-until CI/deploy proves the host-OS-only change on Node B.
+enforcement `0` = `2`; last ΔV: deployed active Nix timer target `1`.
 
 budget: initial planning budget one Codex turn; execution budget extended
 through report/shadow implementation and deployed proof. Solvency: prevention
 work remains solvent; live cleanup is not authorized.
 
 authority / bounds: documentation and read-only investigation are authorized.
-The worktree now includes an orange Nix timer behavior change that runs routine
-`nix store gc` below 100 GiB target headroom after the normal reclaim/journal
-vacuum/generation-prune sequence. Manual live deletion, ad hoc Nix GC, service
-restarts, and any expansion of active prune/reclaim deletion require explicit
-approval and staging evidence.
+The deployed Node B timer now runs routine `nix store gc` below 100 GiB target
+headroom after the normal reclaim/journal vacuum/generation-prune sequence.
+Manual live deletion, ad hoc Nix GC, manual snapshot cleanup, service restarts,
+and any expansion of active prune/reclaim deletion require explicit approval
+and staging evidence.
 
 mutation class / protected surfaces: green for this paradoc; future orange for
 retention code and CI/deploy changes; future red for live Node B VM/Nix cleanup.
@@ -462,14 +465,14 @@ evidence packet: Node B disk inventory; `scripts/node-b-storage-report` output;
 vmctl health/list/retention-plan/retention-shadow-plan; Nix root inventory and
 `nix_roots.gc_plan`; incident docs; code references in `internal/vmctl`,
 `nix/node-b.nix`, and `.github/workflows/ci.yml`; deploy evidence from GitHub
-Actions run `27504321847`; latest read-only proof
-`/tmp/node-b-storage-proof-20260614T163631Z`; future active cleanup proof must
-include dry-run report, focused tests, CI/deploy identity when behavior
+Actions runs `27504321847` and `27505328627`; latest post-deploy read-only
+proof `/tmp/node-b-storage-proof-20260614T164148Z`; future active cleanup proof
+must include dry-run report, focused tests, CI/deploy identity when behavior
 changes, and post-cleanup health.
 
-heresy delta: discovered `1` policy mismatch; introduced `0`; repaired `1`
-for staging-proven report-only prevention visibility; active cleanup prevention
-remains open.
+heresy delta: discovered `1` policy mismatch; introduced `0`; repaired `2`
+for staging-proven report-only prevention visibility plus deployed Nix timer
+headroom enforcement; active VM/snapshot cleanup prevention remains open.
 
 position / live conjectures / open edges: Current evidence supports a policy
 mismatch, not a single leak. The report has an identity-backed baseline cleanup
@@ -497,26 +500,27 @@ image-build request unless the classifier explicitly treats them as
 operator/report tooling. Commit `ce52c115cd03bc07bcf40a3a95a2f31ccd8a7cc8`
 proved that fix in CI: run `27504868005` passed, Detect Staging Deploy Impact
 passed, Build Frontend was skipped, and `Deploy to Staging (Node B)` was
-skipped. Existing deployed disk GC still preserves Nix cache above the 40 GiB
-free-space floor, but the current worktree changes the daily sweep to run
-routine `nix store gc` below a 100 GiB target after vmctl reclaim, journal
-vacuum, and existing `+8` system-generation pruning. The latest read-only proof
-completed in 7.193 seconds, identified pressure `below_target_headroom`, timer
-action `run_nix_store_gc_from_timer`, current generation 494, rollback
-generation 493, eight stale generation review candidates, one broken root, and
-explicit no-generation-delete/no-root-delete/no-ad-hoc-GC gates from the
-report. Deploy classifier output for `nix/node-b.nix` is host OS only:
-ordinary and Playwright guest images are false. Open edges: push/CI/deploy
-proof for the active timer target, missing-auth-user policy, active fake-user
-cleanup approval/enforcement, snapshot cleanup enforcement after typed metadata
-exists, whether live `data.img` sparsification/discard should be part of
-hibernate/recovery, and how to expose reports to operators.
+skipped. Commit `c04e9649d28d2e163d7c0eb9d0d3e9e506af649e` then deployed the
+daily Nix sweep target: the timer now runs routine `nix store gc` below a
+100 GiB target after vmctl reclaim, journal vacuum, and existing `+8`
+system-generation pruning. GitHub Actions run `27505328627` passed, deploy
+impact was host OS only with ordinary and Playwright guest images false, deploy
+completed in 29 seconds, host NixOS closure build took 9 seconds, and guest
+image builds/installs were skipped. Staging health reports deployed commit
+`c04e9649d28d2e163d7c0eb9d0d3e9e506af649e`. Systemd now shows
+`GO_CHOIR_DISK_GC_TARGET_FREE_KIB=104857600` on `go-choir-disk-gc.service`.
+Post-deploy proof completed in 6.873 seconds, identified pressure
+`below_target_headroom`, timer action `run_nix_store_gc_from_timer`, current
+generation 495, rollback generation 494, nine stale generation review
+candidates, one broken root, active vmctl retention delete bytes `0`, and
+protected accounts still refused. Open edges: missing-auth-user policy, active
+fake-user cleanup approval/enforcement, snapshot cleanup enforcement after
+typed metadata exists, whether live `data.img` sparsification/discard should be
+part of hibernate/recovery, and how to expose reports to operators.
 
-next move: push and monitor the host-OS-only Nix timer change, then verify
-deployed Node B reports the 100 GiB target and the deploy did not request guest
-image builds. After that, implement snapshot cleanup gates over typed sidecars
-or owner-approved active fake-user cleanup while retaining the protected account
-gate and rollback/refusal record.
+next move: implement snapshot cleanup gates over typed sidecars, or convert
+deployed vmctl shadow fake-user candidates into owner-approved active cleanup
+while retaining the protected account gate and rollback/refusal record.
 
 ledger file: docs/mission-node-b-storage-retention-v0.ledger.md
 
