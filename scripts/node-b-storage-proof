@@ -106,6 +106,7 @@ jq -e '
 
   .mode == "report-only; no VM state deletion or ownership mutation"
   and .active_delete_authorized == false
+  and .missing_auth_policy.active_delete_authorized == false
   and .gates.protected_account_gate_passed == true
   and .gates.source_report_active_delete_authorized == false
   and protected_refused("yusefnathanson@me.com")

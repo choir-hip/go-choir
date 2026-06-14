@@ -717,16 +717,24 @@ for my $o (@ownerships) {
   } elsif ($email_mapping =~ /^available/) {
     $role = "missing_auth_user_record_refusal";
     $missing_auth_user_refusal_bytes += $dir_bytes;
+    my $gate = vmctl_ephemeral_primary_gate($kind, $desktop, $published_bool, $state, $age_seconds);
+    if ($gate eq "") {
+      $gate = "current vmctl ephemeral-primary guard plus missing-auth lineage/tombstone proof plus owner-approved active policy plus rollback/refusal record";
+    }
     push @cleanup_refusals, {
       class => $role,
       vm_id => $vm,
       user_id => $user,
       email => "",
       state => $state,
+      kind => $kind,
+      desktop => $desktop,
+      published => $published_bool,
       size => $dir_bytes,
       age => $age_seconds,
       reason => "uuid_owner_missing_auth_user_record",
       action => "refuse_until_missing_auth_policy_exists",
+      gate => $gate,
     };
   } else {
     $identity_unresolved_bytes += $dir_bytes;
@@ -1013,7 +1021,7 @@ if ($report_format eq "json") {
     next_required_proof => [
       "Use scripts/node-b-storage-vm-gates to review fake-domain and synthetic-owner rows before any active cleanup.",
       "Attach typed manual snapshot metadata or keep current filename-inferred snapshot refusals.",
-      "Define the missing-auth-user UUID VM retention policy or keep current missing-auth refusals.",
+      "Keep missing-auth-user UUID VMs refused unless scripts/node-b-storage-vm-gates reports lineage/tombstone proof, owner approval, rollback/refusal record, and staged proof.",
     ],
   };
   print JSON::PP->new->canonical->pretty->encode($doc);
@@ -1161,7 +1169,7 @@ print "| --- | ---: | ---: | --- | --- |\n";
 print "| `fake_email_domain_dry_run` | $fake_domain_ownerships | " . fmt_bytes($fake_domain_review_bytes) . " total; " . fmt_bytes($fake_domain_policy_eligible_bytes) . " policy-eligible | `destroy_vm_state_and_remove_ownership` after review | active policy not yet authorized |\n";
 print "| `synthetic_user_owner_review` | $synthetic_ownerships | " . fmt_bytes($synthetic_review_bytes) . " total; " . fmt_bytes($synthetic_policy_eligible_bytes) . " policy-eligible | owner-review then destroy VM state | synthetic owners not yet approved disposable |\n";
 print "| `manual_snapshot_review_only` | " . scalar(@snapshots) . " | " . fmt_bytes($snapshot_total) . " | preserve until typed metadata, recovery settlement, and rollback proof exist | filename-only metadata; no deletion authorized |\n";
-print "| `missing_auth_user_record_refusal` | review | " . fmt_bytes($missing_auth_user_refusal_bytes) . " | refuse | missing-auth-user retention policy absent |\n";
+print "| `missing_auth_user_record_refusal` | review | " . fmt_bytes($missing_auth_user_refusal_bytes) . " | refuse | preserve by default; VM gate requires lineage/tombstone proof and owner approval before review |\n";
 print "| `nix_root_review_only` | " . scalar(@nix_roots) . " | " . fmt_bytes($nix_root_target_alloc_total) . " direct target allocation | classify current/rollback/stale root | report-only root budget; no GC authorized |\n\n";
 
 print "### Top VM Cleanup Candidates\n\n";
@@ -1245,13 +1253,13 @@ print "| manual recovery snapshots | " . fmt_bytes($snapshot_total) . " | report
 print "| fake email domain VMs | " . fmt_bytes($fake_domain_review_bytes) . " total; " . fmt_bytes($fake_domain_policy_eligible_bytes) . " policy-eligible | dry-run candidate; requires typed active policy before delete |\n";
 print "| synthetic non-UUID user VMs | " . fmt_bytes($synthetic_review_bytes) . " total; " . fmt_bytes($synthetic_policy_eligible_bytes) . " policy-eligible | owner-review disposable proof, then typed prune |\n";
 print "| registered non-fake user VMs | " . fmt_bytes($registered_user_refusal_bytes) . " | refuse unless owner marks account disposable |\n";
-print "| UUID primary VMs without email mapping | " . fmt_bytes($identity_unresolved_bytes + $missing_auth_user_refusal_bytes) . " | refuse prune until auth email identity is available |\n";
+print "| UUID primary VMs without email mapping | " . fmt_bytes($identity_unresolved_bytes + $missing_auth_user_refusal_bytes) . " | refuse prune unless auth identity or missing-auth lineage/tombstone proof is available |\n";
 print "| known deploy Nix roots | " . fmt_bytes($nix_root_target_alloc_total) . " direct target allocation | no root deletion; timer GC is bounded by current/rollback roots |\n\n";
 
 print "## Next Required Proof\n\n";
 print "1. Use `scripts/node-b-storage-vm-gates` to review fake-domain and synthetic-owner rows before any active cleanup.\n";
 print "2. Attach typed manual snapshot metadata or keep current filename-inferred snapshot refusals.\n";
-print "3. Define the missing-auth-user UUID VM retention policy or keep current missing-auth refusals.\n";
+print "3. Keep missing-auth-user UUID VMs refused unless `scripts/node-b-storage-vm-gates` reports lineage/tombstone proof, owner approval, rollback/refusal record, and staged proof.\n";
 PERL
 }
 

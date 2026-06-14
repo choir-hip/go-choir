@@ -158,8 +158,9 @@ The auth DB currently has 381 users by email domain: 338 `example.com`, 38
 and `me.com`. The report classifies `example.com` and `example.test` as
 fake-domain dry-run candidates only: 54 VM ownerships, 40.81 GiB. It leaves 13
 synthetic non-UUID ownerships, 7.62 GiB, as owner-review candidates. It refuses
-64.96 GiB of UUID primary ownerships that have no auth user record; those need
-a separate retention rule for missing-auth-user VM ownerships.
+64.96 GiB of UUID primary ownerships that have no auth user record unless the
+VM gate has lineage/tombstone proof, owner approval, rollback/refusal record,
+and staged proof.
 
 ## Baseline Cleanup Plan Evidence
 
@@ -188,8 +189,9 @@ or `failed`), and at least 24 hours since last active.
   one platform migration artifact; all remain preserve/refusal rows until typed
   snapshot metadata, recovery settlement, rollback proof, and owner approval
   exist;
-- missing-auth-user UUID VMs: 64.96 GiB, refusal until a policy exists for
-  historical owner IDs without auth rows;
+- missing-auth-user UUID VMs: 64.96 GiB, preserve by default unless the VM gate
+  has lineage/tombstone proof, owner approval, rollback/refusal record, staged
+  proof, and vmctl lifecycle eligibility;
 - Nix roots: 9 known roots / 9.35 GiB direct target allocation, review-only
   under a current/rollback/stale root budget; no Nix GC authorized.
 
@@ -377,6 +379,21 @@ preserve/review-pending because they did not satisfy the current vmctl
 ephemeral-primary age/lifecycle gate. This proves the gate is identity-aware
 and guard-aware; it does not authorize live cleanup.
 
+The gate now also carries an explicit missing-auth UUID policy. Missing-auth
+rows are preserved by default and can only become review candidates with all of
+the following modeled gates present: owner approval, lineage/tombstone proof,
+rollback/refusal record, staged behavior proof, protected-account gate, source
+report no-delete status, and the current vmctl ephemeral-primary lifecycle
+guard. Live Node B proof `/tmp/node-b-storage-proof-20260614T171254Z`
+completed in 7.674 seconds. Default mode reports 134 missing-auth UUID VM
+refusals / 64.96 GiB, 0 missing-auth review-delete candidates, and
+`active_delete_authorized: false`. Modeled missing-auth approval with
+`--missing-auth-approved --missing-auth-lineage-proof modeled-lineage
+--rollback-or-refusal-record modeled-review-record --staging-proof
+modeled-staging-proof` produced 134 missing-auth review candidates / 64.96 GiB
+while keeping `active_delete_authorized: false`. This closes the missing-auth
+policy gap without authorizing cleanup.
+
 ## Structured Report Evidence
 
 `scripts/node-b-storage-report` now supports `--format json` as an alternate
@@ -498,7 +515,7 @@ snapshot deletion, or active prune expansion was run during this pass.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-node-b-storage-retention-v0.md. Treat it as the source program for preventing Node B storage recurrence after the 2026-06-14 VM recovery incident. Current status is open_handoff: read-only classifier, JSON verifier, single-command proof runner, deployed vmctl shadow dry-run retention reporting, typed manual snapshot sidecar reporting, dry-run-by-default snapshot metadata helper, snapshot cleanup gate plan, VM cleanup gate plan, and deployed Nix GC/current+rollback timer policy exist. Commit c04e9649d28d2e163d7c0eb9d0d3e9e506af649e deployed the Node B daily disk sweep target: routine `nix store gc` below 100 GiB free space while preserving rooted current/rollback closures and not deleting Nix roots beyond the existing system generation policy. Latest read-only proof `/tmp/node-b-storage-proof-20260614T170339Z` completed in 7.657 seconds and now emits `node-b-snapshot-cleanup-gates.{md,json}` and `node-b-vm-cleanup-gates.{md,json}`. The VM gate reports active deletion false, protected account gate passed, 67 fake/synthetic cleanup candidates / 48.44 GiB, 0 review-delete candidates by default, 3 protected identity refusals / 32.69 GiB, and 134 missing-auth-user refusals / 64.96 GiB. The snapshot gate reports active deletion false, 4 manual snapshots / 23.82 GiB, 0 typed sidecars, 4 missing sidecars, 0 invalid sidecars, 0 review-delete candidates, and 4 preserve/refusal rows. Mutation class is red for any live cleanup and orange for future vmctl/Nix retention behavior; do not run manual live deletion, ad hoc Nix GC, manual snapshot cleanup, service restarts, or active prune expansion without explicit approval. Preserve real user yusefnathanson@me.com and protected test accounts a@b.com and b@c.com. Do not delete VM state, data.img snapshots, Nix roots, or guest images without a typed retention candidate, rollback/refusal reason, owner-visible report, and explicit approval. First next move: either obtain explicit approval and convert reviewed fake/synthetic VM candidates into active cleanup while retaining protected-account evidence, or define the missing-auth-user retention policy and keep current refusals. Ledger: docs/mission-node-b-storage-retention-v0.ledger.md. Settlement requires staging-proven retention/reporting, CI/deploy evidence for behavior changes, a reviewed baseline cleanup plan, and explicit evidence that owner/test real accounts remain protected.
+/goal Use Parallax on docs/mission-node-b-storage-retention-v0.md. Treat it as the source program for preventing Node B storage recurrence after the 2026-06-14 VM recovery incident. Current status is open_handoff: read-only classifier, JSON verifier, single-command proof runner, deployed vmctl shadow dry-run retention reporting, typed manual snapshot sidecar reporting, dry-run-by-default snapshot metadata helper, snapshot cleanup gate plan, VM cleanup gate plan with missing-auth UUID policy, and deployed Nix GC/current+rollback timer policy exist. Commit c04e9649d28d2e163d7c0eb9d0d3e9e506af649e deployed the Node B daily disk sweep target: routine `nix store gc` below 100 GiB free space while preserving rooted current/rollback closures and not deleting Nix roots beyond the existing system generation policy. Latest read-only proof `/tmp/node-b-storage-proof-20260614T171254Z` completed in 7.674 seconds and emits `node-b-snapshot-cleanup-gates.{md,json}` and `node-b-vm-cleanup-gates.{md,json}`. The VM gate reports active deletion false, protected account gate passed, 67 fake/synthetic cleanup candidates / 48.44 GiB, 0 review-delete candidates by default, 3 protected identity refusals / 32.69 GiB, and 134 missing-auth-user refusals / 64.96 GiB. The missing-auth policy now preserves missing-auth UUID VMs by default and requires lineage/tombstone proof, owner approval, rollback/refusal record, staged proof, and vmctl lifecycle guard before review; modeled proof yields 134 review candidates / 64.96 GiB while active deletion remains false. The snapshot gate reports active deletion false, 4 manual snapshots / 23.82 GiB, 0 typed sidecars, 4 missing sidecars, 0 invalid sidecars, 0 review-delete candidates, and 4 preserve/refusal rows. Mutation class is red for any live cleanup and orange for future vmctl/Nix retention behavior; do not run manual live deletion, ad hoc Nix GC, manual snapshot cleanup, service restarts, or active prune expansion without explicit approval. Preserve real user yusefnathanson@me.com and protected test accounts a@b.com and b@c.com. Do not delete VM state, data.img snapshots, Nix roots, or guest images without a typed retention candidate, rollback/refusal reason, owner-visible report, and explicit approval. First next move: obtain explicit approval before converting reviewed fake/synthetic or missing-auth VM candidates into active cleanup, or keep all current refusal gates. Ledger: docs/mission-node-b-storage-retention-v0.ledger.md. Settlement requires staging-proven retention/reporting, CI/deploy evidence for behavior changes, a reviewed baseline cleanup plan, and explicit evidence that owner/test real accounts remain protected.
 ```
 
 ## Parallax State
@@ -527,10 +544,10 @@ no weakening docs-only CI filters; start read-only on Node B, then dry-run
 staging report, then active bounded cleanup only after explicit approval.
 
 variant (ranking function) V: active VM cleanup approval/enforcement `1` +
-reviewed VM cleanup gate `0` + snapshot cleanup enforcement over typed
-sidecars `0` + active Nix GC/rollback enforcement `0` = `1`; last ΔV: VM
-cleanup gate `0` against active cleanup, but reviewed-baseline evidence is now
-present.
+reviewed VM cleanup gate `0` + missing-auth UUID policy gate `0` + snapshot
+cleanup enforcement over typed sidecars `0` + active Nix GC/rollback
+enforcement `0` = `1`; last ΔV: missing-auth UUID policy gate `1`; live
+cleanup remains unauthorized.
 
 budget: initial planning budget one Codex turn; execution budget extended
 through report/shadow implementation and deployed proof. Solvency: prevention
@@ -555,14 +572,15 @@ vmctl health/list/retention-plan/retention-shadow-plan; Nix root inventory and
 `nix_roots.gc_plan`; incident docs; code references in `internal/vmctl`,
 `nix/node-b.nix`, and `.github/workflows/ci.yml`; deploy evidence from GitHub
 Actions runs `27504321847` and `27505328627`; latest read-only proof
-`/tmp/node-b-storage-proof-20260614T165403Z`; future active VM cleanup proof
+`/tmp/node-b-storage-proof-20260614T171254Z`; future active VM cleanup proof
 must include dry-run report, focused tests, CI/deploy identity when behavior
 changes, protected-account refusal evidence, and post-cleanup health.
 
-heresy delta: discovered `1` policy mismatch; introduced `0`; repaired `4`
+heresy delta: discovered `1` policy mismatch; introduced `0`; repaired `5`
 for staging-proven report-only prevention visibility, deployed Nix timer
 headroom enforcement, snapshot cleanup gate refusal, and fake/synthetic VM
-cleanup gate refusal; active VM cleanup enforcement remains open.
+cleanup gate refusal, plus explicit missing-auth UUID refusal/review policy;
+active VM cleanup enforcement remains open.
 
 position / live conjectures / open edges: Current evidence supports a policy
 mismatch, not a single leak. The report has an identity-backed baseline cleanup
@@ -604,7 +622,7 @@ Post-deploy proof completed in 6.873 seconds, identified pressure
 generation 495, rollback generation 494, nine stale generation review
 candidates, one broken root, active vmctl retention delete bytes `0`, and
 protected accounts still refused. The latest proof
-`/tmp/node-b-storage-proof-20260614T170339Z` emits snapshot and VM cleanup gate
+`/tmp/node-b-storage-proof-20260614T171254Z` emits snapshot and VM cleanup gate
 artifacts. Snapshot gates report active deletion `false`, 4 manual snapshots /
 23.82 GiB, 0 typed sidecars, 4 missing sidecars, 0 invalid sidecars, 0
 review-delete candidates, and 4 preserve/refusal rows. VM gates report active
@@ -613,15 +631,18 @@ candidates / 48.44 GiB, 0 default review-delete candidates, 3 protected
 identity refusals / 32.69 GiB, and 134 missing-auth-user refusals / 64.96 GiB.
 Modeled approval/proof over the same report yields 50 review candidates /
 31.99 GiB while keeping active deletion false; 17 rows remain blocked by the
-current vmctl age/lifecycle gate. Open edges: missing-auth-user policy, active
-fake-user cleanup approval/enforcement, whether live `data.img`
+current vmctl age/lifecycle gate. Missing-auth policy now preserves UUID VMs
+without auth rows by default and requires owner approval, lineage/tombstone
+proof, rollback/refusal record, staged proof, protected-account gate, source
+report no-delete status, and vmctl lifecycle gate before review; modeled proof
+yields 134 review candidates / 64.96 GiB while keeping active deletion false.
+Open edges: active VM cleanup approval/enforcement, whether live `data.img`
 sparsification/discard should be part of hibernate/recovery, and how to expose
 reports to operators.
 
-next move: either obtain explicit approval and convert reviewed fake/synthetic
-VM candidates into active cleanup while retaining the protected account gate and
-rollback/refusal record, or define the missing-auth-user retention policy and
-keep current refusals.
+next move: obtain explicit approval before converting reviewed fake/synthetic
+or missing-auth VM candidates into active cleanup, or keep all current refusal
+gates.
 
 ledger file: docs/mission-node-b-storage-retention-v0.ledger.md
 

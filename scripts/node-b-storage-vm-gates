@@ -5,6 +5,8 @@ report=""
 report_format="${NODE_B_VM_GATES_FORMAT:-json}"
 fake_domain_approved=false
 synthetic_owner_approved=false
+missing_auth_approved=false
+missing_auth_lineage_proof=""
 rollback_or_refusal_record=""
 staging_proof=""
 
@@ -22,6 +24,10 @@ Options:
                                    email-domain VM cleanup
   --synthetic-owner-approved       Model owner approval for synthetic owner-id
                                    VM cleanup
+  --missing-auth-approved          Model owner approval for missing-auth UUID
+                                   VM cleanup review
+  --missing-auth-lineage-proof REF Model auth tombstone, duplicate-owner, or
+                                   migration lineage proof as present
   --rollback-or-refusal-record REF Model rollback/refusal record as present
   --staging-proof REF              Model staged behavior proof as present
   -h, --help                       Show this help
@@ -49,6 +55,14 @@ while [ "$#" -gt 0 ]; do
     --synthetic-owner-approved)
       synthetic_owner_approved=true
       shift
+      ;;
+    --missing-auth-approved)
+      missing_auth_approved=true
+      shift
+      ;;
+    --missing-auth-lineage-proof)
+      missing_auth_lineage_proof="${2:?missing --missing-auth-lineage-proof value}"
+      shift 2
       ;;
     --rollback-or-refusal-record)
       rollback_or_refusal_record="${2:?missing --rollback-or-refusal-record value}"
@@ -90,6 +104,8 @@ REPORT_PATH="$report" \
 REPORT_FORMAT="$report_format" \
 FAKE_DOMAIN_APPROVED="$fake_domain_approved" \
 SYNTHETIC_OWNER_APPROVED="$synthetic_owner_approved" \
+MISSING_AUTH_APPROVED="$missing_auth_approved" \
+MISSING_AUTH_LINEAGE_PROOF="$missing_auth_lineage_proof" \
 ROLLBACK_OR_REFUSAL_RECORD="$rollback_or_refusal_record" \
 STAGING_PROOF="$staging_proof" \
 perl <<'PERL'
@@ -102,6 +118,8 @@ my $report_path = $ENV{REPORT_PATH};
 my $format = $ENV{REPORT_FORMAT} || "json";
 my $fake_domain_approved = ($ENV{FAKE_DOMAIN_APPROVED} || "") eq "true" ? 1 : 0;
 my $synthetic_owner_approved = ($ENV{SYNTHETIC_OWNER_APPROVED} || "") eq "true" ? 1 : 0;
+my $missing_auth_approved = ($ENV{MISSING_AUTH_APPROVED} || "") eq "true" ? 1 : 0;
+my $missing_auth_lineage_proof = $ENV{MISSING_AUTH_LINEAGE_PROOF} || "";
 my $rollback_or_refusal_record = $ENV{ROLLBACK_OR_REFUSAL_RECORD} || "";
 my $staging_proof = $ENV{STAGING_PROOF} || "";
 
@@ -248,6 +266,11 @@ my $protected_refusal_count = 0;
 my $protected_refusal_bytes = 0;
 my $missing_auth_refusal_count = 0;
 my $missing_auth_refusal_bytes = 0;
+my @missing_auth_rows;
+my $missing_auth_review_count = 0;
+my $missing_auth_review_bytes = 0;
+my $missing_auth_preserve_count = 0;
+my $missing_auth_preserve_bytes = 0;
 for my $r (@refusals) {
   my $class = $r->{class} || "";
   my $size = 0 + ($r->{size} || 0);
@@ -259,6 +282,45 @@ for my $r (@refusals) {
   } elsif ($class eq "missing_auth_user_record_refusal") {
     $missing_auth_refusal_count++;
     $missing_auth_refusal_bytes += $size;
+    my $gate = $r->{gate} || "";
+    my @blockers;
+    push @blockers, "protected_account_gate_missing_or_failed" unless $protected_gate_ok;
+    push @blockers, "source_report_must_remain_no_delete" if $report_delete_authorized;
+    push @blockers, "current_vmctl_ephemeral_primary_gate_not_satisfied: $gate"
+      unless vmctl_gate_ok($gate);
+    push @blockers, "missing_auth_owner_approval_required" unless $missing_auth_approved;
+    push @blockers, "missing_auth_lineage_or_tombstone_proof_required"
+      unless length($missing_auth_lineage_proof);
+    push @blockers, "rollback_or_refusal_record_required"
+      unless length($rollback_or_refusal_record);
+    push @blockers, "staged_behavior_proof_required"
+      unless length($staging_proof);
+    @blockers = uniq(@blockers);
+
+    my $action = @blockers ? "preserve_missing_auth_refusal" : "review_missing_auth_delete_candidate";
+    if (@blockers) {
+      $missing_auth_preserve_count++;
+      $missing_auth_preserve_bytes += $size;
+    } else {
+      $missing_auth_review_count++;
+      $missing_auth_review_bytes += $size;
+    }
+    push @missing_auth_rows, {
+      class => $class,
+      vm_id => $r->{vm_id} || "",
+      user_id => $r->{user_id} || "",
+      state => $r->{state} || "",
+      kind => $r->{kind} || "",
+      desktop => $r->{desktop} || "",
+      published => ($r->{published} || 0) ? JSON::PP::true : JSON::PP::false,
+      age_seconds => 0 + ($r->{age} || 0),
+      allocated_bytes => $size,
+      source_action => $r->{action} || "",
+      source_gate => $gate,
+      reason => $r->{reason} || "",
+      action => $action,
+      blockers => \@blockers,
+    };
   }
 }
 
@@ -283,6 +345,8 @@ my $plan = {
     protected_account_gate_passed => bool_json($protected_gate_ok),
     fake_domain_owner_approval_present => bool_json($fake_domain_approved),
     synthetic_owner_approval_present => bool_json($synthetic_owner_approved),
+    missing_auth_owner_approval_present => bool_json($missing_auth_approved),
+    missing_auth_lineage_proof => $missing_auth_lineage_proof,
     rollback_or_refusal_record => $rollback_or_refusal_record,
     staging_proof => $staging_proof,
     source_report_active_delete_authorized => bool_json($report_delete_authorized),
@@ -298,6 +362,16 @@ my $plan = {
     missing_auth_refusal_count => $missing_auth_refusal_count,
     missing_auth_refusal_bytes => $missing_auth_refusal_bytes,
     classes => \@classes,
+  },
+  missing_auth_policy => {
+    policy_status => "preserve by default; review only with lineage/tombstone proof, owner approval, rollback/refusal record, staged proof, and vmctl lifecycle guard",
+    active_delete_authorized => JSON::PP::false,
+    review_delete_candidate_count => $missing_auth_review_count,
+    review_delete_candidate_bytes => $missing_auth_review_bytes,
+    preserve_refusal_count => $missing_auth_preserve_count,
+    preserve_refusal_bytes => $missing_auth_preserve_bytes,
+    lineage_proof => $missing_auth_lineage_proof,
+    rows => \@missing_auth_rows,
   },
   protected_accounts => \@protected,
   candidates => \@rows,
@@ -318,6 +392,8 @@ print "- active_delete_authorized: `false`\n";
 print "- protected_account_gate_passed: `" . ($protected_gate_ok ? "true" : "false") . "`\n";
 print "- fake_domain_owner_approval_present: `" . ($fake_domain_approved ? "true" : "false") . "`\n";
 print "- synthetic_owner_approval_present: `" . ($synthetic_owner_approved ? "true" : "false") . "`\n";
+print "- missing_auth_owner_approval_present: `" . ($missing_auth_approved ? "true" : "false") . "`\n";
+print "- missing_auth_lineage_proof: `" . ($missing_auth_lineage_proof || "") . "`\n";
 print "- rollback_or_refusal_record: `" . ($rollback_or_refusal_record || "") . "`\n";
 print "- staging_proof: `" . ($staging_proof || "") . "`\n\n";
 
@@ -331,6 +407,21 @@ print "- protected_refusal_count: `$protected_refusal_count`\n";
 print "- protected_refusal_bytes: `" . fmt_bytes($protected_refusal_bytes) . "`\n";
 print "- missing_auth_refusal_count: `$missing_auth_refusal_count`\n";
 print "- missing_auth_refusal_bytes: `" . fmt_bytes($missing_auth_refusal_bytes) . "`\n\n";
+
+print "## Missing-Auth UUID Policy\n\n";
+print "- policy_status: `$plan->{missing_auth_policy}{policy_status}`\n";
+print "- active_delete_authorized: `false`\n";
+print "- review_delete_candidate_count: `$missing_auth_review_count`\n";
+print "- review_delete_candidate_bytes: `" . fmt_bytes($missing_auth_review_bytes) . "`\n";
+print "- preserve_refusal_count: `$missing_auth_preserve_count`\n";
+print "- preserve_refusal_bytes: `" . fmt_bytes($missing_auth_preserve_bytes) . "`\n\n";
+print "| vm_id | user_id | state | allocated | action | blockers |\n";
+print "| --- | --- | --- | ---: | --- | --- |\n";
+for my $row (@missing_auth_rows) {
+  print "| `$row->{vm_id}` | `$row->{user_id}` | `$row->{state}` | "
+    . fmt_bytes($row->{allocated_bytes}) . " | `$row->{action}` | `" . join(", ", @{$row->{blockers}}) . "` |\n";
+}
+print "\n";
 
 print "## Protected Accounts\n\n";
 print "| email | user_id | action | allocated |\n";

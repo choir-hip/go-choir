@@ -637,3 +637,36 @@
 - Open edge: obtain explicit approval and convert reviewed fake/synthetic VM
   candidates into active cleanup, or define the missing-auth-user UUID VM
   retention policy and keep current refusals.
+
+## 2026-06-14 — missing-auth UUID policy gate
+
+- Claim: missing-auth UUID VM rows should not remain an undefined 64.96 GiB
+  refusal bucket; they should have an explicit policy that preserves by default
+  and names the proof required before review.
+- Move: extended `scripts/node-b-storage-report` so
+  `missing_auth_user_record_refusal` rows carry the current vmctl
+  ephemeral-primary lifecycle gate. Extended `scripts/node-b-storage-vm-gates`
+  with `--missing-auth-approved` and `--missing-auth-lineage-proof`, and added
+  proof-runner assertions that `missing_auth_policy.active_delete_authorized`
+  remains `false`.
+- Live evidence: `scripts/node-b-storage-proof --host node-b --top 10 --out-dir
+  /tmp/node-b-storage-proof-20260614T171254Z` completed in 7.674 seconds and
+  verifier checks passed. Default mode reports protected account gate passed,
+  active deletion `false`, 134 missing-auth UUID VM refusals / 64.96 GiB, and 0
+  missing-auth review-delete candidates.
+- Modeled-approval evidence: running
+  `scripts/node-b-storage-vm-gates
+  /tmp/node-b-storage-proof-20260614T171254Z/node-b-storage-report.json
+  --format json --missing-auth-approved --missing-auth-lineage-proof
+  modeled-lineage --rollback-or-refusal-record modeled-review-record
+  --staging-proof modeled-staging-proof` produced 134 missing-auth review
+  candidates / 64.96 GiB while keeping active deletion `false`.
+- Safety evidence: no live VM state deletion, `ownerships.json` mutation,
+  service restart, snapshot deletion, Nix root deletion, ad hoc Nix GC, or
+  active prune expansion was run. No authorization was requested or assumed.
+- Expected ΔV: 1 for closing the missing-auth undefined-policy edge while
+  leaving active cleanup unauthorized.
+- Actual ΔV: 1.
+- Open edge: active cleanup still requires explicit owner authorization and a
+  behavior-changing vmctl path with CI/deploy evidence, or the current
+  report-only refusal gates remain the correct state.
