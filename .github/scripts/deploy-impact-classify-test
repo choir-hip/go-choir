@@ -68,11 +68,13 @@ node_b_storage_tooling_output="$(
     "scripts/node-b-storage-proof" \
     "scripts/node-b-storage-snapshot-gates" \
     "scripts/node-b-storage-verify-report" \
+    "scripts/node-b-storage-vm-gates" \
     "scripts/node-b-data-img-snapshot"
 )"
 assert_contains "$node_b_storage_tooling_output" "deploy_needed=false"
 assert_contains "$node_b_storage_tooling_output" "scripts/node-b-storage-report -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
 assert_contains "$node_b_storage_tooling_output" "scripts/node-b-storage-snapshot-gates -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
+assert_contains "$node_b_storage_tooling_output" "scripts/node-b-storage-vm-gates -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
 assert_contains "$node_b_storage_tooling_output" "scripts/node-b-data-img-snapshot -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
 assert_not_contains "$node_b_storage_tooling_output" "unknown deployed path"
 assert_not_contains "$node_b_storage_tooling_output" "ordinary_guest=true"

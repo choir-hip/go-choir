@@ -981,6 +981,8 @@ if ($report_format eq "json") {
     baseline_cleanup_plan => {
       policy_status => "dry-run proposal only",
       active_delete_authorized => 0,
+      cleanup_candidates => \@cleanup_candidates,
+      cleanup_refusals => \@cleanup_refusals,
       top_cleanup_candidates => \@top_cleanup_candidates,
       top_cleanup_refusals => \@top_cleanup_refusals,
     },
@@ -1009,9 +1011,9 @@ if ($report_format eq "json") {
       known_deploy_nix_roots_direct_target_allocated_bytes => $nix_root_target_alloc_total + 0,
     },
     next_required_proof => [
-      "Convert fake-domain and synthetic-user rows into a reviewed active retention policy.",
+      "Use scripts/node-b-storage-vm-gates to review fake-domain and synthetic-owner rows before any active cleanup.",
       "Attach typed manual snapshot metadata or keep current filename-inferred snapshot refusals.",
-      "Expose snapshot cleanup gates and fake-user cleanup decisions as operator-visible reviewed plans.",
+      "Define the missing-auth-user UUID VM retention policy or keep current missing-auth refusals.",
     ],
   };
   print JSON::PP->new->canonical->pretty->encode($doc);
@@ -1247,9 +1249,9 @@ print "| UUID primary VMs without email mapping | " . fmt_bytes($identity_unreso
 print "| known deploy Nix roots | " . fmt_bytes($nix_root_target_alloc_total) . " direct target allocation | no root deletion; timer GC is bounded by current/rollback roots |\n\n";
 
 print "## Next Required Proof\n\n";
-print "1. Convert fake-domain and synthetic-user rows into a reviewed active retention policy.\n";
+print "1. Use `scripts/node-b-storage-vm-gates` to review fake-domain and synthetic-owner rows before any active cleanup.\n";
 print "2. Attach typed manual snapshot metadata or keep current filename-inferred snapshot refusals.\n";
-print "3. Expose snapshot cleanup gates and fake-user cleanup decisions as operator-visible reviewed plans.\n";
+print "3. Define the missing-auth-user UUID VM retention policy or keep current missing-auth refusals.\n";
 PERL
 }
 

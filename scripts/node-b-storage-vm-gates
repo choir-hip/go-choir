@@ -1,0 +1,350 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+report=""
+report_format="${NODE_B_VM_GATES_FORMAT:-json}"
+fake_domain_approved=false
+synthetic_owner_approved=false
+rollback_or_refusal_record=""
+staging_proof=""
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/node-b-storage-vm-gates REPORT.json [options]
+
+Read-only fake-user VM cleanup gate. Consumes
+scripts/node-b-storage-report --format json output and emits a review plan.
+This command never deletes VM state or mutates vmctl ownerships.
+
+Options:
+  --format json|markdown           Output format (default: json)
+  --fake-domain-approved           Model owner approval for configured fake
+                                   email-domain VM cleanup
+  --synthetic-owner-approved       Model owner approval for synthetic owner-id
+                                   VM cleanup
+  --rollback-or-refusal-record REF Model rollback/refusal record as present
+  --staging-proof REF              Model staged behavior proof as present
+  -h, --help                       Show this help
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --format)
+      report_format="${2:?missing --format value}"
+      case "$report_format" in
+        json|markdown) ;;
+        *)
+          echo "unknown --format value: $report_format" >&2
+          usage >&2
+          exit 2
+          ;;
+      esac
+      shift 2
+      ;;
+    --fake-domain-approved)
+      fake_domain_approved=true
+      shift
+      ;;
+    --synthetic-owner-approved)
+      synthetic_owner_approved=true
+      shift
+      ;;
+    --rollback-or-refusal-record)
+      rollback_or_refusal_record="${2:?missing --rollback-or-refusal-record value}"
+      shift 2
+      ;;
+    --staging-proof)
+      staging_proof="${2:?missing --staging-proof value}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      if [ -z "$report" ]; then
+        report="$1"
+        shift
+      else
+        echo "unknown argument: $1" >&2
+        usage >&2
+        exit 2
+      fi
+      ;;
+  esac
+done
+
+if [ -z "$report" ]; then
+  echo "error: REPORT.json is required" >&2
+  usage >&2
+  exit 2
+fi
+
+if [ ! -r "$report" ]; then
+  echo "error: report is not readable: $report" >&2
+  exit 2
+fi
+
+REPORT_PATH="$report" \
+REPORT_FORMAT="$report_format" \
+FAKE_DOMAIN_APPROVED="$fake_domain_approved" \
+SYNTHETIC_OWNER_APPROVED="$synthetic_owner_approved" \
+ROLLBACK_OR_REFUSAL_RECORD="$rollback_or_refusal_record" \
+STAGING_PROOF="$staging_proof" \
+perl <<'PERL'
+use strict;
+use warnings;
+use JSON::PP qw(decode_json);
+use POSIX qw(strftime);
+
+my $report_path = $ENV{REPORT_PATH};
+my $format = $ENV{REPORT_FORMAT} || "json";
+my $fake_domain_approved = ($ENV{FAKE_DOMAIN_APPROVED} || "") eq "true" ? 1 : 0;
+my $synthetic_owner_approved = ($ENV{SYNTHETIC_OWNER_APPROVED} || "") eq "true" ? 1 : 0;
+my $rollback_or_refusal_record = $ENV{ROLLBACK_OR_REFUSAL_RECORD} || "";
+my $staging_proof = $ENV{STAGING_PROOF} || "";
+
+open my $fh, "<", $report_path or die "open $report_path: $!\n";
+local $/;
+my $raw = <$fh>;
+close $fh;
+my $report = decode_json($raw);
+
+my $baseline = ref($report->{baseline_cleanup_plan}) eq "HASH"
+  ? $report->{baseline_cleanup_plan}
+  : {};
+my @candidates = ref($baseline->{cleanup_candidates}) eq "ARRAY"
+  ? @{$baseline->{cleanup_candidates}}
+  : (ref($baseline->{top_cleanup_candidates}) eq "ARRAY" ? @{$baseline->{top_cleanup_candidates}} : ());
+my @refusals = ref($baseline->{cleanup_refusals}) eq "ARRAY"
+  ? @{$baseline->{cleanup_refusals}}
+  : (ref($baseline->{top_cleanup_refusals}) eq "ARRAY" ? @{$baseline->{top_cleanup_refusals}} : ());
+
+sub fmt_bytes {
+  my ($bytes) = @_;
+  $bytes ||= 0;
+  my @units = qw(B KiB MiB GiB TiB);
+  my $n = $bytes + 0;
+  my $i = 0;
+  while ($n >= 1024 && $i < $#units) {
+    $n /= 1024;
+    $i++;
+  }
+  return $i == 0 ? sprintf("%d %s", $n, $units[$i]) : sprintf("%.2f %s", $n, $units[$i]);
+}
+
+sub bool_json {
+  my ($value) = @_;
+  return $value ? JSON::PP::true : JSON::PP::false;
+}
+
+sub uniq {
+  my %seen;
+  return grep { !$seen{$_}++ } @_;
+}
+
+sub protected_refusals {
+  my $mapping = ref($report->{auth_identity_mapping}) eq "HASH"
+    ? $report->{auth_identity_mapping}
+    : {};
+  my @results = ref($mapping->{protected_email_results}) eq "ARRAY"
+    ? @{$mapping->{protected_email_results}}
+    : ();
+  my @protected;
+  for my $r (@results) {
+    push @protected, {
+      email => $r->{email} || "",
+      user_id => defined($r->{user_id}) ? $r->{user_id} : "",
+      present => ($r->{present} || 0) ? JSON::PP::true : JSON::PP::false,
+      action => $r->{action} || "",
+      vm_state_allocated_bytes => 0 + ($r->{vm_state_allocated_bytes} || 0),
+      refused => (($r->{present} || 0) && (($r->{action} || "") eq "refuse_delete"))
+        ? JSON::PP::true
+        : JSON::PP::false,
+    };
+  }
+  return @protected;
+}
+
+my @protected = protected_refusals();
+my $protected_gate_ok = @protected ? 1 : 0;
+for my $p (@protected) {
+  $protected_gate_ok = 0 unless $p->{refused};
+}
+
+my $report_delete_authorized =
+  (($report->{policies}{active_delete_authorized} || 0) != 0)
+  || (($baseline->{active_delete_authorized} || 0) != 0);
+
+sub class_approval_blocker {
+  my ($class) = @_;
+  return $fake_domain_approved ? "" : "fake_domain_owner_approval_required"
+    if $class eq "fake_email_domain_dry_run";
+  return $synthetic_owner_approved ? "" : "synthetic_owner_approval_required"
+    if $class eq "synthetic_user_owner_review";
+  return "unsupported_cleanup_class_review_required";
+}
+
+sub vmctl_gate_ok {
+  my ($gate) = @_;
+  return ($gate || "") =~ /^current vmctl ephemeral-primary guard/ ? 1 : 0;
+}
+
+my @rows;
+my %class_summary;
+my $review_count = 0;
+my $review_bytes = 0;
+my $preserve_count = 0;
+my $preserve_bytes = 0;
+
+for my $c (@candidates) {
+  my $class = $c->{class} || "";
+  my $size = 0 + ($c->{size} || 0);
+  my $gate = $c->{gate} || "";
+  my @blockers;
+
+  push @blockers, "protected_account_gate_missing_or_failed" unless $protected_gate_ok;
+  push @blockers, "source_report_must_remain_no_delete" if $report_delete_authorized;
+  push @blockers, "current_vmctl_ephemeral_primary_gate_not_satisfied: $gate"
+    unless vmctl_gate_ok($gate);
+  my $approval_blocker = class_approval_blocker($class);
+  push @blockers, $approval_blocker if length($approval_blocker);
+  push @blockers, "rollback_or_refusal_record_required"
+    unless length($rollback_or_refusal_record);
+  push @blockers, "staged_behavior_proof_required"
+    unless length($staging_proof);
+  @blockers = uniq(@blockers);
+
+  my $action = @blockers ? "preserve_review_pending" : "review_delete_candidate";
+  if (@blockers) {
+    $preserve_count++;
+    $preserve_bytes += $size;
+  } else {
+    $review_count++;
+    $review_bytes += $size;
+  }
+  $class_summary{$class}{candidate_count}++;
+  $class_summary{$class}{allocated_bytes} += $size;
+
+  push @rows, {
+    class => $class,
+    vm_id => $c->{vm_id} || "",
+    user_id => $c->{user_id} || "",
+    email => $c->{email} || "",
+    state => $c->{state} || "",
+    age_seconds => 0 + ($c->{age} || 0),
+    allocated_bytes => $size,
+    source_action => $c->{action} || "",
+    source_gate => $gate,
+    reason => $c->{reason} || "",
+    action => $action,
+    blockers => \@blockers,
+  };
+}
+
+my %refusal_summary;
+my $protected_refusal_count = 0;
+my $protected_refusal_bytes = 0;
+my $missing_auth_refusal_count = 0;
+my $missing_auth_refusal_bytes = 0;
+for my $r (@refusals) {
+  my $class = $r->{class} || "";
+  my $size = 0 + ($r->{size} || 0);
+  $refusal_summary{$class}{refusal_count}++;
+  $refusal_summary{$class}{allocated_bytes} += $size;
+  if ($class eq "protected_identity_refusal") {
+    $protected_refusal_count++;
+    $protected_refusal_bytes += $size;
+  } elsif ($class eq "missing_auth_user_record_refusal") {
+    $missing_auth_refusal_count++;
+    $missing_auth_refusal_bytes += $size;
+  }
+}
+
+my %all_classes = map { $_ => 1 } (keys %class_summary, keys %refusal_summary);
+my @classes = map {
+  {
+    class => $_,
+    candidate_count => 0 + ($class_summary{$_}{candidate_count} || 0),
+    candidate_allocated_bytes => 0 + ($class_summary{$_}{allocated_bytes} || 0),
+    refusal_count => 0 + ($refusal_summary{$_}{refusal_count} || 0),
+    refusal_allocated_bytes => 0 + ($refusal_summary{$_}{allocated_bytes} || 0),
+  }
+} sort keys %all_classes;
+
+my $plan = {
+  generated_at => strftime("%Y-%m-%dT%H:%M:%SZ", gmtime()),
+  source_report => $report_path,
+  mode => "report-only; no VM state deletion or ownership mutation",
+  policy_status => "review-only; deletion requires a separate owner-approved operation",
+  active_delete_authorized => JSON::PP::false,
+  gates => {
+    protected_account_gate_passed => bool_json($protected_gate_ok),
+    fake_domain_owner_approval_present => bool_json($fake_domain_approved),
+    synthetic_owner_approval_present => bool_json($synthetic_owner_approved),
+    rollback_or_refusal_record => $rollback_or_refusal_record,
+    staging_proof => $staging_proof,
+    source_report_active_delete_authorized => bool_json($report_delete_authorized),
+  },
+  inventory => {
+    cleanup_candidate_count => 0 + scalar(@candidates),
+    review_delete_candidate_count => $review_count,
+    review_delete_candidate_bytes => $review_bytes,
+    preserve_review_pending_count => $preserve_count,
+    preserve_review_pending_bytes => $preserve_bytes,
+    protected_refusal_count => $protected_refusal_count,
+    protected_refusal_bytes => $protected_refusal_bytes,
+    missing_auth_refusal_count => $missing_auth_refusal_count,
+    missing_auth_refusal_bytes => $missing_auth_refusal_bytes,
+    classes => \@classes,
+  },
+  protected_accounts => \@protected,
+  candidates => \@rows,
+  refusals => \@refusals,
+};
+
+if ($format eq "json") {
+  print JSON::PP->new->canonical->pretty->encode($plan);
+  exit 0;
+}
+
+print "# Node B VM Cleanup Gates\n\n";
+print "- generated_at: `$plan->{generated_at}`\n";
+print "- source_report: `$report_path`\n";
+print "- mode: `$plan->{mode}`\n";
+print "- policy_status: `$plan->{policy_status}`\n";
+print "- active_delete_authorized: `false`\n";
+print "- protected_account_gate_passed: `" . ($protected_gate_ok ? "true" : "false") . "`\n";
+print "- fake_domain_owner_approval_present: `" . ($fake_domain_approved ? "true" : "false") . "`\n";
+print "- synthetic_owner_approval_present: `" . ($synthetic_owner_approved ? "true" : "false") . "`\n";
+print "- rollback_or_refusal_record: `" . ($rollback_or_refusal_record || "") . "`\n";
+print "- staging_proof: `" . ($staging_proof || "") . "`\n\n";
+
+print "## Inventory\n\n";
+print "- cleanup_candidate_count: `" . scalar(@candidates) . "`\n";
+print "- review_delete_candidate_count: `$review_count`\n";
+print "- review_delete_candidate_bytes: `" . fmt_bytes($review_bytes) . "`\n";
+print "- preserve_review_pending_count: `$preserve_count`\n";
+print "- preserve_review_pending_bytes: `" . fmt_bytes($preserve_bytes) . "`\n";
+print "- protected_refusal_count: `$protected_refusal_count`\n";
+print "- protected_refusal_bytes: `" . fmt_bytes($protected_refusal_bytes) . "`\n";
+print "- missing_auth_refusal_count: `$missing_auth_refusal_count`\n";
+print "- missing_auth_refusal_bytes: `" . fmt_bytes($missing_auth_refusal_bytes) . "`\n\n";
+
+print "## Protected Accounts\n\n";
+print "| email | user_id | action | allocated |\n";
+print "| --- | --- | --- | ---: |\n";
+for my $p (@protected) {
+  print "| `$p->{email}` | `$p->{user_id}` | `$p->{action}` | " . fmt_bytes($p->{vm_state_allocated_bytes}) . " |\n";
+}
+print "\n";
+
+print "## Cleanup Candidates\n\n";
+print "| class | vm_id | user_id | email | state | allocated | action | blockers |\n";
+print "| --- | --- | --- | --- | --- | ---: | --- | --- |\n";
+for my $row (@rows) {
+  print "| `$row->{class}` | `$row->{vm_id}` | `$row->{user_id}` | `$row->{email}` | `$row->{state}` | "
+    . fmt_bytes($row->{allocated_bytes}) . " | `$row->{action}` | `" . join(", ", @{$row->{blockers}}) . "` |\n";
+}
+PERL

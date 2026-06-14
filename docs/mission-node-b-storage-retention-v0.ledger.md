@@ -600,3 +600,40 @@
   and live snapshots are explicitly refused.
 - Open edge: active VM fake-user cleanup remains unsettled; missing-auth-user
   retention policy remains undefined.
+
+## 2026-06-14 — VM cleanup gates
+
+- Claim: fake-domain and synthetic-owner VM cleanup can become reviewable
+  without authorizing live deletion when the report exports full candidate and
+  refusal rows and a separate gate proves protected accounts remain refusals.
+- Move: added `scripts/node-b-storage-vm-gates`, extended
+  `scripts/node-b-storage-report --format json` with full cleanup
+  candidate/refusal arrays, and wired `scripts/node-b-storage-proof` to emit
+  `node-b-vm-cleanup-gates.{md,json}` plus jq assertions for report-only mode
+  and protected-account refusal.
+- Live evidence: `scripts/node-b-storage-proof --host node-b --top 10 --out-dir
+  /tmp/node-b-storage-proof-20260614T170339Z` completed in 7.657 seconds and
+  verifier checks passed. The VM gate reports mode `report-only; no VM state
+  deletion or ownership mutation`, active deletion `false`, protected account
+  gate passed, 67 cleanup candidates / 48.44 GiB, 0 default review-delete
+  candidates, 67 preserve/review-pending rows / 48.44 GiB, 3 protected identity
+  refusals / 32.69 GiB, and 134 missing-auth-user refusals / 64.96 GiB.
+- Protected account evidence: `yusefnathanson@me.com`,
+  `5bd6de97-3b58-408c-bf89-c42c81b083de`, 31.61 GiB; `a@b.com`,
+  `0e5c45ab-44de-49cd-b07d-e58973b21ad5`, 479.55 MiB; `b@c.com`,
+  `5885aafc-eb85-4255-9818-d521020bdce2`, 619.13 MiB; all have action
+  `refuse_delete`.
+- Modeled-approval evidence: running the gate with fake-domain approval,
+  synthetic-owner approval, a modeled rollback/refusal record, and modeled
+  staging proof produced 50 review candidates / 31.99 GiB while keeping active
+  deletion `false`; 17 rows remained preserve/review-pending because they did
+  not satisfy the current vmctl ephemeral-primary age/lifecycle gate.
+- Safety evidence: no live VM state deletion, `ownerships.json` mutation,
+  service restart, snapshot deletion, ad hoc Nix GC, or active prune expansion
+  was run. This is an operator-visible reviewed baseline plan, not cleanup.
+- Expected ΔV: 0 against active cleanup authorization/enforcement; it closes the
+  reviewed-baseline evidence gap but leaves live cleanup unauthorized.
+- Actual ΔV: 0.
+- Open edge: obtain explicit approval and convert reviewed fake/synthetic VM
+  candidates into active cleanup, or define the missing-auth-user UUID VM
+  retention policy and keep current refusals.
