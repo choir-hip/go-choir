@@ -43,6 +43,7 @@ nodes:
     enables:
       - m1-trajectory-model
       - m2-messaging-cutover
+      - m3.1-lifecycle-recovery
       - m3-lifecycle-cutover
       - m4-continuation-deletion
       - m5-wire-on-settlement
@@ -75,18 +76,34 @@ nodes:
     depends_on:
       - m1-trajectory-model
     enables:
+      - m3.1-lifecycle-recovery
+    sources:
+      - docs/mission-portfolio-2026-06-11.md
+
+  - id: m3.1-lifecycle-recovery
+    title: M3.1 Lifecycle Cutover Regression Recovery
+    path: docs/mission-lifecycle-cutover-m3.1-v0.md
+    ledger: docs/mission-lifecycle-cutover-m3.1-v0.ledger.md
+    status: working
+    kind: spine
+    depends_on:
+      - m2-messaging-cutover
+    enables:
       - m3-lifecycle-cutover
     sources:
       - docs/mission-portfolio-2026-06-11.md
+      - docs/mission-lifecycle-cutover-v0.md
+      - docs/vtext-agentic-invariants-2026-06-13.md
+      - AGENTS.md
 
   - id: m3-lifecycle-cutover
     title: M3 Lifecycle Cutover
     path: docs/mission-lifecycle-cutover-v0.md
     ledger: docs/mission-lifecycle-cutover-v0.ledger.md
-    status: working
+    status: blocked
     kind: spine
     depends_on:
-      - m2-messaging-cutover
+      - m3.1-lifecycle-recovery
     enables:
       - m4-continuation-deletion
     sources:

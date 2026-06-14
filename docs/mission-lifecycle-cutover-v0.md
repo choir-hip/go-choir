@@ -11,6 +11,12 @@ Discipline: `skills/parallax/SKILL.md`. Predecessors: M1
 Doctrine note (2026-06-13): `continuation-level` references in this cutover
 mission are transitional acceptance-language residue, not target doctrine.
 
+Recovery gate (2026-06-14): do not resume M3 implementation directly until
+`docs/mission-lifecycle-cutover-m3.1-v0.md` settles or names accepted successor
+edges. M3.1 is the active recovery paradoc for removing forced VText workflow
+control, repairing the acceptance witness, and updating this handoff away from
+deterministic researcher continuation.
+
 ## Source Form
 
 **Kind:** spine.

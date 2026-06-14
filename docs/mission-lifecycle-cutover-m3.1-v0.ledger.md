@@ -44,3 +44,22 @@ Open edge: documentation is necessary but not sufficient. Next move remains a
 behavior rollback: remove VText researcher hard continuation, narrow
 required-next-tool, rewrite tests, and verify with focused runtime tests plus
 runtime shards.
+
+## 2026-06-14 - Make M3.1 Ready As Active Graph Node
+
+Claim: after docs truth v1, a ready paradoc must be discoverable in the mission
+graph and must carry a copy-pasteable Suggested Goal String, not just a terse
+path stub.
+
+Move: construct / handoff. Added `m3.1-lifecycle-recovery` to
+`docs/mission-graph.yaml`, made M3 proper depend on it, marked M3 proper
+blocked in the graph, added a full Suggested Goal String here, and added a
+recovery gate note to `docs/mission-lifecycle-cutover-v0.md`.
+
+Expected Delta V: -1 against handoff ambiguity. Actual Delta V: -1. M3.1 is
+ready to execute as the active preflight mission; the code/test recovery V
+remains 8.
+
+Receipt: `docs/mission-graph.yaml`,
+`docs/mission-lifecycle-cutover-m3.1-v0.md`,
+`docs/mission-lifecycle-cutover-v0.md`.

@@ -342,8 +342,8 @@ probe became the de facto spec.
 - Split actor memory into explicit scopes before relying on it for persistent
   super behavior.
 
-## Goalstring
+## Suggested Goal String
 
 ```text
-/goal docs/mission-lifecycle-cutover-m3.1-v0.md
+/goal Use Parallax on docs/mission-lifecycle-cutover-m3.1-v0.md. Treat it as the active M3.1 lifecycle-cutover regression recovery source program and the required preflight before resuming M3 proper. Current status is working: V=8 after the VText agentic invariant was promoted to AGENTS.md and docs/vtext-agentic-invariants-2026-06-13.md, but code/tests still violate the invariant. Preserve Choir Doctrine as apex, VText as an agentic canonical-document owner rather than a workflow stepper, harness minimalism, trajectory/work-item evidence over run-tree smoke, and Problem Documentation First. Mutation class is orange/red: runtime VText tools, generic required-next-tool control, prompt-bar researcher intent, public run status, run acceptance, and lifecycle proof surfaces are protected. First next move: implement the smallest regression rollback batch by removing the VText researcher hard continuation, rewriting forced next_required_tool tests into non-forcing/VText-choice tests, narrowing required-next-tool to mechanical protocol outputs or a typed envelope, narrowing or deleting promptBarExplicitResearcherIntent, exposing trajectory/work evidence needed for lifecycle acceptance, and pointing M3 handoff away from deterministic researcher continuation. Run focused VText/tool-loop/API tests, then nix develop -c scripts/go-test-runtime-shards, then independent review, commit/push, CI/deploy, staging identity, and deployed lifecycle evidence before settlement. Ledger: docs/mission-lifecycle-cutover-m3.1-v0.ledger.md. Settlement requires V=0 or named successor edges, no forced semantic VText delegation, no generic semantic next_required_tool control, tests protecting the invariant, M3 handoff corrected, and no M3 settlement claim from prompt/VText smoke alone.
 ```
