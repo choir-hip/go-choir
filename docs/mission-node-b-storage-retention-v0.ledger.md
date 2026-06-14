@@ -454,3 +454,24 @@
 - Open edge: push/monitor CI to prove the classifier suppresses staging deploy
   for this script-only change; then implement snapshot cleanup gates or an
   explicit Nix current/rollback root policy.
+
+## 2026-06-14 — operator tooling CI no-deploy proof
+
+- Claim: after classifying Node B storage scripts as operator/report tooling,
+  storage-tooling changes should run CI without requesting host/guest image
+  builds or Node B staging deploy.
+- Move: pushed `ce52c115cd03bc07bcf40a3a95a2f31ccd8a7cc8` and monitored GitHub
+  Actions.
+- Evidence: CI run `27504868005` completed successfully. `Detect Staging Deploy
+  Impact` passed in 4 seconds, `Build Frontend` was skipped, and
+  `Deploy to Staging (Node B)` was skipped. Docs Truth Check run `27504868013`
+  passed. FlakeHub publish run `27504868006` passed.
+- Interpretation: this commit proves the specific recurrence mode that caused
+  report-tooling edits to request ordinary and Playwright guest image builds is
+  repaired for `scripts/node-b-storage-*` and
+  `scripts/node-b-data-img-snapshot`.
+- Expected ΔV: 0; this prevents tooling iteration from causing image builds but
+  does not implement active cleanup, Nix GC budgeting, or snapshot cleanup.
+- Actual ΔV: 0.
+- Open edge: implement either snapshot cleanup gates over typed sidecars or an
+  explicit Nix current/rollback root policy with budgeted GC.
