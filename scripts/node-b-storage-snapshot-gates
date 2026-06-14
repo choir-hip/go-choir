@@ -1,0 +1,302 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+report=""
+report_format="${NODE_B_SNAPSHOT_GATES_FORMAT:-json}"
+min_age_days="${NODE_B_SNAPSHOT_MIN_AGE_DAYS:-7}"
+owner_approved=false
+recovery_settled=false
+rollback_proof=""
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/node-b-storage-snapshot-gates REPORT.json [options]
+
+Read-only manual data.img snapshot cleanup gate. Consumes
+scripts/node-b-storage-report --format json output and emits a review plan.
+This command never deletes VM state or snapshots.
+
+Options:
+  --format json|markdown      Output format (default: json)
+  --min-age-days N            Minimum snapshot age for review eligibility
+                              (default: 7)
+  --owner-approved            Model owner approval as present in the plan
+  --recovery-settled          Model recovery settlement as present in the plan
+  --rollback-proof REF        Model rollback/replacement proof as present
+  -h, --help                  Show this help
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --format)
+      report_format="${2:?missing --format value}"
+      case "$report_format" in
+        json|markdown) ;;
+        *)
+          echo "unknown --format value: $report_format" >&2
+          usage >&2
+          exit 2
+          ;;
+      esac
+      shift 2
+      ;;
+    --min-age-days)
+      min_age_days="${2:?missing --min-age-days value}"
+      shift 2
+      ;;
+    --owner-approved)
+      owner_approved=true
+      shift
+      ;;
+    --recovery-settled)
+      recovery_settled=true
+      shift
+      ;;
+    --rollback-proof)
+      rollback_proof="${2:?missing --rollback-proof value}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      if [ -z "$report" ]; then
+        report="$1"
+        shift
+      else
+        echo "unknown argument: $1" >&2
+        usage >&2
+        exit 2
+      fi
+      ;;
+  esac
+done
+
+if [ -z "$report" ]; then
+  echo "error: REPORT.json is required" >&2
+  usage >&2
+  exit 2
+fi
+
+if [ ! -r "$report" ]; then
+  echo "error: report is not readable: $report" >&2
+  exit 2
+fi
+
+case "$min_age_days" in
+  ''|*[!0-9]*)
+    echo "error: --min-age-days must be a non-negative integer" >&2
+    exit 2
+    ;;
+esac
+
+REPORT_PATH="$report" \
+REPORT_FORMAT="$report_format" \
+MIN_AGE_DAYS="$min_age_days" \
+OWNER_APPROVED="$owner_approved" \
+RECOVERY_SETTLED="$recovery_settled" \
+ROLLBACK_PROOF="$rollback_proof" \
+perl <<'PERL'
+use strict;
+use warnings;
+use JSON::PP qw(decode_json);
+use POSIX qw(strftime);
+
+my $report_path = $ENV{REPORT_PATH};
+my $format = $ENV{REPORT_FORMAT} || "json";
+my $min_age_days = 0 + ($ENV{MIN_AGE_DAYS} || 7);
+my $min_age_seconds = $min_age_days * 86400;
+my $owner_approved = ($ENV{OWNER_APPROVED} || "") eq "true" ? 1 : 0;
+my $recovery_settled = ($ENV{RECOVERY_SETTLED} || "") eq "true" ? 1 : 0;
+my $rollback_proof = $ENV{ROLLBACK_PROOF} || "";
+
+open my $fh, "<", $report_path or die "open $report_path: $!\n";
+local $/;
+my $raw = <$fh>;
+close $fh;
+my $report = decode_json($raw);
+
+my $snap_doc = ref($report->{manual_recovery_snapshots}) eq "HASH"
+  ? $report->{manual_recovery_snapshots}
+  : {};
+my @snapshots = ref($snap_doc->{snapshots}) eq "ARRAY" ? @{$snap_doc->{snapshots}} : ();
+
+sub fmt_bytes {
+  my ($bytes) = @_;
+  $bytes ||= 0;
+  my @units = qw(B KiB MiB GiB TiB);
+  my $n = $bytes + 0;
+  my $i = 0;
+  while ($n >= 1024 && $i < $#units) {
+    $n /= 1024;
+    $i++;
+  }
+  return $i == 0 ? sprintf("%d %s", $n, $units[$i]) : sprintf("%.2f %s", $n, $units[$i]);
+}
+
+sub bool_json {
+  my ($value) = @_;
+  return $value ? JSON::PP::true : JSON::PP::false;
+}
+
+sub uniq {
+  my %seen;
+  return grep { !$seen{$_}++ } @_;
+}
+
+sub class_blockers {
+  my ($class) = @_;
+  return ("platform_lineage_and_rollback_window_required")
+    if $class eq "platform_migration_snapshot_review";
+  return ("protected_owner_snapshot_one_off_review_required")
+    if $class eq "protected_user_manual_snapshot_review";
+  return ("recovery_settlement_required", "replacement_backup_proof_required", "owner_approval_required")
+    if $class eq "corrupt_disk_quarantine_review";
+  return ("recovery_settlement_required", "rollback_or_rebuildable_cache_proof_required", "owner_approval_required")
+    if $class eq "pre_prune_rollback_review";
+  return ("rollback_or_replacement_proof_required", "owner_approval_required")
+    if $class eq "manual_data_img_snapshot_review";
+  return ("unsupported_snapshot_class_review_required");
+}
+
+my @rows;
+my %class_summary;
+my $candidate_count = 0;
+my $candidate_bytes = 0;
+my $refusal_count = 0;
+my $refusal_bytes = 0;
+my $typed_count = 0;
+my $missing_count = 0;
+my $invalid_count = 0;
+
+for my $s (@snapshots) {
+  my $class = $s->{class} || "manual_data_img_snapshot_review";
+  my $allocated = 0 + ($s->{allocated} || 0);
+  my $age_seconds = 0 + ($s->{age_seconds} || 0);
+  my $metadata_status = $s->{metadata_status} || "";
+  my @blockers;
+
+  if ($metadata_status eq "typed_sidecar_valid") {
+    $typed_count++;
+  } elsif ($metadata_status =~ /^metadata_invalid/) {
+    $invalid_count++;
+    push @blockers, "valid_typed_snapshot_metadata_required";
+  } else {
+    $missing_count++;
+    push @blockers, "typed_snapshot_metadata_required";
+  }
+
+  push @blockers, "minimum_age_${min_age_days}d_required"
+    if $age_seconds < $min_age_seconds;
+
+  for my $blocker (class_blockers($class)) {
+    if ($blocker eq "owner_approval_required") {
+      push @blockers, $blocker unless $owner_approved;
+    } elsif ($blocker =~ /recovery_settlement_required/) {
+      push @blockers, $blocker unless $recovery_settled;
+    } elsif ($blocker =~ /(rollback|replacement|rebuildable).*proof_required/) {
+      push @blockers, $blocker unless length($rollback_proof);
+    } else {
+      push @blockers, $blocker;
+    }
+  }
+  @blockers = uniq(@blockers);
+
+  my $action = @blockers ? "preserve_refusal" : "review_delete_candidate";
+  if (@blockers) {
+    $refusal_count++;
+    $refusal_bytes += $allocated;
+  } else {
+    $candidate_count++;
+    $candidate_bytes += $allocated;
+  }
+
+  $class_summary{$class}{snapshots}++;
+  $class_summary{$class}{allocated_bytes} += $allocated;
+
+  push @rows, {
+    vm_id => $s->{vm_id} || "",
+    user_id => $s->{user_id} || "",
+    name => $s->{name} || "",
+    path => $s->{path} || "",
+    class => $class,
+    action => $action,
+    blockers => \@blockers,
+    allocated_bytes => $allocated,
+    age_seconds => $age_seconds,
+    metadata_status => $metadata_status,
+    metadata_path => $s->{metadata_path} || "",
+    purpose => $s->{purpose} || "",
+    ttl_policy => $s->{ttl_policy} || "",
+    gate => $s->{gate} || "",
+  };
+}
+
+my @classes = map {
+  {
+    class => $_,
+    snapshots => 0 + ($class_summary{$_}{snapshots} || 0),
+    allocated_bytes => 0 + ($class_summary{$_}{allocated_bytes} || 0),
+  }
+} sort keys %class_summary;
+
+my $plan = {
+  generated_at => strftime("%Y-%m-%dT%H:%M:%SZ", gmtime()),
+  source_report => $report_path,
+  mode => "report-only; no snapshot deletion or VM mutation",
+  policy_status => "review-only; deletion requires a separate owner-approved operation",
+  active_delete_authorized => JSON::PP::false,
+  gates => {
+    typed_snapshot_metadata_required => JSON::PP::true,
+    recovery_settlement_present => bool_json($recovery_settled),
+    rollback_or_replacement_proof => $rollback_proof,
+    owner_approval_present => bool_json($owner_approved),
+    minimum_age_days => $min_age_days,
+  },
+  inventory => {
+    snapshot_count => 0 + scalar(@snapshots),
+    typed_metadata_count => $typed_count,
+    missing_metadata_count => $missing_count,
+    invalid_metadata_count => $invalid_count,
+    review_delete_candidate_count => $candidate_count,
+    review_delete_candidate_bytes => $candidate_bytes,
+    preserve_refusal_count => $refusal_count,
+    preserve_refusal_bytes => $refusal_bytes,
+    classes => \@classes,
+  },
+  snapshots => \@rows,
+};
+
+if ($format eq "json") {
+  print JSON::PP->new->canonical->pretty->encode($plan);
+  exit 0;
+}
+
+print "# Node B Snapshot Cleanup Gates\n\n";
+print "- generated_at: `$plan->{generated_at}`\n";
+print "- source_report: `$report_path`\n";
+print "- mode: `$plan->{mode}`\n";
+print "- policy_status: `$plan->{policy_status}`\n";
+print "- active_delete_authorized: `false`\n";
+print "- minimum_age_days: `$min_age_days`\n";
+print "- owner_approval_present: `" . ($owner_approved ? "true" : "false") . "`\n";
+print "- recovery_settlement_present: `" . ($recovery_settled ? "true" : "false") . "`\n";
+print "- rollback_or_replacement_proof: `" . ($rollback_proof || "") . "`\n\n";
+print "## Inventory\n\n";
+print "- snapshot_count: `" . scalar(@snapshots) . "`\n";
+print "- typed_metadata_count: `$typed_count`\n";
+print "- missing_metadata_count: `$missing_count`\n";
+print "- invalid_metadata_count: `$invalid_count`\n";
+print "- review_delete_candidate_count: `$candidate_count`\n";
+print "- review_delete_candidate_bytes: `" . fmt_bytes($candidate_bytes) . "`\n";
+print "- preserve_refusal_count: `$refusal_count`\n";
+print "- preserve_refusal_bytes: `" . fmt_bytes($refusal_bytes) . "`\n\n";
+print "| snapshot | class | action | allocated | blockers |\n";
+print "| --- | --- | --- | ---: | --- |\n";
+for my $row (@rows) {
+  print "| `" . ($row->{path} || $row->{name}) . "` | `$row->{class}` | `$row->{action}` | "
+    . fmt_bytes($row->{allocated_bytes}) . " | `" . join(", ", @{$row->{blockers}}) . "` |\n";
+}
+PERL

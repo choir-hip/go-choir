@@ -10,8 +10,9 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/node-b-storage-proof [--host node-b|--local] [--top N] [--out-dir DIR]
 
-Runs the read-only Node B storage report in Markdown and JSON mode, then
-verifies the JSON no-delete/protected-identity contract.
+Runs the read-only Node B storage report in Markdown and JSON mode, verifies
+the JSON no-delete/protected-identity contract, and emits a review-only
+snapshot cleanup gate plan.
 
 This writes proof artifacts under --out-dir or /tmp by default. It does not
 delete VM state, delete snapshots, run Nix GC, restart services, or mutate VMs.
@@ -69,6 +70,8 @@ mkdir -p "$out_dir"
 
 markdown_report="$out_dir/node-b-storage-report.md"
 json_report="$out_dir/node-b-storage-report.json"
+snapshot_gates_report="$out_dir/node-b-snapshot-cleanup-gates.md"
+snapshot_gates_json="$out_dir/node-b-snapshot-cleanup-gates.json"
 
 scripts/node-b-storage-report "${mode_args[@]}" --top "$top_n" > "$markdown_report" &
 markdown_pid="$!"
@@ -85,7 +88,15 @@ if [ "$markdown_status" -ne 0 ] || [ "$json_status" -ne 0 ]; then
 fi
 
 scripts/node-b-storage-verify-report "$json_report"
+scripts/node-b-storage-snapshot-gates "$json_report" --format markdown > "$snapshot_gates_report"
+scripts/node-b-storage-snapshot-gates "$json_report" --format json > "$snapshot_gates_json"
+jq -e '
+  .mode == "report-only; no snapshot deletion or VM mutation"
+  and .active_delete_authorized == false
+' "$snapshot_gates_json" >/dev/null
 
 printf 'node-b storage proof complete\n'
 printf 'markdown_report=%s\n' "$markdown_report"
 printf 'json_report=%s\n' "$json_report"
+printf 'snapshot_gates_report=%s\n' "$snapshot_gates_report"
+printf 'snapshot_gates_json=%s\n' "$snapshot_gates_json"

@@ -290,7 +290,46 @@ Evidence:
   0 typed sidecars, 0 invalid sidecars, and no snapshot deletion authorization.
 
 This creates the typed creation/annotation path, but it does not authorize
-deletion and does not yet enforce snapshot cleanup.
+deletion. Cleanup enforcement is modeled by the snapshot gate plan below.
+
+## Snapshot Cleanup Gate Evidence
+
+`scripts/node-b-storage-snapshot-gates` now consumes
+`scripts/node-b-storage-report --format json` output and emits a review-only
+manual snapshot cleanup plan. It never deletes VM state or snapshots. It
+requires typed snapshot metadata, minimum age, owner approval, recovery
+settlement, and rollback/replacement proof before a snapshot can become a
+`review_delete_candidate`; even then `active_delete_authorized` remains `false`
+because deletion is a separate owner-approved operation.
+
+`scripts/node-b-storage-proof` now writes both snapshot gate artifacts:
+
+- `node-b-snapshot-cleanup-gates.md`;
+- `node-b-snapshot-cleanup-gates.json`.
+
+Fixture evidence proves the gate behavior:
+
+- without modeled approval/recovery/rollback evidence, both fixture snapshots
+  are preserve/refusal rows;
+- with modeled owner approval, recovery settlement, and rollback proof, only a
+  typed manual snapshot becomes a review candidate;
+- `active_delete_authorized` remains `false` in both cases.
+
+Live Node B proof
+`/tmp/node-b-storage-proof-20260614T165403Z` completed in 7.200 seconds. The
+snapshot gate plan reports:
+
+- mode: report-only; no snapshot deletion or VM mutation;
+- active deletion authorized: false;
+- 4 manual snapshots / 23.82 GiB;
+- typed metadata count: 0;
+- missing metadata count: 4;
+- invalid metadata count: 0;
+- review delete candidates: 0 / 0 bytes;
+- preserve/refusal rows: 4 / 23.82 GiB.
+
+The four live snapshots are now explicitly refused by blockers rather than
+ambiguous filename-only observations.
 
 ## Structured Report Evidence
 
@@ -330,10 +369,11 @@ negative smoke reports with `baseline_cleanup_plan.active_delete_authorized =
 is not a staging/deploy proof until the verifier runs in the deployed/reporting
 environment.
 
-`scripts/node-b-storage-proof` now packages the report and verifier into a
-single read-only proof command. It writes Markdown and JSON artifacts to an
-operator-selected output directory, runs both report formats in parallel, and
-then verifies the JSON protected-identity/no-delete contract.
+`scripts/node-b-storage-proof` now packages the report, verifier, and snapshot
+gates into a single read-only proof command. It writes Markdown and JSON
+artifacts to an operator-selected output directory, runs both report formats in
+parallel, verifies the JSON protected-identity/no-delete contract, and emits
+the snapshot cleanup gate plan.
 
 Evidence: `scripts/node-b-storage-proof --host node-b --top 10 --out-dir
 /tmp/node-b-storage-proof-20260614T154633Z` completed in 7.739 seconds. It
@@ -342,9 +382,10 @@ produced:
 - `/tmp/node-b-storage-proof-20260614T154633Z/node-b-storage-report.md`;
 - `/tmp/node-b-storage-proof-20260614T154633Z/node-b-storage-report.json`.
 
-The verifier passed on that JSON report. This is still report-only proof: it
-does not delete VM state, delete snapshots, run Nix GC, restart services, or
-mutate VMs.
+The verifier passed on that JSON report. Current proof also emits
+`node-b-snapshot-cleanup-gates.{md,json}`. This is still report-only proof: it
+does not delete VM state, delete snapshots, run ad hoc Nix GC, restart
+services, or mutate VMs.
 
 ## Nix Root Budget Evidence
 
@@ -411,7 +452,7 @@ snapshot deletion, or active prune expansion was run during this pass.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-node-b-storage-retention-v0.md. Treat it as the source program for preventing Node B storage recurrence after the 2026-06-14 VM recovery incident. Current status is open_handoff: read-only classifier, JSON verifier, single-command proof runner, deployed vmctl shadow dry-run retention reporting, typed manual snapshot sidecar reporting, a dry-run-by-default snapshot metadata helper, and deployed Nix GC/current+rollback timer policy exist. Commit c04e9649d28d2e163d7c0eb9d0d3e9e506af649e deployed the Node B daily disk sweep target: routine `nix store gc` below 100 GiB free space while preserving rooted current/rollback closures and not deleting Nix roots beyond the existing system generation policy. CI run 27505328627 passed; deploy impact was host OS only with ordinary/Playwright guest images false; deploy completed in 29 seconds and skipped guest image builds/installs. Latest post-deploy read-only proof `/tmp/node-b-storage-proof-20260614T164148Z` completed in 6.873 seconds and shows Nix pressure `below_target_headroom`, timer action `run_nix_store_gc_from_timer`, current generation 495, rollback generation 494, 9 stale generation review candidates, and 1 broken root, with no generation/root deletion or ad hoc GC authorized by the report. Mutation class is red for any live cleanup and orange for future vmctl/Nix retention behavior; do not run manual live deletion, ad hoc Nix GC, manual snapshot cleanup, service restarts, or active prune expansion without explicit approval. Preserve real user yusefnathanson@me.com and protected test accounts a@b.com and b@c.com. Do not delete VM state, data.img snapshots, Nix roots, or guest images without a typed retention candidate, rollback/refusal reason, owner-visible report, and explicit approval. First next move: implement snapshot cleanup gates over typed sidecars, or convert deployed vmctl shadow fake-user candidates into owner-approved active cleanup while retaining protected-account evidence. Ledger: docs/mission-node-b-storage-retention-v0.ledger.md. Settlement requires staging-proven retention/reporting, CI/deploy evidence for behavior changes, a reviewed baseline cleanup plan, and explicit evidence that owner/test real accounts remain protected.
+/goal Use Parallax on docs/mission-node-b-storage-retention-v0.md. Treat it as the source program for preventing Node B storage recurrence after the 2026-06-14 VM recovery incident. Current status is open_handoff: read-only classifier, JSON verifier, single-command proof runner, deployed vmctl shadow dry-run retention reporting, typed manual snapshot sidecar reporting, dry-run-by-default snapshot metadata helper, snapshot cleanup gate plan, and deployed Nix GC/current+rollback timer policy exist. Commit c04e9649d28d2e163d7c0eb9d0d3e9e506af649e deployed the Node B daily disk sweep target: routine `nix store gc` below 100 GiB free space while preserving rooted current/rollback closures and not deleting Nix roots beyond the existing system generation policy. Latest read-only proof `/tmp/node-b-storage-proof-20260614T165403Z` completed in 7.200 seconds and now emits `node-b-snapshot-cleanup-gates.{md,json}`. The snapshot gate reports active deletion false, 4 manual snapshots / 23.82 GiB, 0 typed sidecars, 4 missing sidecars, 0 invalid sidecars, 0 review-delete candidates, and 4 preserve/refusal rows. Mutation class is red for any live cleanup and orange for future vmctl/Nix retention behavior; do not run manual live deletion, ad hoc Nix GC, manual snapshot cleanup, service restarts, or active prune expansion without explicit approval. Preserve real user yusefnathanson@me.com and protected test accounts a@b.com and b@c.com. Do not delete VM state, data.img snapshots, Nix roots, or guest images without a typed retention candidate, rollback/refusal reason, owner-visible report, and explicit approval. First next move: convert deployed vmctl shadow fake-user candidates into owner-approved active cleanup while retaining protected-account evidence, or define the missing-auth-user retention policy. Ledger: docs/mission-node-b-storage-retention-v0.ledger.md. Settlement requires staging-proven retention/reporting, CI/deploy evidence for behavior changes, a reviewed baseline cleanup plan, and explicit evidence that owner/test real accounts remain protected.
 ```
 
 ## Parallax State
@@ -440,8 +481,8 @@ no weakening docs-only CI filters; start read-only on Node B, then dry-run
 staging report, then active bounded cleanup only after explicit approval.
 
 variant (ranking function) V: active VM retention implementation `1` +
-snapshot cleanup enforcement over typed sidecars `1` + active Nix GC/rollback
-enforcement `0` = `2`; last ΔV: deployed active Nix timer target `1`.
+snapshot cleanup enforcement over typed sidecars `0` + active Nix GC/rollback
+enforcement `0` = `1`; last ΔV: snapshot cleanup gates `1`.
 
 budget: initial planning budget one Codex turn; execution budget extended
 through report/shadow implementation and deployed proof. Solvency: prevention
@@ -465,14 +506,15 @@ evidence packet: Node B disk inventory; `scripts/node-b-storage-report` output;
 vmctl health/list/retention-plan/retention-shadow-plan; Nix root inventory and
 `nix_roots.gc_plan`; incident docs; code references in `internal/vmctl`,
 `nix/node-b.nix`, and `.github/workflows/ci.yml`; deploy evidence from GitHub
-Actions runs `27504321847` and `27505328627`; latest post-deploy read-only
-proof `/tmp/node-b-storage-proof-20260614T164148Z`; future active cleanup proof
+Actions runs `27504321847` and `27505328627`; latest read-only proof
+`/tmp/node-b-storage-proof-20260614T165403Z`; future active VM cleanup proof
 must include dry-run report, focused tests, CI/deploy identity when behavior
-changes, and post-cleanup health.
+changes, protected-account refusal evidence, and post-cleanup health.
 
-heresy delta: discovered `1` policy mismatch; introduced `0`; repaired `2`
-for staging-proven report-only prevention visibility plus deployed Nix timer
-headroom enforcement; active VM/snapshot cleanup prevention remains open.
+heresy delta: discovered `1` policy mismatch; introduced `0`; repaired `3`
+for staging-proven report-only prevention visibility, deployed Nix timer
+headroom enforcement, and snapshot cleanup gate refusal; active VM cleanup
+prevention remains open.
 
 position / live conjectures / open edges: Current evidence supports a policy
 mismatch, not a single leak. The report has an identity-backed baseline cleanup
@@ -513,14 +555,18 @@ Post-deploy proof completed in 6.873 seconds, identified pressure
 `below_target_headroom`, timer action `run_nix_store_gc_from_timer`, current
 generation 495, rollback generation 494, nine stale generation review
 candidates, one broken root, active vmctl retention delete bytes `0`, and
-protected accounts still refused. Open edges: missing-auth-user policy, active
-fake-user cleanup approval/enforcement, snapshot cleanup enforcement after
-typed metadata exists, whether live `data.img` sparsification/discard should be
-part of hibernate/recovery, and how to expose reports to operators.
+protected accounts still refused. The latest proof
+`/tmp/node-b-storage-proof-20260614T165403Z` adds snapshot cleanup gate
+artifacts and reports active deletion `false`, 4 manual snapshots / 23.82 GiB,
+0 typed sidecars, 4 missing sidecars, 0 invalid sidecars, 0 review-delete
+candidates, and 4 preserve/refusal rows. Open edges: missing-auth-user policy,
+active fake-user cleanup approval/enforcement, whether live `data.img`
+sparsification/discard should be part of hibernate/recovery, and how to expose
+reports to operators.
 
-next move: implement snapshot cleanup gates over typed sidecars, or convert
-deployed vmctl shadow fake-user candidates into owner-approved active cleanup
-while retaining the protected account gate and rollback/refusal record.
+next move: convert deployed vmctl shadow fake-user candidates into
+owner-approved active cleanup while retaining the protected account gate and
+rollback/refusal record, or define the missing-auth-user retention policy.
 
 ledger file: docs/mission-node-b-storage-retention-v0.ledger.md
 

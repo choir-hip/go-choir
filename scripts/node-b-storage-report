@@ -1010,8 +1010,8 @@ if ($report_format eq "json") {
     },
     next_required_proof => [
       "Convert fake-domain and synthetic-user rows into a reviewed active retention policy.",
-      "Convert typed manual snapshot metadata into reviewed cleanup gates.",
-      "Convert the report-only Nix GC plan into an owner-approved active timer policy.",
+      "Attach typed manual snapshot metadata or keep current filename-inferred snapshot refusals.",
+      "Expose snapshot cleanup gates and fake-user cleanup decisions as operator-visible reviewed plans.",
     ],
   };
   print JSON::PP->new->canonical->pretty->encode($doc);
@@ -1244,12 +1244,12 @@ print "| fake email domain VMs | " . fmt_bytes($fake_domain_review_bytes) . " to
 print "| synthetic non-UUID user VMs | " . fmt_bytes($synthetic_review_bytes) . " total; " . fmt_bytes($synthetic_policy_eligible_bytes) . " policy-eligible | owner-review disposable proof, then typed prune |\n";
 print "| registered non-fake user VMs | " . fmt_bytes($registered_user_refusal_bytes) . " | refuse unless owner marks account disposable |\n";
 print "| UUID primary VMs without email mapping | " . fmt_bytes($identity_unresolved_bytes + $missing_auth_user_refusal_bytes) . " | refuse prune until auth email identity is available |\n";
-print "| known deploy Nix roots | " . fmt_bytes($nix_root_target_alloc_total) . " direct target allocation | no GC; classify against current/rollback/stale budget first |\n\n";
+print "| known deploy Nix roots | " . fmt_bytes($nix_root_target_alloc_total) . " direct target allocation | no root deletion; timer GC is bounded by current/rollback roots |\n\n";
 
 print "## Next Required Proof\n\n";
 print "1. Convert fake-domain and synthetic-user rows into a reviewed active retention policy.\n";
-print "2. Convert typed manual snapshot metadata into reviewed cleanup gates.\n";
-print "3. Convert the report-only Nix GC plan into an owner-approved active timer policy.\n";
+print "2. Attach typed manual snapshot metadata or keep current filename-inferred snapshot refusals.\n";
+print "3. Expose snapshot cleanup gates and fake-user cleanup decisions as operator-visible reviewed plans.\n";
 PERL
 }
 

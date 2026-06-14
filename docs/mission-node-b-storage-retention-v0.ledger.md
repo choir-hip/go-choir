@@ -568,3 +568,35 @@
 - Actual ΔV: 1; active Nix GC/rollback enforcement is deployed and proven.
 - Open edge: active VM fake-user cleanup and snapshot cleanup enforcement remain
   unsettled.
+
+## 2026-06-14 — snapshot cleanup gates
+
+- Claim: manual `data.img.*` snapshots stop being ambiguous storage risk when a
+  reusable gate can classify each snapshot as preserve/refusal or review-delete
+  candidate from typed metadata, age, owner approval, recovery settlement, and
+  rollback/replacement proof, while keeping deletion unauthorized by default.
+- Move: added `scripts/node-b-storage-snapshot-gates`, a read-only planner over
+  `scripts/node-b-storage-report --format json`, and wired it into
+  `scripts/node-b-storage-proof` so every proof emits
+  `node-b-snapshot-cleanup-gates.{md,json}`. Updated the report next-proof text
+  so future passes no longer route back to the already deployed Nix timer work.
+- Fixture evidence: a temp JSON report with one typed manual snapshot and one
+  filename-inferred pre-prune snapshot proves default mode refuses both rows;
+  with modeled owner approval, recovery settlement, and rollback proof, only
+  the typed manual snapshot becomes a `review_delete_candidate`; in both cases
+  `active_delete_authorized` remains `false`.
+- Live evidence: `scripts/node-b-storage-proof --host node-b --top 10 --out-dir
+  /tmp/node-b-storage-proof-20260614T165403Z` completed in 7.200 seconds and
+  verifier passed. The snapshot gate plan reports mode `report-only; no
+  snapshot deletion or VM mutation`, active deletion `false`, 4 manual
+  snapshots / 23.82 GiB, 0 typed metadata sidecars, 4 missing sidecars, 0
+  invalid sidecars, 0 review-delete candidates, and 4 preserve/refusal rows.
+- Safety evidence: no live metadata write, snapshot deletion, VM mutation,
+  service restart, Nix GC, or active prune expansion was run. Existing live
+  manual snapshots remain preserve/refusal rows because typed sidecars and
+  approval/recovery/rollback evidence are absent.
+- Expected ΔV: 1.
+- Actual ΔV: 1; snapshot cleanup enforcement is now a reusable report-only gate
+  and live snapshots are explicitly refused.
+- Open edge: active VM fake-user cleanup remains unsettled; missing-auth-user
+  retention policy remains undefined.
