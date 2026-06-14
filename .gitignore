@@ -48,3 +48,7 @@ vmctl.log
 test-results/
 sourcecycled
 specs/states/
+
+# Generated docs truth reports
+/doccheck-report.md
+/doccheck.json

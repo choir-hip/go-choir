@@ -93,3 +93,105 @@ Receipts:
 
 Open edge: originating-agent critique is still pending; checker implementation
 is explicitly deferred.
+
+## 2026-06-14 - Checker Implementation And Baseline
+
+Claim: the simplified checker can settle v0 if it produces an external
+manifest, a report-only local command, manifest/link/witness/heresy reports, and
+a target-doc reconciler guard probe without touching runtime behavior or CI path
+filters.
+
+Move: add `docs/doc-authority-manifest.yaml`, implement `cmd/doccheck`, add the
+`scripts/doccheck` wrapper, ignore generated report outputs, run the checker
+over the repo, and run an explicit `docs_reconciler` write-attempt probe against
+`docs/intended-architecture-next-2026-06-06.md`.
+
+Expected Delta V: -7 by eliminating the missing manifest, checker command,
+report outputs, seeded detector config, measured runtime, reviewed baseline
+warnings, and CI/manual workflow decision obligations.
+
+Actual Delta V: -7. The checker is local/manual and warn-only; generated
+reports are emitted as ignored artifacts; no docs-only CI filters were changed.
+
+Receipts:
+
+- `go test ./cmd/doccheck` passes.
+- `scripts/doccheck` scanned 193 Markdown docs, emitted `doccheck-report.md`
+  and `doccheck.json`, exited 0, and recorded runtime 819ms.
+- Baseline warnings: H1=724, H3=19, H4=3, R3=50. Reviewed as discovery-only;
+  no content repair is claimed.
+- `go run ./cmd/doccheck -actor docs_reconciler -write-attempt
+  docs/intended-architecture-next-2026-06-06.md -report
+  /tmp/doccheck-r4-report.md -json /tmp/doccheck-r4.json` exited 0 and emitted
+  R4=1 for the target-doc write attempt.
+- Independent prover review found no blocking findings, confirmed generated
+  reports are ignored, no `.github` workflow or runtime behavior files are
+  dirty, and the R4 probe exits 0 with R4=1.
+
+Open edge: the baseline still needs a successor allowlist/manual-docs pass
+before warnings can become enforcement or feed an automated reconciler.
+
+## 2026-06-14 - Report-Only CI Wiring
+
+Claim: v0 can enter CI without weakening Choir's docs-only path-filter policy
+if the job runs only when CI is already triggered, verifies report generation,
+uploads artifacts, and continues to treat baseline warnings as discovery-only
+rather than failures.
+
+Move: add a `doccheck` job to `.github/workflows/ci.yml`, wire it into the
+aggregate `check` job, upload `doccheck-report.md` and `doccheck.json`, and
+preserve the existing `docs/**` and top-level `*.md` `paths-ignore` filters.
+
+Expected Delta V: -1 by eliminating the unresolved CI/manual workflow decision
+without turning doc warnings into a blocking quality gate.
+
+Actual Delta V: -1. CI now exercises the command and report generation when CI
+already runs. Docs-only CI behavior remains unchanged.
+
+Receipts:
+
+- `.github/workflows/ci.yml` has a `Docs Truth Check` job.
+- The job runs `scripts/doccheck`, asserts both reports are non-empty, and
+  uploads them as a `doccheck-report` artifact.
+- The aggregate `check` job now requires `doccheck` success, meaning command
+  success and report generation, not zero warnings.
+
+Open edge: automatic doc-only PR execution still requires explicit
+operating-contract reconciliation before changing path filters.
+
+## 2026-06-14 - Completion Audit
+
+Claim: the v0 checker mission can be closed only if current evidence proves the
+manifest, checker command, generated reports, warn-only behavior, R4 target-doc
+guard probe, baseline review, runtime budget, and no-runtime-change boundary.
+
+Move: audit the current worktree, fix the stale Suggested Goal String in the
+paradoc, rerun compile/report/R4 acceptance, and inspect dirty paths plus
+ignored generated artifacts.
+
+Expected Delta V: -1 by converting settlement from a plausible handoff claim
+to current-state evidence.
+
+Actual Delta V: -1. The mission remains settled for v0.
+
+Receipts:
+
+- `nix develop -c go test ./cmd/doccheck` passes.
+- `nix develop -c scripts/doccheck` scans 193 Markdown docs, emits
+  `doccheck-report.md` and `doccheck.json`, exits 0, and records runtime under
+  the 10-second budget.
+- The baseline warning shape remains discovery-only: H1 retired vocabulary,
+  H3 VText agency-collapse candidates, H4 current/target collapse candidates,
+  and R3 reachability or collection-candidate findings. Introduced heresy is
+  empty and repaired heresy is not claimed for content.
+- `nix develop -c go run ./cmd/doccheck -actor docs_reconciler -write-attempt
+  docs/intended-architecture-next-2026-06-06.md -report
+  /tmp/doccheck-r4-report.md -json /tmp/doccheck-r4.json` exits 0 and emits
+  one R4 warning for a `claim_scope: target` write attempt.
+- Dirty tracked paths are limited to `.gitignore`, this paradoc/ledger, and
+  the new docs checker artifacts; no `.github` workflow or runtime behavior
+  file is dirty. Generated `doccheck-report.md` and `doccheck.json` are ignored.
+
+Open edge: successor work still needs a reviewed allowlist/manual-docs cleanup
+plan before warnings can become policy, and no reconciler should be implemented
+until its write path carries the R4 actor guard.

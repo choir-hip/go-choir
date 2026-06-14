@@ -1,0 +1,215 @@
+schema_version: 0
+documents:
+  - path: docs/choir-doctrine.md
+    claim_scope: current
+    is_root: [authority, entry]
+    is_evidence: false
+    annotations:
+      doc_role: doctrine
+      authority: apex
+      lifecycle: living
+    witnesses:
+      - docs/choir-doctrine.md
+      - docs/heresy-detectors.md
+    refresh_triggers:
+      - doctrine_change
+      - protected_surface_change
+
+  - path: AGENTS.md
+    claim_scope: current
+    is_root: [authority, entry]
+    is_evidence: false
+    annotations:
+      doc_role: operating_contract
+      authority: apex_operating_contract
+      lifecycle: living
+    witnesses:
+      - AGENTS.md
+      - docs/choir-doctrine.md
+    refresh_triggers:
+      - doctrine_change
+      - agent_operating_contract_change
+      - protected_surface_change
+
+  - path: README.md
+    claim_scope: mixed
+    is_root: [entry]
+    is_evidence: false
+    annotations:
+      doc_role: orientation
+      authority: support
+      lifecycle: living
+    witnesses:
+      - cmd/**
+      - frontend/src/lib/apps/registry.ts
+      - frontend/src/lib/Desktop.svelte
+      - .github/workflows/**
+    refresh_triggers:
+      - cmd_service_topology_change
+      - app_registry_change
+      - doctrine_change
+
+  - path: docs/README.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations:
+      doc_role: orientation
+      authority: support
+      lifecycle: living
+    witnesses:
+      - docs/choir-doctrine.md
+      - AGENTS.md
+      - docs/current-architecture.md
+      - docs/platform-os-app-state.md
+      - docs/mission-portfolio-2026-06-11.md
+    refresh_triggers:
+      - doctrine_change
+      - documentation_index_change
+
+  - path: docs/current-architecture.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations:
+      doc_role: current_state
+      authority: support
+      lifecycle: living
+    witnesses:
+      - cmd/**
+      - internal/**
+      - frontend/src/**
+      - .github/workflows/**
+    refresh_triggers:
+      - cmd_service_topology_change
+      - runtime_architecture_change
+      - frontend_app_change
+
+  - path: docs/platform-os-app-state.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations:
+      doc_role: current_state
+      authority: support
+      lifecycle: living
+    witnesses:
+      - frontend/src/lib/apps/registry.ts
+      - frontend/src/lib/Desktop.svelte
+      - frontend/src/lib/*App.svelte
+      - internal/**
+      - cmd/**
+    refresh_triggers:
+      - app_registry_change
+      - desktop_shell_change
+      - promotion_or_vm_lifecycle_change
+
+  - path: docs/mission-portfolio-2026-06-11.md
+    claim_scope: mixed
+    is_root: [entry]
+    is_evidence: false
+    annotations:
+      doc_role: mission
+      authority: support
+      lifecycle: living
+    witnesses:
+      - docs/choir-rearchitecture-durable-actors-2026-06-11.md
+      - docs/choir-role-free-actor-protocol-2026-06-11.md
+      - docs/system-v1-one-cut-2026-06-11.md
+    refresh_triggers:
+      - durable_actor_portfolio_change
+      - mission_settlement_change
+
+  - path: docs/runtime-invariants.md
+    claim_scope: current
+    is_root: false
+    is_evidence: false
+    annotations:
+      doc_role: current_state
+      authority: domain_invariant
+      lifecycle: living
+    witnesses:
+      - internal/runtime/**
+      - internal/store/**
+      - docs/choir-doctrine.md
+    refresh_triggers:
+      - runtime_authority_change
+      - prompt_default_change
+
+  - path: docs/source-external-data-publication.md
+    claim_scope: current
+    is_root: false
+    is_evidence: false
+    annotations:
+      doc_role: current_state
+      authority: domain_invariant
+      lifecycle: living
+    witnesses:
+      - cmd/sourcecycled/**
+      - internal/store/browser.go
+      - internal/types/browser.go
+      - frontend/src/lib/BrowserApp.svelte
+    refresh_triggers:
+      - source_system_change
+      - publication_contract_change
+
+  - path: docs/computer-ontology.md
+    claim_scope: current
+    is_root: false
+    is_evidence: false
+    annotations:
+      doc_role: doctrine
+      authority: domain_doctrine
+      lifecycle: living
+    witnesses:
+      - docs/choir-doctrine.md
+      - docs/platform-os-app-state.md
+      - internal/**
+      - cmd/vmctl/**
+    refresh_triggers:
+      - computer_ontology_change
+      - vm_or_promotion_change
+
+  - path: docs/vtext-agentic-invariants-2026-06-13.md
+    claim_scope: current
+    is_root: false
+    is_evidence: false
+    annotations:
+      doc_role: doctrine
+      authority: domain_invariant
+      lifecycle: living
+    witnesses:
+      - internal/runtime/**
+      - internal/runtime/prompt_defaults/**
+      - docs/choir-doctrine.md
+    refresh_triggers:
+      - vtext_tool_or_prompt_change
+      - role_authority_change
+
+  - path: docs/heresy-detectors.md
+    claim_scope: mixed
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: evidence
+      authority: doctrine_detector_manifest
+      lifecycle: living
+    witnesses:
+      - docs/choir-doctrine.md
+      - docs/heresy-detectors.md
+    refresh_triggers:
+      - doctrine_heresy_change
+      - detector_baseline_change
+
+  - path: docs/intended-architecture-next-2026-06-06.md
+    claim_scope: target
+    is_root: false
+    is_evidence: false
+    annotations:
+      doc_role: target_architecture
+      authority: support
+      lifecycle: living
+    refresh_triggers:
+      - target_architecture_change
+      - explicit_owner_promotion
+

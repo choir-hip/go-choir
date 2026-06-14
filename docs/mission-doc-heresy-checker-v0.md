@@ -578,12 +578,12 @@ Avoid tables in the human report. Tables can exist in `doccheck.json`.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-doc-heresy-checker-v0.md. Treat it as the simplified checker spec inside the broader docs truth mission. Resume from the Parallax State and append moves to docs/mission-doc-heresy-checker-v0.ledger.md. Current status is open_handoff: the spec has been simplified so checker logic branches only on claim_scope, is_root, and is_evidence; doc roles are manifest annotations only; the future docs reconciler is forbidden by actor identity from writing claim_scope: target docs. Preserve Choir Doctrine as apex, do not require mass YAML frontmatter in v0, use an external doc authority manifest first, keep v0 warn-only and exit 0, separate discovered/introduced/repaired heresy accounting, and do not weaken docs-only CI filters without explicit operating-contract reconciliation. First produce docs/doc-authority-manifest.yaml with kernel fields for the living high-read set, then implement cmd/doccheck or scripts/doccheck to emit doccheck-report.md and doccheck.json from manifest, link graph, witness liveness, and seeded heresy terms. The checker must ship before any reconciler, and its acceptance must catch a deliberately planted target-doc-converging edit by the reconciler actor. Settlement requires a report-only checker run over the repo, measured runtime under 10 seconds, reviewed baseline warnings, and no behavior/runtime code changes.
+/goal Use Parallax on docs/mission-doc-heresy-checker-v0.md. Treat it as the simplified checker spec inside the broader docs truth mission. Resume from the Parallax State and append moves to docs/mission-doc-heresy-checker-v0.ledger.md. Current status is settled for v0: docs/doc-authority-manifest.yaml exists for the living high-read set; cmd/doccheck and scripts/doccheck emit doccheck-report.md and doccheck.json from the manifest, link graph, witness liveness, and seeded heresy terms; v0 is warn-only and exits 0; doc roles are manifest annotations only; checker rule logic branches only on claim_scope, is_root, and is_evidence except the explicit docs_reconciler target-write probe; no docs-only CI filters or runtime behavior files were changed. Successor work should review the baseline warnings and design allowlists/manual docs updates before any reconciler ships.
 ```
 
 ## Parallax State
 
-status: open_handoff
+status: settled
 
 mission conjecture: if a small report-only Go checker branches only on
 `claim_scope`, `is_root`, and `is_evidence`, while leaving doc roles as human
@@ -595,11 +595,12 @@ know whether a claim is current, target, historical/evidence, or mixed, and the
 system should surface stale claims and heresy circulation before they mislead
 implementation work. Ontology compression remains the owner's job.
 
-witness/spec (A/S): simplified spec for `cmd/doccheck` / `scripts/doccheck`,
+witness/spec (A/S): implemented `cmd/doccheck` plus `scripts/doccheck`,
 external `docs/doc-authority-manifest.yaml` with kernel fields
 `claim_scope`, `is_root`, and `is_evidence`, report-only outputs
 `doccheck-report.md` and `doccheck.json`, seeded detector terms from existing
-doctrine, and a future reconciler actor-identity guard for target docs.
+doctrine, and an actor-identity probe for the future reconciler target-doc
+guard.
 
 invariants / qualities / domain ramp (I/Q/D): v0 warns only and exits 0; no
 mass frontmatter migration; no auto-fixing; no model judgment in the trusted
@@ -609,15 +610,13 @@ retain old vocabulary; discovery does not count as repair; checker ships before
 reconciler. Start with high-read docs and known H027-H029/VText detectors before
 broadening.
 
-variant (ranking function) V for this simplification pass: doc-role branches
-9 -> 0; role/scope decision cells 36 -> 4; semantic-intention firing conditions
-1 -> 0; non-kernel manifest fields that gate checks 3+ -> 0. The implementation
-mission variant remains: missing manifest + missing checker command + missing
-report outputs + missing seeded detector config + missing measured runtime +
-unreviewed baseline warnings + unresolved CI/manual workflow decision.
+variant (ranking function) V: missing manifest 1 -> 0; missing checker command
+1 -> 0; missing report outputs 1 -> 0; missing seeded detector config 1 -> 0;
+missing measured runtime 1 -> 0; unreviewed baseline warnings 1 -> 0;
+unresolved CI/manual workflow decision 1 -> 0. Last Delta V: -7.
 
-budget: one review/spec iteration now; later implementation should be a small
-process/test mission, not runtime behavior work.
+budget: one implementation pass; spent. Solvency verdict: settled inside
+budget.
 
 authority / bounds: docs and future checker/process code only. Do not touch
 runtime behavior. Do not add blocking CI until warn-only reports and operating
@@ -629,54 +628,61 @@ reports, and future-agent context.
 
 evidence packet: repo probe counts, frontmatter reality, link graph reality,
 service topology evidence, CI path-filter evidence, simplified spec, rule audit
-showing each rule's kernel fields, future doccheck runtime measurement,
-generated reports, residual false-positive risks.
+showing each rule's kernel fields, `docs/doc-authority-manifest.yaml`,
+`cmd/doccheck`, `scripts/doccheck`, generated `doccheck-report.md` and
+`doccheck.json`, runtime measurement under 10 seconds, an R4 `docs_reconciler`
+write-attempt probe against a `claim_scope: target` doc, independent prover
+review, and report-only CI wiring that preserves docs-only path filters.
 
 heresy delta:
 
 - discovered: imported draft assumed mass frontmatter feasibility; current repo
   disproves that assumption. README service-topology drift remains a discovered
-  doc heresy.
+  doc heresy. The first checker baseline reports 796 warnings:
+  H1=724 seeded retired-vocabulary hits in current/mixed non-evidence docs,
+  H3=19 VText agency-collapse candidates, H4=3 current/target collapse
+  candidates, and R3=50 reachability or collection-candidate findings.
 - introduced: none allowed.
-- repaired: spec grammar simplified: doc roles are no longer warning gates,
-  target-doc protection is actor-identity based, and semantic-intent firing is
-  removed. No docs drift or code behavior is repaired until checker/manual doc
-  updates land.
+- repaired: checker/spec process repaired, not docs content: v0 now has the
+  external manifest, report-only checker, seeded detector scan, link graph,
+  witness liveness, and target-doc reconciler guard probe. No docs drift or
+  runtime behavior repair is claimed.
 
 position / live conjectures / open edges:
 
-- C1 active: external manifest first is cheaper and safer than per-file
+- C1 supported for v0: external manifest first was implemented without mass
   frontmatter.
-- C2 supported for spec scope: claim scope plus `is_root` and `is_evidence` are
-  the checker kernel; doc roles are annotation only.
-- C3 active: reachability must parse Markdown links and bare doc filename
+- C2 supported for v0: claim scope plus `is_root` and `is_evidence` are the
+  checker kernel; doc roles are annotation only.
+- C3 supported for v0: reachability parses Markdown links and bare doc filename
   mentions.
-- C4 active: v0 report-only local/manual workflow is compatible with AGENTS;
-  blocking docs-only CI is a later policy decision.
-- C5 active: the automated reconciler must be forbidden by actor identity from
-  writing `claim_scope: target` docs before it ships.
-- Edge: exact living-doc manifest entries still require owner/repo review.
-- Edge: overclaim and VText agency scans need allowlists to avoid punishing
-  doctrine docs that discuss the forbidden patterns.
+- C4 supported for v0: local/manual report-only workflow is compatible with
+  AGENTS; initial CI wiring runs doccheck when CI already runs, and no
+  docs-only CI filter was weakened.
+- C5 supported for v0 acceptance: `docs_reconciler` write attempt against
+  `docs/intended-architecture-next-2026-06-06.md` produces R4 while still
+  exiting 0.
+- Edge accepted and named: baseline false positives remain likely because v0
+  has only broad seeded detectors and no reviewed allowlist grammar.
 
-next move: send the simplified draft back to the originating agent for critique.
-After iteration, decide whether to keep this as the narrower implementation
-paradoc for the checker or merge its settled kernel into the broader docs-truth
-mission.
+next move: successor work should review the generated baseline and decide which
+warnings become explicit allowlist classes or manual docs updates. Do not build
+a reconciler until the target-doc actor guard exists in the write path.
 
 ledger file: `docs/mission-doc-heresy-checker-v0.ledger.md`.
 
 version / lineage: imported from out-of-context draft and edited against repo
 evidence on 2026-06-13.
 
-learning state: retained here for the iteration loop. Promote into the broader
-docs-truth mission only after the second-pass review settles the manifest and
-frontmatter decisions.
+learning state: retained here and ready to promote into the broader docs-truth
+mission as the checker-before-reconciler baseline.
 
-settlement: open_handoff for this simplification pass. Independent prover
-review found grammar-regrowth risks in witness payload wording, R3's read audit,
-and non-kernel manifest metadata; the follow-up patch removed those risks.
-Implementation settlement still requires a reviewed spec accepted for
-implementation, then a report-only checker run over the repo with runtime under
-10 seconds, baseline warnings recorded, and a planted reconciler
-target-doc-convergence edit caught.
+settlement: settled for v0 checker and initial CI integration. `go test
+./cmd/doccheck` passes;
+`scripts/doccheck` emitted `doccheck-report.md` and `doccheck.json` over 193
+Markdown docs with runtime under 10 seconds and exit 0; the explicit R4
+acceptance probe emitted one `docs_reconciler` target-write warning for
+`docs/intended-architecture-next-2026-06-06.md`; an independent prover found no
+blocking findings; `.github/workflows/ci.yml` now runs doccheck and uploads
+reports when CI already runs; no runtime behavior code or CI path filters
+changed.

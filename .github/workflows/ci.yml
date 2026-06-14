@@ -125,10 +125,37 @@ jobs:
         shell: bash
         run: scripts/go-test-integration
 
+  doccheck:
+    name: Docs Truth Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Run doccheck
+        shell: bash
+        run: scripts/doccheck
+
+      - name: Confirm reports were produced
+        shell: bash
+        run: test -s doccheck-report.md && test -s doccheck.json
+
+      - name: Upload doccheck reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: doccheck-report
+          path: |
+            doccheck-report.md
+            doccheck.json
+
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [go-vet-build, go-test, go-test-runtime, go-test-integration]
+    needs: [go-vet-build, go-test, go-test-runtime, go-test-integration, doccheck]
     if: always()
     steps:
       - name: Confirm Go gates passed
@@ -151,7 +178,11 @@ jobs:
             echo "go-test-integration result: ${{ needs.go-test-integration.result }}" >&2
             exit 1
           fi
-          echo "Go vet, test, and build gates passed"
+          if [[ "${{ needs.doccheck.result }}" != "success" ]]; then
+            echo "doccheck result: ${{ needs.doccheck.result }}" >&2
+            exit 1
+          fi
+          echo "Go vet, test, build, and doccheck gates passed"
 
   build-frontend:
     name: Build Frontend
