@@ -262,6 +262,34 @@ The 2026-06-14 Node B report found:
 No snapshot deletion is authorized. The delete gate is typed snapshot metadata,
 recovery settlement, replacement/rollback proof, and owner approval.
 
+## Typed Snapshot Metadata Path Evidence
+
+Manual `data.img.*` snapshots now have a typed sidecar path:
+`scripts/node-b-data-img-snapshot` can create or annotate a snapshot with
+`data.img.*.metadata.json` using schema
+`choir.manual-data-img-snapshot.v1`. The helper defaults to dry-run, never
+deletes VM state or snapshots, and refuses to copy a live VM disk while
+`firecracker.pid` is active unless the operator passes `--allow-running`.
+
+`scripts/node-b-storage-report` now consumes valid sidecars, excludes
+`.metadata.json` files from the snapshot list, and reports
+`metadata_present_count`, `metadata_missing_count`, and
+`metadata_invalid_count`. Invalid sidecars are preserve/refusal evidence, and
+the verifier fails closed when invalid metadata is present.
+
+Evidence:
+
+- local temp-fixture `scripts/node-b-data-img-snapshot --apply` created a
+  sparse `data.img.pre-prune-*` copy and valid metadata sidecar;
+- a Node B `/tmp` fixture proved the report recognizes a valid typed sidecar as
+  `typed_sidecar_valid` with one present metadata row, zero missing rows, and
+  zero invalid rows;
+- live Node B proof still reports 4 manual snapshots, 4 missing metadata rows,
+  0 typed sidecars, 0 invalid sidecars, and no snapshot deletion authorization.
+
+This creates the typed creation/annotation path, but it does not authorize
+deletion and does not yet enforce snapshot cleanup.
+
 ## Structured Report Evidence
 
 `scripts/node-b-storage-report` now supports `--format json` as an alternate
@@ -340,7 +368,7 @@ rollback refs, and staging/deploy evidence.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-node-b-storage-retention-v0.md. Treat it as the source program for preventing Node B storage recurrence after the 2026-06-14 VM recovery incident. Current status is open_handoff: read-only classifier, JSON verifier, single-command proof runner, and deployed vmctl shadow dry-run retention reporting exist; CI/deploy passed for 32e754208e2a332165f3bce13ecbdf2ab17c5d97, and deployed Node B proof completed in 7.160 seconds with active retention deleting 0 bytes while shadow dry-run reports 46 candidates / 30.89 GiB. Mutation class is red for any live cleanup and orange for future vmctl/Nix retention behavior; do not run live deletion, Nix GC, manual snapshot cleanup, service restarts, or active prune expansion without explicit approval. Preserve real user yusefnathanson@me.com and protected test accounts a@b.com and b@c.com. Do not delete VM state, data.img snapshots, Nix roots, or guest images without a typed retention candidate, rollback/refusal reason, owner-visible report, and explicit approval. First next move: implement typed snapshot metadata at creation/cleanup and an explicit Nix current/rollback root + GC budget, or request owner approval for a narrowly bounded active fake-user cleanup based on the shadow dry-run proof. Ledger: docs/mission-node-b-storage-retention-v0.ledger.md. Settlement requires staging-proven retention/reporting, CI/deploy evidence for behavior changes, a reviewed baseline cleanup plan, and explicit evidence that owner/test real accounts remain protected.
+/goal Use Parallax on docs/mission-node-b-storage-retention-v0.md. Treat it as the source program for preventing Node B storage recurrence after the 2026-06-14 VM recovery incident. Current status is open_handoff: read-only classifier, JSON verifier, single-command proof runner, deployed vmctl shadow dry-run retention reporting, typed manual snapshot sidecar reporting, and a dry-run-by-default snapshot metadata helper exist. CI/deploy passed for 32e754208e2a332165f3bce13ecbdf2ab17c5d97, and deployed Node B proof completed in 7.160 seconds with active retention deleting 0 bytes while shadow dry-run reports 46 candidates / 30.89 GiB. Mutation class is red for any live cleanup and orange for future vmctl/Nix retention behavior; do not run live deletion, Nix GC, manual snapshot cleanup, service restarts, or active prune expansion without explicit approval. Preserve real user yusefnathanson@me.com and protected test accounts a@b.com and b@c.com. Do not delete VM state, data.img snapshots, Nix roots, or guest images without a typed retention candidate, rollback/refusal reason, owner-visible report, and explicit approval. First next move: push and monitor the operator-tooling classifier/report changes to prove storage script edits no longer request host/guest image deploys; then implement either snapshot cleanup gates over typed sidecars or an explicit Nix current/rollback root + GC budget. Ledger: docs/mission-node-b-storage-retention-v0.ledger.md. Settlement requires staging-proven retention/reporting, CI/deploy evidence for behavior changes, a reviewed baseline cleanup plan, and explicit evidence that owner/test real accounts remain protected.
 ```
 
 ## Parallax State
@@ -427,16 +455,18 @@ deployed paths, so future report-tooling changes would repeat that conservative
 image-build request unless the classifier explicitly treats them as
 operator/report tooling. Existing disk GC still preserves Nix cache above the
 40 GiB free-space floor. Open edges: missing-auth-user policy, active fake-user
-cleanup approval/enforcement, active Nix GC/rollback enforcement, typed
-snapshot metadata at creation time plus cleanup enforcement, whether live
-`data.img` sparsification/discard should be part of hibernate/recovery, and how
-to expose reports to operators.
+cleanup approval/enforcement, active Nix GC/rollback enforcement, snapshot
+cleanup enforcement after typed metadata exists, whether live `data.img`
+sparsification/discard should be part of hibernate/recovery, and how to expose
+reports to operators.
 
-next move: classify Node B storage report scripts as operator/report tooling so
-script-only iterations stop requesting guest image builds, then implement typed
-snapshot metadata plus cleanup gates. A separate owner-approved active
-fake-user cleanup can follow from the deployed shadow proof, but only after
-retaining the protected account gate and rollback/refusal record.
+next move: push and monitor the operator-tooling classifier/report changes to
+prove storage script edits no longer request host/guest image deploys; then
+implement either snapshot cleanup gates over typed sidecars or an explicit Nix
+current/rollback root policy with more frequent budgeted GC. A separate
+owner-approved active fake-user cleanup can follow from the deployed shadow
+proof, but only after retaining the protected account gate and rollback/refusal
+record.
 
 ledger file: docs/mission-node-b-storage-retention-v0.ledger.md
 

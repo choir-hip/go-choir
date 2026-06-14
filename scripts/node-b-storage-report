@@ -304,6 +304,58 @@ sub snapshot_policy {
   );
 }
 
+sub snapshot_metadata_policy {
+  my ($path, $vm_id, $name) = @_;
+  my $metadata_path = "$path.metadata.json";
+  return (0, 0, "metadata_missing", undef, $metadata_path) unless -e $metadata_path;
+  my %allowed = map { $_ => 1 } qw(
+    pre_prune_rollback_review
+    corrupt_disk_quarantine_review
+    platform_migration_snapshot_review
+    protected_user_manual_snapshot_review
+    manual_data_img_snapshot_review
+  );
+  open my $fh, "<", $metadata_path
+    or return (0, 1, "metadata_invalid: unreadable sidecar", undef, $metadata_path);
+  local $/;
+  my $json = <$fh>;
+  close $fh;
+  my $doc = eval { decode_json($json) };
+  return (0, 1, "metadata_invalid: invalid JSON sidecar", undef, $metadata_path)
+    unless $doc && ref($doc) eq "HASH";
+
+  my @errors;
+  push @errors, "schema_version must be choir.manual-data-img-snapshot.v1"
+    if ($doc->{schema_version} || "") ne "choir.manual-data-img-snapshot.v1";
+  push @errors, "vm_id mismatch"
+    if ($doc->{vm_id} || "") ne $vm_id;
+  push @errors, "snapshot_name mismatch"
+    if ($doc->{snapshot_name} || "") ne $name;
+  push @errors, "source_image must be data.img"
+    if ($doc->{source_image} || "") ne "data.img";
+  push @errors, "snapshot_class missing or unsupported"
+    if !$allowed{$doc->{snapshot_class} || ""};
+  push @errors, "reason missing"
+    if ($doc->{reason} || "") eq "";
+  my $retention = ref($doc->{retention}) eq "HASH" ? $doc->{retention} : {};
+  push @errors, "retention.delete_gate missing"
+    if ($retention->{delete_gate} || "") eq "";
+  return (0, 1, "metadata_invalid: " . join("; ", @errors), $doc, $metadata_path)
+    if @errors;
+  return (1, 0, "typed_sidecar_valid", $doc, $metadata_path);
+}
+
+sub snapshot_policy_from_metadata {
+  my ($doc) = @_;
+  my $retention = ref($doc->{retention}) eq "HASH" ? $doc->{retention} : {};
+  return (
+    $doc->{snapshot_class} || "manual_data_img_snapshot_review",
+    $doc->{reason} || "typed manual data.img snapshot",
+    $retention->{ttl_policy} || "preserve_until_recovery_settlement_and_owner_approval",
+    $retention->{delete_gate} || "typed metadata present; deletion still requires recovery settlement, rollback proof, and owner approval"
+  );
+}
+
 my $now = strftime("%Y-%m-%dT%H:%M:%SZ", gmtime());
 my $host = sh("hostname");
 my $df = sh("df -h / " . shell_quote($vm_state_dir) . " | sed -n '1,3p'");
@@ -367,7 +419,9 @@ for my $line (split(/\n/, sh("find " . shell_quote($vm_state_dir) . " -mindepth 
 my @snapshots;
 my %snapshot_classes;
 my $snapshot_missing_metadata_count = 0;
-for my $line (split(/\n/, sh("find " . shell_quote($vm_state_dir) . " -mindepth 2 -maxdepth 2 -type f -name 'data.img.*' -printf '%p\\t%s\\t%TY-%Tm-%TdT%TH:%TM:%TSZ\\n' | sort"))) {
+my $snapshot_present_metadata_count = 0;
+my $snapshot_invalid_metadata_count = 0;
+for my $line (split(/\n/, sh("find " . shell_quote($vm_state_dir) . " -mindepth 2 -maxdepth 2 -type f -name 'data.img.*' ! -name '*.metadata.json' -printf '%p\\t%s\\t%TY-%Tm-%TdT%TH:%TM:%TSZ\\n' | sort"))) {
   my ($path, $logical, $mtime) = split(/\t/, $line);
   next unless $path;
   my ($vmid, $name) = $path =~ m{/([^/]+)/(data\.img\..+)$};
@@ -382,8 +436,18 @@ for my $line (split(/\n/, sh("find " . shell_quote($vm_state_dir) . " -mindepth 
   my $age_seconds = $mtime_epoch > 0 ? time() - $mtime_epoch : 0;
   $age_seconds = 0 if $age_seconds < 0;
   my ($class, $purpose, $ttl_policy, $gate) = snapshot_policy($name || $path, $vmid || "", $user_id, $is_protected, $is_platform);
+  my ($metadata_valid, $metadata_invalid, $metadata_status, $metadata_doc, $metadata_path) =
+    snapshot_metadata_policy($path, $vmid || "", $name || $path);
+  if ($metadata_valid) {
+    ($class, $purpose, $ttl_policy, $gate) = snapshot_policy_from_metadata($metadata_doc);
+    $snapshot_present_metadata_count++;
+  } elsif ($metadata_invalid) {
+    $snapshot_invalid_metadata_count++;
+  } else {
+    $snapshot_missing_metadata_count++;
+    $metadata_status = "inferred_from_filename_only";
+  }
   $snapshot_classes{$class}++;
-  $snapshot_missing_metadata_count++;
   push @snapshots, {
     vm_id => $vmid || "",
     name => $name || $path,
@@ -398,7 +462,8 @@ for my $line (split(/\n/, sh("find " . shell_quote($vm_state_dir) . " -mindepth 
     purpose => $purpose,
     ttl_policy => $ttl_policy,
     gate => $gate,
-    metadata_status => "inferred_from_filename_only",
+    metadata_status => $metadata_status,
+    metadata_path => $metadata_valid || $metadata_invalid ? $metadata_path : "",
   };
 }
 
@@ -763,6 +828,8 @@ if ($report_format eq "json") {
       snapshot_count => scalar(@snapshots) + 0,
       snapshot_allocated_bytes => $snapshot_total + 0,
       metadata_missing_count => $snapshot_missing_metadata_count + 0,
+      metadata_present_count => $snapshot_present_metadata_count + 0,
+      metadata_invalid_count => $snapshot_invalid_metadata_count + 0,
       policy_status => "report-only; no snapshot deletion authorized",
       required_delete_gate => "typed snapshot metadata plus recovery settlement plus replacement/rollback proof plus owner approval",
       classes => \@snapshot_classes_json,
@@ -906,9 +973,11 @@ print "- snapshot_count: `" . scalar(@snapshots) . "`\n";
 print "- snapshot_allocated: `" . fmt_bytes($snapshot_total) . "`\n";
 print "- candidate_type: `manual_snapshot_review_only`\n";
 print "- metadata_missing_count: `$snapshot_missing_metadata_count`\n";
+print "- metadata_present_count: `$snapshot_present_metadata_count`\n";
+print "- metadata_invalid_count: `$snapshot_invalid_metadata_count`\n";
 print "- policy_status: `report-only; no snapshot deletion authorized`\n";
 print "- required_delete_gate: `typed snapshot metadata plus recovery settlement plus replacement/rollback proof plus owner approval`\n";
-print "- refusal_reason: `manual snapshots lack typed retention metadata; verify rollback value before deletion`\n\n";
+print "- refusal_reason: `snapshot deletion remains unauthorized; verify metadata, rollback value, recovery settlement, and owner approval before deletion`\n\n";
 print "| snapshot_class | snapshots |\n";
 print "| --- | ---: |\n";
 for my $class (sort { $snapshot_classes{$b} <=> $snapshot_classes{$a} || $a cmp $b } keys %snapshot_classes) {

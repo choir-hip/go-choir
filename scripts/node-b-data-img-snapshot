@@ -1,0 +1,302 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+snapshot_class=""
+reason=""
+created_by="${USER:-operator}"
+mission_doc=""
+vm_dir=""
+snapshot_path=""
+snapshot_name=""
+ttl_policy="preserve_until_recovery_settlement_and_owner_approval"
+delete_gate="typed metadata present; deletion still requires recovery settlement, rollback proof, and owner approval"
+apply=false
+force=false
+allow_running=false
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/node-b-data-img-snapshot --vm-dir DIR --class CLASS --reason TEXT [options]
+  scripts/node-b-data-img-snapshot --snapshot PATH --class CLASS --reason TEXT [options]
+
+Create or attach typed metadata for a manual data.img recovery snapshot.
+Default mode is dry-run. This command never deletes VM state or snapshots.
+
+Options:
+  --vm-dir DIR             VM state directory containing data.img
+  --snapshot PATH          Existing data.img.* snapshot to annotate
+  --class CLASS            Snapshot class:
+                             pre_prune_rollback_review
+                             corrupt_disk_quarantine_review
+                             platform_migration_snapshot_review
+                             protected_user_manual_snapshot_review
+                             manual_data_img_snapshot_review
+  --reason TEXT            Human-readable recovery reason
+  --created-by TEXT        Operator or agent identity (default: $USER/operator)
+  --mission DOC            Mission/incident doc path or URL
+  --snapshot-name NAME     Snapshot filename when creating a new snapshot
+  --ttl-policy TEXT        Retention policy text
+  --delete-gate TEXT       Required deletion gate text
+  --allow-running          Allow copying while firecracker.pid is live
+  --force                  Overwrite an existing metadata sidecar
+  --apply                  Write sidecar; if --snapshot is absent, copy data.img
+  -h, --help               Show this help
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --vm-dir)
+      vm_dir="${2:?missing --vm-dir value}"
+      shift 2
+      ;;
+    --snapshot)
+      snapshot_path="${2:?missing --snapshot value}"
+      shift 2
+      ;;
+    --class)
+      snapshot_class="${2:?missing --class value}"
+      shift 2
+      ;;
+    --reason)
+      reason="${2:?missing --reason value}"
+      shift 2
+      ;;
+    --created-by)
+      created_by="${2:?missing --created-by value}"
+      shift 2
+      ;;
+    --mission)
+      mission_doc="${2:?missing --mission value}"
+      shift 2
+      ;;
+    --snapshot-name)
+      snapshot_name="${2:?missing --snapshot-name value}"
+      shift 2
+      ;;
+    --ttl-policy)
+      ttl_policy="${2:?missing --ttl-policy value}"
+      shift 2
+      ;;
+    --delete-gate)
+      delete_gate="${2:?missing --delete-gate value}"
+      shift 2
+      ;;
+    --allow-running)
+      allow_running=true
+      shift
+      ;;
+    --force)
+      force=true
+      shift
+      ;;
+    --apply)
+      apply=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+case "$snapshot_class" in
+  pre_prune_rollback_review|corrupt_disk_quarantine_review|platform_migration_snapshot_review|protected_user_manual_snapshot_review|manual_data_img_snapshot_review) ;;
+  "")
+    echo "error: --class is required" >&2
+    exit 2
+    ;;
+  *)
+    echo "error: unsupported --class: $snapshot_class" >&2
+    exit 2
+    ;;
+esac
+
+if [ -z "$reason" ]; then
+  echo "error: --reason is required" >&2
+  exit 2
+fi
+
+portable_stat_size() {
+  local path="$1"
+  if stat -c %s "$path" >/dev/null 2>&1; then
+    stat -c %s "$path"
+  else
+    stat -f %z "$path"
+  fi
+}
+
+portable_stat_mtime() {
+  local path="$1"
+  if stat -c %Y "$path" >/dev/null 2>&1; then
+    stat -c %Y "$path"
+  else
+    stat -f %m "$path"
+  fi
+}
+
+default_snapshot_name() {
+  local stamp="$1"
+  case "$snapshot_class" in
+    pre_prune_rollback_review)
+      printf 'data.img.pre-prune-%s' "$stamp"
+      ;;
+    corrupt_disk_quarantine_review)
+      printf 'data.img.corrupted-%s' "$stamp"
+      ;;
+    platform_migration_snapshot_review)
+      printf 'data.img.pre-migration-%s' "$stamp"
+      ;;
+    protected_user_manual_snapshot_review|manual_data_img_snapshot_review)
+      printf 'data.img.manual-%s' "$stamp"
+      ;;
+  esac
+}
+
+if [ -n "$snapshot_path" ]; then
+  if [ ! -f "$snapshot_path" ]; then
+    echo "error: snapshot does not exist: $snapshot_path" >&2
+    exit 2
+  fi
+  vm_dir="$(cd "$(dirname "$snapshot_path")" && pwd)"
+  snapshot_name="$(basename "$snapshot_path")"
+  case "$snapshot_name" in
+    data.img.*) ;;
+    *)
+      echo "error: --snapshot must point to a data.img.* file" >&2
+      exit 2
+      ;;
+  esac
+else
+  if [ -z "$vm_dir" ]; then
+    echo "error: --vm-dir is required when --snapshot is not provided" >&2
+    exit 2
+  fi
+  vm_dir="$(cd "$vm_dir" && pwd)"
+  source_image="$vm_dir/data.img"
+  if [ ! -f "$source_image" ]; then
+    echo "error: source image not found: $source_image" >&2
+    exit 2
+  fi
+  if [ -z "$snapshot_name" ]; then
+    snapshot_name="$(default_snapshot_name "$(date -u +%Y%m%dT%H%M%SZ)")"
+  fi
+  case "$snapshot_name" in
+    data.img.*) ;;
+    *)
+      echo "error: --snapshot-name must start with data.img." >&2
+      exit 2
+      ;;
+  esac
+  snapshot_path="$vm_dir/$snapshot_name"
+fi
+
+vm_id="$(basename "$vm_dir")"
+metadata_path="$snapshot_path.metadata.json"
+source_image="$vm_dir/data.img"
+created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+source_logical_bytes=0
+source_mtime_epoch=0
+if [ -f "$source_image" ]; then
+  source_logical_bytes="$(portable_stat_size "$source_image")"
+  source_mtime_epoch="$(portable_stat_mtime "$source_image")"
+fi
+
+if [ -e "$metadata_path" ] && [ "$force" != true ]; then
+  echo "error: metadata sidecar already exists: $metadata_path" >&2
+  echo "use --force to replace the sidecar" >&2
+  exit 2
+fi
+
+if [ "$apply" = true ] && [ ! -f "$snapshot_path" ]; then
+  if [ -s "$vm_dir/firecracker.pid" ] && [ "$allow_running" != true ]; then
+    pid="$(cat "$vm_dir/firecracker.pid" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" >/dev/null 2>&1; then
+      echo "error: VM appears to be running (firecracker.pid=$pid); refusing live data.img copy" >&2
+      echo "stop/hibernate the VM first, or pass --allow-running with an explicit recovery rationale" >&2
+      exit 3
+    fi
+  fi
+fi
+
+write_metadata() {
+  local out="$1"
+  SNAPSHOT_SCHEMA_VERSION="choir.manual-data-img-snapshot.v1" \
+  SNAPSHOT_NAME="$snapshot_name" \
+  SNAPSHOT_PATH="$snapshot_path" \
+  VM_ID="$vm_id" \
+  SOURCE_IMAGE="data.img" \
+  SOURCE_IMAGE_PATH="$source_image" \
+  SOURCE_LOGICAL_BYTES="$source_logical_bytes" \
+  SOURCE_MTIME_EPOCH="$source_mtime_epoch" \
+  SNAPSHOT_CLASS="$snapshot_class" \
+  REASON="$reason" \
+  CREATED_BY="$created_by" \
+  CREATED_AT="$created_at" \
+  MISSION_DOC="$mission_doc" \
+  TTL_POLICY="$ttl_policy" \
+  DELETE_GATE="$delete_gate" \
+  perl > "$out" <<'PERL'
+use strict;
+use warnings;
+use JSON::PP;
+
+my $doc = {
+  schema_version => $ENV{SNAPSHOT_SCHEMA_VERSION},
+  snapshot_name => $ENV{SNAPSHOT_NAME},
+  snapshot_path => $ENV{SNAPSHOT_PATH},
+  vm_id => $ENV{VM_ID},
+  source_image => $ENV{SOURCE_IMAGE},
+  source_image_path => $ENV{SOURCE_IMAGE_PATH},
+  source_logical_bytes => 0 + ($ENV{SOURCE_LOGICAL_BYTES} || 0),
+  source_mtime_epoch => 0 + ($ENV{SOURCE_MTIME_EPOCH} || 0),
+  snapshot_class => $ENV{SNAPSHOT_CLASS},
+  reason => $ENV{REASON},
+  created_by => $ENV{CREATED_BY},
+  created_at => $ENV{CREATED_AT},
+  mission_doc => $ENV{MISSION_DOC},
+  retention => {
+    ttl_policy => $ENV{TTL_POLICY},
+    delete_gate => $ENV{DELETE_GATE},
+    owner_approval_required => JSON::PP::true,
+  },
+};
+
+print JSON::PP->new->canonical->pretty->encode($doc);
+PERL
+}
+
+if [ "$apply" != true ]; then
+  echo "dry_run=true"
+  echo "vm_dir=$vm_dir"
+  echo "snapshot_path=$snapshot_path"
+  echo "metadata_path=$metadata_path"
+  echo "snapshot_class=$snapshot_class"
+  echo "reason=$reason"
+  tmp_preview="$(mktemp)"
+  write_metadata "$tmp_preview"
+  cat "$tmp_preview"
+  rm -f "$tmp_preview"
+  exit 0
+fi
+
+if [ ! -f "$snapshot_path" ]; then
+  if cp --help 2>/dev/null | grep -q -- '--reflink'; then
+    cp --reflink=auto --sparse=always --preserve=mode,timestamps "$source_image" "$snapshot_path"
+  else
+    cp -p "$source_image" "$snapshot_path"
+  fi
+fi
+
+tmp_metadata="$(mktemp "$vm_dir/.${snapshot_name}.metadata.XXXXXX")"
+write_metadata "$tmp_metadata"
+mv "$tmp_metadata" "$metadata_path"
+echo "snapshot_path=$snapshot_path"
+echo "metadata_path=$metadata_path"

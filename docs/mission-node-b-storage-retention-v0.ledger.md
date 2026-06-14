@@ -414,3 +414,43 @@
 - Actual ΔV: 0.
 - Open edge: update the deploy-impact classifier and its test so storage
   report-tooling changes run CI without requesting Node B host/guest deploys.
+
+## 2026-06-14 — operator tooling classifier and typed snapshot sidecars
+
+- Claim: storage-reporting iterations should not request guest image builds, and
+  manual snapshots need typed metadata before any future cleanup can be
+  reviewed.
+- Move: updated `.github/scripts/deploy-impact-classify` and its test to treat
+  `scripts/node-b-storage-*` and `scripts/node-b-data-img-snapshot` as Node B
+  operator/report tooling rather than deployed host or guest closures. Added
+  `scripts/node-b-data-img-snapshot`, a dry-run-by-default helper that creates
+  or annotates manual `data.img.*` snapshots with a
+  `choir.manual-data-img-snapshot.v1` sidecar. Extended
+  `scripts/node-b-storage-report` and `scripts/node-b-storage-verify-report` to
+  consume typed sidecars, count present/missing/invalid metadata, and fail
+  closed on invalid sidecars while keeping deletion unauthorized.
+- Safety evidence: no live VM state, manual snapshot, Nix root, guest image, or
+  service was deleted or pruned. The helper refuses live `data.img` copies while
+  `firecracker.pid` is active unless `--allow-running` is explicitly supplied.
+- Verification: `bash -n` passed for the touched scripts; deploy-impact
+  classifier regression passed; changed-path classifier output reports
+  `deploy_needed=false`, `deploy_ordinary_guest=false`, and
+  `deploy_playwright_guest=false`; doccheck passed; live
+  `scripts/node-b-storage-proof --host node-b --top 10 --out-dir
+  /tmp/node-b-storage-proof-20260614T161820Z` completed in 7.217 seconds and
+  the verifier passed.
+- Metadata fixture evidence: a local temp fixture proved
+  `scripts/node-b-data-img-snapshot --apply` writes a valid sidecar; a Node B
+  `/tmp` fixture proved `scripts/node-b-storage-report --format json` reports
+  one `typed_sidecar_valid` snapshot with `metadata_present_count: 1`,
+  `metadata_missing_count: 0`, and `metadata_invalid_count: 0`.
+- Live Node B evidence: current report still shows 4 manual snapshots, 4 missing
+  metadata rows, 0 typed sidecars, 0 invalid sidecars, and no snapshot deletion
+  authorization.
+- Expected ΔV: 0; this creates the typed metadata path and stops report-tooling
+  edits from requesting image deploys, but cleanup enforcement and Nix GC
+  budgeting remain open.
+- Actual ΔV: 0.
+- Open edge: push/monitor CI to prove the classifier suppresses staging deploy
+  for this script-only change; then implement snapshot cleanup gates or an
+  explicit Nix current/rollback root policy.

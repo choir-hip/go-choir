@@ -37,7 +37,11 @@ jq -e '
   and protected_refused("a@b.com")
   and protected_refused("b@c.com")
   and (.fake_or_synthetic_users.protected_identity_allocated_refusal_bytes > 0)
-  and (.manual_recovery_snapshots.metadata_missing_count == .manual_recovery_snapshots.snapshot_count)
+  and (.manual_recovery_snapshots.metadata_invalid_count == 0)
+  and ((.manual_recovery_snapshots.metadata_missing_count
+        + .manual_recovery_snapshots.metadata_present_count
+        + .manual_recovery_snapshots.metadata_invalid_count)
+       == .manual_recovery_snapshots.snapshot_count)
   and (.projected_reclaim_and_refusals.vmctl_active_retention_candidates_bytes == 0)
   and ((.vmctl.retention_shadow_plan == null) or (.vmctl.retention_shadow_mode == "dry-run"))
 ' "$report" >/dev/null

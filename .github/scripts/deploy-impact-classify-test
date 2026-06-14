@@ -62,6 +62,20 @@ assert_contains "$doccheck_tooling_output" "AGENTS.md -> ignored (top-level mark
 assert_not_contains "$doccheck_tooling_output" "conservative Go impact"
 assert_not_contains "$doccheck_tooling_output" "unknown deployed path"
 
+node_b_storage_tooling_output="$(
+  run_classifier \
+    "scripts/node-b-storage-report" \
+    "scripts/node-b-storage-proof" \
+    "scripts/node-b-storage-verify-report" \
+    "scripts/node-b-data-img-snapshot"
+)"
+assert_contains "$node_b_storage_tooling_output" "deploy_needed=false"
+assert_contains "$node_b_storage_tooling_output" "scripts/node-b-storage-report -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
+assert_contains "$node_b_storage_tooling_output" "scripts/node-b-data-img-snapshot -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
+assert_not_contains "$node_b_storage_tooling_output" "unknown deployed path"
+assert_not_contains "$node_b_storage_tooling_output" "ordinary_guest=true"
+assert_not_contains "$node_b_storage_tooling_output" "playwright_guest=true"
+
 proxy_runtime_output="$(run_classifier "cmd/proxy/main.go")"
 assert_contains "$proxy_runtime_output" "deploy_needed=true"
 assert_contains "$proxy_runtime_output" "host_services=proxy"
