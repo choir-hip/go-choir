@@ -96,3 +96,40 @@ Open edge: final settlement is external to this local proof. The next move is
 commit, push, CI/deploy monitoring, staging identity verification, and deployed
 lifecycle evidence. Actor memory cross-trajectory scoping remains a named
 successor edge, not a blocker for this rollback.
+
+## 2026-06-14 - Deployed Acceptance Overclaimed M3.1 Smoke
+
+Claim: the local run-acceptance repair did not cover every deployed synthesis
+path. The deployed M3.1 acceptance endpoint still accepted prompt/VText-only
+smoke for the new mission id.
+
+Move: observe / document. After commit
+`27af4f2f6cf9caddc8fc3ae0ea96d5dbbdc1428a` reached staging, public health
+reported proxy and sandbox deployed at that commit and the deployed adaptive
+lifecycle Playwright proof passed. A separate authenticated product-path
+submission then called `/api/run-acceptances/synthesize` for
+`mission-lifecycle-cutover-m3.1-v0` with trajectory
+`4e28d8aa-34fc-42ca-a5e8-64620f6e888f`. The endpoint returned
+`runacc-94d318d49e2ba66a99ce` at `staging-smoke-level/accepted` with only
+`submitted` and `vtext_opened` checkpoints.
+
+Expected Delta V: 0 if deployed synthesis matched the local invariant. Actual
+Delta V: +1. The forced VText continuation rollback still reached staging, but
+settlement is blocked until M3.1 acceptance synthesis no longer accepts
+prompt/VText smoke.
+
+Receipts:
+- CI run `27514147770`, Docs Truth run `27514147777`, and FlakeHub publish run
+  `27514147780` succeeded.
+- `https://choir.news/health` reported proxy and sandbox
+  `deployed_commit=27af4f2f6cf9caddc8fc3ae0ea96d5dbbdc1428a`.
+- `GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news pnpm --dir frontend exec playwright test tests/adaptive-lifecycle-control-deployed.spec.js --project=chromium --reporter=list`
+  passed.
+- Deployed acceptance synthesis returned
+  `runacc-94d318d49e2ba66a99ce` as `staging-smoke-level/accepted` for trajectory
+  `4e28d8aa-34fc-42ca-a5e8-64620f6e888f`, proving the overclaim remains on at
+  least one deployed mission-id path.
+
+Open edge: first next move is a code fix, but only after this documentation
+checkpoint commit. Add local coverage for the M3.1 target mission id and rerun
+the deployed acceptance synthesis to verify `staging-smoke-level/blocked`.
