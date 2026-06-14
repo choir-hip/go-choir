@@ -327,7 +327,7 @@ rollback refs, and staging/deploy evidence.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-node-b-storage-retention-v0.md. Treat it as the source program for preventing Node B storage recurrence after the 2026-06-14 VM recovery incident. Current status is open_handoff: read-only classifier, JSON verifier, single-command proof runner, and a local vmctl shadow dry-run retention plan exist; latest live Node B proof completed in 7.072 seconds and still shows the shadow endpoint undeployed. Mutation class is orange for the pending vmctl/Nix config change and red for any live cleanup; do not run live deletion, Nix GC, service restarts, or snapshot cleanup without explicit approval. Preserve real user yusefnathanson@me.com and protected test accounts a@b.com and b@c.com. Do not delete VM state, data.img snapshots, Nix roots, or guest images without a typed retention candidate, rollback/refusal reason, owner-visible report, and explicit approval. First next move: review/land the shadow dry-run retention change, then monitor CI/deploy and run the deployed storage proof to prove active retention remains bounded while the shadow policy reports example.test/synthetic candidates in dry-run only. Ledger: docs/mission-node-b-storage-retention-v0.ledger.md. Settlement requires staging-proven retention/reporting, CI/deploy evidence for behavior changes, a reviewed baseline cleanup plan, and explicit evidence that owner/test real accounts remain protected.
+/goal Use Parallax on docs/mission-node-b-storage-retention-v0.md. Treat it as the source program for preventing Node B storage recurrence after the 2026-06-14 VM recovery incident. Current status is open_handoff: read-only classifier, JSON verifier, single-command proof runner, and deployed vmctl shadow dry-run retention reporting exist; CI/deploy passed for 32e754208e2a332165f3bce13ecbdf2ab17c5d97, and deployed Node B proof completed in 7.160 seconds with active retention deleting 0 bytes while shadow dry-run reports 46 candidates / 30.89 GiB. Mutation class is red for any live cleanup and orange for future vmctl/Nix retention behavior; do not run live deletion, Nix GC, manual snapshot cleanup, service restarts, or active prune expansion without explicit approval. Preserve real user yusefnathanson@me.com and protected test accounts a@b.com and b@c.com. Do not delete VM state, data.img snapshots, Nix roots, or guest images without a typed retention candidate, rollback/refusal reason, owner-visible report, and explicit approval. First next move: implement typed snapshot metadata at creation/cleanup and an explicit Nix current/rollback root + GC budget, or request owner approval for a narrowly bounded active fake-user cleanup based on the shadow dry-run proof. Ledger: docs/mission-node-b-storage-retention-v0.ledger.md. Settlement requires staging-proven retention/reporting, CI/deploy evidence for behavior changes, a reviewed baseline cleanup plan, and explicit evidence that owner/test real accounts remain protected.
 ```
 
 ## Parallax State
@@ -357,12 +357,13 @@ staging report, then active bounded cleanup only after explicit approval.
 
 variant (ranking function) V: active VM retention implementation `1` +
 snapshot metadata-at-creation/cleanup enforcement `1` + active Nix GC/rollback
-enforcement `1` + staging/deploy proof for behavior changes `1` = `4`; last
-ΔV: shadow dry-run retention plan added locally `0` because it is not yet
-landed, deployed, or staging-proven.
+enforcement `1` = `3`; last ΔV: deployed shadow dry-run reporting proof `1`
+because the orange vmctl/Nix observation change is landed, CI/deploy-proven,
+and staging-proven.
 
-budget: initial planning budget one Codex turn; execution budget not yet
-granted. Solvency: planning is solvent; live cleanup is not authorized.
+budget: initial planning budget one Codex turn; execution budget extended
+through report/shadow implementation and deployed proof. Solvency: prevention
+work remains solvent; live cleanup is not authorized.
 
 authority / bounds: documentation and read-only investigation are authorized.
 The worktree now includes an orange vmctl/Nix config change that is
@@ -378,48 +379,47 @@ rollback refs.
 
 evidence packet: Node B disk inventory; `scripts/node-b-storage-report` output;
 `scripts/node-b-storage-proof` artifacts; read-only auth DB identity mapping;
-vmctl health/list/retention-plan; Nix root inventory; incident docs; code
-references in `internal/vmctl`, `nix/node-b.nix`, and
-`.github/workflows/ci.yml`; future proof must include dry-run report, focused
-tests, CI, deploy identity, and post-cleanup health.
+vmctl health/list/retention-plan/retention-shadow-plan; Nix root inventory;
+incident docs; code references in `internal/vmctl`, `nix/node-b.nix`, and
+`.github/workflows/ci.yml`; deploy evidence from GitHub Actions run
+`27504321847`; future active cleanup proof must include dry-run report, focused
+tests, CI/deploy identity when behavior changes, and post-cleanup health.
 
-heresy delta: discovered `1` policy mismatch; introduced `0`; repaired `0`
-until a prevention/reporting path lands and is proven.
+heresy delta: discovered `1` policy mismatch; introduced `0`; repaired `1`
+for staging-proven report-only prevention visibility; active cleanup prevention
+remains open.
 
 position / live conjectures / open edges: Current evidence supports a policy
-mismatch, not a single leak. The report now has an identity-backed baseline
-cleanup plan with independent review and repair: `example.com` and
-`example.test` VMs are dry-run candidates only when they match the current
-vmctl ephemeral-primary guard plus owner review, synthetic non-UUID VMs are
-owner-review candidates under the same guard, protected owner/test accounts are
-explicit refusals, missing-auth-user UUID VMs are refusals, manual snapshots
-now carry filename-inferred classes and TTL gates while remaining
-metadata-missing preserve/refusal rows, and Nix roots carry a report-only
-current/rollback/stale budget with one broken `/opt/go-choir/result` pointer
-identified. The report now emits both Markdown and JSON, and JSON assertions
-prove the protected owner/test identities are present and refused; the verifier
-script turns those assertions into a reusable fail-closed contract.
-`scripts/node-b-storage-proof` now runs the two report formats plus verification
-in one command, and the latest Node B proof completed in 7.072 seconds. Local
-vmctl tests now prove the intended dry-run fake-domain/synthetic-prefix policy
-shape can select old terminal published primaries while excluding owner/test
-accounts, active primaries, and unpublished non-primary desktops. A new local
-shadow dry-run retention plan exposes the broadened fake-domain/synthetic
-policy without feeding `PruneRetention`; tests prove active pruning remains
-limited to the active `example.com` policy. Existing live Node B vmctl active
-retention is still narrower than the report's fake-domain policy and currently
-projects 0 bytes; the live Node B report still shows `retention_shadow_plan:
-null` because the runtime/config change has not been deployed. Existing disk GC
-preserves Nix cache above the 40 GiB free-space floor. Open edges: commit/push,
-CI, Node B deploy identity, deployed shadow-plan proof, missing-auth-user
-policy, active Nix GC/rollback enforcement, typed snapshot metadata at creation
-time plus cleanup enforcement, whether live `data.img` sparsification/discard
-should be part of hibernate/recovery, and how to expose reports to operators.
+mismatch, not a single leak. The report has an identity-backed baseline cleanup
+plan with independent review: `example.com` and `example.test` VMs are dry-run
+candidates only when they match the vmctl ephemeral-primary guard plus owner
+review, synthetic non-UUID VMs are owner-review candidates under the same guard,
+protected owner/test accounts are explicit refusals, missing-auth-user UUID VMs
+are refusals, manual snapshots carry filename-inferred classes and TTL gates
+while remaining metadata-missing preserve/refusal rows, and Nix roots carry a
+report-only current/rollback/stale budget with one broken `/opt/go-choir/result`
+pointer identified. The report emits Markdown and JSON; the verifier turns the
+protected-account/no-delete assertions into a reusable fail-closed contract.
+`scripts/node-b-storage-proof` runs the two report formats plus verification in
+one command. Commit `32e754208e2a332165f3bce13ecbdf2ab17c5d97` passed GitHub
+Actions run `27504321847`, deployed to Node B, and the deployed proof completed
+in 7.160 seconds. Deployed Node B evidence now shows active retention mode
+`active` with projected delete count/bytes `0`, while retention shadow mode is
+`dry-run` and reports 46 disposable candidates / 30.89 GiB for `example.com`,
+`example.test`, `diagnostic-*`, and `sourcemaxx-proof-*`. Deploy slowness was
+explained by Nix rebuilding selected guest images: the deploy spent 257 seconds
+in Nix build, including ordinary and Playwright guest image roots. Existing
+disk GC still preserves Nix cache above the 40 GiB free-space floor. Open
+edges: missing-auth-user policy, active fake-user cleanup approval/enforcement,
+active Nix GC/rollback enforcement, typed snapshot metadata at creation time
+plus cleanup enforcement, whether live `data.img` sparsification/discard should
+be part of hibernate/recovery, and how to expose reports to operators.
 
-next move: review/land the shadow dry-run retention change, monitor CI/deploy,
-then run the deployed storage proof to verify the shadow plan is `dry-run`,
-active retention remains bounded/reviewed, protected accounts are refused, and
-snapshot deletion plus Nix GC remain unauthorized.
+next move: either implement typed snapshot metadata plus cleanup gates, or
+implement an explicit Nix current/rollback root policy with more frequent
+budgeted GC. A separate owner-approved active fake-user cleanup can follow from
+the deployed shadow proof, but only after retaining the protected account gate
+and rollback/refusal record.
 
 ledger file: docs/mission-node-b-storage-retention-v0.ledger.md
 

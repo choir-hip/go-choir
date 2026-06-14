@@ -357,3 +357,38 @@
 - Open edge: land the change, monitor CI/deploy identity, then rerun the
   storage proof against Node B and require `retention_shadow_mode: dry-run`
   while active retention and protected-account refusals remain bounded.
+
+## 2026-06-14 — deployed shadow dry-run proof
+
+- Claim: the landed shadow retention plan should prove the broadened
+  fake-domain/synthetic policy on Node B without expanding active deletion.
+- Move: pushed commit `32e754208e2a332165f3bce13ecbdf2ab17c5d97`, monitored
+  GitHub Actions run `27504321847`, confirmed the Node B staging deploy job
+  succeeded, and ran the report-only storage proof against Node B after deploy.
+- CI/deploy evidence: run `27504321847` completed successfully; deploy job
+  `81292841840` fetched and deployed
+  `32e754208e2a332165f3bce13ecbdf2ab17c5d97`; deploy health output reported
+  proxy/platformd `deployed_commit` as the same SHA; staging deploy completed
+  at `2026-06-14T16:07:29Z`.
+- Runtime evidence: `scripts/node-b-storage-proof --host node-b --top 10
+  --out-dir /tmp/node-b-storage-proof-20260614T160853Z` completed in 7.160
+  seconds and the JSON verifier passed.
+- Safety evidence: deployed report shows active `retention_mode: active`,
+  active projected delete count/bytes `0`, `retention_shadow_mode: dry-run`,
+  shadow projected delete count `46`, and shadow projected delete bytes
+  `30.89 GiB`. The shadow policy includes `example.com`, `example.test`,
+  `diagnostic-*`, and `sourcemaxx-proof-*`. Protected identities
+  `yusefnathanson@me.com`, `a@b.com`, and `b@c.com` remain refusal rows from
+  read-only auth DB mapping.
+- CI duration finding: the deploy step spent 257 seconds in selected Nix builds,
+  including ordinary and Playwright guest image builds, explaining the unusually
+  slow deploy. This will recur when guest-image or NixOS closure inputs change
+  or when current deploy roots do not preserve the desired cache; it is not
+  caused by docs-only commits.
+- Expected ΔV: 1, for staging/deploy proof of the orange report-only behavior
+  change.
+- Actual ΔV: 1.
+- Open edge: active fake-user cleanup remains unauthorized; snapshot deletion
+  remains blocked on typed snapshot metadata, recovery settlement, rollback
+  proof, and owner approval; Nix GC remains blocked on an explicit
+  current/rollback root policy and budget.
