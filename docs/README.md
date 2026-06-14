@@ -45,6 +45,14 @@ explicitly promotes one as source form.
 - **Operating contract:** `../AGENTS.md`.
 - **Active mission portfolio:** `docs/mission-portfolio-2026-06-11.md` and the
   current mission paradoc.
+- **Mission graph:** `docs/mission-graph.yaml` is the machine-readable mission
+  DAG index. It links paradocs and dependency/status metadata; it is not a
+  second mission ledger.
+- **Assertion register:** `docs/conjecture-assertion-ledger-2026-06.md` is the
+  canonical home for supported assertions, invariant candidates, and open
+  hyperthesis edges.
+- **Heresy detector manifest:** `docs/heresy-detectors.md` defines detector
+  families and baseline vocabulary. Counts are evidence, not ontology.
 - **Domain invariants:** `docs/computer-ontology.md`,
   `docs/vtext-agentic-invariants-2026-06-13.md`,
   `docs/runtime-invariants.md`, `docs/source-external-data-publication.md`,
@@ -65,6 +73,16 @@ explicitly promotes one as source form.
 - `docs/choir-doctrine.md` - apex doctrine and architecture control document.
 - `../README.md` - operational entrypoint for humans and agents.
 - `../AGENTS.md` - repo-level agent operating contract.
+- `docs/conjecture-assertion-ledger-2026-06.md` - canonical conjecture and
+  assertion register: supported assertions, invariant candidates, and open
+  blind edges with receipts and invalidation triggers.
+- `docs/heresy-detectors.md` - doctrine detector manifest and baseline
+  vocabulary for heresy accounting across docs and code.
+- `docs/mission-graph.yaml` - machine-readable mission DAG index. Creating or
+  materially re-scoping a paradoc should update this graph in the same pass.
+- `docs/mission-docs-truth-system-v1.md` - active docs truth system mission:
+  focal docs spine, mission DAG, assertion-register wiring, and code/docs
+  heresy baseline.
 - `docs/mission-geometry.md` - high-level mission geometry: Choir as statistical/symbolic/evolutionary learner and automatic computer -> newspaper -> radio -> capital vector.
 - `docs/parallax-design-2026-06-11.md` - current mission-discipline design:
   Parallax conjecture circuits and paradocs for new broad work.

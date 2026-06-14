@@ -201,6 +201,25 @@ documents:
       - doctrine_heresy_change
       - detector_baseline_change
 
+  - path: docs/conjecture-assertion-ledger-2026-06.md
+    claim_scope: current
+    is_root: false
+    is_evidence: false
+    annotations:
+      doc_role: assertion_register
+      authority: canonical_assertion_register
+      lifecycle: living
+    witnesses:
+      - docs/choir-doctrine.md
+      - docs/conjecture-learning-proof-theory-2026-06-11.md
+      - specs/**
+      - internal/actor/**
+      - internal/runtime/**
+    refresh_triggers:
+      - conjecture_promotion
+      - assertion_invalidation
+      - verifier_contract_change
+
   - path: docs/intended-architecture-next-2026-06-06.md
     claim_scope: target
     is_root: false
@@ -212,4 +231,3 @@ documents:
     refresh_triggers:
       - target_architecture_change
       - explicit_owner_promotion
-

@@ -28,6 +28,9 @@ substrate. They are not the root ontology.
 The canonical doctrine and architecture source is
 [docs/choir-doctrine.md](docs/choir-doctrine.md). This README gives the
 orientation; Choir Doctrine wins on architectural conflicts.
+Use [docs/README.md](docs/README.md) as the documentation index and truth
+spine: it points to the current architecture docs, mission portfolio, mission
+graph, assertion register, and heresy detector manifest.
 
 Older docs and code comments may still describe Choir as a personal writing
 system, publishing system, AI workspace, sandbox, or workflow app. Treat that as

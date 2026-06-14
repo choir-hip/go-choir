@@ -1,7 +1,7 @@
 ---
 name: parallax
 description: "Run a mission as a conjecture circuit: the mission document claims that completing an artifact/spec/objective will actually advance a deeper goal, then tests and constructs that claim through observer shifts, descending a declared variant under an explicit budget. Use for any nontrivial /goal mission where the route is uncertain, the evidence may mislead, or the work must hand off cleanly."
-version: 1.3.2
+version: 1.3.3
 metadata:
   hermes:
     tags: [parallax, conjecture-learning, proof-search, long-running-agents]
@@ -119,6 +119,13 @@ variant/budget, authority bounds, protected invariants, first next move, ledger
 path, and settlement rule. When the user asks for a paradoc, return the same
 goal string in the final response as a fenced text block in addition to writing
 it into the document.
+
+When the repo has a machine-readable mission graph such as
+`docs/mission-graph.yaml`, every new paradoc and every materially re-scoped
+paradoc must add or update its graph node in the same pass unless the mission is
+explicitly scratch or outside-repo. The graph is an indexable DAG, not a second
+ledger: link the paradoc and ledger, record dependency/status metadata, and do
+not transcribe Parallax State or move history into it.
 
 ## The Mission Document
 

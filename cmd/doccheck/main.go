@@ -16,21 +16,25 @@ import (
 )
 
 const (
-	defaultManifest = "docs/doc-authority-manifest.yaml"
-	defaultReport   = "doccheck-report.md"
-	defaultJSON     = "doccheck.json"
+	defaultManifest          = "docs/doc-authority-manifest.yaml"
+	defaultGraph             = "docs/mission-graph.yaml"
+	defaultAssertionRegister = "docs/conjecture-assertion-ledger-2026-06.md"
+	defaultReport            = "doccheck-report.md"
+	defaultJSON              = "doccheck.json"
 )
 
 var highRead = map[string]bool{
-	"README.md":                                true,
-	"AGENTS.md":                                true,
-	"docs/README.md":                           true,
-	"docs/choir-doctrine.md":                   true,
-	"docs/current-architecture.md":             true,
-	"docs/platform-os-app-state.md":            true,
-	"docs/mission-portfolio-2026-06-11.md":     true,
-	"docs/runtime-invariants.md":               true,
-	"docs/source-external-data-publication.md": true,
+	"README.md":                                   true,
+	"AGENTS.md":                                   true,
+	"docs/README.md":                              true,
+	"docs/choir-doctrine.md":                      true,
+	"docs/current-architecture.md":                true,
+	"docs/platform-os-app-state.md":               true,
+	"docs/mission-portfolio-2026-06-11.md":        true,
+	"docs/conjecture-assertion-ledger-2026-06.md": true,
+	"docs/heresy-detectors.md":                    true,
+	"docs/runtime-invariants.md":                  true,
+	"docs/source-external-data-publication.md":    true,
 }
 
 type manifestFile struct {
@@ -82,18 +86,23 @@ type warning struct {
 }
 
 type report struct {
-	GeneratedAt        string         `json:"generated_at"`
-	RuntimeMS          int64          `json:"runtime_ms"`
-	ManifestPath       string         `json:"manifest_path"`
-	DocsScanned        int            `json:"docs_scanned"`
-	ManifestEntries    int            `json:"manifest_entries"`
-	InferredDocs       int            `json:"inferred_docs"`
-	Edges              []edge         `json:"edges"`
-	Warnings           []warning      `json:"warnings"`
-	WarningsByRule     map[string]int `json:"warnings_by_rule"`
-	WarningsBySeverity map[string]int `json:"warnings_by_severity"`
-	HeresyAccounting   heresyAccount  `json:"heresy_accounting"`
-	Documents          []docInfo      `json:"documents"`
+	GeneratedAt           string          `json:"generated_at"`
+	RuntimeMS             int64           `json:"runtime_ms"`
+	ManifestPath          string          `json:"manifest_path"`
+	MissionGraphPath      string          `json:"mission_graph_path"`
+	AssertionRegisterPath string          `json:"assertion_register_path"`
+	DocsScanned           int             `json:"docs_scanned"`
+	ManifestEntries       int             `json:"manifest_entries"`
+	InferredDocs          int             `json:"inferred_docs"`
+	Edges                 []edge          `json:"edges"`
+	Warnings              []warning       `json:"warnings"`
+	WarningsByRule        map[string]int  `json:"warnings_by_rule"`
+	WarningsBySeverity    map[string]int  `json:"warnings_by_severity"`
+	HeresyAccounting      heresyAccount   `json:"heresy_accounting"`
+	MissionGraph          graphReport     `json:"mission_graph"`
+	AssertionRegister     assertionReport `json:"assertion_register"`
+	HeresyScan            heresyScan      `json:"heresy_scan"`
+	Documents             []docInfo       `json:"documents"`
 }
 
 type heresyAccount struct {
@@ -102,17 +111,85 @@ type heresyAccount struct {
 	Repaired   []string `json:"repaired"`
 }
 
+type missionGraphFile struct {
+	SchemaVersion int                `yaml:"schema_version" json:"schema_version"`
+	Status        string             `yaml:"status" json:"status"`
+	Nodes         []missionGraphNode `yaml:"nodes" json:"nodes"`
+}
+
+type missionGraphNode struct {
+	ID        string   `yaml:"id" json:"id"`
+	Title     string   `yaml:"title" json:"title"`
+	Path      string   `yaml:"path" json:"path,omitempty"`
+	Ledger    string   `yaml:"ledger" json:"ledger,omitempty"`
+	Status    string   `yaml:"status" json:"status"`
+	Kind      string   `yaml:"kind" json:"kind"`
+	DependsOn []string `yaml:"depends_on" json:"depends_on,omitempty"`
+	Enables   []string `yaml:"enables" json:"enables,omitempty"`
+	Sources   []string `yaml:"sources" json:"sources,omitempty"`
+}
+
+type graphReport struct {
+	Path              string             `json:"path"`
+	Status            string             `json:"status"`
+	NodeCount         int                `json:"node_count"`
+	EdgeCount         int                `json:"edge_count"`
+	StatusCounts      map[string]int     `json:"status_counts,omitempty"`
+	KindCounts        map[string]int     `json:"kind_counts,omitempty"`
+	UngraphedParadocs []string           `json:"ungraphed_paradocs,omitempty"`
+	Nodes             []missionGraphNode `json:"nodes,omitempty"`
+}
+
+type assertionReport struct {
+	Path                 string   `json:"path"`
+	Exists               bool     `json:"exists"`
+	Assertions           []string `json:"assertions,omitempty"`
+	InvariantCandidates  []string `json:"invariant_candidates,omitempty"`
+	OpenEdges            []string `json:"open_edges,omitempty"`
+	HasAssertionsSection bool     `json:"has_assertions_section"`
+	HasInvariantsSection bool     `json:"has_invariants_section"`
+	HasOpenEdgesSection  bool     `json:"has_open_edges_section"`
+}
+
+type detectorDefinition struct {
+	ID     string   `json:"id"`
+	Family string   `json:"family"`
+	Terms  []string `json:"terms"`
+}
+
+type heresyFinding struct {
+	Path    string `json:"path"`
+	Line    int    `json:"line"`
+	Term    string `json:"term"`
+	Family  string `json:"family,omitempty"`
+	Context string `json:"context"`
+	Surface string `json:"surface"`
+}
+
+type heresyScan struct {
+	FilesScanned      int                  `json:"files_scanned"`
+	Findings          int                  `json:"findings"`
+	DetectorFamilies  int                  `json:"detector_families"`
+	DetectorTerms     int                  `json:"detector_terms"`
+	FindingsByContext map[string]int       `json:"findings_by_context,omitempty"`
+	FindingsBySurface map[string]int       `json:"findings_by_surface,omitempty"`
+	Detectors         []detectorDefinition `json:"detectors,omitempty"`
+	Items             []heresyFinding      `json:"items,omitempty"`
+}
+
 func main() {
 	start := time.Now()
-	var manifestPath, reportPath, jsonPath, actor, writeAttempt string
+	var manifestPath, graphPath, assertionPath, reportPath, jsonPath, actor, writeAttempt string
 	flag.StringVar(&manifestPath, "manifest", defaultManifest, "doc authority manifest path")
+	flag.StringVar(&graphPath, "mission-graph", defaultGraph, "mission graph path")
+	flag.StringVar(&assertionPath, "assertion-register", defaultAssertionRegister, "canonical conjecture/assertion register path")
 	flag.StringVar(&reportPath, "report", defaultReport, "human report output path")
 	flag.StringVar(&jsonPath, "json", defaultJSON, "machine report output path")
 	flag.StringVar(&actor, "actor", "", "optional actor id for write-attempt guard probes")
 	flag.StringVar(&writeAttempt, "write-attempt", "", "optional markdown doc path an actor is attempting to write")
 	flag.Parse()
 
-	rep, err := run(manifestPath, actor, writeAttempt)
+	rep, err := run(manifestPath, graphPath, assertionPath, actor, writeAttempt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "doccheck: %v\n", err)
 		os.Exit(0)
@@ -126,7 +203,7 @@ func main() {
 	os.Exit(0)
 }
 
-func run(manifestPath, actor, writeAttempt string) (report, error) {
+func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (report, error) {
 	mf, err := readManifest(manifestPath)
 	if err != nil {
 		return report{}, err
@@ -233,7 +310,8 @@ func run(manifestPath, actor, writeAttempt string) (report, error) {
 		}
 	}
 
-	detectors := detectorTerms("docs/heresy-detectors.md")
+	detectors := detectorDefinitions("docs/heresy-detectors.md")
+	detectorTerms := flattenDetectorTerms(detectors)
 	for _, p := range mdFiles {
 		info := docs[p]
 		if info == nil || info.IsEvidence || !(info.Scope == "current" || info.Scope == "mixed") {
@@ -243,10 +321,19 @@ func run(manifestPath, actor, writeAttempt string) (report, error) {
 		if err != nil {
 			continue
 		}
-		warnings = append(warnings, scanHeresyTerms(p, string(content), detectors)...)
+		warnings = append(warnings, scanHeresyTerms(p, string(content), detectorTerms)...)
 		warnings = append(warnings, scanOverclaims(p, string(content), info)...)
 		warnings = append(warnings, scanVTextAgency(p, string(content), info)...)
 		warnings = append(warnings, scanCurrentTargetCollapse(p, string(content), info)...)
+	}
+
+	graph, graphWarnings := validateMissionGraph(graphPath, docs)
+	warnings = append(warnings, graphWarnings...)
+	assertions, assertionWarnings := validateAssertionRegister(assertionPath)
+	warnings = append(warnings, assertionWarnings...)
+	heresyScan, err := scanCodeHeresy(detectors, docs)
+	if err != nil {
+		warnings = append(warnings, warning{Rule: "R7", Severity: "warning", Message: fmt.Sprintf("code heresy scan failed: %v", err)})
 	}
 
 	sortWarnings(warnings)
@@ -267,21 +354,26 @@ func run(manifestPath, actor, writeAttempt string) (report, error) {
 	sort.Slice(docList, func(i, j int) bool { return docList[i].Path < docList[j].Path })
 
 	return report{
-		GeneratedAt:        time.Now().UTC().Format(time.RFC3339),
-		ManifestPath:       manifestPath,
-		DocsScanned:        len(mdFiles),
-		ManifestEntries:    len(mf.Documents),
-		InferredDocs:       inferred,
-		Edges:              allEdges,
-		Warnings:           warnings,
-		WarningsByRule:     countBy(warnings, func(w warning) string { return w.Rule }),
-		WarningsBySeverity: countBy(warnings, func(w warning) string { return w.Severity }),
+		GeneratedAt:           time.Now().UTC().Format(time.RFC3339),
+		ManifestPath:          manifestPath,
+		MissionGraphPath:      graphPath,
+		AssertionRegisterPath: assertionPath,
+		DocsScanned:           len(mdFiles),
+		ManifestEntries:       len(mf.Documents),
+		InferredDocs:          inferred,
+		Edges:                 allEdges,
+		Warnings:              warnings,
+		WarningsByRule:        countBy(warnings, func(w warning) string { return w.Rule }),
+		WarningsBySeverity:    countBy(warnings, func(w warning) string { return w.Severity }),
 		HeresyAccounting: heresyAccount{
 			Discovered: discoveredFromWarnings(warnings),
 			Introduced: []string{},
 			Repaired:   []string{"none claimed; v0 is report-only"},
 		},
-		Documents: docList,
+		MissionGraph:      graph,
+		AssertionRegister: assertions,
+		HeresyScan:        heresyScan,
+		Documents:         docList,
 	}, nil
 }
 
@@ -536,10 +628,208 @@ func witnessMatches(pattern string) ([]string, error) {
 	return nil, nil
 }
 
-func detectorTerms(path string) []string {
+func validateMissionGraph(path string, docs map[string]*docInfo) (graphReport, []warning) {
+	rep := graphReport{Path: path}
+	var warnings []warning
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return fallbackDetectorTerms()
+		return rep, []warning{{Rule: "R5", Severity: "warning", Path: path, Message: "mission graph is missing or unreadable", Hint: "create docs/mission-graph.yaml"}}
+	}
+	var mf missionGraphFile
+	if err := yaml.Unmarshal(b, &mf); err != nil {
+		return rep, []warning{{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("mission graph YAML is invalid: %v", err)}}
+	}
+	rep.Status = mf.Status
+	rep.NodeCount = len(mf.Nodes)
+	rep.Nodes = mf.Nodes
+	rep.StatusCounts = map[string]int{}
+	rep.KindCounts = map[string]int{}
+	ids := map[string]missionGraphNode{}
+	validStatus := map[string]bool{"planned": true, "working": true, "open_handoff": true, "settled": true, "superseded": true, "blocked": true}
+	validKind := map[string]bool{"spine": true, "side": true, "docs_truth": true, "evidence": true, "superseded": true}
+	for _, n := range mf.Nodes {
+		if n.ID == "" {
+			warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: "mission graph node has no id"})
+			continue
+		}
+		if _, exists := ids[n.ID]; exists {
+			warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("duplicate mission graph id %q", n.ID)})
+		}
+		ids[n.ID] = n
+		rep.StatusCounts[n.Status]++
+		rep.KindCounts[n.Kind]++
+		if !validStatus[n.Status] {
+			warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("mission graph node %q has invalid status %q", n.ID, n.Status)})
+		}
+		if !validKind[n.Kind] {
+			warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("mission graph node %q has invalid kind %q", n.ID, n.Kind)})
+		}
+		for _, fieldPath := range []struct {
+			label string
+			value string
+		}{
+			{"path", n.Path},
+			{"ledger", n.Ledger},
+		} {
+			if fieldPath.value == "" {
+				continue
+			}
+			if !fileExists(fieldPath.value) {
+				warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("mission graph node %q %s points at missing file %s", n.ID, fieldPath.label, fieldPath.value)})
+			}
+		}
+		for _, source := range n.Sources {
+			if source == "" {
+				continue
+			}
+			if !fileExists(source) {
+				warnings = append(warnings, warning{Rule: "R5", Severity: "info", Path: path, Message: fmt.Sprintf("mission graph node %q source %s is not present", n.ID, source)})
+			}
+		}
+	}
+	for _, n := range mf.Nodes {
+		for _, dep := range n.DependsOn {
+			rep.EdgeCount++
+			if _, ok := ids[dep]; !ok {
+				warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("mission graph node %q depends on unknown node %q", n.ID, dep)})
+			}
+		}
+		for _, enabled := range n.Enables {
+			if _, ok := ids[enabled]; !ok {
+				warnings = append(warnings, warning{Rule: "R5", Severity: "info", Path: path, Message: fmt.Sprintf("mission graph node %q enables node %q that is not yet graphed", n.ID, enabled)})
+			}
+		}
+	}
+	if cycle := findGraphCycle(mf.Nodes); len(cycle) > 0 {
+		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("mission graph dependency cycle detected: %s", strings.Join(cycle, " -> "))})
+	}
+	graphedPaths := map[string]bool{}
+	for _, n := range mf.Nodes {
+		if n.Path != "" {
+			graphedPaths[cleanPath(n.Path)] = true
+		}
+	}
+	for p, info := range docs {
+		if !strings.HasPrefix(p, "docs/mission-") || strings.HasSuffix(p, ".ledger.md") || info.IsEvidence {
+			continue
+		}
+		if !graphedPaths[p] {
+			rep.UngraphedParadocs = append(rep.UngraphedParadocs, p)
+		}
+	}
+	sort.Strings(rep.UngraphedParadocs)
+	if mf.Status != "seed" {
+		for _, p := range rep.UngraphedParadocs {
+			warnings = append(warnings, warning{Rule: "R5", Severity: "info", Path: path, Message: fmt.Sprintf("paradoc %s is not represented in mission graph", p), Hint: "add a mission graph node or classify it as historical/evidence"})
+		}
+	}
+	if !graphedPaths["docs/mission-docs-truth-system-v1.md"] {
+		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: "current docs truth v1 paradoc is not represented in mission graph"})
+	}
+	return rep, warnings
+}
+
+func findGraphCycle(nodes []missionGraphNode) []string {
+	adj := map[string][]string{}
+	for _, n := range nodes {
+		adj[n.ID] = append(adj[n.ID], n.DependsOn...)
+	}
+	visiting := map[string]bool{}
+	visited := map[string]bool{}
+	var stack []string
+	var visit func(string) []string
+	visit = func(id string) []string {
+		if visiting[id] {
+			for i, item := range stack {
+				if item == id {
+					return append(append([]string{}, stack[i:]...), id)
+				}
+			}
+			return []string{id, id}
+		}
+		if visited[id] {
+			return nil
+		}
+		visiting[id] = true
+		stack = append(stack, id)
+		for _, dep := range adj[id] {
+			if cycle := visit(dep); len(cycle) > 0 {
+				return cycle
+			}
+		}
+		stack = stack[:len(stack)-1]
+		visiting[id] = false
+		visited[id] = true
+		return nil
+	}
+	for _, n := range nodes {
+		if cycle := visit(n.ID); len(cycle) > 0 {
+			return cycle
+		}
+	}
+	return nil
+}
+
+func fileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func validateAssertionRegister(path string) (assertionReport, []warning) {
+	rep := assertionReport{Path: path}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return rep, []warning{{Rule: "R6", Severity: "warning", Path: path, Message: "canonical assertion register is missing or unreadable"}}
+	}
+	rep.Exists = true
+	text := string(b)
+	rep.HasAssertionsSection = strings.Contains(text, "## Assertions")
+	rep.HasInvariantsSection = strings.Contains(text, "## Invariant candidates")
+	rep.HasOpenEdgesSection = strings.Contains(text, "## Open hyperthesis edges")
+	var warnings []warning
+	if !rep.HasAssertionsSection {
+		warnings = append(warnings, warning{Rule: "R6", Severity: "warning", Path: path, Message: "assertion register is missing ## Assertions"})
+	}
+	if !rep.HasInvariantsSection {
+		warnings = append(warnings, warning{Rule: "R6", Severity: "warning", Path: path, Message: "assertion register is missing ## Invariant candidates"})
+	}
+	if !rep.HasOpenEdgesSection {
+		warnings = append(warnings, warning{Rule: "R6", Severity: "warning", Path: path, Message: "assertion register is missing ## Open hyperthesis edges"})
+	}
+	idRe := regexp.MustCompile(`(?m)^###\s+([AIE][0-9]+)\b`)
+	seen := map[string]bool{}
+	for _, m := range idRe.FindAllStringSubmatch(text, -1) {
+		id := m[1]
+		if seen[id] {
+			warnings = append(warnings, warning{Rule: "R6", Severity: "warning", Path: path, Message: fmt.Sprintf("duplicate assertion register id %s", id)})
+			continue
+		}
+		seen[id] = true
+		switch id[0] {
+		case 'A':
+			rep.Assertions = append(rep.Assertions, id)
+		case 'I':
+			rep.InvariantCandidates = append(rep.InvariantCandidates, id)
+		case 'E':
+			rep.OpenEdges = append(rep.OpenEdges, id)
+		}
+	}
+	if len(rep.Assertions) == 0 {
+		warnings = append(warnings, warning{Rule: "R6", Severity: "warning", Path: path, Message: "assertion register has no A* assertions"})
+	}
+	if len(rep.OpenEdges) == 0 {
+		warnings = append(warnings, warning{Rule: "R6", Severity: "warning", Path: path, Message: "assertion register has no E* open edges"})
+	}
+	return rep, warnings
+}
+
+func detectorDefinitions(path string) []detectorDefinition {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return fallbackDetectorDefinitions()
 	}
 	text := string(b)
 	section := text
@@ -551,10 +841,52 @@ func detectorTerms(path string) []string {
 	}
 	re := regexp.MustCompile("`([^`]+)`")
 	seen := map[string]bool{}
+	var out []detectorDefinition
+	for _, line := range strings.Split(section, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") || strings.HasPrefix(line, "| ---") || strings.Contains(line, "| ID |") {
+			continue
+		}
+		cells := splitMarkdownRow(line)
+		if len(cells) < 3 {
+			continue
+		}
+		var terms []string
+		for _, m := range re.FindAllStringSubmatch(cells[2], -1) {
+			for _, part := range strings.Split(m[1], ",") {
+				term := strings.TrimSpace(part)
+				if term == "" || seen[term] {
+					continue
+				}
+				seen[term] = true
+				terms = append(terms, term)
+			}
+		}
+		if len(terms) == 0 {
+			continue
+		}
+		out = append(out, detectorDefinition{ID: strings.TrimSpace(cells[0]), Family: strings.TrimSpace(cells[1]), Terms: terms})
+	}
+	if len(out) == 0 {
+		return fallbackDetectorDefinitions()
+	}
+	return out
+}
+
+func splitMarkdownRow(line string) []string {
+	line = strings.Trim(line, "|")
+	parts := strings.Split(line, "|")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
+func flattenDetectorTerms(defs []detectorDefinition) []string {
+	seen := map[string]bool{}
 	var out []string
-	for _, m := range re.FindAllStringSubmatch(section, -1) {
-		for _, part := range strings.Split(m[1], ",") {
-			term := strings.TrimSpace(part)
+	for _, def := range defs {
+		for _, term := range def.Terms {
 			if term == "" || seen[term] {
 				continue
 			}
@@ -562,14 +894,167 @@ func detectorTerms(path string) []string {
 			out = append(out, term)
 		}
 	}
-	if len(out) == 0 {
-		return fallbackDetectorTerms()
-	}
+	sort.Strings(out)
 	return out
 }
 
-func fallbackDetectorTerms() []string {
-	return []string{"Trace app", "Trace UI", "Open Trace", "Terminal app", "raw Terminal", "manual terminal", "Browser app", "BrowserApp", "browser_sessions", "AppHint: \"browser\"", "RunContinuation", "run_continuations", "/api/continuations", "continuation-level"}
+func fallbackDetectorDefinitions() []detectorDefinition {
+	return []detectorDefinition{
+		{ID: "fallback-surface", Family: "surface residue", Terms: []string{"Trace app", "Trace UI", "Open Trace", "Terminal app", "raw Terminal", "manual terminal", "Browser app", "BrowserApp", "browser_sessions", "AppHint: \"browser\""}},
+		{ID: "fallback-continuation", Family: "continuation residue", Terms: []string{"RunContinuation", "run_continuations", "/api/continuations", "continuation-level"}},
+	}
+}
+
+func scanCodeHeresy(detectors []detectorDefinition, docs map[string]*docInfo) (heresyScan, error) {
+	files, err := heresySurfaceFiles(".")
+	if err != nil {
+		return heresyScan{}, err
+	}
+	termFamily := map[string]string{}
+	for _, def := range detectors {
+		for _, term := range def.Terms {
+			if _, ok := termFamily[term]; !ok {
+				termFamily[term] = def.Family
+			}
+		}
+	}
+	var items []heresyFinding
+	for _, p := range files {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(b), "\n")
+		for i, line := range lines {
+			for _, term := range flattenDetectorTerms(detectors) {
+				if term == "" || !strings.Contains(line, term) {
+					continue
+				}
+				items = append(items, heresyFinding{
+					Path:    p,
+					Line:    i + 1,
+					Term:    term,
+					Family:  termFamily[term],
+					Context: classifyHeresyContext(p, line, docs),
+					Surface: classifySurface(p),
+				})
+			}
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Context == items[j].Context {
+			if items[i].Path == items[j].Path {
+				if items[i].Line == items[j].Line {
+					return items[i].Term < items[j].Term
+				}
+				return items[i].Line < items[j].Line
+			}
+			return items[i].Path < items[j].Path
+		}
+		return items[i].Context < items[j].Context
+	})
+	return heresyScan{
+		FilesScanned:      len(files),
+		Findings:          len(items),
+		DetectorFamilies:  len(detectors),
+		DetectorTerms:     len(flattenDetectorTerms(detectors)),
+		FindingsByContext: countFindings(items, func(f heresyFinding) string { return f.Context }),
+		FindingsBySurface: countFindings(items, func(f heresyFinding) string { return f.Surface }),
+		Detectors:         detectors,
+		Items:             items,
+	}, nil
+}
+
+func heresySurfaceFiles(root string) ([]string, error) {
+	var out []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		name := d.Name()
+		if d.IsDir() && (name == ".git" || name == "node_modules" || name == "vendor" || name == "dist" || name == "test-results" || name == ".gstack") {
+			return filepath.SkipDir
+		}
+		if d.IsDir() {
+			return nil
+		}
+		p := cleanPath(path)
+		if p == "doccheck-report.md" || p == "doccheck.json" {
+			return nil
+		}
+		if isHeresySurface(p) {
+			out = append(out, p)
+		}
+		return nil
+	})
+	sort.Strings(out)
+	return out, err
+}
+
+func isHeresySurface(path string) bool {
+	ext := filepath.Ext(path)
+	switch ext {
+	case ".md", ".go", ".svelte", ".ts", ".js", ".nix", ".yaml", ".yml", ".sh":
+		return true
+	}
+	return strings.HasPrefix(path, "scripts/") || strings.HasPrefix(path, ".github/workflows/")
+}
+
+func classifyHeresyContext(path, line string, docs map[string]*docInfo) string {
+	lower := strings.ToLower(line)
+	if path == "docs/heresy-detectors.md" {
+		return "detector-definition"
+	}
+	if info := docs[path]; info != nil {
+		if info.IsEvidence || info.Scope == "historical" {
+			return "historical-evidence"
+		}
+	}
+	for _, term := range []string{"historical", "evidence", "quoted", "not endorsed"} {
+		if strings.Contains(lower, term) {
+			return "historical-evidence"
+		}
+	}
+	for _, term := range []string{"deprecated", "retired", "forbidden", "must not", "do not", "invalid"} {
+		if strings.Contains(lower, term) {
+			return "explicitly-deprecated"
+		}
+	}
+	for _, term := range []string{"transitional", "compatibility", "legacy", "shim", "residue", "migration"} {
+		if strings.Contains(lower, term) {
+			return "implementation-transitional"
+		}
+	}
+	return "current-violation"
+}
+
+func classifySurface(path string) string {
+	switch {
+	case strings.HasPrefix(path, "docs/") || path == "README.md" || path == "AGENTS.md":
+		return "docs"
+	case strings.HasPrefix(path, "internal/runtime/prompt_defaults/"):
+		return "runtime-prompt"
+	case strings.HasSuffix(path, ".go"):
+		return "go"
+	case strings.HasSuffix(path, ".svelte") || strings.HasSuffix(path, ".ts") || strings.HasSuffix(path, ".js"):
+		return "frontend"
+	case strings.HasSuffix(path, ".nix"):
+		return "nix"
+	case strings.HasPrefix(path, ".github/"):
+		return "workflow"
+	case strings.HasPrefix(path, "scripts/"):
+		return "script"
+	default:
+		return "other"
+	}
+}
+
+func countFindings(findings []heresyFinding, key func(heresyFinding) string) map[string]int {
+	out := map[string]int{}
+	for _, f := range findings {
+		out[key(f)]++
+	}
+	return out
 }
 
 func scanHeresyTerms(path, content string, terms []string) []warning {
@@ -699,6 +1184,27 @@ func renderMarkdown(rep report) string {
 	fmt.Fprintf(&b, "Inferred docs: %d\n\n", rep.InferredDocs)
 	fmt.Fprintf(&b, "Warnings by rule: %s\n\n", formatCounts(rep.WarningsByRule))
 	fmt.Fprintf(&b, "Warnings by severity: %s\n\n", formatCounts(rep.WarningsBySeverity))
+	fmt.Fprintf(&b, "## Mission Graph\n\n")
+	fmt.Fprintf(&b, "- Path: `%s`\n", rep.MissionGraph.Path)
+	fmt.Fprintf(&b, "- Status: `%s`\n", rep.MissionGraph.Status)
+	fmt.Fprintf(&b, "- Nodes: %d\n", rep.MissionGraph.NodeCount)
+	fmt.Fprintf(&b, "- Dependency edges: %d\n", rep.MissionGraph.EdgeCount)
+	fmt.Fprintf(&b, "- Status counts: %s\n", formatCounts(rep.MissionGraph.StatusCounts))
+	fmt.Fprintf(&b, "- Kind counts: %s\n", formatCounts(rep.MissionGraph.KindCounts))
+	fmt.Fprintf(&b, "- Ungraphed paradocs: %d\n\n", len(rep.MissionGraph.UngraphedParadocs))
+	fmt.Fprintf(&b, "## Assertion Register\n\n")
+	fmt.Fprintf(&b, "- Path: `%s`\n", rep.AssertionRegister.Path)
+	fmt.Fprintf(&b, "- Exists: %t\n", rep.AssertionRegister.Exists)
+	fmt.Fprintf(&b, "- Assertions: %d (%s)\n", len(rep.AssertionRegister.Assertions), strings.Join(rep.AssertionRegister.Assertions, ", "))
+	fmt.Fprintf(&b, "- Invariant candidates: %d (%s)\n", len(rep.AssertionRegister.InvariantCandidates), strings.Join(rep.AssertionRegister.InvariantCandidates, ", "))
+	fmt.Fprintf(&b, "- Open edges: %d (%s)\n\n", len(rep.AssertionRegister.OpenEdges), strings.Join(rep.AssertionRegister.OpenEdges, ", "))
+	fmt.Fprintf(&b, "## Code And Docs Heresy Scan\n\n")
+	fmt.Fprintf(&b, "- Files scanned: %d\n", rep.HeresyScan.FilesScanned)
+	fmt.Fprintf(&b, "- Findings: %d\n", rep.HeresyScan.Findings)
+	fmt.Fprintf(&b, "- Detector families: %d\n", rep.HeresyScan.DetectorFamilies)
+	fmt.Fprintf(&b, "- Detector terms: %d\n", rep.HeresyScan.DetectorTerms)
+	fmt.Fprintf(&b, "- Findings by context: %s\n", formatCounts(rep.HeresyScan.FindingsByContext))
+	fmt.Fprintf(&b, "- Findings by surface: %s\n\n", formatCounts(rep.HeresyScan.FindingsBySurface))
 	fmt.Fprintf(&b, "## Heresy Accounting\n\n")
 	fmt.Fprintf(&b, "Discovered:\n")
 	for _, item := range rep.HeresyAccounting.Discovered {

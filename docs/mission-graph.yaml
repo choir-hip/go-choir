@@ -1,0 +1,217 @@
+schema_version: 0
+generated: false
+status: seed
+description: >
+  Machine-readable mission DAG seed. This file is an index, not a second
+  mission ledger. Parallax State in each paradoc remains the source of current
+  mission state; this graph records discoverability, dependency, and portfolio
+  ordering.
+
+rules:
+  - id: graph-is-dag
+    text: Mission dependency edges must remain acyclic.
+  - id: paradoc-updates-graph
+    text: Creating or materially re-scoping a repo paradoc must add or update
+      its node here in the same pass unless the mission is explicitly scratch
+      or outside-repo.
+  - id: no-double-ledger
+    text: Do not transcribe Parallax ledgers into this graph. Link the paradoc
+      and ledger only.
+  - id: doctrine-apex
+    text: This graph inherits docs/choir-doctrine.md and AGENTS.md. It does not
+      override doctrine, operating contract, or mission Parallax State.
+
+node_fields:
+  id: stable mission id
+  title: human-readable mission title
+  path: paradoc path, if one exists
+  ledger: Parallax ledger path, if one exists
+  status: planned | working | open_handoff | settled | superseded | blocked
+  kind: spine | side | docs_truth | evidence | superseded
+  depends_on: mission ids that must settle first
+  enables: mission ids this node directly unlocks
+  sources: high-authority docs or specs the mission executes against
+
+nodes:
+  - id: portfolio-2026-06-11
+    title: Mission Portfolio
+    path: docs/mission-portfolio-2026-06-11.md
+    ledger: docs/mission-portfolio-2026-06-11.ledger.md
+    status: working
+    kind: spine
+    depends_on: []
+    enables:
+      - m1-trajectory-model
+      - m2-messaging-cutover
+      - m3-lifecycle-cutover
+      - m4-continuation-deletion
+      - m5-wire-on-settlement
+      - docs-truth-system-v1
+    sources:
+      - docs/choir-doctrine.md
+      - docs/choir-rearchitecture-durable-actors-2026-06-11.md
+      - docs/conjecture-learning-proof-theory-2026-06-11.md
+      - docs/conjecture-assertion-ledger-2026-06.md
+
+  - id: m1-trajectory-model
+    title: M1 Trajectory Model
+    path: docs/mission-trajectory-model-v0.md
+    ledger: ""
+    status: settled
+    kind: spine
+    depends_on:
+      - portfolio-2026-06-11
+    enables:
+      - m2-messaging-cutover
+    sources:
+      - docs/mission-portfolio-2026-06-11.md
+
+  - id: m2-messaging-cutover
+    title: M2 Messaging Cutover
+    path: docs/mission-messaging-cutover-v0.md
+    ledger: docs/mission-messaging-cutover-v0.ledger.md
+    status: settled
+    kind: spine
+    depends_on:
+      - m1-trajectory-model
+    enables:
+      - m3-lifecycle-cutover
+    sources:
+      - docs/mission-portfolio-2026-06-11.md
+
+  - id: m3-lifecycle-cutover
+    title: M3 Lifecycle Cutover
+    path: docs/mission-lifecycle-cutover-v0.md
+    ledger: docs/mission-lifecycle-cutover-v0.ledger.md
+    status: working
+    kind: spine
+    depends_on:
+      - m2-messaging-cutover
+    enables:
+      - m4-continuation-deletion
+    sources:
+      - docs/mission-portfolio-2026-06-11.md
+
+  - id: m4-continuation-deletion
+    title: M4 Continuation Deletion
+    path: ""
+    ledger: ""
+    status: planned
+    kind: spine
+    depends_on:
+      - m3-lifecycle-cutover
+    enables:
+      - m5-wire-on-settlement
+      - m6-route-flip-consumer
+    sources:
+      - docs/mission-portfolio-2026-06-11.md
+
+  - id: m5-wire-on-settlement
+    title: M5 Wire On Settlement
+    path: docs/mission-wire-on-settlement-v0.md
+    ledger: docs/mission-wire-on-settlement-v0.ledger.md
+    status: open_handoff
+    kind: spine
+    depends_on:
+      - m4-continuation-deletion
+    enables: []
+    sources:
+      - docs/mission-portfolio-2026-06-11.md
+
+  - id: m6-route-flip-consumer
+    title: M6 Route-Profile Consumer
+    path: ""
+    ledger: ""
+    status: planned
+    kind: spine
+    depends_on:
+      - m4-continuation-deletion
+    enables:
+      - m8-dolt-rollback-window
+    sources:
+      - docs/mission-portfolio-2026-06-11.md
+
+  - id: m8-dolt-rollback-window
+    title: M8 Dolt Branching And Rollback Window
+    path: ""
+    ledger: ""
+    status: planned
+    kind: spine
+    depends_on:
+      - m6-route-flip-consumer
+    enables:
+      - m7-review-ui
+    sources:
+      - docs/mission-portfolio-2026-06-11.md
+
+  - id: m7-review-ui
+    title: M7 Changes App Review Loop
+    path: ""
+    ledger: ""
+    status: planned
+    kind: spine
+    depends_on:
+      - m8-dolt-rollback-window
+    enables: []
+    sources:
+      - docs/mission-portfolio-2026-06-11.md
+
+  - id: doc-heresy-checker-v0
+    title: Doc/Heresy Checker v0
+    path: docs/mission-doc-heresy-checker-v0.md
+    ledger: docs/mission-doc-heresy-checker-v0.ledger.md
+    status: settled
+    kind: docs_truth
+    depends_on: []
+    enables:
+      - docs-truth-system-v1
+    sources:
+      - docs/choir-doctrine.md
+      - docs/heresy-detectors.md
+
+  - id: doc-truth-drift-context-v0
+    title: Doc Truth, Drift CI, And Context Packet v0
+    path: docs/mission-doc-truth-drift-ci-context-packet-v0.md
+    ledger: docs/mission-doc-truth-drift-ci-context-packet-v0.ledger.md
+    status: open_handoff
+    kind: docs_truth
+    depends_on:
+      - doc-heresy-checker-v0
+    enables:
+      - docs-truth-system-v1
+    sources:
+      - docs/mission-doc-heresy-checker-v0.md
+      - docs/mission-heresy-detectors-ci-v0.md
+
+  - id: heresy-detectors-ci-v0
+    title: Heresy Detectors CI v0
+    path: docs/mission-heresy-detectors-ci-v0.md
+    ledger: ""
+    status: superseded
+    kind: superseded
+    depends_on: []
+    enables:
+      - docs-truth-system-v1
+    sources:
+      - docs/heresy-detectors.md
+
+  - id: docs-truth-system-v1
+    title: Docs Truth System v1
+    path: docs/mission-docs-truth-system-v1.md
+    ledger: docs/mission-docs-truth-system-v1.ledger.md
+    status: settled
+    kind: docs_truth
+    depends_on:
+      - doc-heresy-checker-v0
+      - doc-truth-drift-context-v0
+      - heresy-detectors-ci-v0
+      - portfolio-2026-06-11
+    enables:
+      - m3-lifecycle-cutover
+      - m4-continuation-deletion
+    sources:
+      - docs/choir-doctrine.md
+      - AGENTS.md
+      - docs/mission-portfolio-2026-06-11.md
+      - docs/conjecture-assertion-ledger-2026-06.md
+      - docs/heresy-detectors.md
