@@ -364,8 +364,10 @@ type OwnershipRegistry struct {
 
 	// retentionPrune controls durable VM-state deletion for explicitly
 	// disposable computers such as staging Playwright accounts.
-	retentionPrune      RetentionPruneConfig
-	retentionUserEmails map[string]string
+	retentionPrune              RetentionPruneConfig
+	retentionShadowPrune        RetentionPruneConfig
+	retentionShadowPruneEnabled bool
+	retentionUserEmails         map[string]string
 
 	// warmnessPolicy controls under-capacity primary keepalive and future
 	// always-on tier modeling.
@@ -666,6 +668,21 @@ func (r *OwnershipRegistry) SetRetentionPruneConfig(cfg RetentionPruneConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.retentionPrune = normalizeRetentionPruneConfig(cfg)
+}
+
+// SetRetentionShadowPruneConfig configures a dry-run-only retention policy for
+// operator visibility. It is intentionally separate from the active prune
+// policy so broader candidate classes can be observed before they are allowed
+// to delete VM state.
+func (r *OwnershipRegistry) SetRetentionShadowPruneConfig(cfg RetentionPruneConfig) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cfg = normalizeRetentionPruneConfig(cfg)
+	if cfg.Mode != RetentionPruneModeOff {
+		cfg.Mode = RetentionPruneModeDryRun
+	}
+	r.retentionShadowPrune = cfg
+	r.retentionShadowPruneEnabled = true
 }
 
 func (r *OwnershipRegistry) setRetentionUserEmailsForTest(emails map[string]string) {

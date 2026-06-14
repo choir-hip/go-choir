@@ -488,6 +488,17 @@ in
         "VMCTL_RETENTION_EPHEMERAL_MIN_AGE=24h"
         "VMCTL_RETENTION_MAX_DELETES=100"
         "VMCTL_RETENTION_MAX_BYTES_MIB=122880"
+        # Broader retention policy under observation only. This lets staging
+        # prove example.test and synthetic proof-owner candidates without
+        # expanding the active deletion policy before owner approval.
+        "VMCTL_RETENTION_SHADOW_PRUNE_MODE=dry-run"
+        "VMCTL_RETENTION_SHADOW_AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"
+        "VMCTL_RETENTION_SHADOW_EPHEMERAL_EMAIL_DOMAINS=example.com,example.test"
+        "VMCTL_RETENTION_SHADOW_EPHEMERAL_USER_PREFIXES=diagnostic-,sourcemaxx-proof-"
+        "VMCTL_RETENTION_SHADOW_ORPHAN_MIN_AGE=6h"
+        "VMCTL_RETENTION_SHADOW_EPHEMERAL_MIN_AGE=24h"
+        "VMCTL_RETENTION_SHADOW_MAX_DELETES=100"
+        "VMCTL_RETENTION_SHADOW_MAX_BYTES_MIB=122880"
         # Gateway URL for issuing sandbox credentials to VM guests.
         # vmctl calls this endpoint to get a token before booting each VM.
         "VMCTL_GATEWAY_URL=http://127.0.0.1:8084"

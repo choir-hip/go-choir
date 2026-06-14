@@ -59,27 +59,27 @@ type resolveResponse struct {
 
 // ownershipResponse is the JSON response for ownership queries.
 type ownershipResponse struct {
-	VMID                 string `json:"vm_id"`
-	UserID               string `json:"user_id"`
-	DesktopID            string `json:"desktop_id"`
-	Kind                 VMKind `json:"kind,omitempty"`
-	ParentDesktopID      string `json:"parent_desktop_id,omitempty"`
-	ParentVMID           string `json:"parent_vm_id,omitempty"`
-	SnapshotKind         string `json:"snapshot_kind,omitempty"`
-	WorkerID             string `json:"worker_id,omitempty"`
-	ParentAgentID        string `json:"parent_agent_id,omitempty"`
-	TrajectoryID         string `json:"trajectory_id,omitempty"`
-	Purpose              string `json:"purpose,omitempty"`
-	ObjectiveFingerprint string `json:"objective_fingerprint,omitempty"`
-	MachineClass         string `json:"machine_class,omitempty"`
-	WarmnessClass        string `json:"warmness_class,omitempty"`
-	Published            bool   `json:"published"`
-	SandboxURL           string `json:"sandbox_url"`
-	State                string `json:"state"`
-	CreatedAt            string `json:"created_at"`
-	LastActiveAt         string `json:"last_active_at"`
-	Epoch                int64  `json:"epoch"`
-	StoppedBy            string `json:"stopped_by,omitempty"`
+	VMID                 string             `json:"vm_id"`
+	UserID               string             `json:"user_id"`
+	DesktopID            string             `json:"desktop_id"`
+	Kind                 VMKind             `json:"kind,omitempty"`
+	ParentDesktopID      string             `json:"parent_desktop_id,omitempty"`
+	ParentVMID           string             `json:"parent_vm_id,omitempty"`
+	SnapshotKind         string             `json:"snapshot_kind,omitempty"`
+	WorkerID             string             `json:"worker_id,omitempty"`
+	ParentAgentID        string             `json:"parent_agent_id,omitempty"`
+	TrajectoryID         string             `json:"trajectory_id,omitempty"`
+	Purpose              string             `json:"purpose,omitempty"`
+	ObjectiveFingerprint string             `json:"objective_fingerprint,omitempty"`
+	MachineClass         string             `json:"machine_class,omitempty"`
+	WarmnessClass        string             `json:"warmness_class,omitempty"`
+	Published            bool               `json:"published"`
+	SandboxURL           string             `json:"sandbox_url"`
+	State                string             `json:"state"`
+	CreatedAt            string             `json:"created_at"`
+	LastActiveAt         string             `json:"last_active_at"`
+	Epoch                int64              `json:"epoch"`
+	StoppedBy            string             `json:"stopped_by,omitempty"`
 	DataImage            *dataImageResponse `json:"data_image,omitempty"`
 }
 
@@ -840,6 +840,25 @@ func (h *Handler) HandleRetentionPlan(w http.ResponseWriter, r *http.Request) {
 	writeVMCTLJSON(w, http.StatusOK, h.registry.RetentionPrunePlan())
 }
 
+// HandleRetentionShadowPlan handles GET /internal/vmctl/retention-shadow-plan.
+// It returns an observation-only retention inventory. The shadow plan is never
+// consumed by prune or reclaim deletion paths.
+func (h *Handler) HandleRetentionShadowPlan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
+			Error: "vmctl control endpoints are not publicly accessible",
+		})
+		return
+	}
+
+	writeVMCTLJSON(w, http.StatusOK, h.registry.RetentionShadowPlan())
+}
+
 // HandlePrune handles POST /internal/vmctl/prune. It applies the bounded
 // retention policy for orphan and explicitly ephemeral VM state.
 func (h *Handler) HandlePrune(w http.ResponseWriter, r *http.Request) {
@@ -1013,7 +1032,6 @@ func (h *Handler) HandleSandboxProxy(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-
 func runtimePackageServiceEnv(r *http.Request) map[string]string {
 	out := make(map[string]string)
 	host := strings.TrimSpace(r.Host)
@@ -1184,6 +1202,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
 	s.HandleFunc("/internal/vmctl/reclaim", h.HandleReclaim)
 	s.HandleFunc("/internal/vmctl/retention-plan", h.HandleRetentionPlan)
+	s.HandleFunc("/internal/vmctl/retention-shadow-plan", h.HandleRetentionShadowPlan)
 	s.HandleFunc("/internal/vmctl/prune", h.HandlePrune)
 	s.HandleFunc("/internal/vmctl/runtime-package/sandbox", h.HandleRuntimePackage)
 	s.HandleFunc("/internal/vmctl/sandbox-proxy/", h.HandleSandboxProxy)
@@ -1289,6 +1308,12 @@ func ReclaimEndpoint(baseURL string) string {
 // vmctl service at the given base URL.
 func RetentionPlanEndpoint(baseURL string) string {
 	return fmt.Sprintf("%s/internal/vmctl/retention-plan", baseURL)
+}
+
+// RetentionShadowPlanEndpoint returns the full retention-shadow-plan endpoint
+// URL for the vmctl service at the given base URL.
+func RetentionShadowPlanEndpoint(baseURL string) string {
+	return fmt.Sprintf("%s/internal/vmctl/retention-shadow-plan", baseURL)
 }
 
 // PruneEndpoint returns the full prune endpoint URL for the vmctl service at

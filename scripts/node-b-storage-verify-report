@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+report="${1:-}"
+if [ -z "$report" ] || [ "$report" = "-h" ] || [ "$report" = "--help" ]; then
+  cat <<'USAGE'
+Usage: scripts/node-b-storage-verify-report REPORT.json
+
+Read-only verifier for scripts/node-b-storage-report --format json output.
+Fails closed if protected identities or no-delete gates are missing.
+USAGE
+  exit 2
+fi
+
+if [ ! -r "$report" ]; then
+  echo "report is not readable: $report" >&2
+  exit 2
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required to verify $report" >&2
+  exit 2
+fi
+
+jq -e '
+  def protected_refused($email):
+    [.auth_identity_mapping.protected_email_results[]
+      | select(.email == $email and .present == 1 and .action == "refuse_delete")]
+    | length >= 1;
+
+  (.mode == "report-only; no deletion, GC, service restart, or VM mutation")
+  and (.policies.active_delete_authorized == 0)
+  and (.baseline_cleanup_plan.active_delete_authorized == 0)
+  and (.manual_recovery_snapshots.policy_status == "report-only; no snapshot deletion authorized")
+  and (.nix_roots.policy_status == "report-only; no root deletion or nix-store GC authorized")
+  and protected_refused("yusefnathanson@me.com")
+  and protected_refused("a@b.com")
+  and protected_refused("b@c.com")
+  and (.fake_or_synthetic_users.protected_identity_allocated_refusal_bytes > 0)
+  and (.manual_recovery_snapshots.metadata_missing_count == .manual_recovery_snapshots.snapshot_count)
+  and (.projected_reclaim_and_refusals.vmctl_active_retention_candidates_bytes == 0)
+  and ((.vmctl.retention_shadow_plan == null) or (.vmctl.retention_shadow_mode == "dry-run"))
+' "$report" >/dev/null
+
+echo "node-b storage report verification passed: $report"

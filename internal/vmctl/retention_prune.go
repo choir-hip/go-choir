@@ -166,6 +166,24 @@ func retentionPruneConfigSummary(cfg RetentionPruneConfig) RetentionPruneConfigS
 
 func (r *OwnershipRegistry) RetentionPrunePlan() RetentionPrunePlan {
 	cfg, ownerships, emails := r.retentionSnapshot()
+	return retentionPrunePlanFromSnapshot(cfg, ownerships, emails)
+}
+
+func (r *OwnershipRegistry) RetentionShadowPlan() RetentionPrunePlan {
+	cfg, ownerships, emails, ok := r.retentionShadowSnapshot()
+	if !ok {
+		cfg := normalizeRetentionPruneConfig(RetentionPruneConfig{Mode: RetentionPruneModeOff})
+		return RetentionPrunePlan{
+			Mode:     cfg.Mode,
+			Decision: "disabled",
+			Reason:   "retention shadow plan is disabled",
+			Config:   retentionPruneConfigSummary(cfg),
+		}
+	}
+	return retentionPrunePlanFromSnapshot(cfg, ownerships, emails)
+}
+
+func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, ownerships []*VMOwnership, emails map[string]string) RetentionPrunePlan {
 	plan := RetentionPrunePlan{
 		Mode:     cfg.Mode,
 		Decision: "disabled",
@@ -260,6 +278,30 @@ func (r *OwnershipRegistry) retentionSnapshot() (RetentionPruneConfig, []*VMOwne
 		emails[userID] = email
 	}
 	return cfg, ownerships, emails
+}
+
+func (r *OwnershipRegistry) retentionShadowSnapshot() (RetentionPruneConfig, []*VMOwnership, map[string]string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if !r.retentionShadowPruneEnabled {
+		return RetentionPruneConfig{}, nil, nil, false
+	}
+	cfg := normalizeRetentionPruneConfig(r.retentionShadowPrune)
+	if cfg.Mode != RetentionPruneModeOff {
+		cfg.Mode = RetentionPruneModeDryRun
+	}
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	for _, own := range r.ownerships {
+		ownerships = append(ownerships, cloneOwnership(own))
+	}
+	for _, own := range r.workerVMs {
+		ownerships = append(ownerships, cloneOwnership(own))
+	}
+	emails := make(map[string]string, len(r.retentionUserEmails))
+	for userID, email := range r.retentionUserEmails {
+		emails[userID] = email
+	}
+	return cfg, ownerships, emails, true
 }
 
 func retentionOrphanCandidates(cfg RetentionPruneConfig, ownedVMs map[string]bool, now time.Time) ([]RetentionPruneCandidate, int, int, []string) {

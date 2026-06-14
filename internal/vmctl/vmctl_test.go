@@ -1159,42 +1159,98 @@ func TestOwnershipRegistry_RetentionPlanTargetsOnlyOrphansAndEphemeralPrimaries(
 	stateDir := t.TempDir()
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetRetentionPruneConfig(RetentionPruneConfig{
-		Mode:                  RetentionPruneModeDryRun,
-		StateDir:              stateDir,
-		EphemeralEmailDomains: []string{"example.com"},
-		OrphanMinAge:          time.Hour,
-		EphemeralMinAge:       time.Hour,
-		MaxDeletes:            10,
-		MaxBytes:              1024 * 1024 * 1024,
+		Mode:                    RetentionPruneModeDryRun,
+		StateDir:                stateDir,
+		EphemeralEmailDomains:   []string{"example.com", "example.test"},
+		EphemeralUserIDPrefixes: []string{"diagnostic-", "sourcemaxx-proof-"},
+		OrphanMinAge:            time.Hour,
+		EphemeralMinAge:         time.Hour,
+		MaxDeletes:              10,
+		MaxBytes:                1024 * 1024 * 1024,
 	})
 	reg.setRetentionUserEmailsForTest(map[string]string{
-		"test-user":   "playwright@example.com",
-		"real-user":   "owner@choir-ip.com",
-		"active-user": "active@example.com",
+		"test-user":         "playwright@example.com",
+		"example-test-user": "load@example.test",
+		"real-user":         "yusefnathanson@me.com",
+		"owner-test-a":      "a@b.com",
+		"owner-test-b":      "b@c.com",
+		"active-user":       "active@example.com",
+		"branch-user":       "branch@example.test",
 	})
 	testOwn, err := reg.ResolveOrAssign("test-user")
 	if err != nil {
 		t.Fatalf("resolve test user: %v", err)
 	}
+	exampleTestOwn, err := reg.ResolveOrAssign("example-test-user")
+	if err != nil {
+		t.Fatalf("resolve example.test user: %v", err)
+	}
+	syntheticOwn, err := reg.ResolveOrAssign("diagnostic-1778792614")
+	if err != nil {
+		t.Fatalf("resolve synthetic user: %v", err)
+	}
+	sourcemaxxOwn, err := reg.ResolveOrAssign("sourcemaxx-proof-85751dc5")
+	if err != nil {
+		t.Fatalf("resolve sourcemaxx synthetic user: %v", err)
+	}
 	realOwn, err := reg.ResolveOrAssign("real-user")
 	if err != nil {
 		t.Fatalf("resolve real user: %v", err)
+	}
+	ownerTestAOwn, err := reg.ResolveOrAssign("owner-test-a")
+	if err != nil {
+		t.Fatalf("resolve owner test a: %v", err)
+	}
+	ownerTestBOwn, err := reg.ResolveOrAssign("owner-test-b")
+	if err != nil {
+		t.Fatalf("resolve owner test b: %v", err)
 	}
 	activeOwn, err := reg.ResolveOrAssign("active-user")
 	if err != nil {
 		t.Fatalf("resolve active user: %v", err)
 	}
+	if _, err := reg.ResolveOrAssign("branch-user"); err != nil {
+		t.Fatalf("resolve branch user primary: %v", err)
+	}
+	branchOwn, err := reg.ForkDesktop("branch-user", PrimaryDesktopID, "candidate-a")
+	if err != nil {
+		t.Fatalf("fork branch user: %v", err)
+	}
 	old := time.Now().Add(-3 * time.Hour)
 	reg.mu.Lock()
 	reg.ownerships[ownershipKey("test-user", PrimaryDesktopID)].State = VMStateHibernated
 	reg.ownerships[ownershipKey("test-user", PrimaryDesktopID)].LastActiveAt = old
+	reg.ownerships[ownershipKey("example-test-user", PrimaryDesktopID)].State = VMStateHibernated
+	reg.ownerships[ownershipKey("example-test-user", PrimaryDesktopID)].LastActiveAt = old
+	reg.ownerships[ownershipKey("diagnostic-1778792614", PrimaryDesktopID)].State = VMStateHibernated
+	reg.ownerships[ownershipKey("diagnostic-1778792614", PrimaryDesktopID)].LastActiveAt = old
+	reg.ownerships[ownershipKey("sourcemaxx-proof-85751dc5", PrimaryDesktopID)].State = VMStateHibernated
+	reg.ownerships[ownershipKey("sourcemaxx-proof-85751dc5", PrimaryDesktopID)].LastActiveAt = old
 	reg.ownerships[ownershipKey("real-user", PrimaryDesktopID)].State = VMStateHibernated
 	reg.ownerships[ownershipKey("real-user", PrimaryDesktopID)].LastActiveAt = old
+	reg.ownerships[ownershipKey("owner-test-a", PrimaryDesktopID)].State = VMStateHibernated
+	reg.ownerships[ownershipKey("owner-test-a", PrimaryDesktopID)].LastActiveAt = old
+	reg.ownerships[ownershipKey("owner-test-b", PrimaryDesktopID)].State = VMStateHibernated
+	reg.ownerships[ownershipKey("owner-test-b", PrimaryDesktopID)].LastActiveAt = old
 	reg.ownerships[ownershipKey("active-user", PrimaryDesktopID)].State = VMStateActive
 	reg.ownerships[ownershipKey("active-user", PrimaryDesktopID)].LastActiveAt = old
+	reg.ownerships[ownershipKey("branch-user", "candidate-a")].State = VMStateHibernated
+	reg.ownerships[ownershipKey("branch-user", "candidate-a")].LastActiveAt = old
 	reg.mu.Unlock()
 
-	for _, vmID := range []string{testOwn.VMID, realOwn.VMID, activeOwn.VMID, "vm-orphan-old", "vm-orphan-recent"} {
+	for _, vmID := range []string{
+		testOwn.VMID,
+		exampleTestOwn.VMID,
+		syntheticOwn.VMID,
+		sourcemaxxOwn.VMID,
+		realOwn.VMID,
+		ownerTestAOwn.VMID,
+		ownerTestBOwn.VMID,
+		activeOwn.VMID,
+		branchOwn.VMID,
+		"vm-orphan-old",
+		"vm-orphan-recent",
+	} {
 		dir := filepath.Join(stateDir, vmID)
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			t.Fatalf("mkdir %s: %v", vmID, err)
@@ -1215,17 +1271,146 @@ func TestOwnershipRegistry_RetentionPlanTargetsOnlyOrphansAndEphemeralPrimaries(
 	if !retentionPlanHasVM(plan, testOwn.VMID) {
 		t.Fatalf("plan missing ephemeral test primary %s: %+v", testOwn.VMID, plan.Candidates)
 	}
+	if !retentionPlanHasVM(plan, exampleTestOwn.VMID) {
+		t.Fatalf("plan missing example.test primary %s: %+v", exampleTestOwn.VMID, plan.Candidates)
+	}
+	if !retentionPlanHasVM(plan, syntheticOwn.VMID) {
+		t.Fatalf("plan missing synthetic-prefix primary %s: %+v", syntheticOwn.VMID, plan.Candidates)
+	}
+	if !retentionPlanHasVM(plan, sourcemaxxOwn.VMID) {
+		t.Fatalf("plan missing sourcemaxx synthetic-prefix primary %s: %+v", sourcemaxxOwn.VMID, plan.Candidates)
+	}
 	if !retentionPlanHasVM(plan, "vm-orphan-old") {
 		t.Fatalf("plan missing old orphan: %+v", plan.Candidates)
 	}
 	if retentionPlanHasVM(plan, realOwn.VMID) {
 		t.Fatalf("plan must not include real user primary %s: %+v", realOwn.VMID, plan.Candidates)
 	}
+	if retentionPlanHasVM(plan, ownerTestAOwn.VMID) {
+		t.Fatalf("plan must not include owner test account a %s: %+v", ownerTestAOwn.VMID, plan.Candidates)
+	}
+	if retentionPlanHasVM(plan, ownerTestBOwn.VMID) {
+		t.Fatalf("plan must not include owner test account b %s: %+v", ownerTestBOwn.VMID, plan.Candidates)
+	}
 	if retentionPlanHasVM(plan, activeOwn.VMID) {
 		t.Fatalf("plan must not include active ephemeral primary %s: %+v", activeOwn.VMID, plan.Candidates)
 	}
+	if retentionPlanHasVM(plan, branchOwn.VMID) {
+		t.Fatalf("plan must not include unpublished non-primary desktop %s: %+v", branchOwn.VMID, plan.Candidates)
+	}
 	if retentionPlanHasVM(plan, "vm-orphan-recent") {
 		t.Fatalf("plan must not include recent orphan: %+v", plan.Candidates)
+	}
+}
+
+func TestOwnershipRegistry_RetentionShadowPlanDoesNotExpandActivePrune(t *testing.T) {
+	stateDir := t.TempDir()
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetRetentionPruneConfig(RetentionPruneConfig{
+		Mode:                  RetentionPruneModeActive,
+		StateDir:              stateDir,
+		EphemeralEmailDomains: []string{"example.com"},
+		EphemeralMinAge:       time.Hour,
+		MaxDeletes:            10,
+		MaxBytes:              1024 * 1024 * 1024,
+	})
+	reg.SetRetentionShadowPruneConfig(RetentionPruneConfig{
+		Mode:                    RetentionPruneModeActive,
+		StateDir:                stateDir,
+		EphemeralEmailDomains:   []string{"example.com", "example.test"},
+		EphemeralUserIDPrefixes: []string{"diagnostic-"},
+		EphemeralMinAge:         time.Hour,
+		MaxDeletes:              10,
+		MaxBytes:                1024 * 1024 * 1024,
+	})
+	reg.setRetentionUserEmailsForTest(map[string]string{
+		"active-policy-user": "playwright@example.com",
+		"shadow-email-user":  "load@example.test",
+		"real-user":          "yusefnathanson@me.com",
+	})
+
+	activeOwn, err := reg.ResolveOrAssign("active-policy-user")
+	if err != nil {
+		t.Fatalf("resolve active policy user: %v", err)
+	}
+	shadowEmailOwn, err := reg.ResolveOrAssign("shadow-email-user")
+	if err != nil {
+		t.Fatalf("resolve shadow email user: %v", err)
+	}
+	shadowSyntheticOwn, err := reg.ResolveOrAssign("diagnostic-1778792614")
+	if err != nil {
+		t.Fatalf("resolve shadow synthetic user: %v", err)
+	}
+	realOwn, err := reg.ResolveOrAssign("real-user")
+	if err != nil {
+		t.Fatalf("resolve real user: %v", err)
+	}
+
+	old := time.Now().Add(-3 * time.Hour)
+	reg.mu.Lock()
+	for _, userID := range []string{"active-policy-user", "shadow-email-user", "diagnostic-1778792614", "real-user"} {
+		own := reg.ownerships[ownershipKey(userID, PrimaryDesktopID)]
+		own.State = VMStateHibernated
+		own.LastActiveAt = old
+	}
+	reg.mu.Unlock()
+
+	for _, vmID := range []string{activeOwn.VMID, shadowEmailOwn.VMID, shadowSyntheticOwn.VMID, realOwn.VMID} {
+		dir := filepath.Join(stateDir, vmID)
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("mkdir %s: %v", vmID, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "data"), []byte("state"), 0o600); err != nil {
+			t.Fatalf("write %s: %v", vmID, err)
+		}
+	}
+
+	activePlan := reg.RetentionPrunePlan()
+	if activePlan.Mode != RetentionPruneModeActive {
+		t.Fatalf("active plan mode = %s, want active", activePlan.Mode)
+	}
+	if !retentionPlanHasVM(activePlan, activeOwn.VMID) {
+		t.Fatalf("active plan missing active-policy VM %s: %+v", activeOwn.VMID, activePlan.Candidates)
+	}
+	if retentionPlanHasVM(activePlan, shadowEmailOwn.VMID) {
+		t.Fatalf("active plan must not include shadow example.test VM %s: %+v", shadowEmailOwn.VMID, activePlan.Candidates)
+	}
+	if retentionPlanHasVM(activePlan, shadowSyntheticOwn.VMID) {
+		t.Fatalf("active plan must not include shadow synthetic VM %s: %+v", shadowSyntheticOwn.VMID, activePlan.Candidates)
+	}
+	if retentionPlanHasVM(activePlan, realOwn.VMID) {
+		t.Fatalf("active plan must not include protected real-user VM %s: %+v", realOwn.VMID, activePlan.Candidates)
+	}
+
+	shadowPlan := reg.RetentionShadowPlan()
+	if shadowPlan.Mode != RetentionPruneModeDryRun {
+		t.Fatalf("shadow plan mode = %s, want dry-run", shadowPlan.Mode)
+	}
+	if shadowPlan.Decision != "would_prune" {
+		t.Fatalf("shadow plan decision = %s, want would_prune: %+v", shadowPlan.Decision, shadowPlan)
+	}
+	for _, vmID := range []string{activeOwn.VMID, shadowEmailOwn.VMID, shadowSyntheticOwn.VMID} {
+		if !retentionPlanHasVM(shadowPlan, vmID) {
+			t.Fatalf("shadow plan missing VM %s: %+v", vmID, shadowPlan.Candidates)
+		}
+	}
+	if retentionPlanHasVM(shadowPlan, realOwn.VMID) {
+		t.Fatalf("shadow plan must not include protected real-user VM %s: %+v", realOwn.VMID, shadowPlan.Candidates)
+	}
+
+	mgr := &mockVMManager{}
+	reg.SetVMManager(mgr)
+	result := reg.PruneRetention()
+	if result.Deleted != 1 {
+		t.Fatalf("deleted = %d, want 1: %+v", result.Deleted, result)
+	}
+	if !containsString(mgr.destroys, activeOwn.VMID) {
+		t.Fatalf("destroyed VMs = %v, want active policy VM %s", mgr.destroys, activeOwn.VMID)
+	}
+	for _, vmID := range []string{shadowEmailOwn.VMID, shadowSyntheticOwn.VMID, realOwn.VMID} {
+		if containsString(mgr.destroys, vmID) {
+			t.Fatalf("active prune must not destroy shadow/protected VM %s: %v", vmID, mgr.destroys)
+		}
 	}
 }
 
@@ -2618,6 +2803,9 @@ func TestEndpointURLs(t *testing.T) {
 	if got := RetentionPlanEndpoint(base); got != "http://localhost:8083/internal/vmctl/retention-plan" {
 		t.Errorf("RetentionPlanEndpoint = %s", got)
 	}
+	if got := RetentionShadowPlanEndpoint(base); got != "http://localhost:8083/internal/vmctl/retention-shadow-plan" {
+		t.Errorf("RetentionShadowPlanEndpoint = %s", got)
+	}
 	if got := PruneEndpoint(base); got != "http://localhost:8083/internal/vmctl/prune" {
 		t.Errorf("PruneEndpoint = %s", got)
 	}
@@ -3257,6 +3445,7 @@ func TestHandler_LifecycleEndpointsDenyExternalCallers(t *testing.T) {
 		{"/internal/vmctl/idle-check", "POST", ""},
 		{"/internal/vmctl/reclaim", "POST", ""},
 		{"/internal/vmctl/retention-plan", "GET", ""},
+		{"/internal/vmctl/retention-shadow-plan", "GET", ""},
 		{"/internal/vmctl/prune", "POST", ""},
 	}
 

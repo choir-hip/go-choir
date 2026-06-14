@@ -1,0 +1,1049 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+host="${NODE_B_HOST:-node-b}"
+mode="ssh"
+top_n="${NODE_B_STORAGE_TOP_N:-20}"
+report_format="${NODE_B_STORAGE_REPORT_FORMAT:-${REPORT_FORMAT:-markdown}}"
+vm_state_dir="${VM_STATE_DIR:-/var/lib/go-choir/vm-state}"
+auth_db_path="${AUTH_DB_PATH:-/var/lib/go-choir/auth/auth.db}"
+protected_emails="${NODE_B_PROTECTED_EMAILS:-yusefnathanson@me.com,a@b.com,b@c.com}"
+protected_user_ids="${NODE_B_PROTECTED_USER_IDS:-5bd6de97-3b58-408c-bf89-c42c81b083de}"
+fake_email_domains="${NODE_B_FAKE_EMAIL_DOMAINS:-example.com,example.test}"
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/node-b-storage-report [--host node-b|--local] [options]
+
+Read-only Node B storage classifier. Emits a Markdown or JSON report covering
+vm-state, data.img allocation, manual recovery snapshots, fake-user ownerships,
+Nix roots, and projected reclaim/refusal reasons.
+
+Options:
+  --host HOST                 SSH host alias to inspect (default: node-b)
+  --local                     Inspect the current host instead of SSH
+  --top N                     Number of largest VM/state rows to show
+  --format markdown|json      Output format (default: markdown)
+  --auth-db PATH              Auth SQLite DB path
+  --protected-email EMAIL     Add a protected email policy entry
+  --protected-user-id UUID    Add a protected vmctl user_id entry
+  --fake-email-domain DOMAIN  Add a fake-user email domain dry-run class
+  -h, --help                  Show this help
+USAGE
+}
+
+add_csv_value() {
+  local current="$1"
+  local value="$2"
+  if [ -z "$current" ]; then
+    printf '%s' "$value"
+  else
+    printf '%s,%s' "$current" "$value"
+  fi
+}
+
+remote_quote() {
+  printf '%q' "$1"
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --host)
+      host="${2:?missing --host value}"
+      mode="ssh"
+      shift 2
+      ;;
+    --local)
+      mode="local"
+      shift
+      ;;
+    --top)
+      top_n="${2:?missing --top value}"
+      shift 2
+      ;;
+    --format)
+      report_format="${2:?missing --format value}"
+      case "$report_format" in
+        markdown|json) ;;
+        *)
+          echo "unknown --format value: $report_format" >&2
+          usage >&2
+          exit 2
+          ;;
+      esac
+      shift 2
+      ;;
+    --auth-db)
+      auth_db_path="${2:?missing --auth-db value}"
+      shift 2
+      ;;
+    --protected-email)
+      protected_emails="$(add_csv_value "$protected_emails" "${2:?missing --protected-email value}")"
+      shift 2
+      ;;
+    --protected-user-id)
+      protected_user_ids="$(add_csv_value "$protected_user_ids" "${2:?missing --protected-user-id value}")"
+      shift 2
+      ;;
+    --fake-email-domain)
+      fake_email_domains="$(add_csv_value "$fake_email_domains" "${2:?missing --fake-email-domain value}")"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+run_report() {
+  perl <<'PERL'
+use strict;
+use warnings;
+use JSON::PP qw(decode_json);
+use POSIX qw(strftime);
+use Time::Piece;
+
+my $vm_state_dir = $ENV{VM_STATE_DIR} || "/var/lib/go-choir/vm-state";
+my $auth_db_path = $ENV{AUTH_DB_PATH} || "/var/lib/go-choir/auth/auth.db";
+my $top_n = int($ENV{TOP_N} || 20);
+my $report_format = $ENV{REPORT_FORMAT} || "markdown";
+my @protected_emails = map { lc $_ } grep { length($_) } split(/,/, $ENV{PROTECTED_EMAILS} || "");
+my @protected_user_ids = grep { length($_) } split(/,/, $ENV{PROTECTED_USER_IDS} || "");
+my @fake_email_domains = map { lc $_ } grep { length($_) } split(/,/, $ENV{FAKE_EMAIL_DOMAINS} || "");
+my %protected_user_id = map { $_ => 1 } @protected_user_ids;
+my %protected_email = map { $_ => 1 } @protected_emails;
+my %fake_email_domain = map { $_ => 1 } @fake_email_domains;
+
+sub sh {
+  my ($cmd) = @_;
+  my $out = `$cmd 2>/dev/null`;
+  chomp $out;
+  return $out;
+}
+
+sub capture_json {
+  my ($cmd) = @_;
+  my $out = `$cmd 2>/dev/null`;
+  return undef if $?;
+  return eval { decode_json($out) };
+}
+
+sub fmt_bytes {
+  my ($bytes) = @_;
+  $bytes ||= 0;
+  my @units = qw(B KiB MiB GiB TiB);
+  my $n = $bytes + 0;
+  my $i = 0;
+  while ($n >= 1024 && $i < $#units) {
+    $n /= 1024;
+    $i++;
+  }
+  return $i == 0 ? sprintf("%d %s", $n, $units[$i]) : sprintf("%.2f %s", $n, $units[$i]);
+}
+
+sub shell_quote {
+  my ($s) = @_;
+  $s =~ s/'/'"'"'/g;
+  return "'$s'";
+}
+
+sub stat_size {
+  my ($path) = @_;
+  return 0 unless -e $path;
+  my $out = sh("stat -c %s " . shell_quote($path));
+  return $out =~ /^\d+$/ ? int($out) : 0;
+}
+
+sub du_size {
+  my ($path) = @_;
+  return 0 unless -e $path;
+  my $out = sh("du -sxB1 " . shell_quote($path) . " | awk '{print \$1}'");
+  return $out =~ /^\d+$/ ? int($out) : 0;
+}
+
+sub read_ownerships {
+  my $path = "$vm_state_dir/ownerships.json";
+  open my $fh, "<", $path or return ();
+  local $/;
+  my $json = <$fh>;
+  close $fh;
+  my $doc = eval { decode_json($json) };
+  return () unless $doc && ref($doc->{ownerships}) eq "ARRAY";
+  return @{$doc->{ownerships}};
+}
+
+sub bool_text {
+  my ($v) = @_;
+  return $v ? "true" : "false";
+}
+
+sub iso_age_seconds {
+  my ($raw) = @_;
+  return 0 unless $raw;
+  my $s = $raw;
+  $s =~ s/\.\d+Z$/Z/;
+  my $t = eval { Time::Piece->strptime($s, "%Y-%m-%dT%H:%M:%SZ") };
+  return 0 if !$t;
+  my $age = time() - $t->epoch;
+  return $age > 0 ? int($age) : 0;
+}
+
+sub fmt_age {
+  my ($seconds) = @_;
+  return "unknown" if !$seconds || $seconds <= 0;
+  return sprintf("%.1fd", $seconds / 86400);
+}
+
+sub fmt_epoch {
+  my ($epoch) = @_;
+  return "unknown" if !$epoch || $epoch <= 0;
+  return strftime("%Y-%m-%dT%H:%M:%SZ", gmtime($epoch));
+}
+
+sub terminal_vm_state {
+  my ($state) = @_;
+  return $state eq "hibernated" || $state eq "stopped" || $state eq "failed";
+}
+
+sub vmctl_ephemeral_primary_gate {
+  my ($kind, $desktop, $published, $state, $age_seconds) = @_;
+  return "not current vmctl retention kind; refuse non-interactive VM ownership"
+    if $kind ne "interactive";
+  return "not current vmctl retention desktop; refuse non-primary or missing desktop ownership"
+    if $desktop ne "primary";
+  return "not current vmctl retention publication state; refuse unpublished ownership"
+    if !$published;
+  return "not lifecycle eligible; refuse active, booting, or otherwise non-terminal VM state"
+    if !terminal_vm_state($state);
+  return "not age eligible under 24h policy; wait or require explicit owner override"
+    if $age_seconds < 86400;
+  return "";
+}
+
+sub find_sqlite {
+  my $sqlite = sh("command -v sqlite3");
+  return $sqlite if $sqlite && -x $sqlite;
+  $sqlite = sh("find /nix/store -maxdepth 4 -path '*/bin/sqlite3' -type f | sort | head -1");
+  return $sqlite if $sqlite && -x $sqlite;
+  return "";
+}
+
+sub nix_root_policy {
+  my ($root, $target_exists) = @_;
+  return (
+    $target_exists ? "current_deploy_root_preserve" : "broken_current_deploy_root_repair",
+    $target_exists ? "preserve_current_root" : "repair_or_remove_broken_root_after deploy identity proof",
+    $target_exists ? "must match deployed service identity before any GC policy depends on it" : "broken current pointer; fix deployment root before pruning roots"
+  ) if $root eq "/opt/go-choir/result";
+
+  return (
+    "host_system_build_root_review",
+    "keep current plus explicit rollback generation only",
+    "requires deployed system identity and rollback manifest before pruning"
+  ) if $root eq "/tmp/go-choir-nixos-result";
+
+  return (
+    "guest_image_candidate_root_review",
+    "keep latest proven guest image root; prune replaced candidates after rollback review",
+    "requires guest image deploy identity, latest-image pointer, and rollback window"
+  ) if $root eq "/tmp/go-choir-guest-image-new" || $root eq "/tmp/guest-image-result";
+
+  return (
+    "browser_worker_guest_image_root_review",
+    "keep only if browser worker class is currently required",
+    "requires worker-class inventory and rollback decision"
+  ) if $root eq "/tmp/guest-image-playwright-result";
+
+  return (
+    "service_build_root_review",
+    "keep only current service closure plus explicit rollback root",
+    "requires service deploy identity and rollback manifest before pruning"
+  ) if $root =~ m{^/tmp/go-choir-service-.+-result$} || $root eq "/tmp/go-choir-frontend-result";
+
+  return (
+    "unknown_nix_root_review",
+    "classify manually before deletion",
+    "unknown root policy"
+  );
+}
+
+sub snapshot_policy {
+  my ($name, $vm_id, $user_id, $is_protected, $is_platform) = @_;
+  return (
+    "platform_migration_snapshot_review",
+    "platform migration seed or empty-disk rollback artifact",
+    "preserve_until_platform_migration_lineage_and_rollback_window_are_proven",
+    "metadata missing; require platform lineage proof before deletion"
+  ) if $is_platform || $name =~ /pre-migration-empty/;
+
+  return (
+    "corrupt_disk_quarantine_review",
+    "quarantined suspected-corrupt data image from recovery branch",
+    "preserve_until_owner_recovery_is_settled_and_good_image_backup_exists",
+    "metadata missing; require recovery settlement, replacement backup, and owner approval before deletion"
+  ) if $name =~ /corrupt/i;
+
+  return (
+    "pre_prune_rollback_review",
+    "operator rollback copy before pruning or filesystem repair",
+    "preserve_until_owner_recovery_is_settled_and_prune_inputs_are_rebuildable",
+    "metadata missing; require recovery settlement, rebuildable-cache proof, and owner approval before deletion"
+  ) if $name =~ /pre-prune/i;
+
+  return (
+    $is_protected ? "protected_user_manual_snapshot_review" : "manual_data_img_snapshot_review",
+    "manual data.img snapshot with unknown recovery purpose",
+    "preserve_until_typed_snapshot_metadata_is_attached",
+    "metadata missing; classify purpose and rollback value before deletion"
+  );
+}
+
+my $now = strftime("%Y-%m-%dT%H:%M:%SZ", gmtime());
+my $host = sh("hostname");
+my $df = sh("df -h / " . shell_quote($vm_state_dir) . " | sed -n '1,3p'");
+my $nix_store_total = du_size("/nix/store");
+
+my $health = capture_json("curl -fsS http://127.0.0.1:8083/internal/vmctl/health");
+my $retention = capture_json("curl -fsS http://127.0.0.1:8083/internal/vmctl/retention-plan");
+my $retention_shadow = capture_json("curl -fsS http://127.0.0.1:8083/internal/vmctl/retention-shadow-plan");
+my @ownerships = read_ownerships();
+my %by_vm = map { ($_->{vm_id} || "") => $_ } @ownerships;
+
+my $sqlite = find_sqlite();
+my $email_mapping = "unavailable: sqlite3 is not installed on Node B";
+my %email_by_user_id;
+my %domain_by_user_id;
+my %domain_counts;
+my $auth_user_count = 0;
+if ($sqlite && -r $auth_db_path) {
+  my $query = "select id || char(9) || lower(email) || char(9) || lower(substr(email,instr(email,char(64))+1)) from users order by email";
+  my $out = sh(shell_quote($sqlite) . " -readonly " . shell_quote($auth_db_path) . " " . shell_quote($query));
+  for my $line (split(/\n/, $out)) {
+    my ($id, $email, $domain) = split(/\t/, $line, 3);
+    next unless $id && $email;
+    $auth_user_count++;
+    $email_by_user_id{$id} = $email;
+    $domain_by_user_id{$id} = $domain || "";
+    $domain_counts{$domain || "unknown"}++;
+    $protected_user_id{$id} = 1 if $protected_email{$email};
+  }
+  $email_mapping = "available via " . $sqlite;
+} elsif ($sqlite) {
+  $email_mapping = "unavailable: auth DB is not readable at " . $auth_db_path;
+}
+
+my %state_dir_bytes;
+for my $line (split(/\n/, sh("find " . shell_quote($vm_state_dir) . " -mindepth 1 -maxdepth 1 -type d -name 'vm-*' -print0 | xargs -0 -r du -sxB1"))) {
+  next unless $line =~ /^(\d+)\s+(.+)$/;
+  my ($bytes, $path) = ($1, $2);
+  $path =~ s{/$}{};
+  my ($vmid) = $path =~ m{/([^/]+)$};
+  $state_dir_bytes{$vmid} = int($bytes) if $vmid;
+}
+my $vm_state_total = 0;
+$vm_state_total += $_ for values %state_dir_bytes;
+
+my %data_alloc_bytes;
+for my $line (split(/\n/, sh("find " . shell_quote($vm_state_dir) . " -mindepth 2 -maxdepth 2 -type f -name 'data.img' -print0 | xargs -0 -r du -B1"))) {
+  next unless $line =~ /^(\d+)\s+(.+)$/;
+  my ($bytes, $path) = ($1, $2);
+  my ($vmid) = $path =~ m{/([^/]+)/data\.img$};
+  $data_alloc_bytes{$vmid} = int($bytes) if $vmid;
+}
+
+my %data_logical_bytes;
+for my $line (split(/\n/, sh("find " . shell_quote($vm_state_dir) . " -mindepth 2 -maxdepth 2 -type f -name 'data.img' -printf '%p\\t%s\\n'"))) {
+  my ($path, $logical) = split(/\t/, $line, 2);
+  my ($vmid) = ($path || "") =~ m{/([^/]+)/data\.img$};
+  $data_logical_bytes{$vmid} = int($logical || 0) if $vmid;
+}
+
+my @snapshots;
+my %snapshot_classes;
+my $snapshot_missing_metadata_count = 0;
+for my $line (split(/\n/, sh("find " . shell_quote($vm_state_dir) . " -mindepth 2 -maxdepth 2 -type f -name 'data.img.*' -printf '%p\\t%s\\t%TY-%Tm-%TdT%TH:%TM:%TSZ\\n' | sort"))) {
+  my ($path, $logical, $mtime) = split(/\t/, $line);
+  next unless $path;
+  my ($vmid, $name) = $path =~ m{/([^/]+)/(data\.img\..+)$};
+  my $own = $by_vm{$vmid || ""};
+  my $user_id = $own ? ($own->{user_id} || "") : "";
+  my $warm = $own ? ($own->{warmness_class} || "") : "";
+  my $desktop = $own ? ($own->{desktop_id} || "") : "";
+  my $is_protected = $protected_user_id{$user_id} ? 1 : 0;
+  my $is_platform = ($warm eq "public_platform" || $desktop eq "platform" || $user_id =~ /platform/ || ($vmid || "") =~ /platform/) ? 1 : 0;
+  my $mtime_epoch = sh("stat -c %Y " . shell_quote($path));
+  $mtime_epoch = $mtime_epoch =~ /^\d+$/ ? int($mtime_epoch) : 0;
+  my $age_seconds = $mtime_epoch > 0 ? time() - $mtime_epoch : 0;
+  $age_seconds = 0 if $age_seconds < 0;
+  my ($class, $purpose, $ttl_policy, $gate) = snapshot_policy($name || $path, $vmid || "", $user_id, $is_protected, $is_platform);
+  $snapshot_classes{$class}++;
+  $snapshot_missing_metadata_count++;
+  push @snapshots, {
+    vm_id => $vmid || "",
+    name => $name || $path,
+    path => $path,
+    user_id => $user_id,
+    logical => int($logical || 0),
+    allocated => du_size($path),
+    mtime => $mtime || "",
+    mtime_epoch => $mtime_epoch,
+    age_seconds => $age_seconds,
+    class => $class,
+    purpose => $purpose,
+    ttl_policy => $ttl_policy,
+    gate => $gate,
+    metadata_status => "inferred_from_filename_only",
+  };
+}
+
+my @rows;
+my %group;
+my %states;
+my %synthetic_users;
+my %fake_domain_users;
+my @cleanup_candidates;
+my @cleanup_refusals;
+my $protected_bytes = 0;
+my $platform_bytes = 0;
+my $identity_unresolved_bytes = 0;
+my $synthetic_review_bytes = 0;
+my $fake_domain_review_bytes = 0;
+my $fake_domain_policy_eligible_bytes = 0;
+my $fake_domain_policy_eligible_count = 0;
+my $synthetic_policy_eligible_bytes = 0;
+my $synthetic_policy_eligible_count = 0;
+my $synthetic_ownerships = 0;
+my $registered_user_refusal_bytes = 0;
+my $missing_auth_user_refusal_bytes = 0;
+my %bytes_by_user_id;
+
+for my $o (@ownerships) {
+  my $vm = $o->{vm_id} || "";
+  my $dir = "$vm_state_dir/$vm";
+  my $data = "$dir/data.img";
+  my $user = $o->{user_id} || "";
+  my $state = $o->{state} || "unknown";
+  my $kind = $o->{kind} || "unknown";
+  my $warm = $o->{warmness_class} || "";
+  my $desktop = $o->{desktop_id} || "";
+  my $email = $email_by_user_id{$user} || "";
+  my $domain = $domain_by_user_id{$user} || "";
+  my $age_seconds = iso_age_seconds($o->{last_active_at} || "");
+  my $published_bool = $o->{published} ? 1 : 0;
+  my $published = bool_text($published_bool);
+  my $dir_bytes = $state_dir_bytes{$vm} || du_size($dir);
+  my $data_alloc = $data_alloc_bytes{$vm} || 0;
+  my $data_logical = $data_logical_bytes{$vm} || stat_size($data);
+  my $snapshot_alloc = 0;
+  for my $s (@snapshots) {
+    $snapshot_alloc += $s->{allocated} if $s->{vm_id} eq $vm;
+  }
+  my $role = "identity_unresolved_primary_refusal";
+  if ($protected_user_id{$user}) {
+    $role = "protected_identity_refusal";
+    $protected_bytes += $dir_bytes;
+    push @cleanup_refusals, {
+      class => $role,
+      vm_id => $vm,
+      user_id => $user,
+      email => $email,
+      state => $state,
+      size => $dir_bytes,
+      age => $age_seconds,
+      reason => "owner_or_owner_test_account",
+      action => "refuse_delete",
+    };
+  } elsif ($warm eq "public_platform" || $desktop eq "platform" || $user =~ /platform/) {
+    $role = "platform_refusal";
+    $platform_bytes += $dir_bytes;
+    push @cleanup_refusals, {
+      class => $role,
+      vm_id => $vm,
+      user_id => $user,
+      email => $email,
+      state => $state,
+      size => $dir_bytes,
+      age => $age_seconds,
+      reason => "platform_or_published_computer",
+      action => "refuse_delete",
+    };
+  } elsif ($email_by_user_id{$user} && $fake_email_domain{$domain_by_user_id{$user} || ""}) {
+    $role = "fake_email_domain_dry_run";
+    $fake_domain_review_bytes += $dir_bytes;
+    $fake_domain_users{$domain_by_user_id{$user} || "unknown"}++;
+    my $gate = vmctl_ephemeral_primary_gate($kind, $desktop, $published_bool, $state, $age_seconds);
+    if ($gate eq "") {
+      $gate = "current vmctl ephemeral-primary guard plus owner-approved active policy plus rollback/refusal record";
+      $fake_domain_policy_eligible_count++;
+      $fake_domain_policy_eligible_bytes += $dir_bytes;
+    }
+    push @cleanup_candidates, {
+      class => $role,
+      vm_id => $vm,
+      user_id => $user,
+      email => $email,
+      state => $state,
+      size => $dir_bytes,
+      age => $age_seconds,
+      reason => "registered_fake_email_domain",
+      action => "review_then_destroy_vm_state_and_remove_ownership",
+      gate => $gate,
+    };
+  } elsif ($user !~ /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) {
+    $role = "synthetic_user_owner_review";
+    $synthetic_review_bytes += $dir_bytes;
+    $synthetic_ownerships++;
+    $synthetic_users{$user}++;
+    my $gate = vmctl_ephemeral_primary_gate($kind, $desktop, $published_bool, $state, $age_seconds);
+    if ($gate eq "") {
+      $gate = "current vmctl ephemeral-primary guard plus owner marks synthetic owner disposable plus rollback/refusal record";
+      $synthetic_policy_eligible_count++;
+      $synthetic_policy_eligible_bytes += $dir_bytes;
+    }
+    push @cleanup_candidates, {
+      class => $role,
+      vm_id => $vm,
+      user_id => $user,
+      email => "",
+      state => $state,
+      size => $dir_bytes,
+      age => $age_seconds,
+      reason => "synthetic_non_uuid_owner_id",
+      action => "owner_review_then_destroy_vm_state_and_remove_ownership",
+      gate => $gate,
+    };
+  } elsif ($email_by_user_id{$user}) {
+    $role = "registered_user_refusal";
+    $registered_user_refusal_bytes += $dir_bytes;
+    push @cleanup_refusals, {
+      class => $role,
+      vm_id => $vm,
+      user_id => $user,
+      email => $email,
+      state => $state,
+      size => $dir_bytes,
+      age => $age_seconds,
+      reason => "registered_non_fake_email_domain",
+      action => "refuse_delete",
+    };
+  } elsif ($email_mapping =~ /^available/) {
+    $role = "missing_auth_user_record_refusal";
+    $missing_auth_user_refusal_bytes += $dir_bytes;
+    push @cleanup_refusals, {
+      class => $role,
+      vm_id => $vm,
+      user_id => $user,
+      email => "",
+      state => $state,
+      size => $dir_bytes,
+      age => $age_seconds,
+      reason => "uuid_owner_missing_auth_user_record",
+      action => "refuse_until_missing_auth_policy_exists",
+    };
+  } else {
+    $identity_unresolved_bytes += $dir_bytes;
+    push @cleanup_refusals, {
+      class => $role,
+      vm_id => $vm,
+      user_id => $user,
+      email => "",
+      state => $state,
+      size => $dir_bytes,
+      age => $age_seconds,
+      reason => "email_mapping_unavailable",
+      action => "refuse_delete",
+    };
+  }
+  $bytes_by_user_id{$user} += $dir_bytes if $user;
+  my $g = join("/", $state, $warm || "none", $desktop || "none", $role);
+  $group{$g}{count}++;
+  $group{$g}{bytes} += $dir_bytes;
+  $states{$state}++;
+  push @rows, {
+    vm_id => $vm,
+    user_id => $user,
+    state => $state,
+    kind => $kind,
+    warmness => $warm,
+    desktop => $desktop,
+    published => $published,
+    role => $role,
+    dir_bytes => $dir_bytes,
+    data_alloc => $data_alloc,
+    data_logical => $data_logical,
+    snapshot_alloc => $snapshot_alloc,
+    last_active_at => $o->{last_active_at} || "",
+  };
+}
+
+for my $vm (sort keys %state_dir_bytes) {
+  next if $by_vm{$vm};
+  push @rows, {
+    vm_id => $vm,
+    user_id => "",
+    state => "orphan_state_dir",
+    kind => "",
+    warmness => "",
+    desktop => "",
+    published => "",
+    role => "orphan_review",
+    dir_bytes => $state_dir_bytes{$vm},
+    data_alloc => du_size("$vm_state_dir/$vm/data.img"),
+    data_logical => stat_size("$vm_state_dir/$vm/data.img"),
+    snapshot_alloc => 0,
+    last_active_at => "",
+  };
+}
+
+@rows = sort { $b->{dir_bytes} <=> $a->{dir_bytes} } @rows;
+@cleanup_candidates = sort { $b->{size} <=> $a->{size} || $b->{age} <=> $a->{age} } @cleanup_candidates;
+@cleanup_refusals = sort { $b->{size} <=> $a->{size} || $b->{age} <=> $a->{age} } @cleanup_refusals;
+
+my @known_roots = qw(
+  /opt/go-choir/result
+  /tmp/go-choir-service-platformd-result
+  /tmp/go-choir-guest-image-new
+  /tmp/go-choir-service-proxy-result
+  /tmp/go-choir-frontend-result
+  /tmp/go-choir-nixos-result
+  /tmp/guest-image-result
+  /tmp/guest-image-playwright-result
+  /tmp/go-choir-service-vmctl-result
+);
+
+my @nix_roots;
+my %nix_root_classes;
+my $nix_root_target_alloc_total = 0;
+my $nix_root_broken_count = 0;
+for my $root (@known_roots) {
+  next unless -l $root || -e $root;
+  my $target = sh("readlink -f " . shell_quote($root));
+  next unless $target =~ m{^/nix/store/};
+  my $target_exists = -e $target ? 1 : 0;
+  my $target_alloc_bytes = $target_exists ? du_size($target) : 0;
+  my $target_alloc = $target_exists ? fmt_bytes($target_alloc_bytes) : "missing-store-path";
+  my $root_mtime = sh("stat -c %Y " . shell_quote($root));
+  $root_mtime = $root_mtime =~ /^\d+$/ ? int($root_mtime) : 0;
+  my ($class, $action, $gate) = nix_root_policy($root, $target_exists);
+  $nix_root_classes{$class}++;
+  $nix_root_target_alloc_total += $target_alloc_bytes;
+  $nix_root_broken_count++ if !$target_exists;
+  push @nix_roots, {
+    root => $root,
+    target => $target,
+    target_exists => $target_exists,
+    target_alloc => $target_alloc || "unknown",
+    target_alloc_bytes => $target_alloc_bytes,
+    root_mtime => $root_mtime,
+    class => $class,
+    action => $action,
+    gate => $gate,
+  };
+}
+
+my $profiles = sh("(timeout 3s nix-env -p /nix/var/nix/profiles/system --list-generations 2>/dev/null || true) | grep -v '^waiting for lock' | tail -12");
+
+my $projected_delete_count = $retention && $retention->{inventory} ? ($retention->{inventory}{projected_delete_count} || 0) : 0;
+my $projected_delete_bytes = $retention && $retention->{inventory} ? ($retention->{inventory}{projected_delete_bytes} || 0) : 0;
+my $retention_reason = $retention ? ($retention->{reason} || "") : "vmctl retention-plan unavailable";
+my $retention_mode = $retention ? ($retention->{mode} || "") : "unavailable";
+my $ephemeral_ownerships = $retention && $retention->{inventory} ? ($retention->{inventory}{ephemeral_ownerships} || 0) : 0;
+my $retention_shadow_reason = $retention_shadow ? ($retention_shadow->{reason} || "") : "vmctl retention-shadow-plan unavailable";
+my $retention_shadow_mode = $retention_shadow ? ($retention_shadow->{mode} || "") : "unavailable";
+my $retention_shadow_projected_delete_count = $retention_shadow && $retention_shadow->{inventory} ? ($retention_shadow->{inventory}{projected_delete_count} || 0) : 0;
+my $retention_shadow_projected_delete_bytes = $retention_shadow && $retention_shadow->{inventory} ? ($retention_shadow->{inventory}{projected_delete_bytes} || 0) : 0;
+my $retention_shadow_ephemeral_ownerships = $retention_shadow && $retention_shadow->{inventory} ? ($retention_shadow->{inventory}{ephemeral_ownerships} || 0) : 0;
+my $snapshot_total = 0;
+$snapshot_total += $_->{allocated} for @snapshots;
+my $fake_domain_ownerships = 0;
+$fake_domain_ownerships += $_ for values %fake_domain_users;
+
+if ($report_format eq "json") {
+  my @protected_results;
+  for my $email (@protected_emails) {
+    my @ids = sort grep { ($email_by_user_id{$_} || "") eq $email } keys %email_by_user_id;
+    if (!@ids) {
+      push @protected_results, {
+        email => $email,
+        user_id => undef,
+        present => 0,
+        vm_state_allocated_bytes => 0,
+        action => "missing_protected_identity_mapping",
+      };
+      next;
+    }
+    for my $id (@ids) {
+      push @protected_results, {
+        email => $email,
+        user_id => $id,
+        present => 1,
+        vm_state_allocated_bytes => ($bytes_by_user_id{$id} || 0) + 0,
+        action => "refuse_delete",
+      };
+    }
+  }
+
+  my @domain_counts_json = map {
+    { domain => $_, users => $domain_counts{$_} + 0 }
+  } sort { $domain_counts{$b} <=> $domain_counts{$a} || $a cmp $b } keys %domain_counts;
+  my @ownership_classes_json = map {
+    { class => $_, count => $group{$_}{count} + 0, allocated_bytes => $group{$_}{bytes} + 0 }
+  } sort { $group{$b}{bytes} <=> $group{$a}{bytes} } keys %group;
+  my @snapshot_classes_json = map {
+    { class => $_, snapshots => $snapshot_classes{$_} + 0 }
+  } sort { $snapshot_classes{$b} <=> $snapshot_classes{$a} || $a cmp $b } keys %snapshot_classes;
+  my @nix_root_classes_json = map {
+    { class => $_, roots => $nix_root_classes{$_} + 0 }
+  } sort { $nix_root_classes{$b} <=> $nix_root_classes{$a} || $a cmp $b } keys %nix_root_classes;
+
+  my @top_rows;
+  for my $r (@rows) {
+    last if @top_rows >= $top_n;
+    push @top_rows, $r;
+  }
+  my @top_cleanup_candidates;
+  for my $c (@cleanup_candidates) {
+    last if @top_cleanup_candidates >= $top_n;
+    push @top_cleanup_candidates, $c;
+  }
+  my @top_cleanup_refusals;
+  for my $r (@cleanup_refusals) {
+    last if @top_cleanup_refusals >= $top_n;
+    push @top_cleanup_refusals, $r;
+  }
+
+  my $doc = {
+    generated_at => $now,
+    host => $host,
+    mode => "report-only; no deletion, GC, service restart, or VM mutation",
+    vm_state_dir => $vm_state_dir,
+    auth_db_path => $auth_db_path,
+    policies => {
+      protected_emails => \@protected_emails,
+      protected_user_ids => [ sort keys %protected_user_id ],
+      fake_email_domains => \@fake_email_domains,
+      active_delete_authorized => 0,
+      required_delete_gate => "typed candidate plus owner-reviewed policy plus rollback/refusal record plus staged behavior proof",
+    },
+    filesystems => {
+      df_root_and_vm_state => $df,
+      vm_state_allocated_bytes => $vm_state_total + 0,
+      nix_store_allocated_bytes => $nix_store_total + 0,
+    },
+    vmctl => {
+      health => $health,
+      retention_plan => $retention,
+      retention_shadow_plan => $retention_shadow,
+      retention_mode => $retention_mode,
+      retention_projected_delete_count => $projected_delete_count + 0,
+      retention_projected_delete_bytes => $projected_delete_bytes + 0,
+      retention_ephemeral_ownerships => $ephemeral_ownerships + 0,
+      retention_reason => $retention_reason,
+      retention_shadow_mode => $retention_shadow_mode,
+      retention_shadow_projected_delete_count => $retention_shadow_projected_delete_count + 0,
+      retention_shadow_projected_delete_bytes => $retention_shadow_projected_delete_bytes + 0,
+      retention_shadow_ephemeral_ownerships => $retention_shadow_ephemeral_ownerships + 0,
+      retention_shadow_reason => $retention_shadow_reason,
+    },
+    auth_identity_mapping => {
+      auth_user_count => $auth_user_count + 0,
+      mapping_status => $email_mapping,
+      protected_email_results => \@protected_results,
+      domain_counts => \@domain_counts_json,
+    },
+    ownership_classes => \@ownership_classes_json,
+    largest_vm_state_directories => \@top_rows,
+    manual_recovery_snapshots => {
+      snapshot_count => scalar(@snapshots) + 0,
+      snapshot_allocated_bytes => $snapshot_total + 0,
+      metadata_missing_count => $snapshot_missing_metadata_count + 0,
+      policy_status => "report-only; no snapshot deletion authorized",
+      required_delete_gate => "typed snapshot metadata plus recovery settlement plus replacement/rollback proof plus owner approval",
+      classes => \@snapshot_classes_json,
+      snapshots => \@snapshots,
+    },
+    fake_or_synthetic_users => {
+      synthetic_user_count => scalar(keys %synthetic_users) + 0,
+      synthetic_ownerships => $synthetic_ownerships + 0,
+      fake_email_domain_ownerships => $fake_domain_ownerships + 0,
+      fake_email_domain_allocated_dry_run_bytes => $fake_domain_review_bytes + 0,
+      fake_email_domain_policy_eligible_vmctl_ephemeral_primary_count => $fake_domain_policy_eligible_count + 0,
+      fake_email_domain_policy_eligible_vmctl_ephemeral_primary_bytes => $fake_domain_policy_eligible_bytes + 0,
+      synthetic_user_allocated_review_bytes => $synthetic_review_bytes + 0,
+      synthetic_user_policy_eligible_vmctl_ephemeral_primary_count => $synthetic_policy_eligible_count + 0,
+      synthetic_user_policy_eligible_vmctl_ephemeral_primary_bytes => $synthetic_policy_eligible_bytes + 0,
+      registered_user_allocated_refusal_bytes => $registered_user_refusal_bytes + 0,
+      missing_auth_user_allocated_refusal_bytes => $missing_auth_user_refusal_bytes + 0,
+      protected_identity_allocated_refusal_bytes => $protected_bytes + 0,
+      platform_allocated_refusal_bytes => $platform_bytes + 0,
+      synthetic_users => [ sort keys %synthetic_users ],
+    },
+    baseline_cleanup_plan => {
+      policy_status => "dry-run proposal only",
+      active_delete_authorized => 0,
+      top_cleanup_candidates => \@top_cleanup_candidates,
+      top_cleanup_refusals => \@top_cleanup_refusals,
+    },
+    nix_roots => {
+      candidate_type => "nix_root_review_only",
+      policy_status => "report-only; no root deletion or nix-store GC authorized",
+      proposed_budget => "preserve current deploy root, current system generation, one explicit rollback generation, latest proven guest image root, and only explicitly required specialized worker image roots",
+      required_delete_gate => "deployed identity plus rollback manifest plus owner-reviewed stale-root decision",
+      direct_target_allocated_bytes => $nix_root_target_alloc_total + 0,
+      broken_root_count => $nix_root_broken_count + 0,
+      classes => \@nix_root_classes_json,
+      roots => \@nix_roots,
+      recent_system_generations => $profiles,
+    },
+    projected_reclaim_and_refusals => {
+      vmctl_active_retention_candidates_bytes => $projected_delete_bytes + 0,
+      manual_recovery_snapshots_bytes => $snapshot_total + 0,
+      fake_email_domain_vms_total_bytes => $fake_domain_review_bytes + 0,
+      fake_email_domain_vms_policy_eligible_bytes => $fake_domain_policy_eligible_bytes + 0,
+      synthetic_non_uuid_user_vms_total_bytes => $synthetic_review_bytes + 0,
+      synthetic_non_uuid_user_vms_policy_eligible_bytes => $synthetic_policy_eligible_bytes + 0,
+      registered_non_fake_user_vms_refusal_bytes => $registered_user_refusal_bytes + 0,
+      uuid_primary_vms_without_email_mapping_refusal_bytes => ($identity_unresolved_bytes + $missing_auth_user_refusal_bytes) + 0,
+      known_deploy_nix_roots_direct_target_allocated_bytes => $nix_root_target_alloc_total + 0,
+    },
+    next_required_proof => [
+      "Convert fake-domain and synthetic-user rows into a reviewed active retention policy.",
+      "Attach typed retention metadata to manual snapshots at creation time.",
+      "Prove Nix root budget against deployed identity and rollback manifest before any root deletion or GC.",
+    ],
+  };
+  print JSON::PP->new->canonical->pretty->encode($doc);
+  exit 0;
+}
+if ($report_format ne "markdown") {
+  die "unsupported report format: $report_format\n";
+}
+
+print "# Node B Storage Report\n\n";
+print "- generated_at: `$now`\n";
+print "- host: `$host`\n";
+print "- mode: report-only; no deletion, GC, service restart, or VM mutation\n";
+print "- vm_state_dir: `$vm_state_dir`\n";
+print "- auth_db_path: `$auth_db_path`\n";
+print "- protected_emails_policy: `" . join(",", @protected_emails) . "`\n";
+print "- protected_user_ids: `" . join(",", sort keys %protected_user_id) . "`\n";
+print "- fake_email_domains_policy: `" . join(",", @fake_email_domains) . "`\n";
+print "- email_mapping: `$email_mapping`\n\n";
+
+print "## Filesystems\n\n";
+print "```text\n$df\n```\n\n";
+print "- vm_state_allocated: `" . fmt_bytes($vm_state_total) . "`\n";
+print "- nix_store_allocated: `" . fmt_bytes($nix_store_total) . "`\n\n";
+
+print "## vmctl Summary\n\n";
+if ($health) {
+  print "- vmctl_state_dir_pressure: `" . (($health->{state_dir_pressure} // "unknown")) . "`\n";
+  print "- vmctl_available_percent: `" . (($health->{state_dir_available_percent} // "unknown")) . "`\n";
+}
+print "- retention_mode: `$retention_mode`\n";
+print "- retention_projected_delete_count: `$projected_delete_count`\n";
+print "- retention_projected_delete_bytes: `" . fmt_bytes($projected_delete_bytes) . "`\n";
+print "- retention_ephemeral_ownerships: `$ephemeral_ownerships`\n";
+print "- retention_reason: `$retention_reason`\n";
+print "- retention_shadow_mode: `$retention_shadow_mode`\n";
+print "- retention_shadow_projected_delete_count: `$retention_shadow_projected_delete_count`\n";
+print "- retention_shadow_projected_delete_bytes: `" . fmt_bytes($retention_shadow_projected_delete_bytes) . "`\n";
+print "- retention_shadow_ephemeral_ownerships: `$retention_shadow_ephemeral_ownerships`\n";
+print "- retention_shadow_reason: `$retention_shadow_reason`\n\n";
+
+print "## Auth Identity Mapping\n\n";
+print "- auth_user_count: `$auth_user_count`\n";
+print "- mapping_status: `$email_mapping`\n";
+print "- protected_email_policy_result: `" . (@protected_emails ? "checked" : "none") . "`\n\n";
+print "| protected_email | user_id | vm_state_allocated |\n";
+print "| --- | --- | ---: |\n";
+for my $email (@protected_emails) {
+  my @ids = sort grep { ($email_by_user_id{$_} || "") eq $email } keys %email_by_user_id;
+  if (!@ids) {
+    print "| `$email` | `missing` | 0 B |\n";
+    next;
+  }
+  for my $id (@ids) {
+    print "| `$email` | `$id` | " . fmt_bytes($bytes_by_user_id{$id} || 0) . " |\n";
+  }
+}
+print "\n";
+print "| auth_email_domain | users |\n";
+print "| --- | ---: |\n";
+for my $domain (sort { $domain_counts{$b} <=> $domain_counts{$a} || $a cmp $b } keys %domain_counts) {
+  print "| `$domain` | $domain_counts{$domain} |\n";
+}
+print "\n";
+
+print "## Ownership Classes\n\n";
+print "| class | count | allocated |\n";
+print "| --- | ---: | ---: |\n";
+for my $k (sort { $group{$b}{bytes} <=> $group{$a}{bytes} } keys %group) {
+  print "| `$k` | $group{$k}{count} | " . fmt_bytes($group{$k}{bytes}) . " |\n";
+}
+print "\n";
+
+print "## Largest VM State Directories\n\n";
+print "| vm_id | user_id | state | class | data_alloc | snapshots | dir_alloc | last_active_at |\n";
+print "| --- | --- | --- | --- | ---: | ---: | ---: | --- |\n";
+my $shown = 0;
+for my $r (@rows) {
+  last if $shown++ >= $top_n;
+  print "| `$r->{vm_id}` | `$r->{user_id}` | `$r->{state}` | `$r->{role}` | "
+    . fmt_bytes($r->{data_alloc}) . " | " . fmt_bytes($r->{snapshot_alloc}) . " | "
+    . fmt_bytes($r->{dir_bytes}) . " | `$r->{last_active_at}` |\n";
+}
+print "\n";
+
+print "## Manual Recovery Snapshots\n\n";
+print "- snapshot_count: `" . scalar(@snapshots) . "`\n";
+print "- snapshot_allocated: `" . fmt_bytes($snapshot_total) . "`\n";
+print "- candidate_type: `manual_snapshot_review_only`\n";
+print "- metadata_missing_count: `$snapshot_missing_metadata_count`\n";
+print "- policy_status: `report-only; no snapshot deletion authorized`\n";
+print "- required_delete_gate: `typed snapshot metadata plus recovery settlement plus replacement/rollback proof plus owner approval`\n";
+print "- refusal_reason: `manual snapshots lack typed retention metadata; verify rollback value before deletion`\n\n";
+print "| snapshot_class | snapshots |\n";
+print "| --- | ---: |\n";
+for my $class (sort { $snapshot_classes{$b} <=> $snapshot_classes{$a} || $a cmp $b } keys %snapshot_classes) {
+  print "| `$class` | $snapshot_classes{$class} |\n";
+}
+print "\n";
+print "| vm_id | user_id | snapshot | class | age | allocated | logical | mtime | purpose | ttl_policy | gate | metadata_status |\n";
+print "| --- | --- | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- |\n";
+for my $s (sort { $b->{allocated} <=> $a->{allocated} } @snapshots) {
+  print "| `$s->{vm_id}` | `$s->{user_id}` | `$s->{name}` | `$s->{class}` | " . fmt_age($s->{age_seconds}) . " | "
+    . fmt_bytes($s->{allocated}) . " | " . fmt_bytes($s->{logical}) . " | `$s->{mtime}` | `$s->{purpose}` | "
+    . "`$s->{ttl_policy}` | `$s->{gate}` | `$s->{metadata_status}` |\n";
+}
+print "\n";
+
+print "## Fake Or Synthetic Users\n\n";
+print "- synthetic_user_count: `" . scalar(keys %synthetic_users) . "`\n";
+print "- synthetic_ownerships: `$synthetic_ownerships`\n";
+print "- fake_email_domain_ownerships: `$fake_domain_ownerships`\n";
+print "- fake_email_domain_allocated_dry_run: `" . fmt_bytes($fake_domain_review_bytes) . "`\n";
+print "- fake_email_domain_policy_eligible_vmctl_ephemeral_primary: `$fake_domain_policy_eligible_count`, `" . fmt_bytes($fake_domain_policy_eligible_bytes) . "`\n";
+print "- synthetic_user_allocated_review: `" . fmt_bytes($synthetic_review_bytes) . "`\n";
+print "- synthetic_user_policy_eligible_vmctl_ephemeral_primary: `$synthetic_policy_eligible_count`, `" . fmt_bytes($synthetic_policy_eligible_bytes) . "`\n";
+print "- identity_unresolved_uuid_allocated_refusal: `" . fmt_bytes($identity_unresolved_bytes) . "`\n";
+print "- registered_user_allocated_refusal: `" . fmt_bytes($registered_user_refusal_bytes) . "`\n";
+print "- missing_auth_user_allocated_refusal: `" . fmt_bytes($missing_auth_user_refusal_bytes) . "`\n";
+print "- protected_identity_allocated_refusal: `" . fmt_bytes($protected_bytes) . "`\n";
+print "- platform_allocated_refusal: `" . fmt_bytes($platform_bytes) . "`\n\n";
+print "| fake_email_domain | ownerships |\n";
+print "| --- | ---: |\n";
+for my $d (sort { $fake_domain_users{$b} <=> $fake_domain_users{$a} || $a cmp $b } keys %fake_domain_users) {
+  print "| `$d` | $fake_domain_users{$d} |\n";
+}
+print "\n";
+print "| synthetic_user_id | ownerships |\n";
+print "| --- | ---: |\n";
+for my $u (sort { $synthetic_users{$b} <=> $synthetic_users{$a} || $a cmp $b } keys %synthetic_users) {
+  print "| `$u` | $synthetic_users{$u} |\n";
+}
+print "\n";
+
+print "## Baseline Cleanup Plan (Report-Only)\n\n";
+print "- policy_status: `dry-run proposal only`\n";
+print "- active_delete_authorized: `false`\n";
+print "- required_delete_gate: `typed candidate plus owner-reviewed policy plus rollback/refusal record plus staged behavior proof`\n";
+print "- protected_account_gate: `proved by auth DB mapping; protected identities remain refusal classes`\n\n";
+print "| class | count | size_or_projected_reclaim | policy_action | gate |\n";
+print "| --- | ---: | ---: | --- | --- |\n";
+print "| `fake_email_domain_dry_run` | $fake_domain_ownerships | " . fmt_bytes($fake_domain_review_bytes) . " total; " . fmt_bytes($fake_domain_policy_eligible_bytes) . " policy-eligible | `destroy_vm_state_and_remove_ownership` after review | active policy not yet authorized |\n";
+print "| `synthetic_user_owner_review` | $synthetic_ownerships | " . fmt_bytes($synthetic_review_bytes) . " total; " . fmt_bytes($synthetic_policy_eligible_bytes) . " policy-eligible | owner-review then destroy VM state | synthetic owners not yet approved disposable |\n";
+print "| `manual_snapshot_review_only` | " . scalar(@snapshots) . " | " . fmt_bytes($snapshot_total) . " | preserve until typed metadata, recovery settlement, and rollback proof exist | filename-only metadata; no deletion authorized |\n";
+print "| `missing_auth_user_record_refusal` | review | " . fmt_bytes($missing_auth_user_refusal_bytes) . " | refuse | missing-auth-user retention policy absent |\n";
+print "| `nix_root_review_only` | " . scalar(@nix_roots) . " | " . fmt_bytes($nix_root_target_alloc_total) . " direct target allocation | classify current/rollback/stale root | report-only root budget; no GC authorized |\n\n";
+
+print "### Top VM Cleanup Candidates\n\n";
+print "| class | vm_id | user_id | email | state | age | allocated | action | gate |\n";
+print "| --- | --- | --- | --- | --- | ---: | ---: | --- | --- |\n";
+my $candidate_shown = 0;
+for my $c (@cleanup_candidates) {
+  last if $candidate_shown++ >= $top_n;
+  print "| `$c->{class}` | `$c->{vm_id}` | `$c->{user_id}` | `" . ($c->{email} || "") . "` | `$c->{state}` | "
+    . fmt_age($c->{age}) . " | " . fmt_bytes($c->{size}) . " | `$c->{action}` | `$c->{gate}` |\n";
+}
+print "\n";
+
+print "### Top VM Refusals\n\n";
+print "| class | vm_id | user_id | email | state | age | allocated | reason | action |\n";
+print "| --- | --- | --- | --- | --- | ---: | ---: | --- | --- |\n";
+my $refusal_shown = 0;
+for my $r (@cleanup_refusals) {
+  last if $refusal_shown++ >= $top_n;
+  print "| `$r->{class}` | `$r->{vm_id}` | `$r->{user_id}` | `" . ($r->{email} || "") . "` | `$r->{state}` | "
+    . fmt_age($r->{age}) . " | " . fmt_bytes($r->{size}) . " | `$r->{reason}` | `$r->{action}` |\n";
+}
+print "\n";
+
+print "## Nix Roots\n\n";
+print "- candidate_type: `nix_root_review_only`\n";
+print "- policy_status: `report-only; no root deletion or nix-store GC authorized`\n";
+print "- proposed_budget: `preserve current deploy root, current system generation, one explicit rollback generation, latest proven guest image root, and only explicitly required specialized worker image roots`\n";
+print "- required_delete_gate: `deployed identity plus rollback manifest plus owner-reviewed stale-root decision`\n";
+print "- direct_target_allocated: `" . fmt_bytes($nix_root_target_alloc_total) . "`\n";
+print "- broken_root_count: `$nix_root_broken_count`\n\n";
+print "| root_class | roots |\n";
+print "| --- | ---: |\n";
+for my $class (sort { $nix_root_classes{$b} <=> $nix_root_classes{$a} || $a cmp $b } keys %nix_root_classes) {
+  print "| `$class` | $nix_root_classes{$class} |\n";
+}
+print "\n";
+print "| root | class | target_exists | target_alloc | root_mtime | action | gate | target |\n";
+print "| --- | --- | --- | ---: | --- | --- | --- | --- |\n";
+for my $r (@nix_roots) {
+  print "| `$r->{root}` | `$r->{class}` | `" . bool_text($r->{target_exists}) . "` | `$r->{target_alloc}` | `"
+    . fmt_epoch($r->{root_mtime}) . "` | `$r->{action}` | `$r->{gate}` | `$r->{target}` |\n";
+}
+print "\n";
+print "### Recent System Generations\n\n";
+print "```text\n$profiles\n```\n\n";
+
+print "## Projected Reclaim And Refusals\n\n";
+print "| class | size_or_projected_reclaim | action |\n";
+print "| --- | ---: | --- |\n";
+print "| vmctl active retention candidates | " . fmt_bytes($projected_delete_bytes) . " | current vmctl policy says `$retention_reason` |\n";
+print "| manual recovery snapshots | " . fmt_bytes($snapshot_total) . " | report-only; preserve until typed metadata, recovery settlement, rollback proof, and owner approval |\n";
+print "| fake email domain VMs | " . fmt_bytes($fake_domain_review_bytes) . " total; " . fmt_bytes($fake_domain_policy_eligible_bytes) . " policy-eligible | dry-run candidate; requires typed active policy before delete |\n";
+print "| synthetic non-UUID user VMs | " . fmt_bytes($synthetic_review_bytes) . " total; " . fmt_bytes($synthetic_policy_eligible_bytes) . " policy-eligible | owner-review disposable proof, then typed prune |\n";
+print "| registered non-fake user VMs | " . fmt_bytes($registered_user_refusal_bytes) . " | refuse unless owner marks account disposable |\n";
+print "| UUID primary VMs without email mapping | " . fmt_bytes($identity_unresolved_bytes + $missing_auth_user_refusal_bytes) . " | refuse prune until auth email identity is available |\n";
+print "| known deploy Nix roots | " . fmt_bytes($nix_root_target_alloc_total) . " direct target allocation | no GC; classify against current/rollback/stale budget first |\n\n";
+
+print "## Next Required Proof\n\n";
+print "1. Convert fake-domain and synthetic-user rows into a reviewed active retention policy.\n";
+print "2. Attach typed retention metadata to manual snapshots at creation time.\n";
+print "3. Prove Nix root budget against deployed identity and rollback manifest before any root deletion or GC.\n";
+PERL
+}
+
+if [ "$mode" = "local" ]; then
+  VM_STATE_DIR="$vm_state_dir" \
+  AUTH_DB_PATH="$auth_db_path" \
+  TOP_N="$top_n" \
+  REPORT_FORMAT="$report_format" \
+  PROTECTED_EMAILS="$protected_emails" \
+  PROTECTED_USER_IDS="$protected_user_ids" \
+  FAKE_EMAIL_DOMAINS="$fake_email_domains" \
+  run_report
+else
+  remote_vm_state_dir="$(remote_quote "$vm_state_dir")"
+  remote_auth_db_path="$(remote_quote "$auth_db_path")"
+  remote_top_n="$(remote_quote "$top_n")"
+  remote_report_format="$(remote_quote "$report_format")"
+  remote_protected_emails="$(remote_quote "$protected_emails")"
+  remote_protected_user_ids="$(remote_quote "$protected_user_ids")"
+  remote_fake_email_domains="$(remote_quote "$fake_email_domains")"
+  ssh "$host" \
+    "sudo env VM_STATE_DIR=$remote_vm_state_dir AUTH_DB_PATH=$remote_auth_db_path NODE_B_STORAGE_TOP_N=$remote_top_n REPORT_FORMAT=$remote_report_format NODE_B_PROTECTED_EMAILS=$remote_protected_emails NODE_B_PROTECTED_USER_IDS=$remote_protected_user_ids NODE_B_FAKE_EMAIL_DOMAINS=$remote_fake_email_domains bash -s -- --local" \
+    < "$0"
+fi

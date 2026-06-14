@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+host="${NODE_B_HOST:-node-b}"
+top_n="${NODE_B_STORAGE_TOP_N:-10}"
+out_dir=""
+mode_args=()
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/node-b-storage-proof [--host node-b|--local] [--top N] [--out-dir DIR]
+
+Runs the read-only Node B storage report in Markdown and JSON mode, then
+verifies the JSON no-delete/protected-identity contract.
+
+This writes proof artifacts under --out-dir or /tmp by default. It does not
+delete VM state, delete snapshots, run Nix GC, restart services, or mutate VMs.
+
+Options:
+  --host HOST     SSH host alias to inspect (default: node-b)
+  --local         Inspect the current host instead of SSH
+  --top N         Number of largest report rows to include (default: 10)
+  --out-dir DIR   Directory for report artifacts
+  -h, --help      Show this help
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --host)
+      host="${2:?missing --host value}"
+      mode_args=(--host "$host")
+      shift 2
+      ;;
+    --local)
+      mode_args=(--local)
+      shift
+      ;;
+    --top)
+      top_n="${2:?missing --top value}"
+      shift 2
+      ;;
+    --out-dir)
+      out_dir="${2:?missing --out-dir value}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ "${#mode_args[@]}" -eq 0 ]; then
+  mode_args=(--host "$host")
+fi
+
+if [ -z "$out_dir" ]; then
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  out_dir="/tmp/node-b-storage-proof-$stamp"
+fi
+
+mkdir -p "$out_dir"
+
+markdown_report="$out_dir/node-b-storage-report.md"
+json_report="$out_dir/node-b-storage-report.json"
+
+scripts/node-b-storage-report "${mode_args[@]}" --top "$top_n" > "$markdown_report" &
+markdown_pid="$!"
+scripts/node-b-storage-report "${mode_args[@]}" --format json --top "$top_n" > "$json_report" &
+json_pid="$!"
+
+markdown_status=0
+json_status=0
+wait "$markdown_pid" || markdown_status="$?"
+wait "$json_pid" || json_status="$?"
+if [ "$markdown_status" -ne 0 ] || [ "$json_status" -ne 0 ]; then
+  echo "storage report generation failed: markdown=$markdown_status json=$json_status" >&2
+  exit 1
+fi
+
+scripts/node-b-storage-verify-report "$json_report"
+
+printf 'node-b storage proof complete\n'
+printf 'markdown_report=%s\n' "$markdown_report"
+printf 'json_report=%s\n' "$json_report"

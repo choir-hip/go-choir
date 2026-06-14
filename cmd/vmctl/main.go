@@ -71,6 +71,10 @@ func main() {
 		idleSweeperEnabled = true
 		log.Printf("vmctl: retention prune mode=%s ephemeral_domains=%s max_deletes=%d max_bytes=%d", cfg.Mode, strings.Join(cfg.EphemeralEmailDomains, ","), cfg.MaxDeletes, cfg.MaxBytes)
 	}
+	if cfg, ok := retentionShadowPruneConfigFromEnv(); ok {
+		registry.SetRetentionShadowPruneConfig(cfg)
+		log.Printf("vmctl: retention shadow prune mode=dry-run requested_mode=%s ephemeral_domains=%s ephemeral_user_prefixes=%s max_deletes=%d max_bytes=%d", cfg.Mode, strings.Join(cfg.EphemeralEmailDomains, ","), strings.Join(cfg.EphemeralUserIDPrefixes, ","), cfg.MaxDeletes, cfg.MaxBytes)
+	}
 	warmnessPolicy := warmnessPolicyConfigFromEnv()
 	registry.SetWarmnessPolicyConfig(warmnessPolicy)
 	log.Printf("vmctl: warmness policy primary_keepalive_mode=%s always_on_user_count=%d", warmnessPolicy.PrimaryKeepaliveMode, len(warmnessPolicy.AlwaysOnUserIDs))
@@ -384,6 +388,45 @@ func retentionPruneConfigFromEnv() (vmctl.RetentionPruneConfig, bool) {
 		}
 	}
 	if v := os.Getenv("VMCTL_RETENTION_MAX_BYTES_MIB"); v != "" {
+		if mib, err := strconv.ParseInt(v, 10, 64); err == nil && mib > 0 {
+			cfg.MaxBytes = mib * 1024 * 1024
+		}
+	}
+	return cfg, true
+}
+
+func retentionShadowPruneConfigFromEnv() (vmctl.RetentionPruneConfig, bool) {
+	mode := os.Getenv("VMCTL_RETENTION_SHADOW_PRUNE_MODE")
+	if strings.TrimSpace(mode) == "" {
+		return vmctl.RetentionPruneConfig{}, false
+	}
+	cfg := vmctl.DefaultRetentionPruneConfig()
+	cfg.Mode = mode
+	if v := os.Getenv("VM_STATE_DIR"); v != "" {
+		cfg.StateDir = v
+	}
+	if v := os.Getenv("VMCTL_RETENTION_SHADOW_STATE_DIR"); v != "" {
+		cfg.StateDir = v
+	}
+	cfg.AuthDBPath = strings.TrimSpace(os.Getenv("VMCTL_RETENTION_SHADOW_AUTH_DB_PATH"))
+	cfg.EphemeralEmailDomains = splitEnvList(os.Getenv("VMCTL_RETENTION_SHADOW_EPHEMERAL_EMAIL_DOMAINS"))
+	cfg.EphemeralUserIDPrefixes = splitEnvList(os.Getenv("VMCTL_RETENTION_SHADOW_EPHEMERAL_USER_PREFIXES"))
+	if v := os.Getenv("VMCTL_RETENTION_SHADOW_ORPHAN_MIN_AGE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.OrphanMinAge = d
+		}
+	}
+	if v := os.Getenv("VMCTL_RETENTION_SHADOW_EPHEMERAL_MIN_AGE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.EphemeralMinAge = d
+		}
+	}
+	if v := os.Getenv("VMCTL_RETENTION_SHADOW_MAX_DELETES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.MaxDeletes = n
+		}
+	}
+	if v := os.Getenv("VMCTL_RETENTION_SHADOW_MAX_BYTES_MIB"); v != "" {
 		if mib, err := strconv.ParseInt(v, 10, 64); err == nil && mib > 0 {
 			cfg.MaxBytes = mib * 1024 * 1024
 		}
