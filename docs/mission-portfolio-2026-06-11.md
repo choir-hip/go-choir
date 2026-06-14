@@ -496,6 +496,11 @@ mission. **Dependencies:** none. **Size:** half a session.
   exist; eviction safety is already proven and implemented.
 - **Slides/computational cinematography, vector index service, new source
   families** — per the conjecture program §5; substrate first.
+- **Doc truth / context packet CI** —
+  `docs/mission-doc-truth-drift-ci-context-packet-v0.md` is the successor for
+  executable heresy detectors, docs drift checks, and a generated
+  `docs/choir-context-packet.md`. It is a process side mission, not
+  architecture-spine descent, unless stale docs block M3-M5 execution.
 
 ## Portfolio Settlement Conjecture
 

@@ -1,7 +1,7 @@
 ---
 name: parallax
 description: "Run a mission as a conjecture circuit: the mission document claims that completing an artifact/spec/objective will actually advance a deeper goal, then tests and constructs that claim through observer shifts, descending a declared variant under an explicit budget. Use for any nontrivial /goal mission where the route is uncertain, the evidence may mislead, or the work must hand off cleanly."
-version: 1.3.1
+version: 1.3.2
 metadata:
   hermes:
     tags: [parallax, conjecture-learning, proof-search, long-running-agents]
@@ -111,6 +111,15 @@ format. Compile it in place and call it a paradoc once it contains a
 `Parallax State` section. The companion ledger is the Parallax mission
 ledger.
 
+Every new paradoc, and every materially re-scoped paradoc, must include a
+copy-pasteable **Suggested Goal String** section. Put it outside `Parallax
+State` so state stays compact. The goal string should be enough for a fresh
+agent to resume the mission: path, source-program instruction, current status,
+variant/budget, authority bounds, protected invariants, first next move, ledger
+path, and settlement rule. When the user asks for a paradoc, return the same
+goal string in the final response as a fenced text block in addition to writing
+it into the document.
+
 ## The Mission Document
 
 A mission document may begin as research, architecture, a spec, an objective,
@@ -166,6 +175,11 @@ version / lineage:
 learning state: retained here / promoted outward / successor links
 settlement:
 ```
+
+Suggested goal strings are handoff instructions, not proof. Keep them current
+when the paradoc is split, superseded, narrowed, or converted from planning to
+execution. Do not let an old goal string route a future agent around the current
+Parallax State.
 
 **Pointers, not mirrors.** When a mission splits, links to its successor or
 predecessor are one line each: the successor's path, the resume condition,
@@ -413,6 +427,10 @@ superseded. Platform behavior settlement requires repo landing proof in the
 same document. No claim outruns its evidence class; no self-checked proofs;
 no fake islands; no descent-free passes.
 ```
+
+When authoring a new paradoc, include a mission-specific version of that goal
+string in the paradoc's `Suggested Goal String` section and repeat it in the
+final response for the owner to copy and paste.
 
 Parallax is candidate state. Promote it only if real missions show the
 conjecture bridge changing the route, observer shifts narrowing scope, the

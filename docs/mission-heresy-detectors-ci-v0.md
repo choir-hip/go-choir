@@ -1,6 +1,7 @@
 # Mission - Heresy Detectors CI - v0
 
-Status: successor paradoc stub.
+Status: superseded by
+`docs/mission-doc-truth-drift-ci-context-packet-v0.md`.
 
 Source: `docs/heresy-detectors.md` and `docs/choir-doctrine.md`.
 
@@ -45,4 +46,6 @@ write the smallest script that reports count deltas without failing.
 
 ledger file: `docs/mission-heresy-detectors-ci-v0.ledger.md`.
 
-settlement: not claimed.
+settlement: not claimed. This narrower detector mission remains useful evidence,
+but the broader docs-truth mission now carries implementation priority because
+README/current-architecture drift proved that detector CI alone is not enough.
