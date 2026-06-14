@@ -236,3 +236,38 @@ Receipts:
 Open edge: next move is a scoped code/test repair, then focused VText
 prompt/tool-loop/API tests, runtime shards, independent review, and a corrected
 settlement update.
+
+## 2026-06-14 - Repair Prompt-Pipeline Forcing Locally
+
+Claim: the follow-up blocker is repaired locally. VText prompt-pipeline wording
+now presents researcher and super delegation as affordances VText may choose
+within its authority envelope, not as mandatory semantic tool sequences.
+Grounded safety remains: VText may not write factual/current/source claims from
+model priors, but may write uncertainty-bearing working revisions and record
+the missing evidence or source representation as a blocker.
+
+Move: repair / verify. Softened mandatory `spawn_agent` and
+`request_super_execution` language in `internal/runtime/vtext_agent_revision.go`.
+Updated prompt tests to assert non-forcing language, broadened the denylist for
+imperative researcher/super sequencing, and added media-source prompt coverage
+for represented-evidence-or-blocker behavior.
+
+Expected Delta V: -1 locally. Actual Delta V: -1 locally. M3.1 local V is 0,
+but settlement remains pending until this runtime repair is committed, pushed,
+deployed, and re-proved through staging identity and deployed lifecycle /
+acceptance proof.
+
+Receipts:
+- Static phrase scan found forced semantic-delegation phrases only in the test
+  denylist, not in VText prompt source.
+- `nix develop -c go test ./internal/runtime -run 'Test(VTextPromptInitialRevisionUsesSingleWriterLoop|VTextPromptForFactualFirstRevisionForbidsUngroundedContent|VTextPromptPrioritizesSuperAfterResearchForMixedObligation|VTextPromptSteersCurrentEventsToResearcherNotSuper|VTextPromptExplicitResearcherExposesAffordanceWithoutForcing|BuildAgentRevisionRequestRequiresSuperContinuationForActiveWorker|VTextAgentRevisionRegistersMediaSourceRefs|RunToolLoopRequiredNextTool|RunToolLoopIgnoresSemanticRequiredNextToolFromUntrustedProducer|EditVTextInitialContinuationDoesNotSmuggleRequiredTool|EditVTextExplicitResearcherDoesNotForceSpawnContinuation|EditVTextExplicitResearcherDoesNotForceSpawnAfterSuperBase|EditVTextExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|EditVTextExplicitResearcherFromSeedPromptSurvivesRequestIntent|EditVTextExplicitResearcherDoesNotDuplicateExistingResearcher|HandlePromptBarResearcherMentionDoesNotSetRoutingFlag|InitialVTextToolChoice)' -count=1`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'Test(RunAcceptanceSynthesizeDoesNotAcceptPromptVTextOnlySmoke|HandleRunStatusPublicIncludesTrajectoryEvidence)' -count=1`
+  passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed after the final prompt
+  wording changes.
+- Independent review found no blocking remaining prompt-forcing issue after the
+  media-source and grounded-history follow-up fixes.
+
+Open edge: commit/push/CI/deploy/staging proof remains mandatory before
+settlement is re-claimed.

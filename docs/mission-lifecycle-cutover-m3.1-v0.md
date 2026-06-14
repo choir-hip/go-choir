@@ -71,9 +71,10 @@ pressure from converting agents into brittle procedural workflows.
   staging proof. Local tests cannot settle vmctl, deployed actor rewarm, or
   Choir-in-Choir behavior.
 
-**variant (ranking function) V:** current V=1 after review follow-up on
-2026-06-14 found that the deployed settlement claim was premature. The rollback
-batch removed or accepted most known edges:
+**variant (ranking function) V:** current V=0 locally after the 2026-06-14
+review follow-up found the deployed settlement claim was premature and the
+prompt-pipeline forcing blocker was repaired. The rollback batch removed or
+accepted the known edges:
 1 forced VText researcher continuation removed; 2 generic
 required-next-tool semantic trust narrowed to a typed mechanical protocol; 3
 prompt-bar researcher intent removed from runtime routing; 4 tests rewritten to
@@ -83,11 +84,12 @@ trajectory/work evidence; 7 prompt/VText-only smoke no longer accepts a run
 acceptance record locally and the deploy classifier now restarts vmctl when
 sandbox runtime package sources change; 8 actor memory cross-trajectory policy
 is named as a successor edge rather than a blocker for this rollback.
-Settlement evidence now includes CI/deploy, staging identity, vmctl restart,
+Earlier settlement evidence includes CI/deploy, staging identity, vmctl restart,
 active computer refresh, deployed lifecycle proof, and deployed acceptance
-synthesis proving the overclaim is gone. One blocking edge remains:
-prompt-pipeline wording still forces semantic VText delegation by instructing
-VText to call researcher/super tools in the same run.
+synthesis proving the overclaim is gone. The follow-up prompt-pipeline repair
+is verified locally by focused VText/tool-loop/API tests, runtime shards, static
+phrase scan, and independent review. Settlement still waits on commit, push,
+CI/deploy, staging identity, and deployed proof for the repaired runtime commit.
 
 **budget:** one recovery mission before further M3 implementation. Solvency:
 first pass must buy the doctrine fix plus remove the forced continuation path.
@@ -133,24 +135,20 @@ and staging proof for any vmctl/product-path claim.
   Playwright proof passed; deployed M3.1 acceptance synthesis returned
   `runacc-8b635aa7aa2fe7098d7a` as `staging-smoke-level/blocked` with only
   `submitted` and `vtext_opened` checkpoints.
-- Edge/prompt_pipeline_forcing active: `internal/runtime/vtext_agent_revision.go`
-  still tells VText to "call spawn_agent with role=\"researcher\" in this run",
-  to perform a researcher spawn "in the same run", and to call
-  `request_super_execution` as a semantic next step. This violates
-  `docs/vtext-agentic-invariants-2026-06-13.md`: VText may choose
-  `spawn_agent`, `request_super_execution`, both, neither, or report a blocker
-  within its authority envelope. Grounded/factual safety must remain: VText
-  must not write ungrounded factual/current claims from priors, but it may
-  write an uncertainty-bearing working revision and record that research
-  evidence is needed.
+- Edge/prompt_pipeline_forcing settled locally:
+  `internal/runtime/vtext_agent_revision.go` now frames `spawn_agent` and
+  `request_super_execution` as available affordances that VText may choose
+  within its authority envelope, including both, neither, or a blocker. The
+  factual/current/source safety rule remains: VText must not write ungrounded
+  factual/current claims from priors, but it may write an uncertainty-bearing
+  working revision and record that research or source representation evidence
+  is needed.
 - Edge/successor: actor memory cross-trajectory scope still needs a dedicated
   policy/test pass, but is not required to settle this regression rollback.
 
-**next move:** soften VText prompt-pipeline wording from mandatory semantic
-delegation to affordance/obligation language, update tests to assert absence of
-"call spawn_agent now / in this run" semantics, rerun focused VText
-prompt/tool-loop/API tests and runtime shards, then seek independent review
-before re-claiming settlement.
+**next move:** commit and push the prompt-pipeline repair, monitor CI/deploy,
+verify staging identity for the repaired runtime commit, and rerun deployed
+M3.1 lifecycle/acceptance proof before re-claiming settlement.
 
 **ledger file:** `docs/mission-lifecycle-cutover-m3.1-v0.ledger.md`.
 
@@ -166,12 +164,12 @@ forces researcher continuation from semantic prompt text, and acceptance cannot
 settle M3 from prompt/VText smoke alone. The specific M3 failure chronology
 stays here and in the ledger.
 
-**settlement:** not claimed. Earlier settlement evidence remains valid for
-hard `next_required_tool` rollback, deploy topology, and run-acceptance
-overclaim repair, but V=0 was premature because prompt-pipeline text still
-mandates semantic delegation. Settlement can be re-claimed only after that
-forcing language is removed, tests protect non-forcing VText choice, and the
-focused/runtime shard evidence passes.
+**settlement:** not yet re-claimed. Earlier settlement evidence remains valid
+for hard `next_required_tool` rollback, deploy topology, and run-acceptance
+overclaim repair. The prompt-pipeline forcing language is now removed locally
+and covered by tests, but behavior-changing settlement still requires push,
+CI/deploy, staging identity, and deployed acceptance proof for the repaired
+runtime commit.
 
 ## Review Findings
 

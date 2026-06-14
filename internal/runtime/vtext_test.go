@@ -1896,16 +1896,18 @@ func TestVTextPromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {
 	}, "", false, nil, nil)
 
 	for _, want := range []string{
-		"For factual/current claims, write a brief working revision with explicit uncertainty, then call spawn_agent with role=\"researcher\"",
-		"Ordinary factual, current-events, web, or \"what is going on now\" questions are research work, not super work",
+		"For factual/current claims, write a brief working revision with explicit uncertainty and record that research evidence is needed.",
+		"spawn_agent with role=\"researcher\" is available when VText chooses to open a research branch.",
+		"Ordinary factual, current-events, web, or \"what is going on now\" questions usually need research evidence before factual claims.",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("current-events vtext prompt missing %q:\n%s", want, prompt)
 		}
 	}
+	assertNoForcedSemanticDelegation(t, prompt)
 }
 
-func TestVTextPromptExplicitResearcherOverridesSuperFirstShortcut(t *testing.T) {
+func TestVTextPromptExplicitResearcherExposesAffordanceWithoutForcing(t *testing.T) {
 	t.Parallel()
 	current := types.Revision{
 		DocID:      "doc-explicit-researcher",
@@ -1918,10 +1920,16 @@ func TestVTextPromptExplicitResearcherOverridesSuperFirstShortcut(t *testing.T) 
 		Prompt: "Ask researcher for a concise finding and ask super for a tiny verification note.",
 	}, "", false, nil, nil)
 
-	want := "The owner explicitly asked for a researcher. After the brief working revision, call spawn_agent with role=\"researcher\" in this run; do not satisfy the researcher request by asking only super."
-	if !strings.Contains(prompt, want) {
-		t.Fatalf("explicit researcher vtext prompt missing %q:\n%s", want, prompt)
+	for _, want := range []string{
+		"The owner explicitly asked for researcher help.",
+		"Treat spawn_agent with role=\"researcher\" as an available delegation affordance",
+		"VText must choose whether to use it, ask super, use both, ask neither, or report a blocker",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("explicit researcher vtext prompt missing %q:\n%s", want, prompt)
+		}
 	}
+	assertNoForcedSemanticDelegation(t, prompt)
 }
 
 func TestVTextAgentRevisionAppliesStructuredEdit(t *testing.T) {
@@ -3089,7 +3097,7 @@ func TestBuildAgentRevisionRequestRequiresSuperContinuationForActiveWorker(t *te
 
 	for _, want := range []string{
 		"At least one recent worker message says a delegated worker is still active",
-		"call request_super_execution",
+		"when VText decides continuation is needed, request_super_execution",
 		"continue the existing worker_run_id",
 		"not start a duplicate worker",
 		"VText must not directly control worker/vsuper/co-super runs",
@@ -3098,6 +3106,7 @@ func TestBuildAgentRevisionRequestRequiresSuperContinuationForActiveWorker(t *te
 			t.Fatalf("active-worker vtext prompt missing %q:\n%s", want, prompt)
 		}
 	}
+	assertNoForcedSemanticDelegation(t, prompt)
 }
 
 func TestRestartRecoveryClearsInterruptedVTextMutationAndRelaunches(t *testing.T) {
@@ -7242,10 +7251,12 @@ func TestVTextAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 	}
 	if !strings.Contains(run.Prompt, "Detected durable media source refs") ||
 		!strings.Contains(run.Prompt, "Detected VText source entities") ||
-		!strings.Contains(run.Prompt, "researcher-maintained source representations") ||
+		!strings.Contains(run.Prompt, "source claims need represented evidence") ||
+		!strings.Contains(run.Prompt, "spawn_agent with role=\"researcher\" is available when VText chooses to open that evidence branch") ||
 		!strings.Contains(buildVTextMediaSourceResearchObjective(refs, ""), "first call read_content_item") {
 		t.Fatalf("compiled prompt missing media source contract: %q", run.Prompt)
 	}
+	assertNoForcedSemanticDelegation(t, run.Prompt)
 	byKind := map[string]vtextMediaSourceRef{}
 	for _, ref := range refs {
 		byKind[ref.Kind] = ref

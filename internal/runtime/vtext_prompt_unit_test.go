@@ -12,6 +12,29 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+func assertNoForcedSemanticDelegation(t *testing.T, prompt string) {
+	t.Helper()
+	for _, forbidden := range []string{
+		"call spawn_agent",
+		"call spawn_agent with role=\"researcher\" in this run",
+		"then call spawn_agent",
+		"researcher spawn in the same run",
+		"spawn a researcher",
+		"Open new researcher work when",
+		"call request_super_execution",
+		"request_super_execution in the same run",
+		"first call request_super_execution",
+		"then request_super_execution",
+		"Use request_super_execution when",
+		"next side-effectful action should be request_super_execution",
+		"start needed worker request before ending run",
+	} {
+		if strings.Contains(prompt, forbidden) {
+			t.Fatalf("vtext prompt contains forced semantic delegation %q:\n%s", forbidden, prompt)
+		}
+	}
+}
+
 func TestVTextPromptInitialRevisionUsesSingleWriterLoop(t *testing.T) {
 	current := types.Revision{
 		DocID:      "doc-current-events",
@@ -26,13 +49,14 @@ func TestVTextPromptInitialRevisionUsesSingleWriterLoop(t *testing.T) {
 
 	for _, want := range []string{
 		"Because VText owns the document, write the first useful owner-readable revision with edit_vtext before opening longer worker work.",
-		"For factual/current/search requests, the first revision should be a short working brief with explicit uncertainty and no ungrounded claims, followed by a researcher spawn in the same run.",
+		"For factual/current/search requests, the first revision should be a short working brief with explicit uncertainty and no ungrounded claims; if more evidence is needed, researcher delegation is available as a VText choice.",
 		"Worker messages can wake later vtext runs and trigger the next revision.",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("initial vtext prompt missing %q:\n%s", want, request)
 		}
 	}
+	assertNoForcedSemanticDelegation(t, request)
 }
 
 func TestVTextPromptForFactualFirstRevisionForbidsUngroundedContent(t *testing.T) {
@@ -50,13 +74,15 @@ func TestVTextPromptForFactualFirstRevisionForbidsUngroundedContent(t *testing.T
 	for _, want := range []string{
 		"the first revision should be a short working brief with explicit uncertainty and no ungrounded claims",
 		"Do not add factual claims, citations, or coding results from model priors",
-		"write a brief working revision first, then start the needed worker request before ending the run",
+		"write a brief working revision with explicit uncertainty and record what evidence is needed",
+		"VText may then choose researcher, super, both, neither, or a blocker",
 		"Never describe coordination as already done unless the tool action really happened",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("factual first-revision prompt missing %q:\n%s", want, request)
 		}
 	}
+	assertNoForcedSemanticDelegation(t, request)
 }
 
 func TestVTextPromptUsesDiffFirstContextForDirectUserEdits(t *testing.T) {
@@ -464,16 +490,17 @@ func TestVTextPromptPrioritizesSuperAfterResearchForMixedObligation(t *testing.T
 
 	for _, want := range []string{
 		"recent worker messages do not include a super delivery",
-		"next side-effectful action should be request_super_execution before another source-only edit",
-		"Do not attempt a full-document rewrite in this worker-wake turn before the super request exists",
-		"Keep the request_super_execution objective concise and concrete",
+		"request_super_execution is available when VText chooses that the execution obligation is ready for super",
+		"if VText does not use it, record the precise blocker or missing evidence",
+		"Keep any request_super_execution objective concise and concrete",
 		"must not use the final [CMD] evidence label before the super delivery arrives",
-		"Do not spend a worker-wake turn only improving source text while that execution obligation has no super request",
+		"if VText does not use it, record the blocker instead of making a source-grounded edit look final",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("mixed-obligation prompt missing %q:\n%s", want, request)
 		}
 	}
+	assertNoForcedSemanticDelegation(t, request)
 }
 
 func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
