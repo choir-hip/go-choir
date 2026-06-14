@@ -164,3 +164,47 @@ Receipts:
 Open edge: deploy and product-path proof remain mandatory. The next deployed
 acceptance synthesis probe must return `staging-smoke-level/blocked` for M3.1
 prompt/VText-only smoke before this mission can settle.
+
+## 2026-06-14 - Settle M3.1 Lifecycle Recovery
+
+Claim: M3.1 has completed its regression recovery purpose. VText remains an
+agentic canonical-document owner rather than a deterministic workflow stepper,
+generic semantic `next_required_tool` is no longer trusted, prompt-bar
+researcher intent no longer routes runtime control, M3 handoff no longer points
+at deterministic researcher continuation, and lifecycle acceptance no longer
+settles from prompt/VText smoke.
+
+Move: settle / handoff. Pushed the deploy-impact repair at
+`aa7279f74adccd81ddd96356e29994a584442991`, ran CI, then manually dispatched
+CI run `27514505833` with `force_staging_deploy=true` because the repair commit
+itself changed only workflow/test/docs files while the stale runtime-package
+state needed a real vmctl refresh. The deploy reported
+`deploy_vmctl_restart=true`, restarted vmctl, refreshed three active
+interactive computers, and completed staging health checks. `https://choir.news/health`
+then reported proxy and sandbox at `aa7279f74adccd81ddd96356e29994a584442991`.
+
+Expected Delta V: settle at V=0. Actual Delta V: V=0. No forced semantic VText
+delegation remains in the rollback scope, no generic semantic
+`next_required_tool` control remains in the rollback scope, and deployed
+acceptance synthesis now blocks M3.1 prompt/VText-only smoke.
+
+Receipts:
+- Push CI run `27514456013` succeeded for
+  `aa7279f74adccd81ddd96356e29994a584442991`.
+- Manual forced deploy CI run `27514505833` succeeded.
+- Deploy log: `deploy_vmctl_restart=true`; `Phase vmctl restart: 1s`; active
+  interactive computers `vm-6a5ec0aa6ed8d9ae77de95ab660c532a`,
+  `vm-e4bfbd6e51aa7e11b9a481c7245cfe51`, and
+  `vm-d01a2bdc8b486a710b795e1ffb8d06ff` refreshed.
+- `https://choir.news/health` reported proxy and sandbox
+  `deployed_commit=aa7279f74adccd81ddd96356e29994a584442991`.
+- `GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news pnpm --dir frontend exec playwright test tests/adaptive-lifecycle-control-deployed.spec.js --project=chromium --reporter=list`
+  passed.
+- Deployed acceptance synthesis for trajectory
+  `2487ebb5-4087-47fa-a44e-d36d204fe84b` returned
+  `runacc-8b635aa7aa2fe7098d7a` as `staging-smoke-level/blocked`, with only
+  `submitted` and `vtext_opened` checkpoints.
+
+Settlement: M3.1 is settled. Resume M3 proper from
+`docs/mission-lifecycle-cutover-v0.md`. Actor memory cross-trajectory scoping
+remains a named successor edge, not a blocker for this recovery.
