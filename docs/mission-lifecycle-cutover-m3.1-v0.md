@@ -71,9 +71,9 @@ pressure from converting agents into brittle procedural workflows.
   staging proof. Local tests cannot settle vmctl, deployed actor rewarm, or
   Choir-in-Choir behavior.
 
-**variant (ranking function) V:** current V=0 after deployed settlement
-evidence on 2026-06-14. The rollback batch removed or accepted all eight known
-edges:
+**variant (ranking function) V:** current V=1 after review follow-up on
+2026-06-14 found that the deployed settlement claim was premature. The rollback
+batch removed or accepted most known edges:
 1 forced VText researcher continuation removed; 2 generic
 required-next-tool semantic trust narrowed to a typed mechanical protocol; 3
 prompt-bar researcher intent removed from runtime routing; 4 tests rewritten to
@@ -85,7 +85,9 @@ sandbox runtime package sources change; 8 actor memory cross-trajectory policy
 is named as a successor edge rather than a blocker for this rollback.
 Settlement evidence now includes CI/deploy, staging identity, vmctl restart,
 active computer refresh, deployed lifecycle proof, and deployed acceptance
-synthesis proving the overclaim is gone.
+synthesis proving the overclaim is gone. One blocking edge remains:
+prompt-pipeline wording still forces semantic VText delegation by instructing
+VText to call researcher/super tools in the same run.
 
 **budget:** one recovery mission before further M3 implementation. Solvency:
 first pass must buy the doctrine fix plus remove the forced continuation path.
@@ -131,13 +133,24 @@ and staging proof for any vmctl/product-path claim.
   Playwright proof passed; deployed M3.1 acceptance synthesis returned
   `runacc-8b635aa7aa2fe7098d7a` as `staging-smoke-level/blocked` with only
   `submitted` and `vtext_opened` checkpoints.
+- Edge/prompt_pipeline_forcing active: `internal/runtime/vtext_agent_revision.go`
+  still tells VText to "call spawn_agent with role=\"researcher\" in this run",
+  to perform a researcher spawn "in the same run", and to call
+  `request_super_execution` as a semantic next step. This violates
+  `docs/vtext-agentic-invariants-2026-06-13.md`: VText may choose
+  `spawn_agent`, `request_super_execution`, both, neither, or report a blocker
+  within its authority envelope. Grounded/factual safety must remain: VText
+  must not write ungrounded factual/current claims from priors, but it may
+  write an uncertainty-bearing working revision and record that research
+  evidence is needed.
 - Edge/successor: actor memory cross-trajectory scope still needs a dedicated
   policy/test pass, but is not required to settle this regression rollback.
 
-**next move:** M3.1 is settled. Resume M3 proper from
-`docs/mission-lifecycle-cutover-v0.md`, preserving the M3.1 invariant: no
-forced semantic VText delegation, no generic semantic `next_required_tool`, and
-no lifecycle settlement from prompt/VText smoke alone.
+**next move:** soften VText prompt-pipeline wording from mandatory semantic
+delegation to affordance/obligation language, update tests to assert absence of
+"call spawn_agent now / in this run" semantics, rerun focused VText
+prompt/tool-loop/API tests and runtime shards, then seek independent review
+before re-claiming settlement.
 
 **ledger file:** `docs/mission-lifecycle-cutover-m3.1-v0.ledger.md`.
 
@@ -153,14 +166,12 @@ forces researcher continuation from semantic prompt text, and acceptance cannot
 settle M3 from prompt/VText smoke alone. The specific M3 failure chronology
 stays here and in the ledger.
 
-**settlement:** settled on 2026-06-14 at V=0. Commit
-`aa7279f74adccd81ddd96356e29994a584442991` reached staging through manual CI
-run `27514505833`; deploy log showed `deploy_vmctl_restart=true`, vmctl restart,
-and active interactive computer refresh; `https://choir.news/health` reported
-proxy and sandbox at that commit; deployed adaptive lifecycle Playwright proof
-passed; deployed run-acceptance synthesis returned
-`runacc-8b635aa7aa2fe7098d7a` as `staging-smoke-level/blocked` for M3.1
-prompt/VText-only smoke.
+**settlement:** not claimed. Earlier settlement evidence remains valid for
+hard `next_required_tool` rollback, deploy topology, and run-acceptance
+overclaim repair, but V=0 was premature because prompt-pipeline text still
+mandates semantic delegation. Settlement can be re-claimed only after that
+forcing language is removed, tests protect non-forcing VText choice, and the
+focused/runtime shard evidence passes.
 
 ## Review Findings
 

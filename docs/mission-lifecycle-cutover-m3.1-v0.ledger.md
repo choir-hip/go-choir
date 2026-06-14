@@ -208,3 +208,31 @@ Receipts:
 Settlement: M3.1 is settled. Resume M3 proper from
 `docs/mission-lifecycle-cutover-v0.md`. Actor memory cross-trajectory scoping
 remains a named successor edge, not a blocker for this recovery.
+
+## 2026-06-14 - Reopen Prompt-Pipeline Forcing Blocker
+
+Claim: the prior V=0 settlement claim was premature. Runtime
+`next_required_tool` forcing was removed, but VText prompt-pipeline wording
+still mandates semantic delegation by telling VText to call `spawn_agent` or
+`request_super_execution` in the same run. This violates the VText agentic
+invariant even without a hard tool-loop continuation.
+
+Move: observe / document. Recorded the blocker before code changes, per Problem
+Documentation First. The repair scope is narrow: soften prompt language from
+mandatory role/tool sequences into affordance/obligation language while keeping
+grounded factual safety, then update tests to assert non-forcing language and
+absence of "call spawn_agent now / in this run" semantics.
+
+Expected Delta V: +1 for reopening a real blocker. Actual Delta V: +1. M3.1
+returns to V=1 until prompt-pipeline forcing is repaired and verified.
+
+Receipts:
+- `internal/runtime/vtext_agent_revision.go` still contains "call spawn_agent
+  with role=\"researcher\" in this run", "followed by a researcher spawn in the
+  same run", and semantic `request_super_execution` forcing phrases.
+- `internal/runtime/vtext_prompt_unit_test.go` and
+  `internal/runtime/vtext_test.go` assert mandatory wording.
+
+Open edge: next move is a scoped code/test repair, then focused VText
+prompt/tool-loop/API tests, runtime shards, independent review, and a corrected
+settlement update.
