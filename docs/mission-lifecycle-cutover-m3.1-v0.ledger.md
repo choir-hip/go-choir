@@ -271,3 +271,39 @@ Receipts:
 
 Open edge: commit/push/CI/deploy/staging proof remains mandatory before
 settlement is re-claimed.
+
+## 2026-06-14 - Settle M3.1 Prompt-Pipeline Follow-up
+
+Claim: M3.1 is settled again after the review follow-up. The runtime
+prompt-pipeline no longer mandates semantic VText delegation through researcher
+or super tool sequences, tests protect the non-forcing invariant, and the
+repaired runtime commit was deployed and proved on staging.
+
+Move: settle. Committed and pushed
+`0ab8bd6a20f09ad38ef0c4c7293d42bbf8845efe`, monitored CI/deploy, verified
+staging build identity, reran deployed lifecycle proof, and synthesized a
+deployed M3.1 prompt/VText-only acceptance record.
+
+Expected Delta V: settle at V=0. Actual Delta V: V=0. No forced semantic VText
+delegation remains in runtime prompt-pipeline wording for the rollback scope,
+no generic semantic `next_required_tool` control remains in the rollback scope,
+and deployed acceptance synthesis still blocks M3.1 prompt/VText-only smoke.
+
+Receipts:
+- Push CI run `27515490562` succeeded for
+  `0ab8bd6a20f09ad38ef0c4c7293d42bbf8845efe`.
+- Deploy log reported `deploy_vmctl_restart=true`, host services
+  `gateway,sandbox`, `Phase vmctl restart: 11s`, and active sandbox runtime
+  hot-refresh for five interactive computers.
+- `https://choir.news/health` reported proxy and sandbox
+  `deployed_commit=0ab8bd6a20f09ad38ef0c4c7293d42bbf8845efe`.
+- `GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news pnpm --dir frontend exec playwright test tests/adaptive-lifecycle-control-deployed.spec.js --project=chromium --reporter=list`
+  passed.
+- Deployed acceptance synthesis for trajectory
+  `97d6cf3b-0fc9-4ba3-8db1-5c6b28042c33` returned
+  `runacc-98a84912f02bcb4e0f82` as `staging-smoke-level/blocked`, with only
+  `submitted` and `vtext_opened` checkpoints.
+
+Settlement: M3.1 is settled. Resume M3 proper from
+`docs/mission-lifecycle-cutover-v0.md`. Actor memory cross-trajectory scoping
+remains a named successor edge, not a blocker for this recovery.

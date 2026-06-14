@@ -30,7 +30,7 @@ into `docs/vtext-agentic-invariants-2026-06-13.md` and `AGENTS.md`.
 
 ## Parallax State
 
-status: working
+status: settled
 
 **mission conjecture:** if M3.1 removes forced VText workflow control, restores
 agentic VText delegation semantics, repairs acceptance surfaces so they measure
@@ -71,9 +71,10 @@ pressure from converting agents into brittle procedural workflows.
   staging proof. Local tests cannot settle vmctl, deployed actor rewarm, or
   Choir-in-Choir behavior.
 
-**variant (ranking function) V:** current V=0 locally after the 2026-06-14
-review follow-up found the deployed settlement claim was premature and the
-prompt-pipeline forcing blocker was repaired. The rollback batch removed or
+**variant (ranking function) V:** current V=0 after the 2026-06-14 review
+follow-up found the deployed settlement claim was premature, the
+prompt-pipeline forcing blocker was repaired, and the repaired runtime commit
+was pushed, deployed, and re-proved on staging. The rollback batch removed or
 accepted the known edges:
 1 forced VText researcher continuation removed; 2 generic
 required-next-tool semantic trust narrowed to a typed mechanical protocol; 3
@@ -84,12 +85,13 @@ trajectory/work evidence; 7 prompt/VText-only smoke no longer accepts a run
 acceptance record locally and the deploy classifier now restarts vmctl when
 sandbox runtime package sources change; 8 actor memory cross-trajectory policy
 is named as a successor edge rather than a blocker for this rollback.
-Earlier settlement evidence includes CI/deploy, staging identity, vmctl restart,
-active computer refresh, deployed lifecycle proof, and deployed acceptance
-synthesis proving the overclaim is gone. The follow-up prompt-pipeline repair
-is verified locally by focused VText/tool-loop/API tests, runtime shards, static
-phrase scan, and independent review. Settlement still waits on commit, push,
-CI/deploy, staging identity, and deployed proof for the repaired runtime commit.
+Settlement evidence includes CI/deploy, staging identity, vmctl restart, active
+computer refresh, deployed lifecycle proof, and deployed acceptance synthesis
+proving the overclaim is gone. The follow-up prompt-pipeline repair is verified
+by focused VText/tool-loop/API tests, runtime shards, static phrase scan,
+independent review, CI run `27515490562`, staging deploy of
+`0ab8bd6a20f09ad38ef0c4c7293d42bbf8845efe`, and deployed acceptance synthesis
+`runacc-98a84912f02bcb4e0f82`.
 
 **budget:** one recovery mission before further M3 implementation. Solvency:
 first pass must buy the doctrine fix plus remove the forced continuation path.
@@ -146,9 +148,9 @@ and staging proof for any vmctl/product-path claim.
 - Edge/successor: actor memory cross-trajectory scope still needs a dedicated
   policy/test pass, but is not required to settle this regression rollback.
 
-**next move:** commit and push the prompt-pipeline repair, monitor CI/deploy,
-verify staging identity for the repaired runtime commit, and rerun deployed
-M3.1 lifecycle/acceptance proof before re-claiming settlement.
+**next move:** resume M3 proper from `docs/mission-lifecycle-cutover-v0.md`.
+Actor memory cross-trajectory scoping remains a named successor edge, not a
+blocker for this recovery.
 
 **ledger file:** `docs/mission-lifecycle-cutover-m3.1-v0.ledger.md`.
 
@@ -164,12 +166,13 @@ forces researcher continuation from semantic prompt text, and acceptance cannot
 settle M3 from prompt/VText smoke alone. The specific M3 failure chronology
 stays here and in the ledger.
 
-**settlement:** not yet re-claimed. Earlier settlement evidence remains valid
-for hard `next_required_tool` rollback, deploy topology, and run-acceptance
-overclaim repair. The prompt-pipeline forcing language is now removed locally
-and covered by tests, but behavior-changing settlement still requires push,
-CI/deploy, staging identity, and deployed acceptance proof for the repaired
-runtime commit.
+**settlement:** claimed. M3.1 has removed hard `next_required_tool` researcher
+forcing, blocked generic semantic required-next-tool control, removed prompt-bar
+researcher intent routing, corrected M3 handoff away from deterministic
+researcher continuation, exposed trajectory/work evidence for lifecycle review,
+and removed prompt-pipeline semantic delegation forcing while preserving
+grounded factual/current/source safety. Deployed proof now shows M3.1
+prompt/VText-only smoke remains blocked rather than accepted.
 
 ## Review Findings
 
