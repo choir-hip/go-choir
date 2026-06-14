@@ -2027,9 +2027,6 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		"input_origin":        vtextInputOriginUserPrompt,
 		"vtext_version":       "v0",
 	}
-	if metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) {
-		userRevisionMetadata[runMetadataExplicitResearcher] = true
-	}
 	userRevMeta, _ := json.Marshal(userRevisionMetadata)
 	userRev := types.Revision{
 		RevisionID:  userRevisionID,
@@ -2078,8 +2075,7 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		initialPrompt = "Create the first useful current-state version of this vtext document."
 	}
 	combinedPrompt := decision.SeedPrompt + " " + initialPrompt
-	explicitResearcher := metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) || vtextPromptExplicitlyRequestsResearcher(combinedPrompt)
-	if vtextPromptNeedsSuperExecution(combinedPrompt) && !explicitResearcher {
+	if vtextPromptNeedsSuperExecution(combinedPrompt) {
 		requestCtx := WithToolExecutionContext(ctx, &types.RunRecord{
 			RunID:        rec.RunID,
 			AgentID:      "vtext:" + doc.DocID,
@@ -2177,16 +2173,7 @@ func initialVTextToolChoice(rec *types.RunRecord) string {
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""
 	}
-	prompt := metadataStringValue(rec.Metadata, "seed_prompt") + " " + metadataStringValue(rec.Metadata, "original_prompt")
-	explicitResearcher := metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) || vtextPromptExplicitlyRequestsResearcher(prompt)
-	if vtextPromptNeedsSuperExecution(prompt) && !explicitResearcher {
-		return exactRequiredToolChoice("request_super_execution")
-	}
 	return exactRequiredToolChoice("edit_vtext")
-}
-
-func promptBarExplicitResearcherIntent(prompt string) bool {
-	return strings.Contains(strings.ToLower(strings.TrimSpace(prompt)), AgentProfileResearcher)
 }
 
 func vtextPromptExplicitlyRequestsResearcher(prompt string) bool {

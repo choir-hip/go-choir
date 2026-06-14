@@ -6559,7 +6559,7 @@ func TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *te
 	}
 }
 
-func TestEditVTextExplicitResearcherRequiresSpawnContinuation(t *testing.T) {
+func TestEditVTextExplicitResearcherDoesNotForceSpawnContinuation(t *testing.T) {
 	t.Parallel()
 	_, s, rt := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
@@ -6636,19 +6636,18 @@ func TestEditVTextExplicitResearcherRequiresSpawnContinuation(t *testing.T) {
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
-	if got := editResult["next_required_tool"]; got != "spawn_agent" {
-		t.Fatalf("next_required_tool = %#v, want spawn_agent; result=%s", got, editRaw)
+	if _, ok := editResult["next_required_tool"]; ok {
+		t.Fatalf("edit_vtext must not force researcher continuation; result=%s", editRaw)
 	}
-	args, _ := editResult["next_required_args"].(map[string]any)
-	if args["role"] != AgentProfileResearcher || args["channel_id"] != doc.DocID {
-		t.Fatalf("next_required_args = %#v, want researcher on doc channel", args)
+	if _, ok := registry.Lookup("spawn_agent"); !ok {
+		t.Fatal("vtext registry missing spawn_agent affordance")
 	}
-	if !strings.Contains(fmt.Sprint(editResult["next_instruction"]), "request_super_execution after the researcher spawn succeeds") {
-		t.Fatalf("next_instruction = %#v, want super follow-up guidance", editResult["next_instruction"])
+	if _, ok := registry.Lookup("request_super_execution"); !ok {
+		t.Fatal("vtext registry missing request_super_execution affordance")
 	}
 }
 
-func TestEditVTextExplicitResearcherRequiresSpawnAfterSuperBase(t *testing.T) {
+func TestEditVTextExplicitResearcherDoesNotForceSpawnAfterSuperBase(t *testing.T) {
 	t.Parallel()
 	_, s, rt := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
@@ -6726,12 +6725,8 @@ func TestEditVTextExplicitResearcherRequiresSpawnAfterSuperBase(t *testing.T) {
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
-	if got := editResult["next_required_tool"]; got != "spawn_agent" {
-		t.Fatalf("next_required_tool = %#v, want spawn_agent after super-authored base; result=%s", got, editRaw)
-	}
-	args, _ := editResult["next_required_args"].(map[string]any)
-	if args["role"] != AgentProfileResearcher || args["channel_id"] != doc.DocID {
-		t.Fatalf("next_required_args = %#v, want researcher on doc channel", args)
+	if _, ok := editResult["next_required_tool"]; ok {
+		t.Fatalf("edit_vtext must not force researcher continuation after super-authored base; result=%s", editRaw)
 	}
 }
 
@@ -6812,15 +6807,8 @@ func TestEditVTextExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt(
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
-	if got := editResult["next_required_tool"]; got != "spawn_agent" {
-		t.Fatalf("next_required_tool = %#v, want spawn_agent from base revision content; result=%s", got, editRaw)
-	}
-	args, _ := editResult["next_required_args"].(map[string]any)
-	if args["role"] != AgentProfileResearcher || args["channel_id"] != doc.DocID {
-		t.Fatalf("next_required_args = %#v, want researcher on doc channel", args)
-	}
-	if !strings.Contains(fmt.Sprint(args["objective"]), "Ask researcher for route evidence") {
-		t.Fatalf("objective = %#v, want durable base revision prompt", args["objective"])
+	if _, ok := editResult["next_required_tool"]; ok {
+		t.Fatalf("base revision content must not force researcher continuation; result=%s", editRaw)
 	}
 }
 
@@ -6904,15 +6892,8 @@ func TestEditVTextExplicitResearcherFromSeedPromptSurvivesRequestIntent(t *testi
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
-	if got := editResult["next_required_tool"]; got != "spawn_agent" {
-		t.Fatalf("next_required_tool = %#v, want spawn_agent from seed prompt despite request_intent; result=%s", got, editRaw)
-	}
-	args, _ := editResult["next_required_args"].(map[string]any)
-	if args["role"] != AgentProfileResearcher || args["channel_id"] != doc.DocID {
-		t.Fatalf("next_required_args = %#v, want researcher on doc channel", args)
-	}
-	if !strings.Contains(fmt.Sprint(args["objective"]), "Ask researcher for route evidence") {
-		t.Fatalf("objective = %#v, want seed prompt focus", args["objective"])
+	if _, ok := editResult["next_required_tool"]; ok {
+		t.Fatalf("seed prompt/request intent must not force researcher continuation; result=%s", editRaw)
 	}
 }
 

@@ -90,7 +90,7 @@ func TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper(t *tes
 	}
 }
 
-func TestHandlePromptBarExplicitResearcherBypassesPersistentSuperShortcut(t *testing.T) {
+func TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Create a vtext document for M3. Ask researcher for a concise finding. Ask super to create a tiny verification note."}`, "user-alice")
@@ -112,8 +112,8 @@ func TestHandlePromptBarExplicitResearcherBypassesPersistentSuperShortcut(t *tes
 	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
 		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
 	}
-	if !metadataBoolValue(conductor.Metadata, runMetadataExplicitResearcher) {
-		t.Fatalf("conductor metadata missing %s=true: %+v", runMetadataExplicitResearcher, conductor.Metadata)
+	if metadataBoolValue(conductor.Metadata, runMetadataExplicitResearcher) {
+		t.Fatalf("conductor metadata must not set %s from prompt text: %+v", runMetadataExplicitResearcher, conductor.Metadata)
 	}
 	if decision.InitialLoopID == "" {
 		t.Fatalf("conductor decision missing initial loop: %+v", decision)
@@ -122,16 +122,13 @@ func TestHandlePromptBarExplicitResearcherBypassesPersistentSuperShortcut(t *tes
 	if err != nil {
 		t.Fatalf("get initial loop run: %v", err)
 	}
-	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
-		t.Fatalf("initial loop profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
+	if metadataBoolValue(initialRun.Metadata, runMetadataExplicitResearcher) {
+		t.Fatalf("initial run metadata must not set %s from prompt text: %+v", runMetadataExplicitResearcher, initialRun.Metadata)
 	}
-	if !metadataBoolValue(initialRun.Metadata, runMetadataExplicitResearcher) {
-		t.Fatalf("initial run metadata missing %s=true: %+v", runMetadataExplicitResearcher, initialRun.Metadata)
+	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
+		t.Fatalf("initial loop profile = %q/%q, want ordinary vtext route", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
-		t.Fatalf("initial_handoff = %q, want vtext path for explicit researcher request", got)
-	}
-	if choice := initialVTextToolChoice(initialRun); choice != exactRequiredToolChoice("edit_vtext") {
-		t.Fatalf("initial tool choice = %q, want edit_vtext so vtext can open researcher work", choice)
+		t.Fatalf("initial_handoff = %q, want no researcher-driven route override", got)
 	}
 }

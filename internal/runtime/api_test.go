@@ -569,7 +569,7 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	}
 }
 
-func TestRunAcceptanceSynthesizeAcceptsPromptVTextStagingSmoke(t *testing.T) {
+func TestRunAcceptanceSynthesizeDoesNotAcceptPromptVTextOnlySmoke(t *testing.T) {
 	t.Parallel()
 	_, handler := testAPISetup(t)
 
@@ -593,8 +593,8 @@ func TestRunAcceptanceSynthesizeAcceptsPromptVTextStagingSmoke(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
 		t.Fatalf("decode acceptance: %v", err)
 	}
-	if rec.AcceptanceLevel != types.RunAcceptanceStagingSmokeLevel || rec.State != types.RunAcceptanceAccepted {
-		t.Fatalf("acceptance = %s/%s, want staging-smoke-level/accepted; checkpoints=%+v invariants=%+v risks=%+v", rec.AcceptanceLevel, rec.State, rec.Checkpoints, rec.InvariantChecks, rec.FailureResidualRisks)
+	if rec.AcceptanceLevel != types.RunAcceptanceStagingSmokeLevel || rec.State != types.RunAcceptanceBlocked {
+		t.Fatalf("acceptance = %s/%s, want staging-smoke-level/blocked for prompt/VText-only smoke; checkpoints=%+v invariants=%+v risks=%+v", rec.AcceptanceLevel, rec.State, rec.Checkpoints, rec.InvariantChecks, rec.FailureResidualRisks)
 	}
 	for _, want := range []string{"submitted", "vtext_opened"} {
 		if !acceptanceHasCheckpoint(rec, want) {
@@ -3852,6 +3852,89 @@ func TestHandleRunStatusByIDStateTransitions(t *testing.T) {
 	// UpdatedAt should be >= CreatedAt.
 	if finalResp.UpdatedAt < finalResp.CreatedAt {
 		t.Errorf("updated_at %q should be >= created_at %q", finalResp.UpdatedAt, finalResp.CreatedAt)
+	}
+}
+
+func TestHandleRunStatusPublicIncludesTrajectoryEvidence(t *testing.T) {
+	t.Parallel()
+	rt, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	const trajectoryID = "traj-public-status-evidence"
+	if _, err := rt.store.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID:   trajectoryID,
+		OwnerID:        "user-alice",
+		Kind:           types.TrajectoryKindTask,
+		Status:         types.TrajectoryLive,
+		SettlementRule: defaultSettlementRuleForKind(types.TrajectoryKindTask),
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	rec := types.RunRecord{
+		RunID:        "run-public-status-evidence",
+		AgentID:      "super:user-alice",
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "inspect trajectory status",
+		TrajectoryID: trajectoryID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		AgentProfile: AgentProfileSuper,
+		AgentRole:    AgentProfileSuper,
+		Metadata: map[string]any{
+			runMetadataTrajectoryID: trajectoryID,
+		},
+	}
+	if err := rt.store.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if _, err := rt.store.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              "user-alice",
+		TrajectoryID:         trajectoryID,
+		Objective:            "open lifecycle obligation",
+		ObjectiveFingerprint: "fp-public-status-evidence",
+		CreatedByRunID:       rec.RunID,
+	}); err != nil {
+		t.Fatalf("create work item: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name string
+		path string
+		call func(*httptest.ResponseRecorder, *http.Request)
+	}{
+		{
+			name: "query",
+			path: "/api/agent/status?loop_id=" + rec.RunID,
+			call: handler.HandleRunStatus,
+		},
+		{
+			name: "by_id",
+			path: "/api/agent/" + rec.RunID + "/status",
+			call: handler.HandleRunStatusByID,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := authenticatedRequest(http.MethodGet, tc.path, "", "user-alice")
+			w := httptest.NewRecorder()
+			tc.call(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+			}
+			var resp runStatusResponse
+			if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if resp.Trajectory == nil {
+				t.Fatalf("trajectory evidence missing: %+v", resp)
+			}
+			if resp.Trajectory.TrajectoryID != trajectoryID || resp.Trajectory.OpenWorkItemCount != 1 || resp.Trajectory.SettlementReady {
+				t.Fatalf("trajectory evidence = %+v, want open obligation on %s", resp.Trajectory, trajectoryID)
+			}
+		})
 	}
 }
 

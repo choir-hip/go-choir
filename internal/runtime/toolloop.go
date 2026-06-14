@@ -180,8 +180,9 @@ func WithInitialToolChoice(choice string) ToolLoopOption {
 }
 
 // WithTerminalToolSuccesses makes successful tool calls terminal for this loop
-// unless a tool result explicitly declares a next_required_tool. This is for
-// side-effect tools whose successful execution is the run's observable result.
+// unless the same tool batch yields a recognized mechanical required-next-tool
+// protocol. This is for side-effect tools whose successful execution is the
+// run's observable result.
 func WithTerminalToolSuccesses(names ...string) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		if len(names) == 0 {
@@ -529,7 +530,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			if activeRequired != nil && requiredCalled {
 				requiredNextTool = nil
 			}
-			if next, ok := extractRequiredNextTool(toolResults); ok {
+			if next, ok := extractRequiredNextTool(resp.ToolCalls, toolResults); ok {
 				if requiredToolSucceeded(next.Name, resp.ToolCalls, toolResults) {
 					if emit != nil {
 						payload, _ := json.Marshal(map[string]any{
@@ -823,8 +824,13 @@ func toolDefinitionsMatchingName(defs []ToolDefinition, name string) []ToolDefin
 	return defs
 }
 
-func extractRequiredNextTool(results []types.ToolResult) (pendingRequiredTool, bool) {
-	for _, result := range results {
+func extractRequiredNextTool(calls []types.ToolCall, results []types.ToolResult) (pendingRequiredTool, bool) {
+	limit := len(results)
+	if len(calls) < limit {
+		limit = len(calls)
+	}
+	for i := 0; i < limit; i++ {
+		result := results[i]
 		if result.IsError {
 			continue
 		}
@@ -840,6 +846,9 @@ func extractRequiredNextTool(results []types.ToolResult) (pendingRequiredTool, b
 		if name == "" {
 			continue
 		}
+		if !requiredNextToolProtocolAllowed(calls[i].Name, name, decoded) {
+			continue
+		}
 		if required, ok := decoded["delegation_required"].(bool); ok && !required {
 			continue
 		}
@@ -850,6 +859,17 @@ func extractRequiredNextTool(results []types.ToolResult) (pendingRequiredTool, b
 		return pendingRequiredTool{Name: name, Instruction: instruction}, true
 	}
 	return pendingRequiredTool{}, false
+}
+
+func requiredNextToolProtocolAllowed(producerTool, nextTool string, decoded map[string]any) bool {
+	producerTool = strings.TrimSpace(producerTool)
+	nextTool = strings.TrimSpace(nextTool)
+	switch producerTool {
+	case "request_worker_vm":
+		return nextTool == "start_worker_delegation" && decoded["start_args"] != nil
+	default:
+		return false
+	}
 }
 
 func successfulTerminalToolNames(calls []types.ToolCall, results []types.ToolResult, terminalTools map[string]bool) []string {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -106,24 +105,14 @@ func newEditVTextTool(rt *Runtime) Tool {
 				"base_revision_id": rev.ParentRevisionID,
 				"status":           "stored",
 			}
-			if continuation, ok := rt.requiredContinuationAfterVTextEdit(context.Background(), rec, in, rev); ok {
-				if continuation.Tool == "request_email_draft" {
-					emailResult, err := rt.executeRequiredEmailDraftContinuation(ctx, rec, continuation.Args)
-					if err != nil {
-						return "", err
-					}
-					result["email_draft_request"] = emailResult
-					result["email_draft_request_status"] = emailResult["status"]
-					result["next_instruction"] = "Email appagent draft handoff completed from the stored VText revision. Do not send mail directly; owner approval remains required."
-				} else {
-					result["next_required_tool"] = continuation.Tool
-					if len(continuation.Args) > 0 {
-						result["next_required_args"] = continuation.Args
-					}
-					if strings.TrimSpace(continuation.Instruction) != "" {
-						result["next_instruction"] = continuation.Instruction
-					}
+			if continuation, ok := rt.requiredContinuationAfterVTextEdit(context.Background(), rec, in, rev); ok && continuation.Tool == "request_email_draft" {
+				emailResult, err := rt.executeRequiredEmailDraftContinuation(ctx, rec, continuation.Args)
+				if err != nil {
+					return "", err
 				}
+				result["email_draft_request"] = emailResult
+				result["email_draft_request_status"] = emailResult["status"]
+				result["next_instruction"] = "Email appagent draft handoff completed from the stored VText revision. Do not send mail directly; owner approval remains required."
 			}
 			return toolResultJSON(result)
 		},
@@ -177,8 +166,6 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 	if prompt == "" {
 		prompt = strings.TrimSpace(baseRevision.Content)
 	}
-	baseRevisionMeta := decodeRevisionMetadata(baseRevision.Metadata)
-	revMeta := decodeRevisionMetadata(rev.Metadata)
 	if prompt != "" {
 		if intent, ok := extractEmailDraftIntent(prompt, rev.Content); ok {
 			if baseRevision.AuthorKind == types.AuthorUser || grounded {
@@ -198,101 +185,7 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 			}
 		}
 	}
-	explicitResearcher := metadataBoolValue(rec.Metadata, runMetadataExplicitResearcher) ||
-		metadataBoolValue(baseRevisionMeta, runMetadataExplicitResearcher) ||
-		metadataBoolValue(revMeta, runMetadataExplicitResearcher) ||
-		vtextPromptExplicitlyRequestsResearcher(vtextEditResearcherIntentText(rec, prompt, baseRevision, baseRevisionMeta, rev, revMeta))
-	if explicitResearcher &&
-		!rt.vtextTrajectoryHasResearcherParticipation(ctx, rec, rev.DocID) {
-		objective := "Research the user's request for this VText document and send a concise finding with evidence via update_coagent."
-		if focus := firstNonEmpty(
-			metadataStringValue(baseRevisionMeta, "seed_prompt"),
-			metadataStringValue(baseRevisionMeta, "original_prompt"),
-			metadataStringValue(baseRevisionMeta, "request_intent"),
-			metadataStringValue(revMeta, "seed_prompt"),
-			metadataStringValue(revMeta, "original_prompt"),
-			metadataStringValue(revMeta, "request_intent"),
-			baseRevision.Content,
-			metadataStringValue(rec.Metadata, "seed_prompt"),
-			metadataStringValue(rec.Metadata, "original_prompt"),
-			metadataStringValue(rec.Metadata, "request_intent"),
-			prompt,
-		); strings.TrimSpace(focus) != "" {
-			objective += " Focus on: " + truncateForToolInstruction(focus, 420)
-		}
-		return vtextRequiredContinuation{
-			Tool: "spawn_agent",
-			Args: map[string]any{
-				"role":       AgentProfileResearcher,
-				"channel_id": rev.DocID,
-				"objective":  objective,
-			},
-			Instruction: "The owner explicitly asked for a researcher. Call spawn_agent next with role=\"researcher\" and the provided arguments before ending this run. If the owner also asked for generated artifacts, execution, or verification, call request_super_execution after the researcher spawn succeeds.",
-		}, true
-	}
 	return vtextRequiredContinuation{}, false
-}
-
-func vtextEditResearcherIntentText(rec *types.RunRecord, prompt string, baseRevision types.Revision, baseRevisionMeta map[string]any, rev types.Revision, revMeta map[string]any) string {
-	parts := []string{
-		prompt,
-		metadataStringValue(rec.Metadata, "seed_prompt"),
-		metadataStringValue(rec.Metadata, "original_prompt"),
-		metadataStringValue(rec.Metadata, "request_intent"),
-		baseRevision.Content,
-		metadataStringValue(baseRevisionMeta, "seed_prompt"),
-		metadataStringValue(baseRevisionMeta, "original_prompt"),
-		metadataStringValue(baseRevisionMeta, "request_intent"),
-		rev.Content,
-		metadataStringValue(revMeta, "seed_prompt"),
-		metadataStringValue(revMeta, "original_prompt"),
-		metadataStringValue(revMeta, "request_intent"),
-	}
-	return strings.Join(parts, "\n")
-}
-
-func (rt *Runtime) vtextTrajectoryHasResearcherParticipation(ctx context.Context, rec *types.RunRecord, docID string) bool {
-	if rt == nil || rt.store == nil || rec == nil {
-		return false
-	}
-	ownerID := strings.TrimSpace(rec.OwnerID)
-	docID = strings.TrimSpace(docID)
-	trajectoryID := strings.TrimSpace(rec.TrajectoryID)
-	if ownerID == "" || docID == "" || trajectoryID == "" {
-		return false
-	}
-	runs, err := rt.store.ListRunsByChannel(ctx, ownerID, docID, 500)
-	if err != nil {
-		log.Printf("runtime: vtext run %s: list channel runs for researcher obligation: %v", rec.RunID, err)
-		return false
-	}
-	for _, run := range runs {
-		if strings.TrimSpace(run.TrajectoryID) != trajectoryID {
-			continue
-		}
-		if agentProfileForRun(&run) == AgentProfileResearcher {
-			return true
-		}
-	}
-	updates, err := rt.store.ListWorkerUpdatesByTrajectory(ctx, ownerID, trajectoryID, 200)
-	if err != nil {
-		log.Printf("runtime: vtext run %s: list worker updates for researcher obligation: %v", rec.RunID, err)
-		return false
-	}
-	for _, update := range updates {
-		if strings.TrimSpace(update.ChannelID) == docID && strings.TrimSpace(update.Role) == AgentProfileResearcher {
-			return true
-		}
-	}
-	return false
-}
-
-func truncateForToolInstruction(text string, limit int) string {
-	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
-	if limit <= 0 || len(text) <= limit {
-		return text
-	}
-	return strings.TrimSpace(text[:limit]) + "..."
 }
 
 func newRequestSuperExecutionTool(rt *Runtime) Tool {

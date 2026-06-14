@@ -71,15 +71,18 @@ pressure from converting agents into brittle procedural workflows.
   staging proof. Local tests cannot settle vmctl, deployed actor rewarm, or
   Choir-in-Choir behavior.
 
-**variant (ranking function) V:** current V=8:
-1 forced VText researcher continuation remains; 2 generic required-next-tool
-trusts semantic outputs; 3 prompt-bar researcher intent is overbroad; 4 tests
-assert forced workflow; 5 current M3 paradoc points at hardening the regression;
-6 browser-public run status omits trajectory/work evidence; 7 prompt/VText-only
-acceptance can be accepted for M3-looking smoke; 8 actor memory rewarm
-cross-trajectory policy is implicit. Settled in this pass: VText multi-agent
-invariant is now documented in shared doctrine. Settlement requires V=0 or a
-named successor for any accepted edge.
+**variant (ranking function) V:** current local rollback V=0, settlement
+pending landing evidence. The rollback batch removed or accepted all eight
+known edges: 1 forced VText researcher continuation removed; 2 generic
+required-next-tool semantic trust narrowed to a typed mechanical protocol; 3
+prompt-bar researcher intent removed from runtime routing; 4 tests rewritten to
+protect VText choice/non-forcing semantics; 5 M3 handoff corrected away from
+hardening the deterministic continuation; 6 browser-public run status exposes
+trajectory/work evidence; 7 prompt/VText-only smoke no longer accepts a run
+acceptance record; 8 actor memory cross-trajectory policy is named as a
+successor edge rather than a blocker for this rollback. Settlement still
+requires commit/push, CI/deploy, staging identity, and deployed lifecycle
+evidence.
 
 **budget:** one recovery mission before further M3 implementation. Solvency:
 first pass must buy the doctrine fix plus remove the forced continuation path.
@@ -100,22 +103,21 @@ and staging proof for any vmctl/product-path claim.
   researcher was absent, the paradoc converted that into "repair product route,"
   then "make explicit researcher obligations executable," then "enforce runtime
   continuation."
-- C3 supported for docs, active for code/tests: VText now has a crisp invariant
-  in shared doctrine: `docs/vtext-agentic-invariants-2026-06-13.md`. Code and
-  tests still violate it until the forced researcher continuation is removed.
-- C4 active: required-next-tool is useful for mechanical protocols but unsafe as
-  a generic semantic channel. It must be narrowed, not deleted blindly.
-- Edge/missing_oracle: acceptance currently has a weak smoke tier that can pass
-  with only prompt submission and VText opening. M3 needs a distinct lifecycle
-  proof predicate.
+- C3 supported for docs and local code/tests: VText has a crisp invariant in
+  shared doctrine and the forced researcher continuation is removed locally.
+- C4 supported locally: required-next-tool remains only for the worker VM
+  mechanical lease/start protocol with typed `start_args`; semantic tool results
+  cannot force exact appagent delegation.
+- Edge/deployed_oracle: local tests and runtime shards pass, but behavior change
+  settlement requires CI/deploy and deployed lifecycle evidence against
+  `https://choir.news`.
+- Edge/successor: actor memory cross-trajectory scope still needs a dedicated
+  policy/test pass, but is not required to settle this regression rollback.
 
-**next move:** commit the docs checkpoint, then implement the smallest
-regression rollback batch: remove VText researcher hard continuation, rewrite
-tests from forced `next_required_tool` to VText-choice/non-forcing semantics,
-narrow required-next-tool to allowed mechanical tool outputs or rename its
-contract, expose trajectory/work evidence on public run status, and update M3
-handoff away from deterministic continuation. Then run focused tests and runtime
-shards before any staging claim.
+**next move:** commit the rollback batch, push `main`, monitor CI and staging
+deploy identity, then run deployed lifecycle evidence that depends on
+trajectory/work-item state rather than prompt/VText smoke or exact researcher
+sequencing.
 
 **ledger file:** `docs/mission-lifecycle-cutover-m3.1-v0.ledger.md`.
 
@@ -125,12 +127,16 @@ history. M4 continuation deletion and M5 Wire settlement remain successors only
 after M3/M3.1 lifecycle settlement.
 
 **learning state:** VText invariant promoted outward to `AGENTS.md` and
-`docs/vtext-agentic-invariants-2026-06-13.md`. The specific M3 failure
-chronology stays here and in the ledger. Tests and code still need promotion.
+`docs/vtext-agentic-invariants-2026-06-13.md`. The local rollback now matches
+that invariant: VText may choose delegation affordances, runtime no longer
+forces researcher continuation from semantic prompt text, and acceptance cannot
+settle M3 from prompt/VText smoke alone. The specific M3 failure chronology
+stays here and in the ledger.
 
-**settlement:** not claimed. Settlement requires code/docs fixed, tests passing,
-CI/deploy green for behavior changes, and a deployed proof whose success depends
-on durable actor lifecycle evidence rather than forced researcher sequencing.
+**settlement:** not claimed. Local code/docs and tests are repaired; final
+settlement still requires a pushed commit, CI/deploy green for the behavior
+change, verified staging identity, and a deployed proof whose success depends on
+durable actor lifecycle evidence rather than forced researcher sequencing.
 
 ## Review Findings
 
@@ -345,5 +351,5 @@ probe became the de facto spec.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-lifecycle-cutover-m3.1-v0.md. Treat it as the active M3.1 lifecycle-cutover regression recovery source program and the required preflight before resuming M3 proper. Current status is working: V=8 after the VText agentic invariant was promoted to AGENTS.md and docs/vtext-agentic-invariants-2026-06-13.md, but code/tests still violate the invariant. Preserve Choir Doctrine as apex, VText as an agentic canonical-document owner rather than a workflow stepper, harness minimalism, trajectory/work-item evidence over run-tree smoke, and Problem Documentation First. Mutation class is orange/red: runtime VText tools, generic required-next-tool control, prompt-bar researcher intent, public run status, run acceptance, and lifecycle proof surfaces are protected. First next move: implement the smallest regression rollback batch by removing the VText researcher hard continuation, rewriting forced next_required_tool tests into non-forcing/VText-choice tests, narrowing required-next-tool to mechanical protocol outputs or a typed envelope, narrowing or deleting promptBarExplicitResearcherIntent, exposing trajectory/work evidence needed for lifecycle acceptance, and pointing M3 handoff away from deterministic researcher continuation. Run focused VText/tool-loop/API tests, then nix develop -c scripts/go-test-runtime-shards, then independent review, commit/push, CI/deploy, staging identity, and deployed lifecycle evidence before settlement. Ledger: docs/mission-lifecycle-cutover-m3.1-v0.ledger.md. Settlement requires V=0 or named successor edges, no forced semantic VText delegation, no generic semantic next_required_tool control, tests protecting the invariant, M3 handoff corrected, and no M3 settlement claim from prompt/VText smoke alone.
+/goal Use Parallax on docs/mission-lifecycle-cutover-m3.1-v0.md. Treat it as the active M3.1 lifecycle-cutover regression recovery source program and the required preflight before resuming M3 proper. Current status is working: local rollback V=0 after removing forced semantic VText researcher continuation, narrowing required-next-tool to mechanical protocol output, deleting prompt-bar researcher routing intent, exposing trajectory/work evidence, preventing prompt/VText-only run acceptance, updating M3 handoff, and adding tests that protect VText choice. Settlement is not claimed until landing evidence exists. Preserve Choir Doctrine as apex, VText as an agentic canonical-document owner rather than a workflow stepper, harness minimalism, trajectory/work-item evidence over run-tree smoke, and Problem Documentation First. Mutation class is orange/red: runtime VText tools, generic required-next-tool control, prompt-bar researcher intent, public run status, run acceptance, and lifecycle proof surfaces are protected. First next move: commit/push the rollback batch, monitor CI/deploy, verify staging identity, and run deployed lifecycle evidence before settlement. Ledger: docs/mission-lifecycle-cutover-m3.1-v0.ledger.md. Settlement requires no forced semantic VText delegation, no generic semantic next_required_tool control, tests protecting the invariant, M3 handoff corrected, no M3 settlement claim from prompt/VText smoke alone, and deployed lifecycle proof or a named successor edge.
 ```

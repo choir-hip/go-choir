@@ -489,9 +489,6 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 	if ownerEmail := authenticatedUserEmail(r); ownerEmail != "" {
 		metadata[runMetadataOwnerEmail] = ownerEmail
 	}
-	if promptBarExplicitResearcherIntent(text) {
-		metadata[runMetadataExplicitResearcher] = true
-	}
 	if contentSourceURL != "" {
 		metadata["content_source_url"] = contentSourceURL
 		metadata["content_media_type"] = contentMediaType
@@ -1335,31 +1332,7 @@ func (h *APIHandler) HandleRunStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var finishedAt *string
-	if rec.FinishedAt != nil {
-		s := rec.FinishedAt.Format("2006-01-02T15:04:05.000Z")
-		finishedAt = &s
-	}
-
-	writeAPIJSON(w, http.StatusOK, runStatusResponse{
-		AgentID:         rec.AgentID,
-		RunID:           rec.RunID,
-		ChannelID:       rec.ChannelID,
-		ParentRunID:     rec.ParentRunID,
-		AgentProfile:    rec.AgentProfile,
-		AgentRole:       rec.AgentRole,
-		OwnerID:         rec.OwnerID,
-		SandboxID:       rec.SandboxID,
-		State:           rec.State,
-		Prompt:          rec.Prompt,
-		Result:          rec.Result,
-		Error:           rec.Error,
-		CreatedAt:       rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:       rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-		FinishedAt:      finishedAt,
-		ActiveChildRuns: 0,
-		Metadata:        rec.Metadata,
-	})
+	writeAPIJSON(w, http.StatusOK, h.runStatusWithTrajectory(r.Context(), rec))
 }
 
 // HandleRunList handles GET /api/agent/loops.
@@ -1575,30 +1548,7 @@ func (h *APIHandler) HandleRunStatusByID(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var finishedAt *string
-	if rec.FinishedAt != nil {
-		s := rec.FinishedAt.Format("2006-01-02T15:04:05.000Z")
-		finishedAt = &s
-	}
-
-	writeAPIJSON(w, http.StatusOK, runStatusResponse{
-		AgentID:      rec.AgentID,
-		RunID:        rec.RunID,
-		ChannelID:    rec.ChannelID,
-		ParentRunID:  rec.ParentRunID,
-		AgentProfile: rec.AgentProfile,
-		AgentRole:    rec.AgentRole,
-		OwnerID:      rec.OwnerID,
-		SandboxID:    rec.SandboxID,
-		State:        rec.State,
-		Prompt:       rec.Prompt,
-		Result:       rec.Result,
-		Error:        rec.Error,
-		CreatedAt:    rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:    rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-		FinishedAt:   finishedAt,
-		Metadata:     rec.Metadata,
-	})
+	writeAPIJSON(w, http.StatusOK, h.runStatusWithTrajectory(r.Context(), rec))
 }
 
 // HandleTopology handles GET /api/agent/topology.

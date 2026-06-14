@@ -1071,22 +1071,15 @@ func acceptanceContinuationEventDetails(ev types.EventRecord) map[string]any {
 
 func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types.RunAcceptanceLevel, types.RunAcceptanceState) {
 	has := map[string]bool{}
-	hasBlocked := false
 	for _, checkpoint := range checkpoints {
 		if checkpoint.State == "passed" {
 			has[checkpoint.Kind] = true
-		}
-		if checkpoint.State == "blocked" {
-			hasBlocked = true
 		}
 	}
 	level := types.RunAcceptanceDocsLevel
 	state := types.RunAcceptanceBlocked
 	if has["submitted"] && has["vtext_opened"] {
 		level = types.RunAcceptanceStagingSmokeLevel
-		if !hasBlocked {
-			state = types.RunAcceptanceAccepted
-		}
 	}
 	if has["submitted"] && has["vtext_opened"] && has["super_requested"] && has["worker_leased"] && has["worker_supervision_observed"] {
 		level = types.RunAcceptanceStagingSmokeLevel

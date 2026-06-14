@@ -63,3 +63,36 @@ remains 8.
 Receipt: `docs/mission-graph.yaml`,
 `docs/mission-lifecycle-cutover-m3.1-v0.md`,
 `docs/mission-lifecycle-cutover-v0.md`.
+
+## 2026-06-14 - Remove Forced Semantic VText Continuation Locally
+
+Claim: the smallest rollback batch can repair the regression without adding a
+new role-specific harness branch. VText should retain delegation affordances,
+but runtime must not force researcher or super continuation from semantic prompt
+text.
+
+Move: repair / contain. Removed the VText researcher hard continuation from
+`edit_vtext`, kept the email draft handoff as a bounded app protocol, narrowed
+`next_required_tool` handling to the typed worker VM lease/start protocol,
+deleted prompt-bar researcher routing intent, exposed trajectory/work evidence
+on browser-public run status, prevented prompt/VText-only smoke from accepting a
+run acceptance record, and updated M3 handoff away from deterministic researcher
+continuation.
+
+Expected Delta V: -8 for the local rollback batch. Actual Delta V: -8 locally.
+M3.1 local rollback V is 0, with settlement still pending commit/push,
+CI/deploy, staging identity, and deployed lifecycle evidence.
+
+Receipts:
+- `nix develop -c go test ./internal/runtime -run 'Test(EditVTextInitialContinuationDoesNotSmuggleRequiredTool|EditVTextExplicitResearcherDoesNotForceSpawnContinuation|EditVTextExplicitResearcherDoesNotForceSpawnAfterSuperBase|EditVTextExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|EditVTextExplicitResearcherFromSeedPromptSurvivesRequestIntent|EditVTextExplicitResearcherDoesNotDuplicateExistingResearcher|HandlePromptBarResearcherMentionDoesNotSetRoutingFlag|RunToolLoopRequiredNextTool|RunToolLoopIgnoresSemanticRequiredNextToolFromUntrustedProducer|HandleRunStatusPublicIncludesTrajectoryEvidence|RunAcceptanceSynthesizeDoesNotAcceptPromptVTextOnlySmoke|RunAcceptanceSynthesizeAcceptsRuntimeSupervisionWithoutAppPackage|InitialVTextToolChoice)'` passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed after the runtime
+  changes.
+- Independent review reported no blockers and two P3 cleanup findings; both
+  were repaired, then
+  `nix develop -c go test ./internal/runtime -run 'Test(EditVTextExplicitResearcherDoesNotForceSpawnContinuation|RunToolLoopRequiredNextToolUsesRequiredChoice|RunToolLoopIgnoresSemanticRequiredNextToolFromUntrustedProducer|InitialVTextToolChoiceUsesExactTools)'`
+  passed.
+
+Open edge: final settlement is external to this local proof. The next move is
+commit, push, CI/deploy monitoring, staging identity verification, and deployed
+lifecycle evidence. Actor memory cross-trajectory scoping remains a named
+successor edge, not a blocker for this rollback.
