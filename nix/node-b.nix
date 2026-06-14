@@ -56,9 +56,10 @@ let
     set -euo pipefail
     export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.curl pkgs.gnugrep pkgs.nix pkgs.systemd ]}:$PATH"
 
-    min_free_kib="''${GO_CHOIR_DISK_GC_MIN_FREE_KIB:-41943040}"
+    emergency_min_free_kib="''${GO_CHOIR_DISK_GC_MIN_FREE_KIB:-41943040}"
+    target_free_kib="''${GO_CHOIR_DISK_GC_TARGET_FREE_KIB:-104857600}"
     avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
-    echo "go-choir disk retention: root_available_kib=''${avail_kib} min_required_kib=''${min_free_kib}"
+    echo "go-choir disk retention: root_available_kib=''${avail_kib} emergency_min_free_kib=''${emergency_min_free_kib} target_free_kib=''${target_free_kib}"
     df -h / /var/lib/go-choir 2>/dev/null || df -h /
 
     curl -fsS -X POST -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/reclaim || true
@@ -66,11 +67,14 @@ let
     nix-env -p /nix/var/nix/profiles/system --delete-generations +8 || true
 
     avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
-    if [ -z "''${avail_kib}" ] || [ "''${avail_kib}" -lt "''${min_free_kib}" ]; then
-      echo "go-choir disk retention: below headroom after generation pruning; running nix store gc"
+    if [ -z "''${avail_kib}" ] || [ "''${avail_kib}" -lt "''${emergency_min_free_kib}" ]; then
+      echo "go-choir disk retention: below emergency headroom after generation pruning; running nix store gc"
+      nix store gc || true
+    elif [ "''${avail_kib}" -lt "''${target_free_kib}" ]; then
+      echo "go-choir disk retention: below target headroom; running nix store gc for routine maintenance"
       nix store gc || true
     else
-      echo "go-choir disk retention: preserving warm Nix cache because headroom is sufficient"
+      echo "go-choir disk retention: preserving warm Nix cache because target headroom is satisfied"
     fi
 
     df -h / /var/lib/go-choir 2>/dev/null || df -h /
@@ -519,8 +523,10 @@ in
       Type = "oneshot";
       ExecStart = diskRetentionSweep;
       Environment = [
-        # Keep about 40 GiB of deploy/build headroom during daily maintenance.
+        # Emergency floor remains the lower bound. The higher target runs
+        # routine Nix GC before storage pressure reaches recovery territory.
         "GO_CHOIR_DISK_GC_MIN_FREE_KIB=41943040"
+        "GO_CHOIR_DISK_GC_TARGET_FREE_KIB=104857600"
       ];
     };
   };

@@ -501,3 +501,35 @@
 - Actual ΔV: 0.
 - Open edge: convert this report-only plan into an owner-approved active timer
   policy, or implement snapshot cleanup gates over typed sidecars first.
+
+## 2026-06-14 — active Nix timer target implementation
+
+- Claim: Node B can prune `/nix/store` more frequently without deleting Nix
+  roots or weakening rollback evidence by making the daily timer run
+  `nix store gc` below a 100 GiB target headroom while keeping the existing
+  40 GiB emergency floor and `+8` system-generation retention policy.
+- Move: changed `nix/node-b.nix` so `go-choir-disk-retention-sweep` has
+  `GO_CHOIR_DISK_GC_TARGET_FREE_KIB=104857600` and runs routine
+  `nix store gc` when free space is below that target after vmctl reclaim,
+  journal vacuum, and existing generation pruning. Updated the read-only report
+  and verifier to distinguish timer-authorized GC from ad hoc GC that the
+  report still refuses to authorize.
+- Evidence: `bash -n` passed for touched scripts; deploy-impact classifier
+  regression passed; `nix-instantiate --parse nix/node-b.nix` passed; classifier
+  output for `nix/node-b.nix` is host OS only with `deploy_ordinary_guest=false`
+  and `deploy_playwright_guest=false`. Live read-only proof
+  `scripts/node-b-storage-proof --host node-b --top 10 --out-dir
+  /tmp/node-b-storage-proof-20260614T163631Z` completed in 7.193 seconds and
+  verifier passed. The JSON report shows pressure `below_target_headroom`,
+  timer action `run_nix_store_gc_from_timer`, current generation 494, rollback
+  generation 493, 8 stale generation review candidates, 1 broken root, and
+  active vmctl retention projected delete bytes `0`.
+- Safety evidence: no live `nix store gc`, generation deletion, root deletion,
+  service restart, VM mutation, snapshot deletion, or active prune expansion was
+  run during this pass.
+- Expected ΔV: 1 after CI/deploy proves the host-OS-only timer behavior on
+  Node B.
+- Actual ΔV: 0 until the commit is pushed, CI passes, deploy identity is
+  verified, and deployed Node B proof observes the target.
+- Open edge: push/monitor CI and deploy, then verify deployed Node B reports
+  the 100 GiB target and did not request ordinary/Playwright guest image builds.

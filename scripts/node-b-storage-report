@@ -366,19 +366,23 @@ sub build_nix_gc_plan {
 
   my $pressure = $avail_kib > 0 && $avail_kib < $min_free_kib ? "below_emergency_floor" :
     ($avail_kib > 0 && $avail_kib < $target_free_kib ? "below_target_headroom" : "target_headroom_met");
+  my $timer_gc_action = $pressure eq "target_headroom_met" ? "preserve_warm_cache" : "run_nix_store_gc_from_timer";
   return {
-    policy_status => "report-only; no generation deletion, root deletion, or nix-store GC authorized",
+    policy_status => "report-only; no generation deletion, root deletion, or ad hoc nix-store GC authorized by this report",
     current_available_kib => $avail_kib + 0,
     active_sweep_min_free_kib => $min_free_kib + 0,
+    active_sweep_target_free_kib => $target_free_kib + 0,
     proposed_target_free_kib => $target_free_kib + 0,
     pressure => $pressure,
+    timer_gc_action => $timer_gc_action,
     current_generation => $current_generation + 0,
     rollback_generation => $rollback_generation + 0,
     stale_generation_count => $stale_generation_count + 0,
     stale_root_count => $stale_root_count + 0,
     broken_root_count => $missing_root_count + 0,
     proposed_delete_gate => "deployed identity plus rollback manifest plus owner-reviewed stale generation/root decision plus dry-run report",
-    proposed_gc_gate => "only after stale roots/generations are reviewed and protected roots remain preserved",
+    timer_gc_gate => "daily timer may run nix store gc below target headroom; Nix roots preserve current/rollback closures",
+    proposed_gc_gate => "ad hoc GC only after stale roots/generations are reviewed and protected roots remain preserved",
     generations => \@generation_rows,
     roots => \@root_rows,
   };
@@ -1207,13 +1211,15 @@ print "### Nix GC Plan (Report-Only)\n\n";
 print "- policy_status: `$nix_gc_plan->{policy_status}`\n";
 print "- current_available: `" . fmt_bytes(($nix_gc_plan->{current_available_kib} || 0) * 1024) . "`\n";
 print "- active_sweep_min_free: `" . fmt_bytes(($nix_gc_plan->{active_sweep_min_free_kib} || 0) * 1024) . "`\n";
-print "- proposed_target_free: `" . fmt_bytes(($nix_gc_plan->{proposed_target_free_kib} || 0) * 1024) . "`\n";
+print "- active_sweep_target_free: `" . fmt_bytes(($nix_gc_plan->{active_sweep_target_free_kib} || 0) * 1024) . "`\n";
 print "- pressure: `$nix_gc_plan->{pressure}`\n";
+print "- timer_gc_action: `$nix_gc_plan->{timer_gc_action}`\n";
 print "- current_generation: `$nix_gc_plan->{current_generation}`\n";
 print "- rollback_generation: `$nix_gc_plan->{rollback_generation}`\n";
 print "- stale_generation_count: `$nix_gc_plan->{stale_generation_count}`\n";
 print "- stale_root_count: `$nix_gc_plan->{stale_root_count}`\n";
 print "- broken_root_count: `$nix_gc_plan->{broken_root_count}`\n";
+print "- timer_gc_gate: `$nix_gc_plan->{timer_gc_gate}`\n";
 print "- proposed_delete_gate: `$nix_gc_plan->{proposed_delete_gate}`\n";
 print "- proposed_gc_gate: `$nix_gc_plan->{proposed_gc_gate}`\n\n";
 print "| generation | current | action | gate | date |\n";
