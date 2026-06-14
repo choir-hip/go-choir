@@ -475,3 +475,29 @@
 - Actual ΔV: 0.
 - Open edge: implement either snapshot cleanup gates over typed sidecars or an
   explicit Nix current/rollback root policy with budgeted GC.
+
+## 2026-06-14 — report-only Nix GC current/rollback plan
+
+- Claim: before making Nix GC more frequent or active, the storage report needs
+  a structured current/rollback budget that distinguishes protected roots from
+  stale generation/root candidates and keeps GC unauthorized until reviewed.
+- Move: extended `scripts/node-b-storage-report` with `nix_roots.gc_plan` and
+  added verifier assertions that the plan remains report-only. The plan records
+  root free space, the active 40 GiB emergency floor, a proposed 100 GiB target
+  headroom, current generation, rollback generation, stale generation review
+  candidates, root actions, and delete/GC gates.
+- Live evidence: `scripts/node-b-storage-proof --host node-b --top 10 --out-dir
+  /tmp/node-b-storage-proof-20260614T163005Z` completed in 7.533 seconds and
+  the verifier passed. The JSON report shows `pressure:
+  below_target_headroom`, `current_generation: 494`, `rollback_generation:
+  493`, `stale_generation_count: 8`, `broken_root_count: 1`,
+  `current_available_kib: 78564284`, `active_sweep_min_free_kib: 41943040`,
+  and `proposed_target_free_kib: 104857600`.
+- Safety evidence: no Nix generation deletion, root deletion, `nix store gc`,
+  service restart, VM mutation, or snapshot deletion was run. The changed paths
+  classify as operator/report tooling with `deploy_needed=false`.
+- Expected ΔV: 0; this creates the Nix GC oracle but does not change the active
+  timer or enforce a new GC policy.
+- Actual ΔV: 0.
+- Open edge: convert this report-only plan into an owner-approved active timer
+  policy, or implement snapshot cleanup gates over typed sidecars first.

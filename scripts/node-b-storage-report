@@ -237,6 +237,12 @@ sub find_sqlite {
 sub nix_root_policy {
   my ($root, $target_exists) = @_;
   return (
+    $target_exists ? "current_system_profile_preserve" : "broken_current_system_profile_repair",
+    $target_exists ? "preserve_current_running_system" : "repair current system profile before any GC policy depends on it",
+    $target_exists ? "current running system is never a prune candidate" : "broken current system pointer; block Nix GC planning"
+  ) if $root eq "/run/current-system";
+
+  return (
     $target_exists ? "current_deploy_root_preserve" : "broken_current_deploy_root_repair",
     $target_exists ? "preserve_current_root" : "repair_or_remove_broken_root_after deploy identity proof",
     $target_exists ? "must match deployed service identity before any GC policy depends on it" : "broken current pointer; fix deployment root before pruning roots"
@@ -271,6 +277,111 @@ sub nix_root_policy {
     "classify manually before deletion",
     "unknown root policy"
   );
+}
+
+sub parse_system_generations {
+  my ($profiles) = @_;
+  my @generations;
+  for my $line (split(/\n/, $profiles || "")) {
+    next unless $line =~ /^\s*(\d+)\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})(.*)$/;
+    push @generations, {
+      generation => int($1),
+      date => "$2 $3",
+      current => ($4 =~ /\(current\)/ ? 1 : 0),
+    };
+  }
+  return sort { $a->{generation} <=> $b->{generation} } @generations;
+}
+
+sub build_nix_gc_plan {
+  my (%args) = @_;
+  my @generations = @{$args{generations} || []};
+  my @roots = @{$args{roots} || []};
+  my $avail_kib = $args{available_kib} || 0;
+  my $min_free_kib = $args{min_free_kib} || 41943040;
+  my $target_free_kib = $args{target_free_kib} || 104857600;
+  my $current_generation = 0;
+  for my $g (@generations) {
+    $current_generation = $g->{generation} if $g->{current};
+  }
+  $current_generation ||= @generations ? $generations[-1]{generation} : 0;
+  my $rollback_generation = 0;
+  for my $g (reverse @generations) {
+    next if $g->{generation} >= $current_generation;
+    $rollback_generation = $g->{generation};
+    last;
+  }
+
+  my @generation_rows;
+  my $stale_generation_count = 0;
+  for my $g (@generations) {
+    my $action = "review_prune_candidate";
+    my $gate = "owner-reviewed rollback policy plus deployed identity proof";
+    if ($g->{generation} == $current_generation) {
+      $action = "preserve_current_generation";
+      $gate = "current running generation";
+    } elsif ($rollback_generation && $g->{generation} == $rollback_generation) {
+      $action = "preserve_rollback_generation";
+      $gate = "explicit rollback generation";
+    } else {
+      $stale_generation_count++;
+    }
+    push @generation_rows, {
+      generation => $g->{generation},
+      date => $g->{date},
+      current => $g->{current} ? 1 : 0,
+      action => $action,
+      gate => $gate,
+    };
+  }
+
+  my @root_rows;
+  my $stale_root_count = 0;
+  my $missing_root_count = 0;
+  my %root_preserve_class = map { $_ => 1 } qw(
+    current_system_profile_preserve
+    current_deploy_root_preserve
+    host_system_build_root_review
+    guest_image_candidate_root_review
+    browser_worker_guest_image_root_review
+    service_build_root_review
+  );
+  for my $r (@roots) {
+    my $action = $root_preserve_class{$r->{class} || ""} ? "preserve_pending_rollback_manifest" : "review_stale_root";
+    if (!$r->{target_exists}) {
+      $action = "repair_or_remove_broken_root_after_identity_proof";
+      $missing_root_count++;
+    } elsif ($action eq "review_stale_root") {
+      $stale_root_count++;
+    }
+    push @root_rows, {
+      root => $r->{root},
+      class => $r->{class},
+      target => $r->{target},
+      target_exists => $r->{target_exists} ? 1 : 0,
+      action => $action,
+      gate => $r->{gate},
+    };
+  }
+
+  my $pressure = $avail_kib > 0 && $avail_kib < $min_free_kib ? "below_emergency_floor" :
+    ($avail_kib > 0 && $avail_kib < $target_free_kib ? "below_target_headroom" : "target_headroom_met");
+  return {
+    policy_status => "report-only; no generation deletion, root deletion, or nix-store GC authorized",
+    current_available_kib => $avail_kib + 0,
+    active_sweep_min_free_kib => $min_free_kib + 0,
+    proposed_target_free_kib => $target_free_kib + 0,
+    pressure => $pressure,
+    current_generation => $current_generation + 0,
+    rollback_generation => $rollback_generation + 0,
+    stale_generation_count => $stale_generation_count + 0,
+    stale_root_count => $stale_root_count + 0,
+    broken_root_count => $missing_root_count + 0,
+    proposed_delete_gate => "deployed identity plus rollback manifest plus owner-reviewed stale generation/root decision plus dry-run report",
+    proposed_gc_gate => "only after stale roots/generations are reviewed and protected roots remain preserved",
+    generations => \@generation_rows,
+    roots => \@root_rows,
+  };
 }
 
 sub snapshot_policy {
@@ -359,6 +470,8 @@ sub snapshot_policy_from_metadata {
 my $now = strftime("%Y-%m-%dT%H:%M:%SZ", gmtime());
 my $host = sh("hostname");
 my $df = sh("df -h / " . shell_quote($vm_state_dir) . " | sed -n '1,3p'");
+my $root_avail_kib_raw = sh("df --output=avail -k / | tail -n 1 | tr -d ' '");
+my $root_available_kib = $root_avail_kib_raw =~ /^\d+$/ ? int($root_avail_kib_raw) : 0;
 my $nix_store_total = du_size("/nix/store");
 
 my $health = capture_json("curl -fsS http://127.0.0.1:8083/internal/vmctl/health");
@@ -671,6 +784,7 @@ for my $vm (sort keys %state_dir_bytes) {
 @cleanup_refusals = sort { $b->{size} <=> $a->{size} || $b->{age} <=> $a->{age} } @cleanup_refusals;
 
 my @known_roots = qw(
+  /run/current-system
   /opt/go-choir/result
   /tmp/go-choir-service-platformd-result
   /tmp/go-choir-guest-image-new
@@ -713,6 +827,14 @@ for my $root (@known_roots) {
 }
 
 my $profiles = sh("(timeout 3s nix-env -p /nix/var/nix/profiles/system --list-generations 2>/dev/null || true) | grep -v '^waiting for lock' | tail -12");
+my @system_generations = parse_system_generations($profiles);
+my $nix_gc_plan = build_nix_gc_plan(
+  generations => \@system_generations,
+  roots => \@nix_roots,
+  available_kib => $root_available_kib,
+  min_free_kib => 41943040,
+  target_free_kib => 104857600,
+);
 
 my $projected_delete_count = $retention && $retention->{inventory} ? ($retention->{inventory}{projected_delete_count} || 0) : 0;
 my $projected_delete_bytes = $retention && $retention->{inventory} ? ($retention->{inventory}{projected_delete_bytes} || 0) : 0;
@@ -798,6 +920,7 @@ if ($report_format eq "json") {
     },
     filesystems => {
       df_root_and_vm_state => $df,
+      root_available_kib => $root_available_kib + 0,
       vm_state_allocated_bytes => $vm_state_total + 0,
       nix_store_allocated_bytes => $nix_store_total + 0,
     },
@@ -867,6 +990,8 @@ if ($report_format eq "json") {
       classes => \@nix_root_classes_json,
       roots => \@nix_roots,
       recent_system_generations => $profiles,
+      system_generations => \@system_generations,
+      gc_plan => $nix_gc_plan,
     },
     projected_reclaim_and_refusals => {
       vmctl_active_retention_candidates_bytes => $projected_delete_bytes + 0,
@@ -881,8 +1006,8 @@ if ($report_format eq "json") {
     },
     next_required_proof => [
       "Convert fake-domain and synthetic-user rows into a reviewed active retention policy.",
-      "Attach typed retention metadata to manual snapshots at creation time.",
-      "Prove Nix root budget against deployed identity and rollback manifest before any root deletion or GC.",
+      "Convert typed manual snapshot metadata into reviewed cleanup gates.",
+      "Convert the report-only Nix GC plan into an owner-approved active timer policy.",
     ],
   };
   print JSON::PP->new->canonical->pretty->encode($doc);
@@ -905,6 +1030,7 @@ print "- email_mapping: `$email_mapping`\n\n";
 
 print "## Filesystems\n\n";
 print "```text\n$df\n```\n\n";
+print "- root_available: `" . fmt_bytes($root_available_kib * 1024) . "`\n";
 print "- vm_state_allocated: `" . fmt_bytes($vm_state_total) . "`\n";
 print "- nix_store_allocated: `" . fmt_bytes($nix_store_total) . "`\n\n";
 
@@ -1077,6 +1203,32 @@ print "\n";
 print "### Recent System Generations\n\n";
 print "```text\n$profiles\n```\n\n";
 
+print "### Nix GC Plan (Report-Only)\n\n";
+print "- policy_status: `$nix_gc_plan->{policy_status}`\n";
+print "- current_available: `" . fmt_bytes(($nix_gc_plan->{current_available_kib} || 0) * 1024) . "`\n";
+print "- active_sweep_min_free: `" . fmt_bytes(($nix_gc_plan->{active_sweep_min_free_kib} || 0) * 1024) . "`\n";
+print "- proposed_target_free: `" . fmt_bytes(($nix_gc_plan->{proposed_target_free_kib} || 0) * 1024) . "`\n";
+print "- pressure: `$nix_gc_plan->{pressure}`\n";
+print "- current_generation: `$nix_gc_plan->{current_generation}`\n";
+print "- rollback_generation: `$nix_gc_plan->{rollback_generation}`\n";
+print "- stale_generation_count: `$nix_gc_plan->{stale_generation_count}`\n";
+print "- stale_root_count: `$nix_gc_plan->{stale_root_count}`\n";
+print "- broken_root_count: `$nix_gc_plan->{broken_root_count}`\n";
+print "- proposed_delete_gate: `$nix_gc_plan->{proposed_delete_gate}`\n";
+print "- proposed_gc_gate: `$nix_gc_plan->{proposed_gc_gate}`\n\n";
+print "| generation | current | action | gate | date |\n";
+print "| ---: | --- | --- | --- | --- |\n";
+for my $g (@{$nix_gc_plan->{generations} || []}) {
+  print "| `$g->{generation}` | `" . bool_text($g->{current}) . "` | `$g->{action}` | `$g->{gate}` | `$g->{date}` |\n";
+}
+print "\n";
+print "| root | class | target_exists | action | gate |\n";
+print "| --- | --- | --- | --- | --- |\n";
+for my $r (@{$nix_gc_plan->{roots} || []}) {
+  print "| `$r->{root}` | `$r->{class}` | `" . bool_text($r->{target_exists}) . "` | `$r->{action}` | `$r->{gate}` |\n";
+}
+print "\n";
+
 print "## Projected Reclaim And Refusals\n\n";
 print "| class | size_or_projected_reclaim | action |\n";
 print "| --- | ---: | --- |\n";
@@ -1090,8 +1242,8 @@ print "| known deploy Nix roots | " . fmt_bytes($nix_root_target_alloc_total) . 
 
 print "## Next Required Proof\n\n";
 print "1. Convert fake-domain and synthetic-user rows into a reviewed active retention policy.\n";
-print "2. Attach typed retention metadata to manual snapshots at creation time.\n";
-print "3. Prove Nix root budget against deployed identity and rollback manifest before any root deletion or GC.\n";
+print "2. Convert typed manual snapshot metadata into reviewed cleanup gates.\n";
+print "3. Convert the report-only Nix GC plan into an owner-approved active timer policy.\n";
 PERL
 }
 
