@@ -636,18 +636,33 @@ without auth rows by default and requires owner approval, lineage/tombstone
 proof, rollback/refusal record, staged proof, protected-account gate, source
 report no-delete status, and vmctl lifecycle gate before review; modeled proof
 yields 134 review candidates / 64.96 GiB while keeping active deletion false.
-Open edges: active VM cleanup approval/enforcement, whether live `data.img`
-sparsification/discard should be part of hibernate/recovery, and how to expose
-reports to operators.
+Commit `6c1448035afce1006d593b2469c9c7990d4f9650` then promoted the
+Codex-domain cleanup policy to active retention for `example.com`,
+`example.test`, `diagnostic-`, and `sourcemaxx-proof-`. GitHub Actions run
+`27506420444` passed and deployed to Node B. The deploy skipped ordinary and
+Playwright guest image builds/installs; the host closure build took 8 seconds,
+the NixOS switch took 12 seconds, service activation took 90 seconds, and total
+deploy time was 122 seconds. vmctl restart applied active retention and logged
+46 VM state directories deleted / 31632.2 MiB reclaimed. Disk moved from
+399G used / 75G free / 85% to 363G used / 111G free / 77%. An explicit
+`POST /internal/vmctl/reclaim` saved at
+`/tmp/node-b-retention-reclaim-20260614T172726Z.json` returned zero additional
+deletions because restart cleanup had already settled the authorized class.
+Manual `go-choir-disk-gc.service` execution removed stale system generations
+488-485, vacuumed journals, and skipped Nix store GC because free space was
+above the 100 GiB target. Post-cleanup proof
+`/tmp/node-b-storage-proof-post-cleanup-20260614T172740Z` completed in 7.596
+seconds and verifier passed: active and shadow retention both report zero
+projected delete bytes, protected accounts remain present/refuse_delete, and
+missing-auth UUID owners/manual snapshots remain refusal classes.
 
-next move: deploy the active Codex-domain retention policy, capture the
-deployed retention plan, run product-path vmctl reclaim, then run post-cleanup
-storage proof. The authorized active cleanup scope is Codex-created
-`example.com` and `example.test` accounts plus synthetic owner prefixes
-`diagnostic-` and `sourcemaxx-proof-`, still bounded by vmctl's primary,
-published, terminal-state, older-than-24h guard. Missing-auth UUID owners,
-manual recovery snapshots, Nix roots, and protected identities remain refusal
-classes.
+Open edges: whether live `data.img` sparsification/discard should be part of
+hibernate/recovery, how to expose reports to operators, and auth-DB
+unavailability fail-closed hardening for domain-derived retention candidates.
+
+next move: harden retention so domain-derived cleanup refuses deletion if
+auth DB lookup is unavailable, while synthetic owner-id prefixes can remain
+explicitly configured cleanup classes.
 
 ledger file: docs/mission-node-b-storage-retention-v0.ledger.md
 

@@ -706,3 +706,53 @@
   cleanup could delete a still-useful Codex proof computer if it is terminal and
   older than the TTL; repaired the prior recurrence risk where shadow-only
   disposable VM state could keep growing indefinitely.
+
+## 2026-06-14 — active cleanup deployed and exercised
+
+- Claim: promoting the shadow Codex-domain policy to active retention should
+  reclaim stale agentic test VM state without rebuilding guest images or
+  touching protected owner/test computers.
+- Commit/deploy evidence: commit
+  `6c1448035afce1006d593b2469c9c7990d4f9650` pushed to `origin/main`.
+  GitHub Actions run `27506420444` passed. Deploy impact passed, Build
+  Frontend was skipped, Docs Truth Check passed, and the Node B deploy
+  completed successfully.
+- Deploy timing evidence: the deploy built only the host NixOS closure in 8s,
+  skipped ordinary and Playwright guest image builds and installs, completed
+  `nixos-rebuild switch` in 12s, then spent 90s in service activation. Total
+  deploy time was 122s; the prior image-cache issue did not repeat.
+- Live cleanup evidence: vmctl restart loaded 208 persisted ownerships, applied
+  active retention with `example.com,example.test` and
+  `diagnostic-,sourcemaxx-proof-`, then logged `retention prune deleted 46 VM
+  state directorie(s), reclaimed 31632.2 MiB`. A second vmctl restart loaded
+  162 persisted ownerships.
+- Product-path reclaim evidence: explicit
+  `POST /internal/vmctl/reclaim` saved at
+  `/tmp/node-b-retention-reclaim-20260614T172726Z.json` returned status `ok`,
+  `retention.deleted: 0`, and both before/after active retention plans showed
+  zero candidates because restart cleanup had already settled the authorized
+  class.
+- Habitual cleanup evidence: `systemctl start go-choir-disk-gc.service`
+  completed successfully. The service ran vmctl reclaim, journal vacuum,
+  deleted stale system profile versions 488, 487, 486, and 485, and preserved
+  the warm Nix cache because free space was above the 100 GiB target. The timer
+  remains scheduled daily with the next run on 2026-06-15 at 00:45:36 UTC.
+- Post-cleanup proof: `scripts/node-b-storage-proof --host node-b --top 20
+  --out-dir /tmp/node-b-storage-proof-post-cleanup-20260614T172740Z` completed
+  in 7.596s and verifier passed. Active and shadow retention both report
+  `projected_delete_count: 0`, `projected_delete_bytes: 0`, 162 ownerships, and
+  162 state dirs. Disk is 363G used / 111G available / 77% used.
+- Protected account evidence: post-cleanup report still marks
+  `yusefnathanson@me.com`, `a@b.com`, and `b@c.com` present with action
+  `refuse_delete`. Allocated protected VM-state bytes are 33.94 GiB,
+  502.85 MiB, and 649.20 MiB respectively.
+- Remaining refusals: missing-auth UUID owners remain refused by policy;
+  manual recovery snapshots remain report-only; Nix roots are managed only by
+  the daily generation/journal/conditional-GC policy, not ad hoc root deletion.
+- Actual ΔV: 3; the recurring leak path for Codex-domain agentic test VM state
+  is now active, bounded, and exercised, and disk pressure fell from 85% to 77%.
+- Residual risk: startup retention produced transient auth DB warning logs
+  before deletion, although post-cleanup protected-account evidence is intact.
+  A future hardening move should make auth-DB unavailability fail closed for
+  domain-derived candidates while still allowing explicit synthetic owner-id
+  prefixes.
