@@ -79,12 +79,14 @@ The mission should decide, implement, and prove a policy close to:
 
 ## Parallax State
 
-status: open_handoff
+status: settled
 
 mission conjecture: if Node B Nix retention is converted from emergency-only
 cleanup to a routine generation/root/GC/optimise policy with typed rollback
 exceptions, then launch operations can keep enough rollback/cache value while
 preventing recurring Nix-store growth from threatening deploys or VM recovery.
+Status: supported for the current Node B launch host by deployed policy and
+one successful declared service run.
 
 deeper goal (G): launch next week with Node B storage behavior boring enough
 that alpha-user growth, docs-only changes, host deploys, and occasional guest
@@ -105,7 +107,7 @@ over manual root deletion; prove on Node B staging before claiming settlement.
 Ramp from read-only root/dead-path inventory, to dry-run plan, to host-config
 change, to one explicit scheduled-service run, to post-cleanup proof.
 
-variant (ranking function) V: 7 open obligations:
+variant (ranking function) V: original 7 open obligations:
 1. root inventory classifies ad hoc roots as keep/delete/formalize;
 2. generation retention target selected with rollback rationale;
 3. GC cadence and `min-free` / `max-free` thresholds selected;
@@ -113,22 +115,24 @@ variant (ranking function) V: 7 open obligations:
 5. host config implemented and parsed;
 6. CI/deploy and staging identity captured;
 7. post-cleanup proof shows protected surfaces intact and routine policy
-   active. Current V=2. Completed: 1-5. Remaining: 6-7.
+   active. Current V=0; last delta closed CI/deploy and post-cleanup proof.
 
-budget: one focused implementation mission after this paradoc. Solvency:
-fits if the first pass is read-only inventory plus a small host-config patch;
-does not fit if it tries to redesign guest-image build distribution at the
-same time.
+budget: one focused implementation mission after this paradoc, spent. Solvency
+result: fit because the mission stayed to read-only inventory, a small
+host-config patch, normal CI/deploy, and one declared service run. Guest-image
+build distribution remains a separate future optimisation, not a settlement
+dependency for this mission.
 
-authority / bounds: this document authorizes planning only. Later execution
-requires explicit mutation-class declaration and owner approval before
-deleting roots manually or changing rollback retention. Declarative scheduled
-GC policy changes are orange platform behavior. Manual root deletion or Nix GC
-outside the declared service path is red and must name rollback/refusal
+authority / bounds: declarative scheduled GC policy changes were treated as
+orange platform behavior and landed through git/CI/deploy. The live cleanup ran
+only through the reviewed `go-choir-disk-gc.service` path after explicit owner
+authorization. Manual root deletion or Nix GC outside the declared service path
+remains forbidden without a separate typed approval and rollback/refusal
 evidence.
 
-mutation class / protected surfaces: current doc is green. Future host policy
-change is orange. Future live cleanup is red. Protected surfaces are
+mutation class / protected surfaces: mission docs/report tooling were green;
+host policy was orange; declared service cleanup was red live infrastructure
+mutation bounded by the reviewed service path. Protected surfaces were
 `/nix/store`, `/nix/var/nix/profiles/system-*`,
 `/nix/var/nix/gcroots`, `/tmp/go-choir-*result`, guest image closures,
 vmctl guest image paths, and Node B deployment rollback.
@@ -138,59 +142,66 @@ root inventory, generation list, current vmctl guest image paths, Nix config,
 CI/deploy run, post-change `systemctl list-timers`, service journal, dry-run or
 actual GC output, post-cleanup `df`, and proof that current/rollback closures
 and vmctl guest paths still resolve. Current root classification evidence:
-`docs/evidence/node-b-nix-root-classification-2026-06-14.md`.
+`docs/evidence/node-b-nix-root-classification-2026-06-14.md`. Behavior commits:
+`5505ff9a` added the root classifier/report and `e4bfae61` tightened Node B
+retention policy. CI run `27510888401` passed; deploy job `81310709649`
+succeeded. Deploy log selected host OS only, skipped frontend install, skipped
+ordinary and Playwright guest image build/install, restarted vmctl, and skipped
+active computer refresh. Staging health reported deployed commit
+`e4bfae6106ad33c9c8f021819b335041348f4078`.
 
 heresy delta: discovered existing Nix dead-path/root pressure and ambiguous
-ad hoc roots; introduced none in planning; repaired only after a later deployed
-policy proves routine cleanup without losing rollback capability.
+ad hoc roots; introduced no untyped manual cleanup path; repaired for v0 by
+deployed routine policy, zero remaining dead paths after service GC, and
+preserved rollback/guest image evidence.
 
 position / live conjectures / open edges: read-only root classification on
 2026-06-14 found root available `122.16 GiB`, root used `350.96 GiB`,
 `/nix/store` apparent `243G`, 9,423 dead store paths, and no unknown deploy
 roots after classifying `/root/.cache/nix/flake-registry.json` as a small Nix
-cache root. Active roots to keep: `/run/current-system`, `/run/booted-system`
-until reboot convergence is understood, running-process roots, active service
-runtime pointers, active guest image files, and the four newest system
-generations 493-496. Stale rollback candidates: generations 489-492. Ad hoc
-roots to formalize/delete after identity proof: `/tmp/go-choir-*result`,
-`/tmp/guest-image-*`, `/tmp/go-choir-guest-image-new`, and invalid
-`/opt/go-choir/result`. Exact policy selected for implementation:
-four-generation retention, daily off-peak retention sweep targeting 180 GiB
-free with a 120 GiB emergency floor, Nix daemon `min-free=120 GiB` and
-`max-free=180 GiB`, weekly off-peak `nix-store --optimise`, and typed TTL/owner
-rules for ad hoc result roots. Host config has been patched and locally parsed:
-`nix.settings.min-free=128849018880`, `max-free=193273528320`,
-`auto-optimise-store=false`, `nix.optimise.automatic=true`, `dates=["Sun
-03:30"]`, and disk sweep env target/floor `188743680/125829120` KiB. Deploy
-impact for the patch is host OS only with no ordinary/playwright guest image
-builds and no active VM refresh. Open edge: do not manually delete roots or run
-ad hoc GC from the report alone; root cleanup must happen through the reviewed
-service path or a separate owner-approved manual action.
+cache root. The implemented policy keeps four generations, sets the retention
+sweep floor/target to 120/180 GiB, sets Nix daemon `min-free=128849018880` and
+`max-free=193273528320`, disables per-build `auto-optimise-store`, enables
+weekly off-peak `nix-store --optimise`, and leaves ad hoc manual root deletion
+outside the service path forbidden. Post-deploy Node B evidence at
+`2026-06-14T20:31:40Z`: `/` and `/nix/store` had `299G` free and `37%` use;
+`/nix/store` apparent usage was `31G`; `/var/lib/go-choir/vm-state` was
+`122G`; `nix-store --gc --print-dead` reported `0` dead store paths. The
+declared service ran from `20:26:51Z` to `20:27:30Z` with `Result=success`,
+deleted 9,624 store paths, and freed `220991.43 MiB`. System generations are
+494, 495, 496, and 497 current. `/run/current-system` resolves to generation
+497 and `/run/booted-system` still resolves as the booted rollback surface.
+Ordinary and Playwright vmctl guest image files all still exist.
 
-next move: commit and push the host policy patch, monitor CI/deploy, verify
-deployed timers/Nix config/service journal on Node B, run the declared
-retention service once if CI has not already done so, and prove disk headroom
-plus protected current/rollback and guest-image paths.
+next move: no required v0 work remains. Future work should be a successor
+mission for explicit TTL/owner cleanup of ad hoc result roots, reboot
+convergence if desired, and moving repeated guest-image builds away from the
+long-lived launch host.
 
 ledger file: docs/mission-node-b-nix-store-retention-v0.ledger.md
 
 version / lineage: v0 follows
 `docs/mission-node-b-storage-retention-v0.md` after Codex-domain VM-state
-cleanup settled. This mission must not re-open VM-state deletion except as
+cleanup settled. This mission did not re-open VM-state deletion except as
 read-only context.
 
 learning state: retain Nix-store retention findings here until a deployed
 policy is proven, then promote the stable operating rule into the repo
-operating contract or Node B runbook.
+operating contract or Node B runbook if the policy remains correct under
+launch load.
 
 settlement: settled only when Node B has a deployed routine Nix retention
 policy, the policy has run once successfully, docs-only commits still avoid
 host deploy, guest-image builds are not unexpectedly triggered, current and
 rollback closures still resolve, vmctl guest image paths are intact, and disk
-headroom remains above the selected target after cleanup.
+headroom remains above the selected target after cleanup. Status: satisfied for
+v0. A docs-only deploy-impact probe for this mission/Pulse docs returned
+`deploy_needed=false` and all deploy classes false; the pushed behavior deploy
+skipped guest image build/install and active computer refresh; post-cleanup
+headroom `299G` is above the 180 GiB target.
 
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-node-b-nix-store-retention-v0.md. Treat it as the next source program after Node B VM-state cleanup. Current status is open_handoff: live read-only evidence shows /nix/store at 243G, root filesystem 357G used / 117G free / 76%, system generations 489-496 retained, 9409 absolute dead /nix/store paths, largest dead paths dominated by old guest-image/playwright-image/runtime-deps/closure-info outputs, and ambiguous ad hoc GC roots under /tmp/go-choir-*result, /tmp/guest-image-*, and /opt/go-choir/result. Do not run live Nix GC, delete roots, delete guest images, or change rollback generation retention without typed root classification, rollback/refusal evidence, and explicit authorization. First next move: build a read-only root classification report grouping roots into current/booted systems, retained system generations, active service/guest-image roots, temporary build-result roots, invalid roots, and unknown roots; then propose exact keep/delete/formalize policy before editing nix/node-b.nix. Target policy to test: keep 3-4 generations, scheduled GC routinely rather than below-100G only, Nix daemon min-free/max-free backstop around 120G/180G, weekly off-peak store optimisation, and formal TTL/owner rules for ad hoc result roots. Ledger: docs/mission-node-b-nix-store-retention-v0.ledger.md. Settlement requires deployed routine Nix retention, one successful service run, CI/deploy evidence, current/rollback and vmctl guest paths intact, docs-only commits still avoiding host deploy, and disk headroom above target.
+/goal Use Parallax on docs/mission-node-b-nix-store-retention-v0.md. Treat it as the settled v0 Node B Nix-store retention mission after Node B VM-state cleanup. Current status is settled: root classification report exists, four-generation retention and 120/180 GiB floor/target policy deployed, weekly off-peak store optimisation enabled, CI/deploy evidence captured, declared retention service ran once successfully, dead store path count reached zero, `/nix/store` dropped to 31G apparent, root filesystem headroom rose to 299G free, current/booted rollback surfaces resolve, vmctl ordinary and Playwright guest paths are intact, and docs-only deploy-impact still selects no host deploy. Do not reopen v0 except to audit the evidence packet or correct factual drift. For new work, open a successor mission for explicit TTL/owner cleanup of ad hoc result roots, reboot convergence, or moving repeated guest-image builds away from the launch host. Ledger: docs/mission-node-b-nix-store-retention-v0.ledger.md.
 ```

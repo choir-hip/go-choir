@@ -83,3 +83,45 @@
   The patch will deploy through the normal host OS path.
 - Expected ΔV: 1 for host config implemented and parsed.
 - Actual ΔV: 1. Remaining V=2: CI/deploy and post-cleanup proof.
+
+## 2026-06-14 — deployed service run and settlement proof
+
+- Claim tested: the reviewed routine retention policy can run on Node B through
+  the declared service path, reclaim the dead Nix-store pressure, and preserve
+  rollback and vmctl guest-image surfaces.
+- Move: pushed behavior commit `e4bfae61`, monitored CI/deploy, verified
+  staging identity, started `go-choir-disk-gc.service` once, and collected
+  post-service read-only evidence.
+- CI/deploy evidence: CI run `27510888401` succeeded. Deploy job
+  `81310709649` succeeded. Deploy selected host OS only, skipped frontend
+  install, skipped ordinary guest image build/install, skipped Playwright guest
+  image build/install, restarted vmctl, and skipped active computer refresh.
+  Staging health reported deployed commit
+  `e4bfae6106ad33c9c8f021819b335041348f4078`.
+- Routine policy evidence: `nix show-config` on Node B reported
+  `auto-optimise-store=false`, `min-free=128849018880`, and
+  `max-free=193273528320`. Timers reported `go-choir-disk-gc.timer` scheduled
+  for `2026-06-15T00:04:15Z` and `nix-optimise.timer` scheduled for
+  `2026-06-21T03:39:15Z`.
+- Service evidence: `go-choir-disk-gc.service` ran from `20:26:51Z` to
+  `20:27:30Z` with `Result=success` and `ExecMainStatus=0`; journal reported
+  `9624 store paths deleted, 220991.43 MiB freed`.
+- Post-cleanup storage evidence: at `2026-06-14T20:31:40Z`, `df -h` showed
+  `/` and `/nix/store` at `476G` total, `174G` used, `299G` available, `37%`
+  used. `du -sh /nix/store` reported `31G`; `/var/lib/go-choir/vm-state`
+  reported `122G`. `nix-store --gc --print-dead` counted `0` store paths.
+- Rollback/protected-surface evidence: system generations retained are `494`,
+  `495`, `496`, and `497 (current)`. `/run/current-system` resolves to
+  `/nix/store/0z8w1db6apxvqbvkkwf8s219bhgzdm5h-nixos-system-go-choir-b-26.05.20260409.4c1018d`;
+  `/run/booted-system` resolves to
+  `/nix/store/jmlg9chm4l2s8wn4synl464bvq16l9yw-nixos-system-choiros-b-26.05.20260306.aca4d95`.
+  Ordinary and Playwright vmctl guest files all still exist:
+  `vmlinux`, `rootfs.ext4`, `initrd`, `storedisk.erofs`, and `kernel-params`.
+- Docs-only guard evidence: local deploy-impact probe for the docs-only mission
+  updates returned `deploy_needed=false` and every deploy class false.
+- Safety boundary: no manual root deletion, manual guest-image deletion, or
+  ad hoc `nix store gc` was performed outside `go-choir-disk-gc.service`.
+- Expected ΔV: 2 for CI/deploy and post-cleanup proof.
+- Actual ΔV: 2. Remaining V=0; v0 settled. Future axes are explicit TTL/owner
+  cleanup of ad hoc result roots, reboot convergence if desired, and moving
+  repeated guest-image builds away from the long-lived launch host.
