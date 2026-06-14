@@ -640,9 +640,14 @@ Open edges: active VM cleanup approval/enforcement, whether live `data.img`
 sparsification/discard should be part of hibernate/recovery, and how to expose
 reports to operators.
 
-next move: obtain explicit approval before converting reviewed fake/synthetic
-or missing-auth VM candidates into active cleanup, or keep all current refusal
-gates.
+next move: deploy the active Codex-domain retention policy, capture the
+deployed retention plan, run product-path vmctl reclaim, then run post-cleanup
+storage proof. The authorized active cleanup scope is Codex-created
+`example.com` and `example.test` accounts plus synthetic owner prefixes
+`diagnostic-` and `sourcemaxx-proof-`, still bounded by vmctl's primary,
+published, terminal-state, older-than-24h guard. Missing-auth UUID owners,
+manual recovery snapshots, Nix roots, and protected identities remain refusal
+classes.
 
 ledger file: docs/mission-node-b-storage-retention-v0.ledger.md
 

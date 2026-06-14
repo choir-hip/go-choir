@@ -670,3 +670,39 @@
 - Open edge: active cleanup still requires explicit owner authorization and a
   behavior-changing vmctl path with CI/deploy evidence, or the current
   report-only refusal gates remain the correct state.
+
+## 2026-06-14 — owner authorizes Codex-domain active cleanup
+
+- Claim: the reviewed fake/synthetic VM cleanup class can move from shadow
+  observation to active retention when the owner identifies `example.com` and
+  `example.test` as Codex-created account domains and authorizes real cleanup.
+- Owner clarification: after asking for recurring stale-state cleanup rather
+  than a one-time purge, the owner clarified that the intended deletion target
+  is accounts made by Codex for agentic testing, and then explicitly stated
+  that `example.com` and `example.test` are Codex domains.
+- Move: promoted the deployed shadow vmctl policy into the active Node B
+  retention policy by adding `example.test` plus synthetic owner prefixes
+  `diagnostic-` and `sourcemaxx-proof-` to active retention. The policy remains
+  bounded by vmctl's existing reclaimability guard: interactive primary
+  desktop, published ownership, terminal VM state, older than 24 hours, and
+  per-sweep max delete/byte caps.
+- Safety boundary: protected identities remain out of the cleanup class:
+  `yusefnathanson@me.com`, `a@b.com`, and `b@c.com`. Missing-auth UUID owners
+  remain refusals until lineage/tombstone proof exists. Manual recovery
+  snapshots and Nix roots remain outside this VM-retention authorization.
+- Mutation class: orange for durable Node B retention policy; red for the
+  follow-on live reclaim call after deploy.
+- Protected surfaces: vmctl retention policy, `/var/lib/go-choir/vm-state`,
+  `ownerships.json`, and Node B disk retention sweep.
+- Evidence class: CI/deploy identity for the config change, deployed
+  `/internal/vmctl/retention-plan` before cleanup, product-path
+  `/internal/vmctl/reclaim` result, post-cleanup proof, and protected-account
+  refusal evidence.
+- Rollback path: revert the Node B retention config to active `example.com`
+  only or disable active retention with `VMCTL_RETENTION_PRUNE_MODE=off`, deploy
+  that host config, and preserve any remaining ambiguous rows as report-only
+  refusals. Deleted stale Codex VM state is not a protected rollback primitive.
+- Heresy delta: discovered none; introduced risk that broad Codex-domain
+  cleanup could delete a still-useful Codex proof computer if it is terminal and
+  older than the TTL; repaired the prior recurrence risk where shadow-only
+  disposable VM state could keep growing indefinitely.

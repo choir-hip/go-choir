@@ -481,20 +481,20 @@ in
         "VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES=5"
         "VMCTL_STALE_STATE_MIN_AGE=6h"
         "VMCTL_STALE_STATE_MAX_DELETES=25"
-        # Staging Playwright/product-proof accounts are disposable and use
-        # example.com emails. Their hibernated primary VM state is not a
+        # Codex-created staging/product-proof accounts use the example.com and
+        # example.test domains. Their hibernated primary VM state is not a
         # rollback primitive, so vmctl may delete it after a day while keeping
         # real-user computers protected.
         "VMCTL_RETENTION_PRUNE_MODE=active"
         "VMCTL_RETENTION_AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"
-        "VMCTL_RETENTION_EPHEMERAL_EMAIL_DOMAINS=example.com"
+        "VMCTL_RETENTION_EPHEMERAL_EMAIL_DOMAINS=example.com,example.test"
+        "VMCTL_RETENTION_EPHEMERAL_USER_PREFIXES=diagnostic-,sourcemaxx-proof-"
         "VMCTL_RETENTION_ORPHAN_MIN_AGE=6h"
         "VMCTL_RETENTION_EPHEMERAL_MIN_AGE=24h"
         "VMCTL_RETENTION_MAX_DELETES=100"
         "VMCTL_RETENTION_MAX_BYTES_MIB=122880"
-        # Broader retention policy under observation only. This lets staging
-        # prove example.test and synthetic proof-owner candidates without
-        # expanding the active deletion policy before owner approval.
+        # Shadow retention mirrors the active policy as an observation endpoint
+        # so reports can compare deletion pressure before and after sweeps.
         "VMCTL_RETENTION_SHADOW_PRUNE_MODE=dry-run"
         "VMCTL_RETENTION_SHADOW_AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"
         "VMCTL_RETENTION_SHADOW_EPHEMERAL_EMAIL_DOMAINS=example.com,example.test"
