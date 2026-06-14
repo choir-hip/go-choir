@@ -392,3 +392,25 @@
   remains blocked on typed snapshot metadata, recovery settlement, rollback
   proof, and owner approval; Nix GC remains blocked on an explicit
   current/rollback root policy and budget.
+
+## 2026-06-14 — deploy-impact classifier problem checkpoint
+
+- Claim: the unusually slow deploy can repeat for storage-reporting work if the
+  deploy-impact classifier keeps treating Node B storage scripts as unknown
+  deployed paths.
+- Move: probed `.github/scripts/deploy-impact-classify` with
+  `scripts/node-b-storage-report`, `scripts/node-b-storage-proof`, and
+  `scripts/node-b-storage-verify-report`.
+- Evidence: the classifier currently returns `deploy_needed=true`,
+  `deploy_host_os=true`, `deploy_ordinary_guest=true`, and
+  `deploy_playwright_guest=true` for those storage scripts, with the explanation
+  `unknown deployed path: conservative host + both guest images`.
+- Finding: this is separate from docs-only path filters; docs-only commit
+  `25c4242bbbad89fe150a782f50b3e27a7501fe0c` triggered Docs Truth Check only.
+  Storage-tooling script edits are not docs-only and currently request image
+  builds unless the classifier explicitly marks them as operator/report tooling.
+- Expected ΔV: 0; this is the required problem documentation before changing CI
+  deploy-impact behavior.
+- Actual ΔV: 0.
+- Open edge: update the deploy-impact classifier and its test so storage
+  report-tooling changes run CI without requesting Node B host/guest deploys.

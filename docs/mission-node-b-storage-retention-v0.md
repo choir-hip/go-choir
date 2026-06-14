@@ -90,6 +90,19 @@ Some are useful current/rollback pointers; some may be stale build roots. The
 mission must replace accidental roots with an explicit current/rollback root
 policy before increasing GC aggressiveness.
 
+### Why can storage-tooling edits rebuild images?
+
+The deploy impact classifier currently treats `scripts/node-b-storage-report`,
+`scripts/node-b-storage-proof`, and `scripts/node-b-storage-verify-report` as
+unknown deployed paths. That is conservative, but it means a report-tooling-only
+change requests host OS plus ordinary and Playwright guest image builds. This
+is a repeatable source of slow deploys until those scripts are explicitly
+classified as operator/report tooling or moved behind a deployed service path.
+
+This is separate from docs-only commits. The workflow path filters already make
+docs-only commits run Docs Truth Check only; commit
+`25c4242bbbad89fe150a782f50b3e27a7501fe0c` proved that path.
+
 ## First Read-Only Report Evidence
 
 `scripts/node-b-storage-report --host node-b --top 12` now emits a report-only
@@ -408,18 +421,22 @@ in 7.160 seconds. Deployed Node B evidence now shows active retention mode
 `dry-run` and reports 46 disposable candidates / 30.89 GiB for `example.com`,
 `example.test`, `diagnostic-*`, and `sourcemaxx-proof-*`. Deploy slowness was
 explained by Nix rebuilding selected guest images: the deploy spent 257 seconds
-in Nix build, including ordinary and Playwright guest image roots. Existing
-disk GC still preserves Nix cache above the 40 GiB free-space floor. Open
-edges: missing-auth-user policy, active fake-user cleanup approval/enforcement,
-active Nix GC/rollback enforcement, typed snapshot metadata at creation time
-plus cleanup enforcement, whether live `data.img` sparsification/discard should
-be part of hibernate/recovery, and how to expose reports to operators.
+in Nix build, including ordinary and Playwright guest image roots. A fresh
+classifier probe shows the storage report scripts fall through as unknown
+deployed paths, so future report-tooling changes would repeat that conservative
+image-build request unless the classifier explicitly treats them as
+operator/report tooling. Existing disk GC still preserves Nix cache above the
+40 GiB free-space floor. Open edges: missing-auth-user policy, active fake-user
+cleanup approval/enforcement, active Nix GC/rollback enforcement, typed
+snapshot metadata at creation time plus cleanup enforcement, whether live
+`data.img` sparsification/discard should be part of hibernate/recovery, and how
+to expose reports to operators.
 
-next move: either implement typed snapshot metadata plus cleanup gates, or
-implement an explicit Nix current/rollback root policy with more frequent
-budgeted GC. A separate owner-approved active fake-user cleanup can follow from
-the deployed shadow proof, but only after retaining the protected account gate
-and rollback/refusal record.
+next move: classify Node B storage report scripts as operator/report tooling so
+script-only iterations stop requesting guest image builds, then implement typed
+snapshot metadata plus cleanup gates. A separate owner-approved active
+fake-user cleanup can follow from the deployed shadow proof, but only after
+retaining the protected account gate and rollback/refusal record.
 
 ledger file: docs/mission-node-b-storage-retention-v0.ledger.md
 
