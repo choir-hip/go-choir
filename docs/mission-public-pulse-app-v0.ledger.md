@@ -70,3 +70,17 @@
 - Settlement: v0 public Pulse app is deployed and report-only. Remaining
   hardening axis is cache/rate-limiting for public storage sampling if traffic
   rises; this does not block v0 launch visibility.
+
+## 2026-06-14 — Parallax State reconciled
+
+- Claim: the paradoc should not keep routing future agents through an
+  implementation handoff after v0 staging settlement has already been recorded.
+- Move: rewrote `docs/mission-public-pulse-app-v0.md` Parallax State from
+  `open_handoff` to `settled`, named Pulse / Choir Pulse as the v0 product
+  name, preserved "metrics" as the ordinary noun for counters, and updated the
+  suggested goal string to prevent accidental v0 re-entry.
+- Evidence: prior ledger entry records commits `9b39b84d` and `a92498e`,
+  CI/deploy runs `27509667041` and `27509797114`, public API proof, signed-out
+  browser proof, and privacy grep proof.
+- Expected ΔV: close the stale-state mismatch.
+- Actual ΔV: v0 mission state now matches the recorded settlement evidence.
