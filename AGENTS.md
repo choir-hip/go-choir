@@ -141,7 +141,12 @@ that candidate into their own active computer without a global platform deploy.
 That path still needs lineage, typed deltas, verifier evidence, route rollback,
 and no lost foreground updates.
 
-Docs-only commits are different. The CI workflow intentionally ignores `docs/**` and top-level `*.md`. Do not weaken those path filters to force docs-only CI. If documentation needs validation, run the specific check directly or use a manual workflow dispatch when one exists.
+Docs-only commits are different. The full CI/deploy workflow intentionally
+ignores `docs/**` and top-level `*.md`; do not weaken those filters to force a
+full CI or staging deploy path for docs-only changes. Docs-only pushes and pull
+requests should run the report-only docs truth checker workflow instead. If
+documentation needs validation beyond that checker, run the specific check
+directly or use a manual workflow dispatch when one exists.
 
 ## Parallax
 

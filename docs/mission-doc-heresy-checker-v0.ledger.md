@@ -195,3 +195,31 @@ Receipts:
 Open edge: successor work still needs a reviewed allowlist/manual-docs cleanup
 plan before warnings can become policy, and no reconciler should be implemented
 until its write path carries the R4 actor guard.
+
+## 2026-06-14 - Docs-Only CI Contract Reconciliation
+
+Claim: docs-only commits should run the report-only docs checker, but must not
+enter full CI or staging deploy. This reconciles the earlier "do not weaken
+docs-only filters" rule with the new checker requirement by preserving full CI
+`paths-ignore` and adding a separate docs-only checker path.
+
+Observed problem: commit `812899e` added checker code and was classified as a
+deployed artifact change because `cmd/doccheck` matched the conservative Go
+fallback, while `scripts/doccheck` and `.gitignore` matched the unknown-path
+fallback. CI therefore selected host OS, frontend, ordinary guest, and
+Playwright guest deploy classes and spent 285s in Nix builds even though the
+checker is report-only CI tooling.
+
+Storage observation: the same deploy log reported Node B root at 402G used of
+476G, 72G available, 85% used. Deploy preflight skipped reclaim because its
+threshold is 20GiB free; the daily retention sweep keeps about 40GiB free and
+may intentionally preserve warm Nix cache above that floor. Direct directory
+attribution still needs Node B SSH or an equivalent deployment log probe.
+
+Move: document the contract change before implementation. The next fix should
+add a separate docs checker workflow for docs/Markdown changes and classify
+doccheck tooling plus non-deployed metadata as non-deploying, while keeping
+normal CI's doccheck job for non-doc pushes.
+
+Expected Delta V: -1 by turning the CI slowdown into a named classifier defect
+and a reconciled operating rule instead of silently weakening the full CI path.
