@@ -195,13 +195,21 @@ states reasons without forcing choreography.
   prompt. Trace again showed a `super` run before the VText run, while the
   canonical private-reason leak stayed repaired. The deployed route is still
   bypassing the deterministic decision-record path.
+- Public Trace diagnostic identified the route gap: deployed diagnostic artifact
+  `/tmp/vtext-route-diagnostic-1781489784153.json` showed
+  `initial_loop_id=0e66ef35-accd-4113-874f-3d3451d8fb47` was the `super` run,
+  and the VText run was spawned from that super run. The failure is initial
+  persistent-super preemption, not a later VText recording failure.
+- Local prompt-bar no-worker route repair complete: prompt-bar now stamps an
+  explicit no-worker decision route flag for prompts containing
+  `no_worker_needed` or "no research or execution worker", and conductor VText
+  materialization honors that flag before persistent-super preemption. Negative
+  coverage still proves operational proof prompts use persistent super.
 
-**next move:** identify why the deployed prompt-bar route still creates a
-`super` run before the VText run for the explicit no-worker decision prompt.
-Add product-route coverage or public Trace evidence that distinguishes initial
-super preemption from VText-requested super, repair that route, then rerun
-local tests and deployed product-path proof for decision row, Trace decision
-moment, no forbidden routes, and no private reason in canonical text.
+**next move:** commit the prompt-bar no-worker route repair, push `origin main`,
+monitor CI/deploy, verify staging identity, and rerun deployed product-path
+proof for decision row, Trace decision moment, no forbidden routes, and no
+private reason in canonical text.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 

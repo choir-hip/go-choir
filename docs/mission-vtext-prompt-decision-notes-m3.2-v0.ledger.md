@@ -475,6 +475,40 @@ super handoff, whether VText asks super before the deterministic decision path,
 or whether the proof is following a later VText run. Then repair the actual
 route and rerun local plus deployed product-path proof.
 
+## 2026-06-15 - Local Prompt-Bar No-Worker Route Repair
+
+Claim/scope: the deployed route gap was initial persistent-super preemption.
+Public Trace diagnostic artifact
+`/tmp/vtext-route-diagnostic-1781489784153.json` showed
+`initial_loop_id=0e66ef35-accd-4113-874f-3d3451d8fb47` was the super run, and
+the VText run was spawned from that super run. The repair adds a prompt-bar
+metadata flag for explicit no-worker decision prompts and makes conductor VText
+materialization honor it before persistent-super preemption.
+
+Move: stamp `prompt_bar_no_worker_decision_route` for prompts containing the
+structured `no_worker_needed` marker or "no research or execution worker"; use
+that flag in `ensureConductorVTextRoute`; keep negative coverage for ordinary
+operational proof prompts that still need persistent super. Expected Delta V:
+close the local route-preemption repair. Actual Delta V: V=2 to V=1, leaving
+landing/staging proof.
+
+Receipts:
+- Public diagnostic proof through `/api/prompt-bar`, `/api/vtext/*`, and
+  `/api/trace/*`: `/tmp/vtext-route-diagnostic-1781489784153.json`.
+- `internal/runtime/api.go` stamps the prompt-bar no-worker decision route flag.
+- `internal/runtime/runtime.go` honors the flag before persistent-super
+  preemption and keeps the previous explicit no-worker prompt detector.
+- `internal/runtime/prompt_bar_unit_test.go` asserts the flag and durable
+  decision row for the proof-style route.
+- `internal/runtime/vtext_prompt_unit_test.go` covers the route predicate and a
+  negative mutation prompt.
+- `nix develop -c go test ./internal/runtime -run 'Test(HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|ExplicitNoWorkerDecisionPromptParsesInitialDecision|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|InitialVTextToolChoiceUsesExactTools|RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|RunToolLoopInitialToolChoiceAppliesOnlyFirstCall|RunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition|RunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionPromptParsesInitialDecision|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|InitialVTextToolChoiceUsesExactTools|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords|DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof.
+
 ## 2026-06-15 - Local Initial Tool-Choice Repair
 
 Claim/scope: explicit owner-requested decision notes now select exact

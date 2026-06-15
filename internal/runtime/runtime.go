@@ -2087,7 +2087,9 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		initialPrompt = "Create the first useful current-state version of this vtext document."
 	}
 	combinedPrompt := decision.SeedPrompt + " " + initialPrompt
-	if vtextPromptNeedsSuperExecution(combinedPrompt) && !vtextPromptExplicitlyRequestsNoWorkerDecision(combinedPrompt) {
+	noWorkerDecisionRoute := metadataBoolValue(rec.Metadata, "prompt_bar_no_worker_decision_route") ||
+		promptBarNoWorkerDecisionRoute(combinedPrompt)
+	if vtextPromptNeedsSuperExecution(combinedPrompt) && !noWorkerDecisionRoute {
 		requestCtx := WithToolExecutionContext(ctx, &types.RunRecord{
 			RunID:        rec.RunID,
 			AgentID:      "vtext:" + doc.DocID,
@@ -2371,6 +2373,20 @@ func vtextPromptExplicitlyRequestsNoWorkerDecision(prompt string) bool {
 		return true
 	}
 	return false
+}
+
+func promptBarNoWorkerDecisionRoute(prompt string) bool {
+	text := strings.ToLower(strings.TrimSpace(prompt))
+	if text == "" {
+		return false
+	}
+	if strings.Contains(text, "no_worker_needed") {
+		return true
+	}
+	if strings.Contains(text, "no research or execution worker") {
+		return true
+	}
+	return vtextPromptExplicitlyRequestsNoWorkerDecision(text)
 }
 
 func vtextPromptExplicitlyRequestsResearcher(prompt string) bool {

@@ -627,6 +627,9 @@ func TestExplicitNoWorkerDecisionBypassesInitialSuperPreemption(t *testing.T) {
 	if !vtextPromptExplicitlyRequestsNoWorkerDecision(prompt) {
 		t.Fatal("no-worker decision note prompt should bypass initial super preemption")
 	}
+	if !promptBarNoWorkerDecisionRoute(prompt) {
+		t.Fatal("prompt-bar no-worker decision route should bypass initial super preemption")
+	}
 
 	mutationPrompt := "Debug and fix the runtime gateway, run tests, and verify the staging proof."
 	if !vtextPromptNeedsSuperExecution(mutationPrompt) {
@@ -634,6 +637,9 @@ func TestExplicitNoWorkerDecisionBypassesInitialSuperPreemption(t *testing.T) {
 	}
 	if vtextPromptExplicitlyRequestsNoWorkerDecision(mutationPrompt) {
 		t.Fatal("ordinary mutation prompt must not bypass super execution")
+	}
+	if promptBarNoWorkerDecisionRoute(mutationPrompt) {
+		t.Fatal("ordinary mutation prompt must not set prompt-bar no-worker route")
 	}
 }
 

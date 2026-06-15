@@ -131,6 +131,9 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
 		t.Fatalf("initial_handoff = %q, want no initial super handoff", got)
 	}
+	if !metadataBoolValue(conductor.Metadata, "prompt_bar_no_worker_decision_route") {
+		t.Fatalf("conductor missing prompt-bar no-worker route flag: %+v", conductor.Metadata)
+	}
 	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_decision_required") {
 		t.Fatalf("initial run missing deterministic decision metadata: %+v", initialRun.Metadata)
 	}
