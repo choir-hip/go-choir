@@ -362,6 +362,49 @@ Receipts:
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
 
+## 2026-06-15 - Staging Prompt-Bar Boundary Stamping Checkpoint
+
+Claim/scope: the prompt-bar boundary stamping repair deployed cleanly, but the
+deployed proof still failed the durable decision-table requirement. Public
+diagnosis still showed no `prompt_bar_no_worker_decision_route` on the
+conductor run and still selected `initial_handoff=persistent_super`.
+
+Move: document the deployed failure before changing any further route code.
+Expected Delta V: close the landing/staging proof. Actual Delta V: V=1 to V=2,
+with the live prompt-bar implementation boundary unresolved.
+
+Receipts:
+- Commit `97852b155b7896f4af101cf3103dead3fb78c9a1` passed CI run
+  `27522658503`, Docs Truth Check `27522658505`, and FlakeHub publish
+  `27522658518`.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=97852b155b7896f4af101cf3103dead3fb78c9a1`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781495174835.json`.
+- Deployed proof screenshot:
+  `/tmp/vtext-decision-staging-proof-1781495174835.png`.
+- Proof submission `f5719caa-246d-498d-a717-0e1667030fae`, document
+  `a7480eed-574c-482a-af85-f306778e5ccd`, initial loop
+  `4fbf3dde-240b-40b9-984b-bd8220472bee`.
+- Observed diagnosis decisions `0`, Trace decision moments `0`,
+  `canonical_contains_reason=false`, revision count `2`, forbidden internal
+  routes `[]`.
+- Follow-up public diagnosis artifact:
+  `/tmp/vtext-decision-full-diagnostic-1781495392699.json`.
+- Diagnostic submission `44d86ec7-ab18-4b03-90ab-24de08d86234`, document
+  `9de6a1d0-5233-4c36-971d-2054fb8f2dcf`, initial loop
+  `8a58455f-fef5-4a2c-82e5-74ccaf0637e6`.
+- Diagnostic public conductor metadata still lacked
+  `prompt_bar_no_worker_decision_route` and still had
+  `initial_handoff=persistent_super`; the VText run had
+  `parent_id=8a58455f-fef5-4a2c-82e5-74ccaf0637e6`,
+  `scheduled_message_seq=2`, `request_intent=integrate_worker_findings`, and
+  no `vtext_initial_decision_required` metadata.
+
+Open edge: identify the actual live `/api/prompt-bar` implementation boundary
+on staging and why the patched sandbox completed-conductor stamp is not visible
+in public route metadata.
+
 ## 2026-06-15 - Staging Route-Carrier Repair Checkpoint
 
 Claim/scope: the route-carrier repair deployed cleanly, but the deployed proof

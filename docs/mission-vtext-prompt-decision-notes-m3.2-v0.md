@@ -292,10 +292,17 @@ states reasons without forcing choreography.
   the caller did not pre-stamp metadata. Stored-route coverage now asserts the
   flag exists before materialization and still proves the decision row after
   VText completion.
+- Deployed prompt-bar boundary stamping repair failed: staging at
+  `97852b155b7896f4af101cf3103dead3fb78c9a1` still showed no
+  `prompt_bar_no_worker_decision_route` in public conductor metadata and still
+  persisted `initial_handoff=persistent_super`. This suggests the live
+  `/api/prompt-bar` path may not be exercising the sandbox runtime boundary
+  modified by the local repairs, or another route layer rewrites the completed
+  conductor metadata before materialization.
 
-**next move:** commit the prompt-bar boundary stamping repair, push
-`origin main`, monitor CI/deploy, verify staging identity, and rerun deployed
-proof.
+**next move:** identify the live `/api/prompt-bar` implementation boundary on
+staging and why the sandbox commit's completed-conductor stamp is not visible,
+then repair that actual boundary and rerun deployed proof.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -764,6 +771,63 @@ Heresy delta: discovered: the deployed prompt-bar API boundary can still
 materialize a completed conductor route without the no-worker route flag even
 when downstream conductor and redirect predicates parse the same prompt shape.
 introduced: none accepted. repaired: pending API-boundary stamping repair.
+
+## Staging Prompt-Bar Boundary Stamping Checkpoint - 2026-06-15
+
+Reliable evidence: commit
+`97852b155b7896f4af101cf3103dead3fb78c9a1` passed CI run `27522658503`, Docs
+Truth Check `27522658505`, and FlakeHub publish `27522658518`, including Node
+B staging deploy. Public `https://choir.news/health` reported both proxy and
+upstream sandbox `deployed_commit` equal to that SHA. A deployed product-path
+proof submitted through `/api/prompt-bar` and observed through
+`/api/vtext/*/diagnosis` and `/api/trace/*`, using no forbidden
+browser-public internal routes. Proof artifact
+`/tmp/vtext-decision-staging-proof-1781495174835.json` and screenshot
+`/tmp/vtext-decision-staging-proof-1781495174835.png` recorded submission
+`f5719caa-246d-498d-a717-0e1667030fae`, document
+`a7480eed-574c-482a-af85-f306778e5ccd`, and initial loop
+`4fbf3dde-240b-40b9-984b-bd8220472bee`. The proof ended with diagnosis
+decisions `0`, Trace decision moments `0`, `canonical_contains_reason=false`,
+revision count `2`, and forbidden internal routes `[]`.
+
+Follow-up public diagnosis artifact
+`/tmp/vtext-decision-full-diagnostic-1781495392699.json` recorded submission
+`44d86ec7-ab18-4b03-90ab-24de08d86234`, document
+`9de6a1d0-5233-4c36-971d-2054fb8f2dcf`, and initial loop
+`8a58455f-fef5-4a2c-82e5-74ccaf0637e6`. Public conductor metadata still lacked
+`prompt_bar_no_worker_decision_route` and still persisted
+`initial_handoff=persistent_super`; the VText run had
+`parent_id=8a58455f-fef5-4a2c-82e5-74ccaf0637e6`,
+`scheduled_message_seq=2`, `request_intent=integrate_worker_findings`, and no
+`vtext_initial_decision_required` metadata.
+
+Conjecture delta: stamping inside `completePromptBarDecisionRun` did not
+change live staging behavior. The failure is now likely outside the local
+boundary assumed by the repair: either `/api/prompt-bar` reaches a different
+implementation path than the sandbox runtime function just changed, or a later
+route/materialization layer rewrites the conductor metadata/result before the
+VText route branch observes the flag.
+
+Protected surfaces: prompt-bar proxy/upstream routing, sandbox prompt-bar API
+handler, completed conductor metadata persistence, conductor materialization,
+persistent-super fallback routing, VText decision persistence, Trace decision
+projection, and canonical VText revision creation.
+
+Admissible evidence class: route-boundary evidence showing which process and
+handler materializes `/api/prompt-bar` on staging; focused tests for that
+actual boundary; deployed product-path proof showing one matching diagnosis
+decision, one matching Trace decision moment, no forbidden routes, and no
+private reason in the final canonical revision.
+
+Rollback path: revert the next boundary repair if it reroutes ordinary
+execution/operational proof prompts away from persistent super or records false
+decision notes. Keep this checkpoint as evidence that sandbox-local
+`completePromptBarDecisionRun` stamping alone did not affect staging.
+
+Heresy delta: discovered: staging can report the expected sandbox commit while
+the observable prompt-bar route still omits metadata written by the patched
+sandbox function. introduced: none accepted. repaired: pending live-boundary
+repair.
 
 ## Suggested Goal String
 
