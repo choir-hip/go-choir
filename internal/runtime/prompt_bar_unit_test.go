@@ -195,6 +195,84 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 	}
 }
 
+func TestHandlePromptBarExplicitSuperExecutionStartsWithVTextThenRequestsSuper(t *testing.T) {
+	rt, handler := testAPISetup(t)
+
+	prompt := "Create a VText document for M32_CONTROL_PLANE_EXEC_TEST. This is an execution-shaped request: the document should ask downstream super execution to create a tiny file artifacts/m32_control_plane_exec_test.txt containing the marker, then report the requested execution handle. Do not research; this only needs execution authority after VText owns the artifact context."
+	body, err := json.Marshal(map[string]string{"text": prompt})
+	if err != nil {
+		t.Fatalf("marshal request body: %v", err)
+	}
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", string(body), "user-alice")
+	w := httptest.NewRecorder()
+	handler.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+
+	var resp promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	conductor, err := rt.GetRun(context.Background(), resp.SubmissionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get conductor: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	initialRun, err := rt.GetRun(context.Background(), decision.InitialLoopID, "user-alice")
+	if err != nil {
+		t.Fatalf("get initial loop run: %v", err)
+	}
+	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
+		t.Fatalf("initial loop profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
+	}
+	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_super_request_required") {
+		t.Fatalf("initial run missing VText super request metadata: %+v", initialRun.Metadata)
+	}
+
+	var superRun *types.RunRecord
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-alice", 100)
+		if err != nil {
+			t.Fatalf("list runs: %v", err)
+		}
+		for i := range runs {
+			run := runs[i]
+			if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == AgentProfileSuper {
+				superRun = &run
+				break
+			}
+		}
+		if superRun != nil {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if superRun == nil {
+		t.Fatalf("no downstream super run appeared after VText request")
+	}
+	if got := metadataStringValue(superRun.Metadata, "requested_by_profile"); got != AgentProfileVText {
+		t.Fatalf("super requested_by_profile = %q, want %q; metadata=%+v", got, AgentProfileVText, superRun.Metadata)
+	}
+	if got := metadataStringValue(superRun.Metadata, "requested_by_agent_id"); got != initialRun.AgentID {
+		t.Fatalf("super requested_by_agent_id = %q, want %q", got, initialRun.AgentID)
+	}
+	if got := metadataStringValue(superRun.Metadata, "requested_by_run_id"); got != initialRun.RunID {
+		t.Fatalf("super requested_by_run_id = %q, want %q", got, initialRun.RunID)
+	}
+	decisions, err := rt.Store().ListVTextDecisionsByDocument(context.Background(), "user-alice", decision.DocID, 10)
+	if err != nil {
+		t.Fatalf("list decisions: %v", err)
+	}
+	if len(decisions) != 1 || decisions[0].DecisionKind != "delegation_opened" || decisions[0].RunID != initialRun.RunID {
+		t.Fatalf("vtext super decision records = %+v, want one delegation_opened from initial run", decisions)
+	}
+}
+
 func TestConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt(t *testing.T) {
 	rt, _ := testAPISetup(t)
 

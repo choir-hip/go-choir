@@ -674,6 +674,27 @@ func TestExplicitNoWorkerDecisionDoesNotCreateRouteSpecialCase(t *testing.T) {
 	}
 }
 
+func TestExplicitVTextSuperExecutionRequestParserIsNarrow(t *testing.T) {
+	explicit := "Create a VText document. The document should ask downstream super execution to create a tiny file artifacts/proof.txt containing the marker. Do not research."
+	request, ok := explicitVTextSuperExecutionRequestFromPrompt(explicit)
+	if !ok {
+		t.Fatalf("explicit downstream super request was not parsed")
+	}
+	if !strings.Contains(request.Objective, "create a tiny file artifacts/proof.txt containing the marker") {
+		t.Fatalf("objective = %q", request.Objective)
+	}
+
+	for _, prompt := range []string{
+		"Create a VText document for an execution-shaped request.",
+		"Debug and verify this after VText owns the artifact context.",
+		"Because this task requires no research or execution worker, record an off-document VText decision note with decision_kind no_worker_needed, exact reason no worker needed.",
+	} {
+		if got, ok := explicitVTextSuperExecutionRequestFromPrompt(prompt); ok {
+			t.Fatalf("prompt %q parsed as explicit super request: %+v", prompt, got)
+		}
+	}
+}
+
 func TestExplicitNoWorkerDecisionPromptParsesInitialDecision(t *testing.T) {
 	prompt := strings.Join([]string{
 		"Create a short VText document titled M32_VTEXT_DECISION_ROUTE_TEST.",

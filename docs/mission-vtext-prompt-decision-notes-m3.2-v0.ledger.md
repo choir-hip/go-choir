@@ -1373,3 +1373,43 @@ control plane, not in conductor. A valid repair may make a VText run honor a
 clear owner request to ask downstream super execution before provider latency
 can strand the request, but it must still create/open VText first and mark the
 super work as requested by VText.
+
+## 2026-06-15 - Local VText-Owned Explicit Super Handoff Repair
+
+Claim/scope: explicit owner requests for VText to ask downstream super
+execution now remain inside the VText control plane. Conductor still
+materializes VText first. The initial VText run then honors narrow explicit
+downstream-super wording by creating a persistent-super request attributed to
+that VText run and by recording an off-document `delegation_opened` decision.
+
+Move: add a narrow explicit-super parser, mark initial VText runs with
+`vtext_initial_super_request_required` only for owner wording such as "ask
+downstream super execution to ...", and execute the handoff through the VText
+run's existing `requestPersistentSuperExecution` path before provider latency
+can strand the request. Expected Delta V: close local downstream-super repair
+without reintroducing conductor prompt heuristics. Actual Delta V: V remains 2
+until staging proves the repair and source/news/article product-path evidence
+is recorded.
+
+Receipts:
+- `internal/runtime/vtext_agent_revision.go` marks the initial VText run only
+  when explicit downstream-super wording is present and no explicit
+  no-worker decision prompt applies.
+- `internal/runtime/runtime.go` records the initial VText super request through
+  VText run context, preserving requester metadata on the downstream super run,
+  and records a `delegation_opened` VText decision.
+- `internal/runtime/prompt_bar_unit_test.go` proves an explicit downstream
+  super prompt starts with VText and then creates a super run with
+  `requested_by_profile=vtext`, `requested_by_agent_id` equal to the VText
+  agent, and `requested_by_run_id` equal to the VText run.
+- `internal/runtime/vtext_prompt_unit_test.go` proves the parser accepts
+  explicit downstream-super wording but rejects generic execution/debug wording
+  and explicit no-worker prompts.
+- `nix develop -c go test ./internal/runtime -run 'Test(HandlePromptBarExplicitSuperExecutionStartsWithVTextThenRequestsSuper|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|HandlePromptBarOperationalProofInitialRunStartsWithVText|ConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt|ExplicitVTextSuperExecutionRequestParserIsNarrow|InitialVTextToolChoiceUsesExactTools)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(HandlePromptBarVTextRouteCompletesConductorSynchronously|HandlePromptBarOperationalProofInitialRunStartsWithVText|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|HandlePromptBarExplicitSuperExecutionStartsWithVTextThenRequestsSuper|ConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt|HandlePromptBarResearcherMentionDoesNotSetRoutingFlag|InitialVTextToolChoiceUsesExactTools|ExplicitVTextSuperExecutionRequestParserIsNarrow|ExplicitNoWorkerDecisionDoesNotCreateRouteSpecialCase|ExplicitNoWorkerDecisionPromptParsesInitialDecision|VTextPromptBarIntakeTreatsSeedAsInstructionsNotCanonicalProse|ProcessorSpawnVText|HandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolutionCompletes)' -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestProcessorAndReconcilerProfilesDelegateToVTextOnly|TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolutionCompletes' -count=1`
+
+Open edge: commit and push the repair, monitor CI and staging deploy, verify
+staging identity, then rerun deployed prompt-bar acceptance. Staging proof must
+show no super-before-VText, no canonical decision-rationale leak, explicit
+decision row/Trace evidence, and downstream super only after the VText request.

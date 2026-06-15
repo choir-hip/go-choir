@@ -395,11 +395,17 @@ ingress has been repaired for fresh prompt-bar VText submissions.
   to 720 seconds, a fresh deployed submission again started conductor -> VText
   but VText run `a03f7f14-6899-453c-b16e-3dabf8e5434a` remained `running`
   without a downstream `request_super_execution` call.
+- Local VText-owned explicit-super handoff repair complete: the initial VText
+  run now detects narrow owner wording that explicitly asks VText to ask/request
+  downstream super execution, requests persistent super from that VText run
+  before provider latency can strand the handoff, and records a
+  `delegation_opened` VText decision. Generic execution/debug wording and
+  explicit no-worker prompts do not trigger this path.
 
-**next move:** commit the extended downstream-super checkpoint, then repair the
-explicit owner-requested execution handoff as a VText-owned affordance. Do not
-add conductor-level prompt heuristics or direct super ingress; any repair must
-create/open VText first and make super downstream of the VText run/request.
+**next move:** commit the VText-owned explicit-super repair, push, monitor
+CI/staging deploy, verify staging identity, and rerun deployed acceptance. Do
+not add conductor-level prompt heuristics or direct super ingress; super must
+remain downstream of the VText run/request.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -1065,10 +1071,13 @@ the VText Sources panel; keep request_super_execution only as a VText
 affordance. Deployed prompt-bar route/canonical/decision acceptance now passes
 on `39273a164ce08d6567bc5e05a04099a1167acdca`, but the execution-shaped leg
 still failed after a 720 second renewed-session proof because VText stayed
-running and did not request super. Next move: after committing the extended
-downstream-super checkpoint, repair explicit owner-requested execution handoff
-inside the VText control plane, then rerun deployed acceptance covering
-prompt-bar plus source/news/article product paths where feasible.
+running and did not request super. A local VText-owned explicit-super repair
+now requests persistent super from the initial VText run only when the owner
+explicitly asks VText to ask/request downstream super execution; generic
+execution/debug wording and no-worker prompts do not trigger it. Next move:
+commit/push this repair, monitor CI/staging deploy, verify staging identity,
+then rerun deployed acceptance covering prompt-bar plus source/news/article
+product paths where feasible.
 Settlement still requires focused schema/tool/prompt tests, route tests proving
 VText before super, API/event/log readability proof, Sources-panel Playwright
 proof, runtime/frontend checks for touched surfaces, push/CI/deploy, staging

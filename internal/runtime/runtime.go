@@ -392,6 +392,10 @@ func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID str
 		rt.handleExecutionError(ctx, rec, err)
 		return nil, err
 	}
+	if err := rt.recordExplicitInitialVTextSuperRequestIfNeeded(ctx, rec); err != nil {
+		rt.handleExecutionError(ctx, rec, err)
+		return nil, err
+	}
 	rt.startRunAsync(rec)
 	return rec, nil
 }
@@ -674,6 +678,10 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		log.Printf("runtime: started child %s from parent=%s parent_profile=%s", wireLifecycleSummary(rec), parentRec.RunID, canonicalAgentProfile(agentProfileForRun(&parentRec)))
 	}
 	if err := rt.recordExplicitInitialVTextDecisionIfNeeded(ctx, rec); err != nil {
+		rt.handleExecutionError(ctx, rec, err)
+		return nil, releaseCoSuperSlotClaim(err)
+	}
+	if err := rt.recordExplicitInitialVTextSuperRequestIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
 		return nil, releaseCoSuperSlotClaim(err)
 	}
@@ -1546,6 +1554,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		rt.handleExecutionError(ctx, rec, err)
 		return
 	}
+	if err := rt.recordExplicitInitialVTextSuperRequestIfNeeded(ctx, rec); err != nil {
+		rt.handleExecutionError(ctx, rec, err)
+		return
+	}
 	llmConfig := ResolvedLLMConfigFromMetadata(rec.Metadata)
 	renderedSystemPrompt := systemPrompt
 	if registry != nil {
@@ -2208,6 +2220,106 @@ func (rt *Runtime) recordExplicitInitialVTextDecisionIfNeeded(ctx context.Contex
 	}
 	rt.emitVTextDecisionRecordedEvent(ctx, rec, decision)
 	rec.Metadata["vtext_initial_decision_recorded"] = true
+	return nil
+}
+
+type explicitInitialVTextSuperRequest struct {
+	Objective string
+	Reason    string
+}
+
+func explicitVTextSuperExecutionRequestFromPrompt(prompt string) (explicitInitialVTextSuperRequest, bool) {
+	text := strings.TrimSpace(prompt)
+	if text == "" || vtextPromptExplicitlyRequestsNoWorkerDecision(text) {
+		return explicitInitialVTextSuperRequest{}, false
+	}
+	lower := strings.ToLower(text)
+	markers := []string{
+		"ask downstream super execution to",
+		"request downstream super execution to",
+		"ask super execution to",
+		"request super execution to",
+		"call request_super_execution to",
+		"request_super_execution to",
+	}
+	for _, marker := range markers {
+		idx := strings.Index(lower, marker)
+		if idx < 0 {
+			continue
+		}
+		objective := strings.TrimSpace(text[idx+len(marker):])
+		objectiveLower := strings.ToLower(objective)
+		for _, delim := range []string{". do not research", ". do not use researcher", ". no research", ". then write", ". then report"} {
+			if end := strings.Index(objectiveLower, delim); end >= 0 {
+				objective = strings.TrimSpace(objective[:end])
+				break
+			}
+		}
+		objective = strings.Trim(objective, " \t\r\n.:;")
+		if objective == "" {
+			objective = text
+		}
+		return explicitInitialVTextSuperRequest{
+			Objective: "VText requests downstream super execution for this document: " + objective,
+			Reason:    "Owner explicitly requested downstream super execution after VText materialization.",
+		}, true
+	}
+	return explicitInitialVTextSuperRequest{}, false
+}
+
+func (rt *Runtime) recordExplicitInitialVTextSuperRequestIfNeeded(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil
+	}
+	if metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" ||
+		!metadataBoolValue(rec.Metadata, "vtext_initial_super_request_required") ||
+		metadataBoolValue(rec.Metadata, "vtext_initial_super_request_recorded") {
+		return nil
+	}
+	docID := metadataStringValue(rec.Metadata, "doc_id")
+	objective := metadataStringValue(rec.Metadata, "vtext_initial_super_request_objective")
+	if docID == "" || objective == "" {
+		return nil
+	}
+	_, err := rt.requestPersistentSuperExecution(WithToolExecutionContext(ctx, rec), rec.OwnerID, docID, rec.RunID, rec.AgentID, objective, "")
+	if err != nil {
+		return fmt.Errorf("record initial vtext super request: %w", err)
+	}
+	reason := metadataStringValue(rec.Metadata, "vtext_initial_super_request_reason")
+	if reason == "" {
+		reason = "Owner explicitly requested downstream super execution after VText materialization."
+	}
+	decision := types.VTextDecisionRecord{
+		DecisionID:   uuid.New().String(),
+		OwnerID:      rec.OwnerID,
+		DocID:        docID,
+		RunID:        rec.RunID,
+		TrajectoryID: trajectoryIDForRun(rec),
+		ActorID:      strings.TrimSpace(rec.AgentID),
+		DecisionKind: "delegation_opened",
+		Reason:       reason,
+		EvidenceRefs: []string{"prompt:explicit_downstream_super_execution"},
+		NextAction:   "Wait for super execution evidence and integrate it into the VText artifact.",
+		CreatedAt:    time.Now().UTC(),
+	}
+	if decision.ActorID == "" {
+		decision.ActorID = "vtext:" + docID
+	}
+	existing, err := rt.store.ListVTextDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
+	if err != nil {
+		return fmt.Errorf("list initial vtext super decisions: %w", err)
+	}
+	for _, item := range existing {
+		if item.RunID == rec.RunID && item.DecisionKind == decision.DecisionKind && item.Reason == decision.Reason {
+			rec.Metadata["vtext_initial_super_request_recorded"] = true
+			return nil
+		}
+	}
+	if err := rt.store.CreateVTextDecision(ctx, decision); err != nil {
+		return fmt.Errorf("record initial vtext super decision: %w", err)
+	}
+	rt.emitVTextDecisionRecordedEvent(ctx, rec, decision)
+	rec.Metadata["vtext_initial_super_request_recorded"] = true
 	return nil
 }
 
