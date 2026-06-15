@@ -228,11 +228,16 @@ states reasons without forcing choreography.
   prompt. The canonical private-reason leak stayed repaired, but public Trace
   agent summary still showed `super` before VText. The remaining gap is still a
   deployed super-first route path, not document-body pollution.
+- Public Trace route diagnostic on deployed `9c11fab05c5d5f24e9d869a721a25a1455ce63b5`
+  clarified the path: conductor creates the VText document, then sends the
+  initial assignment to `super`; `super` later wakes VText, and VText edits the
+  document without any decision row. The bypass happens before VText owns the
+  initial route, not inside VText's final edit loop.
 
-**next move:** run a focused public Trace route diagnostic for deployed
-`9c11fab05c5d5f24e9d869a721a25a1455ce63b5`, then repair the actual
-prompt-bar-to-VText path that still lets `super` own the initial loop before
-the deterministic VText decision record exists.
+**next move:** inspect and repair the conductor-to-super assignment path that
+still lets `super` own the initial loop before the deterministic VText
+decision record exists, then rerun local route coverage before another
+push/deploy/proof loop.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 

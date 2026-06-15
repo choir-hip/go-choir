@@ -292,6 +292,38 @@ Open edge: run a focused public Trace diagnostic for the deployed `9c11` path
 to identify which route bypasses the no-worker guard, then repair that route
 with local route coverage before another push/deploy/proof loop.
 
+## 2026-06-15 - Public Trace Route Diagnostic
+
+Claim/scope: a focused public Trace diagnostic on deployed `9c11` clarified
+the remaining route bypass. The conductor creates the VText document, then the
+initial assignment goes to `super`; `super` later wakes VText, and VText edits
+without any decision row.
+
+Move: capture route-level public product evidence before touching routing code.
+Expected Delta V: identify whether the bypass is inside VText recording or
+before VText owns the route. Actual Delta V: V=2 remains, but the repair target
+narrows to conductor-to-super assignment.
+
+Receipts:
+- Diagnostic artifact:
+  `/tmp/vtext-route-diagnostic-1781491412663.json`.
+- Diagnostic screenshot:
+  `/tmp/vtext-route-diagnostic-1781491412663.png`.
+- Submission `005828b7-b74d-4316-99da-20edcf987916`, document
+  `31757e3f-3429-42a4-8d68-f4f59a1dbaf0`, initial loop
+  `d4d9a803-8bb4-4f41-a64e-e0150a08ff66`.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=9c11fab05c5d5f24e9d869a721a25a1455ce63b5`.
+- Observed decision rows `0`, Trace moments `48`, forbidden internal routes
+  `[]`.
+- Trace order: conductor created the document revision, then emitted an
+  assignment channel message to `super`; `super` invoked `update_coagent`;
+  VText then started from the super loop and invoked `edit_vtext`.
+
+Open edge: inspect and repair the conductor-to-super assignment path for
+explicit no-worker VText decision prompts, then rerun focused local coverage and
+the deployed product-path proof.
+
 ## 2026-06-15 - Prompt-Bar Route-Contract Checkpoint
 
 Claim/scope: the local no-worker route-preemption repair deployed cleanly, but
