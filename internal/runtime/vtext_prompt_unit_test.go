@@ -166,6 +166,43 @@ func TestVTextPromptUsesDiffFirstContextForDirectUserEdits(t *testing.T) {
 	}
 }
 
+func TestVTextPromptBarIntakeTreatsSeedAsInstructionsNotCanonicalProse(t *testing.T) {
+	reason := "M3.2 staging proof: user supplied the needed content and requested no research or execution worker."
+	current := types.Revision{
+		DocID:      "doc-prompt-bar-intake",
+		RevisionID: "rev-prompt-bar-intake",
+		Content:    "",
+		AuthorKind: types.AuthorUser,
+	}
+	metadata := map[string]any{
+		"seed_prompt":                     "Create a short VText document. Record an off-document VText decision note with exact reason " + reason + ".",
+		"prompt_bar_instruction_revision": true,
+		"input_origin":                    vtextInputOriginUserPrompt,
+	}
+	request := buildAgentRevisionRequest(current, nil, metadata, vtextAgentRevisionRequest{
+		Intent: "initial_conductor_workflow",
+	}, "", false, nil, nil)
+
+	for _, want := range []string{
+		"Treat this prompt-bar intake revision as intentionally blank canonical document state.",
+		"Use the original user request as instruction/context for the first VText-authored reader-facing revision, not as existing canonical prose to preserve or quote.",
+		"Keep private coordination rationale, explicit off-document decision reasons, and tool instructions out of the canonical document body",
+		"Current canonical document content:\n---\n(empty document)\n---",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("prompt-bar intake prompt missing %q:\n%s", want, request)
+		}
+	}
+	for _, forbidden := range []string{
+		"Treat this latest user-authored revision as the canonical input for the next version.",
+		"Interpret the user edit diff as the instruction-bearing control surface.",
+	} {
+		if strings.Contains(request, forbidden) {
+			t.Fatalf("prompt-bar intake prompt contains direct-edit instruction %q:\n%s", forbidden, request)
+		}
+	}
+}
+
 func TestVTextPromptFocusesLongDirectUserEdits(t *testing.T) {
 	var before strings.Builder
 	before.WriteString("# Proposal\n\n")

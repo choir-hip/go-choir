@@ -1253,3 +1253,43 @@ so the full owner request remains available to VText as instruction/context
 without becoming canonical reader-facing text. Preserve VText as the initial
 handoff and preserve `request_super_execution` as the downstream execution
 affordance.
+
+## 2026-06-15 - Local Prompt-Bar Intake Canonical-Text Repair
+
+Claim/scope: prompt-bar VText materialization no longer stores the full
+instruction/control prompt as canonical VText body. The full prompt remains
+available to VText through `seed_prompt` metadata and the initial VText run
+prompt; the durable input revision is intentionally blank so VText owns the
+first reader-facing artifact revision.
+
+Move: change `ensureConductorVTextRoute` so prompt-bar intake revisions carry
+`prompt_bar_instruction_revision=true` and empty content while retaining
+`seed_prompt`; change the VText revision prompt to tell VText that this blank
+intake is instruction/context rather than existing canonical prose; add focused
+tests for the deployed failure. Expected Delta V: close the local
+canonical-control-text obligation. Actual Delta V: V=3 to V=2, leaving staging
+proof of the canonical fix and deployed downstream-super/source-article proof.
+
+Receipts:
+- `internal/runtime/runtime.go` keeps prompt-bar request text in metadata but
+  creates blank prompt-bar intake content.
+- `internal/runtime/vtext_agent_revision.go` tells VText not to preserve or
+  quote prompt-bar control text as canonical prose.
+- `internal/runtime/runtime_test.go` now asserts prompt-bar intake content is
+  empty while `seed_prompt` metadata is preserved.
+- `internal/runtime/prompt_bar_unit_test.go` now asserts the explicit
+  `no_worker_needed` decision row exists and neither the seed revision nor the
+  canonical head contains the private reason.
+- `internal/runtime/vtext_prompt_unit_test.go` now asserts the VText prompt
+  names prompt-bar intake as intentionally blank canonical state and does not
+  use direct-edit canonical-input instructions for that case.
+- `nix develop -c go test ./internal/runtime -run 'Test(ConductorTaskNormalizesStructuredRouteResult|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt|VTextPromptBarIntakeTreatsSeedAsInstructionsNotCanonicalProse|HandlePromptBarOperationalProofInitialRunStartsWithVText|ProcessorSpawnVText|InitialVTextToolChoiceUsesExactTools)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(HandlePromptBarVTextRouteCompletesConductorSynchronously|HandlePromptBarOperationalProofInitialRunStartsWithVText|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt|HandlePromptBarResearcherMentionDoesNotSetRoutingFlag|InitialVTextToolChoiceUsesExactTools|ExplicitNoWorkerDecisionDoesNotCreateRouteSpecialCase|ExplicitNoWorkerDecisionPromptParsesInitialDecision|VTextPromptBarIntakeTreatsSeedAsInstructionsNotCanonicalProse|ProcessorSpawnVText|HandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolutionCompletes)' -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestProcessorAndReconcilerProfilesDelegateToVTextOnly|TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolutionCompletes' -count=1`
+
+Open edge: commit and push the repair, monitor CI and staging deploy, verify
+the deployed commit identity, then rerun deployed product-path proof. If
+prompt-bar route/canonical/decision acceptance passes but the
+execution-shaped prompt still does not request super before the proof timeout,
+checkpoint that separately before changing VText prompt pressure or runtime
+continuation policy.

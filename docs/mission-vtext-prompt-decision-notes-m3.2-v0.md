@@ -94,21 +94,21 @@ control plane.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=3:
-1. repair prompt-bar VText materialization so instruction/control text,
-   including explicit off-document decision rationale, is not preserved as
-   canonical reader-facing document text before VText writes the first useful
-   revision.
+**variant (ranking function) V:** current V=2:
+1. prove on staging that prompt-bar VText materialization keeps
+   instruction/control text, including explicit off-document decision
+   rationale, out of canonical reader-facing document text while preserving the
+   full request as VText instruction/context.
 2. prove an ordinary execution-shaped prompt can still cause VText to request
    downstream super execution after VText owns the artifact context, or record
    the precise blocker if the deployed VText/model path cannot make that
    request within the acceptance budget.
-3. rerun deployed acceptance so prompt-bar VText ingress starts with VText,
-   super before VText fails, super after VText is allowed only when VText
-   requested it, explicit owner-requested decision notes create
-   `vtext_decisions` rows plus Trace/log projections without leaking into
-   canonical text, and source/news/article product paths attach downstream work
-   back to VText/artifact context where product-path proof is available.
+Then rerun deployed acceptance so prompt-bar VText ingress starts with VText,
+super before VText fails, super after VText is allowed only when VText
+requested it, explicit owner-requested decision notes create `vtext_decisions`
+rows plus Trace/log projections without leaking into canonical text, and
+source/news/article product paths attach downstream work back to VText/artifact
+context where product-path proof is available.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
 if the tool/table/UI path exceeds one mission, split after the problem
@@ -372,11 +372,19 @@ ingress has been repaired for fresh prompt-bar VText submissions.
 - Deployed downstream-super proof remains open: an execution-shaped prompt
   started with VText and no super-before-VText violation, but the VText run did
   not call `request_super_execution` within the 240 second proof window.
+- Local prompt-bar intake repair complete: prompt-bar conductor materialization
+  now creates an intentionally blank input revision, stores the full user
+  request in `seed_prompt` metadata, marks the revision as a prompt-bar
+  instruction revision, and tells VText to use the original request as
+  instruction/context rather than existing canonical prose. Focused tests prove
+  the explicit decision row still exists while the seed revision and canonical
+  head do not contain the private decision reason.
 
-**next move:** commit this deployed proof checkpoint, then repair prompt-bar
-VText materialization so control prompts are instruction-bearing input rather
-than canonical document body. After local tests, rerun landing and deployed
-proof, including downstream VText-requested super acceptance.
+**next move:** commit the prompt-bar intake repair, push, monitor CI/staging
+deploy, verify staging identity, and rerun deployed proof. If the
+downstream-super leg still times out while route/canonical/decision evidence is
+green, record that as a separate VText/model proof-window problem before
+changing prompts or runtime continuation behavior.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -1020,7 +1028,7 @@ deployed prompt-bar super-first ingress.
 ```text
 Use Parallax on docs/mission-vtext-prompt-decision-notes-m3.2-v0.md. Treat it
 as the M3.2 gate between the settled M3.1 emergency repair and M3 lifecycle
-cutover. Current status is working with V=3. Preserve Choir Doctrine and
+cutover. Current status is working with V=2. Preserve Choir Doctrine and
 docs/vtext-agentic-invariants-2026-06-13.md: VText is Choir's versioned artifact
 control plane. Conductor routes exogenous prompt/source/article/mission input
 into VText-owned artifact state; super is downstream execution authority that
@@ -1034,13 +1042,14 @@ because prompt-bar materialization stored the full control prompt, including the
 off-document decision rationale, as canonical VText text; the explicit
 `no_worker_needed` decision row and Trace/log evidence did exist. A second
 execution-shaped prompt also started with VText but did not request super within
-the proof window. Keep record_vtext_decision backed by Dolt, readable from
-Trace/logs, and visible in the VText Sources panel; keep request_super_execution
-only as a VText affordance. Next move: after committing the Staging Control-Text
-Checkpoint, repair prompt-bar VText materialization so control prompts remain
-instruction-bearing input, not reader-facing canonical body, then rerun local
-tests and deployed acceptance covering prompt-bar plus source/news/article
-product paths where feasible.
+the proof window. A local prompt-bar intake repair now keeps the full request in
+VText metadata/context while creating an intentionally blank canonical intake
+revision, and focused route/prompt/source-article tests pass. Keep
+record_vtext_decision backed by Dolt, readable from Trace/logs, and visible in
+the VText Sources panel; keep request_super_execution only as a VText
+affordance. Next move: commit/push the prompt-bar intake repair, monitor
+CI/staging deploy, verify staging identity, then rerun deployed acceptance
+covering prompt-bar plus source/news/article product paths where feasible.
 Settlement still requires focused schema/tool/prompt tests, route tests proving
 VText before super, API/event/log readability proof, Sources-panel Playwright
 proof, runtime/frontend checks for touched surfaces, push/CI/deploy, staging

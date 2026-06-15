@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -173,6 +174,24 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 		decisions[0].DecisionKind != "no_worker_needed" ||
 		decisions[0].Reason != "M3.2 staging proof: user supplied the needed content and requested no research or execution worker." {
 		t.Fatalf("decision record = %+v", decisions[0])
+	}
+	seedRev, err := rt.Store().GetRevision(context.Background(), decision.UserRevisionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get seed revision: %v", err)
+	}
+	if strings.Contains(seedRev.Content, decisions[0].Reason) {
+		t.Fatalf("prompt-bar seed revision leaked decision reason into canonical text: %q", seedRev.Content)
+	}
+	doc, err := rt.Store().GetDocument(context.Background(), decision.DocID, "user-alice")
+	if err != nil {
+		t.Fatalf("get document: %v", err)
+	}
+	head, err := rt.Store().GetRevision(context.Background(), doc.CurrentRevisionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get head revision: %v", err)
+	}
+	if strings.Contains(head.Content, decisions[0].Reason) {
+		t.Fatalf("canonical head leaked decision reason: %q", head.Content)
 	}
 }
 

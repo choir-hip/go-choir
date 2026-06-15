@@ -153,12 +153,18 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if v0.AuthorKind != types.AuthorUser {
 		t.Fatalf("v0 author_kind: got %q, want %q", v0.AuthorKind, types.AuthorUser)
 	}
-	if v0.Content != "hi" {
-		t.Fatalf("v0 content: got %q, want hi", v0.Content)
+	if v0.Content != "" {
+		t.Fatalf("v0 content: got %q, want empty prompt-bar intake revision", v0.Content)
 	}
 	meta := decodeRevisionMetadata(v0.Metadata)
 	if metadataString(meta, "conductor_loop_id") != rec.RunID {
 		t.Fatalf("v0 conductor_loop_id: got %q, want %q", metadataString(meta, "conductor_loop_id"), rec.RunID)
+	}
+	if metadataString(meta, "seed_prompt") != "hi" {
+		t.Fatalf("v0 seed_prompt metadata: got %q, want hi", metadataString(meta, "seed_prompt"))
+	}
+	if !metadataBoolValue(meta, "prompt_bar_instruction_revision") {
+		t.Fatalf("v0 prompt_bar_instruction_revision = %v, want true", meta["prompt_bar_instruction_revision"])
 	}
 	if metadataString(meta, "vtext_version") != "v0" {
 		t.Fatalf("v0 metadata version: got %q, want v0", metadataString(meta, "vtext_version"))

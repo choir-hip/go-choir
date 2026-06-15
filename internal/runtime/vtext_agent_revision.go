@@ -445,6 +445,7 @@ func vtextUseFocusedUserEditContext(current types.Revision, previous *types.Revi
 // request sent as the user turn for the vtext appagent.
 func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req vtextAgentRevisionRequest, diffSummary string, hasGroundedHistory bool, recentWorkerMessages []ChannelMessage, _ []string) string {
 	var b strings.Builder
+	promptBarInstructionRevision := current.AuthorKind == types.AuthorUser && metadataBoolValue(metadata, "prompt_bar_instruction_revision")
 	b.WriteString("A revise event was triggered for the current vtext document.")
 
 	intent := strings.TrimSpace(req.Intent)
@@ -584,10 +585,16 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("Treat this checklist as acceptance criteria for any replace_all edit; preserve these prefixes, labels, values, and headings verbatim unless the user explicitly changed them.\n")
 	}
 	if current.AuthorKind == types.AuthorUser {
-		b.WriteString("\nTreat this latest user-authored revision as the canonical input for the next version.")
-		b.WriteString("\nInterpret the user edit diff as the instruction-bearing control surface. The user may have mixed final prose, scratch instruction, replacement text, deletions, and annotations directly inside the document.")
-		b.WriteString("\nConsume instruction-like text when it is not intended as final prose. If the edit is meant to replace existing text, remove the stale target text instead of appending a competing alternative.")
-		b.WriteString("\nDo not require //edit markers, XML tags, HTML comments, or other meta syntax. Do not classify the prompt into a workflow before acting; use retrieval tools only if this diff needs more context.")
+		if promptBarInstructionRevision {
+			b.WriteString("\nTreat this prompt-bar intake revision as intentionally blank canonical document state.")
+			b.WriteString("\nUse the original user request as instruction/context for the first VText-authored reader-facing revision, not as existing canonical prose to preserve or quote.")
+			b.WriteString("\nKeep private coordination rationale, explicit off-document decision reasons, and tool instructions out of the canonical document body unless the owner explicitly asked for that rationale to be part of the reader-facing artifact.")
+		} else {
+			b.WriteString("\nTreat this latest user-authored revision as the canonical input for the next version.")
+			b.WriteString("\nInterpret the user edit diff as the instruction-bearing control surface. The user may have mixed final prose, scratch instruction, replacement text, deletions, and annotations directly inside the document.")
+			b.WriteString("\nConsume instruction-like text when it is not intended as final prose. If the edit is meant to replace existing text, remove the stale target text instead of appending a competing alternative.")
+			b.WriteString("\nDo not require //edit markers, XML tags, HTML comments, or other meta syntax. Do not classify the prompt into a workflow before acting; use retrieval tools only if this diff needs more context.")
+		}
 		b.WriteString("\nBecause VText owns the document, write the first useful owner-readable revision with edit_vtext before opening longer worker work.")
 		b.WriteString("\nFor greetings or simple non-factual prompts, answer directly and do not open workers.")
 		if metadataBoolValue(metadata, runMetadataExplicitResearcher) || vtextPromptExplicitlyRequestsResearcher(metadataString(metadata, "seed_prompt")+" "+req.Prompt) {
@@ -608,6 +615,9 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\nThis document does not yet have grounded workflow history.")
 		if current.AuthorKind == types.AuthorUser {
 			b.WriteString("\nYou may edit user-provided text for structure, clarity, or formatting.")
+			if promptBarInstructionRevision {
+				b.WriteString("\nFor this prompt-bar intake, write the first useful document from the original user request while excluding control-only rationale from the body.")
+			}
 			b.WriteString("\nDo not add factual claims, citations, or coding results from model priors.")
 			b.WriteString("\nIf the request needs facts, current events, citations, generated artifacts, execution, or verification, write a brief working revision with explicit uncertainty and record what evidence is needed; VText may then choose researcher, super, both, neither, or a blocker.")
 		} else {

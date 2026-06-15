@@ -2045,6 +2045,11 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		"input_origin":        vtextInputOriginUserPrompt,
 		"vtext_version":       "v0",
 	}
+	userRevisionContent := routeSeedPrompt
+	if metadataStringValue(rec.Metadata, "input_source") == "prompt_bar" {
+		userRevisionContent = ""
+		userRevisionMetadata["prompt_bar_instruction_revision"] = true
+	}
 	userRevMeta, _ := json.Marshal(userRevisionMetadata)
 	userRev := types.Revision{
 		RevisionID:  userRevisionID,
@@ -2052,7 +2057,7 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		OwnerID:     rec.OwnerID,
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: rec.OwnerID,
-		Content:     routeSeedPrompt,
+		Content:     userRevisionContent,
 		Citations:   json.RawMessage("[]"),
 		Metadata:    userRevMeta,
 		CreatedAt:   now,
