@@ -1340,3 +1340,36 @@ Open edge: discriminate whether the execution-shaped miss is proof-window/model
 latency, insufficient VText prompt/tool pressure, or another VText tool-loop
 continuation issue. Do not repair it by restoring conductor direct-super
 ingress or prompt-bar prompt heuristics; super must remain downstream of VText.
+
+## 2026-06-15 - Extended Downstream-Super Proof Still Timed Out
+
+Claim/scope: the downstream-super miss is not explained by the original
+240-second proof window or by access-token expiry. A renewed-session proof with
+a 720-second execution window still produced no VText-requested super run.
+
+Move: update the temporary proof harness to renew the browser session through
+`/auth/session` on 401 and rerun only the execution-shaped leg with a longer
+deadline. Expected Delta V: distinguish proof-window/auth expiry from a real
+VText downstream-super gap. Actual Delta V: V remains 2; the execution-shaped
+request still starts with VText and no direct super ingress, but VText does not
+request super within the extended acceptance budget.
+
+Receipts:
+- Proof harness command:
+  `BASE_URL=https://choir.news npx playwright test tests/vtext-control-plane-staging.tmp.spec.js --workers=1 -g "execution-shaped prompt"`
+  from `frontend/`.
+- The temporary harness retried protected API reads after `/auth/session`
+  renewal and gave the execution-shaped leg 720 seconds.
+- Submission `2913223a-7b86-4de2-8e1d-f34994c19447` created doc
+  `af566404-bf2b-4974-99d2-0b75af1a32fd`; its
+  `initial_loop_id=a03f7f14-6899-453c-b16e-3dabf8e5434a` resolved to profile
+  `vtext`, with conductor as Trace entry and no super-before-VText run.
+- After 12.3 minutes, diagnosis still showed only the conductor run and the
+  VText run; the VText run remained `running`, and no downstream
+  VText-requested super run appeared.
+
+Open edge: repair explicit owner-requested execution handoff inside the VText
+control plane, not in conductor. A valid repair may make a VText run honor a
+clear owner request to ask downstream super execution before provider latency
+can strand the request, but it must still create/open VText first and mark the
+super work as requested by VText.

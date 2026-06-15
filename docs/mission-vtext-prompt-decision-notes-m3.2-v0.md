@@ -390,12 +390,16 @@ ingress has been repaired for fresh prompt-bar VText submissions.
   submission started conductor -> VText with initial VText loop
   `227288c3-d159-466f-8288-3040b934661b`, but the VText run remained `running`
   and did not call `request_super_execution` within the 240 second proof window.
+- Extended downstream-super discriminator failed: after adding session-renewal
+  retry to the temporary proof harness and extending the execution-shaped leg
+  to 720 seconds, a fresh deployed submission again started conductor -> VText
+  but VText run `a03f7f14-6899-453c-b16e-3dabf8e5434a` remained `running`
+  without a downstream `request_super_execution` call.
 
-**next move:** commit this deployed partial-acceptance checkpoint, then
-discriminate the downstream-super miss with an extended proof window or focused
-VText prompt/tool evidence. Do not add conductor-level prompt heuristics or
-direct super ingress; any repair must keep super downstream of a VText
-`request_super_execution` decision.
+**next move:** commit the extended downstream-super checkpoint, then repair the
+explicit owner-requested execution handoff as a VText-owned affordance. Do not
+add conductor-level prompt heuristics or direct super ingress; any repair must
+create/open VText first and make super downstream of the VText run/request.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -1060,12 +1064,11 @@ record_vtext_decision backed by Dolt, readable from Trace/logs, and visible in
 the VText Sources panel; keep request_super_execution only as a VText
 affordance. Deployed prompt-bar route/canonical/decision acceptance now passes
 on `39273a164ce08d6567bc5e05a04099a1167acdca`, but the execution-shaped leg
-still failed because VText stayed running and did not request super inside the
-240 second proof window. Next move: after committing the partial-acceptance
-checkpoint, discriminate whether the downstream-super miss is proof-window/model
-latency or insufficient VText prompt/tool pressure, then rerun deployed
-acceptance covering prompt-bar plus source/news/article product paths where
-feasible.
+still failed after a 720 second renewed-session proof because VText stayed
+running and did not request super. Next move: after committing the extended
+downstream-super checkpoint, repair explicit owner-requested execution handoff
+inside the VText control plane, then rerun deployed acceptance covering
+prompt-bar plus source/news/article product paths where feasible.
 Settlement still requires focused schema/tool/prompt tests, route tests proving
 VText before super, API/event/log readability proof, Sources-panel Playwright
 proof, runtime/frontend checks for touched surfaces, push/CI/deploy, staging
