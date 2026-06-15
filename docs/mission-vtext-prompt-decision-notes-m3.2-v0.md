@@ -79,14 +79,13 @@ auditable through the runtime evidence substrate.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=6:
-1. problem checkpoint names the document/work-log hazard before code;
-2. Dolt schema and store APIs for VText decision rows;
-3. `record_vtext_decision` tool registered for VText with validation and tests;
-4. Trace/log projection and API readability for the decision event;
-5. VText Sources panel shows decisions separately from sources/researcher
+**variant (ranking function) V:** current V=5:
+1. Dolt schema and store APIs for VText decision rows;
+2. `record_vtext_decision` tool registered for VText with validation and tests;
+3. Trace/log projection and API readability for the decision event;
+4. VText Sources panel shows decisions separately from sources/researcher
    findings;
-6. prompt defaults/tool descriptions rewritten and tested for direct,
+5. prompt defaults/tool descriptions rewritten and tested for direct,
    reason-bearing, non-forcing register.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
@@ -125,11 +124,16 @@ states reasons without forcing choreography.
 - Edge/noise: the prompt/tool contract must define "audit-worthy" narrowly
   enough that VText does not produce a decision note for every ordinary
   sentence edit.
+- Problem checkpoint complete: the current default VText prompt still carries
+  forced-sequence language for broad task classes ("write a short working v1
+  first ... Then call `spawn_agent`") and therefore documents the hazard M3.2
+  must repair before code changes land.
 
-**next move:** create the problem checkpoint commit, then implement the
-schema/tool/API/UI/prompt batch with tests. Start by inspecting current VText
-tool registration, runtime store migrations, event emission, `VTextSourcePanel`
-data flow, and prompt default tests.
+**next move:** implement the schema/tool/API/UI/prompt batch with tests. Start
+with the Dolt table and store APIs, then register `record_vtext_decision`, emit
+readable Trace/log evidence, expose decision rows through VText diagnosis for
+the Sources panel, and rewrite prompt defaults without semantic tool-order
+forcing.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -143,9 +147,42 @@ should be direct, active, and reason-bearing, with less descriptive/passive
 voice and more E-prime style where useful. Owner decision: VText decisions
 should be visible in the VText UI when the Sources panel opens from the toolbar.
 
-**settlement:** not settled. Settle only when the witness exists with product
-proof and M3 can resume with both hazards covered: no forced semantic
-delegation and no document-body agent work logs.
+**settlement:** not settled. Problem Documentation First is satisfied at
+docs-level only. Settle only when the witness exists with product proof and M3
+can resume with both hazards covered: no forced semantic delegation and no
+document-body agent work logs.
+
+## Problem Checkpoint - 2026-06-14
+
+Reliable evidence: the checked-in VText default prompt still instructs VText to
+create a working revision and then call `spawn_agent` for broad factual,
+current, cited, linked, uploaded, code, product, and verification requests. That
+language creates a semantic route script, not merely an affordance. It also
+invites "record why not" pressure to leak into canonical document prose when
+VText chooses not to delegate.
+
+Conjecture delta: M3.2 repairs the prompt/register contract by adding a durable,
+off-document decision channel and by changing prompt language from required
+tool sequence to reason-bearing obligations. Strong delegation pressure remains
+admissible; mandatory semantic next steps do not.
+
+Protected surfaces: VText tool registration and descriptions, VText prompt
+defaults, embedded Dolt VText schema/store APIs, Trace/event/log projection,
+VText diagnosis/API payloads, and the VText Sources panel.
+
+Admissible evidence class: focused schema/store/tool/prompt tests for local
+construct proof; API/log tests for readability; Playwright/browser proof for
+Sources-panel visibility; staging identity and deployed product-path proof for
+settlement.
+
+Rollback path: revert the M3.2 runtime/frontend/prompt commits to remove the
+new table/tool/API/UI path and restore prior prompt defaults. The documentation
+checkpoint may remain as discovery evidence unless a later doctrine update
+supersedes it.
+
+Heresy delta: discovered: prompt text can make VText behave like a route-script
+executor and can push agent process rationale into canonical documents.
+introduced: none accepted. repaired: pending implementation.
 
 ## Suggested Goal String
 

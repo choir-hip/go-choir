@@ -21,3 +21,21 @@ Receipts:
 Open edge: implementation must still start with Problem Documentation First
 because the mission touches protected VText tools/prompts, runtime store schema,
 Trace/event projection, logs, and VText UI.
+
+## 2026-06-14 - Problem Checkpoint Before Red-Surface Code
+
+Claim/scope: current VText prompt defaults still include forced-sequence
+language for broad task classes, and "record why not" pressure would pollute
+canonical documents unless M3.2 provides an off-document decision path.
+
+Move: construct Problem Documentation First checkpoint in the paradoc before
+runtime/frontend edits. Expected Delta V: close the first obligation. Actual
+Delta V: V=6 to V=5 at docs-level only.
+
+Receipts:
+- `docs/mission-vtext-prompt-decision-notes-m3.2-v0.md`
+- `internal/runtime/prompt_defaults/vtext.md` inspection
+
+Open edge: schema/tool/API/UI/prompt implementation and all product-path
+evidence remain open; this checkpoint documents the hazard but does not repair
+it.
