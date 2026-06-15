@@ -8,14 +8,16 @@ Discipline: `skills/parallax/SKILL.md`. Predecessors: M1
 (`docs/mission-trajectory-model-v0.md`) and M2
 (`docs/mission-messaging-cutover-v0.md`) are settled.
 
-Doctrine note (2026-06-13): `continuation-level` references in this cutover
-mission are transitional acceptance-language residue, not target doctrine.
+Doctrine note (2026-06-13): legacy continuation acceptance-level references in
+this cutover mission are transitional acceptance-language residue, not target
+doctrine.
 
-Recovery gate (2026-06-14): do not resume M3 implementation directly until
-`docs/mission-lifecycle-cutover-m3.1-v0.md` settles or names accepted successor
-edges. M3.1 is the active recovery paradoc for removing forced VText workflow
-control, repairing the acceptance witness, and updating this handoff away from
-deterministic researcher continuation.
+Recovery gates: M3.1 settled on 2026-06-14 and M3.2 settled on 2026-06-15.
+M3 must resume as lifecycle cutover, not deterministic VText researcher
+continuation and not direct-super ingress. Preserve the M3.1/M3.2 invariants:
+VText remains the artifact control plane, semantic delegation is VText's choice,
+decision rationale stays off-document, and prompt/source/article/mission ingress
+enters VText-owned artifact state before downstream super work.
 
 ## Source Form
 
@@ -23,8 +25,8 @@ deterministic researcher continuation.
 
 **Real artifact:** run-shaped goroutine closures replaced by actor activation
 loops; `recoverInterruptedRuns` blanket-fail deleted (boot = cold actors +
-sweep); cancel-by-trajectory replaces `CancelRunGraph`; `ParentRunID` becomes
-`spawned_by_run_id` provenance-only.
+sweep); cancel-by-trajectory replaces `CancelRunGraph`; legacy parent-run
+fields become `spawned_by_run_id` provenance-only.
 
 **Bridge conjecture (R1/R2):** activation/passivation/sweep semantics, already
 proven at the protocol level (`actor_protocol.tla`) and package level
@@ -37,12 +39,172 @@ reactivate with correct memory and zero stranded messages.
 clean step/loop/activation boundary; budget for a shim layer rather than
 distorting the actor semantics.
 
-**Settlement:** restart amnesia gone; the falsifier passes; ParentRunID control
-sites migrated with their features; acceptance evidence re-pointed.
+**Settlement:** restart amnesia gone; the falsifier passes; legacy parent-run
+control sites migrated with their features; acceptance evidence re-pointed.
 
 **Dependencies:** M2. **Size:** 2 overnight missions; the big one.
 
 ## Parallax State
+
+status: working
+
+**mission conjecture:** if runtime execution moves from run-shaped goroutine
+closures to durable actor activation loops, and boot becomes cold actors plus a
+wake/sweep instead of blanket-failing interrupted runs, then the deeper
+rearchitecture goal advances: agents own lifecycles, old trajectories can
+rewarm, restart amnesia is gone, and completion/parent-tree liveness no longer
+controls coagent work.
+
+**deeper goal (G):** durable actors, evidence-bearing promotion, and
+self-development operational instead of documentary.
+
+**witness/spec (A/S):** live work is an activation over a durable agent
+identity; `update_coagent` and assigned work activate cold actors or steer warm
+actors at step boundaries; passivation drops residency without losing backlog;
+boot reactivates from durable updates/open obligations; cancellation is by
+trajectory/work item; legacy parent-run fields are provenance-only and
+eventually become `spawned_by_run_id`.
+
+**invariants / qualities / domain ramp (I/Q/D):**
+- I: no blanket fail-on-restart, no parent/child control reads, no new wake
+  primitive, and no direct-super ingress for ordinary VText-centered work.
+- I: VText owns artifact control. M3 must not force VText to spawn researcher or
+  super as a lifecycle proof precondition.
+- I: passivation must not lose a wake or open assigned obligation. If an actor
+  sleeps, backlog and open work must remain observable and rewarmable.
+- I: prompt/VText smoke and `staging-smoke-level` acceptance are not M3 proof.
+  M3 proof is lifecycle evidence: passivation, rewarm, delivered updates, open
+  obligations, and no stranded messages after real restart/refresh.
+- Q: compatibility shims may exist for v0, but settlement must name which run
+  rows, active-run queries, and legacy parent-run fields remain audit-only.
+- D: use focused local process-kill tests only to shape. Settlement requires
+  deployed vmctl-routed user-computer restart/refresh proof on staging.
+
+**variant (ranking function) V:** current V=3:
+1. compile a fresh lifecycle proof harness/predicate over existing
+   actor/backlog/work-item evidence, not forced researcher sequencing;
+2. run the deployed vmctl-routed restart/refresh falsifier against
+   `https://choir.news`, with correct target VM identity before/after refresh;
+3. either settle from receipts or record the next real lifecycle substrate
+   blocker, plus acceptance packet, rollback refs, heresy delta, and residual
+   compatibility surfaces.
+
+Prior M3 batches landed real lifecycle substrate: `executeActivation`,
+passivation instead of blanket failure, pending-update and assigned-work sweeps,
+trajectory-owned co-super slots, vSuper cancel authority limited by trajectory
+slot, actor rewarm memory seeding, spawned-child work items, boot synthesis for
+missing spawned work, and explicit VText requester metadata on reactivated
+spawned work. The last M3 proof attempts got trapped in a false proxy: requiring
+an explicit researcher branch before vmctl refresh. M3.1 and M3.2 settled that
+trap. Do not resurrect it.
+
+**budget:** one finishing pass for M3 proof and settlement if the harness can
+use existing product/control evidence. If the proof reveals a new lifecycle
+failure, document that first and fix only the lifecycle substrate, not VText
+delegation policy.
+
+**authority / bounds:** mutation class for the next implementation is `red`
+because it touches vmctl, VText lifecycle evidence, run acceptance, and actor
+restart semantics. Before code, name conjecture delta, protected surfaces,
+admissible evidence, rollback path, and heresy delta. Apply Problem
+Documentation First for any new staging/lifecycle failure.
+
+**evidence packet:** focused tests for any touched runtime path;
+`nix develop -c scripts/go-test-runtime-shards`; independent review before
+settlement; push to `origin/main`; CI; Node B deploy with staging health
+identity; deployed vmctl-routed restart/refresh proof; browser-public/product
+control evidence of trajectory/work-item obligations before refresh and
+passivation, rewarm/delivery/no-stranding after refresh; run acceptance
+synthesis that does not claim old continuation or promotion acceptance levels.
+
+**heresy delta:** discovered: late M3 turned a proof precondition into forced
+appagent sequencing; M3.1/M3.2 repaired that. Introduced: none accepted.
+Current M3 must repair only lifecycle heresy: restart amnesia, parent-tree
+authority, or active-run liveness if the fresh proof exposes it.
+
+**position / live conjectures / open edges:**
+- C1 supported locally: activation loops can wrap the current LLM/tool loop
+  without weakening M2 message/wake semantics.
+- C2 supported locally: boot passivation plus sweeps can rewarm pending updates
+  and assigned work after OS-process death.
+- C3 testing: deployed vmctl-routed user-computer refresh must prove cold actors
+  rewarm from durable backlog/open assigned obligations with no stranded updates
+  or zero-obligation stalls.
+- C4 active: legacy parent-run fields remain compatibility/audit lineage. They
+  must not decide liveness, cancellation, slot ownership, or authority.
+- Edge/compatibility: non-vSuper cancellation active-run fallback, terminal run
+  rows, and physical `run_memory_entries.loop_id` remain accepted v0 shims only
+  if final settlement names them and proves they are not warm-residency or
+  authority oracles.
+- Edge/successor: M3.2 accepted source/news/article route proof as residual
+  product-surface debt. It does not block M3 lifecycle settlement, but do not
+  claim source/news/article route proof from M3.
+
+**next move:** build or update a deployed M3 lifecycle proof harness around the
+current invariant: create/observe durable assigned work or pending update
+backlog for a VText-owned trajectory, refresh the correct vmctl-routed user
+computer, then prove passivation, rewarm, delivery, and no stranded obligations.
+Do not require an exact researcher branch, exact tool order, direct-super
+ingress, or deterministic VText continuation. If no current product path can
+expose the required lifecycle evidence, record the exact proof-surface blocker
+and stop before runtime changes.
+
+**ledger file:** `docs/mission-lifecycle-cutover-v0.ledger.md`.
+
+**version / lineage:** v0 compiled 2026-06-13 after M2 settled at
+`794d28dd76ff00a2ae27c98a14dbce9e34834695`. M3.1 and M3.2 are now settled
+gates. Successors gated on M3: M4 continuation deletion and M5 Wire settlement
+falsifier.
+
+**learning state:** M2 learning carries forward: no old/new dual model may
+survive settlement; stale prompt/tool surfaces are blockers, not cleanup;
+product surfaces are downstream falsifiers, not proof that the spine stands.
+M3.1/M3.2 learning carries forward: VText is artifact control plane, not a
+workflow runner.
+
+**settlement:** not claimed. Required landing proof: commit, push, CI, Node B
+deploy, staging health identity, deployed vmctl-routed restart proof, and an
+acceptance/evidence packet whose lifecycle claim does not outrun the receipts.
+
+## Suggested Goal String
+
+```text
+Use Parallax on docs/mission-lifecycle-cutover-v0.md. Treat it as M3 proper
+after settled M3.1 and M3.2. Current status is working with V=3. Preserve Choir
+Doctrine, AGENTS.md, docs/vtext-agentic-invariants-2026-06-13.md, and the
+settled M3.1/M3.2 invariants: VText is Choir's artifact control plane, semantic
+delegation is VText's choice, decision rationale stays off-document, ordinary
+prompt/source/article/mission ingress enters VText-owned artifact state, and
+super is downstream of VText request. Do not resurrect deterministic
+edit_vtext -> spawn_agent, exact researcher branch requirements, prompt-bar
+researcher routing, direct-super ingress, or prompt/VText smoke as M3 proof.
+
+The live M3 objective is lifecycle cutover settlement: prove on deployed staging
+that a vmctl-routed user computer can be refreshed/restarted while actor work
+rewarms from durable backlog/open assigned obligations, updates are delivered,
+and no stranded messages or zero-obligation stalls remain. Current V=3: 1)
+compile a fresh lifecycle proof harness/predicate over existing
+actor/backlog/work-item evidence, not forced researcher sequencing; 2) run the
+deployed vmctl-routed restart/refresh falsifier against https://choir.news with
+correct target VM identity before/after refresh; 3) settle from receipts or
+record the next real lifecycle substrate blocker with acceptance packet,
+rollback refs, heresy delta, and residual compatibility surfaces.
+
+Start by reading the compact Parallax State and the Lifecycle Inventory, then
+inspect current runtime proof surfaces. If a code change is needed, first record
+the lifecycle problem in this paradoc/ledger. Mutation class is red: protected
+surfaces include vmctl refresh, actor passivation/rewarm, trajectory/work-item
+obligations, VText lifecycle evidence, run acceptance, and deployment routing.
+Required verification for settlement: focused tests for touched runtime paths,
+nix develop -c scripts/go-test-runtime-shards, independent review, push to
+origin/main, CI, Node B deploy, staging health identity, deployed vmctl-routed
+restart proof, and acceptance synthesis that does not claim old continuation or
+promotion acceptance levels. If no browser-public/product-control path can
+expose the needed lifecycle evidence, record the exact proof-surface blocker
+and stop without weakening the invariant.
+```
+
+## Historical Parallax State - Through 2026-06-13
 
 status: working
 

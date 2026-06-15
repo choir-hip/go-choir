@@ -2286,3 +2286,29 @@ The next fix should instrument or repair the deterministic tool-result
 continuation path, not rely on another prompt-only hint. No code fix in this
 checkpoint, and no continuation-level, promotion-level, zero-stranding, or
 final M3 settlement is claimed.
+
+## 2026-06-15T10:17:53Z - Resume M3 After M3.1/M3.2 Settlement
+
+Claim/scope: M3.1 and M3.2 are now settled, so the M3 paradoc can no longer
+remain blocked behind M3.1 or route implementers toward deterministic VText
+researcher continuation. The correct current frame is lifecycle cutover proof:
+vmctl-routed restart/refresh, durable backlog/open assigned obligations,
+passivation, rewarm, delivered updates, and no stranded messages.
+
+Move: rewrite the current M3 Parallax State into a compact handoff, demote the
+old 2026-06-13 state to a historical section, add a current Suggested Goal
+String, and update `docs/mission-graph.yaml` so M3.2 is settled and M3 is
+working. Expected Delta V: no runtime V decrease, but remove a stale blocking
+edge and prevent the next implementation pass from reintroducing M3.1's false
+researcher-continuation proxy. Actual Delta V: M3 remains V=3, now resumable.
+
+Receipts:
+- M3 current Parallax State word count after rewrite: 910 words.
+- M3.1 settled with deployed acceptance synthesis
+  `runacc-98a84912f02bcb4e0f82` blocked for prompt/VText-only smoke.
+- M3.2 settled with source/news/article deployed route proof explicitly not
+  claimed and `/api/universal-wire/stories` recorded as successor debt.
+- Follow-up wording cleanup left M3 current Parallax State at 916 words.
+- `scripts/doccheck` passed report-only: 204 docs, 801 warnings, 3795ms.
+
+Open edge: use the new M3 goal string for the next implementation pass.

@@ -99,7 +99,7 @@ nodes:
   title: M3.2 VText Prompt Register And Decision Notes
   path: docs/mission-vtext-prompt-decision-notes-m3.2-v0.md
   ledger: docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md
-  status: open_handoff
+  status: settled
   kind: spine
   depends_on:
   - m3.1-lifecycle-recovery
@@ -114,7 +114,7 @@ nodes:
   title: M3 Lifecycle Cutover
   path: docs/mission-lifecycle-cutover-v0.md
   ledger: docs/mission-lifecycle-cutover-v0.ledger.md
-  status: blocked
+  status: working
   kind: spine
   depends_on:
   - m3.2-vtext-prompt-decision-notes
