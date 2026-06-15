@@ -139,7 +139,7 @@ func newRecordVTextDecisionTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "record_vtext_decision",
-		Description: "Record an audit-worthy VText decision outside the canonical document. Use this for reasoned delegation choices, waits, blockers, or no-worker decisions that reviewers may need later. Do not use it for ordinary sentence-level edits, and do not put agent process rationale into document text.",
+		Description: "Record an audit-worthy VText decision outside the canonical document. Use this for reasoned delegation choices, waits, blockers, or no-worker decisions that reviewers may need later. If the owner explicitly asks VText to record an off-document decision note and the requested record is truthful and within VText authority, call this tool. Do not use it for ordinary sentence-level edits, and do not put agent process rationale into document text.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"doc_id": map[string]any{
 				"type":        "string",

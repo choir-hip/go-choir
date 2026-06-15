@@ -79,11 +79,8 @@ auditable through the runtime evidence substrate.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=2:
-1. repair the staging-discovered gap where explicit owner-requested decision
-   recording did not cause the deployed VText model to call
-   `record_vtext_decision`;
-2. reland the behavior change on `origin/main`, monitor CI/deploy, verify
+**variant (ranking function) V:** current V=1:
+1. reland the behavior change on `origin/main`, monitor CI/deploy, verify
    staging identity, and run deployed product-path proof.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
@@ -136,11 +133,15 @@ states reasons without forcing choreography.
   `890dbe6fafc413f7d301828c83a51cbe10705ad4` exposed that the construct exists
   but the active VText model can complete without calling the decision tool even
   when the owner prompt explicitly asks for an off-document decision note.
+- Local prompt/tool compliance repair complete: VText prompt defaults, runtime
+  profile augmentation, and the tool description now make explicit
+  owner-requested off-document decision notes a mechanical
+  `record_vtext_decision` obligation unless the requested record would be
+  false, unsafe, or outside VText authority.
 
-**next move:** strengthen the explicit owner-requested decision-recording
-obligation without reintroducing forced semantic delegation choreography, rerun
-focused prompt/runtime tests, then reland and rerun staging product-path proof
-for decision recording plus Sources-panel visibility.
+**next move:** commit the prompt/tool compliance repair, push `origin main`,
+monitor CI and staging deploy, verify staging commit identity, and rerun staging
+product-path proof for decision recording plus Sources-panel visibility.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 

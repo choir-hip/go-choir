@@ -23,6 +23,8 @@ func TestDefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence(t *tes
 	for _, want := range []string{
 		"VText owns canonical document versions",
 		"Use `record_vtext_decision` for audit-worthy off-document choices",
+		"If the owner explicitly asks VText to record an off-document decision note",
+		"unless the requested record would be false, unsafe, or outside VText authority",
 		"Do not put agent process rationale",
 		"These are obligations and affordances, not a forced tool sequence",
 		"VText may write, ask researcher, ask super, ask both, ask neither, wait, or report a blocker",
@@ -37,6 +39,7 @@ func TestDefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence(t *tes
 func TestRecordVTextDecisionToolDescriptionKeepsDecisionsOffDocument(t *testing.T) {
 	tool := newRecordVTextDecisionTool(&Runtime{})
 	if !strings.Contains(tool.Description, "outside the canonical document") ||
+		!strings.Contains(tool.Description, "owner explicitly asks VText to record an off-document decision note") ||
 		!strings.Contains(tool.Description, "Do not use it for ordinary sentence-level edits") ||
 		!strings.Contains(tool.Description, "do not put agent process rationale into document text") {
 		t.Fatalf("record_vtext_decision description is too weak: %q", tool.Description)

@@ -98,3 +98,30 @@ Open edge: strengthen explicit owner-requested decision-recording pressure
 without reintroducing forced semantic researcher/super choreography, rerun
 focused prompt/runtime tests, push, monitor CI/deploy, and rerun deployed
 product-path proof.
+
+## 2026-06-15 - Local Prompt Compliance Repair
+
+Claim/scope: explicit owner requests to record an off-document VText decision
+now create a clear tool obligation without making researcher/super delegation a
+forced semantic sequence.
+
+Move: strengthen VText prompt defaults, runtime profile augmentation, tool
+description, and prompt tests. Expected Delta V: close the local repair loop.
+Actual Delta V: V=2 to V=1, leaving landing/staging proof.
+
+Receipts:
+- `internal/runtime/prompt_defaults/vtext.md` now says explicit
+  owner-requested off-document decision notes call `record_vtext_decision`
+  unless the requested record would be false, unsafe, or outside VText
+  authority.
+- `internal/runtime/tool_profiles.go` carries the same runtime prompt
+  augmentation.
+- `internal/runtime/tools_vtext.go` tool description carries the explicit owner
+  request obligation.
+- `internal/runtime/vtext_prompt_unit_test.go` rejects losing that prompt/tool
+  language while still checking for no forced semantic delegation sequence.
+- `nix develop -c go test ./internal/runtime -run 'Test(DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence|RecordVTextDecisionToolDescriptionKeepsDecisionsOffDocument|InstallDefaultAgentToolsProfiles|InitialVTextToolChoice)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords|DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence|RecordVTextDecisionToolDescriptionKeepsDecisionsOffDocument|InstallDefaultAgentToolsProfiles|InitialVTextToolChoice)' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof.

@@ -40,6 +40,10 @@ delegation that a reviewer could reasonably expect; when VText chooses no
 worker for a nontrivial reason; or when VText needs to preserve why a worker
 path was opened. Keep the note concise and reason-bearing. Do not record a note
 for every sentence edit, and do not copy the note into canonical document text.
+If the owner explicitly asks VText to record an off-document decision note, call
+`record_vtext_decision` for that note unless the requested record would be
+false, unsafe, or outside VText authority. If you cannot record it, report the
+blocker instead of hiding the failure in document prose.
 
 If the first useful revision must precede longer worker work, write a short
 owner-readable revision with explicit uncertainty and no ungrounded factual,
