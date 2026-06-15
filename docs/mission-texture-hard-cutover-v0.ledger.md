@@ -308,3 +308,60 @@ Receipts:
 Open edge: push the slice, monitor CI and Node B staging deploy identity, then
 run a staging browser/product proof that a related Texture transclusion renders
 with a pinned revision and a newer-version indicator.
+
+## 2026-06-15 - Staging Proof For Texture Transclusion Pins
+
+Claim: the transclusion pinned-ref/newer-version slice is deployed and proves
+the product invariant that related Texture transclusions pin a version by
+default and show when a newer version exists.
+
+Move: push commit `0cb42bb95efe8f92cc2d6ba921af19a62ee282e4`, monitor CI and
+Node B deploy, verify staging build identity, then run a temporary authenticated
+Playwright product proof against `https://choir.news`. The scratch spec was
+deleted after the run; evidence was written outside the repo.
+
+Expected ΔV: -1 by discharging the transclusion pinned-ref/newer-version proof.
+
+Actual ΔV: -1. V moves from 6 to 5. This proof does not discharge old UI/file
+symbol residue, compatibility-shim deletion, edit-affordance naming, or
+Texture Protocol v0.
+
+Receipts:
+- pushed commit:
+  `0cb42bb95efe8f92cc2d6ba921af19a62ee282e4`
+  (`frontend: pin texture transclusion refs`).
+- CI run `27582557591`: success. Runtime shards 0-3, non-runtime tests,
+  integration-tagged smoke, Go vet/build, frontend build, Docs Truth Check job,
+  TLA+ model check, final Go gate, and Node B staging deploy job passed.
+- Docs Truth Check run `27582557606`: success.
+- FlakeHub publish run `27582557566`: success.
+- Staging health: `https://choir.news/health` reported proxy and sandbox
+  commit `0cb42bb95efe8f92cc2d6ba921af19a62ee282e4`, deployed at
+  `2026-06-15T23:15:09Z`.
+- Staging acceptance command:
+  `PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000 npm --prefix frontend run e2e -- tests/texture-transclusion-staging.tmp.spec.js`
+  passed, 1 test, 13.7s.
+- Staging evidence artifact:
+  `/tmp/texture-transclusion-staging-proof-1781565407707.json`.
+- Product evidence ids: parent Texture document
+  `8bee5667-f59e-4081-a1bb-63a9094487d9`; parent revision
+  `b081bc14-812c-43ac-9e0c-048cb50b095c`; child Texture document
+  `7e6c3873-9716-496c-b4d0-dbab537f50f9`; pinned child revision
+  `c554c39c-15c6-4b44-a733-f58d48f8029c` at version 0; current child head
+  `71d79821-5420-498c-ab8d-eb0367e4b4ac` at version 1.
+- Product observations: the parent Texture was opened through the desktop UI;
+  its related Texture ref rendered `data-vtext-related-revision-id`,
+  `data-vtext-related-version-number`,
+  `data-vtext-related-current-revision-id`,
+  `data-vtext-related-current-version-number`, and
+  `data-vtext-related-has-newer-version="true"`; the inline transclusion showed
+  the pinned child revision text and the newer-version note; clicking the
+  related ref opened the child Texture at the pinned revision rather than the
+  newer head.
+- Rollback ref: revert commit `0cb42bb9` to return to document-only related
+  Texture refs and unpinned related-document launches.
+
+Open edge: continue reducing retired-name residue, rename UI/internal symbols,
+prove edit-affordance common-vs-exceptional naming, delete compatibility shims
+with receipts, and write Texture Protocol v0 only after the working surface is
+settled.

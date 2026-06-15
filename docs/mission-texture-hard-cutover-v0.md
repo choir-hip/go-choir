@@ -146,7 +146,7 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: docs and detector warnings -> focused local tests -> staging deploy
   identity -> browser product proof -> protocol canonization.
 
-variant (ranking function) V: current V=6; last ΔV=0:
+variant (ranking function) V: current V=5; last ΔV=-1:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
@@ -170,9 +170,9 @@ variant (ranking function) V: current V=6; last ΔV=0:
 8. discharged for the current product-facing slice: deployed prompt-bar ->
    conductor -> Texture first-revision proof passed under `/api/texture` and
    `edit_texture`, with no super-before-Texture trace;
-9. current V includes: transclusion pinned-ref plus newer-version indicator
-   proof is locally implemented and focused-test green, but not yet pushed,
-   deployed, or proven on staging;
+9. discharged: transclusion pinned-ref plus newer-version indicator behavior is
+   locally focused-test green and proven on staging with browser/product UI
+   evidence;
 10. current V includes: Texture Protocol v0 is intentionally unwritten until
     the working minimal surface is proven.
 
@@ -237,10 +237,14 @@ position / live conjectures / open edges:
   edition transclusion and missing in-flight publication work item evidence.
   The repair accepts current Texture metadata plus deletion-receipted legacy
   metadata in the wire publish/read predicates; the rerun passed CI and staged.
+- C8 supported for deployed transclusion scope: related Texture refs now carry
+  pinned revision identity, preserve the pin through editor serialization, open
+  the pinned revision, and show a newer-version marker when the related Texture
+  head advances. The deployed proof covered a parent Texture ref with pinned
+  child revision v0 and current child revision v1 on staging.
 
-next move: push and monitor the transclusion pinned-ref/newer-version slice,
-verify staging deploy identity, and run a deployed product/browser proof before
-counting the transclusion obligation discharged.
+next move: continue the broader UI/internal symbol cutover and edit-affordance
+common-vs-exceptional proof before protocol v0.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -265,17 +269,17 @@ Use Parallax on docs/mission-texture-hard-cutover-v0.md. Treat it as the source
 program for the Texture hard cutover before M3 resumes. Texture is the promoted
 ontology for Choir's versioned, transclusive artifact control plane; the old
 V-name is migration residue allowed only in the historical background doc and
-explicit historical mission evidence. Current status is open_handoff with V=6.
+explicit historical mission evidence. Current status is open_handoff with V=5.
 The read-only retired-name inventory, Problem Documentation First checkpoint,
 report-only H5 docs checker, operating-contract Texture reconciliation, and a
-deployed product-facing route/tool/prompt slice are landed. Continue renaming
+deployed product-facing route/tool/prompt slice plus deployed transclusion
+pinned-ref/newer-version proof are landed. Continue renaming
 docs/code/prompts/UI/tests/tool affordances toward Texture, preserve one Texture
 writer among agents, keep human direct edits canonical, keep super downstream of
-Texture for privileged execution, and avoid runtime semantic decision trees.
-Transclusions should pin version refs by default and show newer versions when
-available. Do not canonize a Texture Protocol upfront; make protocol v0 the last
-deliverable after the working minimal product surface is proven. Append moves
-to docs/mission-texture-hard-cutover-v0.ledger.md and settle only with CI,
-staging identity, deployed acceptance, retired-name search receipts, checker
-report, and a minimal protocol distilled from proof.
+Texture for privileged execution, and avoid runtime semantic decision trees. Do
+not canonize a Texture Protocol upfront; make protocol v0 the last deliverable
+after the working minimal product surface is proven. Append moves to
+docs/mission-texture-hard-cutover-v0.ledger.md and settle only with CI, staging
+identity, deployed acceptance, retired-name search receipts, checker report,
+and a minimal protocol distilled from proof.
 ```
