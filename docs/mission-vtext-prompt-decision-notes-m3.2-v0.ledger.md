@@ -1462,3 +1462,27 @@ Open edge: find an admissible browser-public product path for
 sourcecycled/news/article route evidence, or record the exact product-surface
 blocker. Do not use `/api/agent`, `/internal`, `/api/test`, raw event mutation,
 or manual success seeding to fill this gap.
+
+## 2026-06-15T09:04:57Z - Parallax state compaction review
+
+Claim/scope: the M3.2 Parallax State had the right current V=1 framing, but it
+still carried the superseded no-worker route-repair history inside the current
+state section. That made the state log-shaped and risked routing the next agent
+back into the rejected predicate frame.
+
+Move: compact the Parallax State in place, preserving the current
+implementation/proof/open-edge facts and pointing the failed no-worker sequence
+back to this ledger. Expected Delta V: no mission V decrease, but improved
+handoff fidelity before the remaining source/news/article proof move. Actual
+Delta V: V remains 1.
+
+Receipts:
+- Parallax State word count after compaction: 1490 words, under the skill's
+  hard ~1500-word cap.
+- `scripts/doccheck` passed report-only: 204 docs, 805 warnings, 2645ms.
+- Current next move remains unchanged: prove sourcecycled/news/article route
+  ownership through an admissible deployed product path, or record the exact
+  product-surface blocker.
+
+Open edge: commit/push this docs-only handoff repair before giving the
+continuation string.
