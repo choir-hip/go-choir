@@ -208,8 +208,6 @@ func TestPromptBarNoWorkerSuperRequestRedirectsToVText(t *testing.T) {
 	conductor, err := rt.completePromptBarDecisionRun(ctx, prompt, "user-alice", map[string]any{
 		runMetadataAgentProfile:  AgentProfileConductor,
 		runMetadataAgentRole:     AgentProfileConductor,
-		"input_source":           "prompt_bar",
-		"requested_app":          AgentProfileVText,
 		"initial_document_title": "M32_VTEXT_ROUTE_REDIRECT",
 		"submission_surface":     "prompt_bar",
 	}, conductorDecision{

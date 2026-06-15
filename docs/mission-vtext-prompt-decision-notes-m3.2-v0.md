@@ -261,11 +261,13 @@ states reasons without forcing choreography.
   loop to `super`, labeled with VText requester identity. The redirect hook
   exists on the right function, but its stored-conductor metadata guard is too
   strict for the deployed prompt-bar run shape.
+- Local redirect-predicate repair complete: the super-request redirect now
+  relies on owner, conductor profile, existing VText document channel, and
+  durable no-worker prompt text. It no longer requires stored prompt-bar app
+  metadata fields that the deployed conductor route may not carry.
 
-**next move:** relax the super-request redirect guard to rely on owner,
-conductor profile, existing VText document channel, and the durable no-worker
-prompt text instead of prompt-bar metadata fields that may be absent in the
-stored run, then rerun focused tests and deployed proof.
+**next move:** commit the redirect-predicate repair, push `origin main`,
+monitor CI/deploy, verify staging identity, and rerun deployed proof.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 

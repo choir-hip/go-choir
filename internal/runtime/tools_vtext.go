@@ -489,9 +489,7 @@ func (rt *Runtime) redirectPromptBarNoWorkerSuperRequestToVText(ctx context.Cont
 		return nil, false, fmt.Errorf("lookup requester run for no-worker route: %w", err)
 	}
 	if requester.OwnerID != ownerID ||
-		agentProfileForRun(&requester) != AgentProfileConductor ||
-		metadataStringValue(requester.Metadata, "input_source") != "prompt_bar" ||
-		metadataStringValue(requester.Metadata, "requested_app") != AgentProfileVText {
+		agentProfileForRun(&requester) != AgentProfileConductor {
 		return nil, false, nil
 	}
 	routePrompt := strings.Join([]string{

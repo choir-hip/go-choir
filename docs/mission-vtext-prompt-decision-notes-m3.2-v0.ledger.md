@@ -191,6 +191,29 @@ Open edge: relax the super-request redirect predicate to rely on owner,
 conductor profile, existing VText document channel, and durable no-worker
 prompt text, then rerun focused route tests and deployed proof.
 
+## 2026-06-15 - Local Redirect-Predicate Repair
+
+Claim/scope: the super-request redirect no longer depends on stored prompt-bar
+app metadata fields that may be absent on the deployed conductor run. It now
+requires owner match, conductor profile, an existing VText document channel,
+and durable prompt text that matches the explicit no-worker decision route.
+
+Move: relax the over-strict predicate identified by public Trace. Expected
+Delta V: close local repair and return to landing/staging proof. Actual Delta
+V: V=2 to V=1.
+
+Receipts:
+- `internal/runtime/tools_vtext.go` removes the `input_source=prompt_bar` and
+  `requested_app=vtext` requirements from the redirect predicate.
+- `internal/runtime/prompt_bar_unit_test.go` now omits those metadata fields
+  in `TestPromptBarNoWorkerSuperRequestRedirectsToVText`.
+- `nix develop -c go test ./internal/runtime -run 'Test(HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt|PromptBarNoWorkerSuperRequestRedirectsToVText|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|ExplicitNoWorkerDecisionPromptParsesInitialDecision)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|RunToolLoopInitialToolChoiceAppliesOnlyFirstCall|RunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition|RunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt|PromptBarNoWorkerSuperRequestRedirectsToVText|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionPromptParsesInitialDecision|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|InitialVTextToolChoiceUsesExactTools|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords|DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof.
+
 ## 2026-06-15 - Staging Route-Carrier Repair Checkpoint
 
 Claim/scope: the route-carrier repair deployed cleanly, but the deployed proof
