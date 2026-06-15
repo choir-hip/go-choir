@@ -48,6 +48,7 @@ nodes:
   - m3.1-lifecycle-recovery
   - m3.2-vtext-prompt-decision-notes
   - m3.3-vm-bootstrap-recovery-race
+  - m3.4-vtext-first-draft-regression
   - m3-lifecycle-cutover
   - m4-continuation-deletion
   - m5-wire-on-settlement
@@ -115,17 +116,32 @@ nodes:
   title: M3.3 VM Bootstrap Recovery Race
   path: docs/mission-vm-bootstrap-recovery-race-m3.3-v0.md
   ledger: docs/mission-vm-bootstrap-recovery-race-m3.3-v0.ledger.md
-  status: open_handoff
+  status: settled
   kind: spine
   depends_on:
   - m3.2-vtext-prompt-decision-notes
   enables:
-  - m3-lifecycle-cutover
+  - m3.4-vtext-first-draft-regression
   sources:
   - docs/mission-portfolio-2026-06-11.md
   - docs/mission-lifecycle-cutover-v0.md
   - docs/incident-vm-bootstrap-stale-route-2026-06-09.md
   - docs/mission-computer-recovery-system-monitor-v0.md
+  - AGENTS.md
+- id: m3.4-vtext-first-draft-regression
+  title: M3.4 Prompt-Bar VText First-Draft Regression
+  path: docs/mission-vtext-first-draft-regression-m3.4-v0.md
+  ledger: docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md
+  status: working
+  kind: spine
+  depends_on:
+  - m3.3-vm-bootstrap-recovery-race
+  enables:
+  - m3-lifecycle-cutover
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+  - docs/mission-lifecycle-cutover-v0.md
+  - docs/vtext-agentic-invariants-2026-06-13.md
   - AGENTS.md
 - id: m3-lifecycle-cutover
   title: M3 Lifecycle Cutover
@@ -134,7 +150,7 @@ nodes:
   status: working
   kind: spine
   depends_on:
-  - m3.3-vm-bootstrap-recovery-race
+  - m3.4-vtext-first-draft-regression
   enables:
   - m4-continuation-deletion
   sources:

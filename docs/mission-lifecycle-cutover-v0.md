@@ -12,16 +12,19 @@ Doctrine note (2026-06-13): legacy continuation acceptance-level references in
 this cutover mission are transitional acceptance-language residue, not target
 doctrine.
 
-Recovery gates: M3.1 settled on 2026-06-14 and M3.2 settled on 2026-06-15.
-M3.3 is now the narrow pre-M3 gate for owner-visible VM bootstrap/recovery
-first-load failures where manual reload succeeds after vmctl finishes useful
-recovery. M3 must resume as lifecycle cutover only after M3.3 settles or records
-a precise non-blocking proof-surface edge. Do not resume deterministic VText
-researcher continuation and do not route ordinary ingress directly to super.
-Preserve the M3.1/M3.2 invariants: VText remains the artifact control plane,
-semantic delegation is VText's choice, decision rationale stays off-document,
-and prompt/source/article/mission ingress enters VText-owned artifact state
-before downstream super work.
+Recovery gates: M3.1 settled on 2026-06-14, M3.2 settled on 2026-06-15, and
+M3.3 settled the narrow VM bootstrap/recovery race on 2026-06-15. A new M3.4
+gate is open because owner manual QA found the ordinary prompt-bar -> conductor
+-> VText first-draft path can open an empty VText and remain stuck at
+`Writing first draft...` after repeated `edit_vtext` tool-use responses and VM
+restart/passivation. M3 must resume as lifecycle cutover only after M3.4 proves
+fresh deployed prompt-bar VText V1 creation or records a precise non-blocking
+proof-surface edge. Do not resume deterministic VText researcher continuation
+and do not route ordinary ingress directly to super. Preserve the M3.1/M3.2
+invariants: VText remains the artifact control plane, semantic delegation is
+VText's choice, decision rationale stays off-document, and
+prompt/source/article/mission ingress enters VText-owned artifact state before
+downstream super work.
 
 ## Source Form
 
