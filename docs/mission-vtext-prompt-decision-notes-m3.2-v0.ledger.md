@@ -126,6 +126,39 @@ Receipts:
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
 
+## 2026-06-15 - Staging Prompt-Bar Route Repair Checkpoint
+
+Claim/scope: the prompt-bar no-worker route repair deployed, but deployed proof
+still recorded zero decision rows and zero Trace decision moments. The route
+shape changed: VText had two runs and the document had three revisions, while
+the private reason still did not leak into canonical text.
+
+Move: document the deployed failure before changing metadata or recording
+behavior again. Expected Delta V: reopen landing-only variant into a VText run
+metadata/recording repair. Actual Delta V: V=1 to V=2.
+
+Receipts:
+- Commit `6be05f87043553e07cebd56940c3d004deaeaebd` passed CI run
+  `27520207638`, Docs Truth Check `27520207623`, and FlakeHub publish
+  `27520207634`.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=6be05f87043553e07cebd56940c3d004deaeaebd`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781490150274.json`.
+- Deployed proof screenshot:
+  `/tmp/vtext-decision-staging-proof-1781490150274.png`.
+- Proof submission `0f1b0472-a833-4370-9862-b268d93b6fd9`, document
+  `5bbaccb7-fca4-45b9-94e7-f67379dee590`, initial loop
+  `2cdcc3f6-00d4-4da0-9574-3c2f2e21f4aa`.
+- Observed diagnosis decisions `0`, Trace decision moments `0`,
+  `canonical_contains_reason=false`, revision count `3`, forbidden internal
+  routes `[]`.
+- Trace agents included conductor, `super`, and VText; VText run count was `2`.
+
+Open edge: capture full public Trace for this route shape, identify both VText
+runs and why neither records the deterministic no-worker decision, then repair
+the metadata propagation or recording boundary.
+
 ## 2026-06-15 - Staging Partial Enforcement Checkpoint
 
 Claim/scope: the exact initial tool enforcement repair deployed cleanly and

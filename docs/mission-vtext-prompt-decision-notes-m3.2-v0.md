@@ -205,11 +205,18 @@ states reasons without forcing choreography.
   `no_worker_needed` or "no research or execution worker", and conductor VText
   materialization honors that flag before persistent-super preemption. Negative
   coverage still proves operational proof prompts use persistent super.
+- Deployed prompt-bar no-worker route repair still failed: staging at
+  `6be05f87043553e07cebd56940c3d004deaeaebd` produced zero decision records
+  and zero Trace decision moments, with no private-reason canonical leak and no
+  forbidden routes. Unlike the prior proof, VText had two runs and the document
+  had three revisions, so the route likely reaches initial VText but still
+  misses the deterministic decision-record metadata on at least one VText run.
 
-**next move:** commit the prompt-bar no-worker route repair, push `origin main`,
-monitor CI/deploy, verify staging identity, and rerun deployed product-path
-proof for decision row, Trace decision moment, no forbidden routes, and no
-private reason in canonical text.
+**next move:** capture full public Trace for the `6be05f87` route to identify
+the two VText runs and why neither has `vtext_initial_decision_required`. Then
+repair the metadata propagation or recording boundary, rerun local tests, and
+rerun deployed product-path proof for decision row, Trace decision moment, no
+forbidden routes, and no private reason in canonical text.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -517,6 +524,49 @@ Heresy delta: discovered: the deployed route can still pass through `super`
 before off-document VText accountability exists, despite local pre-activation
 recording coverage. introduced: none accepted. repaired: pending route
 preemption repair.
+
+## Staging Prompt-Bar Route Repair Checkpoint - 2026-06-15
+
+Reliable evidence: commit
+`6be05f87043553e07cebd56940c3d004deaeaebd` passed CI run `27520207638`, Docs
+Truth Check `27520207623`, and FlakeHub publish `27520207634`, then deployed to
+Node B. Public `https://choir.news/health` reported both proxy and upstream
+sandbox `deployed_commit` equal to that SHA. A deployed product-path proof
+submitted through `/api/prompt-bar` and observed through
+`/api/vtext/*/diagnosis` and `/api/trace/*`, using no forbidden browser-public
+internal routes. Proof artifact
+`/tmp/vtext-decision-staging-proof-1781490150274.json` recorded submission
+`0f1b0472-a833-4370-9862-b268d93b6fd9`, document
+`5bbaccb7-fca4-45b9-94e7-f67379dee590`, and initial loop
+`2cdcc3f6-00d4-4da0-9574-3c2f2e21f4aa`. The proof ended with diagnosis
+decisions `0`, Trace decision moments `0`, `canonical_contains_reason=false`,
+revision count `3`, and forbidden internal routes `[]`. Trace agents included
+conductor, `super`, and VText; VText had run count `2`.
+
+Conjecture delta: prompt-bar no-worker route flagging appears to have changed
+the route shape but did not create the required off-document decision row. The
+next repair must inspect the two VText runs and identify whether the initial
+VText run lacks explicit decision metadata, records against the wrong document
+or trajectory, or is bypassed by a later super-spawned VText run.
+
+Protected surfaces: prompt-bar route metadata, VText run metadata propagation,
+pre-activation decision recording, Trace decision projection, and canonical
+VText writes.
+
+Admissible evidence class: public Trace evidence that identifies both VText
+runs and the initial-loop agent; focused runtime tests for the selected
+metadata/recording repair; deployed product-path proof showing a decision row,
+Trace decision moment, no forbidden routes, and no private reason in canonical
+text.
+
+Rollback path: revert the next metadata or recording repair if it records false
+decision notes, duplicates decision records for ordinary VText runs, or weakens
+required super handoffs. Keep this checkpoint as evidence that route bypass
+alone did not settle M3.2.
+
+Heresy delta: discovered: bypassing initial super preemption is not sufficient
+if VText run metadata still does not drive a durable decision row. introduced:
+none accepted. repaired: pending metadata/recording repair.
 
 ## Suggested Goal String
 
