@@ -274,9 +274,6 @@ func (rt *Runtime) ensureCoagentVTextRevisionRoute(ctx context.Context, parentRe
 	}); err != nil {
 		return coagentVTextRouteDecision{}, fmt.Errorf("persist vtext appagent: %w", err)
 	}
-	if _, err := rt.EnsurePersistentSuperAgent(ctx, ownerID); err != nil {
-		return coagentVTextRouteDecision{}, fmt.Errorf("persist persistent super appagent: %w", err)
-	}
 
 	prompt := buildCoagentVTextRevisionPrompt(parentRec, req, doc, created, sourceEntities)
 	rec, err := rt.submitVTextAgentRevisionRun(ctx, doc, ownerID, vtextAgentRevisionRequest{

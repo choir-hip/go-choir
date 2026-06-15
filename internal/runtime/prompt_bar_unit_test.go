@@ -51,7 +51,7 @@ func TestHandlePromptBarVTextRouteCompletesConductorSynchronously(t *testing.T) 
 	}
 }
 
-func TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper(t *testing.T) {
+func TestHandlePromptBarOperationalProofInitialRunStartsWithVText(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Universal Wire staging proof request: using product paths only, run the existing Universal Wire source-refresh/research/projection/publication flow, create or approve an Article VText, update universal-wire/Wire.vtext, then leave evidence ids and verifier proof. Do not use test-only routes."}`, "user-alice")
@@ -80,14 +80,35 @@ func TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper(t *tes
 	if err != nil {
 		t.Fatalf("get initial loop run: %v", err)
 	}
-	if initialRun.AgentProfile != AgentProfileSuper || initialRun.AgentRole != AgentProfileSuper {
-		t.Fatalf("initial loop profile = %q/%q, want super", initialRun.AgentProfile, initialRun.AgentRole)
+	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
+		t.Fatalf("initial loop profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if initialRun.ChannelID != decision.DocID {
-		t.Fatalf("initial super channel = %q, want vtext doc %q", initialRun.ChannelID, decision.DocID)
+		t.Fatalf("initial vtext channel = %q, want vtext doc %q", initialRun.ChannelID, decision.DocID)
 	}
-	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got != "persistent_super" {
-		t.Fatalf("initial_handoff = %q, want persistent_super", got)
+	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got != "" {
+		t.Fatalf("initial_handoff = %q, want no conductor-level super handoff", got)
+	}
+	runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-alice", 100)
+	if err != nil {
+		t.Fatalf("list runs before vtext super request: %v", err)
+	}
+	for _, run := range runs {
+		if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == AgentProfileSuper {
+			t.Fatalf("super run appeared before VText request on prompt-bar trajectory: %+v", run)
+		}
+	}
+
+	requestCtx := WithToolExecutionContext(context.Background(), initialRun)
+	superResult, err := rt.requestPersistentSuperExecution(requestCtx, "user-alice", decision.DocID, initialRun.RunID, initialRun.AgentID, "Run the Universal Wire verification steps and report evidence back to VText.", "")
+	if err != nil {
+		t.Fatalf("vtext request super execution: %v", err)
+	}
+	if got := superResult["profile"]; got != AgentProfileSuper {
+		t.Fatalf("super profile = %v, want %s: %+v", got, AgentProfileSuper, superResult)
+	}
+	if got := superResult["requested_by"]; got != initialRun.AgentID {
+		t.Fatalf("requested_by = %v, want %s", got, initialRun.AgentID)
 	}
 }
 
@@ -131,9 +152,6 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
 		t.Fatalf("initial_handoff = %q, want no initial super handoff", got)
 	}
-	if !metadataBoolValue(conductor.Metadata, "prompt_bar_no_worker_decision_route") {
-		t.Fatalf("conductor missing prompt-bar no-worker route flag: %+v", conductor.Metadata)
-	}
 	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_decision_required") {
 		t.Fatalf("initial run missing deterministic decision metadata: %+v", initialRun.Metadata)
 	}
@@ -158,7 +176,7 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 	}
 }
 
-func TestConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt(t *testing.T) {
+func TestConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt(t *testing.T) {
 	rt, _ := testAPISetup(t)
 
 	prompt := "Create a short VText document titled M32_VTEXT_ROUTE_DIAGNOSTIC. The body should say this marker is a deployed route diagnostic. Keep the document reader-facing only. Because this task is fully supplied and requires no research or execution worker, record an off-document VText decision note with decision_kind no_worker_needed, exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker., evidence ref staging-marker:M32_VTEXT_ROUTE_DIAGNOSTIC, next action Write the concise reader-facing VText revision. Then write the concise reader-facing VText revision."
@@ -177,9 +195,6 @@ func TestConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt(t *testing.T
 	if err != nil {
 		t.Fatalf("complete conductor decision: %v", err)
 	}
-	if !metadataBoolValue(rec.Metadata, "prompt_bar_no_worker_decision_route") {
-		t.Fatalf("completed conductor missing no-worker route flag before materialization: %+v", rec.Metadata)
-	}
 
 	decision, err := rt.ensureConductorVTextRoute(context.Background(), rec, "", "")
 	if err != nil {
@@ -187,9 +202,6 @@ func TestConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt(t *testing.T
 	}
 	if got := metadataStringValue(rec.Metadata, "initial_handoff"); got == "persistent_super" {
 		t.Fatalf("initial_handoff = %q, want no initial super handoff", got)
-	}
-	if !metadataBoolValue(rec.Metadata, "prompt_bar_no_worker_decision_route") {
-		t.Fatalf("route should persist no-worker flag derived from stored prompt: %+v", rec.Metadata)
 	}
 	initialRun, err := rt.GetRun(context.Background(), decision.InitialLoopID, "user-alice")
 	if err != nil {
@@ -216,66 +228,6 @@ func TestConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt(t *testing.T
 		decisions[0].DecisionKind != "no_worker_needed" ||
 		decisions[0].Reason != "M3.2 staging proof: user supplied the needed content and requested no research or execution worker." {
 		t.Fatalf("decision record = %+v", decisions[0])
-	}
-}
-
-func TestPromptBarNoWorkerSuperRequestRedirectsToVText(t *testing.T) {
-	rt, _ := testAPISetup(t)
-	ctx := context.Background()
-
-	prompt := "Create a short VText document titled M32_VTEXT_ROUTE_REDIRECT. The body should say this marker is a deployed route diagnostic. Keep the document reader-facing only. Because this task is fully supplied and requires no research or execution worker, record an off-document VText decision note with decision_kind no_worker_needed, exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker., evidence ref staging-marker:M32_VTEXT_ROUTE_REDIRECT, next action Write the concise reader-facing VText revision. Then write the concise reader-facing VText revision."
-	conductor, err := rt.completePromptBarDecisionRun(ctx, prompt, "user-alice", map[string]any{
-		runMetadataAgentProfile:  AgentProfileConductor,
-		runMetadataAgentRole:     AgentProfileConductor,
-		"initial_document_title": "M32_VTEXT_ROUTE_REDIRECT",
-		"submission_surface":     "prompt_bar",
-	}, conductorDecision{
-		Action: "open_app",
-		App:    AgentProfileVText,
-		Title:  "M32_VTEXT_ROUTE_REDIRECT",
-	})
-	if err != nil {
-		t.Fatalf("complete conductor decision: %v", err)
-	}
-	now := time.Now().UTC()
-	doc := types.Document{
-		DocID:     "doc-no-worker-redirect",
-		OwnerID:   "user-alice",
-		Title:     "M32_VTEXT_ROUTE_REDIRECT",
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	if err := rt.Store().CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("create document: %v", err)
-	}
-
-	result, err := rt.requestPersistentSuperExecution(ctx, "user-alice", doc.DocID, conductor.RunID, "vtext:"+doc.DocID, prompt, "")
-	if err != nil {
-		t.Fatalf("request persistent super execution: %v", err)
-	}
-	if redirected, _ := result["redirected_to_vtext"].(bool); !redirected {
-		t.Fatalf("redirected_to_vtext = %v, want true: %+v", result["redirected_to_vtext"], result)
-	}
-	if got := result["profile"]; got != AgentProfileVText {
-		t.Fatalf("profile = %v, want vtext: %+v", got, result)
-	}
-	loopID, _ := result["loop_id"].(string)
-	initialRun, err := rt.GetRun(ctx, loopID, "user-alice")
-	if err != nil {
-		t.Fatalf("get redirected vtext run: %v", err)
-	}
-	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
-		t.Fatalf("redirected run profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
-	}
-	decisions, err := rt.Store().ListVTextDecisionsByDocument(ctx, "user-alice", doc.DocID, 10)
-	if err != nil {
-		t.Fatalf("list decisions: %v", err)
-	}
-	if len(decisions) != 1 {
-		t.Fatalf("decision count = %d, want 1: %+v", len(decisions), decisions)
-	}
-	if decisions[0].RunID != loopID || decisions[0].DecisionKind != "no_worker_needed" {
-		t.Fatalf("unexpected decision row: %+v", decisions[0])
 	}
 }
 

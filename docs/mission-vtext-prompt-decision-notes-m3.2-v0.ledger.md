@@ -1075,3 +1075,44 @@ persistent-super preemption for ordinary VText-centered ingress with
 conductor -> VText artifact materialization. Acceptance must prove prompt-bar
 and source/article routes start with VText; super before VText fails; super
 after VText is valid only when VText requested it.
+
+## 2026-06-15 - Local VText Control-Plane Route Repair
+
+Claim/scope: ordinary prompt-bar and source/article ingress now materialize
+VText-owned artifact state before any super execution. The no-worker predicate
+route patches no longer define prompt-bar architecture; explicit no-worker
+decision parsing remains only as VText decision-note content.
+
+Move: delete prompt-bar no-worker route metadata stamping, delete the
+conductor-level persistent-super preemption branch from
+`ensureConductorVTextRoute`, delete the no-worker redirect inside
+`request_super_execution`, and stop Universal Wire source/article handoff from
+eagerly persisting super. Expected Delta V: close local implementation and
+focused route-test obligations. Actual Delta V: V=6 to V=2, leaving deployed
+acceptance and landing proof.
+
+Receipts:
+- `internal/runtime/api.go` no longer stamps
+  `prompt_bar_no_worker_decision_route`.
+- `internal/runtime/runtime.go` no longer has a conductor-side persistent-super
+  branch in `ensureConductorVTextRoute`; initial handoff is the VText revision
+  run.
+- `internal/runtime/tools_vtext.go` keeps `request_super_execution` as a VText
+  affordance and removes the no-worker conductor redirect.
+- `internal/runtime/tools_coagent.go` stops eagerly ensuring persistent super
+  during processor/reconciler VText article handoff.
+- `internal/runtime/prompt_bar_unit_test.go` now proves an execution-shaped
+  Universal Wire prompt starts with VText, no super run exists on that
+  trajectory before VText asks, and a later VText `request_super_execution`
+  still creates a super request.
+- `internal/runtime/agent_tools_test.go` now proves processor source/article
+  VText handoff creates a VText revision run and no super run appears before
+  VText requests execution.
+- `nix develop -c go test ./internal/runtime -run 'Test(HandlePromptBarVTextRouteCompletesConductorSynchronously|HandlePromptBarOperationalProofInitialRunStartsWithVText|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt|HandlePromptBarResearcherMentionDoesNotSetRoutingFlag|InitialVTextToolChoiceUsesExactTools|ExplicitNoWorkerDecisionDoesNotCreateRouteSpecialCase|ExplicitNoWorkerDecisionPromptParsesInitialDecision|ProcessorSpawnVText|HandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolutionCompletes)' -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestProcessorAndReconcilerProfilesDelegateToVTextOnly|TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolutionCompletes' -count=1`
+
+Open edge: commit this behavior repair, push, monitor CI/staging deploy, verify
+staging identity, and rerun deployed product-path proof with explicit
+route-order checks: initial loop is VText, super before VText fails, super after
+VText is accepted only when VText requested it, decision rows/Trace projection
+exist for explicit owner-requested notes, and canonical text stays reader-facing.

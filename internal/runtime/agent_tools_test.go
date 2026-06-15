@@ -2069,6 +2069,15 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	if vtextRun.AgentID != "vtext:"+vtextSpawn.DocID || vtextRun.ChannelID != vtextSpawn.DocID || metadataString(vtextRun.Metadata, "type") != "vtext_agent_revision" {
 		t.Fatalf("processor vtext run is not a vtext revision run: %+v", vtextRun)
 	}
+	runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-alice", 100)
+	if err != nil {
+		t.Fatalf("list runs after processor vtext handoff: %v", err)
+	}
+	for _, run := range runs {
+		if trajectoryIDForRun(&run) == processorRun.TrajectoryID && run.AgentProfile == AgentProfileSuper {
+			t.Fatalf("source/article route created super before VText requested execution: %+v", run)
+		}
+	}
 	workItems, err := rt.Store().ListWorkItemsByTrajectory(context.Background(), "user-alice", processorRun.TrajectoryID, true)
 	if err != nil {
 		t.Fatalf("list processor publication work items: %v", err)

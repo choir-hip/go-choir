@@ -460,12 +460,6 @@ func (rt *Runtime) startRunAsync(rec *types.RunRecord) {
 func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, ownerID string, metadata map[string]any, decision conductorDecision) (*types.RunRecord, error) {
 	now := time.Now().UTC()
 	runID := uuid.New().String()
-	if promptBarStructuredNoWorkerDecisionKind(prompt) {
-		if metadata == nil {
-			metadata = make(map[string]any)
-		}
-		metadata["prompt_bar_no_worker_decision_route"] = true
-	}
 	metadata = ensureDesktopID(metadata, nil, metadataStringValue(metadata, runMetadataDesktopID))
 	metadata = ensureTrajectoryID(metadata, nil, runID)
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, nil)
@@ -2081,10 +2075,6 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	}); err != nil {
 		return conductorDecision{}, fmt.Errorf("persist vtext appagent: %w", err)
 	}
-	if _, err := rt.EnsurePersistentSuperAgent(ctx, rec.OwnerID); err != nil {
-		return conductorDecision{}, fmt.Errorf("persist persistent super appagent: %w", err)
-	}
-
 	decision.DocID = doc.DocID
 	decision.UserRevisionID = userRev.RevisionID
 	if decision.InitialRevisionID == "" {
@@ -2097,64 +2087,6 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	}
 	if initialPrompt == "" {
 		initialPrompt = "Create the first useful current-state version of this vtext document."
-	}
-	routePrompt := strings.Join([]string{
-		routeSeedPrompt,
-		initialPrompt,
-		strings.TrimSpace(rec.Prompt),
-		metadataStringValue(rec.Metadata, "seed_prompt"),
-	}, " ")
-	combinedPrompt := routePrompt
-	_, explicitNoWorkerDecisionRoute := explicitNoWorkerDecisionRequestFromPrompt(routePrompt)
-	noWorkerDecisionRoute := metadataBoolValue(rec.Metadata, "prompt_bar_no_worker_decision_route") ||
-		promptBarNoWorkerDecisionRoute(routePrompt) ||
-		explicitNoWorkerDecisionRoute
-	if noWorkerDecisionRoute {
-		if rec.Metadata == nil {
-			rec.Metadata = make(map[string]any)
-		}
-		rec.Metadata["prompt_bar_no_worker_decision_route"] = true
-	}
-	if vtextPromptNeedsSuperExecution(combinedPrompt) && !noWorkerDecisionRoute {
-		requestCtx := WithToolExecutionContext(ctx, &types.RunRecord{
-			RunID:        rec.RunID,
-			AgentID:      "vtext:" + doc.DocID,
-			ChannelID:    doc.DocID,
-			AgentProfile: AgentProfileVText,
-			AgentRole:    AgentProfileVText,
-			OwnerID:      rec.OwnerID,
-			SandboxID:    rec.SandboxID,
-			Metadata:     rec.Metadata,
-		})
-		superResult, err := rt.requestPersistentSuperExecution(requestCtx, rec.OwnerID, doc.DocID, rec.RunID, "vtext:"+doc.DocID, initialPrompt, "")
-		if err != nil {
-			return conductorDecision{}, fmt.Errorf("request initial super execution: %w", err)
-		}
-		if loopID, _ := superResult["loop_id"].(string); strings.TrimSpace(loopID) != "" {
-			decision.InitialLoopID = loopID
-		}
-		decision = fillConductorDecisionFromRun(rec, decision)
-		if rec.Metadata == nil {
-			rec.Metadata = make(map[string]any)
-		}
-		initialHandoff := "persistent_super"
-		if redirected, _ := superResult["redirected_to_vtext"].(bool); redirected {
-			initialHandoff = "vtext_no_worker_redirect"
-		}
-		rec.Metadata["doc_id"] = decision.DocID
-		rec.Metadata["user_revision_id"] = decision.UserRevisionID
-		rec.Metadata["initial_revision_id"] = decision.InitialRevisionID
-		rec.Metadata["initial_loop_id"] = decision.InitialLoopID
-		rec.Metadata["initial_handoff"] = initialHandoff
-		if out, err := json.Marshal(decision); err == nil {
-			rec.Result = string(out)
-		}
-		rec.UpdatedAt = time.Now().UTC()
-
-		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-			return conductorDecision{}, fmt.Errorf("persist conductor route: %w", err)
-		}
-		return decision, nil
 	}
 	initialRun, err := rt.submitVTextAgentRevisionRun(ctx, doc, rec.OwnerID, vtextAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
@@ -2405,28 +2337,6 @@ func vtextPromptExplicitlyRequestsNoWorkerDecision(prompt string) bool {
 	return false
 }
 
-func promptBarNoWorkerDecisionRoute(prompt string) bool {
-	text := strings.ToLower(strings.TrimSpace(prompt))
-	if text == "" {
-		return false
-	}
-	if promptBarStructuredNoWorkerDecisionKind(text) {
-		return true
-	}
-	if strings.Contains(text, "no_worker_needed") {
-		return true
-	}
-	if strings.Contains(text, "no research or execution worker") {
-		return true
-	}
-	return vtextPromptExplicitlyRequestsNoWorkerDecision(text)
-}
-
-func promptBarStructuredNoWorkerDecisionKind(prompt string) bool {
-	text := strings.ToLower(strings.TrimSpace(prompt))
-	return strings.Contains(text, "decision_kind") && strings.Contains(text, "no_worker")
-}
-
 func vtextPromptExplicitlyRequestsResearcher(prompt string) bool {
 	text := strings.ToLower(strings.TrimSpace(prompt))
 	if text == "" {
@@ -2465,7 +2375,7 @@ func vtextPromptNeedsSuperExecution(prompt string) bool {
 	if text == "" {
 		return false
 	}
-	if promptBarNoWorkerDecisionRoute(text) {
+	if vtextPromptExplicitlyRequestsNoWorkerDecision(text) {
 		return false
 	}
 	superMarkers := []string{

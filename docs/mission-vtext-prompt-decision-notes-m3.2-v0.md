@@ -94,22 +94,12 @@ control plane.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=6:
-1. land this Problem Documentation First checkpoint that names VText as the
-   artifact control plane and supersedes no-worker predicate routing as an
-   overfit staging repair.
-2. remove or quarantine `prompt_bar_no_worker_decision_route` and no-worker
-   route predicates so they no longer define architecture.
-3. replace conductor-level persistent-super preemption for VText-centered
-   prompt/source/article/mission routes with conductor -> VText artifact
-   materialization.
-4. add focused route tests proving prompt-bar and source/article ingress starts
-   with VText, not super, while VText still exposes `request_super_execution`.
-5. update deployed acceptance so super before VText fails, super after VText is
+**variant (ranking function) V:** current V=2:
+1. update deployed acceptance so super before VText fails, super after VText is
    allowed only when VText requested it, and explicit owner-requested decision
    notes still create `vtext_decisions` rows and Trace/log projections without
    leaking into canonical text.
-6. land/push/monitor CI/deploy, verify staging identity, and run prompt-bar plus
+2. land/push/monitor CI/deploy, verify staging identity, and run prompt-bar plus
    source/news/article product-path proof with downstream work attached back to
    VText/artifact context.
 
@@ -342,10 +332,16 @@ states reasons without forcing choreography.
 - The prior `prompt_bar_no_worker_decision_route` work is retained only as
   staging evidence about how overfit predicate patches fail. It must be removed
   or quarantined before settlement and must not become architecture.
+- Local VText control-plane repair complete: prompt-bar and completed-conductor
+  materialization no longer stamp no-worker route flags; conductor VText routing
+  no longer has a persistent-super preemption branch; `request_super_execution`
+  no longer redirects conductor no-worker requests back to VText; Universal Wire
+  source/article handoff no longer eagerly persists super. Focused tests prove
+  prompt-bar execution-shaped prompts and processor article routes start with
+  VText, and VText can still request persistent super afterward.
 
-**next move:** commit this VText-control-plane checkpoint, then replace
-conductor-level persistent-super preemption with general conductor -> VText
-artifact materialization for prompt-bar and source/article routes.
+**next move:** commit the local control-plane route repair, then run landing
+loop and deployed product-path proof with route-order acceptance.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -924,27 +920,30 @@ VText-centered ingress.
 
 Heresy delta: discovered: no-worker route predicates were an overfit staging
 repair that preserved the deeper heresy of super as direct ingress for
-VText-centered work. introduced: none accepted. repaired: pending route
-invariant implementation.
+VText-centered work. introduced: none accepted. repaired: local route invariant
+implementation complete, deployed proof pending.
 
 ## Suggested Goal String
 
 ```text
 Use Parallax on docs/mission-vtext-prompt-decision-notes-m3.2-v0.md. Treat it
 as the M3.2 gate between the settled M3.1 emergency repair and M3 lifecycle
-cutover. Current status is open_handoff with V=6. Preserve Choir Doctrine and
+cutover. Current status is open_handoff with V=2. Preserve Choir Doctrine and
 docs/vtext-agentic-invariants-2026-06-13.md: VText is Choir's versioned artifact
 control plane. Conductor routes exogenous prompt/source/article/mission input
 into VText-owned artifact state; super is downstream execution authority that
-VText may request later through request_super_execution. Supersede the
-no-worker route predicates as overfit staging repair evidence. Keep the
+VText may request later through request_super_execution. The local runtime
+repair has removed the no-worker route predicates as architecture and replaced
+conductor-level super preemption for ordinary VText-centered ingress with
+conductor -> VText artifact materialization. Keep the
 off-document record_vtext_decision tool backed by Dolt, readable from
 Trace/logs, and visible in the VText Sources panel; never put agent process
-rationale into canonical VText documents. Replace conductor-level super
-preemption for ordinary VText-centered ingress with conductor -> VText artifact
-materialization. Settlement requires focused schema/tool/prompt tests,
-prompt-bar and source/article route tests proving VText before super,
-API/event/log readability proof, Sources-panel Playwright proof,
-runtime/frontend checks for touched surfaces, push/CI/deploy, staging identity,
-and deployed product-path proof; no claim outruns its evidence class.
+rationale into canonical VText documents. Next move: update/run deployed
+acceptance so super before VText fails and super after VText is accepted only
+when VText requested it, then commit/push/monitor CI/deploy, verify staging
+identity, and run prompt-bar plus source/news/article product-path proof.
+Settlement still requires focused schema/tool/prompt tests, route tests proving
+VText before super, API/event/log readability proof, Sources-panel Playwright
+proof, runtime/frontend checks for touched surfaces, push/CI/deploy, staging
+identity, and deployed product-path proof; no claim outruns its evidence class.
 ```

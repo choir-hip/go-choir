@@ -611,7 +611,7 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 	}
 }
 
-func TestExplicitNoWorkerDecisionBypassesInitialSuperPreemption(t *testing.T) {
+func TestExplicitNoWorkerDecisionDoesNotCreateRouteSpecialCase(t *testing.T) {
 	prompt := strings.Join([]string{
 		"Create a short VText document for a deployed staging proof.",
 		"Because this task is fully supplied and requires no research or execution worker,",
@@ -625,21 +625,15 @@ func TestExplicitNoWorkerDecisionBypassesInitialSuperPreemption(t *testing.T) {
 		t.Fatal("test prompt should explicitly request a decision note")
 	}
 	if !vtextPromptExplicitlyRequestsNoWorkerDecision(prompt) {
-		t.Fatal("no-worker decision note prompt should bypass initial super preemption")
-	}
-	if !promptBarNoWorkerDecisionRoute(prompt) {
-		t.Fatal("prompt-bar no-worker decision route should bypass initial super preemption")
+		t.Fatal("no-worker decision note prompt should parse as an explicit decision request")
 	}
 
 	mutationPrompt := "Debug and fix the runtime gateway, run tests, and verify the staging proof."
 	if !vtextPromptNeedsSuperExecution(mutationPrompt) {
-		t.Fatal("mutation prompt should need super execution")
+		t.Fatal("mutation prompt should still create a VText-local super-execution obligation hint")
 	}
 	if vtextPromptExplicitlyRequestsNoWorkerDecision(mutationPrompt) {
-		t.Fatal("ordinary mutation prompt must not bypass super execution")
-	}
-	if promptBarNoWorkerDecisionRoute(mutationPrompt) {
-		t.Fatal("ordinary mutation prompt must not set prompt-bar no-worker route")
+		t.Fatal("ordinary mutation prompt must not parse as a no-worker decision")
 	}
 }
 

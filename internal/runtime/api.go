@@ -486,9 +486,6 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		"initial_document_title": buildInitialVTextTitle(text, ""),
 		"submission_surface":     "prompt_bar",
 	}
-	if promptBarNoWorkerDecisionRoute(text) {
-		metadata["prompt_bar_no_worker_decision_route"] = true
-	}
 	if ownerEmail := authenticatedUserEmail(r); ownerEmail != "" {
 		metadata[runMetadataOwnerEmail] = ownerEmail
 	}
