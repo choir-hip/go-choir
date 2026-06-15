@@ -162,6 +162,30 @@ decision-note prompts reach VText decision recording instead of preemptive
 initial super execution, without weakening super routing for real code,
 artifact, verification, or mutation requests.
 
+## 2026-06-15 - Local No-Worker Route-Preemption Repair
+
+Claim/scope: explicit no-worker decision-note prompts now reach VText decision
+recording instead of being preempted by broad initial super-execution markers.
+Ordinary debug/fix/verify/product-mutation prompts still trigger super
+execution.
+
+Move: guard the initial super handoff with
+`!vtextPromptExplicitlyRequestsNoWorkerDecision(combinedPrompt)` and test both
+the no-worker bypass and ordinary mutation route. Expected Delta V: close local
+route repair. Actual Delta V: V=2 to V=1, leaving landing/staging proof.
+
+Receipts:
+- `internal/runtime/runtime.go` skips initial super preemption for explicit
+  `decision_kind no_worker_needed` / no-worker decision-note prompts.
+- `internal/runtime/vtext_prompt_unit_test.go` proves the proof-style prompt
+  still contains broad super markers but is recognized as a no-worker decision
+  route, while a debug/fix/verify prompt remains super-worthy.
+- `nix develop -c go test ./internal/runtime -run 'Test(ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|InitialVTextToolChoiceUsesExactTools|InitialVTextRunWritesFirstAppagentRevisionThroughEdit|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|InitialVTextToolChoiceUsesExactTools|DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence|RecordVTextDecisionToolDescriptionKeepsDecisionsOffDocument|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords|InstallDefaultAgentToolsProfiles|InitialVTextRunWritesFirstAppagentRevisionThroughEdit)' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof.
+
 ## 2026-06-15 - Tool-Choice Root Cause Checkpoint
 
 Claim/scope: the prompt/tool-description repair deployed cleanly, but the

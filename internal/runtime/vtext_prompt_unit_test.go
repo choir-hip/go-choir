@@ -610,3 +610,29 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 		})
 	}
 }
+
+func TestExplicitNoWorkerDecisionBypassesInitialSuperPreemption(t *testing.T) {
+	prompt := strings.Join([]string{
+		"Create a short VText document for a deployed staging proof.",
+		"Because this task is fully supplied and requires no research or execution worker,",
+		"record an off-document VText decision note with decision_kind no_worker_needed.",
+		"Then write the concise reader-facing VText revision.",
+	}, " ")
+	if !vtextPromptNeedsSuperExecution(prompt) {
+		t.Fatal("test prompt should still contain broad super-execution markers")
+	}
+	if !vtextPromptExplicitlyRequestsDecisionNote(prompt) {
+		t.Fatal("test prompt should explicitly request a decision note")
+	}
+	if !vtextPromptExplicitlyRequestsNoWorkerDecision(prompt) {
+		t.Fatal("no-worker decision note prompt should bypass initial super preemption")
+	}
+
+	mutationPrompt := "Debug and fix the runtime gateway, run tests, and verify the staging proof."
+	if !vtextPromptNeedsSuperExecution(mutationPrompt) {
+		t.Fatal("mutation prompt should need super execution")
+	}
+	if vtextPromptExplicitlyRequestsNoWorkerDecision(mutationPrompt) {
+		t.Fatal("ordinary mutation prompt must not bypass super execution")
+	}
+}
