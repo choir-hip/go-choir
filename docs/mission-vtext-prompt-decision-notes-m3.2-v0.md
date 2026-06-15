@@ -250,11 +250,17 @@ states reasons without forcing choreography.
   now redirects it to a VText initial revision run instead of dispatching a
   persistent-super update. The redirected VText run records the deterministic
   `no_worker_needed` decision before provider execution.
+- Deployed super-request choke-point repair failed: staging at
+  `80883c5f34add2de0a77e1e5a193e314a6ca602d` still returned a `super` initial
+  loop for the explicit no-worker prompt. VText diagnosis returned zero
+  decision rows and Trace returned zero decision moments. The canonical
+  private-reason leak stayed repaired, so the remaining failure is still
+  route/decision persistence rather than document pollution.
 
-**next move:** commit the super-request choke-point repair, push `origin main`,
-monitor CI/deploy, verify staging identity, and rerun deployed product-path
-proof for a durable decision row, a real Trace decision event, no initial super
-handoff, no forbidden routes, and no private reason in canonical text.
+**next move:** run a focused diagnostic on deployed
+`80883c5f34add2de0a77e1e5a193e314a6ca602d` to identify why the
+`requestPersistentSuperExecution` redirect did not intercept the staging
+super-first route, then repair the actual path or record the precise blocker.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 

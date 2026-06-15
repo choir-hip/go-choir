@@ -126,6 +126,40 @@ Receipts:
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
 
+## 2026-06-15 - Staging Super-Request Choke-Point Checkpoint
+
+Claim/scope: the super-request choke-point repair deployed cleanly, but the
+deployed proof still failed. The route still created a `super` initial loop
+before VText, and neither VText diagnosis nor Trace showed a durable VText
+decision record.
+
+Move: document the deployed failure before another runtime route change.
+Expected Delta V: close the landing/staging proof. Actual Delta V: V=1 to V=2,
+with the staging super-first route still not intercepted.
+
+Receipts:
+- Commit `80883c5f34add2de0a77e1e5a193e314a6ca602d` passed CI run
+  `27521430465`, Docs Truth Check `27521430463`, and FlakeHub publish
+  `27521430481`.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=80883c5f34add2de0a77e1e5a193e314a6ca602d`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781492755257.json`.
+- Deployed proof screenshot:
+  `/tmp/vtext-decision-staging-proof-1781492755257.png`.
+- Proof submission `09346891-ff2b-468b-9dda-c40d190370da`, document
+  `e321e1a4-4271-4e8b-8552-e1a7e217f555`, initial loop
+  `b96d830a-4f28-4546-9ec9-9773d3c7d123`.
+- Observed diagnosis decisions `0`, Trace decision moments `0`,
+  `canonical_contains_reason=false`, revision count `2`, forbidden internal
+  routes `[]`.
+- Trace agents still included conductor, `super`, and VText; `super` first
+  appeared before VText.
+
+Open edge: run a focused public Trace route diagnostic on deployed `80883c5f`
+to identify why the new `requestPersistentSuperExecution` redirect did not
+intercept the staging super-first route.
+
 ## 2026-06-15 - Staging Route-Carrier Repair Checkpoint
 
 Claim/scope: the route-carrier repair deployed cleanly, but the deployed proof
