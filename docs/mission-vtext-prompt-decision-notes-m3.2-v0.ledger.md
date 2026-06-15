@@ -126,6 +126,39 @@ Receipts:
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
 
+## 2026-06-15 - Staging Partial Enforcement Checkpoint
+
+Claim/scope: the exact initial tool enforcement repair deployed cleanly and
+removed the canonical leak, but deployed proof still failed the core M3.2
+decision-record requirement. Staging produced no decision rows or Trace decision
+moments, while VText still wrote clean reader-facing revisions and opened a
+super branch.
+
+Move: document the deployed partial repair before making the next runtime
+change. Expected Delta V: reopen landing-only variant into a first-turn decision
+guarantee repair. Actual Delta V: V=1 to V=2, with the remaining guarantee
+pending.
+
+Receipts:
+- Commit `44851c95d44b4308b21598a90cf3a5022221f17f` passed CI run
+  `27518973675`, Docs Truth Check `27518973682`, and FlakeHub publish
+  `27518973674`.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=44851c95d44b4308b21598a90cf3a5022221f17f`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781487682095.json`.
+- Proof submission `919e7628-dbe2-4bd5-a9cf-e5b915ba3ece`, document
+  `3382ae5d-699d-4d3a-81b8-848134e4e4e4`, initial loop
+  `2b6c207c-8fdf-48ca-b0f5-860d26050439`.
+- Observed decisions `0`, Trace decision moments `0`,
+  `canonical_contains_reason=false`, revision count `3`, forbidden internal
+  routes `[]`, Trace agents conductor + `super` + VText, VText run count `2`.
+
+Open edge: inspect product Trace/log evidence for the first VText run to
+distinguish missing exact decision selection, provider noncompliance, and
+decision-tool execution failure; then repair the remaining first-turn decision
+guarantee without turning ordinary VText agency into blanket over-recording.
+
 ## 2026-06-15 - Prompt-Bar Route-Contract Checkpoint
 
 Claim/scope: the local no-worker route-preemption repair deployed cleanly, but

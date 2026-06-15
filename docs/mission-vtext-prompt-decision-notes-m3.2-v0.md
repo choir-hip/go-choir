@@ -168,10 +168,17 @@ states reasons without forcing choreography.
 - Local enforcement repair complete: exact initial tool choice now validates the
   provider's returned tool call before execution, retries mismatches without
   executing them, and has focused tool-loop plus VText prompt-bar route coverage.
+- Deployed enforcement repair partially helped but did not settle M3.2: staging
+  at `44851c95d44b4308b21598a90cf3a5022221f17f` no longer leaked the private
+  reason into canonical text, but it still produced zero decision records, zero
+  Trace decision moments, two VText runs, one super run, and three document
+  revisions. Explicit decision-note pressure is still not reaching a durable
+  decision row on the deployed model path.
 
-**next move:** commit the enforcement repair, push `origin main`, monitor
-CI/deploy, verify staging identity, and rerun deployed product-path proof for a
-decision record plus canonical text without private rationale.
+**next move:** checkpoint the deployed partial repair, inspect provider/tool-loop
+evidence for why exact `record_vtext_decision` is not producing a durable row,
+then repair the remaining first-turn decision guarantee without weakening
+ordinary VText agency.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -187,9 +194,10 @@ should be visible in the VText UI when the Sources panel opens from the toolbar.
 
 **settlement:** not settled. Problem Documentation First and local construct
 proof are satisfied, but staging has found prompt compliance, tool-choice,
-route-preemption, route-contract, and exact-tool enforcement gaps. Settle only
-after landing and deployed product proof show M3 can resume with both hazards
-covered: no forced semantic delegation and no document-body agent work logs.
+route-preemption, route-contract, exact-tool enforcement, and deployed
+first-turn decision guarantee gaps. Settle only after landing and deployed
+product proof show M3 can resume with both hazards covered: no forced semantic
+delegation and no document-body agent work logs.
 
 ## Problem Checkpoint - 2026-06-14
 
@@ -347,6 +355,50 @@ evidence.
 Heresy delta: discovered: request-level exact tool choice is not sufficient when
 runtime still trusts mismatched provider tool calls. introduced: none accepted.
 repaired: pending tool-loop enforcement repair.
+
+## Staging Partial Enforcement Checkpoint - 2026-06-15
+
+Reliable evidence: commit
+`44851c95d44b4308b21598a90cf3a5022221f17f` passed CI run `27518973675`, Docs
+Truth Check `27518973682`, and FlakeHub publish `27518973674`, then deployed to
+Node B. Public `https://choir.news/health` reported both proxy and upstream
+sandbox `deployed_commit` equal to that SHA. A deployed product-path proof
+submitted through `/api/prompt-bar` and observed through
+`/api/vtext/*/diagnosis` and `/api/trace/*`, using no forbidden browser-public
+internal routes. Proof artifact
+`/tmp/vtext-decision-staging-proof-1781487682095.json` recorded submission
+`919e7628-dbe2-4bd5-a9cf-e5b915ba3ece`, document
+`3382ae5d-699d-4d3a-81b8-848134e4e4e4`, and initial loop
+`2b6c207c-8fdf-48ca-b0f5-860d26050439`. The proof ended with diagnosis
+decisions `0`, Trace decision moments `0`, `canonical_contains_reason=false`,
+revision count `3`, Trace agents conductor + `super` + VText, and VText
+`run_count=2`.
+
+Conjecture delta: exact-tool mismatch enforcement repaired the canonical leak
+hazard but did not create a durable first-turn decision guarantee on the
+deployed model/provider path. The next repair must determine whether the first
+VText run is missing exact `record_vtext_decision` selection, the provider is
+ending or routing around the required decision, or the decision tool call is
+failing invisibly before persistence.
+
+Protected surfaces: VText first-turn tool choice, generic tool-loop retry
+semantics, provider tool-choice adapters, `record_vtext_decision` persistence,
+Trace/log projection, and VText canonical writes.
+
+Admissible evidence class: public product Trace/log or diagnosis evidence that
+distinguishes missing tool-choice selection, provider noncompliance, and tool
+execution failure; focused runtime tests for the selected repair; deployed
+product-path proof showing a decision row, Trace decision moment, no forbidden
+routes, and no private reason in canonical text.
+
+Rollback path: revert the next first-turn decision guarantee repair if it makes
+ordinary VText turns over-record or blocks valid provider/tool fallback paths.
+Retain this checkpoint as evidence that leak prevention alone is insufficient.
+
+Heresy delta: discovered: no-leak canonical behavior is not equivalent to
+off-document accountability; VText can write clean reader-facing revisions while
+still omitting the required decision row. introduced: none accepted. repaired:
+pending first-turn decision guarantee repair.
 
 ## Suggested Goal String
 
