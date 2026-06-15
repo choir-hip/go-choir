@@ -643,7 +643,7 @@ func TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead(t *testing.T) 
 	for _, want := range []string{
 		"For Universal Wire article revision runs",
 		"processor or reconciler handoff is newsroom source context",
-		"first edit_texture call must write a publishable article",
+		"first patch_texture call must write a publishable article",
 		"not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder",
 		"Use uncertainty and native source handles in reader-facing article prose",
 		"cite a bounded set of distinct listed handles with [label](source:ENTITY_ID)",
@@ -656,7 +656,7 @@ func TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead(t *testing.T) 
 			t.Fatalf("Universal Wire VText prompt missing %q in %q", want, prompt)
 		}
 	}
-	if strings.Contains(prompt, "first call edit_texture with a short owner-readable working response") {
+	if strings.Contains(prompt, "first call patch_texture with a short owner-readable working response") {
 		t.Fatalf("Universal Wire VText prompt should not use generic working-response rule: %q", prompt)
 	}
 
@@ -677,7 +677,7 @@ func TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead(t *testing.T) 
 	if err != nil {
 		t.Fatalf("systemPromptForRun ordinary VText: %v", err)
 	}
-	if !strings.Contains(ordinaryPrompt, "first call edit_texture with a short owner-readable working response") {
+	if !strings.Contains(ordinaryPrompt, "write the first useful owner-readable Texture revision") {
 		t.Fatalf("ordinary VText prompt should preserve generic working-response rule: %q", ordinaryPrompt)
 	}
 	if strings.Contains(ordinaryPrompt, "processor or reconciler handoff is newsroom source context") {
@@ -1611,8 +1611,8 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 	}
 
 	// Verify agent-specific fields are also present.
-	if resultMap["source"] != "edit_texture" {
-		t.Errorf("source: got %v, want 'edit_texture'", resultMap["source"])
+	if resultMap["source"] != "patch_texture" {
+		t.Errorf("source: got %v, want 'patch_texture'", resultMap["source"])
 	}
 	if resultMap["loop_id"] != "task-agent-1" {
 		t.Errorf("loop_id: got %v, want 'task-agent-1'", resultMap["loop_id"])

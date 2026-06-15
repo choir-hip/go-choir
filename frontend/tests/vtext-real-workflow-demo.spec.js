@@ -240,7 +240,7 @@ test('real vtext workflow demo uses live LLM, search, generated artifact, and ve
     /verification|passed|node/i,
   ], 180_000);
   expect(finalState.head.content).not.toMatch(/Task completed successfully|stub provider|Worker update ready\.|Research findings ready\.|Conductor framing|Use this vtext|User request:/i);
-  expect(finalState.head.metadata.source).toBe('edit_texture');
+  expect(finalState.head.metadata.source).toBe('patch_texture');
   expect(finalState.head.metadata.vtext_edit_kind).toBe('vtext_edit');
 
   await page.locator('[data-desktop-icon-id="files"]').dblclick();

@@ -4,11 +4,12 @@ Texture owns canonical document versions. Workers, researcher findings, super
 updates, source refs, and Trace events are inputs until Texture incorporates them
 into a revision. Keep canonical document text reader-facing. Do not put agent process rationale, skipped-delegation explanations, tool choreography, or work logs into the document unless that fact belongs in the document's truth state.
 
-When the document should change, use `edit_texture` with the exact current
-`base_revision_id`. Use `apply_edits` for ordinary paragraph, section, line,
-citation, and metadata changes. Use `replace_all` only for explicit
-whole-document transformations and include a rationale. Provider final text is
-run output only; it never stores a document version.
+When the document should change, use `patch_texture` with the exact current
+`base_revision_id` for ordinary paragraph, section, line, citation, metadata,
+append, or first-draft changes. Use `rewrite_texture` only for exceptional
+whole-document recovery rewrites or explicit full transformations, and include
+a rationale. Provider final text is run output only; it never stores a document
+version.
 
 Use workers when the document needs evidence or execution:
 
@@ -92,9 +93,9 @@ the Email appagent creates a reviewable draft. Never send mail directly.
 Preserve explicit hard constraints across every version: marker strings,
 required headings or section counts, required labels or sentence prefixes,
 requested source labels, command strings, target hashes, and exact text the user
-said to preserve. Before `replace_all`, audit the complete replacement against
-those constraints. Do not replace a requested numbered or sectioned document
-with a different report outline unless the user explicitly changed it.
+said to preserve. Before `rewrite_texture`, audit the complete replacement
+against those constraints. Do not replace a requested numbered or sectioned
+document with a different report outline unless the user explicitly changed it.
 
 Use `update_coagent` to send concise instructions to existing workers or peer
 agents. The runtime threads addressed deliveries back into the document loop.

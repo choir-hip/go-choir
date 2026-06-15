@@ -15,8 +15,10 @@ const (
 	RequestedByWirePolicy = "wire_publication_policy"
 	PublicationKind       = "universal_wire_autonomous"
 
-	editTextureSource     = "edit_texture"
-	legacyEditVTextSource = "edit_vtext" // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
+	patchTextureSource    = "patch_texture"
+	rewriteTextureSource  = "rewrite_texture"
+	editTextureSource     = "edit_texture" // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
+	legacyEditVTextSource = "edit_vtext"   // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
 )
 
 // PlatformOwnerID returns the durable owner id for the Universal Wire platform computer.
@@ -90,7 +92,12 @@ func RevisionIsPublishableWireArticle(meta map[string]any) bool {
 }
 
 func isTextureEditSource(source string) bool {
-	return source == editTextureSource || source == legacyEditVTextSource
+	switch source {
+	case patchTextureSource, rewriteTextureSource, editTextureSource, legacyEditVTextSource:
+		return true
+	default:
+		return false
+	}
 }
 
 func revisionIsCanonicalArticle(meta map[string]any) bool {

@@ -443,3 +443,40 @@ Open edge: continue reducing retired-name residue, cut over internal symbols
 and compatibility shims with deletion receipts, prove edit-affordance
 common-vs-exceptional naming, and write Texture Protocol v0 only after the
 working surface is settled.
+
+## 2026-06-15 - Local Texture Write Tool Split
+
+Claim: the canonical Texture writer should see the common mutation as
+`patch_texture` and reserve `rewrite_texture` for exceptional whole-document
+recovery, while `edit_texture` remains only as a temporary compatibility alias
+with deletion receipts.
+
+Move: add `patch_texture` and `rewrite_texture` registered tools, force the
+initial Texture tool choice to `patch_texture`, require rationale for
+`rewrite_texture`, keep duplicate side-effect protection across all Texture
+write tools, and update prompt defaults, workflow verification, wire
+eligibility, metadata, fixtures, and focused tests to recognize the split.
+
+Expected ΔV: 0 until pushed CI/deploy and staging product proof pass. The local
+construct supports the common-vs-exceptional naming conjecture but does not
+settle it.
+
+Actual ΔV: 0. V remains 4 because the new tool surface is locally tested but
+not deployed or proven through staging product evidence.
+
+Receipts:
+- `nix develop -c go test ./internal/wirepublish`: pass.
+- `nix develop -c go test ./internal/runtime -run 'TestInitialVTextToolChoiceUsesExactTools|TestInstallDefaultAgentToolsProfiles|TestVTextEditRevisionMetadataRecordsOperationEvidence|TestMaterializeVTextToolEditRequiresRationaleForLongRewrite|TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory|TestInitialVTextRunWritesFirstAppagentRevisionThroughEdit|TestPromptBarInitialDecisionThenEdit|TestHandlePromptBarInitialDecisionThenEdit|TestVTextPromptBarIntakeTreatsSeedAsInstructionsNotCanonicalProse|TestVTextPromptFocusesLongDirectUserEdits|TestSystemPromptForRun|TestBuildAppagentRevisionMetadata|TestRecordVTextDecision'`: pass.
+- `nix develop -c go test ./internal/runtime -run 'TestVTextWorkflowVerifier|TestVerifyVText|TestWorkflowVerifier|TestUniversalWire|TestWire|TestProcessor|TestReconciler|TestBuildCoagentVTextRevisionPrompt'`: pass.
+- `nix develop -c go test ./internal/runtime -run 'TestVTextAgentRevisionMutationCompletedOnlyOnce|TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation|TestEditVTextExplicitResearcherDoesNotForceSpawnContinuation|TestEditVTextExplicitResearcherDoesNotForceSpawnAfterSuperBase|TestEditVTextExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|TestEditVTextExplicitResearcherFromSeedPromptSurvivesRequestIntent|TestEditVTextExplicitResearcherDoesNotDuplicateExistingResearcher'`: pass, no matching tests.
+- `nix develop -c go test ./internal/runtime -run TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn`: pass after updating the duplicate Texture-write notice assertion.
+- `nix develop -c env SHARD_INDEX=0 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`: pass. A prior full-shard run passed shards 1-3 and exposed the stale shard-0 duplicate-notice assertion fixed above.
+- `npm --prefix frontend run build`: pass, with existing Svelte warnings in
+  `UniversalWireApp.svelte`.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,146 warnings.
+- `git diff --check`: pass.
+
+Open edge: commit and push the construct, monitor CI/deploy, then prove on
+staging that prompt-bar -> conductor -> Texture first revision uses
+`patch_texture` metadata and Trace rather than the compatibility alias.

@@ -139,8 +139,10 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("edit_file"); ok {
 		t.Fatalf("researcher should not have edit_file")
 	}
-	if _, ok := researcher.Lookup("edit_texture"); ok {
-		t.Fatalf("researcher should not have edit_texture")
+	for _, name := range []string{"patch_texture", "rewrite_texture", "edit_texture"} {
+		if _, ok := researcher.Lookup(name); ok {
+			t.Fatalf("researcher should not have %s", name)
+		}
 	}
 	if _, ok := researcher.Lookup("publish_app_change_package"); ok {
 		t.Fatalf("researcher should not have publish_app_change_package")
@@ -161,7 +163,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 			t.Fatalf("%s missing tool %q", AgentProfileProcessor, name)
 		}
 	}
-	for _, forbidden := range []string{"bash", "write_file", "edit_file", "edit_texture", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
+	for _, forbidden := range []string{"bash", "write_file", "edit_file", "patch_texture", "rewrite_texture", "edit_texture", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
 		if _, ok := processor.Lookup(forbidden); ok {
 			t.Fatalf("%s should not have %s", AgentProfileProcessor, forbidden)
 		}
@@ -174,7 +176,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := reconciler.Lookup("record_wire_processor_decision"); ok {
 		t.Fatalf("%s should not have record_wire_processor_decision", AgentProfileReconciler)
 	}
-	for _, forbidden := range []string{"bash", "write_file", "edit_file", "edit_texture", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
+	for _, forbidden := range []string{"bash", "write_file", "edit_file", "patch_texture", "rewrite_texture", "edit_texture", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
 		if _, ok := reconciler.Lookup(forbidden); ok {
 			t.Fatalf("%s should not have %s", AgentProfileReconciler, forbidden)
 		}
@@ -196,7 +198,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 			t.Fatalf("%s spawn_agent role enum = %#v, want only vtext", profile, got)
 		}
 	}
-	for _, name := range []string{"spawn_agent", "cancel_agent", "save_evidence", "read_evidence", "edit_texture", "record_texture_decision", "request_super_execution"} {
+	for _, name := range []string{"spawn_agent", "cancel_agent", "save_evidence", "read_evidence", "patch_texture", "rewrite_texture", "edit_texture", "record_texture_decision", "request_super_execution"} {
 		if _, ok := vtext.Lookup(name); !ok {
 			t.Fatalf("vtext missing tool %q", name)
 		}
@@ -241,17 +243,19 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := vtext.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("vtext should not have delegate_worker_vm")
 	}
-	if _, ok := conductor.Lookup("edit_texture"); ok {
-		t.Fatalf("conductor should not have edit_texture")
+	for _, name := range []string{"patch_texture", "rewrite_texture", "edit_texture"} {
+		if _, ok := conductor.Lookup(name); ok {
+			t.Fatalf("conductor should not have %s", name)
+		}
+		if _, ok := super.Lookup(name); ok {
+			t.Fatalf("super should not have %s", name)
+		}
 	}
 	if _, ok := conductor.Lookup("publish_app_change_package"); ok {
 		t.Fatalf("conductor should not have publish_app_change_package")
 	}
 	if _, ok := conductor.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("conductor should not have delegate_worker_vm")
-	}
-	if _, ok := super.Lookup("edit_texture"); ok {
-		t.Fatalf("super should not have edit_texture")
 	}
 }
 
@@ -2145,16 +2149,18 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	editArgs, err := json.Marshal(map[string]any{
 		"doc_id":           vtextSpawn.DocID,
 		"base_revision_id": vtextSpawn.SeedRevisionID,
-		"operation":        "replace_all",
-		"content":          articleContent,
-		"rationale":        "Create the first Universal Wire article revision from the processor brief.",
+		"edits": []map[string]any{{
+			"op":   "append",
+			"text": articleContent,
+		}},
+		"rationale": "Create the first Universal Wire article revision from the processor brief.",
 	})
 	if err != nil {
 		t.Fatalf("marshal vtext edit args: %v", err)
 	}
 	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
-	if _, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "edit_texture", editArgs); err != nil {
-		t.Fatalf("vtext article edit: %v", err)
+	if _, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "patch_texture", editArgs); err != nil {
+		t.Fatalf("vtext article patch: %v", err)
 	}
 	articleDoc, err := rt.Store().GetDocument(context.Background(), vtextSpawn.DocID, "user-alice")
 	if err != nil {

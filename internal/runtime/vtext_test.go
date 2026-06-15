@@ -186,17 +186,17 @@ func (p *vtextEditToolProvider) CallWithTools(ctx context.Context, req ToolLoopR
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "conductor handoff complete", Model: "test-model"}, nil
 	}
 	lastUser := extractLastUserMessage(req.Messages)
-	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnVTextToolCall(lastUser)},
 			Model:      "test-model",
 		}, nil
 	}
-	if messagesContainToolCall(req.Messages, "edit_texture") {
+	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") || messagesContainToolCall(req.Messages, "edit_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "vtext turn complete", Model: "test-model"}, nil
 	}
-	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
+	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "vtext turn complete", Model: "test-model"}, nil
 	}
 	prompt := req.System + "\n" + lastUser
@@ -234,15 +234,14 @@ func (p *vtextDecisionThenEditProvider) CallWithTools(ctx context.Context, req T
 	p.calls++
 	switch p.calls {
 	case 1:
-		if req.ToolChoice == exactRequiredToolChoice("edit_texture") {
+		if req.ToolChoice == exactRequiredToolChoice("patch_texture") {
 			return &ToolLoopResponse{
 				StopReason: "tool_use",
 				ToolCalls: []types.ToolCall{{
 					ID:   "call-reader-edit",
-					Name: "edit_texture",
+					Name: "patch_texture",
 					Arguments: json.RawMessage(`{
-						"operation":"replace_all",
-						"content":"M32_VTEXT_DECISION_ROUTE_TEST\n\nThis marker is a deployed acceptance probe."
+						"edits":[{"op":"append","text":"M32_VTEXT_DECISION_ROUTE_TEST\n\nThis marker is a deployed acceptance probe."}]
 					}`),
 				}},
 				Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
@@ -253,8 +252,8 @@ func (p *vtextDecisionThenEditProvider) CallWithTools(ctx context.Context, req T
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-wrong-edit",
-				Name:      "edit_texture",
-				Arguments: json.RawMessage(`{"operation":"replace_all","content":"private reason leaked"}`),
+				Name:      "patch_texture",
+				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"private reason leaked"}]}`),
 			}},
 			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
 			Model: "test-model",
@@ -280,10 +279,9 @@ func (p *vtextDecisionThenEditProvider) CallWithTools(ctx context.Context, req T
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-reader-edit",
-				Name: "edit_texture",
+				Name: "patch_texture",
 				Arguments: json.RawMessage(`{
-					"operation":"replace_all",
-					"content":"M32_VTEXT_DECISION_ROUTE_TEST\n\nThis marker is a deployed acceptance probe."
+					"edits":[{"op":"append","text":"M32_VTEXT_DECISION_ROUTE_TEST\n\nThis marker is a deployed acceptance probe."}]
 				}`),
 			}},
 			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
@@ -376,15 +374,38 @@ func editVTextToolCallFromLegacyResult(prompt, raw string) (types.ToolCall, erro
 	args := editVTextArgs{
 		DocID:          docID,
 		BaseRevisionID: baseRevisionID,
-		Operation:      env.Operation,
-		Content:        env.Content,
-		Edits:          env.Edits,
+	}
+	toolName := "patch_texture"
+	switch strings.TrimSpace(env.Operation) {
+	case "apply_edits":
+		args.Edits = env.Edits
+	default:
+		currentContent := extractCurrentCanonicalContentFromPrompt(prompt)
+		if currentContent == "" || currentContent == "(empty document)" {
+			args.Edits = []vtextTextEdit{{Op: "append", Text: env.Content}}
+		} else {
+			args.Edits = []vtextTextEdit{{Op: "replace", Find: currentContent, Replace: env.Content}}
+		}
 	}
 	data, err := json.Marshal(args)
 	if err != nil {
 		return types.ToolCall{}, err
 	}
-	return types.ToolCall{ID: "edit-vtext-test-call", Name: "edit_texture", Arguments: data}, nil
+	return types.ToolCall{ID: "edit-vtext-test-call", Name: toolName, Arguments: data}, nil
+}
+
+func extractCurrentCanonicalContentFromPrompt(s string) string {
+	const marker = "Current canonical document content:\n---\n"
+	start := strings.LastIndex(s, marker)
+	if start < 0 {
+		return ""
+	}
+	rest := s[start+len(marker):]
+	end := strings.Index(rest, "\n---")
+	if end < 0 {
+		return ""
+	}
+	return strings.TrimSpace(rest[:end])
 }
 
 func extractPromptValue(s, prefix, suffix string) string {
@@ -1447,17 +1468,17 @@ func (p *stochasticWorkflowProvider) CallWithTools(ctx context.Context, req Tool
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow conductor handoff complete", Model: "test-model"}, nil
 	}
 	lastUser := extractLastUserMessage(req.Messages)
-	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnVTextToolCall(lastUser)},
 			Model:      "test-model",
 		}, nil
 	}
-	if messagesContainToolCall(req.Messages, "edit_texture") {
+	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") || messagesContainToolCall(req.Messages, "edit_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
-	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
+	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
 	delay := p.delay
@@ -1655,7 +1676,7 @@ func revisionWorkerConsumption(t *testing.T, revs []types.Revision) (map[int64]b
 			continue
 		}
 		meta := decodeRevisionMetadata(rev.Metadata)
-		if metadataString(meta, "source") != "edit_texture" || metadataString(meta, "vtext_edit_kind") != "vtext_edit" {
+		if !isTextureWriteToolName(metadataString(meta, "source")) || metadataString(meta, "vtext_edit_kind") != "vtext_edit" {
 			continue
 		}
 		consumed := metadataSlice(t, meta, "worker_updates_consumed")
@@ -1858,22 +1879,22 @@ func (p *vtextMinimalEditProvider) CallWithTools(ctx context.Context, req ToolLo
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "conductor handoff complete", Model: "test-model"}, nil
 	}
 	lastUser := extractLastUserMessage(req.Messages)
-	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnVTextToolCall(lastUser)},
 			Model:      "test-model",
 		}, nil
 	}
-	if !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
+	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "vtext turn complete", Model: "test-model"}, nil
 	}
 	return &ToolLoopResponse{
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-minimal-edit",
-			Name:      "edit_texture",
-			Arguments: json.RawMessage(`{"content":"M34_MINIMAL_EDIT_DEFAULTS\n\nThe VText activation wrote a first visible revision from runtime-owned context."}`),
+			Name:      "patch_texture",
+			Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"M34_MINIMAL_EDIT_DEFAULTS\n\nThe Texture activation wrote a first visible revision from runtime-owned context."}]}`),
 		}},
 		Model: "test-model",
 	}, nil
@@ -1922,11 +1943,11 @@ func TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testin
 	if !foundAppAgent {
 		t.Fatalf("expected appagent revision over user-provided text, got %+v", revs)
 	}
-	if len(provider.choices) == 0 || provider.choices[0] != exactRequiredToolChoice("edit_texture") {
-		t.Fatalf("initial vtext tool_choice = %#v, want first choice %q", provider.choices, exactRequiredToolChoice("edit_texture"))
+	if len(provider.choices) == 0 || provider.choices[0] != exactRequiredToolChoice("patch_texture") {
+		t.Fatalf("initial vtext tool_choice = %#v, want first choice %q", provider.choices, exactRequiredToolChoice("patch_texture"))
 	}
 	if len(provider.choices) != 1 {
-		t.Fatalf("vtext provider calls = %d choices=%#v, want one terminal edit_texture turn", len(provider.choices), provider.choices)
+		t.Fatalf("vtext provider calls = %d choices=%#v, want one terminal patch_texture turn", len(provider.choices), provider.choices)
 	}
 }
 
@@ -2036,8 +2057,8 @@ func TestInitialVTextRunDefaultsMinimalEditContextFromActivation(t *testing.T) {
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial vtext state = %q, want completed", state)
 	}
-	if len(provider.choices) != 1 || provider.choices[0] != exactRequiredToolChoice("edit_texture") {
-		t.Fatalf("vtext provider choices = %#v, want one terminal edit_texture turn", provider.choices)
+	if len(provider.choices) != 1 || provider.choices[0] != exactRequiredToolChoice("patch_texture") {
+		t.Fatalf("vtext provider choices = %#v, want one terminal patch_texture turn", provider.choices)
 	}
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
 	if err != nil {
@@ -2054,10 +2075,10 @@ func TestInitialVTextRunDefaultsMinimalEditContextFromActivation(t *testing.T) {
 		t.Fatalf("expected appagent revision from minimal edit context, got %+v", revs)
 	}
 	meta := decodeRevisionMetadata(appRevision.Metadata)
-	if metadataString(meta, "source") != "edit_texture" ||
-		metadataString(meta, "vtext_edit_operation") != "replace_all" ||
+	if metadataString(meta, "source") != "patch_texture" ||
+		metadataString(meta, "vtext_edit_operation") != "apply_edits" ||
 		metadataString(meta, "vtext_edit_base_revision_id") == "" {
-		t.Fatalf("appagent revision metadata = %+v, want defaulted edit_texture context", meta)
+		t.Fatalf("appagent revision metadata = %+v, want defaulted patch_texture context", meta)
 	}
 	mutation, err := s.GetAgentMutationByRun(context.Background(), decision.InitialLoopID)
 	if err != nil {
@@ -2133,7 +2154,7 @@ func TestInitialVTextDecisionPromptRejectsPrematureEditBeforeDecision(t *testing
 		t.Fatalf("appagent revision leaked private decision rationale: %q", appContent)
 	}
 	if len(provider.choices) < 2 ||
-		provider.choices[0] != exactRequiredToolChoice("edit_texture") ||
+		provider.choices[0] != exactRequiredToolChoice("patch_texture") ||
 		provider.choices[1] != "" {
 		t.Fatalf("tool choices = %#v, want deterministic decision record before initial edit", provider.choices)
 	}

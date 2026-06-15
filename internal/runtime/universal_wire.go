@@ -786,6 +786,8 @@ func normalizeWireArticleRevisionForRead(rev types.Revision) types.Revision {
 
 func wireRevisionSourceIsTextureEdit(meta map[string]any) bool {
 	switch metadataString(meta, "source") {
+	case "patch_texture", "rewrite_texture":
+		return true
 	case "edit_texture":
 		return true
 	case "edit_vtext": // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration

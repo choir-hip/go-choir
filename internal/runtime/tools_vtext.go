@@ -18,7 +18,9 @@ import (
 
 func RegisterVTextTools(registry *ToolRegistry, rt *Runtime) error {
 	for _, tool := range []Tool{
-		newEditVTextTool(rt),
+		newPatchTextureTool(rt),
+		newRewriteTextureTool(rt),
+		newEditTextureCompatibilityTool(rt),
 		newRecordVTextDecisionTool(rt),
 		newRequestSuperExecutionTool(rt),
 		newRequestEmailDraftTool(rt),
@@ -45,11 +47,13 @@ type editVTextArgs struct {
 	Content        string          `json:"content,omitempty"`
 	Edits          []vtextTextEdit `json:"edits,omitempty"`
 	Rationale      string          `json:"rationale,omitempty"`
+	SourceTool     string          `json:"-"`
 }
 
 type materializedVTextEdit struct {
 	Content        string
 	Operation      string
+	SourceTool     string
 	BaseRevisionID string
 	EditCount      int
 	Rationale      string
@@ -58,10 +62,82 @@ type materializedVTextEdit struct {
 	DeltaChars     int
 }
 
-func newEditVTextTool(rt *Runtime) Tool {
+func isTextureWriteToolName(name string) bool {
+	switch strings.TrimSpace(name) {
+	case "patch_texture", "rewrite_texture", "edit_texture":
+		return true
+	default:
+		return false
+	}
+}
+
+func newPatchTextureTool(rt *Runtime) Tool {
+	return Tool{
+		Name:        "patch_texture",
+		Description: "Apply ordinary structured edits to the current Texture document and store the next complete canonical version. Use this for normal line, paragraph, section, citation, metadata, append, or first-draft changes. Do not use it for whole-document replacement; use rewrite_texture only when a full recovery rewrite is explicitly required.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"doc_id":           map[string]any{"type": "string"},
+			"base_revision_id": map[string]any{"type": "string"},
+			"rationale":        map[string]any{"type": "string"},
+			"edits": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"op":          map[string]any{"type": "string", "enum": []string{"replace", "append"}},
+						"find":        map[string]any{"type": "string"},
+						"replace":     map[string]any{"type": "string"},
+						"text":        map[string]any{"type": "string"},
+						"replace_all": map[string]any{"type": "boolean"},
+					},
+					"required":             []string{"op"},
+					"additionalProperties": false,
+				},
+			},
+		}, []string{"doc_id", "base_revision_id", "edits"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			var in editVTextArgs
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode patch_texture args: %w", err)
+			}
+			in.Operation = "apply_edits"
+			in.Content = ""
+			in.SourceTool = "patch_texture"
+			return rt.executeTextureEditTool(ctx, "patch_texture", in)
+		},
+	}
+}
+
+func newRewriteTextureTool(rt *Runtime) Tool {
+	return Tool{
+		Name:        "rewrite_texture",
+		Description: "Exceptionally replace the entire current Texture document and store the next complete canonical version. Use only for explicit whole-document recovery rewrites or owner-requested full transformations after auditing hard constraints. Rationale is required.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"doc_id":           map[string]any{"type": "string"},
+			"base_revision_id": map[string]any{"type": "string"},
+			"content":          map[string]any{"type": "string"},
+			"rationale":        map[string]any{"type": "string"},
+		}, []string{"doc_id", "base_revision_id", "content", "rationale"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			var in editVTextArgs
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode rewrite_texture args: %w", err)
+			}
+			if strings.TrimSpace(in.Rationale) == "" {
+				return "", fmt.Errorf("rewrite_texture requires rationale")
+			}
+			in.Operation = "replace_all"
+			in.Edits = nil
+			in.SourceTool = "rewrite_texture"
+			return rt.executeTextureEditTool(ctx, "rewrite_texture", in)
+		},
+	}
+}
+
+func newEditTextureCompatibilityTool(rt *Runtime) Tool {
 	return Tool{
 		Name:        "edit_texture",
-		Description: "Apply a structured edit to the current Texture document and store the next complete canonical version. Use apply_edits for ordinary line, paragraph, section, citation, or metadata changes. Use replace_all only for explicit whole-document rewrites and include rationale, especially for long documents.",
+		Description: "Temporary compatibility alias for legacy Texture edit calls. Prefer patch_texture for ordinary structured edits and rewrite_texture for exceptional whole-document recovery rewrites.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"doc_id":           map[string]any{"type": "string"},
 			"base_revision_id": map[string]any{"type": "string"},
@@ -85,39 +161,44 @@ func newEditVTextTool(rt *Runtime) Tool {
 			},
 		}, []string{"doc_id", "base_revision_id", "operation"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileVText {
-				return "", fmt.Errorf("edit_texture is only available to Texture agents")
-			}
-			rec := ctxRunRecord(ctx)
-			if rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
-				return "", fmt.Errorf("edit_texture requires a Texture agent revision run")
-			}
 			var in editVTextArgs
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode edit_texture args: %w", err)
 			}
-			rev, err := rt.commitVTextToolEdit(context.Background(), rec, in)
-			if err != nil {
-				return "", err
-			}
-			result := map[string]any{
-				"doc_id":           rev.DocID,
-				"revision_id":      rev.RevisionID,
-				"base_revision_id": rev.ParentRevisionID,
-				"status":           "stored",
-			}
-			if continuation, ok := rt.requiredContinuationAfterVTextEdit(context.Background(), rec, in, rev); ok && continuation.Tool == "request_email_draft" {
-				emailResult, err := rt.executeRequiredEmailDraftContinuation(ctx, rec, continuation.Args)
-				if err != nil {
-					return "", err
-				}
-				result["email_draft_request"] = emailResult
-				result["email_draft_request_status"] = emailResult["status"]
-				result["next_instruction"] = "Email appagent draft handoff completed from the stored Texture revision. Do not send mail directly; owner approval remains required."
-			}
-			return toolResultJSON(result)
+			in.SourceTool = "edit_texture"
+			return rt.executeTextureEditTool(ctx, "edit_texture", in)
 		},
 	}
+}
+
+func (rt *Runtime) executeTextureEditTool(ctx context.Context, toolName string, in editVTextArgs) (string, error) {
+	if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileVText {
+		return "", fmt.Errorf("%s is only available to Texture agents", toolName)
+	}
+	rec := ctxRunRecord(ctx)
+	if rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
+		return "", fmt.Errorf("%s requires a Texture agent revision run", toolName)
+	}
+	rev, err := rt.commitVTextToolEdit(context.Background(), rec, in)
+	if err != nil {
+		return "", err
+	}
+	result := map[string]any{
+		"doc_id":           rev.DocID,
+		"revision_id":      rev.RevisionID,
+		"base_revision_id": rev.ParentRevisionID,
+		"status":           "stored",
+	}
+	if continuation, ok := rt.requiredContinuationAfterVTextEdit(context.Background(), rec, in, rev); ok && continuation.Tool == "request_email_draft" {
+		emailResult, err := rt.executeRequiredEmailDraftContinuation(ctx, rec, continuation.Args)
+		if err != nil {
+			return "", err
+		}
+		result["email_draft_request"] = emailResult
+		result["email_draft_request_status"] = emailResult["status"]
+		result["next_instruction"] = "Email appagent draft handoff completed from the stored Texture revision. Do not send mail directly; owner approval remains required."
+	}
+	return toolResultJSON(result)
 }
 
 type recordVTextDecisionArgs struct {
@@ -759,6 +840,10 @@ func materializeVTextToolEdit(edit editVTextArgs, current types.Revision) (mater
 	}
 
 	operation := strings.TrimSpace(edit.Operation)
+	sourceTool := strings.TrimSpace(edit.SourceTool)
+	if sourceTool == "" {
+		sourceTool = "edit_texture"
+	}
 	var content string
 	var editCount int
 	switch operation {
@@ -792,6 +877,7 @@ func materializeVTextToolEdit(edit editVTextArgs, current types.Revision) (mater
 	return materializedVTextEdit{
 		Content:        content,
 		Operation:      operation,
+		SourceTool:     sourceTool,
 		BaseRevisionID: baseRevisionID,
 		EditCount:      editCount,
 		Rationale:      strings.TrimSpace(edit.Rationale),
@@ -872,7 +958,12 @@ func addVTextEditRevisionMetadata(raw json.RawMessage, edit materializedVTextEdi
 	if meta == nil {
 		meta = map[string]any{}
 	}
-	meta["source"] = "edit_texture"
+	sourceTool := strings.TrimSpace(edit.SourceTool)
+	if sourceTool == "" {
+		sourceTool = "edit_texture"
+	}
+	meta["source"] = sourceTool
+	meta["texture_edit_tool"] = sourceTool
 	meta["vtext_edit_kind"] = "vtext_edit"
 	meta["vtext_edit_operation"] = edit.Operation
 	meta["vtext_edit_base_revision_id"] = edit.BaseRevisionID

@@ -92,6 +92,7 @@ func TestVTextEditRevisionMetadataRecordsOperationEvidence(t *testing.T) {
 	now := time.Now().UTC()
 	raw := addVTextEditRevisionMetadata(json.RawMessage(`{"existing":"kept"}`), materializedVTextEdit{
 		Operation:      "apply_edits",
+		SourceTool:     "patch_texture",
 		BaseRevisionID: "rev-1",
 		EditCount:      2,
 		BaseChars:      100,
@@ -109,6 +110,9 @@ func TestVTextEditRevisionMetadataRecordsOperationEvidence(t *testing.T) {
 	}
 	if meta["existing"] != "kept" {
 		t.Fatalf("existing metadata not preserved: %+v", meta)
+	}
+	if meta["source"] != "patch_texture" || meta["texture_edit_tool"] != "patch_texture" {
+		t.Fatalf("texture write source metadata missing: %+v", meta)
 	}
 	if meta["vtext_edit_operation"] != "apply_edits" || int(meta["vtext_edit_count"].(float64)) != 2 {
 		t.Fatalf("edit operation metadata missing: %+v", meta)

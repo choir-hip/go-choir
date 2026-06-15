@@ -1594,6 +1594,8 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if metadataString(rec.Metadata, "type") == "vtext_agent_revision" {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialVTextToolChoice(rec)))
 		toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses(
+			"patch_texture",
+			"rewrite_texture",
 			"edit_texture",
 			"spawn_agent",
 			"request_super_execution",
@@ -2168,12 +2170,12 @@ func initialVTextToolChoice(rec *types.RunRecord) string {
 		return ""
 	}
 	if metadataBoolValue(rec.Metadata, "vtext_initial_decision_required") {
-		return exactRequiredToolChoice("edit_texture")
+		return exactRequiredToolChoice("patch_texture")
 	}
 	if vtextPromptExplicitlyRequestsDecisionNote(metadataString(rec.Metadata, "seed_prompt") + " " + metadataStringValue(rec.Metadata, "original_prompt")) {
 		return exactRequiredToolChoice("record_texture_decision")
 	}
-	return exactRequiredToolChoice("edit_texture")
+	return exactRequiredToolChoice("patch_texture")
 }
 
 func (rt *Runtime) recordExplicitInitialVTextDecisionIfNeeded(ctx context.Context, rec *types.RunRecord) error {
@@ -2556,7 +2558,7 @@ func vtextPromptNeedsSuperExecution(prompt string) bool {
 
 // handleRunCompletion processes feature-specific side effects after a run
 // completes successfully. VText document writes are intentionally not handled
-// here: canonical appagent revisions are created only by the edit_texture tool.
+// here: canonical appagent revisions are created only by Texture write tools.
 func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord) error {
 	if agentProfileForRun(rec) == AgentProfileConductor {
 		rt.materializeConductorDecision(rec)
@@ -2623,11 +2625,11 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 	failPayload, _ := json.Marshal(map[string]string{
 		"doc_id":  docID,
 		"loop_id": rec.RunID,
-		"error":   "vtext run completed without calling edit_texture",
+		"error":   "vtext run completed without storing a Texture revision",
 	})
 	rt.emitVTextAgentEvent(persistCtx, rec, types.EventVTextAgentRevisionFailed,
 		events.CauseTaskLifecycle, failPayload)
-	log.Printf("runtime: vtext agent revision run %s completed without edit_texture; no canonical revision created", rec.RunID)
+	log.Printf("runtime: vtext agent revision run %s completed without a Texture write tool; no canonical revision created", rec.RunID)
 	return nil
 }
 
@@ -2802,7 +2804,7 @@ var durableMetadataKeys = []string{
 // from the parent revision so they remain available on the next revise.
 func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types.RunRecord, doc types.Document, ownerID string, mutation *store.AgentMutation) json.RawMessage {
 	meta := map[string]any{
-		"source":  "edit_texture",
+		"source":  "patch_texture",
 		"loop_id": rec.RunID,
 	}
 
@@ -2843,7 +2845,7 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 
 	data, err := json.Marshal(meta)
 	if err != nil {
-		return json.RawMessage(`{"source":"edit_texture","loop_id":"` + rec.RunID + `"}`)
+		return json.RawMessage(`{"source":"patch_texture","loop_id":"` + rec.RunID + `"}`)
 	}
 	return data
 }
@@ -3074,7 +3076,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 
 // providerResult returns fallback result text when a completed provider
 // execution did not populate rec.Result directly. This text is run output only;
-// vtext document revisions are materialized exclusively by edit_texture.
+// vtext document revisions are materialized exclusively by Texture write tools.
 func (rt *Runtime) providerResult() string {
 	if sp, ok := rt.provider.(*StubProvider); ok {
 		return sp.Result

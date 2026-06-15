@@ -590,7 +590,7 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 		if err := json.Unmarshal(payload, &decoded); err != nil {
 			t.Fatalf("decode tool result: %v", err)
 		}
-		if decoded["call_id"] == "call-edit-2" && strings.Contains(fmt.Sprint(decoded["output"]), "duplicate edit_texture") {
+		if decoded["call_id"] == "call-edit-2" && strings.Contains(fmt.Sprint(decoded["output"]), "duplicate Texture write tool edit_texture") {
 			duplicateNoticeSeen = true
 		}
 	}

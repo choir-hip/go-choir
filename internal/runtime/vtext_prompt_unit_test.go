@@ -85,7 +85,7 @@ func TestVTextPromptInitialRevisionUsesSingleWriterLoop(t *testing.T) {
 	}, "", false, nil, nil)
 
 	for _, want := range []string{
-		"Because VText owns the document, write the first useful owner-readable revision with edit_texture before opening longer worker work.",
+		"Because Texture owns the document, write the first useful owner-readable revision with patch_texture before opening longer worker work.",
 		"For factual/current/search requests, the first revision should be a short working brief with explicit uncertainty and no ungrounded claims; if more evidence is needed, researcher delegation is available as a VText choice.",
 		"Worker messages can wake later vtext runs and trigger the next revision.",
 	} {
@@ -243,7 +243,8 @@ func TestVTextPromptFocusesLongDirectUserEdits(t *testing.T) {
 		"Full document omitted for ordinary long-document edit latency.",
 		"User note: replace the stale paragraph above with the cleaner appendix table wording.",
 		"Cleaner appendix table wording.",
-		"operation\":\"apply_edits",
+		"call patch_texture",
+		"\"edits\":[{\"op\":\"replace\"",
 		"complete current document is intentionally not preloaded",
 	} {
 		if !strings.Contains(request, want) {
@@ -284,14 +285,14 @@ func TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T) {
 	}, "", true, recent, nil)
 
 	for _, want := range []string{
-		"This VText run was woken by worker findings",
-		"Make those findings visible with edit_texture as this turn's next document revision before spawning additional workers",
+		"This Texture run was woken by worker findings",
+		"Make those findings visible with patch_texture as this turn's next document revision before spawning additional workers",
 		"If recent worker findings are only partial and the document needs more evidence",
 		"write an honest partial revision first",
 		"Do not write that a follow-up researcher was dispatched",
 		"Never describe coordination as already done unless the tool action really happened",
 		"Phrases such as \"researcher dispatched\"",
-		"If you only edit_texture, phrase remaining work as \"next needed\" or \"still unresolved\"",
+		"If you only patch_texture or rewrite_texture, phrase remaining work as \"next needed\" or \"still unresolved\"",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("partial-findings prompt missing %q:\n%s", want, request)
@@ -323,7 +324,7 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 		"required headings or section counts",
 		"required labels or sentence prefixes",
 		"target hashes",
-		"Before a replace_all edit, audit the complete replacement against those hard requirements",
+		"Before rewrite_texture, audit the complete replacement against those hard requirements",
 		"Do not replace a requested numbered/sectioned document with a different report outline",
 		"Never use `[CMD]` as a pending/requested/target-only label, including in the initial v1 scaffold",
 	} {
@@ -430,7 +431,7 @@ func TestVTextPromptDerivesSourceServiceEntitiesFromResearcherUpdates(t *testing
 		"source_service_item",
 		"item_id=srcitem_current_economy",
 		"Canonical inline Source Entity syntax is [label](source:ENTITY_ID)",
-		"Make those findings visible with edit_texture",
+		"Make those findings visible with patch_texture",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("source-service prompt missing %q:\n%s", want, request)
@@ -589,7 +590,7 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 				"type":            "vtext_agent_revision",
 				"original_prompt": "what is the weather in boston now",
 			},
-			want: "function:edit_texture",
+			want: "function:patch_texture",
 		},
 		{
 			name: "mutable product work does not force super request",
@@ -597,7 +598,7 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 				"type":            "vtext_agent_revision",
 				"original_prompt": "debug and fix the runtime gateway",
 			},
-			want: "function:edit_texture",
+			want: "function:patch_texture",
 		},
 		{
 			name: "community wire operational proof does not force super request",
@@ -605,7 +606,7 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 				"type":        "vtext_agent_revision",
 				"seed_prompt": "Universal Wire staging proof request: run the existing source-refresh/research/projection/publication flow, create or approve an Article VText, update universal-wire/Wire.vtext, then leave evidence ids and verifier proof.",
 			},
-			want: "function:edit_texture",
+			want: "function:patch_texture",
 		},
 		{
 			name: "creative direct document work edits vtext",
@@ -613,7 +614,7 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 				"type":            "vtext_agent_revision",
 				"original_prompt": "tell me a story about computers",
 			},
-			want: "function:edit_texture",
+			want: "function:patch_texture",
 		},
 		{
 			name: "explicit decision note starts with decision record",

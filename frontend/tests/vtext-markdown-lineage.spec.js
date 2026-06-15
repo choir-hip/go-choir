@@ -817,7 +817,7 @@ test('VText Sources panel shows structured edit evidence without raw prompts', a
         'This revision carries structured edit metadata for diagnosis.',
       ].join('\n'),
       metadata: {
-        source: 'edit_texture',
+        source: 'patch_texture',
         vtext_context_mode: 'focused_user_edit_diff',
         vtext_edit_operation: 'apply_edits',
         vtext_edit_count: 2,
@@ -995,7 +995,7 @@ test('VText Sources panel shows off-document decision notes separately', async (
           decision_kind: 'delegation_skipped',
           reason: decisionReason,
           evidence_refs: ['rev-owner-source', 'source:owner-excerpt'],
-          next_action: 'Use edit_texture for the reader-facing revision.',
+          next_action: 'Use patch_texture for the reader-facing revision.',
           created_at: '2026-06-14T20:00:00.000Z',
         }],
         evidence: [],
@@ -1013,7 +1013,7 @@ test('VText Sources panel shows off-document decision notes separately', async (
     await expect(decisions).toContainText('VText decisions');
     await expect(decisions.locator('[data-vtext-decision]')).toHaveAttribute('data-decision-kind', 'delegation_skipped');
     await expect(decisions).toContainText(decisionReason);
-    await expect(decisions).toContainText('Use edit_texture for the reader-facing revision.');
+    await expect(decisions).toContainText('Use patch_texture for the reader-facing revision.');
     await expect(decisions.locator('[data-vtext-decision-refs]')).toContainText('source:owner-excerpt');
     await expect(vtextWindow.locator('[data-vtext-rendered]')).not.toContainText(decisionReason);
   } finally {

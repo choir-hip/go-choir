@@ -508,7 +508,7 @@ func TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn(t *testing.T) {
 	if results[0].IsError {
 		t.Fatalf("first edit result = %#v, want success", results[0])
 	}
-	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate edit_texture") {
+	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate Texture write tool edit_texture") {
 		t.Fatalf("second edit result = %#v, want non-error duplicate notice", results[1])
 	}
 }

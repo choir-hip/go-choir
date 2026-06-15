@@ -515,7 +515,7 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 		b.WriteString(" in reader-facing article prose using [label](source:entity_id). Citations that appear only in Source Handles, Source Manifest, source inventories, notes, or metadata sections do not satisfy this requirement.")
 	}
 	b.WriteString("\n\nHard requirements:")
-	b.WriteString("\n- Use edit_texture to write the canonical VText revision; do not leave the article only in the run result.")
+	b.WriteString("\n- Use patch_texture to write the canonical Texture revision; do not leave the article only in the run result.")
 	b.WriteString("\n- The current document head after this run must be a publishable article or correction/update draft, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
 	b.WriteString("\n- Preserve source handles and use native VText source refs like [label](source:entity_id) inside article prose; do not replace them with a plain source manifest or isolate them in an inventory section.")

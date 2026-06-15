@@ -161,8 +161,10 @@ variant (ranking function) V: current V=4; last ΔV=-1:
    routes and tool affordance names now expose Texture locally;
 5. discharged: visible UI labels and import affordances are cut over to
    Texture and proven on staging through browser product evidence;
-6. current V includes: edit affordance surface still needs common-vs-
-   exceptional naming proof;
+6. locally supported, not yet deployed: the edit affordance surface now has a
+   common `patch_texture` tool and an exceptional `rewrite_texture` tool, with
+   `edit_texture` retained only as a deletion-receipted compatibility alias;
+   current V still includes CI/deploy/staging proof for the common path;
 7. discharged for local scope: prompt register and registered tool names now
    use Texture-oriented wording and `edit_texture` /
    `record_texture_decision` affordances without adding runtime semantic
@@ -211,8 +213,11 @@ mission proves them.
 position / live conjectures / open edges:
 - C1 active: the hard rename is a vocabulary shift that should change route
   choice and acceptance quality, not just labels.
-- C2 active: a common patch tool plus an exceptional whole-document recovery
-  rewrite will better orient the Texture writer than one overloaded edit tool.
+- C2 locally supported, pending staging: a common `patch_texture` tool plus an
+  exceptional `rewrite_texture` tool better orients the Texture writer than one
+  overloaded edit tool. Local focused tests and runtime shard 0 pass; deployed
+  proof still needs to show a prompt-bar Texture first revision created through
+  `patch_texture` metadata and Trace.
 - C3 supported for report-only scope: the docs checker now carries H5
   retired-name warnings without failing docs-only CI. Current baseline:
   `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
@@ -246,9 +251,16 @@ position / live conjectures / open edges:
   selectors, storage keys, and compatibility API names remain deletion-receipted
   residue. Staging proof covered the desktop icon, window title, recent landing,
   Files import button, and Web Lens import button.
+- C10 active: `edit_texture` can remain only as a short-lived compatibility
+  alias while `patch_texture` becomes the exact initial Texture write choice and
+  `rewrite_texture` requires an explicit rationale for full-document recovery.
+  Settlement requires deployed receipts and a later alias deletion receipt.
 
-next move: continue the internal symbol/compatibility-shim cutover and
-edit-affordance common-vs-exceptional proof before protocol v0.
+next move: push the `patch_texture` / `rewrite_texture` construct, monitor CI
+and Node B deploy identity, then run staging product proof that a prompt-bar
+Texture first revision uses `patch_texture` rather than the compatibility
+alias. After that, continue internal symbol/compatibility-shim cutover before
+protocol v0.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
