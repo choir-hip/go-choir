@@ -79,8 +79,11 @@ auditable through the runtime evidence substrate.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=1:
-1. reland the behavior change on `origin/main`, monitor CI/deploy, verify
+**variant (ranking function) V:** current V=2:
+1. repair the route-preemption gap where explicit `no_worker_needed`
+   decision-note prompts can be diverted to initial super execution by broad
+   proof/execution keywords before VText can record the decision;
+2. reland the behavior change on `origin/main`, monitor CI/deploy, verify
    staging identity, and run deployed product-path proof.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
@@ -146,10 +149,16 @@ states reasons without forcing choreography.
   the initial VText tool loop with exact `record_vtext_decision`, while
   ordinary initial VText work still starts with exact `edit_vtext` and
   worker-woken turns remain unconstrained.
+- Route-preemption gap discovered: broad super-execution markers such as
+  "staging proof" and "execution" can still divert an explicit
+  `no_worker_needed` decision-note prompt before VText records the
+  off-document decision, even when the prompt says no research or execution
+  worker is required.
 
-**next move:** commit the tool-choice repair, push `origin main`, monitor
-CI/deploy, verify staging identity, and rerun staging product-path proof for
-decision recording plus Sources-panel visibility.
+**next move:** repair the no-worker decision-note route preemption, rerun
+focused tests, commit, push `origin main`, monitor CI/deploy, verify staging
+identity, and rerun staging product-path proof for decision recording plus
+Sources-panel visibility.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 

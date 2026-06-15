@@ -126,6 +126,42 @@ Receipts:
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
 
+## 2026-06-15 - No-Worker Decision Route-Preemption Checkpoint
+
+Claim/scope: the exact initial tool-choice repair deployed cleanly, but the
+third staging proof still produced zero decision rows and zero Trace decision
+moments. The VText revision count reached two and canonical content contained
+the decision rationale, proving the process note still leaked into document
+text. Local inspection found a route-preemption cause: broad super-execution
+markers such as "staging proof" and "execution" can divert the initial route
+before VText records an explicit `no_worker_needed` decision.
+
+Move: document the refined route-preemption problem before changing runtime
+routing. Expected Delta V: reopen the landing-only variant into a narrow route
+repair. Actual Delta V: V=1 to V=2, with route repair pending.
+
+Receipts:
+- Commit `d3b8277ff67459d2de47ab00f3d7f1de83725bbd` passed CI run
+  `27518252699`, including Node B deploy.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=d3b8277ff67459d2de47ab00f3d7f1de83725bbd`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781486103418.json`.
+- Proof submission `0e171d1a-e3d6-4109-9938-6a50cea58efb`, document
+  `d25ca47e-ddbe-450c-ab7f-ae6b4daedf90`, initial loop
+  `9f5af4c3-4303-46c2-9bee-64575a708225`.
+- Observed diagnosis decisions `0`, Trace decision moments `0`,
+  `canonical_contains_reason=true`, revision count `2`, forbidden internal
+  routes `[]`.
+- `internal/runtime/runtime.go` checks `vtextPromptNeedsSuperExecution` before
+  starting the initial VText revision run; the marker list includes
+  `"staging proof"` and `"execution"`.
+
+Open edge: let explicit `decision_kind no_worker_needed` / no-worker
+decision-note prompts reach VText decision recording instead of preemptive
+initial super execution, without weakening super routing for real code,
+artifact, verification, or mutation requests.
+
 ## 2026-06-15 - Tool-Choice Root Cause Checkpoint
 
 Claim/scope: the prompt/tool-description repair deployed cleanly, but the
