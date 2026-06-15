@@ -245,3 +245,61 @@ Conjecture delta: C8 supported locally. The prompt-bar VText first-draft loop
 is now explained as a pre-tool-execution guard bug, not a missing seed, not a
 failed edit payload, and not a direct-super routing mistake. Settlement still
 requires CI, deploy, and fresh deployed browser/product proof.
+
+## 2026-06-15 - Settlement: Deployed Prompt-Bar VText V1 Proof Passed
+
+Landed repair commit:
+
+- `bf4f5158f26581e35534b7256043aaced009daa4`
+  `fix: accept duplicate exact VText edit tool calls`.
+
+Local verification:
+
+- Focused runtime tests passed:
+  `TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool`,
+  `TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool`,
+  `TestInitialVTextRunDefaultsMinimalEditContextFromActivation`, and
+  `TestInitialVTextRunWritesFirstAppagentRevisionThroughEdit`.
+- `nix develop -c scripts/go-test-runtime-shards` passed.
+- `scripts/doccheck` passed report-only:
+  `208 docs, 803 warnings`.
+
+CI/deploy:
+
+- CI run `27548635772` passed, including runtime shards, non-runtime Go tests,
+  vet/build, docs truth check, and Node B staging deploy.
+- Docs Truth Check run `27548635796` passed.
+- FlakeHub run `27548635709` passed.
+- `https://choir.news/health` reported proxy and upstream commit
+  `bf4f5158f26581e35534b7256043aaced009daa4`, deployed at
+  `2026-06-15T13:13:36Z`, with `vmctl_status=ok`.
+
+Deployed browser/product proof:
+
+- Artifact: `/tmp/m34-vtext-proof-1781529413860/proof.json`.
+- Fresh passkey user:
+  `m34-proof-1781529413860@example.com`
+  (`5255b8f0-a2a4-4387-b6ad-7754da44a865`).
+- Prompt-bar/conductor run:
+  `1438bb6f-93fe-4e0a-99ac-212a68653391`.
+- VText activation:
+  `6ab801c5-276c-4ebd-a028-8a578629bd50`.
+- VText document:
+  `75c85eba-b07b-41cc-811c-57528ba6f84c`.
+- Appagent V1:
+  `12c2df99-4370-4d98-babf-b680ea36021f`, `version_number=1`, containing
+  marker `M34_DUP_EDIT_FIX_1781529413860`.
+- Trace summary: 28 moments, first VText at stream seq 5, no super moment, no
+  super-before-VText route, and no `model_called_different_initial_tool`
+  retry. Only retry summaries were provider availability fallback from the
+  configured xiaomi/deepseek `402` path before ChatGPT.
+
+Settlement judgment:
+
+- M3.4 first-draft regression is repaired and settled at V=0.
+- The repair did not change VText agency, did not route ordinary prompt-bar
+  work directly to super, and did not force researcher/super sequencing.
+- Residual H001 remains: runtime logs, test names, APIs, and docs still carry
+  parent/child vocabulary and some compatibility semantics. That heresy is
+  discovered and must be repaired or explicitly bounded before M3 lifecycle
+  settlement. It is not accepted architecture and was not repaired by M3.4.

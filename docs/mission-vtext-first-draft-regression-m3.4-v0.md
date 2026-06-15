@@ -71,7 +71,7 @@ control rather than the mission under test.
 
 ## Parallax State
 
-status: working
+status: settled
 
 mission conjecture: if prompt-bar/conductor/VText first-draft ingress is
 repaired and proven through the deployed product path, then M3 can resume
@@ -103,7 +103,7 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: start with the observed staging trace and focused local tests; then
   deploy and prove with browser-driven QA on `https://choir.news`.
 
-variant (ranking function) V: current V=3:
+variant (ranking function) V: current V=0:
 1. completed: record the problem and initial conjectures before code changes;
 2. completed: extract enough failed transition evidence for run
    `386f6c28-5594-4605-ba02-5c90387be3ad`: conductor decision, document id,
@@ -116,8 +116,8 @@ variant (ranking function) V: current V=3:
 5. completed: extract the failed deployed `edit_vtext` tool result/arguments
    from VText activation `20f1b17d-c8b5-4bfe-b17e-2ac546e77f5f`;
 6. completed locally: implement the third repair against that failed transition;
-7. remaining: verify deployed product path with browser/computer-use evidence;
-8. remaining: update M3 goalstring only after deployed proof shows prompt-bar VText V1
+7. completed: verify deployed product path with browser/computer-use evidence;
+8. completed for this mission: update M3 readiness only after deployed proof shows prompt-bar VText V1
    creation and no indefinite pending state.
 
 budget: one urgent red-surface repair pass before M3. If root cause crosses VM
@@ -137,12 +137,13 @@ fresh prompt through the real prompt bar, VText V1 content observed in UI/API,
 Trace showing conductor then VText, no super before VText, pending mutation
 cleared or honestly failed, and residual risks.
 
-heresy delta: discovered: the product can open a VText artifact and then leave
-the owner in an indefinite first-draft pending state after repeated tool-use
-responses and VM restart/passivation. Discovered: H001 parent/child ontology
-still appears in runtime logs, APIs, tests, and mission docs. Introduced: none
-accepted. Repaired: none accepted for this deployed regression; local repair
-candidates have been falsified by staging until a fresh proof passes.
+heresy delta: discovered: the product could open a VText artifact and then
+leave the owner in an indefinite first-draft pending state after repeated
+tool-use responses and VM restart/passivation. Repaired: exact initial
+tool-choice duplicate handling now allows VText to execute the first
+`edit_vtext` and create V1. Discovered but not repaired here: H001
+parent/child ontology still appears in runtime logs, APIs, tests, and mission
+docs. Introduced: none accepted.
 
 position / live conjectures / open edges:
 - C1 supported: prompt-bar seed is not necessarily lost. Code intentionally stores
@@ -194,12 +195,17 @@ position / live conjectures / open edges:
   same-tool duplicate calls and adds a regression test proving one canonical
   edit executes, the duplicate notice is non-error, and terminal success ends
   the VText turn.
+- C9 supported on staging: deployed commit
+  `bf4f5158f26581e35534b7256043aaced009daa4` passed CI/deploy and fresh-auth
+  browser product proof. The prompt-bar trajectory created user V0 and
+  appagent V1 with marker `M34_DUP_EDIT_FIX_1781529413860`; Trace showed
+  conductor -> VText, no super before VText, and no
+  `model_called_different_initial_tool` retry. Provider fallback `402`
+  noise remains, but it no longer prevents V1 creation.
 
-next move: run focused and wider runtime checks, commit/push the local repair,
-monitor CI and Node B deploy, then run a fresh-auth browser/product proof on
-`https://choir.news`. Acceptance still requires non-empty V1, cleared pending
-state or precise blocker, and trace evidence showing conductor -> VText before
-any super.
+next move: do not reopen M3.4 unless prompt-bar first-draft proof regresses.
+Before M3 settlement, either repair or explicitly bound H001 parent/child
+runtime residue in the M3 lifecycle paradoc. H001 is not accepted architecture.
 
 ledger file: `docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md`
 
@@ -207,18 +213,24 @@ version / lineage: spawned from M3.3/M3 readiness review after owner-reported
 manual QA regression on 2026-06-15. Blocks M3 until settled or explicitly
 superseded by a narrower root-cause mission.
 
-learning state: early evidence suggests the acceptance portfolio over-weighted
-API/trace route proofs and under-weighted browser-driven manual QA of the core
-artifact loop. Promote a durable acceptance once the repair lands.
+learning state: promote a durable acceptance for prompt-bar -> conductor ->
+VText V1 creation with same-tool duplicate `edit_vtext` calls. The acceptance
+portfolio over-weighted route proofs and under-weighted browser-driven/manual
+QA of the core artifact loop.
 
-settlement: settled only after deployed browser/product proof shows a fresh
-prompt-bar submission creates a non-empty appagent V1 within a bounded window,
-VText pending state clears or turns into a precise blocker, trace shows
-VText-first ingress, and no runtime/code change remains unverified by CI and
-staging.
+settlement: settled on 2026-06-15 by deployed browser/product proof against
+`https://choir.news` at `bf4f5158f26581e35534b7256043aaced009daa4`.
+Fresh passkey user `m34-proof-1781529413860@example.com` submitted prompt-bar
+run `1438bb6f-93fe-4e0a-99ac-212a68653391`, which opened VText activation
+`6ab801c5-276c-4ebd-a028-8a578629bd50`, document
+`75c85eba-b07b-41cc-811c-57528ba6f84c`, and appagent V1
+`12c2df99-4370-4d98-babf-b680ea36021f` containing marker
+`M34_DUP_EDIT_FIX_1781529413860`. Trace had first VText at stream seq 5,
+no super, and no `model_called_different_initial_tool` retry. Artifact:
+`/tmp/m34-vtext-proof-1781529413860/proof.json`.
 
 ## Suggested Goal String
 
 ```text
-/goal Run docs/mission-vtext-first-draft-regression-m3.4-v0.md with Parallax. Treat this as a red protected-surface repair before M3. Start from the Parallax State, append moves to docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md, and do not change runtime code until the failed-deployed-proof checkpoint is committed or preserved. The latest deployed proof after 3b7e4c2b1571ca055be4826b686c782292a7a884 created prompt-bar/conductor run 60a1370c-4b88-43cc-96d4-0541719234e1, VText activation 20f1b17d-c8b5-4bfe-b17e-2ac546e77f5f, document 64478c33-ad21-45e7-bd6c-3f1c28590bd1, owner efae891d-8eca-4719-9409-f9de2c8b8999, and VM vm-3797c196ac56cdf0607eb6fe1356cab8 at 10.200.67.2:8085; it still produced only user-authored V0 while logs repeated exact edit_vtext calls. First extract the edit_vtext tool-result/argument payloads through product trace/diagnosis or read-only VM/store inspection. Preserve invariants: VText is the artifact control plane; no direct-super ingress for ordinary prompts; no forced researcher/super sequence; no indefinite Writing first draft state; parent/child ontology is H001 residue, not accepted architecture. Implement only the narrow root-cause repair, then verify with focused tests, CI, Node B deploy, staging health identity, and browser/computer-use proof that a fresh prompt-bar prompt creates a non-empty V1, clears pending state or records a precise blocker, and shows conductor -> VText before any super.
+/goal M3.4 is settled in docs/mission-vtext-first-draft-regression-m3.4-v0.md. Do not reopen it unless prompt-bar first-draft proof regresses. Settlement commit bf4f5158f26581e35534b7256043aaced009daa4 repaired exact initial tool-choice handling so same-tool duplicate edit_vtext responses execute one canonical VText edit instead of retrying forever. Before M3 settlement, carry forward the residual H001 obligation: parent/child runtime vocabulary and control residue remain a discovered heresy, not accepted architecture.
 ```
