@@ -1182,3 +1182,24 @@ stale per-user runtime/package despite `/health` reporting the new default
 upstream SHA, or whether another prompt-bar route path still calls persistent
 super before the repaired `ensureConductorVTextRoute` branch. Do not make the
 next behavior fix until this checkpoint is committed.
+
+## 2026-06-15 - VMCTL Runtime Package Pointer Repair
+
+Claim/scope: the deployed super-first route was caused by a deployment boundary,
+not by the local prompt-bar route branch. `internal/runtime/*` changes selected
+the fast host service pointer deploy for `sandbox` and restarted vmctl, but
+vmctl's `VMCTL_SANDBOX_PACKAGE_DIR` still pointed at the NixOS closure
+`${goChoirPackages.sandbox}`. Fresh VM guests and hot-refresh restarts could
+therefore fetch a stale sandbox package from vmctl even while the host
+`go-choir-sandbox` service and `/health` deploy metadata reported the new SHA.
+
+Move: point `VMCTL_SANDBOX_PACKAGE_DIR` at
+`/var/lib/go-choir/services/sandbox`, the same service pointer updated by the
+fast deploy path. Expected Delta V: close the stale VM runtime package
+discriminator so future sandbox runtime service-pointer deploys feed active and
+fresh interactive computers the same package as the host sandbox service. Actual
+Delta V: pending CI/deploy and deployed route proof.
+
+Open edge: land this host configuration repair, verify vmctl and active/fresh
+interactive computers fetch the current sandbox runtime package, then rerun the
+VText control-plane deployed proof.
