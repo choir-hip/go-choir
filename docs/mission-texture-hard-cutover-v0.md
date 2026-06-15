@@ -146,7 +146,7 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: docs and detector warnings -> focused local tests -> staging deploy
   identity -> browser product proof -> protocol canonization.
 
-variant (ranking function) V: current V=7; last ΔV=-1:
+variant (ranking function) V: current V=6; last ΔV=-1:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
@@ -167,8 +167,9 @@ variant (ranking function) V: current V=7; last ΔV=-1:
    use Texture-oriented wording and `edit_texture` /
    `record_texture_decision` affordances without adding runtime semantic
    decision trees;
-8. current V includes: prompt-bar first-revision product proof must pass under
-   Texture names;
+8. discharged for the current product-facing slice: deployed prompt-bar ->
+   conductor -> Texture first-revision proof passed under `/api/texture` and
+   `edit_texture`, with no super-before-Texture trace;
 9. current V includes: transclusion pinned-ref plus newer-version indicator
    proof is not yet present;
 10. current V includes: Texture Protocol v0 is intentionally unwritten until
@@ -223,21 +224,21 @@ position / live conjectures / open edges:
 - C5 active: protocol design before proof risks cathedral-building. The
   protocol should be the last deliverable, distilled from the working minimal
   surface.
-- C6 supported for local scope: `/api/texture` is registered and exercised by
-  focused tests and frontend API callers, while `/api/vtext` remains an
-  explicitly temporary compatibility shim. This does not yet prove staging or
-  authorize shim deletion.
-- C7 repaired locally, CI pending: CI exposed a Universal Wire publication compatibility
+- C6 supported for deployed product-route scope: `/api/texture` is registered
+  and exercised by focused tests, frontend API callers, and staging
+  Playwright product proof. `/api/vtext` remains an explicitly temporary
+  compatibility shim; this does not authorize shim deletion.
+- C7 repaired and CI-green: CI exposed a Universal Wire publication compatibility
   regression. The route/tool slice made new Texture revisions write
   `source=edit_texture`, but the `internal/wirepublish` autonomous publication
   eligibility package still accepted only the retired edit-source metadata.
   Result: runtime shards 2 and 3 failed before staging deploy, with missing
   edition transclusion and missing in-flight publication work item evidence.
-  The local repair accepts current Texture metadata plus deletion-receipted
-  legacy metadata in the wire publish/read predicates.
+  The repair accepts current Texture metadata plus deletion-receipted legacy
+  metadata in the wire publish/read predicates; the rerun passed CI and staged.
 
-next move: commit and push the wire compatibility repair, then rerun the
-landing loop through CI, staging deploy identity, and deployed product proof.
+next move: continue the broader UI/internal symbol cutover and the
+transclusion pinned-ref/newer-version proof before protocol v0.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -262,16 +263,13 @@ Use Parallax on docs/mission-texture-hard-cutover-v0.md. Treat it as the source
 program for the Texture hard cutover before M3 resumes. Texture is the promoted
 ontology for Choir's versioned, transclusive artifact control plane; the old
 V-name is migration residue allowed only in the historical background doc and
-explicit historical mission evidence. Current status is open_handoff with V=7.
+explicit historical mission evidence. Current status is open_handoff with V=6.
 The read-only retired-name inventory, Problem Documentation First checkpoint,
 report-only H5 docs checker, operating-contract Texture reconciliation, and a
-local product-facing route/tool/prompt slice are landed or ready to land. Continue
-renaming docs/code/prompts/UI/tests/tool affordances toward Texture, preserve one
-Texture writer among agents, keep human direct edits canonical, keep super
-downstream of Texture for privileged execution, and avoid runtime semantic
-decision trees. Prove prompt-bar ->
-conductor -> Texture first revision through staging browser/computer-use
-evidence, including history/source surfaces and no super-before-Texture route.
+deployed product-facing route/tool/prompt slice are landed. Continue renaming
+docs/code/prompts/UI/tests/tool affordances toward Texture, preserve one Texture
+writer among agents, keep human direct edits canonical, keep super downstream of
+Texture for privileged execution, and avoid runtime semantic decision trees.
 Transclusions should pin version refs by default and show newer versions when
 available. Do not canonize a Texture Protocol upfront; make protocol v0 the last
 deliverable after the working minimal product surface is proven. Append moves

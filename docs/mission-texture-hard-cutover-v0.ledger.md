@@ -212,3 +212,67 @@ Receipts:
 
 Open edge: the repair has not yet passed pushed CI, deployed to staging, or
 received browser/product-path acceptance proof.
+
+## 2026-06-15 - Staging Product Proof For Texture First Revision
+
+Claim: the product-facing Texture route/tool slice is deployed and preserves
+the core prompt-bar -> conductor -> Texture first-revision loop under the new
+`/api/texture` and `edit_texture` affordances.
+
+Move: push the docs checkpoint and repair commits, monitor CI/deploy, verify
+staging identity, and run a temporary authenticated Playwright proof against
+`https://choir.news`. The scratch spec was removed after the run; evidence was
+written outside the repo.
+
+Expected ΔV: -1 by discharging the deployed prompt-bar first-revision proof
+for the current product-facing Texture slice.
+
+Actual ΔV: -1. V moves from 7 to 6. This proves the first-revision loop for a
+fully supplied prompt; it does not discharge the broader UI/internal symbol
+cutover, transclusion proof, compatibility-shim deletion, or protocol v0.
+
+Receipts:
+- pushed commit:
+  `be76501c5eba0bbb65ceb132d597f57a281affb9`
+  (`runtime: accept texture wire publish metadata`), after docs checkpoint
+  `d7b7e8e0` and runtime route/tool slice `8d8ee883`.
+- CI run `27581914180`: success. Runtime shards 0-3, non-runtime tests,
+  integration-tagged smoke, Go vet/build, Docs Truth Check job, TLA+ model
+  check, final Go gate, and Node B staging deploy job passed.
+- Docs Truth Check run `27581913968`: success.
+- FlakeHub publish run `27581913969`: success.
+- Staging health: `https://choir.news/health` reported proxy and sandbox
+  commit `be76501c5eba0bbb65ceb132d597f57a281affb9`, deployed at
+  `2026-06-15T23:00:02Z`.
+- Staging acceptance command:
+  `PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000 npm --prefix frontend run e2e -- tests/texture-cutover-staging.tmp.spec.js`
+  passed, 1 test, 8.8s.
+- Staging evidence artifact:
+  `/tmp/texture-cutover-staging-proof-1781564582210.json`.
+- Product evidence ids: prompt-bar submission
+  `68bd8e67-3bb9-4aa8-bbbd-151d6df698d8`; Texture document
+  `a73a2f12-9e95-45fd-a75e-6ab50ab2ec80`; user revision
+  `4932cab1-0f56-487b-911a-24d4fa72c32f`; initial Texture loop
+  `6cd68262-7c42-4d26-98ed-427ba4a3533e`; appagent revision
+  `bde617a9-5630-42ce-9395-d5480197d85e`.
+- Product observations: `/api/texture/documents/{id}`,
+  `/api/texture/documents/{id}/revisions`,
+  `/api/texture/documents/{id}/history`, and
+  `/api/texture/documents/{id}/diagnosis?limit=10&include_content=false`
+  returned authenticated product-path evidence; the appagent revision carried
+  `metadata.source=edit_texture`; history included the appagent revision; the
+  diagnosis/source surface returned the target document.
+- Trace ordering: agents were conductor
+  `conductor:f8052051-08d1-4d3a-a519-d6694ab3ad0e` first at
+  `2026-06-15T23:03:14Z`, then Texture
+  `vtext:a73a2f12-9e95-45fd-a75e-6ab50ab2ec80` at
+  `2026-06-15T23:03:19Z`. No super agent appeared before Texture; no super
+  agent appeared in this proof trajectory.
+- Rollback ref: revert runtime commits `8d8ee883` and `be76501c` (plus
+  docs-only checkpoint `d7b7e8e0` if reverting the mission record) to return to
+  pre-runtime-cutover commit `53af096a`.
+
+Open edge: continue reducing retired-name residue, rename UI/internal symbols,
+prove pinned transclusion/newer-version behavior, delete compatibility shims
+with receipts, and write Texture Protocol v0 only after the working surface is
+settled.
