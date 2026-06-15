@@ -68,3 +68,50 @@ Receipts:
 
 Open edge: implement proxy-owned durable recovery/status or prove that vmctl job
 records are required. No runtime code has been changed in this checkpoint.
+
+## 2026-06-15T10:57:20Z - Local Durable Recovery Repair
+
+Claim/scope: proxy-owned durable recovery/status is sufficient for the local
+first-load cancel/reload-success shape. Once an authenticated owner asks for
+recovery, browser request cancellation must not cancel the underlying vmctl
+refresh; later compute status/bootstrap should observe the completed route.
+
+Move: implemented a proxy recovery tracker and refactored
+`HandleComputeRecovery` so `wake_current_computer`/`resume_current_computer`
+starts or joins a detached owner/desktop recovery operation. Fast vmctl
+completion still returns the existing synchronous `200` response. Slow recovery
+can return `202`, and canceled browser requests return without canceling the
+detached vmctl work. `/api/compute/status` now includes a redacted `recovery`
+object but keeps current computer/runtime facts from a fresh lookup/probe rather
+than overlaying terminal recovery snapshots.
+
+Expected Delta V: -2 for deterministic regression plus local repair. Actual
+Delta V: -2 locally. Staging deploy/proof and Universal Wire route separation
+remain open, so the mission is not settled.
+
+Receipts:
+
+- Regression:
+  `TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady`
+  cancels the browser recovery request while vmctl refresh is blocked, verifies
+  the vmctl refresh context remains live, observes `recovery.status=refreshing`
+  through compute status, releases refresh, then verifies status `ready` and
+  bootstrap `200` with the recovered sandbox id.
+- Compatibility regression:
+  `TestComputeRecoveryWakeKeepsObservationWhenUnreachableRefreshFails` preserves
+  the previous behavior where a refresh failure after successful lookup returns
+  the current unreachable runtime observation instead of converting the whole
+  recovery response to `502`.
+- Focused checks passed:
+  `nix develop -c go test ./internal/proxy -run 'TestComputeRecovery' -count=1`;
+  `nix develop -c go test -race ./internal/proxy -run 'TestComputeRecovery' -count=1`;
+  `nix develop -c go test ./internal/proxy -count=1`.
+- Broad check on the final staged state passed:
+  `nix develop -c scripts/go-test-local`.
+- Independent prover found two blocking issues before this ledger entry:
+  terminal recovery snapshots could stale-overlay fresh compute status, and
+  refresh failure on an existing unhealthy current computer had become a `502`.
+  Both were repaired before commit.
+
+Open edge: commit, push, monitor CI/deploy, prove staging owner-path recovery,
+and report or repair the stale Universal Wire/sourcecycled route separately.

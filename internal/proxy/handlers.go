@@ -105,6 +105,7 @@ type Handler struct {
 	sandboxURL   *url.URL      // parsed sandbox URL for WS dial derivation
 	vmctlClient  *vmctl.Client // optional vmctl client for VM-backed routing
 	lifecycle    *lifecycleRecorder
+	recoveries   *computeRecoveryTracker
 }
 
 // NewHandler creates a proxy Handler with the given config and auth public key.
@@ -215,6 +216,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		sandboxURL:  sandboxURL,
 		vmctlClient: vmctlCli,
 		lifecycle:   newLifecycleRecorder(),
+		recoveries:  newComputeRecoveryTracker(),
 	}, nil
 }
 

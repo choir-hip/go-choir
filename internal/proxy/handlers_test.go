@@ -3381,6 +3381,90 @@ func TestComputeRecoveryWakeRefreshesUnreachableCurrentComputer(t *testing.T) {
 	}
 }
 
+func TestComputeRecoveryWakeKeepsObservationWhenUnreachableRefreshFails(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate ed25519 key: %v", err)
+	}
+
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "boot_pending"})
+	})
+	sandboxSrv := httptest.NewServer(sandboxMux)
+	t.Cleanup(func() { sandboxSrv.Close() })
+
+	var refreshCalled atomic.Bool
+	writeOwnership := func(w http.ResponseWriter) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"vm_id":          "vm-refresh-fails",
+			"user_id":        "compute-refresh-fails-user",
+			"desktop_id":     vmctl.PrimaryDesktopID,
+			"kind":           string(vmctl.VMKindInteractive),
+			"warmness_class": "primary",
+			"published":      true,
+			"sandbox_url":    sandboxSrv.URL,
+			"state":          string(vmctl.VMStateActive),
+			"created_at":     "2026-06-15T10:00:00.000Z",
+			"last_active_at": "2026-06-15T10:01:00.000Z",
+			"epoch":          8,
+		})
+	}
+
+	vmctlMux := http.NewServeMux()
+	vmctlMux.HandleFunc("/internal/vmctl/lookup", func(w http.ResponseWriter, r *http.Request) {
+		writeOwnership(w)
+	})
+	vmctlMux.HandleFunc("/internal/vmctl/refresh", func(w http.ResponseWriter, r *http.Request) {
+		refreshCalled.Store(true)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "refresh failed"})
+	})
+	vmctlMux.HandleFunc("/internal/vmctl/list", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"ownerships": []any{}})
+	})
+	vmctlSrv := httptest.NewServer(vmctlMux)
+	t.Cleanup(func() { vmctlSrv.Close() })
+
+	cfg := &Config{
+		Port:              "0",
+		SandboxURL:        sandboxSrv.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+		VmctlURL:          vmctlSrv.URL,
+	}
+	handler, err := NewHandler(cfg, pub)
+	if err != nil {
+		t.Fatalf("NewHandler with vmctl: %v", err)
+	}
+
+	token := issueTestAccessJWT(priv, "compute-refresh-fails-user")
+	req := httptest.NewRequest(http.MethodPost, "/api/compute/recovery", strings.NewReader(`{"action":"wake_current_computer"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	w := httptest.NewRecorder()
+	handler.HandleAPI(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("compute recovery = %d, want 200 body=%s", w.Code, w.Body.String())
+	}
+	if !refreshCalled.Load() {
+		t.Fatal("expected recovery to attempt refresh")
+	}
+	var result computeRecoveryResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode recovery response: %v", err)
+	}
+	if !result.OK {
+		t.Fatal("recovery response ok=false")
+	}
+	if result.Runtime == nil || result.Runtime.Reachable {
+		t.Fatalf("runtime after failed refresh = %+v, want unreachable observation", result.Runtime)
+	}
+	if result.CurrentComputer.State != string(vmctl.VMStateActive) {
+		t.Fatalf("current computer state = %s, want active observation", result.CurrentComputer.State)
+	}
+}
+
 func TestComputeRecoveryWakeRefreshesCurrentComputerWithoutBlockingResolve(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
@@ -3559,6 +3643,198 @@ func TestComputeRecoveryWakeRefreshesStoppedCurrentComputerWhenResolveFails(t *t
 	}
 	if result.Runtime == nil || !result.Runtime.Reachable {
 		t.Fatalf("runtime after stopped fallback refresh = %+v, want reachable", result.Runtime)
+	}
+}
+
+func TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate ed25519 key: %v", err)
+	}
+
+	var refreshed atomic.Bool
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if !refreshed.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "boot_pending"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "sandbox"})
+	})
+	sandboxMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if !refreshed.Load() {
+			w.WriteHeader(http.StatusBadGateway)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "route not ready"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"sandbox_id": "vm-cancel-recovered"})
+	})
+	sandboxSrv := httptest.NewServer(sandboxMux)
+	t.Cleanup(func() { sandboxSrv.Close() })
+
+	refreshStarted := make(chan struct{})
+	releaseRefresh := make(chan struct{})
+	refreshDone := make(chan struct{})
+	var refreshStartedClosed atomic.Bool
+	var refreshContextCanceled atomic.Bool
+
+	writeOwnership := func(w http.ResponseWriter, state string) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"vm_id":          "vm-cancel-recovered",
+			"user_id":        "compute-cancel-recovery-user",
+			"desktop_id":     vmctl.PrimaryDesktopID,
+			"kind":           string(vmctl.VMKindInteractive),
+			"warmness_class": "primary",
+			"published":      true,
+			"sandbox_url":    sandboxSrv.URL,
+			"state":          state,
+			"created_at":     "2026-06-15T10:00:00.000Z",
+			"last_active_at": "2026-06-15T10:01:00.000Z",
+			"epoch":          7,
+		})
+	}
+
+	vmctlMux := http.NewServeMux()
+	vmctlMux.HandleFunc("/internal/vmctl/lookup", func(w http.ResponseWriter, r *http.Request) {
+		writeOwnership(w, string(vmctl.VMStateActive))
+	})
+	vmctlMux.HandleFunc("/internal/vmctl/resolve", func(w http.ResponseWriter, r *http.Request) {
+		writeOwnership(w, string(vmctl.VMStateActive))
+	})
+	vmctlMux.HandleFunc("/internal/vmctl/refresh", func(w http.ResponseWriter, r *http.Request) {
+		if refreshStartedClosed.CompareAndSwap(false, true) {
+			close(refreshStarted)
+		}
+		defer close(refreshDone)
+		select {
+		case <-r.Context().Done():
+			refreshContextCanceled.Store(true)
+			return
+		case <-releaseRefresh:
+		}
+		refreshed.Store(true)
+		writeOwnership(w, string(vmctl.VMStateActive))
+	})
+	vmctlMux.HandleFunc("/internal/vmctl/list", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"ownerships": []any{}})
+	})
+	vmctlMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "vmctl"})
+	})
+	vmctlSrv := httptest.NewServer(vmctlMux)
+	t.Cleanup(func() { vmctlSrv.Close() })
+
+	cfg := &Config{
+		Port:              "0",
+		SandboxURL:        sandboxSrv.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+		VmctlURL:          vmctlSrv.URL,
+	}
+	handler, err := NewHandler(cfg, pub)
+	if err != nil {
+		t.Fatalf("NewHandler with vmctl: %v", err)
+	}
+
+	token := issueTestAccessJWT(priv, "compute-cancel-recovery-user")
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodPost, "/api/compute/recovery", strings.NewReader(`{"action":"wake_current_computer"}`)).WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	w := httptest.NewRecorder()
+	handlerDone := make(chan struct{})
+	go func() {
+		handler.HandleAPI(w, req)
+		close(handlerDone)
+	}()
+
+	select {
+	case <-refreshStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("recovery did not reach vmctl refresh")
+	}
+	cancel()
+	select {
+	case <-handlerDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled recovery request did not return")
+	}
+
+	statusReq := httptest.NewRequest(http.MethodGet, "/api/compute/status", nil)
+	statusReq.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	statusW := httptest.NewRecorder()
+	handler.HandleAPI(statusW, statusReq)
+	if statusW.Code != http.StatusOK {
+		t.Fatalf("compute status during recovery = %d, want 200 body=%s", statusW.Code, statusW.Body.String())
+	}
+	var statusDuring computeStatusResponse
+	if err := json.NewDecoder(statusW.Body).Decode(&statusDuring); err != nil {
+		t.Fatalf("decode status during recovery: %v", err)
+	}
+	if statusDuring.Recovery == nil || !statusDuring.Recovery.Active || statusDuring.Recovery.Status != "refreshing" {
+		t.Fatalf("status during recovery = %+v, want active refreshing", statusDuring.Recovery)
+	}
+
+	select {
+	case <-refreshDone:
+		t.Fatal("vmctl refresh ended before release; likely inherited the canceled browser context")
+	case <-time.After(50 * time.Millisecond):
+	}
+	if refreshContextCanceled.Load() {
+		t.Fatal("vmctl refresh inherited canceled browser request context")
+	}
+	close(releaseRefresh)
+	select {
+	case <-refreshDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("detached vmctl refresh did not complete")
+	}
+
+	readyDeadline := time.Now().Add(2 * time.Second)
+	var statusAfter computeStatusResponse
+	for time.Now().Before(readyDeadline) {
+		statusReq := httptest.NewRequest(http.MethodGet, "/api/compute/status", nil)
+		statusReq.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+		statusW := httptest.NewRecorder()
+		handler.HandleAPI(statusW, statusReq)
+		if statusW.Code != http.StatusOK {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if err := json.NewDecoder(statusW.Body).Decode(&statusAfter); err != nil {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if statusAfter.Recovery != nil &&
+			!statusAfter.Recovery.Active &&
+			statusAfter.Recovery.Status == "ready" &&
+			statusAfter.CurrentComputer.State == string(vmctl.VMStateActive) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if statusAfter.Recovery == nil ||
+		statusAfter.Recovery.Active ||
+		statusAfter.Recovery.Status != "ready" ||
+		statusAfter.CurrentComputer.State != string(vmctl.VMStateActive) {
+		t.Fatalf("status after recovery = recovery:%+v current:%+v, want ready active", statusAfter.Recovery, statusAfter.CurrentComputer)
+	}
+
+	bootstrapReq := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	bootstrapReq.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	bootstrapW := httptest.NewRecorder()
+	handler.HandleBootstrap(bootstrapW, bootstrapReq)
+	if bootstrapW.Code != http.StatusOK {
+		t.Fatalf("bootstrap after detached recovery = %d, want 200 body=%s", bootstrapW.Code, bootstrapW.Body.String())
+	}
+	var bootstrap map[string]string
+	if err := json.NewDecoder(bootstrapW.Body).Decode(&bootstrap); err != nil {
+		t.Fatalf("decode bootstrap after detached recovery: %v", err)
+	}
+	if bootstrap["sandbox_id"] != "vm-cancel-recovered" {
+		t.Fatalf("bootstrap sandbox_id = %q, want vm-cancel-recovered", bootstrap["sandbox_id"])
 	}
 }
 

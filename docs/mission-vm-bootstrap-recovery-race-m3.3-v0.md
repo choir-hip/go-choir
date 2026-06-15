@@ -49,7 +49,7 @@ before M3 uses vmctl refresh/restart as lifecycle-settlement evidence.
 
 ## Parallax State
 
-status: open_handoff
+status: working
 
 mission conjecture: if bootstrap/recovery becomes a durable, owner-scoped
 computer lifecycle transition that survives browser request cancellation and
@@ -83,15 +83,16 @@ invariants / qualities / domain ramp (I/Q/D):
   staging owner-path proof on `https://choir.news`; optional separate staging
   proof or blocker for the Universal Wire platform route.
 
-variant (ranking function) V: 4.
+variant (ranking function) V: 2.
 1. reproduce or synthesize a deterministic first-load cancel/reload-success
-   failure shape; (documented from current code inspection; regression still
-   pending)
+   failure shape; (implemented in
+   `TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady`)
 2. identify whether the fix belongs in proxy recovery context, vmctl recovery
    job semantics, frontend boot polling, or a combination; (current evidence:
    proxy-owned durable recovery/status is the narrow v0 locus; vmctl job records
    are not yet required)
-3. implement the narrow durable recovery/status repair with tests;
+3. implement the narrow durable recovery/status repair with tests; (local proxy
+   repair implemented; focused checks, race check, and broad local gate passed)
 4. deploy and prove the owner-path first-load recovery behavior on staging;
 5. separate or repair the stale Universal Wire/sourcecycled 502 route so health
    counters no longer hide owner bootstrap regressions.
@@ -134,13 +135,22 @@ position / live conjectures / open edges:
   operations: detach the owner-authorized refresh/wake operation from the
   browser request context, coalesce it per owner/desktop, expose redacted
   `recovery_status`/state through compute status, and let bootstrap polling
-  observe the refreshed route when vmctl completes. Explicit vmctl job records
-  remain a successor only if proxy-owned status cannot carry staging proof.
+  observe the refreshed route when vmctl completes.
+- C5 supported locally: proxy-owned status is enough for the deterministic unit
+  shape. The implementation starts a detached, coalesced recovery operation
+  after authentication, waits for fast completion to preserve existing
+  synchronous success behavior, returns/ends safely when the browser request is
+  canceled or slow, and exposes only redacted `recovery` status through compute
+  status. Status does not overlay terminal recovery current/runtime snapshots on
+  fresh lookup results, avoiding stale route reports after later lifecycle
+  changes. Explicit vmctl job records remain a successor only if staging shows
+  proxy-owned status is insufficient.
 
-next move: add the deterministic regression where `/api/compute/recovery` starts
-an authenticated owner recovery, the client request cancels before vmctl refresh
-returns, the refresh still completes, `/api/compute/status` reports redacted
-progress/ready state, and the next bootstrap succeeds without manual reload.
+next move: commit the runtime fix referencing problem checkpoint `397c1865`,
+push to `origin/main`, monitor CI/deploy, verify staging build identity, and run
+deployed owner-path acceptance. Also inspect/report the Universal
+Wire/sourcecycled platform-route 502 separately so aggregate health does not
+hide owner bootstrap behavior.
 
 ledger file: `docs/mission-vm-bootstrap-recovery-race-m3.3-v0.ledger.md`
 
