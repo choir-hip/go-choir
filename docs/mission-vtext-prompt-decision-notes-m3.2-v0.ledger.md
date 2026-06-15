@@ -256,6 +256,42 @@ Receipts:
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
 
+## 2026-06-15 - Staging Detector-Level Route Repair Checkpoint
+
+Claim/scope: the detector-level no-worker route repair deployed cleanly, but
+the deployed product proof still recorded zero VText decisions and zero Trace
+decision moments. The private no-worker reason stayed out of canonical text,
+but Trace agent summary still showed `super` before VText, so staging still has
+a super-first route path before the deterministic VText decision record exists.
+
+Move: document the deployed failure before changing runtime routing again.
+Expected Delta V: reopen landing-only variant into a focused deployed route
+diagnostic. Actual Delta V: V=1 to V=2, with the remaining super-first route
+path pending.
+
+Receipts:
+- Commit `9c11fab05c5d5f24e9d869a721a25a1455ce63b5` passed CI run
+  `27520566861`, Docs Truth Check `27520566862`, and FlakeHub publish
+  `27520566875`.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=9c11fab05c5d5f24e9d869a721a25a1455ce63b5`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781491001897.json`.
+- Deployed proof screenshot:
+  `/tmp/vtext-decision-staging-proof-1781491001897.png`.
+- Proof submission `c0599cdc-5591-4fba-bb4b-372e066b44a6`, document
+  `e3774182-f2c2-40f5-9268-fe5230652643`, initial loop
+  `a89ff657-1530-4516-9d24-436407808b91`.
+- Observed diagnosis decisions `0`, Trace decision moments `0`,
+  `canonical_contains_reason=false`, revision count `2`, forbidden internal
+  routes `[]`.
+- Trace agent summary included conductor, `super`, and VText; `super` first
+  appeared before VText.
+
+Open edge: run a focused public Trace diagnostic for the deployed `9c11` path
+to identify which route bypasses the no-worker guard, then repair that route
+with local route coverage before another push/deploy/proof loop.
+
 ## 2026-06-15 - Prompt-Bar Route-Contract Checkpoint
 
 Claim/scope: the local no-worker route-preemption repair deployed cleanly, but

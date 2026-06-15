@@ -222,11 +222,17 @@ states reasons without forcing choreography.
   now returns false for explicit prompt-bar no-worker decision routes before
   scanning super-execution markers, while operational proof prompts still route
   to persistent super.
+- Deployed detector-level no-worker repair failed: staging at
+  `9c11fab05c5d5f24e9d869a721a25a1455ce63b5` still produced zero decision
+  records and zero Trace decision moments for the explicit no-worker decision
+  prompt. The canonical private-reason leak stayed repaired, but public Trace
+  agent summary still showed `super` before VText. The remaining gap is still a
+  deployed super-first route path, not document-body pollution.
 
-**next move:** commit the detector-level no-worker repair, push `origin main`,
-monitor CI/deploy, verify staging identity, and rerun deployed product-path
-proof for decision row, Trace decision moment, no forbidden routes, and no
-private reason in canonical text.
+**next move:** run a focused public Trace route diagnostic for deployed
+`9c11fab05c5d5f24e9d869a721a25a1455ce63b5`, then repair the actual
+prompt-bar-to-VText path that still lets `super` own the initial loop before
+the deterministic VText decision record exists.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
