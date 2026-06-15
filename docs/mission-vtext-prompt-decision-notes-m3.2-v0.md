@@ -94,14 +94,18 @@ control plane.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=2:
-1. update deployed acceptance so super before VText fails, super after VText is
-   allowed only when VText requested it, and explicit owner-requested decision
-   notes still create `vtext_decisions` rows and Trace/log projections without
-   leaking into canonical text.
-2. land/push/monitor CI/deploy, verify staging identity, and run prompt-bar plus
-   source/news/article product-path proof with downstream work attached back to
-   VText/artifact context.
+**variant (ranking function) V:** current V=3:
+1. discriminate why browser-public authenticated prompt-bar traffic on staging
+   still returns `initial_loop_id` for a `super` run even though `/health`
+   reports deployed commit `eae9a96f59e1fd7420ae7283374f2cafdbe798e8` for the
+   proxy and default upstream sandbox.
+2. repair the remaining deployed route/package/runtime boundary so prompt-bar
+   VText ingress starts with VText before any super run.
+3. rerun deployed acceptance so super before VText fails, super after VText is
+   allowed only when VText requested it, explicit owner-requested decision notes
+   create `vtext_decisions` rows plus Trace/log projections without leaking
+   into canonical text, and source/news/article product paths attach downstream
+   work back to VText/artifact context where product-path proof is available.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
 if the tool/table/UI path exceeds one mission, split after the problem
@@ -129,6 +133,13 @@ states reasons without forcing choreography.
 - C0 active: VText is Choir's artifact control plane. Conductor routes
   exogenous input into VText-owned artifact state; super is downstream execution
   authority that VText may request later.
+- C0a active: local route code now starts prompt-bar VText materialization with
+  VText, but deployed browser-public proof on
+  `eae9a96f59e1fd7420ae7283374f2cafdbe798e8` still observed
+  `initial_loop_id` resolving to a `super` run for fresh authenticated
+  prompt-bar submissions. The next discriminator is whether active prompt-bar
+  traffic still executes stale per-user runtime/package code or another route
+  path outside the locally repaired branch.
 - C1 active: VText needs strong delegation pressure for factual/current/source,
   generated-artifact, execution, and verification work, but this pressure should
   live as reasoned obligation language, not tool-order enforcement.
@@ -928,20 +939,26 @@ implementation complete, deployed proof pending.
 ```text
 Use Parallax on docs/mission-vtext-prompt-decision-notes-m3.2-v0.md. Treat it
 as the M3.2 gate between the settled M3.1 emergency repair and M3 lifecycle
-cutover. Current status is open_handoff with V=2. Preserve Choir Doctrine and
+cutover. Current status is open_handoff with V=3. Preserve Choir Doctrine and
 docs/vtext-agentic-invariants-2026-06-13.md: VText is Choir's versioned artifact
 control plane. Conductor routes exogenous prompt/source/article/mission input
 into VText-owned artifact state; super is downstream execution authority that
 VText may request later through request_super_execution. The local runtime
 repair has removed the no-worker route predicates as architecture and replaced
 conductor-level super preemption for ordinary VText-centered ingress with
-conductor -> VText artifact materialization. Keep the
-off-document record_vtext_decision tool backed by Dolt, readable from
-Trace/logs, and visible in the VText Sources panel; never put agent process
-rationale into canonical VText documents. Next move: update/run deployed
-acceptance so super before VText fails and super after VText is accepted only
-when VText requested it, then commit/push/monitor CI/deploy, verify staging
-identity, and run prompt-bar plus source/news/article product-path proof.
+conductor -> VText artifact materialization. The behavior repair is pushed at
+`eae9a96f59e1fd7420ae7283374f2cafdbe798e8`; CI and the Node B staging deploy
+for run `27523603303` passed, and `/health` reports that SHA for proxy and
+default upstream. Deployed browser-public proof still failed: fresh
+authenticated prompt-bar VText submissions returned `initial_loop_id` for a
+`super` run, so the active staging route still violates the VText control-plane
+invariant. Keep the off-document record_vtext_decision tool backed by Dolt,
+readable from Trace/logs, and visible in the VText Sources panel; never put
+agent process rationale into canonical VText documents. Next move: discriminate
+the remaining staging/runtime boundary that still produces super-first route
+evidence, repair only after this checkpoint is committed, then rerun deployed
+acceptance covering prompt-bar plus source/news/article product paths where
+feasible.
 Settlement still requires focused schema/tool/prompt tests, route tests proving
 VText before super, API/event/log readability proof, Sources-panel Playwright
 proof, runtime/frontend checks for touched surfaces, push/CI/deploy, staging

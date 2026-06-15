@@ -1116,3 +1116,69 @@ staging identity, and rerun deployed product-path proof with explicit
 route-order checks: initial loop is VText, super before VText fails, super after
 VText is accepted only when VText requested it, decision rows/Trace projection
 exist for explicit owner-requested notes, and canonical text stays reader-facing.
+
+## 2026-06-15 - Goalstring Resume Checkpoint After CI/Deploy
+
+Claim/scope: the VText control-plane route repair has landed on `main` and the
+active Parallax state must point at the remaining proof work, not the already
+completed commit/push/deploy loop.
+
+Move: refresh the paradoc variant and Suggested Goal String after CI run
+`27523603303` completed successfully for
+`eae9a96f59e1fd7420ae7283374f2cafdbe798e8` and the Node B staging deploy job
+passed. Expected Delta V: no variant decrease; this is a route-control update
+that prevents stale handoff instructions. Actual Delta V: V=2 remains, with
+staging identity and deployed product-path proof still open.
+
+Receipts:
+- CI run `27523603303` concluded `success` at
+  `eae9a96f59e1fd7420ae7283374f2cafdbe798e8`.
+- Deploy to Staging (Node B) job `81346528915` concluded `success`.
+- `docs/mission-vtext-prompt-decision-notes-m3.2-v0.md` now says the next move
+  is staging identity plus deployed prompt-bar/source-news-article proof.
+
+Open edge: verify `https://choir.news/health` reports the expected deployed
+commit, then run browser-public product-path acceptance showing prompt-bar
+VText ingress starts with VText, explicit owner-requested decision notes remain
+off-document while creating decision/Trace evidence, and any super execution
+appears only downstream of a VText request.
+
+## 2026-06-15 - Deployed VText Control-Plane Proof Failed On Super-First Route
+
+Claim/scope: staging identity was correct for the pushed route repair, but the
+browser-public product path still violated the core invariant. A fresh
+authenticated prompt-bar VText submission on `https://choir.news` returned an
+`initial_loop_id` whose diagnosis run profile was `super`, not `vtext`.
+
+Move: checkpoint the deployed failure before touching runtime or deployment
+code again. Expected Delta V: reopen one discriminator around the active
+staging runtime/package boundary. Actual Delta V: V=2 to V=3, because local
+route tests and CI/deploy are green, but deployed acceptance still shows super
+as direct ingress for ordinary prompt-bar VText work.
+
+Receipts:
+- CI run `27523603303` concluded `success` for
+  `eae9a96f59e1fd7420ae7283374f2cafdbe798e8`.
+- Deploy to Staging (Node B) job `81346528915` concluded `success`.
+- `curl -fsS https://choir.news/health` reported proxy and upstream
+  `deployed_commit=eae9a96f59e1fd7420ae7283374f2cafdbe798e8`.
+- Deployed proof command:
+  `BASE_URL=https://choir.news npx playwright test tests/vtext-control-plane-staging.tmp.spec.js --workers=1`
+  from `frontend/`.
+- Deployed proof artifact:
+  `/tmp/vtext-control-plane-staging-proof-1781497355828.json`.
+- Screenshot artifact:
+  `/tmp/vtext-control-plane-staging-proof-1781497355828.png`.
+- Explicit decision-note prompt submission
+  `063dd227-ef2d-4942-92ce-446a5397c7fa` created doc
+  `f097af34-92dc-4416-893d-fa13c0b73ee9` and returned
+  `initial_loop_id=8d6674b6-7395-4514-96e0-4cae5659db17`; the route assertion
+  failed because that run resolved to profile `super`.
+- The execution-shaped prompt test failed the same route-order assertion:
+  expected initial run profile `vtext`, observed `super`.
+
+Open edge: determine whether authenticated prompt-bar traffic is executing a
+stale per-user runtime/package despite `/health` reporting the new default
+upstream SHA, or whether another prompt-bar route path still calls persistent
+super before the repaired `ensureConductorVTextRoute` branch. Do not make the
+next behavior fix until this checkpoint is committed.
