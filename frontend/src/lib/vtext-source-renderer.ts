@@ -388,22 +388,91 @@ function vtextEntityDocID(entity: any): string {
   return String(entity?.target?.doc_id || entity?.doc_id || entity?.document_id || '').trim();
 }
 
+export function parseVTextRelatedRef(value: unknown): { docID: string; revisionID: string } {
+  const raw = String(value || '').trim();
+  if (!raw) return { docID: '', revisionID: '' };
+  const atIndex = raw.indexOf('@');
+  if (atIndex < 0) return { docID: raw, revisionID: '' };
+  return {
+    docID: raw.slice(0, atIndex).trim(),
+    revisionID: raw.slice(atIndex + 1).trim(),
+  };
+}
+
+export function vtextRelatedMarkdownTarget(docID: unknown, revisionID: unknown = ''): string {
+  const normalizedDocID = String(docID || '').trim();
+  const normalizedRevisionID = String(revisionID || '').trim();
+  if (!normalizedDocID) return '';
+  return normalizedRevisionID ? `${normalizedDocID}@${normalizedRevisionID}` : normalizedDocID;
+}
+
+export function vtextEntityPinnedRevisionID(entity: any, explicitRevisionID = ''): string {
+  return String(
+    explicitRevisionID ||
+    entity?.transclusion?.revision_id ||
+    entity?.transclusion?.target_revision_id ||
+    entity?.target?.revision_id ||
+    entity?.revision_id ||
+    entity?.target?.current_revision_id ||
+    entity?.current_revision_id ||
+    ''
+  ).trim();
+}
+
+function vtextEntityPinnedVersionNumber(entity: any): string {
+  return String(
+    entity?.transclusion?.version_number ??
+    entity?.transclusion?.target_version_number ??
+    entity?.target?.version_number ??
+    entity?.version_number ??
+    ''
+  ).trim();
+}
+
+function vtextEntityCurrentRevisionID(entity: any): string {
+  return String(entity?.target?.current_revision_id || entity?.current_revision_id || '').trim();
+}
+
+function vtextEntityCurrentVersionNumber(entity: any): string {
+  return String(entity?.target?.current_version_number ?? entity?.current_version_number ?? '').trim();
+}
+
+function hasNewerVTextVersion(entity: any, pinnedRevisionID = ''): boolean {
+  if (!entity) return false;
+  const pinnedVersionRaw = vtextEntityPinnedVersionNumber(entity);
+  const currentVersionRaw = vtextEntityCurrentVersionNumber(entity);
+  const pinnedVersion = Number(pinnedVersionRaw);
+  const currentVersion = Number(currentVersionRaw);
+  if (pinnedVersionRaw && currentVersionRaw && Number.isFinite(pinnedVersion) && Number.isFinite(currentVersion) && currentVersion > pinnedVersion) return true;
+  const currentRevisionID = vtextEntityCurrentRevisionID(entity);
+  return !!pinnedRevisionID && !!currentRevisionID && currentRevisionID !== pinnedRevisionID;
+}
+
 export function findVTextEntity(relatedVTexts: any[] = [], docID = ''): any | null {
-  const normalized = String(docID || '').trim();
+  const normalized = parseVTextRelatedRef(docID).docID;
   if (!normalized) return null;
   return relatedVTexts.find((entity) => vtextEntityDocID(entity) === normalized) || null;
 }
 
-export function renderInlineVTextRef(label: string, docID: string, relatedVTexts: any[] = []): string {
+export function renderInlineVTextRef(label: string, docRef: string, relatedVTexts: any[] = []): string {
+  const parsed = parseVTextRelatedRef(docRef);
+  const docID = parsed.docID;
   const entity = findVTextEntity(relatedVTexts, docID);
   const title = String(entity?.title || entity?.label || label || 'related VText').trim();
   const displayLabel = String(label || entity?.label || title || 'VText').trim();
   const snapshot = String(entity?.transclusion?.snapshot_text || entity?.snapshot_text || '').trim();
+  const pinnedRevisionID = vtextEntityPinnedRevisionID(entity, parsed.revisionID);
+  const pinnedVersionNumber = vtextEntityPinnedVersionNumber(entity);
+  const currentRevisionID = vtextEntityCurrentRevisionID(entity);
+  const currentVersionNumber = vtextEntityCurrentVersionNumber(entity);
+  const newerVersion = hasNewerVTextVersion(entity, pinnedRevisionID);
   const className = entity ? 'vtext-related-ref' : 'vtext-related-ref vtext-related-ref--missing';
-  return `<span class="${className}" data-vtext-related-ref data-vtext-doc-id="${escapeHTML(docID)}" data-vtext-label="${escapeHTML(displayLabel)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Related VText: ${title}`)}">
+  return `<span class="${className}" data-vtext-related-ref data-vtext-doc-id="${escapeHTML(docID)}" data-vtext-label="${escapeHTML(displayLabel)}"${pinnedRevisionID ? ` data-vtext-related-revision-id="${escapeHTML(pinnedRevisionID)}" data-vtext-related-pin-state="pinned"` : ''}${pinnedVersionNumber ? ` data-vtext-related-version-number="${escapeHTML(pinnedVersionNumber)}"` : ''}${currentRevisionID ? ` data-vtext-related-current-revision-id="${escapeHTML(currentRevisionID)}"` : ''}${currentVersionNumber ? ` data-vtext-related-current-version-number="${escapeHTML(currentVersionNumber)}"` : ''}${newerVersion ? ' data-vtext-related-has-newer-version="true"' : ''} contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Related VText: ${title}`)}">
     <span class="vtext-related-ref-label">${escapeHTML(displayLabel)}</span>
     <span class="vtext-related-ref-popover" data-vtext-inline-transclusion role="note">
       <strong>${escapeHTML(title)}</strong>
+      ${pinnedRevisionID ? `<span class="vtext-transclusion-pin" data-vtext-related-version-pin>Version pin${pinnedVersionNumber ? ` v${escapeHTML(pinnedVersionNumber)}` : ''}</span>` : ''}
+      ${newerVersion ? '<span class="vtext-transclusion-newer" data-vtext-related-newer-version>Newer version available</span>' : ''}
       ${snapshot ? `<span class="vtext-transclusion-quote">${renderInlineMarkdown(snapshot, [], [])}</span>` : ''}
     </span>
   </span>`;

@@ -276,3 +276,35 @@ Open edge: continue reducing retired-name residue, rename UI/internal symbols,
 prove pinned transclusion/newer-version behavior, delete compatibility shims
 with receipts, and write Texture Protocol v0 only after the working surface is
 settled.
+
+## 2026-06-15 - Local Texture Transclusion Pin Slice
+
+Claim: related Texture transclusions should carry an immutable version pin by
+default, preserve that pin through editor serialization, open the pinned
+revision when selected, and show when the related Texture has a newer head.
+
+Move: implement the smallest frontend product slice at the existing
+transclusion boundary: parse `vtext:<doc_id>@<revision_id>` refs, default a
+document-only ref to the related Texture metadata's transclusion revision,
+render pin/current-version attributes plus a visible newer-version note,
+serialize refs back with the pinned revision, and pass `initialRevisionId`
+when launching the related Texture.
+
+Expected ΔV: 0 until pushed CI/deploy and staging product proof pass. This is
+the construct portion of the transclusion obligation, not its deployed proof.
+
+Actual ΔV: 0. V remains 6 because the slice has only local focused proof and
+frontend build proof.
+
+Receipts:
+- `npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js --grep "related VText"`: pass, 2 tests.
+- `npm --prefix frontend run build`: pass; existing Svelte warnings remained
+  in `UniversalWireApp.svelte`.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,146 warnings.
+- `/tmp/choir-doccheck.json` warning counts: H1=724, H3=15, H4=3, H5=347,
+  R3=57.
+- `git diff --check`: pass.
+
+Open edge: push the slice, monitor CI and Node B staging deploy identity, then
+run a staging browser/product proof that a related Texture transclusion renders
+with a pinned revision and a newer-version indicator.

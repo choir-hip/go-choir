@@ -47,9 +47,11 @@
   import VTextToolbar from './VTextToolbar.svelte';
   import { sourceEntityLaunchPayload } from './vtext-source-launcher';
   import {
+    parseVTextRelatedRef,
     sourceEntityID,
     sourceEntityTargetURL,
     sourceEntityTitle,
+    vtextEntityPinnedRevisionID,
   } from './vtext-source-renderer';
   import { renderMarkdownBlocks } from './vtext-markdown-renderer';
   import { serializeEditorMarkdown } from './vtext-markdown-serializer';
@@ -197,11 +199,11 @@
   }
 
   function relatedVTextDocID(entity) {
-    return String(entity?.target?.doc_id || entity?.doc_id || entity?.document_id || '').trim();
+    return parseVTextRelatedRef(entity?.target?.doc_id || entity?.doc_id || entity?.document_id || '').docID;
   }
 
   function relatedVTextForDocID(docID) {
-    const normalized = String(docID || '').trim();
+    const normalized = parseVTextRelatedRef(docID).docID;
     if (!normalized) return null;
     return revisionRelatedVTexts().find((entity) => relatedVTextDocID(entity) === normalized) || null;
   }
@@ -392,6 +394,7 @@
       publishedRoutePath: ctx?.publishedRoutePath || '',
       publishedGuest: !!ctx?.publishedGuest,
       startPublishedDerivative: !!ctx?.startPublishedDerivative,
+      initialRevisionId: ctx?.initialRevisionId || '',
     };
     return JSON.stringify(key);
   }
@@ -917,7 +920,7 @@
       if (appContext.docId) {
         currentDoc = await getDocument(appContext.docId);
         latestHeadRevisionId = currentDoc.current_revision_id || '';
-        await refreshRevisions(currentDoc.doc_id);
+        await refreshRevisions(currentDoc.doc_id, appContext.initialRevisionId || '');
         applyDocumentWorkState(currentDoc);
         if (revisions.length === 0) {
           editorValue = initialValue || '';
@@ -950,7 +953,7 @@
 
       if (currentDoc?.doc_id) {
         await ensureFileManifest();
-        if (!agentPending && !isPublishedReadOnly) {
+        if (!agentPending && !isPublishedReadOnly && !appContext.initialRevisionId) {
           restoreLocalDraftIfNewer();
         }
         publishCurrentDocumentContext(normalizeTitle(appContext));
@@ -1754,6 +1757,7 @@
     const docID = String(relatedRef?.getAttribute?.('data-vtext-doc-id') || '').trim();
     if (!docID) return '';
     const entity = relatedVTextForDocID(docID);
+    const revisionID = vtextEntityPinnedRevisionID(entity, relatedRef?.getAttribute?.('data-vtext-related-revision-id') || '');
     const title = String(entity?.title || entity?.label || relatedRef?.getAttribute?.('data-vtext-label') || 'Related VText').trim();
     const snapshot = String(entity?.transclusion?.snapshot_text || entity?.snapshot_text || '').trim();
     dispatch('launchapp', {
@@ -1763,6 +1767,7 @@
       appContext: {
         windowTitle: title,
         docId: authenticated ? docID : '',
+        initialRevisionId: authenticated ? revisionID : '',
         initialContent: snapshot ? `# ${title}\n\n${snapshot}` : '',
         createInitialVersion: false,
         createdFrom: 'vtext_related_transclusion',

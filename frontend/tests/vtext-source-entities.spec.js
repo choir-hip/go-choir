@@ -13,9 +13,11 @@ import {
   sourceEntityOpenPlan,
   renderInlineMarkdown,
   publicationSourceEntityToLocal,
+  parseVTextRelatedRef,
   selectorTextQuote,
   sourceEvidenceState,
   sourceEvidenceStateLabel,
+  vtextRelatedMarkdownTarget,
 } from '../src/lib/vtext-source-renderer.ts';
 import { buildSourceReviewPayload } from '../src/lib/vtext-source-review.js';
 import { browserOpenableSourceURL } from '../src/lib/source-url.ts';
@@ -98,14 +100,42 @@ test('related VText inline refs render as native transclusion refs', () => {
     [{
       label: 'grid update',
       title: 'Grid operators add reserve alerts as heat forecast shifts north',
-      target: { target_kind: 'vtext_document', doc_id: 'doc-grid-story' },
-      transclusion: { snapshot_text: 'Forecast changes moved stress toward northern reserve margins.' },
+      target: {
+        target_kind: 'vtext_document',
+        doc_id: 'doc-grid-story',
+        current_revision_id: 'rev-grid-v2',
+        current_version_number: 2,
+      },
+      transclusion: {
+        revision_id: 'rev-grid-v1',
+        version_number: 1,
+        snapshot_text: 'Forecast changes moved stress toward northern reserve margins.',
+      },
     }],
   );
 
   expect(html).toContain('data-vtext-related-ref');
   expect(html).toContain('data-vtext-doc-id="doc-grid-story"');
+  expect(html).toContain('data-vtext-related-revision-id="rev-grid-v1"');
+  expect(html).toContain('data-vtext-related-version-number="1"');
+  expect(html).toContain('data-vtext-related-current-revision-id="rev-grid-v2"');
+  expect(html).toContain('data-vtext-related-current-version-number="2"');
+  expect(html).toContain('data-vtext-related-has-newer-version="true"');
+  expect(html).toContain('data-vtext-related-newer-version');
   expect(html).toContain('Forecast changes moved stress toward northern reserve margins.');
+});
+
+test('related VText refs parse and format pinned revision targets', () => {
+  expect(parseVTextRelatedRef('doc-grid-story@rev-grid-v1')).toEqual({
+    docID: 'doc-grid-story',
+    revisionID: 'rev-grid-v1',
+  });
+  expect(parseVTextRelatedRef('doc-grid-story')).toEqual({
+    docID: 'doc-grid-story',
+    revisionID: '',
+  });
+  expect(vtextRelatedMarkdownTarget('doc-grid-story', 'rev-grid-v1')).toBe('doc-grid-story@rev-grid-v1');
+  expect(vtextRelatedMarkdownTarget('doc-grid-story', '')).toBe('doc-grid-story');
 });
 
 test('source evidence states normalize to typed reader labels', () => {

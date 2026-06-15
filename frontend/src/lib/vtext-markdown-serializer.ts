@@ -1,3 +1,5 @@
+import { vtextRelatedMarkdownTarget } from './vtext-source-renderer';
+
 function serializeInlineMarkdown(node: Node | null): string {
   if (!node) return '';
   if (node.nodeType === Node.TEXT_NODE) {
@@ -13,7 +15,9 @@ function serializeInlineMarkdown(node: Node | null): string {
   if (element.matches?.('[data-vtext-related-ref]')) {
     const label = element.getAttribute('data-vtext-label') || element.querySelector?.('.vtext-related-ref-label')?.textContent || 'VText';
     const docID = element.getAttribute('data-vtext-doc-id') || '';
-    return docID ? `[${label}](vtext:${docID})` : label;
+    const revisionID = element.getAttribute('data-vtext-related-revision-id') || '';
+    const target = vtextRelatedMarkdownTarget(docID, revisionID);
+    return target ? `[${label}](vtext:${target})` : label;
   }
   if (element.closest?.('[data-vtext-source-flow]')) return '';
   if (element.closest?.('[data-vtext-source-entity]')) return '';

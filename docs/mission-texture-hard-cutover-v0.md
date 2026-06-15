@@ -146,7 +146,7 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: docs and detector warnings -> focused local tests -> staging deploy
   identity -> browser product proof -> protocol canonization.
 
-variant (ranking function) V: current V=6; last ΔV=-1:
+variant (ranking function) V: current V=6; last ΔV=0:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
@@ -171,7 +171,8 @@ variant (ranking function) V: current V=6; last ΔV=-1:
    conductor -> Texture first-revision proof passed under `/api/texture` and
    `edit_texture`, with no super-before-Texture trace;
 9. current V includes: transclusion pinned-ref plus newer-version indicator
-   proof is not yet present;
+   proof is locally implemented and focused-test green, but not yet pushed,
+   deployed, or proven on staging;
 10. current V includes: Texture Protocol v0 is intentionally unwritten until
     the working minimal surface is proven.
 
@@ -237,8 +238,9 @@ position / live conjectures / open edges:
   The repair accepts current Texture metadata plus deletion-receipted legacy
   metadata in the wire publish/read predicates; the rerun passed CI and staged.
 
-next move: continue the broader UI/internal symbol cutover and the
-transclusion pinned-ref/newer-version proof before protocol v0.
+next move: push and monitor the transclusion pinned-ref/newer-version slice,
+verify staging deploy identity, and run a deployed product/browser proof before
+counting the transclusion obligation discharged.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
