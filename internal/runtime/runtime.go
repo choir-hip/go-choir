@@ -2173,7 +2173,30 @@ func initialVTextToolChoice(rec *types.RunRecord) string {
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""
 	}
+	if vtextPromptExplicitlyRequestsDecisionNote(metadataString(rec.Metadata, "seed_prompt") + " " + metadataStringValue(rec.Metadata, "original_prompt")) {
+		return exactRequiredToolChoice("record_vtext_decision")
+	}
 	return exactRequiredToolChoice("edit_vtext")
+}
+
+func vtextPromptExplicitlyRequestsDecisionNote(prompt string) bool {
+	text := strings.ToLower(strings.TrimSpace(prompt))
+	if text == "" {
+		return false
+	}
+	if strings.Contains(text, "record_vtext_decision") {
+		return true
+	}
+	if strings.Contains(text, "decision_kind") && strings.Contains(text, "off-document") && strings.Contains(text, "decision") {
+		return true
+	}
+	if strings.Contains(text, "record") && strings.Contains(text, "off-document") && strings.Contains(text, "decision note") {
+		return true
+	}
+	if strings.Contains(text, "record") && strings.Contains(text, "vtext decision") {
+		return true
+	}
+	return false
 }
 
 func vtextPromptExplicitlyRequestsResearcher(prompt string) bool {

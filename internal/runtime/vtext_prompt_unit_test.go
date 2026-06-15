@@ -579,6 +579,14 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 			want: "function:edit_vtext",
 		},
 		{
+			name: "explicit decision note starts with decision record",
+			metadata: map[string]any{
+				"type":            "vtext_agent_revision",
+				"original_prompt": "Create a short VText document. Record an off-document VText decision note with decision_kind no_worker_needed first.",
+			},
+			want: "function:record_vtext_decision",
+		},
+		{
 			name: "worker wake leaves vtext free to choose",
 			metadata: map[string]any{
 				"type":                  "vtext_agent_revision",

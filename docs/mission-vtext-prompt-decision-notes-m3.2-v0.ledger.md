@@ -160,3 +160,27 @@ Open edge: make explicit owner-requested decision notes select exact
 `record_vtext_decision` for the initial VText tool choice, while preserving
 exact `edit_vtext` for ordinary first-revision work and leaving worker-woken
 turns free to choose.
+
+## 2026-06-15 - Local Initial Tool-Choice Repair
+
+Claim/scope: explicit owner-requested decision notes now select exact
+`record_vtext_decision` for the first initial VText tool call, while ordinary
+initial VText work keeps exact `edit_vtext` and worker-woken VText turns remain
+free to choose.
+
+Move: add a narrow explicit decision-note detector to `initialVTextToolChoice`
+and cover it in prompt/tool-choice tests. Expected Delta V: close the local
+tool-choice repair. Actual Delta V: V=2 to V=1, leaving landing/staging proof.
+
+Receipts:
+- `internal/runtime/runtime.go` now returns
+  `function:record_vtext_decision` for initial VText prompts that explicitly
+  request an off-document decision note.
+- `internal/runtime/vtext_prompt_unit_test.go` covers the explicit decision
+  note case, ordinary initial `edit_vtext`, and worker-wake unconstrained
+  behavior.
+- `nix develop -c go test ./internal/runtime -run 'Test(InitialVTextToolChoiceUsesExactTools|DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence|RecordVTextDecisionToolDescriptionKeepsDecisionsOffDocument|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords|InstallDefaultAgentToolsProfiles)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(InitialVTextRunWritesFirstAppagentRevisionThroughEdit|InitialVTextToolChoiceUsesExactTools|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords)' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof.

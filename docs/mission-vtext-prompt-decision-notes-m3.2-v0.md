@@ -79,11 +79,8 @@ auditable through the runtime evidence substrate.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=2:
-1. repair the explicit decision-note path at initial VText tool-choice time so
-   `record_vtext_decision` can run before the first `edit_vtext` when the owner
-   explicitly asks for an off-document decision note;
-2. reland the behavior change on `origin/main`, monitor CI/deploy, verify
+**variant (ranking function) V:** current V=1:
+1. reland the behavior change on `origin/main`, monitor CI/deploy, verify
    staging identity, and run deployed product-path proof.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
@@ -145,12 +142,14 @@ states reasons without forcing choreography.
   exact `edit_vtext` as the first provider tool, so explicit owner-requested
   decision notes cannot reliably be the first tool call even when prompt text
   says they are required.
+- Local tool-choice repair complete: explicit decision-note prompts now start
+  the initial VText tool loop with exact `record_vtext_decision`, while
+  ordinary initial VText work still starts with exact `edit_vtext` and
+  worker-woken turns remain unconstrained.
 
-**next move:** repair initial VText tool choice for explicit decision-note
-requests, preserving exact `edit_vtext` for ordinary first-revision work; rerun
-focused tests, commit, push, monitor CI/deploy, verify staging identity, and
-rerun staging product-path proof for decision recording plus Sources-panel
-visibility.
+**next move:** commit the tool-choice repair, push `origin main`, monitor
+CI/deploy, verify staging identity, and rerun staging product-path proof for
+decision recording plus Sources-panel visibility.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
