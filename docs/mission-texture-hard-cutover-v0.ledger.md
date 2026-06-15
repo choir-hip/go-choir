@@ -396,3 +396,50 @@ Receipts:
 
 Open edge: push the slice, monitor CI and Node B staging deploy identity, then
 run staging browser proof of visible Texture labels and import affordances.
+
+## 2026-06-15 - Staging Proof For Visible Texture UI Labels
+
+Claim: the visible product UI now presents the artifact surface as Texture
+without requiring internal `vtext` ids, selectors, storage keys, or compatibility
+routes to be deleted in the same slice.
+
+Move: push commit `78bbcd7ec24d65ab7e17c111ce23ca7731b89003`, monitor CI and
+Node B deploy, verify staging build identity, then run a temporary authenticated
+Playwright product proof against `https://choir.news`. The scratch spec was
+deleted after the run; evidence was written outside the repo.
+
+Expected ΔV: -1 by discharging the visible UI label/browser-proof obligation.
+
+Actual ΔV: -1. V moves from 5 to 4. This proof does not discharge internal
+symbol residue, compatibility-shim deletion, edit-affordance naming, final
+retired-name receipts, or Texture Protocol v0.
+
+Receipts:
+- pushed commit:
+  `78bbcd7ec24d65ab7e17c111ce23ca7731b89003`
+  (`frontend: show texture in artifact UI`).
+- CI run `27583078805`: success. Runtime shards 0-3, non-runtime tests,
+  integration-tagged smoke, Go vet/build, frontend build, Docs Truth Check job,
+  TLA+ model check, final Go gate, and Node B staging deploy job passed.
+- Docs Truth Check run `27583078889`: success.
+- FlakeHub publish run `27583078824`: success.
+- Staging health: `https://choir.news/health` reported proxy and sandbox
+  commit `78bbcd7ec24d65ab7e17c111ce23ca7731b89003`, deployed at
+  `2026-06-15T23:27:38Z`.
+- Staging acceptance command:
+  `PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000 npm --prefix frontend run e2e -- tests/texture-ui-label-staging.tmp.spec.js`
+  passed, 1 test, 14.8s.
+- Staging evidence artifact:
+  `/tmp/texture-ui-label-staging-proof-1781566172780.json`.
+- Product observations: desktop artifact icon label `Texture`; artifact window
+  title `Texture`; recent landing eyebrow `TEXTURE`; Files import button
+  `Texture` with title `Open texture-ui-label-1781566172780.pdf in Texture`;
+  Web Lens snapshot import button `Open in Texture`; Web Lens source URL
+  `https://example.com/texture-ui-label-1781566172780`.
+- Rollback ref: revert commit `78bbcd7e` to return visible product labels to
+  the previous V-name surface.
+
+Open edge: continue reducing retired-name residue, cut over internal symbols
+and compatibility shims with deletion receipts, prove edit-affordance
+common-vs-exceptional naming, and write Texture Protocol v0 only after the
+working surface is settled.
