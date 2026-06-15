@@ -96,10 +96,10 @@ nodes:
   sources:
   - docs/mission-portfolio-2026-06-11.md
   - docs/mission-lifecycle-cutover-v0.md
-  - docs/vtext-agentic-invariants-2026-06-13.md
+  - docs/texture-agentic-invariants-2026-06-13.md
   - AGENTS.md
 - id: m3.2-vtext-prompt-decision-notes
-  title: M3.2 VText Prompt Register And Decision Notes
+  title: M3.2 Texture Prompt Register And Decision Notes
   path: docs/mission-vtext-prompt-decision-notes-m3.2-v0.md
   ledger: docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md
   status: settled
@@ -111,7 +111,7 @@ nodes:
   sources:
   - docs/mission-portfolio-2026-06-11.md
   - docs/mission-lifecycle-cutover-m3.1-v0.md
-  - docs/vtext-agentic-invariants-2026-06-13.md
+  - docs/texture-agentic-invariants-2026-06-13.md
   - AGENTS.md
 - id: m3.3-vm-bootstrap-recovery-race
   title: M3.3 VM Bootstrap Recovery Race
@@ -130,7 +130,7 @@ nodes:
   - docs/mission-computer-recovery-system-monitor-v0.md
   - AGENTS.md
 - id: m3.4-vtext-first-draft-regression
-  title: M3.4 Prompt-Bar VText First-Draft Regression
+  title: M3.4 Prompt-Bar Texture First-Draft Regression
   path: docs/mission-vtext-first-draft-regression-m3.4-v0.md
   ledger: docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md
   status: working
@@ -142,7 +142,7 @@ nodes:
   sources:
   - docs/mission-portfolio-2026-06-11.md
   - docs/mission-lifecycle-cutover-v0.md
-  - docs/vtext-agentic-invariants-2026-06-13.md
+  - docs/texture-agentic-invariants-2026-06-13.md
   - AGENTS.md
 - id: texture-hard-cutover-v0
   title: Texture Hard Cutover v0
@@ -287,7 +287,7 @@ nodes:
   - docs/conjecture-assertion-ledger-2026-06.md
   - docs/heresy-detectors.md
 - id: agentic-debugging-vtext-stability-v0
-  title: 'MissionGradient: Agentic Debugging And VText Stability v0'
+  title: 'MissionGradient: Agentic Debugging And Texture Stability v0'
   path: docs/mission-agentic-debugging-vtext-stability-v0.md
   ledger: ''
   status: settled
@@ -368,7 +368,7 @@ nodes:
   sources:
   - docs/mission-portfolio-2026-06-11.md
 - id: conductor-url-source-routing-h029-v0
-  title: Mission - VText Source Intake And Conductor URL Routing H029 - v0
+  title: Mission - Texture Source Intake And Conductor URL Routing H029 - v0
   path: docs/mission-conductor-url-source-routing-h029-v0.md
   ledger: docs/mission-conductor-url-source-routing-h029-v0.ledger.md
   status: open_handoff
@@ -439,7 +439,7 @@ nodes:
   sources:
   - docs/choir-doctrine.md
 - id: global-wire-broad-source-vtext-newsroom-v0
-  title: 'Mission: Global Wire Broad-Source VText Newsroom'
+  title: 'Mission: Global Wire Broad-Source Texture Newsroom'
   path: docs/mission-global-wire-broad-source-vtext-newsroom-v0.md
   ledger: ''
   status: settled
@@ -449,7 +449,7 @@ nodes:
   sources:
   - docs/mission-portfolio-2026-06-11.md
 - id: global-wire-hard-cutover-real-newsroom-v0
-  title: 'Mission: Global Wire Hard Cutover To Real VText Newsroom'
+  title: 'Mission: Global Wire Hard Cutover To Real Texture Newsroom'
   path: docs/mission-global-wire-hard-cutover-real-newsroom-v0.md
   ledger: ''
   status: settled
@@ -459,7 +459,7 @@ nodes:
   sources:
   - docs/mission-portfolio-2026-06-11.md
 - id: global-wire-living-vtext-newsroom-v1
-  title: 'Mission: Global Wire Living VText Newsroom'
+  title: 'Mission: Global Wire Living Texture Newsroom'
   path: docs/mission-global-wire-living-vtext-newsroom-v1.md
   ledger: ''
   status: open_handoff
@@ -549,7 +549,7 @@ nodes:
   sources:
   - docs/mission-portfolio-2026-06-11.md
 - id: platform-source-service-vtext-publication-campaign-v1
-  title: 'MissionGradient Campaign v1: Platform Source Service, VText Sources, And Publication'
+  title: 'MissionGradient Campaign v1: Platform Source Service, Texture Sources, And Publication'
   path: docs/mission-platform-source-service-vtext-publication-campaign-v1.md
   ledger: ''
   status: open_handoff
@@ -740,7 +740,7 @@ nodes:
   - docs/choir-doctrine.md
   - docs/heresy-detectors.md
 - id: vtext-client-ready-source-transclusion-pretext-v0
-  title: 'MissionGradient v0: Client-Ready VText Source Transclusion And Proposal Cleanup'
+  title: 'MissionGradient v0: Client-Ready Texture Source Transclusion And Proposal Cleanup'
   path: docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md
   ledger: ''
   status: open_handoff
@@ -750,7 +750,7 @@ nodes:
   sources:
   - docs/mission-portfolio-2026-06-11.md
 - id: vtext-fluid-editing-doc-roundtrip-transclusion-v0
-  title: 'MissionGradient v0: VText Fluid Editing, Document Roundtrip, And Source Transclusion'
+  title: 'MissionGradient v0: Texture Fluid Editing, Document Roundtrip, And Source Transclusion'
   path: docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md
   ledger: ''
   status: settled
@@ -761,7 +761,7 @@ nodes:
   - docs/choir-doctrine.md
   - docs/heresy-detectors.md
 - id: vtext-live-cadence-repair-v3
-  title: 'MissionGradient: VText Live Cadence Repair v3'
+  title: 'MissionGradient: Texture Live Cadence Repair v3'
   path: docs/mission-vtext-live-cadence-repair-v3.md
   ledger: ''
   status: open_handoff
@@ -771,7 +771,7 @@ nodes:
   sources:
   - docs/mission-portfolio-2026-06-11.md
 - id: vtext-source-entities-multimedia-transclusion-v0
-  title: 'Mission Campaign: VText Source Entities, Multimedia Review, And Transclusion v0'
+  title: 'Mission Campaign: Texture Source Entities, Multimedia Review, And Transclusion v0'
   path: docs/mission-vtext-source-entities-multimedia-transclusion-v0.md
   ledger: ''
   status: open_handoff
@@ -791,7 +791,7 @@ nodes:
   sources:
   - docs/mission-portfolio-2026-06-11.md
 - id: vtext-version-compare-merge-debuggability-v1
-  title: 'MissionGradient v1: VText Version Compare, Concept Merge, And Debuggability'
+  title: 'MissionGradient v1: Texture Version Compare, Concept Merge, And Debuggability'
   path: docs/mission-vtext-version-compare-merge-debuggability-v1.md
   ledger: ''
   status: settled

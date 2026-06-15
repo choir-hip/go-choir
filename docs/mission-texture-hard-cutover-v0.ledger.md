@@ -83,3 +83,33 @@ Receipts:
 Open edge: H5 is warning-only; high-read docs, prompts, UI, tests, runtime
 symbols, routes, storage names, and tool affordances still need the actual
 Texture cutover.
+
+## 2026-06-15 - High-Read Operating Contract Reconciliation
+
+Claim: future agents should read Texture, not the retired name, in the operating
+contract and domain invariant before runtime changes begin.
+
+Move: construct a bounded docs slice. Renamed
+`docs/vtext-agentic-invariants-2026-06-13.md` to
+`docs/texture-agentic-invariants-2026-06-13.md`; reworded AGENTS.md, Choir
+Doctrine, docs README, doc authority manifest, mission graph references, and
+the invariant doc toward Texture for current operating prose.
+
+Expected ΔV: -1 if high-read doctrine and operating docs cleared the retired
+name.
+
+Actual ΔV: 0 against the coarse mission variant. The operating contract no
+longer has an H5 old-name warning, and H5 decreased from 352 to 349, but
+`docs/README.md`, `docs/choir-doctrine.md`, and `docs/mission-graph.yaml` still
+carry H5 warnings for still-existing old filenames and detector symbols. This
+is useful progress, not discharge of the high-read-doc obligation.
+
+Receipts:
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,148 warnings.
+- `/tmp/choir-doccheck.json` warning counts after the slice: H1=724, H3=15,
+  H4=3, H5=349, R3=57.
+
+Open edge: continue the docs/index sweep or move runtime filenames/symbols so
+doctrine evidence paths and detector symbols can converge without lying about
+current code.

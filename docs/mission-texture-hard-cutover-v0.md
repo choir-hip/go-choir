@@ -146,14 +146,16 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: docs and detector warnings -> focused local tests -> staging deploy
   identity -> browser product proof -> protocol canonization.
 
-variant (ranking function) V: current V=8; last ΔV=-1:
+variant (ranking function) V: current V=8; last ΔV=0:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
 2. discharged: docs checker retired-name warning rule is implemented in
    report-only mode as H5 with the documented allowlist;
-3. current V includes: high-read doctrine and operating docs still require
-   Texture reconciliation;
+3. current V includes: high-read doctrine and index docs still require Texture
+   reconciliation; the operating contract and Texture invariant doc have been
+   renamed/reworded, but doctrine/README/mission graph still carry H5 warnings
+   for live old filenames and detector symbols;
 4. current V includes: runtime/tool/API symbols still use the old ontology;
 5. current V includes: UI labels and browser proof still target the old
    artifact name;
@@ -219,7 +221,7 @@ position / live conjectures / open edges:
   surface.
 
 next move: commit the report-only checker slice, then begin high-read doctrine
-and operating-doc Texture reconciliation before runtime symbol changes.
+and index-doc Texture reconciliation before runtime symbol changes.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

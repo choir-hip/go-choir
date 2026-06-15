@@ -22,7 +22,7 @@ Use these buckets when reading or editing docs:
 - **Active mission portfolio / paradocs** define executable work. They inherit
   doctrine; they do not override it unless explicitly promoted.
 - **Domain invariants** define durable rules for specific subsystems such as
-  computers, VText, source, promotion, or runtime authority.
+  computers, Texture, source, promotion, or runtime authority.
 - **Current descriptive architecture** describes code/staging reality and
   labeled target hardening. It should be corrected when it conflicts with code,
   staging, or doctrine.
@@ -56,7 +56,7 @@ explicitly promotes one as source form.
 - **Heresy detector manifest:** `docs/heresy-detectors.md` defines detector
   families and baseline vocabulary. Counts are evidence, not ontology.
 - **Domain invariants:** `docs/computer-ontology.md`,
-  `docs/vtext-agentic-invariants-2026-06-13.md`,
+  `docs/texture-agentic-invariants-2026-06-13.md`,
   `docs/runtime-invariants.md`, `docs/source-external-data-publication.md`,
   and promotion/source-specific doctrine where explicitly current.
 - **Current descriptive architecture:** `docs/current-architecture.md` and
@@ -112,7 +112,7 @@ explicitly promotes one as source form.
   Community Cloud, reusable in Private Clouds, and personalized in user
   computers.
 - `docs/choir-strategy-overview-2026-06-09.md` - high-level strategy overview:
-  own your AI cloud, own the learning, private clouds, Wire, VText, and radio.
+  own your AI cloud, own the learning, private clouds, Wire, Texture, and radio.
 - `docs/choir-deck-treatment-and-faq-2026-06-09.md` - current deck/FAQ treatment
   for export after the Wire terminology correction.
 - `docs/vm-priority-policy.md` - current and future VM/computer warmness,
@@ -150,15 +150,15 @@ explicitly promotes one as source form.
   theme, and shell contract.
 - `docs/runtime-invariants.md` - implementation invariants and authority boundaries.
 - `docs/source-external-data-publication.md` - canonical contract for external
-  data ingestion, source cleaning, VText source metadata, transclusion,
+  data ingestion, source cleaning, Texture source metadata, transclusion,
   publication policy, and export.
 - `docs/news-system-current-state-and-improvements-2026-06-06.md` - current
   source/news code-state and code-review note. Use it for sourcecycled,
-  source_search, VText source-service refs, News app gaps, and rough future
+  source_search, Texture source-service refs, News app gaps, and rough future
   directions; do not treat its improvement list as accepted mission scope.
 - `docs/choir-wire-source-to-vtext-spec-2026-06-09.md` - current Wire
   requirements contract: Universal Wire, Private Wire reuse, platform/user
-  computer authority, VText ownership, source artifacts, and deletion of legacy
+  computer authority, Texture ownership, source artifacts, and deletion of legacy
   graph/source-maxxing behavior.
 - `docs/mission-*-v*.md` - mission paradocs. Use the portfolio's Parallax
   State to identify the current spine mission instead of updating this index
@@ -168,9 +168,9 @@ explicitly promotes one as source form.
   downstream of M2-M4 in the portfolio.
 - `docs/choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md` -
   historical product/architecture spec for the superseded Universal Wire +
-  StoryGraph/VText framing. Do not use it as current ontology.
+  StoryGraph/Texture framing. Do not use it as current ontology.
 - `docs/vtext-styleguide-system-research-2026-06-06.md` - research synthesis
-  for VText-native `Style.vtext` support, client corpus ingestion, learned style
+  for Texture-native `Style.vtext` support, client corpus ingestion, learned style
   memory, edit feedback, style review, and optional future fine-tuning.
 - `docs/vtext-styleguide-sources-review-2026-06-06.md` - full source-by-source
   review of the styleguide/voice corpus with concise signal summaries for each URL.
@@ -201,7 +201,7 @@ explicitly promotes one as source form.
   bootstrap/recovery race paramission that must settle before lifecycle cutover
   uses vmctl refresh/restart as proof substrate.
 - `docs/mission-platform-source-service-vtext-publication-campaign-v1.md` -
-  active Source Service / VText source metadata / publication campaign. Its
+  active Source Service / Texture source metadata / publication campaign. Its
   requirements contract is `docs/source-external-data-publication.md`.
 - `docs/mission-campaign-compiler-selfdev-v0.md` is the primary current
   self-development mission surface.
@@ -232,7 +232,7 @@ When proof docs contradict `README.md`, `AGENTS.md`, `current-architecture.md`, 
   had become only a pointer to newer docs.
 - Old Mission 1/2/3/5/6/7 milestone docs were deleted after live signal was folded into `docs/project-goals.md`, `docs/glossary.md`, `docs/adr-dolt-as-canonical-state.md`, and the canonical architecture docs. Use git history for the removed originals.
 - Top-level `TODOS.md`, `PROJECT-GOALS.md`, and `PROJECT-GLOSSARY.md` were removed after extraction.
-- The old API/VText hard-cutover checklist was deleted during the 2026-06-06
+- The old artifact-control hard-cutover checklist was deleted during the 2026-06-06
   mid-age cleanup. Its durable review lessons were folded into
   `docs/old-docs-review-2026-06-06.md` and
   `docs/mid-age-docs-review-2026-06-06.md`.

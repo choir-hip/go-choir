@@ -68,7 +68,7 @@ Classify every mission/change by mutation class before editing:
   optimization pressure but not product behavior directly;
 - `orange`: runtime behavior, product APIs, app state, database queries, or
   provider/model routing;
-- `red`: protected surfaces such as VText canonical writes, Trace/evidence,
+- `red`: protected surfaces such as Texture canonical writes, Trace/evidence,
   promotion/rollback, candidate computers, auth/session renewal, vmctl,
   gateway/provider calls, run acceptance, and deployment routing;
 - `black`: irreversible or production-destructive work.
@@ -170,40 +170,40 @@ Select moves by expected variant decrease per budget, force observer shifts
 when probes stop changing decisions, and exit only as settled, open_handoff,
 blocked, or superseded.
 
-For long-running Choir-in-Choir missions, maintain an owner-readable VText
+For long-running Choir-in-Choir missions, maintain an owner-readable Texture
 narrative. Each substantive change in plan, evidence, blocker, or result should
 produce a concise revision that explains the whole run state so far in plain
 language: objective, past work, current work, what changed, evidence, learnings,
-risks, and next step. Do not make VText a Trace-like topology/status table, and
-do not dump low-level events into VText. Trace is the causal ledger for dense
+risks, and next step. Do not make Texture a Trace-like topology/status table, and
+do not dump low-level events into Texture. Trace is the causal ledger for dense
 tool calls, LLM content, and agent-to-agent messages; feature-specific live
-surfaces such as Chyron may show granular activity streams; VText is the human
+surfaces such as Chyron may show granular activity streams; Texture is the human
 supervision narrative.
 
-Read [docs/vtext-agentic-invariants-2026-06-13.md](docs/vtext-agentic-invariants-2026-06-13.md)
-before changing VText tools, prompts, routing, revision creation, coagent wake
-behavior, Trace/VText projection, run acceptance involving VText, or missions
-that use VText as their owner-readable narrative. VText is the canonical
+Read [docs/texture-agentic-invariants-2026-06-13.md](docs/texture-agentic-invariants-2026-06-13.md)
+before changing Texture tools, prompts, routing, revision creation, coagent wake
+behavior, Trace/Texture projection, run acceptance involving Texture, or missions
+that use Texture as their owner-readable narrative. Texture is the canonical
 document/versioning core and must remain an agentic participant in a multi-agent
 system, not a workflow runner. Runtime may expose affordances and durable
-obligations, but it must not force VText to call researcher, super, verifier, or
+obligations, but it must not force Texture to call researcher, super, verifier, or
 any semantic appagent merely because prompt text, revision metadata, or an
 acceptance probe mentions that role.
 
-VText is also Choir's artifact control plane. Conductor routes exogenous
-user/app/source input into VText-owned artifact state: prompt-bar requests,
+Texture is also Choir's artifact control plane. Conductor routes exogenous
+user/app/source input into Texture-owned artifact state: prompt-bar requests,
 sourcecycled/news ingestion, article creation, mission work, and most user
-prompts should open or create VText/context first. Super is not the direct
-ingress target for ordinary user or source prompts. VText may later call
-`request_super_execution` when the VText-controlled artifact needs execution,
+prompts should open or create Texture/context first. Super is not the direct
+ingress target for ordinary user or source prompts. Texture may later call
+`request_super_execution` when the Texture-controlled artifact needs execution,
 coding-agent trees, generated artifacts, verification, candidate work, or other
 privileged action, and downstream researcher/super evidence must attach back to
-the VText/artifact context.
+the Texture/artifact context.
 
 ## Authority Boundaries
 
-- `conductor` routes exogenous user/app/connector input into VText/artifact state. It is not the semantic babysitter and not a direct-super router for ordinary prompts.
-- Appagents own durable app artifacts. `vtext` owns canonical document versions.
+- `conductor` routes exogenous user/app/connector input into Texture/artifact state. It is not the semantic babysitter and not a direct-super router for ordinary prompts.
+- Appagents own durable app artifacts. `texture` owns canonical document versions.
 - `researcher` writes structured findings/evidence, not canonical text or code.
 - `super` is the foreground orchestration root. It can request workers and candidate worlds.
 - `vsuper` owns a background/candidate computer or candidate world.
@@ -212,16 +212,16 @@ the VText/artifact context.
 
 Foreground/canonical state stays stable. Background/candidate computers mutate. Canonical state changes only by promotion.
 
-VText delegation is agentic. VText may write, ask researcher, ask super, ask
+Texture delegation is agentic. Texture may write, ask researcher, ask super, ask
 both, ask neither, wait for more evidence, or report a blocker within its
-authority envelope. `edit_vtext` stores a canonical revision; it must not become
+authority envelope. `edit_texture` stores a canonical revision; it must not become
 a semantic workflow gate that requires a subsequent researcher/super/verifier
 tool call. Exact required-tool continuation is reserved for narrow mechanical
 tool protocols, not appagent policy.
 
 Prompt bar, source ingestion, and article/news creation should show conductor
-entry followed by VText artifact materialization. `super` before VText is a
-route invariant failure. `super` after VText is valid only when VText requested
+entry followed by Texture artifact materialization. `super` before Texture is a
+route invariant failure. `super` after Texture is valid only when Texture requested
 execution through an explicit affordance such as `request_super_execution`.
 
 Prefer asynchronous supervision. A delegation, worker VM run, candidate preview,
@@ -244,7 +244,7 @@ candidate environment when that is required to verify behavior.
 Keep the agent harness small and programmatically uniform across roles by
 default. The core tool loop, provider call semantics, run-memory plumbing,
 event emission, cancellation, retry, compaction, and continuation mechanics
-should behave identically for conductor, VText, researcher, super, vsuper,
+should behave identically for conductor, Texture, researcher, super, vsuper,
 co-super, verifier, and future agent roles unless there is a proven invariant
 that requires divergence.
 
@@ -270,7 +270,7 @@ runtime policy path unless the mission is explicitly a platform config deploy.
 
 Role defaults are policy defaults, not architecture. Any configured model may
 serve any agent role when its declared capabilities match the current turn:
-conductor, VText, researcher, super, vsuper, co-super, verifier, or future
+conductor, Texture, researcher, super, vsuper, co-super, verifier, or future
 roles. Text-only models are valid for orchestration, research, coding, writing,
 and verification that does not need media input. Multimodal models are required
 only when the turn needs screenshots, images, video frames, files, or other
@@ -278,7 +278,7 @@ media inputs. If a current policy maps a role to ChatGPT or Fireworks, treat
 that as the active computer's effective policy, not a hard-coded role boundary.
 Capability is evaluated for the next turn, not permanently for the role.
 Do not add new role-specific provider assumptions such as "conductor must be
-ChatGPT", "super must be ChatGPT", "VText must be Fireworks", or "verifier must
+ChatGPT", "super must be ChatGPT", "Texture must be Fireworks", or "verifier must
 be multimodal" unless the current turn's capability requirements actually imply
 that. The long-term target is dynamic, agentically editable per-computer model
 policy: an owner prompt may ask `super` to edit the computer's model policy,
@@ -297,7 +297,7 @@ Browser or Playwright acceptance may use public authenticated product APIs such 
 
 - `/api/prompt-bar`
 - `/api/prompt-bar/submissions/{id}`
-- `/api/vtext/*`
+- `/api/texture/*`
 - `/api/trace/*`
 - `/api/app-change-packages/*`
 - `/api/computers/*/source-lineage`

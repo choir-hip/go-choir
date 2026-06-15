@@ -28,7 +28,7 @@ Primary support docs:
 - [conjecture-assertion-ledger-2026-06.md](./conjecture-assertion-ledger-2026-06.md)
 - [why-texture-2026-06-15.md](./why-texture-2026-06-15.md)
 - [why-texture-background-2026-06-15.md](./why-texture-background-2026-06-15.md)
-- [vtext-agentic-invariants-2026-06-13.md](./vtext-agentic-invariants-2026-06-13.md)
+- [texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md)
 - [mission-portfolio-2026-06-11.md](./mission-portfolio-2026-06-11.md)
 - [mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md)
 - [mission-source-system-simplify-secure-smart-v0.md](./mission-source-system-simplify-secure-smart-v0.md)
@@ -135,7 +135,7 @@ Each conjecture is tagged as one of:
 `C1 asserted` Choir's primary product object is a persistent computer composed
 of multiple ledgers, not a disposable sandbox and not a chat session.
 
-`C2 asserted` Canonical user-facing truth is versioned artifact state. VText is
+`C2 asserted` Canonical user-facing truth is versioned artifact state. Texture is
 the canonical document and artifact control-plane core; other appagents own
 their own typed artifact domains.
 
@@ -199,18 +199,18 @@ risk remains real even when protocol gates pass.
 
 These are hard consequences of the conjecture set.
 
-`I1` VText owns canonical document versions. Findings, worker updates, search
-results, and verifier output are non-canonical until VText incorporates them.
+`I1` Texture owns canonical document versions. Findings, worker updates, search
+results, and verifier output are non-canonical until Texture incorporates them.
 
-`I2` VText must not be forced into semantic delegation. Runtime may expose
+`I2` Texture must not be forced into semantic delegation. Runtime may expose
 affordances and durable obligations; it must not convert role mentions or
 metadata into a required semantic next step.
 
-`I2a` Exogenous user and source input enters Choir through VText-owned artifact
+`I2a` Exogenous user and source input enters Choir through Texture-owned artifact
 state by default. Conductor may classify, open, or create the target
-VText/context, but ordinary prompt-bar requests, sourcecycled/news ingestion,
+Texture/context, but ordinary prompt-bar requests, sourcecycled/news ingestion,
 article creation, mission work, and most user prompts must not route directly
-to super. Super is downstream execution authority invoked from VText when the
+to super. Super is downstream execution authority invoked from Texture when the
 artifact needs coding, privileged execution, candidate work, generation,
 verification, or other supervision.
 
@@ -271,7 +271,7 @@ Mutation classes:
   future agents optimize but does not change product behavior directly.
 - `orange`: runtime behavior, product APIs, app state, database queries, or
   provider/model routing.
-- `red`: protected surfaces: VText canonical writes, Trace/evidence semantics,
+- `red`: protected surfaces: Texture canonical writes, Trace/evidence semantics,
   promotion/rollback, candidate-computer state, auth/session renewal, vmctl,
   gateway/provider calls, run acceptance, and deployment routing.
 - `black`: irreversible or production-destructive operations. These require
@@ -331,7 +331,7 @@ used. A replacement path working is not reduction while the old path remains
 available. Discovery of a new detector or uncited site is epistemic progress,
 not repair progress.
 
-Heresy ledger rule: missions that touch doctrine, runtime control, VText,
+Heresy ledger rule: missions that touch doctrine, runtime control, Texture,
 Trace/evidence, promotion, source/Web Lens, or app-state ontology must report
 `discovered`, `introduced`, and `repaired` separately. `Delta V` may not count
 as progress when introduced heresy count rises unless a human-readable
@@ -397,7 +397,7 @@ ownership.
 obligation is created and route results by addressed update or owning work
 item.
 
-`deletion gate:` M3 / VText hardening.
+`deletion gate:` M3 / Texture hardening.
 
 #### H004 - Trace And Verifier Parent Topology
 
@@ -506,7 +506,7 @@ repair.
 
 `deletion gate:` M4.
 
-### Tool Forcing And VText Agency Residue
+### Tool Forcing And Texture Agency Residue
 
 #### H009 - Generic Required-Next-Tool Trust Channel
 
@@ -526,12 +526,12 @@ bounded mechanical transitions.
 
 `deletion gate:` M3.1.
 
-#### H010 - VText Semantic Delegation Forcing
+#### H010 - Texture Semantic Delegation Forcing
 
-`bad pattern:` `edit_vtext` can require `spawn_agent` for researcher follow-up
+`bad pattern:` `edit_texture` can require `spawn_agent` for researcher follow-up
 after a canonical write.
 
-`detectors:` `requiredContinuationAfterVTextEdit`, `explicitResearcher`,
+`detectors:` `requiredContinuationAfterTextureEdit`, `explicitResearcher`,
 `runMetadataExplicitResearcher`, `explicit_researcher_request`,
 `durableMetadataKeys`, `vtextEditResearcherIntentText`,
 `vtextTrajectoryHasResearcherParticipation`,
@@ -539,46 +539,46 @@ after a canonical write.
 
 `evidence:` [internal/runtime/tools_vtext.go](../internal/runtime/tools_vtext.go),
 [internal/runtime/vtext_test.go](../internal/runtime/vtext_test.go),
-[docs/vtext-agentic-invariants-2026-06-13.md](./vtext-agentic-invariants-2026-06-13.md).
+[docs/texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md).
 
-`why it violates the spec:` it turns VText from an appagent into a workflow
+`why it violates the spec:` it turns Texture from an appagent into a workflow
 stepper.
 
-`successor pattern:` `edit_vtext` stores the revision and stops; VText decides
+`successor pattern:` `edit_texture` stores the revision and stops; Texture decides
 what semantic delegation, if any, to perform.
 
 `deletion gate:` M3.1.
 
-#### H011 - Super As Direct Ingress For VText-Centered Work
+#### H011 - Super As Direct Ingress For Texture-Centered Work
 
 `bad pattern:` conductor routes ordinary user, prompt-bar, sourcecycled/news,
 article, mission, or document/artifact work directly to super based on prompt
-heuristics. This bypasses VText-owned artifact state and treats Choir as prompt
-routing to agents instead of living VText/artifact state that coordinates
+heuristics. This bypasses Texture-owned artifact state and treats Choir as prompt
+routing to agents instead of living Texture/artifact state that coordinates
 agents.
 
-`detectors:` prompt-bar routing heuristics that select super for VText-class
+`detectors:` prompt-bar routing heuristics that select super for Texture-class
 objectives, source/article ingestion paths that create super work before a
-VText/context artifact exists, `vtextPromptNeedsSuperExecution`,
+Texture/context artifact exists, `vtextPromptNeedsSuperExecution`,
 `prompt_bar_no_worker_decision_route`, no-worker route predicates that patch
 individual prompts instead of removing the direct-super ingress path.
 
 `evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
-[docs/vtext-agentic-invariants-2026-06-13.md](./vtext-agentic-invariants-2026-06-13.md).
+[docs/texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md).
 
-`why it violates the spec:` conductor becomes a policy engine for VText/super
+`why it violates the spec:` conductor becomes a policy engine for Texture/super
 authority rather than a router that materializes exogenous input as
-VText-owned artifact state. Super receives authority before the artifact
+Texture-owned artifact state. Super receives authority before the artifact
 control plane has interpreted the request, recorded audit-worthy decisions, or
 attached downstream evidence back to canonical context.
 
-`successor pattern:` conductor creates or resolves the VText/context artifact;
-VText owns the canonical artifact and then decides whether to write/revise,
+`successor pattern:` conductor creates or resolves the Texture/context artifact;
+Texture owns the canonical artifact and then decides whether to write/revise,
 attach or transclude sources, ask researcher, call `request_super_execution`,
 coordinate coding-agent trees through super, wait, or record an off-document
 decision/blocker.
 
-`deletion gate:` M3.2 / VText control-plane routing cleanup.
+`deletion gate:` M3.2 / Texture control-plane routing cleanup.
 
 #### H012 - Researcher Intent By Substring Oracle
 
@@ -595,7 +595,7 @@ signal.
 `why it violates the spec:` prose is treated as authority metadata and silently
 changes routing semantics.
 
-`successor pattern:` structured intent metadata or explicit VText-authored
+`successor pattern:` structured intent metadata or explicit Texture-authored
 delegation state; no substring oracles.
 
 `deletion gate:` M3.1.
@@ -607,7 +607,7 @@ delegation state; no substring oracles.
 `bad pattern:` smoke-level accepted states can read as stronger proof than they
 are, and some levels are still grounded in old run/continuation semantics.
 
-`detectors:` `staging-smoke-level`, `accepted` on minimal prompt/VText
+`detectors:` `staging-smoke-level`, `accepted` on minimal prompt/Texture
 evidence, `continuation-level`.
 
 `evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
@@ -778,7 +778,7 @@ newer doctrine falsifies them.
 
 `evidence:` [docs/conjecture-assertion-ledger-2026-06.md](./conjecture-assertion-ledger-2026-06.md),
 [docs/current-architecture.md](./current-architecture.md),
-[docs/vtext-agentic-invariants-2026-06-13.md](./vtext-agentic-invariants-2026-06-13.md).
+[docs/texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md).
 
 `why it violates the spec:` stale doctrine is a heresy vector; agents optimize
 what they read.
@@ -830,21 +830,21 @@ loop.
 
 `deletion gate:` M3 lifecycle cutover plus M4 continuation deletion.
 
-#### H024 - VText First-Tool Forcing By Super-Keyword Oracle
+#### H024 - Texture First-Tool Forcing By Super-Keyword Oracle
 
-`bad pattern:` prompt keywords can force VText's initial tool choice to
+`bad pattern:` prompt keywords can force Texture's initial tool choice to
 `request_super_execution`.
 
-`detectors:` `initialVTextToolChoice`, `WithInitialToolChoice`,
+`detectors:` `initialTextureToolChoice`, `WithInitialToolChoice`,
 `exactRequiredToolChoice`, super-keyword routing lists.
 
 `evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
 `internal/runtime/runtime.go`.
 
-`why it violates the spec:` even if conductor routes to VText, the tool loop can
-still replace VText agency with a hidden workflow edge.
+`why it violates the spec:` even if conductor routes to Texture, the tool loop can
+still replace Texture agency with a hidden workflow edge.
 
-`successor pattern:` VText receives owner intent and available affordances, then
+`successor pattern:` Texture receives owner intent and available affordances, then
 chooses the next semantic move.
 
 `deletion gate:` M3.1.
@@ -870,19 +870,19 @@ trajectory/work-item/update semantics.
 
 #### H026 - Prompt-Pipeline Forcing
 
-`bad pattern:` prompt defaults or revision-request builders tell VText to call
+`bad pattern:` prompt defaults or revision-request builders tell Texture to call
 specific semantic workers as a required sequence.
 
 `detectors:` prompt text mandating `spawn_agent` or `request_super_execution`,
 `buildAgentRevisionRequest`, "call spawn_agent now", numbered role-sequence
-scripts in VText prompt defaults.
+scripts in Texture prompt defaults.
 
 `evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
 `internal/runtime/prompt_defaults/vtext.md`,
 `internal/runtime/vtext_agent_revision.go`.
 
 `why it violates the spec:` prompt text is architecture when it controls agent
-behavior. Moving forcing from runtime code into prompts still violates VText
+behavior. Moving forcing from runtime code into prompts still violates Texture
 agency.
 
 `successor pattern:` prompts describe obligations, authority, evidence, and
@@ -907,7 +907,7 @@ manually browse Trace as the debugging surface.
 [frontend/tests/desktop-shell-core.spec.js](../frontend/tests/desktop-shell-core.spec.js).
 
 `why it violates the spec:` Trace became a misleading user-facing surface. The
-right object is agentic tracing: causal/evidence records that agents, VText,
+right object is agentic tracing: causal/evidence records that agents, Texture,
 run-acceptance synthesis, and Super Console can summarize or open when needed.
 
 `successor pattern:` keep trace evidence APIs, run bundles, acceptance records,
@@ -972,7 +972,7 @@ objects with reader artifacts and provenance. A manual browser app makes live
 page viewing look like the primary source workflow and keeps source evidence
 too close to transient iframe/session state.
 
-`successor pattern:` VText source marker -> inline/transcluded expansion ->
+`successor pattern:` Texture source marker -> inline/transcluded expansion ->
 Source Viewer/reader window -> explicit Web Lens live/original inspection when
 needed. Browser/backend-session names may remain only as transitional
 implementation names until the source/Web Lens contract is renamed.
@@ -1011,7 +1011,7 @@ Agents must not introduce:
 
 Near-term architectural order:
 
-1. M3.1 - remove VText workflow forcing and document the invariant.
+1. M3.1 - remove Texture workflow forcing and document the invariant.
 2. M3 - complete lifecycle cutover, especially parent/child residue and
    rewarm/authority cleanup.
 3. M4 - delete continuation substrate and re-point acceptance semantics.

@@ -170,7 +170,7 @@ documents:
       - computer_ontology_change
       - vm_or_promotion_change
 
-  - path: docs/vtext-agentic-invariants-2026-06-13.md
+  - path: docs/texture-agentic-invariants-2026-06-13.md
     claim_scope: current
     is_root: false
     is_evidence: false
@@ -183,7 +183,7 @@ documents:
       - internal/runtime/prompt_defaults/**
       - docs/choir-doctrine.md
     refresh_triggers:
-      - vtext_tool_or_prompt_change
+      - texture_tool_or_prompt_change
       - role_authority_change
 
   - path: docs/why-texture-2026-06-15.md
