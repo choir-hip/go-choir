@@ -96,17 +96,16 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: start with the observed staging trace and focused local tests; then
   deploy and prove with browser-driven QA on `https://choir.news`.
 
-variant (ranking function) V: current V=6:
-1. record the problem and initial conjectures before code changes;
-2. extract the exact failed transition evidence for run
+variant (ranking function) V: current V=3:
+1. completed: record the problem and initial conjectures before code changes;
+2. completed: extract enough failed transition evidence for run
    `386f6c28-5594-4605-ba02-5c90387be3ad`: conductor decision, document id,
    revisions, VText mutation row, run state, tool result errors, and trace;
-3. identify whether repeated `edit_vtext` tool calls failed because of tool
-   schema/content mismatch, stale base revision, store/Dolt lock, provider
-   adapter shape, VM restart/passivation, or another cause;
-4. implement the narrow repair with focused tests;
-5. verify local and deployed product paths with browser/computer-use evidence;
-6. update M3 goalstring only after deployed proof shows prompt-bar VText V1
+3. completed: identify repeated `edit_vtext` continuation as a tool-loop
+   termination mismatch rather than prompt seed loss;
+4. completed locally: implement the narrow repair with focused tests;
+5. remaining: verify deployed product path with browser/computer-use evidence;
+6. remaining: update M3 goalstring only after deployed proof shows prompt-bar VText V1
    creation and no indefinite pending state.
 
 budget: one urgent red-surface repair pass before M3. If root cause crosses VM
@@ -129,16 +128,17 @@ cleared or honestly failed, and residual risks.
 heresy delta: discovered: the product can open a VText artifact and then leave
 the owner in an indefinite first-draft pending state after repeated tool-use
 responses and VM restart/passivation. Introduced: none accepted. Repaired:
-none yet.
+local repair candidate only; not accepted until deployed browser proof passes.
 
 position / live conjectures / open edges:
-- C1 active: prompt-bar seed is not necessarily lost. Code intentionally stores
+- C1 supported: prompt-bar seed is not necessarily lost. Code intentionally stores
   prompt-bar input in metadata and starts VText with that prompt while keeping
   visible V0 empty. The real failure is V1 non-creation or pending-state
   recovery.
-- C2 active: the VText tool loop may repeatedly receive malformed or invalid
-  `edit_vtext` calls, feed errors back to the model, and loop until VM churn
-  interrupts it. Tool-result details are the next decisive evidence.
+- C2 supported and repaired locally: VText agent-revision runs made
+  `edit_vtext` the exact initial tool, but did not treat successful
+  `edit_vtext` as terminal. The loop could ask the provider for another turn
+  after the canonical document write instead of completing the run.
 - C3 active: configured VText provider policy starts with providers returning
   `402 Payment Required`, then falls back to ChatGPT. This adds latency and
   noise but is not yet proven to be the root cause because ChatGPT returned
@@ -151,10 +151,11 @@ position / live conjectures / open edges:
   time out. Health cannot be the sole recovery oracle for VText product
   readiness.
 
-next move: extract failed-run product/control evidence for
-`386f6c28-5594-4605-ba02-5c90387be3ad`, especially tool result errors and the
-VText mutation row. If product routes stay timed out, use a read-only mounted
-or snapshot-safe store inspection path rather than mutating live VM state.
+next move: commit and push the local repair, monitor CI and Node B deploy, then
+run browser/computer-use product proof against `https://choir.news` with a fresh
+prompt-bar submission. Acceptance requires non-empty V1, cleared pending state
+or precise blocker, and trace evidence showing conductor -> VText before any
+super.
 
 ledger file: `docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md`
 

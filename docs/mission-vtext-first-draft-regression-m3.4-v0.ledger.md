@@ -45,3 +45,20 @@ Expected next move: extract the failed run's tool result errors, document id,
 revision list, mutation row, and trace moments. If product routes remain timed
 out, use a read-only, snapshot-safe store inspection route rather than mutating
 live VM state.
+
+## 2026-06-15 - Root Cause And First Repair Move
+
+Code review found the mismatch behind the repeated tool-use loop. VText
+agent-revision runs selected exact initial `edit_vtext`, but configured terminal
+tool successes only for `spawn_agent`, `request_super_execution`, and
+`request_email_draft`. `edit_vtext` stores the canonical revision and completes
+the pending mutation, but the enclosing tool loop still asked the provider for
+another turn. The existing prompt-bar test hid this because its fake provider
+returned `end_turn` after seeing the edit.
+
+Repair conjecture: a successful `edit_vtext` must terminate the current VText
+agent-revision tool loop. VText may still choose researcher/super/email tools in
+the same or a later VText-owned turn, but a canonical document write is not a
+prompt for another forced edit cycle. The first code move adds `edit_vtext` to
+the VText agent-revision terminal tool set and tightens the prompt-bar VText
+test to require a single terminal edit turn.

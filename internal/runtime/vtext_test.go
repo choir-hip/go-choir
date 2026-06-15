@@ -1885,6 +1885,9 @@ func TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testin
 	if len(provider.choices) == 0 || provider.choices[0] != exactRequiredToolChoice("edit_vtext") {
 		t.Fatalf("initial vtext tool_choice = %#v, want first choice %q", provider.choices, exactRequiredToolChoice("edit_vtext"))
 	}
+	if len(provider.choices) != 1 {
+		t.Fatalf("vtext provider calls = %d choices=%#v, want one terminal edit_vtext turn", len(provider.choices), provider.choices)
+	}
 }
 
 func TestInitialVTextRunWritesFirstAppagentRevisionThroughEdit(t *testing.T) {
