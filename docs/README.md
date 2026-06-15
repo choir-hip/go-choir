@@ -87,6 +87,14 @@ explicitly promotes one as source form.
   focal docs spine, mission DAG, assertion-register wiring, and code/docs
   heresy baseline.
 - `docs/mission-geometry.md` - high-level mission geometry: Choir as statistical/symbolic/evolutionary learner and automatic computer -> newspaper -> radio -> capital vector.
+- `docs/why-texture-2026-06-15.md` - explanatory support document for Texture:
+  the artifact layer for directed autonomous results and compounding learning.
+- `docs/why-texture-background-2026-06-15.md` - historical/background support
+  for the Texture rename, multi-agent transcript failure, web desktop
+  deduction, and safe self-development context.
+- `docs/mission-texture-hard-cutover-v0.md` - active Parallax mission to
+  propagate Texture through docs, code, prompts, UI, tests, checker warnings,
+  product proof, and only then a minimal protocol v0.
 - `docs/parallax-design-2026-06-11.md` - current mission-discipline design:
   Parallax conjecture circuits and paradocs for new broad work.
 - `docs/mission-portfolio-2026-06-11.md` - current durable-actor

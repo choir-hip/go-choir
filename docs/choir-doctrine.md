@@ -26,6 +26,8 @@ Primary support docs:
 - [choir-rearchitecture-durable-actors-2026-06-11.md](./choir-rearchitecture-durable-actors-2026-06-11.md)
 - [conjecture-learning-proof-theory-2026-06-11.md](./conjecture-learning-proof-theory-2026-06-11.md)
 - [conjecture-assertion-ledger-2026-06.md](./conjecture-assertion-ledger-2026-06.md)
+- [why-texture-2026-06-15.md](./why-texture-2026-06-15.md)
+- [why-texture-background-2026-06-15.md](./why-texture-background-2026-06-15.md)
 - [vtext-agentic-invariants-2026-06-13.md](./vtext-agentic-invariants-2026-06-13.md)
 - [mission-portfolio-2026-06-11.md](./mission-portfolio-2026-06-11.md)
 - [mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md)

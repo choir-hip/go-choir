@@ -49,6 +49,7 @@ nodes:
   - m3.2-vtext-prompt-decision-notes
   - m3.3-vm-bootstrap-recovery-race
   - m3.4-vtext-first-draft-regression
+  - texture-hard-cutover-v0
   - m3-lifecycle-cutover
   - m4-continuation-deletion
   - m5-wire-on-settlement
@@ -137,12 +138,27 @@ nodes:
   depends_on:
   - m3.3-vm-bootstrap-recovery-race
   enables:
-  - m3-lifecycle-cutover
+  - texture-hard-cutover-v0
   sources:
   - docs/mission-portfolio-2026-06-11.md
   - docs/mission-lifecycle-cutover-v0.md
   - docs/vtext-agentic-invariants-2026-06-13.md
   - AGENTS.md
+- id: texture-hard-cutover-v0
+  title: Texture Hard Cutover v0
+  path: docs/mission-texture-hard-cutover-v0.md
+  ledger: docs/mission-texture-hard-cutover-v0.ledger.md
+  status: open_handoff
+  kind: spine
+  depends_on:
+  - m3.4-vtext-first-draft-regression
+  enables:
+  - m3-lifecycle-cutover
+  sources:
+  - docs/why-texture-2026-06-15.md
+  - docs/why-texture-background-2026-06-15.md
+  - docs/choir-doctrine.md
+  - docs/mission-portfolio-2026-06-11.md
 - id: m3-lifecycle-cutover
   title: M3 Lifecycle Cutover
   path: docs/mission-lifecycle-cutover-v0.md
@@ -150,7 +166,7 @@ nodes:
   status: working
   kind: spine
   depends_on:
-  - m3.4-vtext-first-draft-regression
+  - texture-hard-cutover-v0
   enables:
   - m4-continuation-deletion
   sources:

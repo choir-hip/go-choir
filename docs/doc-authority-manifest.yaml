@@ -186,6 +186,58 @@ documents:
       - vtext_tool_or_prompt_change
       - role_authority_change
 
+  - path: docs/why-texture-2026-06-15.md
+    claim_scope: current
+    is_root: false
+    is_evidence: false
+    annotations:
+      doc_role: explanatory_support
+      authority: support
+      lifecycle: living
+    witnesses:
+      - docs/choir-doctrine.md
+      - docs/mission-geometry.md
+      - docs/choir-strategy-overview-2026-06-09.md
+    refresh_triggers:
+      - texture_tool_or_prompt_change
+      - doctrine_change
+      - product_ontology_change
+
+  - path: docs/why-texture-background-2026-06-15.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_background
+      authority: support
+      lifecycle: living
+    witnesses:
+      - docs/why-texture-2026-06-15.md
+      - docs/choir-doctrine.md
+      - docs/mission-geometry.md
+      - docs/choir-strategy-overview-2026-06-09.md
+    refresh_triggers:
+      - product_ontology_change
+      - doctrine_change
+
+  - path: docs/mission-texture-hard-cutover-v0.md
+    claim_scope: current
+    is_root: false
+    is_evidence: false
+    annotations:
+      doc_role: paradoc
+      authority: mission
+      lifecycle: active
+    witnesses:
+      - docs/why-texture-2026-06-15.md
+      - docs/why-texture-background-2026-06-15.md
+      - docs/mission-graph.yaml
+      - docs/choir-doctrine.md
+    refresh_triggers:
+      - product_ontology_change
+      - texture_tool_or_prompt_change
+      - docs_checker_rule_change
+
   - path: docs/heresy-detectors.md
     claim_scope: mixed
     is_root: false
