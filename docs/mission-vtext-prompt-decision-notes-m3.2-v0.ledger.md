@@ -126,6 +126,44 @@ Receipts:
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
 
+## 2026-06-15 - Staging Route-Carrier Repair Checkpoint
+
+Claim/scope: the route-carrier repair deployed cleanly, but the deployed proof
+still failed the durable decision-table requirement. The proof observed a Trace
+moment mentioning `no_worker_needed`, but inspection showed it was a
+`channel.message` from `super` to VText rather than a
+`vtext.decision.recorded` event or diagnosis decision row.
+
+Move: document the deployed failure before another runtime route change.
+Expected Delta V: close the landing/staging proof. Actual Delta V: V=1 to V=2,
+with a remaining deployed conductor-to-super assignment path.
+
+Receipts:
+- Commit `081a411e88a8d81fb35f62f59c6eecae2baf22e6` passed CI run
+  `27521119493`, Docs Truth Check `27521119488`, and FlakeHub publish
+  `27521119461`.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=081a411e88a8d81fb35f62f59c6eecae2baf22e6`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781492090148.json`.
+- Deployed proof screenshot:
+  `/tmp/vtext-decision-staging-proof-1781492090148.png`.
+- Proof submission `7903b196-f5f1-4ca2-a3d0-b82bc2faf68f`, document
+  `fa2368bd-4f7d-45b4-aac2-b7993c875360`, initial loop
+  `2a7fa7db-7e16-4b07-831d-da624d48efce`.
+- Observed diagnosis decisions `0`, Trace decision-like moments `1`,
+  `canonical_contains_reason=false`, revision count `2`, forbidden internal
+  routes `[]`.
+- The matching Trace moment `8834185b-fcfd-4f16-aaab-2fe1b11e0a22` was kind
+  `channel.message`, agent `super`, summary beginning "VText decision note:
+  no_worker_nee..."; it was not a durable VText decision record.
+- Trace agents still included conductor, `super`, and VText; `super` remained
+  the initial loop.
+
+Open edge: inspect the route that still assigns the initial prompt to `super`
+on staging, then repair it so explicit no-worker VText decision prompts start
+with VText and persist the decision row before the first edit.
+
 ## 2026-06-15 - Staging Prompt-Bar Route Repair Checkpoint
 
 Claim/scope: the prompt-bar no-worker route repair deployed, but deployed proof

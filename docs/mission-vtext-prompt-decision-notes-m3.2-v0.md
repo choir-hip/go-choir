@@ -238,11 +238,18 @@ states reasons without forcing choreography.
   route boundary, stamps the no-worker route flag before any super branch, and
   preserves that prompt as the seed for deterministic VText decision metadata.
   Focused route/tool-loop/decision tests pass.
+- Deployed route-carrier repair failed: staging at
+  `081a411e88a8d81fb35f62f59c6eecae2baf22e6` still returned a `super`
+  initial loop for the explicit no-worker prompt. The proof saw one Trace
+  moment that mentioned `no_worker_needed`, but that moment was a
+  `channel.message` from `super` to VText, not a durable
+  `vtext.decision.recorded` row. VText diagnosis still returned zero decision
+  rows, while the canonical private-reason leak stayed repaired.
 
-**next move:** commit the route-carrier repair, push `origin main`, monitor
-CI/deploy, verify staging identity, and rerun deployed product-path proof for
-decision row, Trace decision moment, no forbidden routes, no initial super
-handoff, and no private reason in canonical text.
+**next move:** inspect the remaining conductor-to-super assignment path on
+deployed `081a411e88a8d81fb35f62f59c6eecae2baf22e6`, then repair the route so
+the initial loop is VText and the durable decision table receives the
+`no_worker_needed` row before any edit.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
