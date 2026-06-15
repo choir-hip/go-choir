@@ -1762,7 +1762,7 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 		s.HandleFunc("/api/test/vtext/worker-update", h.HandleTestVTextWorkerUpdate)
 	}
 
-	// VText document/revision/history/diff/blame APIs.
+	// Texture document/revision/history/diff/blame APIs.
 	// All routes are dispatched from a single prefix handler that inspects
 	// the URL path and method to route to the correct handler. This avoids
 	// ambiguity with Go's ServeMux prefix matching.
@@ -1783,14 +1783,18 @@ func (h *APIHandler) HandleInternalRuntimeRunRouter(w http.ResponseWriter, r *ht
 	h.HandleInternalRunStatus(w, r)
 }
 
-// RegisterVTextRoutes registers the vtext API routes on the given server.
+// RegisterVTextRoutes registers the Texture API routes on the given server.
 // These routes expose document CRUD, revision, history, snapshot, diff,
 // and blame APIs through the authenticated same-origin proxy path.
 func RegisterVTextRoutes(s *server.Server, h *APIHandler) {
 	// Exact match for document collection (create/list).
+	s.HandleFunc("/api/texture/documents", h.HandleVTextDocumentsRoot)
 	s.HandleFunc("/api/vtext/documents", h.HandleVTextDocumentsRoot)
 
-	// Prefix match for all other vtext routes.
+	// Prefix match for all other Texture routes. The /api/vtext prefix is a
+	// temporary compatibility shim for one cutover window; product clients should
+	// use /api/texture.
+	s.HandleFunc("/api/texture/", h.HandleVTextRouter)
 	s.HandleFunc("/api/vtext/", h.HandleVTextRouter)
 }
 
@@ -1823,9 +1827,9 @@ func RegisterVTextRoutes(s *server.Server, h *APIHandler) {
 //	GET    /api/vtext/revisions/{id}/blame     → blame revision
 //	GET    /api/vtext/diff                     → diff two revisions
 func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path
+	path := normalizeTextureAPIPath(r.URL.Path)
 
-	// Diff endpoint: /api/vtext/diff
+	// Diff endpoint: /api/texture/diff
 	if path == "/api/vtext/diff" {
 		h.HandleVTextDiff(w, r)
 		return
@@ -1929,6 +1933,16 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "vtext endpoint not found"})
+}
+
+func normalizeTextureAPIPath(path string) string {
+	if strings.HasPrefix(path, "/api/texture/") {
+		return "/api/vtext/" + strings.TrimPrefix(path, "/api/texture/")
+	}
+	if path == "/api/texture" {
+		return "/api/vtext"
+	}
+	return path
 }
 
 // HandleVTextDocumentsRoot routes POST to create and GET to list at

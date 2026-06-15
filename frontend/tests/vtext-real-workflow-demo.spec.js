@@ -99,12 +99,12 @@ async function waitForPromptDecision(page, submissionId, timeout = 120_000) {
 }
 
 async function listRevisions(page, docId) {
-  return fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(docId)}/revisions`);
+  return fetchJSON(page, `/api/texture/documents/${encodeURIComponent(docId)}/revisions`);
 }
 
 async function loadVTextState(page, docId) {
   const [doc, revisions] = await Promise.all([
-    fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(docId)}`),
+    fetchJSON(page, `/api/texture/documents/${encodeURIComponent(docId)}`),
     listRevisions(page, docId),
   ]);
   const head = (revisions.revisions || []).find((revision) => revision.revision_id === doc.current_revision_id);
@@ -240,7 +240,7 @@ test('real vtext workflow demo uses live LLM, search, generated artifact, and ve
     /verification|passed|node/i,
   ], 180_000);
   expect(finalState.head.content).not.toMatch(/Task completed successfully|stub provider|Worker update ready\.|Research findings ready\.|Conductor framing|Use this vtext|User request:/i);
-  expect(finalState.head.metadata.source).toBe('edit_vtext');
+  expect(finalState.head.metadata.source).toBe('edit_texture');
   expect(finalState.head.metadata.vtext_edit_kind).toBe('vtext_edit');
 
   await page.locator('[data-desktop-icon-id="files"]').dblclick();

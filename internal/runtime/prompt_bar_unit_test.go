@@ -156,8 +156,8 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_decision_required") {
 		t.Fatalf("initial run missing deterministic decision metadata: %+v", initialRun.Metadata)
 	}
-	if got := initialVTextToolChoice(initialRun); got != exactRequiredToolChoice("edit_vtext") {
-		t.Fatalf("initial tool choice = %q, want edit_vtext after deterministic decision record", got)
+	if got := initialVTextToolChoice(initialRun); got != exactRequiredToolChoice("edit_texture") {
+		t.Fatalf("initial tool choice = %q, want edit_texture after deterministic decision record", got)
 	}
 	done := waitForPromptBarUnitRunTerminal(t, rt, decision.InitialLoopID, "user-alice", 5*time.Second)
 	if done.State != types.RunCompleted {

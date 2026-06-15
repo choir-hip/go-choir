@@ -49,7 +49,6 @@ func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.D
 	return nil, fmt.Errorf("wire publish is not configured")
 }
 
-
 func fallbackWirePublishURLFromEnv() string {
 	if url := fallbackWirePublishURLFromBases([]string{
 		os.Getenv("RUNTIME_VMCTL_URL"),
@@ -106,11 +105,11 @@ func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc
 	if rec != nil {
 		payload.RunID = strings.TrimSpace(rec.RunID)
 		payload.RequestIntent = metadataStringValue(rec.Metadata, "request_intent")
-	if len(rec.Metadata) > 0 {
-		if raw, err := json.Marshal(rec.Metadata); err == nil {
-			payload.RunMetadata = raw
+		if len(rec.Metadata) > 0 {
+			if raw, err := json.Marshal(rec.Metadata); err == nil {
+				payload.RunMetadata = raw
+			}
 		}
-	}
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

@@ -146,7 +146,7 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: docs and detector warnings -> focused local tests -> staging deploy
   identity -> browser product proof -> protocol canonization.
 
-variant (ranking function) V: current V=8; last ΔV=0:
+variant (ranking function) V: current V=7; last ΔV=-1:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
@@ -156,13 +156,17 @@ variant (ranking function) V: current V=8; last ΔV=0:
    reconciliation; the operating contract and Texture invariant doc have been
    renamed/reworded, but doctrine/README/mission graph still carry H5 warnings
    for live old filenames and detector symbols;
-4. current V includes: runtime/tool/API symbols still use the old ontology;
+4. current V includes: internal runtime, storage, file, UI data-attribute, and
+   compatibility-shim symbols still use the old ontology; product-facing API
+   routes and tool affordance names now expose Texture locally;
 5. current V includes: UI labels and browser proof still target the old
    artifact name;
 6. current V includes: edit affordance surface still needs common-vs-
    exceptional naming proof;
-7. current V includes: prompt register still needs Texture-oriented why-style
-   wording without workflow forcing;
+7. discharged for local scope: prompt register and registered tool names now
+   use Texture-oriented wording and `edit_texture` /
+   `record_texture_decision` affordances without adding runtime semantic
+   decision trees;
 8. current V includes: prompt-bar first-revision product proof must pass under
    Texture names;
 9. current V includes: transclusion pinned-ref plus newer-version indicator
@@ -219,9 +223,13 @@ position / live conjectures / open edges:
 - C5 active: protocol design before proof risks cathedral-building. The
   protocol should be the last deliverable, distilled from the working minimal
   surface.
+- C6 supported for local scope: `/api/texture` is registered and exercised by
+  focused tests and frontend API callers, while `/api/vtext` remains an
+  explicitly temporary compatibility shim. This does not yet prove staging or
+  authorize shim deletion.
 
-next move: commit the report-only checker slice, then begin high-read doctrine
-and index-doc Texture reconciliation before runtime symbol changes.
+next move: commit the local runtime/product affordance slice, then continue the
+broader UI/internal symbol cutover before staging acceptance.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -246,13 +254,14 @@ Use Parallax on docs/mission-texture-hard-cutover-v0.md. Treat it as the source
 program for the Texture hard cutover before M3 resumes. Texture is the promoted
 ontology for Choir's versioned, transclusive artifact control plane; the old
 V-name is migration residue allowed only in the historical background doc and
-explicit historical mission evidence. Current status is open_handoff with V=10.
-First perform a read-only retired-name inventory and design the report-only
-docs checker warning rule plus allowlist; land a Problem Documentation First
-checkpoint before runtime changes. Then rename docs/code/prompts/UI/tests/tool
-affordances toward Texture, preserve one Texture writer among agents, keep
-human direct edits canonical, keep super downstream of Texture for privileged
-execution, and avoid runtime semantic decision trees. Prove prompt-bar ->
+explicit historical mission evidence. Current status is open_handoff with V=7.
+The read-only retired-name inventory, Problem Documentation First checkpoint,
+report-only H5 docs checker, operating-contract Texture reconciliation, and a
+local product-facing route/tool/prompt slice are landed or ready to land. Continue
+renaming docs/code/prompts/UI/tests/tool affordances toward Texture, preserve one
+Texture writer among agents, keep human direct edits canonical, keep super
+downstream of Texture for privileged execution, and avoid runtime semantic
+decision trees. Prove prompt-bar ->
 conductor -> Texture first revision through staging browser/computer-use
 evidence, including history/source surfaces and no super-before-Texture route.
 Transclusions should pin version refs by default and show newer versions when

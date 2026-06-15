@@ -375,7 +375,7 @@ func toolRequiresSequentialTurnExecution(name string) bool {
 	switch strings.TrimSpace(name) {
 	case "bash",
 		"write_file",
-		"edit_vtext",
+		"edit_texture",
 		"spawn_agent",
 		"cancel_agent",
 		"request_super_execution",
@@ -666,12 +666,12 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 
 	for i, call := range calls {
 		switch call.Name {
-		case "edit_vtext":
+		case "edit_texture":
 			if profile != AgentProfileVText {
 				continue
 			}
 			if firstVTextEdit != -1 {
-				setSkip(i, fmt.Sprintf("tool_notice:duplicate edit_vtext in this VText turn skipped after call %s; one canonical document mutation is allowed per revision run", calls[firstVTextEdit].ID))
+				setSkip(i, fmt.Sprintf("tool_notice:duplicate edit_texture in this VText turn skipped after call %s; one canonical document mutation is allowed per revision run", calls[firstVTextEdit].ID))
 				continue
 			}
 			firstVTextEdit = i

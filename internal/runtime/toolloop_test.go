@@ -145,12 +145,12 @@ func TestRunToolLoopEndTurn(t *testing.T) {
 func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
-		Name: "edit_vtext",
+		Name: "edit_texture",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"stored","revision_id":"rev-2"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register edit_vtext: %v", err)
+		t.Fatalf("register edit_texture: %v", err)
 	}
 
 	provider := newMockToolLoopProvider(
@@ -158,7 +158,7 @@ func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-edit",
-				Name:      "edit_vtext",
+				Name:      "edit_texture",
 				Arguments: json.RawMessage(`{"doc_id":"doc-1"}`),
 			}},
 			Usage: TokenUsage{InputTokens: 10, OutputTokens: 4},
@@ -186,7 +186,7 @@ func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.
 			}
 		},
 		nil,
-		WithTerminalToolSuccesses("edit_vtext"),
+		WithTerminalToolSuccesses("edit_texture"),
 	)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -454,7 +454,7 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 	registry := NewToolRegistry()
 	var edited, recorded int
 	if err := registry.Register(Tool{
-		Name:        "edit_vtext",
+		Name:        "edit_texture",
 		Description: "Edit the VText document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -462,10 +462,10 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 			return `{"status":"edited"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register edit_vtext: %v", err)
+		t.Fatalf("register edit_texture: %v", err)
 	}
 	if err := registry.Register(Tool{
-		Name:        "record_vtext_decision",
+		Name:        "record_texture_decision",
 		Description: "Record a VText decision.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -473,7 +473,7 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 			return `{"status":"recorded"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register record_vtext_decision: %v", err)
+		t.Fatalf("register record_texture_decision: %v", err)
 	}
 
 	var choices []string
@@ -482,7 +482,7 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-edit",
-				Name:      "edit_vtext",
+				Name:      "edit_texture",
 				Arguments: json.RawMessage(`{"content":"private reason leaked"}`),
 			}},
 			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
@@ -492,7 +492,7 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-decision",
-				Name:      "record_vtext_decision",
+				Name:      "record_texture_decision",
 				Arguments: json.RawMessage(`{"decision_kind":"no_worker_needed"}`),
 			}},
 			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
@@ -514,8 +514,8 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 			if err := json.Unmarshal(payload, &decoded); err != nil {
 				t.Fatalf("decode retry payload: %v", err)
 			}
-			if decoded["required_tool"] != "record_vtext_decision" {
-				t.Fatalf("required_tool = %v, want record_vtext_decision", decoded["required_tool"])
+			if decoded["required_tool"] != "record_texture_decision" {
+				t.Fatalf("required_tool = %v, want record_texture_decision", decoded["required_tool"])
 			}
 		}
 	}
@@ -529,7 +529,7 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 		0,
 		emit,
 		nil,
-		WithInitialToolChoice("function:record_vtext_decision"),
+		WithInitialToolChoice("function:record_texture_decision"),
 	)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -538,12 +538,12 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 		t.Fatalf("text = %q, want done", text)
 	}
 	if edited != 0 {
-		t.Fatalf("edit_vtext executed %d times, want 0", edited)
+		t.Fatalf("edit_texture executed %d times, want 0", edited)
 	}
 	if recorded != 1 {
-		t.Fatalf("record_vtext_decision executed %d times, want 1", recorded)
+		t.Fatalf("record_texture_decision executed %d times, want 1", recorded)
 	}
-	if len(choices) != 3 || choices[0] != "function:record_vtext_decision" || choices[1] != "function:record_vtext_decision" || choices[2] != "" {
+	if len(choices) != 3 || choices[0] != "function:record_texture_decision" || choices[1] != "function:record_texture_decision" || choices[2] != "" {
 		t.Fatalf("tool choices = %#v, want exact retry then unconstrained final", choices)
 	}
 	if !retrySeen {
@@ -555,7 +555,7 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 	registry := NewToolRegistry()
 	var edited int
 	if err := registry.Register(Tool{
-		Name:        "edit_vtext",
+		Name:        "edit_texture",
 		Description: "Edit the VText document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -563,15 +563,15 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 			return `{"status":"stored","revision_id":"rev-2"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register edit_vtext: %v", err)
+		t.Fatalf("register edit_texture: %v", err)
 	}
 
 	var choices []string
 	provider := &capturingToolChoiceProvider{responses: []*ToolLoopResponse{{
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{
-			{ID: "call-edit-1", Name: "edit_vtext", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"first"}`)},
-			{ID: "call-edit-2", Name: "edit_vtext", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"second"}`)},
+			{ID: "call-edit-1", Name: "edit_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"first"}`)},
+			{ID: "call-edit-2", Name: "edit_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"second"}`)},
 		},
 		Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
 		Model: "test-model",
@@ -590,7 +590,7 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 		if err := json.Unmarshal(payload, &decoded); err != nil {
 			t.Fatalf("decode tool result: %v", err)
 		}
-		if decoded["call_id"] == "call-edit-2" && strings.Contains(fmt.Sprint(decoded["output"]), "duplicate edit_vtext") {
+		if decoded["call_id"] == "call-edit-2" && strings.Contains(fmt.Sprint(decoded["output"]), "duplicate edit_texture") {
 			duplicateNoticeSeen = true
 		}
 	}
@@ -610,8 +610,8 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 		0,
 		emit,
 		nil,
-		WithInitialToolChoice("function:edit_vtext"),
-		WithTerminalToolSuccesses("edit_vtext"),
+		WithInitialToolChoice("function:edit_texture"),
+		WithTerminalToolSuccesses("edit_texture"),
 	)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -620,16 +620,16 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 		t.Fatalf("text = %q, want empty terminal tool result", text)
 	}
 	if edited != 1 {
-		t.Fatalf("edit_vtext executed %d times, want 1", edited)
+		t.Fatalf("edit_texture executed %d times, want 1", edited)
 	}
 	if retrySeen {
 		t.Fatal("same-tool duplicate response must not trigger initial tool-choice retry")
 	}
 	if !duplicateNoticeSeen {
-		t.Fatal("missing duplicate edit_vtext notice for second call")
+		t.Fatal("missing duplicate edit_texture notice for second call")
 	}
-	if len(choices) != 1 || choices[0] != "function:edit_vtext" {
-		t.Fatalf("tool choices = %#v, want one exact initial edit_vtext choice", choices)
+	if len(choices) != 1 || choices[0] != "function:edit_texture" {
+		t.Fatalf("tool choices = %#v, want one exact initial edit_texture choice", choices)
 	}
 }
 
@@ -1362,7 +1362,7 @@ func (p *exactToolChoicePreconditionThenToolProvider) CallWithTools(ctx context.
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-edit",
-			Name:      "edit_vtext",
+			Name:      "edit_texture",
 			Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"mission checkpoint"}`),
 		}},
 		Usage: TokenUsage{InputTokens: 8, OutputTokens: 2},
@@ -1387,7 +1387,7 @@ func (p *providerPreconditionThenToolProvider) CallWithTools(ctx context.Context
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-edit",
-			Name:      "edit_vtext",
+			Name:      "edit_texture",
 			Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"mission checkpoint"}`),
 		}},
 		Usage: TokenUsage{InputTokens: 9, OutputTokens: 3},
@@ -1412,7 +1412,7 @@ func (p *providerErrorsThenToolProvider) CallWithTools(ctx context.Context, req 
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-edit",
-			Name:      "edit_vtext",
+			Name:      "edit_texture",
 			Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"mission checkpoint"}`),
 		}},
 		Usage: TokenUsage{InputTokens: 12, OutputTokens: 4},
@@ -1424,14 +1424,14 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 	provider := &exactToolChoicePreconditionThenToolProvider{}
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
-		Name:        "edit_vtext",
+		Name:        "edit_texture",
 		Description: "Edit the VText document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register edit_vtext: %v", err)
+		t.Fatalf("register edit_texture: %v", err)
 	}
 	if err := registry.Register(Tool{
 		Name:        "request_super_execution",
@@ -1451,7 +1451,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 			if err := json.Unmarshal(payload, &decoded); err != nil {
 				t.Fatalf("decode retry payload: %v", err)
 			}
-			if decoded["tool_choice"] != "function:edit_vtext" || decoded["retry_tool_choice"] != "required" {
+			if decoded["tool_choice"] != "function:edit_texture" || decoded["retry_tool_choice"] != "required" {
 				t.Fatalf("retry payload = %+v", decoded)
 			}
 		}
@@ -1466,8 +1466,8 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 		0,
 		emit,
 		nil,
-		WithInitialToolChoice("function:edit_vtext"),
-		WithTerminalToolSuccesses("edit_vtext"),
+		WithInitialToolChoice("function:edit_texture"),
+		WithTerminalToolSuccesses("edit_texture"),
 	)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -1481,15 +1481,15 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 	if got := atomic.LoadInt32(&provider.calls); got != 2 {
 		t.Fatalf("provider calls = %d, want 2", got)
 	}
-	if len(provider.choices) != 2 || provider.choices[0] != "function:edit_vtext" || provider.choices[1] != "required" {
+	if len(provider.choices) != 2 || provider.choices[0] != "function:edit_texture" || provider.choices[1] != "required" {
 		t.Fatalf("tool choices = %#v, want exact then required", provider.choices)
 	}
 	if len(provider.requests) != 2 {
 		t.Fatalf("requests = %d, want 2", len(provider.requests))
 	}
 	for i, req := range provider.requests {
-		if len(req.ToolDefinitions) != 1 || req.ToolDefinitions[0].Name != "edit_vtext" {
-			t.Fatalf("request %d tool definitions = %+v, want only edit_vtext", i, req.ToolDefinitions)
+		if len(req.ToolDefinitions) != 1 || req.ToolDefinitions[0].Name != "edit_texture" {
+			t.Fatalf("request %d tool definitions = %+v, want only edit_texture", i, req.ToolDefinitions)
 		}
 	}
 	if !retrySeen {
@@ -1513,7 +1513,7 @@ func (p *deepSeekToolChoicePreconditionThenToolProvider) CallWithTools(ctx conte
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-edit",
-			Name:      "edit_vtext",
+			Name:      "edit_texture",
 			Arguments: json.RawMessage(`{"content":"ok"}`),
 		}},
 		Usage: TokenUsage{InputTokens: 11, OutputTokens: 5},
@@ -1525,14 +1525,14 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoice
 	provider := &deepSeekToolChoicePreconditionThenToolProvider{}
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
-		Name:        "edit_vtext",
+		Name:        "edit_texture",
 		Description: "Edit the VText document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register edit_vtext: %v", err)
+		t.Fatalf("register edit_texture: %v", err)
 	}
 	var retrySeen bool
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
@@ -1542,7 +1542,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoice
 			if err := json.Unmarshal(payload, &decoded); err != nil {
 				t.Fatalf("decode retry payload: %v", err)
 			}
-			if decoded["tool_choice"] != "function:edit_vtext" || decoded["retry_tool_choice"] != "required" {
+			if decoded["tool_choice"] != "function:edit_texture" || decoded["retry_tool_choice"] != "required" {
 				t.Fatalf("retry payload = %+v", decoded)
 			}
 		}
@@ -1557,13 +1557,13 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoice
 		0,
 		emit,
 		nil,
-		WithInitialToolChoice("function:edit_vtext"),
-		WithTerminalToolSuccesses("edit_vtext"),
+		WithInitialToolChoice("function:edit_texture"),
+		WithTerminalToolSuccesses("edit_texture"),
 	)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
-	if len(provider.choices) != 2 || provider.choices[0] != "function:edit_vtext" || provider.choices[1] != "required" {
+	if len(provider.choices) != 2 || provider.choices[0] != "function:edit_texture" || provider.choices[1] != "required" {
 		t.Fatalf("tool choices = %#v, want exact then required", provider.choices)
 	}
 	if !retrySeen {
@@ -1575,14 +1575,14 @@ func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *t
 	provider := &providerPreconditionThenToolProvider{failuresBeforeSuccess: 2}
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
-		Name:        "edit_vtext",
+		Name:        "edit_texture",
 		Description: "Edit the VText document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register edit_vtext: %v", err)
+		t.Fatalf("register edit_texture: %v", err)
 	}
 	if err := registry.Register(Tool{
 		Name:        "request_super_execution",
@@ -1629,8 +1629,8 @@ func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *t
 			ReasoningEffort: "medium",
 			Source:          "test_fallback",
 		}),
-		WithInitialToolChoice("function:edit_vtext"),
-		WithTerminalToolSuccesses("edit_vtext"),
+		WithInitialToolChoice("function:edit_texture"),
+		WithTerminalToolSuccesses("edit_texture"),
 	)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -1650,7 +1650,7 @@ func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *t
 	if len(provider.requests) != 3 {
 		t.Fatalf("requests = %d, want 3", len(provider.requests))
 	}
-	wantChoices := []string{"function:edit_vtext", "required", "required"}
+	wantChoices := []string{"function:edit_texture", "required", "required"}
 	wantModels := []string{
 		"accounts/fireworks/models/deepseek-v4-flash",
 		"accounts/fireworks/models/deepseek-v4-flash",
@@ -1660,8 +1660,8 @@ func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *t
 		if req.ToolChoice != wantChoices[i] || req.Model != wantModels[i] {
 			t.Fatalf("request %d choice/model = %q/%q, want %q/%q", i, req.ToolChoice, req.Model, wantChoices[i], wantModels[i])
 		}
-		if len(req.ToolDefinitions) != 1 || req.ToolDefinitions[0].Name != "edit_vtext" {
-			t.Fatalf("request %d tool definitions = %+v, want only edit_vtext", i, req.ToolDefinitions)
+		if len(req.ToolDefinitions) != 1 || req.ToolDefinitions[0].Name != "edit_texture" {
+			t.Fatalf("request %d tool definitions = %+v, want only edit_texture", i, req.ToolDefinitions)
 		}
 	}
 }
@@ -1670,14 +1670,14 @@ func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 	provider := &providerPreconditionThenToolProvider{failuresBeforeSuccess: 3}
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
-		Name:        "edit_vtext",
+		Name:        "edit_texture",
 		Description: "Edit the VText document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register edit_vtext: %v", err)
+		t.Fatalf("register edit_texture: %v", err)
 	}
 	var fallbackModels []string
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
@@ -1719,8 +1719,8 @@ func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 				Source:          "test_platform_fallback",
 			},
 		),
-		WithInitialToolChoice("function:edit_vtext"),
-		WithTerminalToolSuccesses("edit_vtext"),
+		WithInitialToolChoice("function:edit_texture"),
+		WithTerminalToolSuccesses("edit_texture"),
 	)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -1735,7 +1735,7 @@ func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 	if !reflect.DeepEqual(fallbackModels, wantFallbacks) {
 		t.Fatalf("fallback models = %+v, want %+v", fallbackModels, wantFallbacks)
 	}
-	wantChoices := []string{"function:edit_vtext", "required", "required", "required"}
+	wantChoices := []string{"function:edit_texture", "required", "required", "required"}
 	wantModels := []string{
 		"accounts/fireworks/models/deepseek-v4-flash",
 		"accounts/fireworks/models/deepseek-v4-flash",
@@ -1746,8 +1746,8 @@ func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 		if req.ToolChoice != wantChoices[i] || req.Model != wantModels[i] {
 			t.Fatalf("request %d choice/model = %q/%q, want %q/%q", i, req.ToolChoice, req.Model, wantChoices[i], wantModels[i])
 		}
-		if len(req.ToolDefinitions) != 1 || req.ToolDefinitions[0].Name != "edit_vtext" {
-			t.Fatalf("request %d tool definitions = %+v, want only edit_vtext", i, req.ToolDefinitions)
+		if len(req.ToolDefinitions) != 1 || req.ToolDefinitions[0].Name != "edit_texture" {
+			t.Fatalf("request %d tool definitions = %+v, want only edit_texture", i, req.ToolDefinitions)
 		}
 	}
 }
@@ -1759,14 +1759,14 @@ func TestRunToolLoopFallsBackAfterProviderAvailabilityError(t *testing.T) {
 	}}
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
-		Name:        "edit_vtext",
+		Name:        "edit_texture",
 		Description: "Edit the VText document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register edit_vtext: %v", err)
+		t.Fatalf("register edit_texture: %v", err)
 	}
 	var fallbackReasons []string
 	var fallbackModels []string
@@ -1810,7 +1810,7 @@ func TestRunToolLoopFallsBackAfterProviderAvailabilityError(t *testing.T) {
 				Source:          "test_platform_fallback",
 			},
 		),
-		WithTerminalToolSuccesses("edit_vtext"),
+		WithTerminalToolSuccesses("edit_texture"),
 	)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -1852,14 +1852,14 @@ func TestRunToolLoopTriesProviderPreconditionFallbackWithoutToolChoice(t *testin
 	provider := &providerPreconditionThenToolProvider{failuresBeforeSuccess: 1}
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
-		Name:        "edit_vtext",
+		Name:        "edit_texture",
 		Description: "Edit the VText document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register edit_vtext: %v", err)
+		t.Fatalf("register edit_texture: %v", err)
 	}
 	var fallbackModels []string
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
@@ -1893,7 +1893,7 @@ func TestRunToolLoopTriesProviderPreconditionFallbackWithoutToolChoice(t *testin
 			ReasoningEffort: "medium",
 			Source:          "test_deepseek_fallback",
 		}),
-		WithTerminalToolSuccesses("edit_vtext"),
+		WithTerminalToolSuccesses("edit_texture"),
 	)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)

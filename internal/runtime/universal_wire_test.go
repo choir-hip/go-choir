@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
 func TestHandleUniversalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	_, handler := testAPISetup(t)
 
@@ -51,14 +52,14 @@ func seedPlatformSourceNetworkVTextFixtureWithPublishState(t *testing.T, handler
 		t.Fatalf("create platform source maxx doc: %v", err)
 	}
 	metaMap := map[string]any{
-		"source":                        "edit_vtext",
-		"revision_role":                 vtextRevisionRoleCanonical,
-		"ingestion_handoff_cycle_id":    "cycle-live",
-		"ingestion_handoff_request_id":  "reconciler-live",
+		"source":                         "edit_texture",
+		"revision_role":                  vtextRevisionRoleCanonical,
+		"ingestion_handoff_cycle_id":     "cycle-live",
+		"ingestion_handoff_request_id":   "reconciler-live",
 		"ingestion_handoff_request_kind": "reconciler",
-		"selected_style_sources":        []map[string]any{{"title": "Style.vtext: Universal Wire"}},
-		"selected_style_rationale":      "Universal Wire style fits a fast sourced dispatch.",
-		"source_item_ids":               []string{"srcitem_live_1", "srcitem_live_2"},
+		"selected_style_sources":         []map[string]any{{"title": "Style.vtext: Universal Wire"}},
+		"selected_style_rationale":       "Universal Wire style fits a fast sourced dispatch.",
+		"source_item_ids":                []string{"srcitem_live_1", "srcitem_live_2"},
 	}
 	if published {
 		metaMap["platformd_route_path"] = "/pub/vtext/madrid-dispatch"
@@ -251,14 +252,14 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 		t.Fatalf("create platform source-network doc: %v", err)
 	}
 	meta, _ := json.Marshal(map[string]any{
-		"source":                   "edit_vtext",
-		"revision_role":            vtextRevisionRoleCanonical,
+		"source":                         "edit_texture",
+		"revision_role":                  vtextRevisionRoleCanonical,
 		"ingestion_handoff_cycle_id":     "cycle-scoped",
 		"ingestion_handoff_request_id":   "reconciler-scoped",
 		"ingestion_handoff_request_kind": "reconciler",
-		"selected_style_sources":   []map[string]any{{"title": "Style.vtext: Universal Wire"}},
-		"platformd_route_path":     "/pub/vtext/scoped-sources",
-		"source_item_ids":          []string{"srcitem_cycle_1", "srcitem_cycle_2", "srcitem_cycle_3", "srcitem_cycle_4"},
+		"selected_style_sources":         []map[string]any{{"title": "Style.vtext: Universal Wire"}},
+		"platformd_route_path":           "/pub/vtext/scoped-sources",
+		"source_item_ids":                []string{"srcitem_cycle_1", "srcitem_cycle_2", "srcitem_cycle_3", "srcitem_cycle_4"},
 		"source_entities": []map[string]any{
 			{
 				"entity_id": "src_cited_one",
@@ -410,9 +411,9 @@ func TestNormalizeWireArticleSourceServiceProseRewritesBareLabels(t *testing.T) 
 	rec := &types.RunRecord{
 		OwnerID: "universal-wire-platform",
 		Metadata: map[string]any{
-			"request_intent":              "integrate_worker_findings",
-			"type":                        "vtext_agent_revision",
-			"ingestion_handoff_cycle_id":  "cycle-el-nino",
+			"request_intent":             "integrate_worker_findings",
+			"type":                       "vtext_agent_revision",
+			"ingestion_handoff_cycle_id": "cycle-el-nino",
 		},
 	}
 	normalized, count, entities := normalizeWireArticleSourceServiceProse(content, meta, rec)

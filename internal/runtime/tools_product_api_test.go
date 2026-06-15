@@ -23,7 +23,7 @@ func TestProductAPIRequestToolUsesRunOwnerForAllowedProductRoute(t *testing.T) {
 
 	raw, err := tool.Func(WithToolExecutionContext(context.Background(), run), json.RawMessage(`{
 		"method":"POST",
-		"path":"/api/vtext/documents",
+		"path":"/api/texture/documents",
 		"body":{"title":"Product API tool owner proof"}
 	}`))
 	if err != nil {
@@ -38,7 +38,7 @@ func TestProductAPIRequestToolUsesRunOwnerForAllowedProductRoute(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode product_api_request response: %v\n%s", err, raw)
 	}
-	if resp.StatusCode != http.StatusCreated || resp.Path != "/api/vtext/documents" {
+	if resp.StatusCode != http.StatusCreated || resp.Path != "/api/texture/documents" {
 		t.Fatalf("unexpected product API response: %+v", resp)
 	}
 	if resp.AllowedBy != "product_api_request_allowlist" {

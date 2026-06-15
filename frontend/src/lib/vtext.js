@@ -1,23 +1,23 @@
 /**
- * VText API client for the go-choir desktop shell.
+ * Texture API client for the go-choir desktop shell.
  *
  * Communicates with the versioned document APIs through the same-origin proxy:
- *   POST   /api/vtext/documents                   — create a new document
- *   GET    /api/vtext/documents                   — list documents
- *   POST   /api/vtext/files/open                  — resolve/create aliased file doc
- *   POST   /api/vtext/documents/{id}/manifest     — ensure a filesystem manifestation
- *   GET    /api/vtext/documents/{id}              — get a document
- *   PUT    /api/vtext/documents/{id}              — update a document (title)
- *   DELETE /api/vtext/documents/{id}              — delete a document
- *   POST   /api/vtext/documents/{id}/revisions    — create a revision
- *   GET    /api/vtext/documents/{id}/revisions    — list revisions
- *   GET    /api/vtext/revisions/{id}              — get a revision (snapshot)
- *   GET    /api/vtext/documents/{id}/history      — revision history
- *   GET    /api/vtext/diff?from=X&to=Y            — diff two revisions
- *   GET    /api/vtext/revisions/{id}/blame        — blame revision
- *   GET    /api/vtext/documents/{id}/stream       — document-scoped stream
- *   POST   /api/vtext/documents/{id}/revise        — request a VText revision
- *   POST   /api/vtext/documents/{id}/source-attachments — attach readable source artifacts
+ *   POST   /api/texture/documents                   — create a new document
+ *   GET    /api/texture/documents                   — list documents
+ *   POST   /api/texture/files/open                  — resolve/create aliased file doc
+ *   POST   /api/texture/documents/{id}/manifest     — ensure a filesystem manifestation
+ *   GET    /api/texture/documents/{id}              — get a document
+ *   PUT    /api/texture/documents/{id}              — update a document (title)
+ *   DELETE /api/texture/documents/{id}              — delete a document
+ *   POST   /api/texture/documents/{id}/revisions    — create a revision
+ *   GET    /api/texture/documents/{id}/revisions    — list revisions
+ *   GET    /api/texture/revisions/{id}              — get a revision (snapshot)
+ *   GET    /api/texture/documents/{id}/history      — revision history
+ *   GET    /api/texture/diff?from=X&to=Y            — diff two revisions
+ *   GET    /api/texture/revisions/{id}/blame        — blame revision
+ *   GET    /api/texture/documents/{id}/stream       — document-scoped stream
+ *   POST   /api/texture/documents/{id}/revise        — request a Texture revision
+ *   POST   /api/texture/documents/{id}/source-attachments — attach readable source artifacts
  *   POST   /api/content/items                      — create owner-scoped content item
  *   POST   /api/content/import-url                 — import readable URL content
  *   POST   /api/content/import-file                — import an existing user-computer file
@@ -64,7 +64,7 @@ function withReadOwnerQuery(path, { method = 'GET' } = {}) {
 }
 
 function vtextPath(path) {
-  return `/api/vtext${path}`;
+  return `/api/texture${path}`;
 }
 
 function platformPath(path) {

@@ -186,17 +186,17 @@ func (p *vtextEditToolProvider) CallWithTools(ctx context.Context, req ToolLoopR
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "conductor handoff complete", Model: "test-model"}, nil
 	}
 	lastUser := extractLastUserMessage(req.Messages)
-	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnVTextToolCall(lastUser)},
 			Model:      "test-model",
 		}, nil
 	}
-	if messagesContainToolCall(req.Messages, "edit_vtext") {
+	if messagesContainToolCall(req.Messages, "edit_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "vtext turn complete", Model: "test-model"}, nil
 	}
-	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
+	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "vtext turn complete", Model: "test-model"}, nil
 	}
 	prompt := req.System + "\n" + lastUser
@@ -234,12 +234,12 @@ func (p *vtextDecisionThenEditProvider) CallWithTools(ctx context.Context, req T
 	p.calls++
 	switch p.calls {
 	case 1:
-		if req.ToolChoice == exactRequiredToolChoice("edit_vtext") {
+		if req.ToolChoice == exactRequiredToolChoice("edit_texture") {
 			return &ToolLoopResponse{
 				StopReason: "tool_use",
 				ToolCalls: []types.ToolCall{{
 					ID:   "call-reader-edit",
-					Name: "edit_vtext",
+					Name: "edit_texture",
 					Arguments: json.RawMessage(`{
 						"operation":"replace_all",
 						"content":"M32_VTEXT_DECISION_ROUTE_TEST\n\nThis marker is a deployed acceptance probe."
@@ -253,7 +253,7 @@ func (p *vtextDecisionThenEditProvider) CallWithTools(ctx context.Context, req T
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-wrong-edit",
-				Name:      "edit_vtext",
+				Name:      "edit_texture",
 				Arguments: json.RawMessage(`{"operation":"replace_all","content":"private reason leaked"}`),
 			}},
 			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
@@ -264,7 +264,7 @@ func (p *vtextDecisionThenEditProvider) CallWithTools(ctx context.Context, req T
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-decision",
-				Name: "record_vtext_decision",
+				Name: "record_texture_decision",
 				Arguments: json.RawMessage(`{
 					"decision_kind":"no_worker_needed",
 					"reason":"M3.2 staging proof: user supplied the needed content and requested no research or execution worker.",
@@ -280,7 +280,7 @@ func (p *vtextDecisionThenEditProvider) CallWithTools(ctx context.Context, req T
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-reader-edit",
-				Name: "edit_vtext",
+				Name: "edit_texture",
 				Arguments: json.RawMessage(`{
 					"operation":"replace_all",
 					"content":"M32_VTEXT_DECISION_ROUTE_TEST\n\nThis marker is a deployed acceptance probe."
@@ -384,7 +384,7 @@ func editVTextToolCallFromLegacyResult(prompt, raw string) (types.ToolCall, erro
 	if err != nil {
 		return types.ToolCall{}, err
 	}
-	return types.ToolCall{ID: "edit-vtext-test-call", Name: "edit_vtext", Arguments: data}, nil
+	return types.ToolCall{ID: "edit-vtext-test-call", Name: "edit_texture", Arguments: data}, nil
 }
 
 func extractPromptValue(s, prefix, suffix string) string {
@@ -1447,17 +1447,17 @@ func (p *stochasticWorkflowProvider) CallWithTools(ctx context.Context, req Tool
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow conductor handoff complete", Model: "test-model"}, nil
 	}
 	lastUser := extractLastUserMessage(req.Messages)
-	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnVTextToolCall(lastUser)},
 			Model:      "test-model",
 		}, nil
 	}
-	if messagesContainToolCall(req.Messages, "edit_vtext") {
+	if messagesContainToolCall(req.Messages, "edit_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
-	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
+	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
 	delay := p.delay
@@ -1655,7 +1655,7 @@ func revisionWorkerConsumption(t *testing.T, revs []types.Revision) (map[int64]b
 			continue
 		}
 		meta := decodeRevisionMetadata(rev.Metadata)
-		if metadataString(meta, "source") != "edit_vtext" || metadataString(meta, "vtext_edit_kind") != "vtext_edit" {
+		if metadataString(meta, "source") != "edit_texture" || metadataString(meta, "vtext_edit_kind") != "vtext_edit" {
 			continue
 		}
 		consumed := metadataSlice(t, meta, "worker_updates_consumed")
@@ -1858,21 +1858,21 @@ func (p *vtextMinimalEditProvider) CallWithTools(ctx context.Context, req ToolLo
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "conductor handoff complete", Model: "test-model"}, nil
 	}
 	lastUser := extractLastUserMessage(req.Messages)
-	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnVTextToolCall(lastUser)},
 			Model:      "test-model",
 		}, nil
 	}
-	if !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
+	if !toolDefinitionsContain(req.ToolDefinitions, "edit_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "vtext turn complete", Model: "test-model"}, nil
 	}
 	return &ToolLoopResponse{
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-minimal-edit",
-			Name:      "edit_vtext",
+			Name:      "edit_texture",
 			Arguments: json.RawMessage(`{"content":"M34_MINIMAL_EDIT_DEFAULTS\n\nThe VText activation wrote a first visible revision from runtime-owned context."}`),
 		}},
 		Model: "test-model",
@@ -1922,11 +1922,11 @@ func TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testin
 	if !foundAppAgent {
 		t.Fatalf("expected appagent revision over user-provided text, got %+v", revs)
 	}
-	if len(provider.choices) == 0 || provider.choices[0] != exactRequiredToolChoice("edit_vtext") {
-		t.Fatalf("initial vtext tool_choice = %#v, want first choice %q", provider.choices, exactRequiredToolChoice("edit_vtext"))
+	if len(provider.choices) == 0 || provider.choices[0] != exactRequiredToolChoice("edit_texture") {
+		t.Fatalf("initial vtext tool_choice = %#v, want first choice %q", provider.choices, exactRequiredToolChoice("edit_texture"))
 	}
 	if len(provider.choices) != 1 {
-		t.Fatalf("vtext provider calls = %d choices=%#v, want one terminal edit_vtext turn", len(provider.choices), provider.choices)
+		t.Fatalf("vtext provider calls = %d choices=%#v, want one terminal edit_texture turn", len(provider.choices), provider.choices)
 	}
 }
 
@@ -2036,8 +2036,8 @@ func TestInitialVTextRunDefaultsMinimalEditContextFromActivation(t *testing.T) {
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial vtext state = %q, want completed", state)
 	}
-	if len(provider.choices) != 1 || provider.choices[0] != exactRequiredToolChoice("edit_vtext") {
-		t.Fatalf("vtext provider choices = %#v, want one terminal edit_vtext turn", provider.choices)
+	if len(provider.choices) != 1 || provider.choices[0] != exactRequiredToolChoice("edit_texture") {
+		t.Fatalf("vtext provider choices = %#v, want one terminal edit_texture turn", provider.choices)
 	}
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
 	if err != nil {
@@ -2054,10 +2054,10 @@ func TestInitialVTextRunDefaultsMinimalEditContextFromActivation(t *testing.T) {
 		t.Fatalf("expected appagent revision from minimal edit context, got %+v", revs)
 	}
 	meta := decodeRevisionMetadata(appRevision.Metadata)
-	if metadataString(meta, "source") != "edit_vtext" ||
+	if metadataString(meta, "source") != "edit_texture" ||
 		metadataString(meta, "vtext_edit_operation") != "replace_all" ||
 		metadataString(meta, "vtext_edit_base_revision_id") == "" {
-		t.Fatalf("appagent revision metadata = %+v, want defaulted edit_vtext context", meta)
+		t.Fatalf("appagent revision metadata = %+v, want defaulted edit_texture context", meta)
 	}
 	mutation, err := s.GetAgentMutationByRun(context.Background(), decision.InitialLoopID)
 	if err != nil {
@@ -2133,7 +2133,7 @@ func TestInitialVTextDecisionPromptRejectsPrematureEditBeforeDecision(t *testing
 		t.Fatalf("appagent revision leaked private decision rationale: %q", appContent)
 	}
 	if len(provider.choices) < 2 ||
-		provider.choices[0] != exactRequiredToolChoice("edit_vtext") ||
+		provider.choices[0] != exactRequiredToolChoice("edit_texture") ||
 		provider.choices[1] != "" {
 		t.Fatalf("tool choices = %#v, want deterministic decision record before initial edit", provider.choices)
 	}
@@ -2390,7 +2390,7 @@ func TestVTextStaleAgentRevisionRejectsEditAfterUserEdit(t *testing.T) {
 			t.Fatalf("stale output was materialized as a revision: %+v", rev)
 		}
 		if rev.AuthorKind == types.AuthorAppAgent {
-			t.Fatalf("stale edit_vtext call created appagent revision: %+v", rev)
+			t.Fatalf("stale edit_texture call created appagent revision: %+v", rev)
 		}
 	}
 	doc, err := s.GetDocument(context.Background(), docID, "user-1")
@@ -6024,7 +6024,7 @@ func TestVTextDocumentResponseReconcilesPendingMutationFromCurrentHead(t *testin
 		t.Fatalf("create pending mutation: %v", err)
 	}
 	meta, _ := json.Marshal(map[string]any{
-		"source":  "edit_vtext",
+		"source":  "edit_texture",
 		"loop_id": runID,
 	})
 	if err := s.CreateRevision(context.Background(), types.Revision{
@@ -6076,7 +6076,7 @@ func TestVTextDiagnosisReportsCurrentRevisionVersion(t *testing.T) {
 		AuthorLabel:      "appagent",
 		Content:          "## Appendix\n\n| Owner | State |\n| --- | --- |\n| Legal cloud | Preserved [source](source:src-legal-cloud) |\n",
 		Citations:        json.RawMessage("[]"),
-		Metadata:         json.RawMessage(`{"source":"edit_vtext"}`),
+		Metadata:         json.RawMessage(`{"source":"edit_texture"}`),
 		ParentRevisionID: baseRevisionID,
 		CreatedAt:        time.Now().UTC(),
 	}); err != nil {
@@ -6494,7 +6494,7 @@ func TestVTextAgentRevisionNoDuplicateOnRenewalRetry(t *testing.T) {
 	}
 }
 
-// TestVTextAgentRevisionMutationCompletedOnlyOnce verifies that edit_vtext is
+// TestVTextAgentRevisionMutationCompletedOnlyOnce verifies that edit_texture is
 // the idempotency boundary for canonical appagent revisions (VAL-CROSS-122).
 func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 	t.Parallel()
@@ -6577,8 +6577,8 @@ func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal edit args: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, run), "edit_vtext", rawArgs); err != nil {
-		t.Fatalf("edit_vtext: %v", err)
+	if _, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, run), "edit_texture", rawArgs); err != nil {
+		t.Fatalf("edit_texture: %v", err)
 	}
 	got, err := s.GetDocument(ctx, doc.DocID, doc.OwnerID)
 	if err != nil {
@@ -6698,13 +6698,13 @@ func TestVTextAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 		Content:        "Revised content",
 	})
 	if err != nil {
-		t.Fatalf("marshal edit_vtext args: %v", err)
+		t.Fatalf("marshal edit_texture args: %v", err)
 	}
-	if _, err := vtextRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "edit_vtext", rawArgs); err != nil {
-		t.Fatalf("first edit_vtext: %v", err)
+	if _, err := vtextRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "edit_texture", rawArgs); err != nil {
+		t.Fatalf("first edit_texture: %v", err)
 	}
-	if _, err := vtextRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "edit_vtext", rawArgs); err == nil {
-		t.Fatal("second edit_vtext should be rejected after mutation completion")
+	if _, err := vtextRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "edit_texture", rawArgs); err == nil {
+		t.Fatal("second edit_texture should be rejected after mutation completion")
 	}
 
 	// Call handleRunCompletion twice to simulate duplicate recovery processing.
@@ -6791,21 +6791,21 @@ func TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *te
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_vtext", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
 		"doc_id":"doc-initial-continuation",
 		"base_revision_id":"rev-user-continuation",
 		"operation":"replace_all",
 		"content":"# NBA update\n\nI am preparing a short working update and checking current evidence next."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_vtext: %v", err)
+		t.Fatalf("edit_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
 	if _, ok := editResult["next_required_tool"]; ok {
-		t.Fatalf("edit_vtext must not smuggle a required continuation; result=%s", editRaw)
+		t.Fatalf("edit_texture must not smuggle a required continuation; result=%s", editRaw)
 	}
 
 	spawnRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "spawn_agent", json.RawMessage(`{
@@ -6821,7 +6821,7 @@ func TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *te
 		t.Fatalf("decode spawn result: %v", err)
 	}
 	if _, ok := spawnResult["next_required_tool"]; ok {
-		t.Fatalf("spawn_agent after completed edit must not require a second edit_vtext; result=%s", spawnRaw)
+		t.Fatalf("spawn_agent after completed edit must not require a second edit_texture; result=%s", spawnRaw)
 	}
 }
 
@@ -6889,21 +6889,21 @@ func TestEditVTextExplicitResearcherDoesNotForceSpawnContinuation(t *testing.T) 
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_vtext", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-continuation",
 		"base_revision_id":"rev-user-explicit-researcher",
 		"operation":"replace_all",
 		"content":"# Restart route proof\n\nWorking revision: researcher evidence and super verification are still pending."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_vtext: %v", err)
+		t.Fatalf("edit_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
 	if _, ok := editResult["next_required_tool"]; ok {
-		t.Fatalf("edit_vtext must not force researcher continuation; result=%s", editRaw)
+		t.Fatalf("edit_texture must not force researcher continuation; result=%s", editRaw)
 	}
 	if _, ok := registry.Lookup("spawn_agent"); !ok {
 		t.Fatal("vtext registry missing spawn_agent affordance")
@@ -6978,21 +6978,21 @@ func TestEditVTextExplicitResearcherDoesNotForceSpawnAfterSuperBase(t *testing.T
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_vtext", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-after-super",
 		"base_revision_id":"rev-super-explicit-researcher",
 		"operation":"replace_all",
 		"content":"# Restart route proof\n\nSuper evidence has arrived. Researcher evidence is still pending."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_vtext: %v", err)
+		t.Fatalf("edit_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
 	if _, ok := editResult["next_required_tool"]; ok {
-		t.Fatalf("edit_vtext must not force researcher continuation after super-authored base; result=%s", editRaw)
+		t.Fatalf("edit_texture must not force researcher continuation after super-authored base; result=%s", editRaw)
 	}
 }
 
@@ -7060,14 +7060,14 @@ func TestEditVTextExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt(
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_vtext", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-base-content",
 		"base_revision_id":"rev-user-explicit-researcher-base-content",
 		"operation":"replace_all",
 		"content":"# Restart route proof\n\nWorking revision from worker update."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_vtext: %v", err)
+		t.Fatalf("edit_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
@@ -7145,14 +7145,14 @@ func TestEditVTextExplicitResearcherFromSeedPromptSurvivesRequestIntent(t *testi
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_vtext", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-seed-prompt",
 		"base_revision_id":"rev-user-explicit-researcher-seed-prompt",
 		"operation":"replace_all",
 		"content":"# Restart route proof\n\nResearcher finding: pending.\n\nSuper evidence has arrived."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_vtext: %v", err)
+		t.Fatalf("edit_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
@@ -7252,21 +7252,21 @@ func TestEditVTextExplicitResearcherDoesNotDuplicateExistingResearcher(t *testin
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_vtext", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-existing",
 		"base_revision_id":"rev-user-explicit-researcher-existing",
 		"operation":"replace_all",
 		"content":"# Restart route proof\n\nResearcher work is already open."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_vtext: %v", err)
+		t.Fatalf("edit_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
 	if _, ok := editResult["next_required_tool"]; ok {
-		t.Fatalf("edit_vtext duplicated existing researcher obligation; result=%s", editRaw)
+		t.Fatalf("edit_texture duplicated existing researcher obligation; result=%s", editRaw)
 	}
 }
 

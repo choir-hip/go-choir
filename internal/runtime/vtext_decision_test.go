@@ -30,14 +30,14 @@ func TestRecordVTextDecisionToolPersistsAndEmitsReadableEvent(t *testing.T) {
 	if err := RegisterVTextTools(registry, rt); err != nil {
 		t.Fatalf("register vtext tools: %v", err)
 	}
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, run), "record_vtext_decision", json.RawMessage(`{
+	raw, err := registry.Execute(WithToolExecutionContext(ctx, run), "record_texture_decision", json.RawMessage(`{
 		"decision_kind":"delegation_skipped",
 		"reason":"The owner supplied the source excerpt, so this revision can proceed without researcher.",
 		"evidence_refs":["rev-owner-source","source:owner-excerpt"],
-		"next_action":"Use edit_vtext for the reader-facing revision."
+		"next_action":"Use edit_texture for the reader-facing revision."
 	}`))
 	if err != nil {
-		t.Fatalf("record_vtext_decision: %v", err)
+		t.Fatalf("record_texture_decision: %v", err)
 	}
 	var resp map[string]any
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {

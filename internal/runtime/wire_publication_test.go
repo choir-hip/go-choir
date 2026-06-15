@@ -247,7 +247,7 @@ func TestWireInputRevisionDoesNotAutonomousPublish(t *testing.T) {
 		t.Fatalf("create story document: %v", err)
 	}
 	seedMeta, _ := json.Marshal(map[string]any{
-		"source":                         "edit_vtext",
+		"source":                         "edit_texture",
 		"revision_role":                  vtextRevisionRoleInput,
 		"input_origin":                   vtextInputOriginProcessorHandoff,
 		"artifact_kind":                  "source_brief",

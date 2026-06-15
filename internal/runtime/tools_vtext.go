@@ -60,8 +60,8 @@ type materializedVTextEdit struct {
 
 func newEditVTextTool(rt *Runtime) Tool {
 	return Tool{
-		Name:        "edit_vtext",
-		Description: "Apply a structured edit to the current VText document and store the next complete canonical version. Use apply_edits for ordinary line, paragraph, section, citation, or metadata changes. Use replace_all only for explicit whole-document rewrites and include rationale, especially for long documents.",
+		Name:        "edit_texture",
+		Description: "Apply a structured edit to the current Texture document and store the next complete canonical version. Use apply_edits for ordinary line, paragraph, section, citation, or metadata changes. Use replace_all only for explicit whole-document rewrites and include rationale, especially for long documents.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"doc_id":           map[string]any{"type": "string"},
 			"base_revision_id": map[string]any{"type": "string"},
@@ -86,15 +86,15 @@ func newEditVTextTool(rt *Runtime) Tool {
 		}, []string{"doc_id", "base_revision_id", "operation"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileVText {
-				return "", fmt.Errorf("edit_vtext is only available to vtext agents")
+				return "", fmt.Errorf("edit_texture is only available to Texture agents")
 			}
 			rec := ctxRunRecord(ctx)
 			if rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
-				return "", fmt.Errorf("edit_vtext requires a vtext agent revision run")
+				return "", fmt.Errorf("edit_texture requires a Texture agent revision run")
 			}
 			var in editVTextArgs
 			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode edit_vtext args: %w", err)
+				return "", fmt.Errorf("decode edit_texture args: %w", err)
 			}
 			rev, err := rt.commitVTextToolEdit(context.Background(), rec, in)
 			if err != nil {
@@ -113,7 +113,7 @@ func newEditVTextTool(rt *Runtime) Tool {
 				}
 				result["email_draft_request"] = emailResult
 				result["email_draft_request_status"] = emailResult["status"]
-				result["next_instruction"] = "Email appagent draft handoff completed from the stored VText revision. Do not send mail directly; owner approval remains required."
+				result["next_instruction"] = "Email appagent draft handoff completed from the stored Texture revision. Do not send mail directly; owner approval remains required."
 			}
 			return toolResultJSON(result)
 		},
@@ -138,12 +138,12 @@ func newRecordVTextDecisionTool(rt *Runtime) Tool {
 		"no_worker_needed",
 	}
 	return Tool{
-		Name:        "record_vtext_decision",
-		Description: "Record an audit-worthy VText decision outside the canonical document. Use this for reasoned delegation choices, waits, blockers, or no-worker decisions that reviewers may need later. If the owner explicitly asks VText to record an off-document decision note and the requested record is truthful and within VText authority, call this tool. Do not use it for ordinary sentence-level edits, and do not put agent process rationale into document text.",
+		Name:        "record_texture_decision",
+		Description: "Record an audit-worthy Texture decision outside the canonical document. Use this for reasoned delegation choices, waits, blockers, or no-worker decisions that reviewers may need later. If the owner explicitly asks Texture to record an off-document decision note and the requested record is truthful and within Texture authority, call this tool. Do not use it for ordinary sentence-level edits, and do not put agent process rationale into document text.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"doc_id": map[string]any{
 				"type":        "string",
-				"description": "The VText document id. Omit only when the current VText run is already scoped to the document.",
+				"description": "The Texture document id. Omit only when the current Texture run is already scoped to the document.",
 			},
 			"decision_kind": map[string]any{
 				"type":        "string",
@@ -166,15 +166,15 @@ func newRecordVTextDecisionTool(rt *Runtime) Tool {
 		}, []string{"decision_kind", "reason"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileVText {
-				return "", fmt.Errorf("record_vtext_decision is only available to vtext agents")
+				return "", fmt.Errorf("record_texture_decision is only available to Texture agents")
 			}
 			rec := ctxRunRecord(ctx)
 			if rec == nil {
-				return "", fmt.Errorf("record_vtext_decision missing run context")
+				return "", fmt.Errorf("record_texture_decision missing run context")
 			}
 			var in recordVTextDecisionArgs
 			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode record_vtext_decision args: %w", err)
+				return "", fmt.Errorf("decode record_texture_decision args: %w", err)
 			}
 			decisionKind := strings.TrimSpace(in.DecisionKind)
 			if !validVTextDecisionKind(decisionKind) {
@@ -192,7 +192,7 @@ func newRecordVTextDecisionTool(rt *Runtime) Tool {
 				))
 			}
 			if docID == "" {
-				return "", fmt.Errorf("doc_id is required when the VText run is not document-scoped")
+				return "", fmt.Errorf("doc_id is required when the Texture run is not document-scoped")
 			}
 			if _, err := rt.store.GetDocument(ctx, docID, rec.OwnerID); err != nil {
 				return "", fmt.Errorf("get vtext document for decision: %w", err)
@@ -296,7 +296,7 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 						"body_text":           intent.BodyText,
 						"approval_mode":       "owner_click_or_email_reply",
 					},
-					Instruction: "The VText email artifact is now stored. Call request_email_draft next with the provided arguments before ending this run; stopping now leaves the Email appagent handoff incomplete. Do not call request_super_execution for this simple email draft handoff, and do not send mail directly.",
+					Instruction: "The Texture email artifact is now stored. Call request_email_draft next with the provided arguments before ending this run; stopping now leaves the Email appagent handoff incomplete. Do not call request_super_execution for this simple email draft handoff, and do not send mail directly.",
 				}, true
 			}
 		}
@@ -872,7 +872,7 @@ func addVTextEditRevisionMetadata(raw json.RawMessage, edit materializedVTextEdi
 	if meta == nil {
 		meta = map[string]any{}
 	}
-	meta["source"] = "edit_vtext"
+	meta["source"] = "edit_texture"
 	meta["vtext_edit_kind"] = "vtext_edit"
 	meta["vtext_edit_operation"] = edit.Operation
 	meta["vtext_edit_base_revision_id"] = edit.BaseRevisionID

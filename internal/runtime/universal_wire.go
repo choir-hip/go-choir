@@ -17,10 +17,10 @@ import (
 )
 
 type universalWireStoriesResponse struct {
-	Stories      []types.WireStory       `json:"stories"`
-	StyleSources []types.WireStyleSource `json:"style_sources"`
+	Stories      []types.WireStory             `json:"stories"`
+	StyleSources []types.WireStyleSource       `json:"style_sources"`
 	Source       string                        `json:"source"`
-	Edition      *universalWireEditionResponse    `json:"edition,omitempty"`
+	Edition      *universalWireEditionResponse `json:"edition,omitempty"`
 }
 
 type universalWireEditionResponse struct {
@@ -150,7 +150,6 @@ func (h *APIHandler) universalWireEditionVTextStories(ctx context.Context, style
 	}
 	return stories, edition, nil
 }
-
 
 func (h *APIHandler) platformdStoryVerificationEnabled() bool {
 	if h == nil || h.rt == nil {
@@ -313,7 +312,7 @@ func (h *APIHandler) universalWireEditionIncludesDoc(ctx context.Context, docID 
 func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Document, rev types.Revision, styleSources []types.WireStyleSource) (types.WireStory, bool) {
 	meta := decodeRevisionMetadata(rev.Metadata)
 	cycleID := sourceNetworkCycleID(meta)
-	if metadataString(meta, "source") != "edit_vtext" || cycleID == "" || !wireRevisionIsCanonicalArticle(meta) {
+	if metadataString(meta, "source") != "edit_texture" || cycleID == "" || !wireRevisionIsCanonicalArticle(meta) {
 		return types.WireStory{}, false
 	}
 	content := strings.TrimSpace(rev.Content)
@@ -757,7 +756,7 @@ func normalizeWireStoryPresentation(story types.WireStory) types.WireStory {
 // platform wire article revisions without mutating stored revision content.
 func normalizeWireArticleRevisionForRead(rev types.Revision) types.Revision {
 	meta := decodeRevisionMetadata(rev.Metadata)
-	if metadataString(meta, "source") != "edit_vtext" || sourceNetworkCycleID(meta) == "" {
+	if metadataString(meta, "source") != "edit_texture" || sourceNetworkCycleID(meta) == "" {
 		return rev
 	}
 	rec := &types.RunRecord{

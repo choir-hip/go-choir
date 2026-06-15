@@ -113,3 +113,39 @@ Receipts:
 Open edge: continue the docs/index sweep or move runtime filenames/symbols so
 doctrine evidence paths and detector symbols can converge without lying about
 current code.
+
+## 2026-06-15 - Local Product-Facing Texture Route And Tool Affordance
+
+Claim: the cutover can move the product-facing route, frontend API client,
+registered Texture writer tools, prompt defaults, and acceptance fixtures to
+Texture without adding a runtime semantic workflow gate or deleting the old
+route before proof.
+
+Move: construct a bounded red-surface runtime slice. Added `/api/texture`
+document routes that normalize to the existing internal document handlers,
+kept `/api/vtext` as an explicitly temporary compatibility shim, allowed
+`/api/texture` through the product API tool allowlist, switched the frontend
+Texture client and browser test API calls to `/api/texture`, renamed registered
+tool affordances to `edit_texture` and `record_texture_decision`, and updated
+prompt defaults/tests to expect Texture tool/source metadata.
+
+Expected ΔV: -1 by discharging the local prompt/tool/product-route affordance
+obligation while leaving internal symbol, storage, UI label, staging, and
+protocol obligations open.
+
+Actual ΔV: -1. V moves from 8 to 7. The old route and internal `vtext` symbols
+remain as migration residue and are not settlement-compatible.
+
+Receipts:
+- `nix develop -c go test ./internal/runtime -run 'TestDefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence|TestRecordVTextDecisionToolDescriptionKeepsDecisionsOffDocument|TestRecordVTextDecision|TestAgentToolProfiles|TestToolRegistry|TestProductAPIRequestToolUsesRunOwnerForAllowedProductRoute'`: pass.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run TestHandleVTextDocumentsRootUsesTextureRoutes`: pass.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,146 warnings.
+- `/tmp/choir-doccheck.json` warning counts after the slice: H1=724, H3=15,
+  H4=3, H5=347, R3=57.
+- `rg -n "edit_vtext|record_vtext_decision" internal/runtime frontend/src/lib/vtext.js frontend/tests/vtext-markdown-lineage.spec.js frontend/tests/vtext-real-workflow-demo.spec.js`: no matches.
+- `git diff --check`: pass.
+
+Open edge: no staging deploy or browser product proof has run for this slice;
+the compatibility shim, internal symbol/file/storage names, UI labels/data
+attributes, common-vs-exceptional edit split, transclusion proof, and protocol
+v0 remain open.

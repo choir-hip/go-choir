@@ -51,7 +51,7 @@ test('Markdown lineage import resolves known citation markers into expandable so
   const sourceLabel = 'ABA Model Rule 1.6';
   const excerpt = 'A lawyer shall not reveal information relating to the representation of a client.';
 
-  const imported = await fetchJSON(page, '/api/vtext/markdown-lineage/import', {
+  const imported = await fetchJSON(page, '/api/texture/markdown-lineage/import', {
     method: 'POST',
     body: JSON.stringify({
       source_path: `proposals/legal-cloud-sourced-${stamp}.md`,
@@ -116,7 +116,7 @@ test('Markdown lineage import resolves known citation markers into expandable so
   expect(imported.doc_id).toBeTruthy();
   expect(imported.revisions).toHaveLength(1);
 
-  const revisions = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
+  const revisions = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
   expect(revisions.revisions).toHaveLength(1);
   const revision = revisions.revisions[0];
   expect(revision.content).toContain(`[1](source:${sourceEntityID})`);
@@ -166,7 +166,7 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
     'Seeded from Markdown source bytes.',
   ].join('\n');
 
-  const opened = await fetchJSON(page, '/api/vtext/files/open', {
+  const opened = await fetchJSON(page, '/api/texture/files/open', {
     method: 'POST',
     body: JSON.stringify({
       source_path: sourcePath,
@@ -179,7 +179,7 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
   expect(opened.doc_id).toBeTruthy();
   expect(opened.original_content_id).toBeTruthy();
 
-  const v0Doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}`);
+  const v0Doc = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}`);
   expect(v0Doc.title).toBe(`imported-md-vtext-${stamp}.vtext`);
   expect(v0Doc.current_version_number).toBe(0);
 
@@ -194,7 +194,7 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
     'Seeded from Markdown source bytes and revised as VText.',
   ].join('\n');
 
-  const v1 = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
+  const v1 = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: v1Content,
@@ -215,12 +215,12 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
   expect(v1.metadata?.migration_manifest?.migration_adapter).toBe('markdown_to_vtext_projection');
   expect(v1.content).toContain('| VText | Canonical editable document identity. |');
 
-  const v1Doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}`);
+  const v1Doc = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}`);
   expect(v1Doc.title).toBe(`imported-md-vtext-${stamp}.vtext`);
   expect(v1Doc.current_revision_id).toBe(v1.revision_id);
   expect(v1Doc.current_version_number).toBe(1);
 
-  const reopenedAlias = await fetchJSON(page, '/api/vtext/files/open', {
+  const reopenedAlias = await fetchJSON(page, '/api/texture/files/open', {
     method: 'POST',
     body: JSON.stringify({
       source_path: sourcePath,
@@ -231,12 +231,12 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
   expect(reopenedAlias.created).toBe(false);
   expect(reopenedAlias.doc_id).toBe(opened.doc_id);
 
-  const manifest = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/manifest`, {
+  const manifest = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}/manifest`, {
     method: 'POST',
   });
   expect(manifest.source_path).toMatch(/\.vtext$/);
 
-  const exported = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/export?format=md`);
+  const exported = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}/export?format=md`);
   expect(exported.format).toBe('md');
   expect(exported.filename).toBe(`imported-md-vtext-${stamp}.md`);
   expect(exported.revision_id).toBe(v1.revision_id);
@@ -259,7 +259,7 @@ test('Imported plain text advances to canonical .vtext with migration metadata a
     'Plain text source bytes should become canonical VText.',
   ].join('\n');
 
-  const opened = await fetchJSON(page, '/api/vtext/files/open', {
+  const opened = await fetchJSON(page, '/api/texture/files/open', {
     method: 'POST',
     body: JSON.stringify({
       source_path: sourcePath,
@@ -272,7 +272,7 @@ test('Imported plain text advances to canonical .vtext with migration metadata a
   expect(opened.doc_id).toBeTruthy();
   expect(opened.original_content_id).toBeTruthy();
 
-  const v0Doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}`);
+  const v0Doc = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}`);
   expect(v0Doc.title).toBe(`imported-text-vtext-${stamp}.vtext`);
   expect(v0Doc.current_version_number).toBe(0);
 
@@ -284,7 +284,7 @@ test('Imported plain text advances to canonical .vtext with migration metadata a
     'The first durable revision preserves the source migration manifest.',
   ].join('\n');
 
-  const v1 = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
+  const v1 = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: v1Content,
@@ -308,7 +308,7 @@ test('Imported plain text advances to canonical .vtext with migration metadata a
     migration_adapter: 'plain_text_to_vtext_projection',
   });
 
-  const reopenedAlias = await fetchJSON(page, '/api/vtext/files/open', {
+  const reopenedAlias = await fetchJSON(page, '/api/texture/files/open', {
     method: 'POST',
     body: JSON.stringify({
       source_path: sourcePath,
@@ -319,7 +319,7 @@ test('Imported plain text advances to canonical .vtext with migration metadata a
   expect(reopenedAlias.created).toBe(false);
   expect(reopenedAlias.doc_id).toBe(opened.doc_id);
 
-  const exported = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/export?format=md`);
+  const exported = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}/export?format=md`);
   expect(exported.format).toBe('md');
   expect(exported.filename).toBe(`imported-text-vtext-${stamp}.md`);
   expect(exported.revision_id).toBe(v1.revision_id);
@@ -371,7 +371,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
     }),
   });
 
-  const imported = await fetchJSON(page, '/api/vtext/markdown-lineage/import', {
+  const imported = await fetchJSON(page, '/api/texture/markdown-lineage/import', {
     method: 'POST',
     body: JSON.stringify({
       source_path: `proposals/content-backed-legal-cloud-${stamp}.md`,
@@ -433,7 +433,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   expect(imported.revision_count).toBe(2);
   expect(imported.original_content_ids).toEqual([oldItem.content_id, latestItem.content_id]);
 
-  const revisions = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
+  const revisions = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
   expect(revisions.revisions).toHaveLength(2);
   const historical = revisions.revisions.find((revision) => revision.version_number === 0);
   const latest = revisions.revisions.find((revision) => revision.version_number === 1);
@@ -450,7 +450,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
   await expect(rendered).toContainText('Work product');
 
-  const restored = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(imported.doc_id)}/restore`, {
+  const restored = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(imported.doc_id)}/restore`, {
     method: 'POST',
     body: JSON.stringify({ revision_id: historical.revision_id }),
   });
@@ -473,7 +473,7 @@ test('Migrated source gaps can be repaired as canonical VText revisions', async 
   const sourceLabel = 'Repaired Legal Source';
   const excerpt = 'Repaired source evidence supports the migrated citation.';
 
-  const imported = await fetchJSON(page, '/api/vtext/markdown-lineage/import', {
+  const imported = await fetchJSON(page, '/api/texture/markdown-lineage/import', {
     method: 'POST',
     body: JSON.stringify({
       source_path: `proposals/source-gap-repair-${stamp}.md`,
@@ -492,11 +492,11 @@ test('Migrated source gaps can be repaired as canonical VText revisions', async 
     }),
   });
 
-  const revisionsBefore = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
+  const revisionsBefore = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
   expect(revisionsBefore.revisions).toHaveLength(1);
   expect(revisionsBefore.revisions[0].metadata?.source_gaps?.[0]?.marker).toBe('[2]');
 
-  const repaired = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(imported.doc_id)}/source-repairs`, {
+  const repaired = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(imported.doc_id)}/source-repairs`, {
     method: 'POST',
     body: JSON.stringify({
       base_revision_id: imported.current_revision_id,
@@ -580,7 +580,7 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   const sourceLabel = 'Panel Repair Source';
   const excerpt = 'Panel repair source evidence supports the citation.';
 
-  const imported = await fetchJSON(page, '/api/vtext/markdown-lineage/import', {
+  const imported = await fetchJSON(page, '/api/texture/markdown-lineage/import', {
     method: 'POST',
     body: JSON.stringify({
       source_path: `proposals/panel-source-gap-repair-${stamp}.md`,
@@ -659,7 +659,7 @@ test('VText Sources panel can mark a citation gap as no source needed', async ({
   const stamp = Date.now();
   const reason = 'This is a framing sentence rather than a factual claim requiring citation.';
 
-  const imported = await fetchJSON(page, '/api/vtext/markdown-lineage/import', {
+  const imported = await fetchJSON(page, '/api/texture/markdown-lineage/import', {
     method: 'POST',
     body: JSON.stringify({
       source_path: `proposals/panel-no-source-needed-${stamp}.md`,
@@ -710,7 +710,7 @@ test('VText Sources panel can mark a citation gap as no source needed', async ({
   const repairResponse = await repairResponsePromise;
   expect(repairResponse.status()).toBe(201);
 
-  const revisions = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
+  const revisions = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
   const latest = revisions.revisions.find((revision) => revision.version_number === 1);
   expect(latest.content).toContain('This ordinary framing sentence should not keep a citation marker.');
   expect(latest.content).not.toContain('[2]');
@@ -739,9 +739,9 @@ test('VText Sources panel can cancel diagnosis without blocking source review', 
   const { page } = desktopSession;
   const stamp = Date.now();
   let releaseDiagnosis = null;
-  const diagnosisRoute = '**/api/vtext/documents/*/diagnosis?*';
+  const diagnosisRoute = '**/api/texture/documents/*/diagnosis?*';
 
-  const imported = await fetchJSON(page, '/api/vtext/markdown-lineage/import', {
+  const imported = await fetchJSON(page, '/api/texture/markdown-lineage/import', {
     method: 'POST',
     body: JSON.stringify({
       source_path: `proposals/cancel-source-diagnosis-${stamp}.md`,
@@ -801,14 +801,14 @@ test('VText Sources panel can cancel diagnosis without blocking source review', 
 test('VText Sources panel shows structured edit evidence without raw prompts', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const stamp = Date.now();
-  const doc = await fetchJSON(page, '/api/vtext/documents', {
+  const doc = await fetchJSON(page, '/api/texture/documents', {
     method: 'POST',
     body: JSON.stringify({
       title: `Edit Evidence Fixture ${stamp}`,
     }),
   });
 
-  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+  await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: [
@@ -817,7 +817,7 @@ test('VText Sources panel shows structured edit evidence without raw prompts', a
         'This revision carries structured edit metadata for diagnosis.',
       ].join('\n'),
       metadata: {
-        source: 'edit_vtext',
+        source: 'edit_texture',
         vtext_context_mode: 'focused_user_edit_diff',
         vtext_edit_operation: 'apply_edits',
         vtext_edit_count: 2,
@@ -847,14 +847,14 @@ test('VText Sources panel shows structured edit evidence without raw prompts', a
 test('VText Sources panel shows bounded revision structure without body text', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const stamp = Date.now();
-  const doc = await fetchJSON(page, '/api/vtext/documents', {
+  const doc = await fetchJSON(page, '/api/texture/documents', {
     method: 'POST',
     body: JSON.stringify({
       title: `Structure Evidence Fixture ${stamp}`,
     }),
   });
 
-  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+  await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: [
@@ -871,7 +871,7 @@ test('VText Sources panel shows bounded revision structure without body text', a
     }),
   });
 
-  const diagnosisRoute = `**/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/diagnosis?*`;
+  const diagnosisRoute = `**/api/texture/documents/${encodeURIComponent(doc.doc_id)}/diagnosis?*`;
   await page.route(diagnosisRoute, async (route) => {
     expect(route.request().url()).toContain('include_content=false');
     await route.fulfill({
@@ -946,14 +946,14 @@ test('VText Sources panel shows bounded revision structure without body text', a
 test('VText Sources panel shows off-document decision notes separately', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const stamp = Date.now();
-  const doc = await fetchJSON(page, '/api/vtext/documents', {
+  const doc = await fetchJSON(page, '/api/texture/documents', {
     method: 'POST',
     body: JSON.stringify({
       title: `Decision Evidence Fixture ${stamp}`,
     }),
   });
 
-  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+  await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: [
@@ -968,7 +968,7 @@ test('VText Sources panel shows off-document decision notes separately', async (
   });
 
   const decisionReason = 'Owner supplied source excerpt, so VText skipped researcher for this revision.';
-  const diagnosisRoute = `**/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/diagnosis?*`;
+  const diagnosisRoute = `**/api/texture/documents/${encodeURIComponent(doc.doc_id)}/diagnosis?*`;
   await page.route(diagnosisRoute, async (route) => {
     expect(route.request().url()).toContain('include_content=false');
     await route.fulfill({
@@ -995,7 +995,7 @@ test('VText Sources panel shows off-document decision notes separately', async (
           decision_kind: 'delegation_skipped',
           reason: decisionReason,
           evidence_refs: ['rev-owner-source', 'source:owner-excerpt'],
-          next_action: 'Use edit_vtext for the reader-facing revision.',
+          next_action: 'Use edit_texture for the reader-facing revision.',
           created_at: '2026-06-14T20:00:00.000Z',
         }],
         evidence: [],
@@ -1013,7 +1013,7 @@ test('VText Sources panel shows off-document decision notes separately', async (
     await expect(decisions).toContainText('VText decisions');
     await expect(decisions.locator('[data-vtext-decision]')).toHaveAttribute('data-decision-kind', 'delegation_skipped');
     await expect(decisions).toContainText(decisionReason);
-    await expect(decisions).toContainText('Use edit_vtext for the reader-facing revision.');
+    await expect(decisions).toContainText('Use edit_texture for the reader-facing revision.');
     await expect(decisions.locator('[data-vtext-decision-refs]')).toContainText('source:owner-excerpt');
     await expect(vtextWindow.locator('[data-vtext-rendered]')).not.toContainText(decisionReason);
   } finally {

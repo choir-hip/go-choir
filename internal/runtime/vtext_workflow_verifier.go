@@ -199,7 +199,7 @@ func (rt *Runtime) VerifyVTextWorkflow(ctx context.Context, opts VTextWorkflowVe
 		return report, err
 	}
 	guarantee("vtext revisions have valid causal parents")
-	guarantee("vtext appagent revisions were created through edit_vtext")
+	guarantee("vtext appagent revisions were created through edit_texture")
 	if opts.RequireWorkerConsumption {
 		guarantee("vtext consumed worker update message sequences in a later revision")
 	}
@@ -542,12 +542,12 @@ func verifyVTextRevisionCausality(revisions []types.Revision, events []types.Eve
 			continue
 		}
 		meta := decodeRevisionMetadata(revision.Metadata)
-		if metadataString(meta, "source") != "edit_vtext" {
-			return fmt.Errorf("appagent revision %s source = %q, want edit_vtext", revision.RevisionID, metadataString(meta, "source"))
+		if metadataString(meta, "source") != "edit_texture" {
+			return fmt.Errorf("appagent revision %s source = %q, want edit_texture", revision.RevisionID, metadataString(meta, "source"))
 		}
 		loopID := metadataString(meta, "loop_id")
-		if loopID == "" || len(successfulToolResultPayloadsForRun(events, loopID, "edit_vtext")) == 0 {
-			return fmt.Errorf("appagent revision %s missing successful edit_vtext tool result for loop %q", revision.RevisionID, loopID)
+		if loopID == "" || len(successfulToolResultPayloadsForRun(events, loopID, "edit_texture")) == 0 {
+			return fmt.Errorf("appagent revision %s missing successful edit_texture tool result for loop %q", revision.RevisionID, loopID)
 		}
 	}
 	if requireWorkerConsumption {

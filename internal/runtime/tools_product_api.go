@@ -159,6 +159,8 @@ func validateProductAPIToolRoute(method, requestURI string) error {
 	for _, allowed := range []string{
 		"/api/prompt-bar",
 		"/api/universal-wire/",
+		"/api/texture/",
+		// Temporary compatibility shim during the Texture route cutover.
 		"/api/vtext/",
 		"/api/trace/",
 		"/api/app-change-packages",

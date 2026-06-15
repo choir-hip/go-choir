@@ -614,7 +614,7 @@ func waitForVerifierConsumedWorkerSeq(t *testing.T, rt *Runtime, ownerID, docID 
 							return
 						}
 						eventsForRun, err := rt.store.ListEvents(context.Background(), loopID, 200)
-						if err == nil && len(successfulToolResultPayloadsForRun(eventsForRun, loopID, "edit_vtext")) > 0 {
+						if err == nil && len(successfulToolResultPayloadsForRun(eventsForRun, loopID, "edit_texture")) > 0 {
 							return
 						}
 					}

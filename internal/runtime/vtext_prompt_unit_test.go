@@ -21,13 +21,13 @@ func TestDefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence(t *tes
 	prompt := string(raw)
 	normalizedPrompt := strings.Join(strings.Fields(prompt), " ")
 	for _, want := range []string{
-		"VText owns canonical document versions",
-		"Use `record_vtext_decision` for audit-worthy off-document choices",
-		"If the owner explicitly asks VText to record an off-document decision note",
-		"unless the requested record would be false, unsafe, or outside VText authority",
+		"Texture owns canonical document versions",
+		"Use `record_texture_decision` for audit-worthy off-document choices",
+		"If the owner explicitly asks Texture to record an off-document decision note",
+		"unless the requested record would be false, unsafe, or outside Texture authority",
 		"Do not put agent process rationale",
 		"These are obligations and affordances, not a forced tool sequence",
-		"VText may write, ask researcher, ask super, ask both, ask neither, wait, or report a blocker",
+		"Texture may write, ask researcher, ask super, ask both, ask neither, wait, or report a blocker",
 	} {
 		if !strings.Contains(normalizedPrompt, want) {
 			t.Fatalf("default vtext prompt missing %q:\n%s", want, prompt)
@@ -39,13 +39,13 @@ func TestDefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence(t *tes
 func TestRecordVTextDecisionToolDescriptionKeepsDecisionsOffDocument(t *testing.T) {
 	tool := newRecordVTextDecisionTool(&Runtime{})
 	if !strings.Contains(tool.Description, "outside the canonical document") ||
-		!strings.Contains(tool.Description, "owner explicitly asks VText to record an off-document decision note") ||
+		!strings.Contains(tool.Description, "owner explicitly asks Texture to record an off-document decision note") ||
 		!strings.Contains(tool.Description, "Do not use it for ordinary sentence-level edits") ||
 		!strings.Contains(tool.Description, "do not put agent process rationale into document text") {
-		t.Fatalf("record_vtext_decision description is too weak: %q", tool.Description)
+		t.Fatalf("record_texture_decision description is too weak: %q", tool.Description)
 	}
 	if _, ok := tool.Parameters["properties"].(map[string]any)["decision_kind"]; !ok {
-		t.Fatalf("record_vtext_decision schema missing decision_kind: %#v", tool.Parameters)
+		t.Fatalf("record_texture_decision schema missing decision_kind: %#v", tool.Parameters)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestVTextPromptInitialRevisionUsesSingleWriterLoop(t *testing.T) {
 	}, "", false, nil, nil)
 
 	for _, want := range []string{
-		"Because VText owns the document, write the first useful owner-readable revision with edit_vtext before opening longer worker work.",
+		"Because VText owns the document, write the first useful owner-readable revision with edit_texture before opening longer worker work.",
 		"For factual/current/search requests, the first revision should be a short working brief with explicit uncertainty and no ungrounded claims; if more evidence is needed, researcher delegation is available as a VText choice.",
 		"Worker messages can wake later vtext runs and trigger the next revision.",
 	} {
@@ -285,13 +285,13 @@ func TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T) {
 
 	for _, want := range []string{
 		"This VText run was woken by worker findings",
-		"Make those findings visible with edit_vtext as this turn's next document revision before spawning additional workers",
+		"Make those findings visible with edit_texture as this turn's next document revision before spawning additional workers",
 		"If recent worker findings are only partial and the document needs more evidence",
 		"write an honest partial revision first",
 		"Do not write that a follow-up researcher was dispatched",
 		"Never describe coordination as already done unless the tool action really happened",
 		"Phrases such as \"researcher dispatched\"",
-		"If you only edit_vtext, phrase remaining work as \"next needed\" or \"still unresolved\"",
+		"If you only edit_texture, phrase remaining work as \"next needed\" or \"still unresolved\"",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("partial-findings prompt missing %q:\n%s", want, request)
@@ -430,7 +430,7 @@ func TestVTextPromptDerivesSourceServiceEntitiesFromResearcherUpdates(t *testing
 		"source_service_item",
 		"item_id=srcitem_current_economy",
 		"Canonical inline Source Entity syntax is [label](source:ENTITY_ID)",
-		"Make those findings visible with edit_vtext",
+		"Make those findings visible with edit_texture",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("source-service prompt missing %q:\n%s", want, request)
@@ -589,7 +589,7 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 				"type":            "vtext_agent_revision",
 				"original_prompt": "what is the weather in boston now",
 			},
-			want: "function:edit_vtext",
+			want: "function:edit_texture",
 		},
 		{
 			name: "mutable product work does not force super request",
@@ -597,7 +597,7 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 				"type":            "vtext_agent_revision",
 				"original_prompt": "debug and fix the runtime gateway",
 			},
-			want: "function:edit_vtext",
+			want: "function:edit_texture",
 		},
 		{
 			name: "community wire operational proof does not force super request",
@@ -605,7 +605,7 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 				"type":        "vtext_agent_revision",
 				"seed_prompt": "Universal Wire staging proof request: run the existing source-refresh/research/projection/publication flow, create or approve an Article VText, update universal-wire/Wire.vtext, then leave evidence ids and verifier proof.",
 			},
-			want: "function:edit_vtext",
+			want: "function:edit_texture",
 		},
 		{
 			name: "creative direct document work edits vtext",
@@ -613,7 +613,7 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 				"type":            "vtext_agent_revision",
 				"original_prompt": "tell me a story about computers",
 			},
-			want: "function:edit_vtext",
+			want: "function:edit_texture",
 		},
 		{
 			name: "explicit decision note starts with decision record",
@@ -621,7 +621,7 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 				"type":            "vtext_agent_revision",
 				"original_prompt": "Create a short VText document. Record an off-document VText decision note with decision_kind no_worker_needed first.",
 			},
-			want: "function:record_vtext_decision",
+			want: "function:record_texture_decision",
 		},
 		{
 			name: "worker wake leaves vtext free to choose",

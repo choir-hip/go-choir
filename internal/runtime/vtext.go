@@ -322,8 +322,9 @@ type vtextRestoreRevisionRequest struct {
 // ----- Helper functions -----
 
 // extractDocID extracts the document ID from the URL path.
-// Expected pattern: /api/vtext/documents/{docID}/...
+// Expected pattern: /api/texture/documents/{docID}/...
 func extractDocID(path string) string {
+	path = normalizeTextureAPIPath(path)
 	const prefix = "/api/vtext/documents/"
 	if !strings.HasPrefix(path, prefix) {
 		return ""
@@ -335,8 +336,9 @@ func extractDocID(path string) string {
 }
 
 // extractRevisionID extracts the revision ID from the URL path.
-// Expected pattern: /api/vtext/revisions/{revisionID}/...
+// Expected pattern: /api/texture/revisions/{revisionID}/...
 func extractRevisionID(path string) string {
+	path = normalizeTextureAPIPath(path)
 	const prefix = "/api/vtext/revisions/"
 	if !strings.HasPrefix(path, prefix) {
 		return ""

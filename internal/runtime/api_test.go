@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -4289,12 +4290,12 @@ func TestHandleTopologyReportsOrchestrationShape(t *testing.T) {
 	}
 }
 
-func TestHandleVTextDocumentsRootUsesVTextRoutes(t *testing.T) {
+func TestHandleVTextDocumentsRootUsesTextureRoutes(t *testing.T) {
 	t.Parallel()
 	_, handler := testAPISetup(t)
 
-	createReqBody := `{"title":"vtext alias doc","content":"hello"}`
-	createReq := authenticatedRequest(http.MethodPost, "/api/vtext/documents", createReqBody, "user-alice")
+	createReqBody := `{"title":"texture route doc","content":"hello"}`
+	createReq := authenticatedRequest(http.MethodPost, "/api/texture/documents", createReqBody, "user-alice")
 	createW := httptest.NewRecorder()
 	handler.HandleVTextDocumentsRoot(createW, createReq)
 
@@ -4310,7 +4311,7 @@ func TestHandleVTextDocumentsRootUsesVTextRoutes(t *testing.T) {
 		t.Fatal("doc_id should not be empty")
 	}
 
-	listReq := authenticatedRequest(http.MethodGet, "/api/vtext/documents", "", "user-alice")
+	listReq := authenticatedRequest(http.MethodGet, "/api/texture/documents", "", "user-alice")
 	listW := httptest.NewRecorder()
 	handler.HandleVTextDocumentsRoot(listW, listReq)
 
@@ -4325,8 +4326,23 @@ func TestHandleVTextDocumentsRootUsesVTextRoutes(t *testing.T) {
 	if len(listResp.Documents) != 1 {
 		t.Fatalf("documents: got %d, want 1", len(listResp.Documents))
 	}
-	if listResp.Documents[0].Title != "vtext alias doc" {
-		t.Errorf("title: got %q, want %q", listResp.Documents[0].Title, "vtext alias doc")
+	if listResp.Documents[0].Title != "texture route doc" {
+		t.Errorf("title: got %q, want %q", listResp.Documents[0].Title, "texture route doc")
+	}
+
+	getReq := authenticatedRequest(http.MethodGet, "/api/texture/documents/"+url.PathEscape(createResp.DocID), "", "user-alice")
+	getW := httptest.NewRecorder()
+	handler.HandleVTextRouter(getW, getReq)
+
+	if getW.Code != http.StatusOK {
+		t.Fatalf("get status: got %d, want %d; body=%s", getW.Code, http.StatusOK, getW.Body.String())
+	}
+	var getResp vtextDocumentResponse
+	if err := json.NewDecoder(getW.Body).Decode(&getResp); err != nil {
+		t.Fatalf("decode get response: %v", err)
+	}
+	if getResp.DocID != createResp.DocID {
+		t.Errorf("get doc_id: got %q, want %q", getResp.DocID, createResp.DocID)
 	}
 }
 
