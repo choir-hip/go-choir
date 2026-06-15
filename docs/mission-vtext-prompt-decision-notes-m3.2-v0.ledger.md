@@ -1413,3 +1413,52 @@ Open edge: commit and push the repair, monitor CI and staging deploy, verify
 staging identity, then rerun deployed prompt-bar acceptance. Staging proof must
 show no super-before-VText, no canonical decision-rationale leak, explicit
 decision row/Trace evidence, and downstream super only after the VText request.
+
+## 2026-06-15 - Deployed Prompt-Bar VText Control-Plane Acceptance Passed
+
+Claim/scope: staging at
+`0a5fb602151c8373086c4a2774e1236faa53831b` supports the prompt-bar portion of
+the VText-centered Choir invariant. Fresh prompt-bar submissions enter
+conductor, materialize VText first, keep control/decision rationale out of
+canonical VText text, and allow super only after a VText-owned request.
+
+Move: rerun deployed browser-public acceptance after the VText-owned explicit
+super handoff repair deployed. Expected Delta V: close the prompt-bar
+route/canonical/decision/downstream-super legs without restoring conductor
+direct-super ingress. Actual Delta V: V decreases from 2 to 1. The remaining
+open edge is deployed sourcecycled/news/article product-path evidence, because
+the available staging Universal Wire test proves public story/app visibility
+but not the route chain showing source/article artifacts become VText-owned
+before downstream researcher/super work attaches back to VText.
+
+Receipts:
+- Commit `0a5fb602151c8373086c4a2774e1236faa53831b` was pushed to `main`.
+- CI run `27525752356` passed.
+- Deploy to Staging (Node B) job `81352762195` passed.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=0a5fb602151c8373086c4a2774e1236faa53831b`.
+- Deployed proof command:
+  `BASE_URL=https://choir.news npx playwright test tests/vtext-control-plane-staging.tmp.spec.js --workers=1`
+  from `frontend/`.
+- Explicit no-worker decision submission
+  `69642d43-81e3-4e27-a22e-1256c06cd41d` created doc
+  `797c2145-8f5c-4ad8-85b8-b55d32c02590`; its
+  `initial_loop_id=61915809-722a-4044-9ec1-ba94534f1a28` resolved to VText.
+- Decision row `8bcf0c5b-ffb3-481f-ab6c-1d3b304659cf` existed with Trace/log
+  projection, `superRuns=[]`, forbidden browser-public internal requests were
+  `[]`, and the canonical text did not contain the private rationale.
+- Explicit downstream-super submission
+  `b501490e-b662-41c3-bd14-e682c3f72da3` created doc
+  `efb0a3c8-e6e4-4474-9e3a-46104cf120c9`; its
+  `initial_loop_id=771e92ea-0e2a-46d4-b6c9-dcc5d6499b5f` resolved to VText,
+  followed by super loop `ac9f1c3b-ad59-488d-a7d6-5037c88dbef1`.
+- The downstream super run carried `requested_by_profile=vtext` and requester
+  agent `vtext:efb0a3c8-e6e4-4474-9e3a-46104cf120c9`, so super appeared only
+  after VText requested it.
+- Local source/article route evidence remains the focused comprehensive test:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestProcessorAndReconcilerProfilesDelegateToVTextOnly|TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolutionCompletes' -count=1`.
+
+Open edge: find an admissible browser-public product path for
+sourcecycled/news/article route evidence, or record the exact product-surface
+blocker. Do not use `/api/agent`, `/internal`, `/api/test`, raw event mutation,
+or manual success seeding to fill this gap.

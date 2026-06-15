@@ -94,21 +94,17 @@ control plane.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=2:
-1. prove on staging that prompt-bar VText materialization keeps
-   instruction/control text, including explicit off-document decision
-   rationale, out of canonical reader-facing document text while preserving the
-   full request as VText instruction/context.
-2. prove an ordinary execution-shaped prompt can still cause VText to request
-   downstream super execution after VText owns the artifact context, or record
-   the precise blocker if the deployed VText/model path cannot make that
-   request within the acceptance budget.
-Then rerun deployed acceptance so prompt-bar VText ingress starts with VText,
-super before VText fails, super after VText is allowed only when VText
-requested it, explicit owner-requested decision notes create `vtext_decisions`
-rows plus Trace/log projections without leaking into canonical text, and
-source/news/article product paths attach downstream work back to VText/artifact
-context where product-path proof is available.
+**variant (ranking function) V:** current V=1:
+1. obtain deployed product-path evidence, or record the exact product-surface
+   blocker, for sourcecycled/news ingestion and article creation showing
+   source/article artifacts become VText-owned before downstream researcher or
+   super work attaches back to the VText/artifact context.
+Prompt-bar acceptance is supported on staging: fresh prompt-bar VText ingress
+starts conductor -> VText; super before VText is a failure; super after VText is
+valid only when requested by VText; explicit owner-requested decision notes
+create `vtext_decisions` rows plus Trace/log projections without leaking into
+canonical text; and explicit owner-requested downstream-super handoff is
+recorded as requested by VText.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
 if the tool/table/UI path exceeds one mission, split after the problem
@@ -138,19 +134,21 @@ ingress has been repaired for fresh prompt-bar VText submissions.
 - C0 active: VText is Choir's artifact control plane. Conductor routes
   exogenous input into VText-owned artifact state; super is downstream execution
   authority that VText may request later.
-- C0a supported for prompt-bar route order: deployed browser-public proof on
-  `3a5cbb41fd05b0eb3acf50c7ae930cbfc2108d1f` returned conductor as Trace
-  entry and a VText `initial_loop_id` for fresh authenticated prompt-bar VText
-  submissions. No super-before-VText run appeared in the proof.
-- C0b active: prompt-bar VText materialization still creates the initial
-  user-authored canonical revision from the full control prompt. The explicit
-  off-document decision note row now exists, but the exact decision rationale
-  appears in canonical document text because it was part of that initial
-  revision.
-- C0c active: deployed execution-shaped prompt proof started with VText but did
-  not produce a downstream VText-requested super run within the acceptance
-  window; determine whether this is prompt/tool pressure, provider latency, or a
-  missing VText affordance path.
+- C0a supported for prompt-bar route/canonical/decision acceptance: deployed
+  browser-public proof on `0a5fb602151c8373086c4a2774e1236faa53831b` returned
+  conductor as Trace entry and a VText `initial_loop_id` for fresh
+  authenticated prompt-bar VText submissions. No super-before-VText run
+  appeared, the explicit `no_worker_needed` decision row existed with Trace/log
+  projection, and the canonical VText text did not contain the private
+  rationale.
+- C0b supported for explicit downstream-super handoff: deployed browser-public
+  proof on `0a5fb602151c8373086c4a2774e1236faa53831b` showed the initial
+  VText run requesting super afterward, with requester metadata
+  `requested_by_profile=vtext` and requester agent/run equal to the VText run.
+- C0c active: sourcecycled/news ingestion and article creation have focused
+  local route coverage showing processor/reconciler work opens VText first, but
+  the deployed product-path proof for source/article artifacts becoming
+  VText-owned and downstream work attaching back to VText remains unproven.
 - C1 active: VText needs strong delegation pressure for factual/current/source,
   generated-artifact, execution, and verification work, but this pressure should
   live as reasoned obligation language, not tool-order enforcement.
@@ -401,11 +399,19 @@ ingress has been repaired for fresh prompt-bar VText submissions.
   before provider latency can strand the handoff, and records a
   `delegation_opened` VText decision. Generic execution/debug wording and
   explicit no-worker prompts do not trigger this path.
+- Deployed prompt-bar control-plane acceptance supported on
+  `0a5fb602151c8373086c4a2774e1236faa53831b`: CI and Node B deploy passed,
+  `/health` reported that SHA for proxy and sandbox, and the browser-public
+  proof showed conductor -> VText for prompt-bar ingress, no super before
+  VText, no canonical decision-rationale leak, an explicit decision row plus
+  Trace/log projection, and downstream super only after a VText request.
 
-**next move:** commit the VText-owned explicit-super repair, push, monitor
-CI/staging deploy, verify staging identity, and rerun deployed acceptance. Do
-not add conductor-level prompt heuristics or direct super ingress; super must
-remain downstream of the VText run/request.
+**next move:** decide whether the sourcecycled/news/article deployed route proof
+has an admissible public product path today. If yes, run it and record source or
+article artifact VText ownership plus downstream researcher/super attachment.
+If no, record the exact proof-surface blocker and leave the remaining M3.2 edge
+as product-path observability debt. Do not add conductor-level prompt heuristics
+or direct super ingress; super must remain downstream of the VText run/request.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -1049,37 +1055,36 @@ deployed prompt-bar super-first ingress.
 ```text
 Use Parallax on docs/mission-vtext-prompt-decision-notes-m3.2-v0.md. Treat it
 as the M3.2 gate between the settled M3.1 emergency repair and M3 lifecycle
-cutover. Current status is working with V=2. Preserve Choir Doctrine and
+cutover. Current status is working with V=1. Preserve Choir Doctrine and
 docs/vtext-agentic-invariants-2026-06-13.md: VText is Choir's versioned artifact
 control plane. Conductor routes exogenous prompt/source/article/mission input
 into VText-owned artifact state; super is downstream execution authority that
 VText may request later through request_super_execution. The no-worker route
 predicate work is superseded as overfit staging evidence. Current pushed repair
-is `3a5cbb41fd05b0eb3acf50c7ae930cbfc2108d1f`; CI run `27524029167` and Node B
-deploy job `81347742696` passed, and `/health` reports that SHA for proxy and
-sandbox. Deployed proof now shows prompt-bar -> conductor -> VText route order:
-initial_loop_id was VText and no super-before-VText appeared. It still failed
-because prompt-bar materialization stored the full control prompt, including the
-off-document decision rationale, as canonical VText text; the explicit
-`no_worker_needed` decision row and Trace/log evidence did exist. A second
-execution-shaped prompt also started with VText but did not request super within
-the proof window. A local prompt-bar intake repair now keeps the full request in
-VText metadata/context while creating an intentionally blank canonical intake
-revision, and focused route/prompt/source-article tests pass. Keep
+is `0a5fb602151c8373086c4a2774e1236faa53831b`; CI run `27525752356` and Node B
+deploy job `81352762195` passed, and `/health` reported that SHA for proxy and
+sandbox. Deployed browser-public proof from `frontend/` with
+`BASE_URL=https://choir.news npx playwright test tests/vtext-control-plane-staging.tmp.spec.js --workers=1`
+passed the prompt-bar control-plane acceptance: an explicit no-worker decision
+submission `69642d43-81e3-4e27-a22e-1256c06cd41d` created doc
+`797c2145-8f5c-4ad8-85b8-b55d32c02590`, initial VText loop
+`61915809-722a-4044-9ec1-ba94534f1a28`, decision row
+`8bcf0c5b-ffb3-481f-ab6c-1d3b304659cf`, no super runs, no forbidden public
+internal-route requests, and no canonical decision-rationale leak. An explicit
+downstream-super submission `b501490e-b662-41c3-bd14-e682c3f72da3` created doc
+`efb0a3c8-e6e4-4474-9e3a-46104cf120c9`, initial VText loop
+`771e92ea-0e2a-46d4-b6c9-dcc5d6499b5f`, then super loop
+`ac9f1c3b-ad59-488d-a7d6-5037c88dbef1` with
+`requested_by_profile=vtext` and requester agent
+`vtext:efb0a3c8-e6e4-4474-9e3a-46104cf120c9`. Keep
 record_vtext_decision backed by Dolt, readable from Trace/logs, and visible in
 the VText Sources panel; keep request_super_execution only as a VText
-affordance. Deployed prompt-bar route/canonical/decision acceptance now passes
-on `39273a164ce08d6567bc5e05a04099a1167acdca`, but the execution-shaped leg
-still failed after a 720 second renewed-session proof because VText stayed
-running and did not request super. A local VText-owned explicit-super repair
-now requests persistent super from the initial VText run only when the owner
-explicitly asks VText to ask/request downstream super execution; generic
-execution/debug wording and no-worker prompts do not trigger it. Next move:
-commit/push this repair, monitor CI/staging deploy, verify staging identity,
-then rerun deployed acceptance covering prompt-bar plus source/news/article
-product paths where feasible.
-Settlement still requires focused schema/tool/prompt tests, route tests proving
-VText before super, API/event/log readability proof, Sources-panel Playwright
-proof, runtime/frontend checks for touched surfaces, push/CI/deploy, staging
-identity, and deployed product-path proof; no claim outruns its evidence class.
+affordance. Focused local source/article route tests pass, including
+processor/reconciler coverage that starts with VText, but deployed
+sourcecycled/news/article product-path proof remains open. Next move: find an
+admissible browser-public product path for source/news/article route evidence,
+or record the exact product-surface blocker; do not use /api/agent, /internal,
+/api/test, raw event mutation, or manual success seeding. Settlement requires
+the source/news/article deployed edge to be proven or explicitly scoped as
+remaining product-path observability debt; no claim outruns its evidence class.
 ```
