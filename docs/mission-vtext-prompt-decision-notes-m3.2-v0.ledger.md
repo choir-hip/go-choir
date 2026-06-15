@@ -1203,3 +1203,53 @@ Delta V: pending CI/deploy and deployed route proof.
 Open edge: land this host configuration repair, verify vmctl and active/fresh
 interactive computers fetch the current sandbox runtime package, then rerun the
 VText control-plane deployed proof.
+
+## 2026-06-15 - Deployed Route Order Repaired, Control Text Still Canonical
+
+Claim/scope: staging at
+`3a5cbb41fd05b0eb3acf50c7ae930cbfc2108d1f` now satisfies the core route-order
+portion of the VText-centered paradigm for fresh prompt-bar VText submissions,
+but M3.2 still fails because prompt-bar materialization stores the full control
+prompt as canonical VText content.
+
+Move: record a Problem Documentation First checkpoint before changing
+prompt-bar materialization again. Expected Delta V: mark direct-super ingress
+as repaired on deployed prompt-bar proof and reopen the remaining canonical
+control-text and downstream-super proof obligations. Actual Delta V: V remains
+3, with the active obligations now tied to canonical prompt content,
+VText-requested super proof, and source/news/article product-path proof.
+
+Receipts:
+- CI run `27524029167` passed for
+  `3a5cbb41fd05b0eb3acf50c7ae930cbfc2108d1f`.
+- Deploy to Staging (Node B) job `81347742696` passed.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=3a5cbb41fd05b0eb3acf50c7ae930cbfc2108d1f`.
+- Deployed proof command:
+  `BASE_URL=https://choir.news npx playwright test tests/vtext-control-plane-staging.tmp.spec.js --workers=1`
+  from `frontend/`.
+- Proof artifact:
+  `/tmp/vtext-control-plane-staging-proof-1781498017452.json`.
+- Screenshot artifact:
+  `/tmp/vtext-control-plane-staging-proof-1781498017452.png`.
+- Explicit decision submission `f26cc5ee-039c-4e35-82f9-24f6720efb4c`
+  created doc `37ecfd95-5f79-4a14-a672-f828937c5e81`; its
+  `initial_loop_id=908aad8c-03aa-4e42-8f14-3501a4975145` resolved to profile
+  `vtext`, not `super`.
+- Decision row `4b4ca8ed-c7ca-4fd5-a528-128d91d5e2e2` existed with
+  `decision_kind=no_worker_needed`, the expected reason, and evidence ref
+  `staging-marker:M32_CONTROL_PLANE_DECISION_1781498017452`.
+- The proof failed because `canonicalContainsReason=true`; the exact
+  off-document decision rationale remained in canonical VText text as part of
+  the initial prompt-bar user revision.
+- Execution-shaped submission for doc `4e7e7f9f-eebe-49da-9a2e-a0f9b52cb799`
+  started with VText
+  `initial_loop_id=6c245a00-feb6-4d80-b490-11e5994418c0`, with conductor as
+  Trace entry and no super-before-VText run, but no downstream
+  VText-requested super run appeared within the 240 second proof window.
+
+Open edge: commit this checkpoint, then repair prompt-bar VText materialization
+so the full owner request remains available to VText as instruction/context
+without becoming canonical reader-facing text. Preserve VText as the initial
+handoff and preserve `request_super_execution` as the downstream execution
+affordance.
