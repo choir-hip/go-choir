@@ -189,11 +189,19 @@ states reasons without forcing choreography.
   run activation starts, with the existing tool-loop hook left as an idempotent
   fallback. Prompt-bar route coverage now waits for the VText child run and
   asserts the durable decision row.
+- Deployed pre-activation repair failed: staging at
+  `916885ce5fde61a146a8317353ac6b2096cee4e6` still produced zero decision
+  records and zero Trace decision moments for the explicit no-worker decision
+  prompt. Trace again showed a `super` run before the VText run, while the
+  canonical private-reason leak stayed repaired. The deployed route is still
+  bypassing the deterministic decision-record path.
 
-**next move:** commit the pre-activation decision repair, push `origin main`,
-monitor CI/deploy, verify staging identity, and rerun deployed product-path
-proof for decision row, Trace decision moment, no forbidden routes, and no
-private reason in canonical text.
+**next move:** identify why the deployed prompt-bar route still creates a
+`super` run before the VText run for the explicit no-worker decision prompt.
+Add product-route coverage or public Trace evidence that distinguishes initial
+super preemption from VText-requested super, repair that route, then rerun
+local tests and deployed product-path proof for decision row, Trace decision
+moment, no forbidden routes, and no private reason in canonical text.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -456,6 +464,51 @@ canonical leak prevention alone still does not settle M3.2.
 Heresy delta: discovered: local first-turn guarantees can be bypassed by a
 deployed route/metadata boundary even when code-level VText tests pass.
 introduced: none accepted. repaired: pending route/metadata repair.
+
+## Staging Pre-Activation Repair Checkpoint - 2026-06-15
+
+Reliable evidence: commit
+`916885ce5fde61a146a8317353ac6b2096cee4e6` passed CI run `27519880134`, whose
+Node B staging deploy job completed successfully. Public
+`https://choir.news/health` reported both proxy and upstream sandbox
+`deployed_commit` equal to that SHA. A deployed product-path proof submitted
+through `/api/prompt-bar` and observed through `/api/vtext/*/diagnosis` and
+`/api/trace/*`, using no forbidden browser-public internal routes. Proof
+artifact `/tmp/vtext-decision-staging-proof-1781489484677.json` recorded
+submission `68ff0f37-9b14-47ad-a711-ad5ebf0be660`, document
+`f6caec7a-a975-4b38-8a17-6b4804e8a9ec`, and initial loop
+`efec393f-bc03-4cc9-871a-2b5caa14d3c9`. The proof ended with diagnosis
+decisions `0`, Trace decision moments `0`, `canonical_contains_reason=false`,
+revision count `2`, and forbidden internal routes `[]`. Trace agents again
+included conductor, `super`, and VText, with `super` observed before VText.
+
+Conjecture delta: moving deterministic decision recording before VText
+activation did not repair the deployed route because the route still appears to
+preempt or branch through `super` before the VText no-worker decision record
+exists. The next repair must distinguish whether `initial_loop_id` is still a
+super handoff, whether the initial VText run asks super before recording, or
+whether the public proof is following a later VText run while the true initial
+route lives elsewhere.
+
+Protected surfaces: prompt-bar initial handoff selection, persistent-super
+preemption predicates, VText no-worker decision detection, public Trace
+projection, and canonical VText writes.
+
+Admissible evidence class: product-route coverage or deployed public Trace
+evidence showing which run id corresponds to the initial loop and why `super`
+appears before VText; focused runtime tests for that route; deployed
+product-path proof showing a decision row, Trace decision moment, no forbidden
+routes, and no private reason in canonical text.
+
+Rollback path: revert the next route repair if it suppresses required super
+handoffs for execution, verification, code, or artifact work. Keep this
+checkpoint as evidence that moving the record earlier is still insufficient
+while super preemption remains possible.
+
+Heresy delta: discovered: the deployed route can still pass through `super`
+before off-document VText accountability exists, despite local pre-activation
+recording coverage. introduced: none accepted. repaired: pending route
+preemption repair.
 
 ## Suggested Goal String
 

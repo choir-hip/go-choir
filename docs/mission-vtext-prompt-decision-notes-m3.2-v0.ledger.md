@@ -441,6 +441,40 @@ Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof for decision row, Trace decision moment, no
 forbidden routes, and no private reason in canonical text.
 
+## 2026-06-15 - Staging Pre-Activation Repair Checkpoint
+
+Claim/scope: the pre-activation decision repair deployed and CI/staging deploy
+passed, but the deployed product proof still recorded zero VText decisions and
+zero Trace decision moments. The private reason stayed out of canonical text,
+but Trace again showed `super` before VText.
+
+Move: document the deployed failure before changing the route again. Expected
+Delta V: reopen landing-only variant into a route-preemption investigation.
+Actual Delta V: V=1 to V=2, with the super/VText ordering gap pending.
+
+Receipts:
+- Commit `916885ce5fde61a146a8317353ac6b2096cee4e6` passed CI run
+  `27519880134`, including Node B staging deploy.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=916885ce5fde61a146a8317353ac6b2096cee4e6`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781489484677.json`.
+- Deployed proof screenshot:
+  `/tmp/vtext-decision-staging-proof-1781489484677.png`.
+- Proof submission `68ff0f37-9b14-47ad-a711-ad5ebf0be660`, document
+  `f6caec7a-a975-4b38-8a17-6b4804e8a9ec`, initial loop
+  `efec393f-bc03-4cc9-871a-2b5caa14d3c9`.
+- Observed diagnosis decisions `0`, Trace decision moments `0`,
+  `canonical_contains_reason=false`, revision count `2`, forbidden internal
+  routes `[]`.
+- Trace agents included conductor, `super`, and VText; `super` first appeared
+  before the VText run.
+
+Open edge: determine whether the prompt-bar `initial_loop_id` is still a
+super handoff, whether VText asks super before the deterministic decision path,
+or whether the proof is following a later VText run. Then repair the actual
+route and rerun local plus deployed product-path proof.
+
 ## 2026-06-15 - Local Initial Tool-Choice Repair
 
 Claim/scope: explicit owner-requested decision notes now select exact
