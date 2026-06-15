@@ -79,9 +79,12 @@ auditable through the runtime evidence substrate.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=1:
-1. land the behavior change on `origin/main`, monitor CI/deploy, verify staging
-   identity, and run deployed product-path proof.
+**variant (ranking function) V:** current V=2:
+1. repair the staging-discovered gap where explicit owner-requested decision
+   recording did not cause the deployed VText model to call
+   `record_vtext_decision`;
+2. reland the behavior change on `origin/main`, monitor CI/deploy, verify
+   staging identity, and run deployed product-path proof.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
 if the tool/table/UI path exceeds one mission, split after the problem
@@ -129,10 +132,15 @@ states reasons without forcing choreography.
   and prompt/tool-description rewrites now exist in the worktree with focused
   store/runtime/prompt/API/log tests, frontend build proof, a Playwright
   Sources-panel proof, and an in-app Browser local app-load check.
+- Staging-discovered problem checkpoint complete: deployed staging at
+  `890dbe6fafc413f7d301828c83a51cbe10705ad4` exposed that the construct exists
+  but the active VText model can complete without calling the decision tool even
+  when the owner prompt explicitly asks for an off-document decision note.
 
-**next move:** commit the implementation, push `origin main`, monitor CI and
-staging deploy, verify staging commit identity, and run deployed product-path
-proof for decision recording plus Sources-panel visibility.
+**next move:** strengthen the explicit owner-requested decision-recording
+obligation without reintroducing forced semantic delegation choreography, rerun
+focused prompt/runtime tests, then reland and rerun staging product-path proof
+for decision recording plus Sources-panel visibility.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -147,8 +155,9 @@ voice and more E-prime style where useful. Owner decision: VText decisions
 should be visible in the VText UI when the Sources panel opens from the toolbar.
 
 **settlement:** not settled. Problem Documentation First and local construct
-proof are satisfied. Settle only after landing and deployed product proof show
-M3 can resume with both hazards covered: no forced semantic delegation and no
+proof are satisfied, but the first staging proof found a prompt/tool-use
+compliance gap. Settle only after landing and deployed product proof show M3 can
+resume with both hazards covered: no forced semantic delegation and no
 document-body agent work logs.
 
 ## Problem Checkpoint - 2026-06-14
@@ -182,6 +191,48 @@ supersedes it.
 Heresy delta: discovered: prompt text can make VText behave like a route-script
 executor and can push agent process rationale into canonical documents.
 introduced: none accepted. repaired: pending implementation.
+
+## Staging Problem Checkpoint - 2026-06-15
+
+Reliable evidence: commit
+`890dbe6fafc413f7d301828c83a51cbe10705ad4` passed CI run `27517539570` and
+deployed to Node B. Public `https://choir.news/health` reported both proxy and
+upstream sandbox `deployed_commit` equal to that SHA. A deployed product-path
+proof then authenticated through the normal browser path, submitted through
+`/api/prompt-bar`, and observed the resulting VText document through
+`/api/vtext/*/diagnosis` and `/api/trace/*`. The proof submission
+`a81945d4-15df-4e92-8602-012b55366cb3` created doc
+`5b15afa6-705c-48cf-84ce-b20ee2b0c124`; Trace showed conductor, super, and
+VText all completed, and no forbidden browser-public internal routes were used.
+However, diagnosis returned zero decision records and Trace returned zero
+`vtext.decision.recorded` moments after 69 evidence polls.
+
+Conjecture delta: the M3.2 table/tool/API/UI construct works locally, but the
+prompt/tool contract is still too weak for deployed model behavior when an owner
+explicitly asks VText to record an off-document decision. Repair must add a
+clear mechanical obligation for explicit owner-requested decision notes without
+returning to forced semantic delegation sequences such as "write, then spawn."
+
+Protected surfaces: VText prompt defaults, VText tool descriptions/profile
+augmentation, prompt tests, and deployed VText product proof. The existing
+Dolt/Trace/API/UI construct remains the same unless the repair proves those
+surfaces caused the failure.
+
+Admissible evidence class: focused prompt/tool tests proving explicit
+owner-requested decision recording is a tool obligation while semantic
+delegation remains optional; deployed product-path proof showing a real VText
+run records the off-document decision, diagnosis exposes it, Trace/logs include
+the readable decision moment, and canonical VText content does not include the
+agent process rationale.
+
+Rollback path: revert the prompt/tool compliance repair if it causes VText to
+over-record ordinary choices or reintroduce mandatory researcher/super
+choreography; retain the staging checkpoint as discovery evidence.
+
+Heresy delta: discovered: an available decision tool is insufficient if the
+deployed VText prompt/model can silently ignore an explicit owner request to
+record an off-document decision. introduced: none accepted. repaired: pending
+follow-up prompt/tool compliance repair.
 
 ## Suggested Goal String
 

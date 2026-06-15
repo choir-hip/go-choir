@@ -64,3 +64,37 @@ Receipts:
 
 Open edge: no landing claim yet. Commit, push, CI/deploy monitoring, staging
 identity, and deployed product-path proof remain required before settlement.
+
+## 2026-06-15 - Staging Problem Checkpoint Before Prompt Compliance Repair
+
+Claim/scope: the first deployed product-path proof showed the M3.2 construct
+landed and deployed, but deployed VText did not call `record_vtext_decision`
+even when the owner prompt explicitly asked for an off-document decision note.
+
+Move: document the staging-discovered problem before changing prompt/tool
+behavior. Expected Delta V: reopen the landing-only variant into a small repair
+loop. Actual Delta V: V=1 to V=2, with the problem documented and the repair
+still pending.
+
+Receipts:
+- GitHub Actions CI run `27517539570` passed for
+  `890dbe6fafc413f7d301828c83a51cbe10705ad4`, including Node B staging deploy.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=890dbe6fafc413f7d301828c83a51cbe10705ad4`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781484637787.json`.
+- Deployed proof screenshot:
+  `/tmp/vtext-decision-staging-proof-1781484637787.png`.
+- Proof submission:
+  `a81945d4-15df-4e92-8602-012b55366cb3`.
+- Proof document:
+  `5b15afa6-705c-48cf-84ce-b20ee2b0c124`.
+- Trace agents observed: conductor, super, and VText completed.
+- Forbidden browser-public internal routes observed: none.
+- Diagnosis decisions observed: `0`.
+- Trace decision moments observed: `0`.
+
+Open edge: strengthen explicit owner-requested decision-recording pressure
+without reintroducing forced semantic researcher/super choreography, rerun
+focused prompt/runtime tests, push, monitor CI/deploy, and rerun deployed
+product-path proof.
