@@ -227,9 +227,15 @@ position / live conjectures / open edges:
   focused tests and frontend API callers, while `/api/vtext` remains an
   explicitly temporary compatibility shim. This does not yet prove staging or
   authorize shim deletion.
+- C7 discovered: CI exposed a Universal Wire publication compatibility
+  regression. The route/tool slice made new Texture revisions write
+  `source=edit_texture`, but the `internal/wirepublish` autonomous publication
+  eligibility package still accepted only the retired edit-source metadata.
+  Result: runtime shards 2 and 3 failed before staging deploy, with missing
+  edition transclusion and missing in-flight publication work item evidence.
 
-next move: commit the local runtime/product affordance slice, then continue the
-broader UI/internal symbol cutover before staging acceptance.
+next move: land the docs-only CI-failure checkpoint, then repair the wire
+publication eligibility compatibility predicate and rerun the landing loop.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

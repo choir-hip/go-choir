@@ -149,3 +149,37 @@ Open edge: no staging deploy or browser product proof has run for this slice;
 the compatibility shim, internal symbol/file/storage names, UI labels/data
 attributes, common-vs-exceptional edit split, transclusion proof, and protocol
 v0 remain open.
+
+## 2026-06-15 - CI Failure Checkpoint: Wire Publish Eligibility
+
+Claim: the first pushed Texture route/tool slice did not yet preserve Universal
+Wire autonomous publication compatibility under the new revision metadata
+source.
+
+Move: document the CI-discovered problem before committing the repair. GitHub
+Actions run `27581617910` for commit
+`8d8ee883f6e6d11d8e42fef1077ab14c75e8e26d` failed before staging deploy.
+Runtime shard 2 failed
+`TestWireAutonomousPublishTranscludesEditionAndDebounces` because the edition
+content stayed `"# Wire\n\nUniversal Wire edition."` instead of transcluding
+`doc-publish-slice`. Runtime shard 3 failed
+`TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails` because
+only the story-resolution work item remained open, not the expected
+story-resolution plus in-flight publication pair.
+
+Expected ΔV: 0. This is a Problem Documentation First checkpoint, not a repair.
+
+Actual ΔV: 0. V remains 7. The failure shows the product-facing rename reached
+revision metadata consumers outside the focused test packet.
+
+Evidence / root-cause hypothesis:
+- `internal/wirepublish.EligibleForAutonomousPublish` still gated revisions on
+  the retired edit-source metadata value, while new Texture writes and fixtures
+  now use `source=edit_texture`.
+- Universal Wire read projection also needs to continue recognizing legacy
+  stored metadata during the cutover window; deleting that compatibility would
+  hide pre-cutover articles from reader/publish paths.
+
+Open edge: repair should accept `edit_texture` as the current source, keep the
+retired source only as deletion-receipted legacy metadata compatibility, and
+prove both `internal/wirepublish` and the failed runtime publication tests.
