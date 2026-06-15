@@ -187,6 +187,11 @@ explicitly promotes one as source form.
 
 ## Current Mission Family
 
+- `docs/mission-portfolio-2026-06-11.md` and `docs/mission-graph.yaml` define
+  the current durable-actor spine. As of 2026-06-15, M3 proper is gated by
+  `docs/mission-vm-bootstrap-recovery-race-m3.3-v0.md`, the narrow
+  bootstrap/recovery race paramission that must settle before lifecycle cutover
+  uses vmctl refresh/restart as proof substrate.
 - `docs/mission-platform-source-service-vtext-publication-campaign-v1.md` -
   active Source Service / VText source metadata / publication campaign. Its
   requirements contract is `docs/source-external-data-publication.md`.

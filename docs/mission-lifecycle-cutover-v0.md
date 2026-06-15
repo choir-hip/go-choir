@@ -13,11 +13,15 @@ this cutover mission are transitional acceptance-language residue, not target
 doctrine.
 
 Recovery gates: M3.1 settled on 2026-06-14 and M3.2 settled on 2026-06-15.
-M3 must resume as lifecycle cutover, not deterministic VText researcher
-continuation and not direct-super ingress. Preserve the M3.1/M3.2 invariants:
-VText remains the artifact control plane, semantic delegation is VText's choice,
-decision rationale stays off-document, and prompt/source/article/mission ingress
-enters VText-owned artifact state before downstream super work.
+M3.3 is now the narrow pre-M3 gate for owner-visible VM bootstrap/recovery
+first-load failures where manual reload succeeds after vmctl finishes useful
+recovery. M3 must resume as lifecycle cutover only after M3.3 settles or records
+a precise non-blocking proof-surface edge. Do not resume deterministic VText
+researcher continuation and do not route ordinary ingress directly to super.
+Preserve the M3.1/M3.2 invariants: VText remains the artifact control plane,
+semantic delegation is VText's choice, decision rationale stays off-document,
+and prompt/source/article/mission ingress enters VText-owned artifact state
+before downstream super work.
 
 ## Source Form
 
