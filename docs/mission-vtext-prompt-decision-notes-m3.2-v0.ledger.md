@@ -160,6 +160,37 @@ Open edge: run a focused public Trace route diagnostic on deployed `80883c5f`
 to identify why the new `requestPersistentSuperExecution` redirect did not
 intercept the staging super-first route.
 
+## 2026-06-15 - Public Trace Super-Request Redirect Diagnostic
+
+Claim/scope: a focused public Trace diagnostic on deployed `80883c5f` showed
+that the first super assignment still comes from the conductor loop using
+VText requester identity. The new redirect hook is on the right function, but
+its stored-conductor metadata guard is too strict for the deployed prompt-bar
+run shape.
+
+Move: capture route-level public product evidence before changing the guard.
+Expected Delta V: distinguish wrong hook from over-strict predicate. Actual
+Delta V: V=2 remains, but the repair target narrows to the redirect predicate.
+
+Receipts:
+- Diagnostic artifact:
+  `/tmp/vtext-route-diagnostic-1781493103394.json`.
+- Submission `1c68be03-a265-420f-8a32-618be6d37ba4`, document
+  `474ab6fa-80d6-40fb-a9e4-4a166477aefc`, initial loop
+  `3e2d5235-bec1-47bf-8e1f-67dd119fcd7e`.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=80883c5f34add2de0a77e1e5a193e314a6ca602d`.
+- Stream sequence 5 was a `channel.message` on the conductor loop:
+  `1c68be03-a265-420f-8a32-618be6d37ba4 -> super:4c`, role VText, kind
+  assignment.
+- Stream sequence 6 submitted the persistent `super` loop; stream sequence 17
+  submitted VText from that super loop.
+- Observed decision rows `0`; forbidden internal routes were not used.
+
+Open edge: relax the super-request redirect predicate to rely on owner,
+conductor profile, existing VText document channel, and durable no-worker
+prompt text, then rerun focused route tests and deployed proof.
+
 ## 2026-06-15 - Staging Route-Carrier Repair Checkpoint
 
 Claim/scope: the route-carrier repair deployed cleanly, but the deployed proof

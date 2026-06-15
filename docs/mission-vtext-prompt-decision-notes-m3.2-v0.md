@@ -256,11 +256,16 @@ states reasons without forcing choreography.
   decision rows and Trace returned zero decision moments. The canonical
   private-reason leak stayed repaired, so the remaining failure is still
   route/decision persistence rather than document pollution.
+- Public Trace diagnostic on deployed `80883c5f34add2de0a77e1e5a193e314a6ca602d`
+  showed the first super assignment as a `channel.message` from the conductor
+  loop to `super`, labeled with VText requester identity. The redirect hook
+  exists on the right function, but its stored-conductor metadata guard is too
+  strict for the deployed prompt-bar run shape.
 
-**next move:** run a focused diagnostic on deployed
-`80883c5f34add2de0a77e1e5a193e314a6ca602d` to identify why the
-`requestPersistentSuperExecution` redirect did not intercept the staging
-super-first route, then repair the actual path or record the precise blocker.
+**next move:** relax the super-request redirect guard to rely on owner,
+conductor profile, existing VText document channel, and the durable no-worker
+prompt text instead of prompt-bar metadata fields that may be absent in the
+stored run, then rerun focused tests and deployed proof.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
