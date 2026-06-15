@@ -163,3 +163,44 @@ Open edge: open or resume a narrow Universal Wire platform-computer recovery
 mission for `universal-wire-platform` / `platform` before treating
 sourcecycled dispatch health as repaired. Do not hide that 502 class inside
 owner bootstrap health.
+
+## 2026-06-15T11:22:30Z - Problem-First Checkpoint For Platform Proxy Booting Route
+
+Claim/scope: the remaining sourcecycled 502 edge is a vmctl platform-computer
+route problem, not the old static `SOURCE_SERVICE_RUNTIME_BASE_URL` problem and
+not an owner bootstrap regression. Sourcecycled is already using the vmctl
+Unix-socket sandbox proxy, but vmctl can route that proxy to a persisted
+`booting` Universal Wire platform ownership that has no active in-memory boot
+operation after service restart.
+
+Move: inspected Node B service environment, sourcecycled/vmctl logs, vmctl
+list state, and the sandbox proxy/ownership code before changing behavior.
+Rewrote Parallax State to make the source/platform route repair the next
+bounded red-surface move.
+
+Expected Delta V: 0 for repair, +0 for documentation required before a red
+behavior change. Actual Delta V: 0; the owner recovery substrate remains
+supported, and the remaining V=1 edge is now narrower.
+
+Receipts:
+
+- `go-choir-sourcecycled.service` has `SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform`
+  and `VMCTL_SANDBOX_PROXY_SOCK=/run/go-choir/vmctl.sock`.
+- `cmd/sourcecycled/main.go` builds UDS endpoint
+  `/internal/vmctl/sandbox-proxy/{owner}/internal/runtime/runs`.
+- `internal/vmctl/handlers.go` sandbox proxy resolves
+  `LiveSandboxURL(ownerID, "platform")` before reverse proxying.
+- Node B `go-choir-sourcecycled.service` logged repeated
+  `runtime returned 502 Bad Gateway` dispatch attempts after deployed commit
+  `a1c0ad0d5ba6f7923c19f0346da979a7ea51a818`.
+- Node B `go-choir-vmctl.service` logged matching proxy errors:
+  `dial tcp 10.200.17.2:8085: i/o timeout`.
+- Operator `GET /internal/vmctl/list` over the vmctl Unix socket showed
+  `vm-universal-wire-platform`, owner `universal-wire-platform`, desktop
+  `platform`, `state=booting`, `sandbox_url=http://10.200.17.2:8085`,
+  `epoch=58`.
+- Direct operator probe to `http://10.200.17.2:8085/health` timed out.
+
+Open edge: add vmctl regression coverage and repair the sandbox proxy/platform
+computer readiness path, then deploy and prove sourcecycled can reach the
+platform runtime without hiding owner bootstrap health.

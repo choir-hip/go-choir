@@ -31,8 +31,11 @@ before M3 uses vmctl refresh/restart as lifecycle-settlement evidence.
   `bootstrap.total` 52 requests, 40 HTTP 200, 3 HTTP 502, 9 resolve errors,
   max bootstrap duration about 15 seconds.
 - A separate public platform/source route is also stale:
-  `vm-universal-wire-platform` is `booting` at `http://10.200.17.2:8085`, and
-  `sourcecycled` retries against it about every 32 seconds with 502s. That may
+  `vm-universal-wire-platform` is persisted as `booting` at
+  `http://10.200.17.2:8085`, and `sourcecycled` retries through vmctl's
+  Unix-socket sandbox proxy about every 32 seconds with 502s. Node B vmctl logs
+  after the owner-path deploy showed reverse-proxy dial timeouts to
+  `10.200.17.2:8085`; a direct operator probe to that route timed out. This may
   pollute aggregate health but should not be conflated with the owner boot path.
 
 ## Not This Mission
@@ -160,18 +163,22 @@ position / live conjectures / open edges:
   completed too quickly to produce an aborted browser request, so the
   cancellation predicate is proven by the deterministic local regression rather
   than by a slow staging recovery.
-- C7 active successor blocker: the Universal Wire platform/source route remains
-  unhealthy after the owner-path deploy. `go-choir-sourcecycled.service` logged
-  repeated `runtime returned 502 Bad Gateway` dispatch attempts after
-  `2026-06-15T11:04:42Z`. This is separated from owner bootstrap health:
-  deployed `/health` for the owner/proxy path shows `bootstrap.total` all
-  `http_200` in the active window.
+- C7 active: the Universal Wire platform/source route is not just a
+  sourcecycled configuration problem. Sourcecycled now targets vmctl's
+  Unix-socket sandbox proxy for `universal-wire-platform`, but `HandleSandboxProxy`
+  calls `LiveSandboxURL(owner, "platform")`, which can return the cached route
+  for a persisted `booting` ownership without first ensuring or recovering the
+  platform computer. On Node B, that ownership is
+  `vm-universal-wire-platform`, `state=booting`, `sandbox_url=http://10.200.17.2:8085`,
+  `epoch=58`; sourcecycled POSTs through the proxy still produce 502s while vmctl
+  logs dial timeouts to `10.200.17.2:8085`.
 
-next move: keep M3 lifecycle cutover blocked on the remaining platform/source
-route edge only if M3 proof needs sourcecycled health. Otherwise resume M3 with
-the owner bootstrap substrate repaired, and open a narrow successor for
-Universal Wire platform-computer recovery (`universal-wire-platform` /
-`platform`) before changing sourcecycled dispatch behavior.
+next move: implement the narrow platform route repair in vmctl, not in
+sourcecycled: before proxying the Universal Wire platform owner, ensure/recover
+the `universal-wire-platform` / `platform` computer or return an explicit
+service-unavailable error instead of blindly reverse-proxying a stale booting
+route. Add deterministic vmctl coverage for a persisted booting ownership with
+no in-memory boot waiter.
 
 ledger file: `docs/mission-vm-bootstrap-recovery-race-m3.3-v0.ledger.md`
 
