@@ -83,11 +83,14 @@ invariants / qualities / domain ramp (I/Q/D):
   staging owner-path proof on `https://choir.news`; optional separate staging
   proof or blocker for the Universal Wire platform route.
 
-variant (ranking function) V: 5.
+variant (ranking function) V: 4.
 1. reproduce or synthesize a deterministic first-load cancel/reload-success
-   failure shape;
+   failure shape; (documented from current code inspection; regression still
+   pending)
 2. identify whether the fix belongs in proxy recovery context, vmctl recovery
-   job semantics, frontend boot polling, or a combination;
+   job semantics, frontend boot polling, or a combination; (current evidence:
+   proxy-owned durable recovery/status is the narrow v0 locus; vmctl job records
+   are not yet required)
 3. implement the narrow durable recovery/status repair with tests;
 4. deploy and prove the owner-path first-load recovery behavior on staging;
 5. separate or repair the stale Universal Wire/sourcecycled 502 route so health
@@ -122,21 +125,22 @@ position / live conjectures / open edges:
 - C2 active: sourcecycled's stale Universal Wire platform route is a separate
   health-noise source and may need its own recovery path, but should not drive
   the owner bootstrap fix.
-- C3 proposed: recovery should return a durable operation/status handle or
-  immediately shift to compute status polling, rather than blocking the boot UI
-  on a single request that can be canceled.
-- Open edge: decide whether vmctl itself needs explicit recovery job records or
-  whether proxy-owned durable status over existing vmctl operations is enough for
-  v0.
+- C3 active: current `HandleComputeRecovery` still uses `r.Context()` for
+  lookup, resolve, and refresh, and it returns only the completed synchronous
+  response. If the browser cancels or a foreground deadline trips, the proxy
+  cancels the vmctl request and has no product-visible recovery operation for
+  `/api/compute/status` or the next bootstrap probe to observe.
+- C4 testing: v0 can be proxy-owned durable status over existing vmctl
+  operations: detach the owner-authorized refresh/wake operation from the
+  browser request context, coalesce it per owner/desktop, expose redacted
+  `recovery_status`/state through compute status, and let bootstrap polling
+  observe the refreshed route when vmctl completes. Explicit vmctl job records
+  remain a successor only if proxy-owned status cannot carry staging proof.
 
-next move: read `docs/incident-vm-bootstrap-stale-route-2026-06-09.md`,
-`frontend/src/lib/Desktop.svelte`, `internal/proxy/compute_status.go`,
-`internal/proxy/handlers.go`, `internal/vmctl/client.go`, and
-`internal/vmctl/ownership.go`; then create a problem-first docs/ledger update if
-new live evidence changes the frame. The first code move should add a focused
-regression test where `/api/compute/recovery` starts or records recovery under
-an authenticated owner request, the client request cancels, vmctl completes, and
-subsequent bootstrap/status reports ready without needing a manual reload.
+next move: add the deterministic regression where `/api/compute/recovery` starts
+an authenticated owner recovery, the client request cancels before vmctl refresh
+returns, the refresh still completes, `/api/compute/status` reports redacted
+progress/ready state, and the next bootstrap succeeds without manual reload.
 
 ledger file: `docs/mission-vm-bootstrap-recovery-race-m3.3-v0.ledger.md`
 
