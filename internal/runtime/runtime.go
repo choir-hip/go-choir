@@ -2129,11 +2129,15 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		if rec.Metadata == nil {
 			rec.Metadata = make(map[string]any)
 		}
+		initialHandoff := "persistent_super"
+		if redirected, _ := superResult["redirected_to_vtext"].(bool); redirected {
+			initialHandoff = "vtext_no_worker_redirect"
+		}
 		rec.Metadata["doc_id"] = decision.DocID
 		rec.Metadata["user_revision_id"] = decision.UserRevisionID
 		rec.Metadata["initial_revision_id"] = decision.InitialRevisionID
 		rec.Metadata["initial_loop_id"] = decision.InitialLoopID
-		rec.Metadata["initial_handoff"] = "persistent_super"
+		rec.Metadata["initial_handoff"] = initialHandoff
 		if out, err := json.Marshal(decision); err == nil {
 			rec.Result = string(out)
 		}

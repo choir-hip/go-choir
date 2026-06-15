@@ -164,6 +164,34 @@ Open edge: inspect the route that still assigns the initial prompt to `super`
 on staging, then repair it so explicit no-worker VText decision prompts start
 with VText and persist the decision row before the first edit.
 
+## 2026-06-15 - Local Super-Request Choke-Point Repair
+
+Claim/scope: if a prompt-bar conductor no-worker route still reaches
+`requestPersistentSuperExecution`, the runtime now redirects that request to an
+initial VText revision run instead of dispatching a persistent-super update.
+The redirected VText run records the deterministic `no_worker_needed` decision
+before provider execution.
+
+Move: repair the actual super-assignment choke point observed on staging.
+Expected Delta V: close local repair and return to landing/staging proof.
+Actual Delta V: V=2 to V=1.
+
+Receipts:
+- `internal/runtime/tools_vtext.go` detects prompt-bar conductor no-worker
+  requests at the start of `requestPersistentSuperExecution` and redirects to
+  `submitVTextAgentRevisionRun`.
+- `internal/runtime/runtime.go` records redirected initial handoff metadata as
+  `vtext_no_worker_redirect` instead of `persistent_super`.
+- `internal/runtime/prompt_bar_unit_test.go` adds
+  `TestPromptBarNoWorkerSuperRequestRedirectsToVText`, proving the choke-point
+  returns a VText run and persists one `no_worker_needed` decision row.
+- `nix develop -c go test ./internal/runtime -run 'Test(HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt|PromptBarNoWorkerSuperRequestRedirectsToVText|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|ExplicitNoWorkerDecisionPromptParsesInitialDecision)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|RunToolLoopInitialToolChoiceAppliesOnlyFirstCall|RunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition|RunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt|PromptBarNoWorkerSuperRequestRedirectsToVText|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionPromptParsesInitialDecision|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|InitialVTextToolChoiceUsesExactTools|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords|DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof.
+
 ## 2026-06-15 - Staging Prompt-Bar Route Repair Checkpoint
 
 Claim/scope: the prompt-bar no-worker route repair deployed, but deployed proof

@@ -245,11 +245,16 @@ states reasons without forcing choreography.
   `channel.message` from `super` to VText, not a durable
   `vtext.decision.recorded` row. VText diagnosis still returned zero decision
   rows, while the canonical private-reason leak stayed repaired.
+- Local super-request choke-point repair complete: if a prompt-bar conductor
+  no-worker route still reaches `requestPersistentSuperExecution`, the runtime
+  now redirects it to a VText initial revision run instead of dispatching a
+  persistent-super update. The redirected VText run records the deterministic
+  `no_worker_needed` decision before provider execution.
 
-**next move:** inspect the remaining conductor-to-super assignment path on
-deployed `081a411e88a8d81fb35f62f59c6eecae2baf22e6`, then repair the route so
-the initial loop is VText and the durable decision table receives the
-`no_worker_needed` row before any edit.
+**next move:** commit the super-request choke-point repair, push `origin main`,
+monitor CI/deploy, verify staging identity, and rerun deployed product-path
+proof for a durable decision row, a real Trace decision event, no initial super
+handoff, no forbidden routes, and no private reason in canonical text.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 

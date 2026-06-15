@@ -200,6 +200,68 @@ func TestConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt(t *testing.T
 	}
 }
 
+func TestPromptBarNoWorkerSuperRequestRedirectsToVText(t *testing.T) {
+	rt, _ := testAPISetup(t)
+	ctx := context.Background()
+
+	prompt := "Create a short VText document titled M32_VTEXT_ROUTE_REDIRECT. The body should say this marker is a deployed route diagnostic. Keep the document reader-facing only. Because this task is fully supplied and requires no research or execution worker, record an off-document VText decision note with decision_kind no_worker_needed, exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker., evidence ref staging-marker:M32_VTEXT_ROUTE_REDIRECT, next action Write the concise reader-facing VText revision. Then write the concise reader-facing VText revision."
+	conductor, err := rt.completePromptBarDecisionRun(ctx, prompt, "user-alice", map[string]any{
+		runMetadataAgentProfile:  AgentProfileConductor,
+		runMetadataAgentRole:     AgentProfileConductor,
+		"input_source":           "prompt_bar",
+		"requested_app":          AgentProfileVText,
+		"initial_document_title": "M32_VTEXT_ROUTE_REDIRECT",
+		"submission_surface":     "prompt_bar",
+	}, conductorDecision{
+		Action: "open_app",
+		App:    AgentProfileVText,
+		Title:  "M32_VTEXT_ROUTE_REDIRECT",
+	})
+	if err != nil {
+		t.Fatalf("complete conductor decision: %v", err)
+	}
+	now := time.Now().UTC()
+	doc := types.Document{
+		DocID:     "doc-no-worker-redirect",
+		OwnerID:   "user-alice",
+		Title:     "M32_VTEXT_ROUTE_REDIRECT",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := rt.Store().CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+
+	result, err := rt.requestPersistentSuperExecution(ctx, "user-alice", doc.DocID, conductor.RunID, "vtext:"+doc.DocID, prompt, "")
+	if err != nil {
+		t.Fatalf("request persistent super execution: %v", err)
+	}
+	if redirected, _ := result["redirected_to_vtext"].(bool); !redirected {
+		t.Fatalf("redirected_to_vtext = %v, want true: %+v", result["redirected_to_vtext"], result)
+	}
+	if got := result["profile"]; got != AgentProfileVText {
+		t.Fatalf("profile = %v, want vtext: %+v", got, result)
+	}
+	loopID, _ := result["loop_id"].(string)
+	initialRun, err := rt.GetRun(ctx, loopID, "user-alice")
+	if err != nil {
+		t.Fatalf("get redirected vtext run: %v", err)
+	}
+	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
+		t.Fatalf("redirected run profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
+	}
+	decisions, err := rt.Store().ListVTextDecisionsByDocument(ctx, "user-alice", doc.DocID, 10)
+	if err != nil {
+		t.Fatalf("list decisions: %v", err)
+	}
+	if len(decisions) != 1 {
+		t.Fatalf("decision count = %d, want 1: %+v", len(decisions), decisions)
+	}
+	if decisions[0].RunID != loopID || decisions[0].DecisionKind != "no_worker_needed" {
+		t.Fatalf("unexpected decision row: %+v", decisions[0])
+	}
+}
+
 func waitForPromptBarUnitRunTerminal(t *testing.T, rt *Runtime, runID, ownerID string, timeout time.Duration) types.RunRecord {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

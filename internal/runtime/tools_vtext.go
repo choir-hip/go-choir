@@ -358,6 +358,11 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 	if ownerID == "" {
 		return nil, fmt.Errorf("request_super_execution missing owner context")
 	}
+	if redirected, ok, err := rt.redirectPromptBarNoWorkerSuperRequestToVText(ctx, ownerID, channelID, requesterRunID, objective); err != nil {
+		return nil, err
+	} else if ok {
+		return redirected, nil
+	}
 	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
 	if err != nil {
 		return nil, err
@@ -465,6 +470,70 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 		"state":               state,
 		"request_source":      "update_coagent",
 	}, nil
+}
+
+func (rt *Runtime) redirectPromptBarNoWorkerSuperRequestToVText(ctx context.Context, ownerID, channelID, requesterRunID, objective string) (map[string]any, bool, error) {
+	if rt == nil || rt.store == nil {
+		return nil, false, nil
+	}
+	requesterRunID = strings.TrimSpace(requesterRunID)
+	channelID = strings.TrimSpace(channelID)
+	if requesterRunID == "" || channelID == "" {
+		return nil, false, nil
+	}
+	requester, err := rt.store.GetRun(ctx, requesterRunID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("lookup requester run for no-worker route: %w", err)
+	}
+	if requester.OwnerID != ownerID ||
+		agentProfileForRun(&requester) != AgentProfileConductor ||
+		metadataStringValue(requester.Metadata, "input_source") != "prompt_bar" ||
+		metadataStringValue(requester.Metadata, "requested_app") != AgentProfileVText {
+		return nil, false, nil
+	}
+	routePrompt := strings.Join([]string{
+		strings.TrimSpace(objective),
+		strings.TrimSpace(requester.Prompt),
+		metadataStringValue(requester.Metadata, "seed_prompt"),
+	}, " ")
+	if !promptBarNoWorkerDecisionRoute(routePrompt) {
+		return nil, false, nil
+	}
+	doc, err := rt.store.GetDocument(ctx, channelID, ownerID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("lookup no-worker vtext document: %w", err)
+	}
+	prompt := firstNonEmptyString(
+		strings.TrimSpace(objective),
+		metadataStringValue(requester.Metadata, "seed_prompt"),
+		strings.TrimSpace(requester.Prompt),
+	)
+	rec, err := rt.submitVTextAgentRevisionRun(ctx, doc, ownerID, vtextAgentRevisionRequest{
+		Intent: "initial_conductor_workflow",
+		Prompt: prompt,
+	}, requester.RunID, 0)
+	if err != nil {
+		return nil, false, fmt.Errorf("redirect no-worker prompt-bar route to vtext: %w", err)
+	}
+	return map[string]any{
+		"agent_id":            rec.AgentID,
+		"loop_id":             rec.RunID,
+		"channel_id":          rec.ChannelID,
+		"profile":             rec.AgentProfile,
+		"role":                rec.AgentRole,
+		"requested_by":        "vtext:" + doc.DocID,
+		"requested_by_run_id": requester.RunID,
+		"persistent":          false,
+		"state":               string(rec.State),
+		"request_source":      "prompt_bar_no_worker_redirect",
+		"redirected_to_vtext": true,
+	}, true, nil
 }
 
 func (rt *Runtime) findExistingSuperExecutionRequest(ctx context.Context, ownerID, channelID, superAgentID, requesterRunID, requesterAgentID string) (types.ChannelMessage, bool, error) {
