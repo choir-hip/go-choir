@@ -414,6 +414,33 @@ boundary so explicit `decision_kind no_worker_needed` metadata reaches
 tests, push, monitor CI/deploy, verify staging identity, and rerun deployed
 product-path proof.
 
+## 2026-06-15 - Local Pre-Activation Decision Repair
+
+Claim/scope: explicit no-worker VText decision records no longer depend on the
+VText child goroutine reaching the tool-loop setup. The deterministic record is
+created synchronously after the run row exists and before root or child
+activation starts; the existing tool-loop hook remains as an idempotent fallback.
+
+Move: move the initial decision record to the pre-activation boundary and
+strengthen prompt-bar route coverage to wait for the VText child run and assert
+the durable decision row. Expected Delta V: close the local route/metadata
+repair. Actual Delta V: V=2 to V=1, leaving landing/staging proof.
+
+Receipts:
+- `internal/runtime/runtime.go` calls
+  `recordExplicitInitialVTextDecisionIfNeeded` before `startRunAsync` for root
+  runs and before the child activation goroutine starts in `StartChildRun`.
+- `internal/runtime/prompt_bar_unit_test.go` now proves the prompt-bar route
+  creates one durable `no_worker_needed` decision row for the initial VText
+  child run, not only metadata on the pending run.
+- `nix develop -c go test ./internal/runtime -run 'Test(HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|ExplicitNoWorkerDecisionPromptParsesInitialDecision|InitialVTextToolChoiceUsesExactTools|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|RunToolLoopInitialToolChoiceAppliesOnlyFirstCall|RunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition|RunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ExplicitNoWorkerDecisionPromptParsesInitialDecision|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|InitialVTextToolChoiceUsesExactTools|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords|DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof for decision row, Trace decision moment, no
+forbidden routes, and no private reason in canonical text.
+
 ## 2026-06-15 - Local Initial Tool-Choice Repair
 
 Claim/scope: explicit owner-requested decision notes now select exact

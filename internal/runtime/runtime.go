@@ -388,6 +388,10 @@ func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID str
 	if err != nil {
 		return nil, err
 	}
+	if err := rt.recordExplicitInitialVTextDecisionIfNeeded(ctx, rec); err != nil {
+		rt.handleExecutionError(ctx, rec, err)
+		return nil, err
+	}
 	rt.startRunAsync(rec)
 	return rec, nil
 }
@@ -668,6 +672,10 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	rt.emitEvent(ctx, rec, types.EventRunSubmitted, events.CauseTaskLifecycle, objectiveLenPayload)
 	if shouldLogWireLifecycle(rec) || shouldLogWireLifecycle(&parentRec) {
 		log.Printf("runtime: started child %s from parent=%s parent_profile=%s", wireLifecycleSummary(rec), parentRec.RunID, canonicalAgentProfile(agentProfileForRun(&parentRec)))
+	}
+	if err := rt.recordExplicitInitialVTextDecisionIfNeeded(ctx, rec); err != nil {
+		rt.handleExecutionError(ctx, rec, err)
+		return nil, releaseCoSuperSlotClaim(err)
 	}
 
 	// Begin execution in a goroutine. Use a copy of the record to avoid

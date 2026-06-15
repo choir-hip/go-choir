@@ -184,13 +184,16 @@ states reasons without forcing choreography.
   records and zero Trace decision moments for the explicit no-worker decision
   prompt, while the canonical reason leak remained fixed. The local metadata
   guarantee is not yet reaching the deployed product path.
+- Local pre-activation decision repair complete: explicit no-worker VText
+  decision metadata is now recorded synchronously before the root or child VText
+  run activation starts, with the existing tool-loop hook left as an idempotent
+  fallback. Prompt-bar route coverage now waits for the VText child run and
+  asserts the durable decision row.
 
-**next move:** inspect the deployed-route metadata boundary and add focused
-coverage that proves the explicit no-worker decision metadata reaches the
-actual VText child run before provider execution. Then repair the route,
-rerun focused runtime tests, push `origin main`, monitor CI/deploy, verify
-staging identity, and rerun deployed product-path proof for decision row, Trace
-decision moment, no forbidden routes, and no private reason in canonical text.
+**next move:** commit the pre-activation decision repair, push `origin main`,
+monitor CI/deploy, verify staging identity, and rerun deployed product-path
+proof for decision row, Trace decision moment, no forbidden routes, and no
+private reason in canonical text.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 

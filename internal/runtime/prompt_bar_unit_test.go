@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -136,6 +137,43 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 	if got := initialVTextToolChoice(initialRun); got != exactRequiredToolChoice("edit_vtext") {
 		t.Fatalf("initial tool choice = %q, want edit_vtext after deterministic decision record", got)
 	}
+	done := waitForPromptBarUnitRunTerminal(t, rt, decision.InitialLoopID, "user-alice", 5*time.Second)
+	if done.State != types.RunCompleted {
+		t.Fatalf("initial vtext state = %q, want completed", done.State)
+	}
+	decisions, err := rt.Store().ListVTextDecisionsByDocument(context.Background(), "user-alice", decision.DocID, 10)
+	if err != nil {
+		t.Fatalf("list decisions: %v", err)
+	}
+	if len(decisions) != 1 {
+		t.Fatalf("decision count = %d, want 1: %+v", len(decisions), decisions)
+	}
+	if decisions[0].RunID != decision.InitialLoopID ||
+		decisions[0].DecisionKind != "no_worker_needed" ||
+		decisions[0].Reason != "M3.2 staging proof: user supplied the needed content and requested no research or execution worker." {
+		t.Fatalf("decision record = %+v", decisions[0])
+	}
+}
+
+func waitForPromptBarUnitRunTerminal(t *testing.T, rt *Runtime, runID, ownerID string, timeout time.Duration) types.RunRecord {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		rec, err := rt.GetRun(context.Background(), runID, ownerID)
+		if err != nil {
+			t.Fatalf("get run %s: %v", runID, err)
+		}
+		if rec.State.Terminal() {
+			return *rec
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	rec, err := rt.GetRun(context.Background(), runID, ownerID)
+	if err != nil {
+		t.Fatalf("get run %s after timeout: %v", runID, err)
+	}
+	t.Fatalf("timeout waiting for run %s (state=%s)", runID, rec.State)
+	return types.RunRecord{}
 }
 
 func TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag(t *testing.T) {
