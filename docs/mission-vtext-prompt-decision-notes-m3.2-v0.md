@@ -160,10 +160,16 @@ states reasons without forcing choreography.
   zero VText decision records, zero Trace decision moments, and leaked the exact
   no-worker reason into canonical text. The local predicate test did not cover
   the full prompt-bar route contract.
+- Runtime enforcement gap discovered: exact initial tool choice narrows the
+  provider request but the tool loop can still execute a different returned
+  tool call. A provider/model that returns `edit_vtext` during an exact
+  `record_vtext_decision` initial turn can therefore create a canonical revision
+  before the decision record exists.
 
 **next move:** checkpoint the deployed route-contract failure, then repair with
-a focused route-level test that exercises prompt-bar VText materialization and
-proves explicit no-worker decision prompts do not create initial `super` runs.
+a focused tool-loop enforcement test and route-level proof that explicit
+no-worker decision prompts cannot execute `edit_vtext` before
+`record_vtext_decision`.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -179,9 +185,9 @@ should be visible in the VText UI when the Sources panel opens from the toolbar.
 
 **settlement:** not settled. Problem Documentation First and local construct
 proof are satisfied, but staging has found prompt compliance, tool-choice,
-route-preemption, and full route-contract gaps. Settle only after landing and
-deployed product proof show M3 can resume with both hazards covered: no forced
-semantic delegation and no document-body agent work logs.
+route-preemption, route-contract, and exact-tool enforcement gaps. Settle only
+after landing and deployed product proof show M3 can resume with both hazards
+covered: no forced semantic delegation and no document-body agent work logs.
 
 ## Problem Checkpoint - 2026-06-14
 
@@ -300,6 +306,45 @@ Heresy delta: discovered: predicate-only tests can overstate repair when the
 full product route still spawns `super` and lets private VText rationale leak
 into canonical text. introduced: none accepted. repaired: pending route-contract
 repair.
+
+## Exact Tool Enforcement Checkpoint - 2026-06-15
+
+Reliable evidence: local code inspection after proof artifact
+`/tmp/vtext-decision-staging-proof-1781486690473.json` showed that
+`RunToolLoop` applies `WithInitialToolChoice` by setting `req.ToolChoice` and
+filtering `req.ToolDefinitions` for the first provider call. It does not treat
+that exact initial choice as a required tool after the provider responds. In the
+`tool_use` branch, `executeTools` receives the full registry and executes all
+returned tool calls, even if the provider returned a different tool from the
+exact initial choice. Therefore an initial VText turn meant to force
+`record_vtext_decision` can still execute `edit_vtext` first if the provider
+returns that call.
+
+Conjecture delta: the deployed failure need not mean the prompt-bar route failed
+to reach VText. It can arise when VText reaches the first turn, receives exact
+`record_vtext_decision` guidance, but the provider/model returns `edit_vtext`
+from the prompt's document-writing pressure. Runtime must enforce exact initial
+tool choice at response validation time, not only request-shaping time.
+
+Protected surfaces: generic tool-loop execution, exact initial tool-choice retry
+semantics, VText first-turn decision recording, canonical `edit_vtext` writes,
+and provider fallback behavior.
+
+Admissible evidence class: focused tool-loop tests proving a mismatched returned
+tool is not executed under exact initial choice and that the loop retries the
+required exact tool; VText route tests proving an explicit no-worker decision
+cannot create a canonical revision before `record_vtext_decision`; deployed
+product-path proof showing diagnosis and Trace decision evidence with the reason
+absent from canonical text.
+
+Rollback path: revert the tool-loop enforcement change if it blocks valid
+provider responses or breaks fallback behavior, restoring the prior advisory
+initial tool-choice semantics while retaining this checkpoint as discovery
+evidence.
+
+Heresy delta: discovered: request-level exact tool choice is not sufficient when
+runtime still trusts mismatched provider tool calls. introduced: none accepted.
+repaired: pending tool-loop enforcement repair.
 
 ## Suggested Goal String
 

@@ -159,6 +159,33 @@ explicit `decision_kind no_worker_needed` prompt creates an initial VText
 revision run with exact `record_vtext_decision` and no initial `super` run,
 while ordinary execution/verification/mutation prompts still use super.
 
+## 2026-06-15 - Exact Initial Tool Enforcement Checkpoint
+
+Claim/scope: local route-level testing did not reproduce the initial super
+preemption, but code inspection found a stronger root cause for the canonical
+leak: exact initial tool choice only shapes the provider request. If the
+provider returns a different tool call, the tool loop executes it through the
+full registry.
+
+Move: document the exact-tool enforcement gap before changing generic tool-loop
+behavior. Expected Delta V: refine the route-contract repair into a tool-loop
+enforcement repair. Actual Delta V: V=2 remains V=2, with the enforcement patch
+pending.
+
+Receipts:
+- `RunToolLoop` sets `req.ToolChoice` from `WithInitialToolChoice` and filters
+  `req.ToolDefinitions` on the first provider call.
+- In the `tool_use` response branch, `executeTools(ctx, registry,
+  resp.ToolCalls, emit)` receives the full registry and executes returned calls
+  before validating that they match the exact initial choice.
+- Therefore a model/provider can return `edit_vtext` during an exact
+  `record_vtext_decision` initial VText turn, creating a canonical revision with
+  private rationale before any decision record exists.
+
+Open edge: enforce exact initial tool choice after provider response by rejecting
+or retrying mismatched returned tool calls before execution, then cover the
+behavior in focused tool-loop and VText route tests.
+
 ## 2026-06-15 - No-Worker Decision Route-Preemption Checkpoint
 
 Claim/scope: the exact initial tool-choice repair deployed cleanly, but the
