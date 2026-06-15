@@ -495,18 +495,6 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 
 	docID := strings.TrimSpace(in.DocID)
 	baseRevisionID := strings.TrimSpace(in.BaseRevisionID)
-	if docID == "" {
-		return types.Revision{}, fmt.Errorf("doc_id must not be empty")
-	}
-	if baseRevisionID == "" {
-		return types.Revision{}, fmt.Errorf("base_revision_id is required")
-	}
-	if metaDocID := metadataStringValue(rec.Metadata, "doc_id"); metaDocID != "" && metaDocID != docID {
-		return types.Revision{}, fmt.Errorf("doc_id %q does not match run document %q", docID, metaDocID)
-	}
-	if rec.ChannelID != "" && rec.ChannelID != docID {
-		return types.Revision{}, fmt.Errorf("doc_id %q does not match vtext channel %q", docID, rec.ChannelID)
-	}
 
 	mutation, err := rt.store.GetAgentMutationByRun(ctx, rec.RunID)
 	if err != nil {
@@ -517,6 +505,24 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 	}
 	if mutation.State != "pending" {
 		return types.Revision{}, fmt.Errorf("vtext mutation is %s, not pending", mutation.State)
+	}
+	if docID == "" {
+		docID = strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id"))
+	}
+	if docID == "" {
+		docID = strings.TrimSpace(rec.ChannelID)
+	}
+	if docID == "" {
+		docID = strings.TrimSpace(mutation.DocID)
+	}
+	if docID == "" {
+		return types.Revision{}, fmt.Errorf("doc_id must not be empty")
+	}
+	if metaDocID := metadataStringValue(rec.Metadata, "doc_id"); metaDocID != "" && metaDocID != docID {
+		return types.Revision{}, fmt.Errorf("doc_id %q does not match run document %q", docID, metaDocID)
+	}
+	if rec.ChannelID != "" && rec.ChannelID != docID {
+		return types.Revision{}, fmt.Errorf("doc_id %q does not match vtext channel %q", docID, rec.ChannelID)
 	}
 	if mutation.DocID != docID || mutation.OwnerID != rec.OwnerID {
 		return types.Revision{}, fmt.Errorf("vtext mutation does not match edit target")
@@ -532,6 +538,12 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 	if strings.TrimSpace(doc.CurrentRevisionID) == "" {
 		return types.Revision{}, fmt.Errorf("document has no current revision")
 	}
+	if baseRevisionID == "" {
+		baseRevisionID = strings.TrimSpace(doc.CurrentRevisionID)
+	}
+	if baseRevisionID == "" {
+		return types.Revision{}, fmt.Errorf("base_revision_id is required")
+	}
 	if doc.CurrentRevisionID != baseRevisionID {
 		return types.Revision{}, fmt.Errorf("base_revision_id %q is stale; current revision is %q", baseRevisionID, doc.CurrentRevisionID)
 	}
@@ -540,6 +552,16 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 		return types.Revision{}, fmt.Errorf("get base revision: %w", err)
 	}
 
+	in.DocID = docID
+	in.BaseRevisionID = baseRevisionID
+	if strings.TrimSpace(in.Operation) == "" {
+		switch {
+		case len(in.Edits) > 0:
+			in.Operation = "apply_edits"
+		case strings.TrimSpace(in.Content) != "":
+			in.Operation = "replace_all"
+		}
+	}
 	materialized, err := materializeVTextToolEdit(in, currentRevision)
 	if err != nil {
 		return types.Revision{}, err

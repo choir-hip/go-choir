@@ -1839,6 +1839,46 @@ func TestVTextSystemPromptSharesChoirCoreContext(t *testing.T) {
 	}
 }
 
+type vtextMinimalEditProvider struct {
+	Provider
+	choices []string
+}
+
+func (p *vtextMinimalEditProvider) ProviderName() string {
+	return "vtext-minimal-edit"
+}
+
+func (p *vtextMinimalEditProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+}
+
+func (p *vtextMinimalEditProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.choices = append(p.choices, req.ToolChoice)
+	if messagesContainToolCall(req.Messages, "spawn_agent") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "conductor handoff complete", Model: "test-model"}, nil
+	}
+	lastUser := extractLastUserMessage(req.Messages)
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls:  []types.ToolCall{conductorSpawnVTextToolCall(lastUser)},
+			Model:      "test-model",
+		}, nil
+	}
+	if !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "vtext turn complete", Model: "test-model"}, nil
+	}
+	return &ToolLoopResponse{
+		StopReason: "tool_use",
+		ToolCalls: []types.ToolCall{{
+			ID:        "call-minimal-edit",
+			Name:      "edit_vtext",
+			Arguments: json.RawMessage(`{"content":"M34_MINIMAL_EDIT_DEFAULTS\n\nThe VText activation wrote a first visible revision from runtime-owned context."}`),
+		}},
+		Model: "test-model",
+	}, nil
+}
+
 func TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testing.T) {
 	t.Parallel()
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Hello, edited document.\n\nPolished structure."))
@@ -1954,6 +1994,70 @@ func TestInitialVTextRunWritesFirstAppagentRevisionThroughEdit(t *testing.T) {
 	}
 	if !foundVTextRevision {
 		t.Fatalf("expected first VText-authored appagent revision, got %+v", revs)
+	}
+	mutation, err := s.GetAgentMutationByRun(context.Background(), decision.InitialLoopID)
+	if err != nil {
+		t.Fatalf("get initial mutation: %v", err)
+	}
+	if mutation == nil || mutation.State != "completed" {
+		t.Fatalf("initial vtext mutation = %+v, want completed mutation", mutation)
+	}
+}
+
+func TestInitialVTextRunDefaultsMinimalEditContextFromActivation(t *testing.T) {
+	t.Parallel()
+	provider := &vtextMinimalEditProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+
+	h, s, rt := vtextAPISetupWithProvider(t, provider, true)
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Write a short M3.4 visible first draft."}`, "user-1")
+	w := httptest.NewRecorder()
+	h.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("prompt-bar status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	var submission promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&submission); err != nil {
+		t.Fatalf("decode prompt-bar response: %v", err)
+	}
+	if state := waitForTaskCompletion(t, h, submission.SubmissionID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("conductor state = %q, want completed", state)
+	}
+	conductor, err := rt.GetRun(context.Background(), submission.SubmissionID, "user-1")
+	if err != nil {
+		t.Fatalf("get conductor run: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	if decision.DocID == "" || decision.InitialLoopID == "" {
+		t.Fatalf("conductor did not create vtext route: %+v", decision)
+	}
+	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("initial vtext state = %q, want completed", state)
+	}
+	if len(provider.choices) != 1 || provider.choices[0] != exactRequiredToolChoice("edit_vtext") {
+		t.Fatalf("vtext provider choices = %#v, want one terminal edit_vtext turn", provider.choices)
+	}
+	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	var appRevision *types.Revision
+	for i := range revs {
+		if revs[i].AuthorKind == types.AuthorAppAgent {
+			appRevision = &revs[i]
+			break
+		}
+	}
+	if appRevision == nil || !strings.Contains(appRevision.Content, "M34_MINIMAL_EDIT_DEFAULTS") {
+		t.Fatalf("expected appagent revision from minimal edit context, got %+v", revs)
+	}
+	meta := decodeRevisionMetadata(appRevision.Metadata)
+	if metadataString(meta, "source") != "edit_vtext" ||
+		metadataString(meta, "vtext_edit_operation") != "replace_all" ||
+		metadataString(meta, "vtext_edit_base_revision_id") == "" {
+		t.Fatalf("appagent revision metadata = %+v, want defaulted edit_vtext context", meta)
 	}
 	mutation, err := s.GetAgentMutationByRun(context.Background(), decision.InitialLoopID)
 	if err != nil {
