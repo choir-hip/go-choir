@@ -125,3 +125,38 @@ Receipts:
 
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
+
+## 2026-06-15 - Tool-Choice Root Cause Checkpoint
+
+Claim/scope: the prompt/tool-description repair deployed cleanly, but the
+second staging proof still saw zero decision records and zero Trace decision
+moments before the auth polling session expired. Local code inspection then
+identified a stronger root cause: initial VText revision runs force exact
+`edit_vtext` as the first provider tool.
+
+Move: document the refined staging/root-cause evidence before changing runtime
+tool-choice behavior. Expected Delta V: reopen the landing-only variant into a
+narrow runtime repair. Actual Delta V: V=1 to V=2, with the tool-choice repair
+pending.
+
+Receipts:
+- Commit `9c62cc061114419dd0ce1a36a9f8b27a81fa222a` passed CI run
+  `27517926004`, including Node B deploy.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=9c62cc061114419dd0ce1a36a9f8b27a81fa222a`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781485443266.json`.
+- Proof submission completed, then evidence polling observed diagnosis
+  decisions `0` and Trace decision moments `0` through the last successful
+  sample at `2026-06-15T01:08:59.179Z`.
+- `internal/runtime/runtime.go` applies
+  `WithInitialToolChoice(initialVTextToolChoice(rec))` to VText revision runs,
+  and `initialVTextToolChoice` returns exact `function:edit_vtext` for ordinary
+  initial VText runs.
+- `internal/runtime/vtext_prompt_unit_test.go` currently expects that exact
+  initial `edit_vtext` choice for all initial cases.
+
+Open edge: make explicit owner-requested decision notes select exact
+`record_vtext_decision` for the initial VText tool choice, while preserving
+exact `edit_vtext` for ordinary first-revision work and leaving worker-woken
+turns free to choose.
