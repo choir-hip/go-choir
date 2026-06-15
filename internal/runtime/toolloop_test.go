@@ -450,6 +450,107 @@ func TestRunToolLoopInitialToolChoiceAppliesOnlyFirstCall(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testing.T) {
+	registry := NewToolRegistry()
+	var edited, recorded int
+	if err := registry.Register(Tool{
+		Name:        "edit_vtext",
+		Description: "Edit the VText document.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			edited++
+			return `{"status":"edited"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register edit_vtext: %v", err)
+	}
+	if err := registry.Register(Tool{
+		Name:        "record_vtext_decision",
+		Description: "Record a VText decision.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			recorded++
+			return `{"status":"recorded"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register record_vtext_decision: %v", err)
+	}
+
+	var choices []string
+	provider := &capturingToolChoiceProvider{responses: []*ToolLoopResponse{
+		{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-edit",
+				Name:      "edit_vtext",
+				Arguments: json.RawMessage(`{"content":"private reason leaked"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		},
+		{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-decision",
+				Name:      "record_vtext_decision",
+				Arguments: json.RawMessage(`{"decision_kind":"no_worker_needed"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		},
+		{
+			StopReason: "end_turn",
+			Text:       "done",
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model:      "test-model",
+		},
+	}, choices: &choices}
+
+	var retrySeen bool
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunRetry && phase == "initial_tool_choice" {
+			retrySeen = true
+			var decoded map[string]any
+			if err := json.Unmarshal(payload, &decoded); err != nil {
+				t.Fatalf("decode retry payload: %v", err)
+			}
+			if decoded["required_tool"] != "record_vtext_decision" {
+				t.Fatalf("required_tool = %v, want record_vtext_decision", decoded["required_tool"])
+			}
+		}
+	}
+
+	text, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"record first"}`)},
+		"You are helpful.",
+		0,
+		emit,
+		nil,
+		WithInitialToolChoice("function:record_vtext_decision"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "done" {
+		t.Fatalf("text = %q, want done", text)
+	}
+	if edited != 0 {
+		t.Fatalf("edit_vtext executed %d times, want 0", edited)
+	}
+	if recorded != 1 {
+		t.Fatalf("record_vtext_decision executed %d times, want 1", recorded)
+	}
+	if len(choices) != 3 || choices[0] != "function:record_vtext_decision" || choices[1] != "function:record_vtext_decision" || choices[2] != "" {
+		t.Fatalf("tool choices = %#v, want exact retry then unconstrained final", choices)
+	}
+	if !retrySeen {
+		t.Fatal("missing initial_tool_choice retry event")
+	}
+}
+
 func TestRunToolLoopCarriesAssistantReasoningContent(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{

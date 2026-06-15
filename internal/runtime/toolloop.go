@@ -304,6 +304,17 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		})
 		return appendMessage("user", msg)
 	}
+	appendRequiredInitialToolChoiceReminder := func(requiredName, reason string) error {
+		text := fmt.Sprintf("The previous model turn did not call the required initial tool %q (%s). Call exactly that available tool now. Do not write prose and do not call any other tool.", requiredName, reason)
+		msg, _ := json.Marshal(map[string]any{
+			"role": "user",
+			"content": []map[string]string{{
+				"type": "text",
+				"text": text,
+			}},
+		})
+		return appendMessage("user", msg)
+	}
 
 	for i := 0; i < maxToolLoopIterations; i++ {
 		if options.memoryHooks.BeforeProviderCall != nil {
@@ -489,6 +500,24 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		case "tool_use":
 			if len(resp.ToolCalls) == 0 {
 				return "", totalUsage, fmt.Errorf("tool loop: provider returned tool_use without tool calls")
+			}
+			if initialToolChoiceApplied {
+				if requiredName, ok := exactRequiredToolChoiceName(options.initialToolChoice); ok && !toolCallsExactlyMatchName(resp.ToolCalls, requiredName) {
+					if err := appendRequiredInitialToolChoiceReminder(requiredName, "model_called_different_initial_tool"); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist initial tool-choice retry: %w", err)
+					}
+					forceInitialToolChoiceRetry = true
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"required_tool": requiredName,
+							"called_tools":  toolCallNames(resp.ToolCalls),
+							"tool_choice":   req.ToolChoice,
+							"reason":        "model_called_different_initial_tool",
+						})
+						emit(types.EventRunRetry, "initial_tool_choice", payload)
+					}
+					continue
+				}
 			}
 
 			// Append the assistant's response (with tool calls) to conversation.
@@ -758,6 +787,14 @@ func exactRequiredToolChoiceName(choice string) (string, bool) {
 	}
 	name = strings.TrimSpace(name)
 	return name, name != ""
+}
+
+func toolCallsExactlyMatchName(calls []types.ToolCall, name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" || len(calls) != 1 {
+		return false
+	}
+	return strings.TrimSpace(calls[0].Name) == name
 }
 
 func isExactInitialToolChoicePreconditionError(choice string, err error) bool {

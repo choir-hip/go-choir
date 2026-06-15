@@ -90,6 +90,51 @@ func TestHandlePromptBarOperationalProofInitialRunRequestsPersistentSuper(t *tes
 	}
 }
 
+func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
+	rt, handler := testAPISetup(t)
+
+	prompt := "Create a short VText document titled M32_VTEXT_DECISION_ROUTE_TEST. The body should say this marker is a deployed acceptance probe. Keep the document reader-facing only. Because this task is fully supplied and requires no research or execution worker, record an off-document VText decision note with decision_kind no_worker_needed, exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker., evidence ref staging-marker:M32_VTEXT_DECISION_ROUTE_TEST, next action Write the concise reader-facing VText revision. Then write the concise reader-facing VText revision."
+	body, err := json.Marshal(map[string]string{"text": prompt})
+	if err != nil {
+		t.Fatalf("marshal request body: %v", err)
+	}
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", string(body), "user-alice")
+	w := httptest.NewRecorder()
+	handler.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+
+	var resp promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	conductor, err := rt.GetRun(context.Background(), resp.SubmissionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get conductor: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	if decision.InitialLoopID == "" {
+		t.Fatalf("conductor decision missing initial loop: %+v", decision)
+	}
+	initialRun, err := rt.GetRun(context.Background(), decision.InitialLoopID, "user-alice")
+	if err != nil {
+		t.Fatalf("get initial loop run: %v", err)
+	}
+	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
+		t.Fatalf("initial loop profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
+	}
+	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
+		t.Fatalf("initial_handoff = %q, want no initial super handoff", got)
+	}
+	if got := initialVTextToolChoice(initialRun); got != exactRequiredToolChoice("record_vtext_decision") {
+		t.Fatalf("initial tool choice = %q, want record_vtext_decision", got)
+	}
+}
+
 func TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag(t *testing.T) {
 	rt, handler := testAPISetup(t)
 

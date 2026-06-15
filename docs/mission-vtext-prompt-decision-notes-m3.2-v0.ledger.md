@@ -186,6 +186,36 @@ Open edge: enforce exact initial tool choice after provider response by rejectin
 or retrying mismatched returned tool calls before execution, then cover the
 behavior in focused tool-loop and VText route tests.
 
+## 2026-06-15 - Local Exact Initial Tool Enforcement Repair
+
+Claim/scope: exact initial tool choice now rejects mismatched returned tool
+calls before execution. A provider/model that returns `edit_vtext` during an
+exact `record_vtext_decision` initial turn no longer gets that edit executed;
+the loop appends a retry reminder and reissues the exact initial tool choice.
+
+Move: validate exact initial tool-choice responses before persisting assistant
+tool-call messages or calling `executeTools`, then cover the generic tool loop
+and VText prompt-bar route. Expected Delta V: close local enforcement repair.
+Actual Delta V: V=2 to V=1, leaving landing/staging proof.
+
+Receipts:
+- `internal/runtime/toolloop.go` now checks exact initial tool calls before tool
+  execution and emits an `initial_tool_choice` retry event on mismatch.
+- `internal/runtime/toolloop_test.go` proves a returned `edit_vtext` call is not
+  executed when exact `record_vtext_decision` is required, and the required
+  decision tool is retried.
+- `internal/runtime/vtext_test.go` proves the proof-style prompt records one
+  `no_worker_needed` decision, creates one reader-facing appagent revision, and
+  does not leak the private decision reason into canonical text even when the
+  provider first tries `edit_vtext`.
+- `internal/runtime/prompt_bar_unit_test.go` covers prompt-bar materialization
+  for explicit no-worker decision prompts.
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText|TestInitialVTextDecisionPromptRejectsPrematureEditBeforeDecision' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|RunToolLoopInitialToolChoiceAppliesOnlyFirstCall|RunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition|RunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|InitialVTextToolChoiceUsesExactTools|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords)' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof.
+
 ## 2026-06-15 - No-Worker Decision Route-Preemption Checkpoint
 
 Claim/scope: the exact initial tool-choice repair deployed cleanly, but the

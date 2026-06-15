@@ -165,11 +165,13 @@ states reasons without forcing choreography.
   tool call. A provider/model that returns `edit_vtext` during an exact
   `record_vtext_decision` initial turn can therefore create a canonical revision
   before the decision record exists.
+- Local enforcement repair complete: exact initial tool choice now validates the
+  provider's returned tool call before execution, retries mismatches without
+  executing them, and has focused tool-loop plus VText prompt-bar route coverage.
 
-**next move:** checkpoint the deployed route-contract failure, then repair with
-a focused tool-loop enforcement test and route-level proof that explicit
-no-worker decision prompts cannot execute `edit_vtext` before
-`record_vtext_decision`.
+**next move:** commit the enforcement repair, push `origin main`, monitor
+CI/deploy, verify staging identity, and rerun deployed product-path proof for a
+decision record plus canonical text without private rationale.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
