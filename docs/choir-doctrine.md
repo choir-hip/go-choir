@@ -134,8 +134,8 @@ Each conjecture is tagged as one of:
 of multiple ledgers, not a disposable sandbox and not a chat session.
 
 `C2 asserted` Canonical user-facing truth is versioned artifact state. VText is
-the canonical document core; other appagents own their own typed artifact
-domains.
+the canonical document and artifact control-plane core; other appagents own
+their own typed artifact domains.
 
 `C3 asserted` Canonical state remains stable. Risky or long-running mutation
 happens in candidate computers or candidate worlds and becomes canonical only
@@ -203,6 +203,14 @@ results, and verifier output are non-canonical until VText incorporates them.
 `I2` VText must not be forced into semantic delegation. Runtime may expose
 affordances and durable obligations; it must not convert role mentions or
 metadata into a required semantic next step.
+
+`I2a` Exogenous user and source input enters Choir through VText-owned artifact
+state by default. Conductor may classify, open, or create the target
+VText/context, but ordinary prompt-bar requests, sourcecycled/news ingestion,
+article creation, mission work, and most user prompts must not route directly
+to super. Super is downstream execution authority invoked from VText when the
+artifact needs coding, privileged execution, candidate work, generation,
+verification, or other supervision.
 
 `I3` Parent/child is not a control ontology. Provenance-only spawned-by edges
 may remain temporarily, but control, liveness, settlement, cancellation,
@@ -539,25 +547,36 @@ what semantic delegation, if any, to perform.
 
 `deletion gate:` M3.1.
 
-#### H011 - Conductor Super-Bypass Heuristics
+#### H011 - Super As Direct Ingress For VText-Centered Work
 
-`bad pattern:` conductor still routes some VText-adjacent work directly to
-super based on prompt heuristics rather than always giving VText the document
-turn first.
+`bad pattern:` conductor routes ordinary user, prompt-bar, sourcecycled/news,
+article, mission, or document/artifact work directly to super based on prompt
+heuristics. This bypasses VText-owned artifact state and treats Choir as prompt
+routing to agents instead of living VText/artifact state that coordinates
+agents.
 
 `detectors:` prompt-bar routing heuristics that select super for VText-class
-objectives.
+objectives, source/article ingestion paths that create super work before a
+VText/context artifact exists, `vtextPromptNeedsSuperExecution`,
+`prompt_bar_no_worker_decision_route`, no-worker route predicates that patch
+individual prompts instead of removing the direct-super ingress path.
 
 `evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
 [docs/vtext-agentic-invariants-2026-06-13.md](./vtext-agentic-invariants-2026-06-13.md).
 
 `why it violates the spec:` conductor becomes a policy engine for VText/super
-authority rather than a router of exogenous input.
+authority rather than a router that materializes exogenous input as
+VText-owned artifact state. Super receives authority before the artifact
+control plane has interpreted the request, recorded audit-worthy decisions, or
+attached downstream evidence back to canonical context.
 
-`successor pattern:` conductor creates or resolves the document route; VText
-decides whether to call `request_super_execution`.
+`successor pattern:` conductor creates or resolves the VText/context artifact;
+VText owns the canonical artifact and then decides whether to write/revise,
+attach or transclude sources, ask researcher, call `request_super_execution`,
+coordinate coding-agent trees through super, wait, or record an off-document
+decision/blocker.
 
-`deletion gate:` M3.1 / VText routing cleanup.
+`deletion gate:` M3.2 / VText control-plane routing cleanup.
 
 #### H012 - Researcher Intent By Substring Oracle
 

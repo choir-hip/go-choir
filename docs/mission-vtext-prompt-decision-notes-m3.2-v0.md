@@ -33,14 +33,16 @@ document into an agent work log.
 status: open_handoff
 
 **mission conjecture:** if M3.2 adds an off-document VText decision record,
-exposes those records in Trace/logs and the VText Sources panel, and rewrites
-prompt defaults in a direct reason-bearing register, then M3 can resume without
-recreating either forced workflow choreography or a too-soft VText that silently
-skips needed researcher/super delegation.
+exposes those records in Trace/logs and the VText Sources panel, rewrites prompt
+defaults in a direct reason-bearing register, and restores VText as Choir's
+artifact control plane for ordinary prompt/source/article/mission ingress, then
+M3 can resume without recreating either forced workflow choreography, direct
+super ingress, or document-body agent work logs.
 
-**deeper goal (G):** keep Choir's VText core agentic and document-centered:
-canonical documents carry reader-facing text, while agent decisions remain
-auditable through the runtime evidence substrate.
+**deeper goal (G):** keep Choir's VText core agentic and artifact-centered:
+canonical VText/artifact state coordinates agents, while execution authority and
+agent decisions remain attached as evidence rather than replacing the artifact
+control plane.
 
 **witness/spec (A/S):**
 - `record_vtext_decision` VText tool records off-document decisions without
@@ -57,6 +59,11 @@ auditable through the runtime evidence substrate.
 - Tests prove both sides of the contract: VText can record rationale
   off-document, and canonical VText content does not receive agent process
   notes merely because VText skipped a delegation.
+- Conductor materializes ordinary exogenous input as VText-owned artifact state:
+  prompt-bar requests, sourcecycled/news ingestion, article creation, mission
+  work, and most user prompts enter conductor -> VText before any super
+  execution. `request_super_execution` remains available only as a VText
+  affordance after VText inspects the artifact/request.
 
 **invariants / qualities / domain ramp (I/Q/D):**
 - I: VText documents remain canonical reader-facing documents, not agent work
@@ -71,6 +78,14 @@ auditable through the runtime evidence substrate.
   Trace a normal user-facing product surface.
 - I: Sources-panel visibility is owner-review provenance. It must distinguish
   sources, researcher findings, and VText decisions.
+- I: VText is Choir's artifact control plane. Conductor may classify/open/create
+  VText/context, but must not route ordinary prompt-bar, source/news, article,
+  mission, or document/artifact work directly to super based on prompt text.
+- I: Super before VText is a route invariant failure for ordinary VText-centered
+  ingress. Super after VText is valid only when VText requested it through an
+  explicit affordance such as `request_super_execution`.
+- I: Downstream researcher/super work must attach back to the VText/artifact
+  context as sources, findings, worker updates, decisions, or revisions.
 - Q: direct prompt style beats passive policy prose. State the action and the
   reason: "Use researcher when..." / "This protects..." / "When you skip..."
 - Q: record only audit-worthy decisions. Do not require a note for every minor
@@ -79,9 +94,24 @@ auditable through the runtime evidence substrate.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=1:
-1. reland the behavior change on `origin/main`, monitor CI/deploy, verify
-   staging identity, and run deployed product-path proof.
+**variant (ranking function) V:** current V=6:
+1. land this Problem Documentation First checkpoint that names VText as the
+   artifact control plane and supersedes no-worker predicate routing as an
+   overfit staging repair.
+2. remove or quarantine `prompt_bar_no_worker_decision_route` and no-worker
+   route predicates so they no longer define architecture.
+3. replace conductor-level persistent-super preemption for VText-centered
+   prompt/source/article/mission routes with conductor -> VText artifact
+   materialization.
+4. add focused route tests proving prompt-bar and source/article ingress starts
+   with VText, not super, while VText still exposes `request_super_execution`.
+5. update deployed acceptance so super before VText fails, super after VText is
+   allowed only when VText requested it, and explicit owner-requested decision
+   notes still create `vtext_decisions` rows and Trace/log projections without
+   leaking into canonical text.
+6. land/push/monitor CI/deploy, verify staging identity, and run prompt-bar plus
+   source/news/article product-path proof with downstream work attached back to
+   VText/artifact context.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
 if the tool/table/UI path exceeds one mission, split after the problem
@@ -106,6 +136,9 @@ decision evidence replaces document-body process logging, and prompt register
 states reasons without forcing choreography.
 
 **position / live conjectures / open edges:**
+- C0 active: VText is Choir's artifact control plane. Conductor routes
+  exogenous input into VText-owned artifact state; super is downstream execution
+  authority that VText may request later.
 - C1 active: VText needs strong delegation pressure for factual/current/source,
   generated-artifact, execution, and verification work, but this pressure should
   live as reasoned obligation language, not tool-order enforcement.
@@ -299,10 +332,20 @@ states reasons without forcing choreography.
   `/api/prompt-bar` path may not be exercising the sandbox runtime boundary
   modified by the local repairs, or another route layer rewrites the completed
   conductor metadata before materialization.
+- Owner clarification supersedes the no-worker route-repair frame: the failure
+  is not a missing no-worker predicate. The violated core invariant is that
+  Choir is VText-centered artifact state, not prompt routing to agents.
+  Conductor must route ordinary prompt/source/article/mission ingress into
+  VText-owned artifact context first. Super is never the direct ingress target
+  for ordinary user/source prompts; VText may call `request_super_execution`
+  later when the artifact needs execution authority.
+- The prior `prompt_bar_no_worker_decision_route` work is retained only as
+  staging evidence about how overfit predicate patches fail. It must be removed
+  or quarantined before settlement and must not become architecture.
 
-**next move:** identify the live `/api/prompt-bar` implementation boundary on
-staging and why the sandbox commit's completed-conductor stamp is not visible,
-then repair that actual boundary and rerun deployed proof.
+**next move:** commit this VText-control-plane checkpoint, then replace
+conductor-level persistent-super preemption with general conductor -> VText
+artifact materialization for prompt-bar and source/article routes.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -317,11 +360,11 @@ voice and more E-prime style where useful. Owner decision: VText decisions
 should be visible in the VText UI when the Sources panel opens from the toolbar.
 
 **settlement:** not settled. Problem Documentation First and local construct
-proof are satisfied, but staging has found prompt compliance, tool-choice,
-route-preemption, route-contract, exact-tool enforcement, and deployed
-metadata/first-turn decision guarantee gaps. Settle only after landing and
-deployed product proof show M3 can resume with both hazards covered: no forced
-semantic delegation and no document-body agent work logs.
+proof are satisfied for the decision-note artifact, but the route repair frame
+was too narrow. Settle only after landing and deployed product proof show M3 can
+resume with all three hazards covered: no forced semantic delegation, no
+document-body agent work logs, and no direct-super ingress that bypasses
+VText-owned artifact state.
 
 ## Problem Checkpoint - 2026-06-14
 
@@ -829,25 +872,79 @@ the observable prompt-bar route still omits metadata written by the patched
 sandbox function. introduced: none accepted. repaired: pending live-boundary
 repair.
 
+## VText Control-Plane Ingress Checkpoint - 2026-06-15
+
+Reliable evidence: repeated deployed product-path proofs from
+`890dbe6fafc413f7d301828c83a51cbe10705ad4` through
+`97852b155b7896f4af101cf3103dead3fb78c9a1` showed prompt-bar VText requests
+could route conductor -> super -> VText before any durable VText decision row
+existed. The repairs then narrowed around `no_worker_needed` predicates and
+`prompt_bar_no_worker_decision_route` metadata, but staging continued to show
+`initial_handoff=persistent_super`. Owner clarification on 2026-06-15 states
+that this whole frame was too narrow: the problem is not a missing no-worker
+predicate, it is a violation of the VText-centered Choir paradigm.
+
+Core invariant: VText is Choir's versioned artifact control plane. Conductor
+routes exogenous user/app/source input into VText-owned artifact state.
+Prompt-bar requests, sourcecycled/news ingestion, article creation, mission
+work, and most user prompts should open or create VText/context first. VText
+owns the canonical artifact and then decides whether to write/revise, attach or
+transclude sources, ask researcher, request super execution, coordinate
+coding-agent trees through super, wait, or record an off-document
+decision/blocker. Super is downstream execution authority invoked by VText; it
+is not the ordinary direct ingress target for user/source prompts.
+
+Conjecture delta: M3.2 must stop optimizing around no-worker special cases and
+repair conductor-level ingress. The acceptance route is prompt bar -> conductor
+-> VText for normal VText-centered submissions. Super before VText is failure.
+Super after VText is valid only when VText requested it through
+`request_super_execution`. Sourcecycled/news ingestion and article creation must
+also show source/article artifacts becoming VText-owned, with downstream
+researcher/super work attached back to VText/artifact context.
+
+Protected surfaces: Choir Doctrine, AGENTS operating contract, VText invariant
+doctrine, prompt-bar route materialization, source/article ingestion routes,
+persistent-super preemption, VText `request_super_execution`, VText decision
+persistence, Trace/log projection, and canonical VText writes.
+
+Admissible evidence class: doctrine/docs checkpoint before code; focused local
+route tests proving prompt-bar and source/article routes start with VText, not
+super; tests proving `request_super_execution` remains available only as a VText
+affordance; deployed product-path proof showing initial loop is VText for
+prompt-bar VText submissions, no durable decision rationale in canonical text,
+explicit owner-requested decision notes create `vtext_decisions` rows plus
+Trace/log projection, and ordinary execution-shaped prompts can still lead
+VText to request super after VText sees the artifact/request.
+
+Rollback path: revert the route-invariant repair commit if it blocks VText from
+requesting needed execution authority or breaks source/article materialization.
+Do not restore conductor direct-super ingress as an untyped prompt heuristic;
+instead document the narrower exception and prove why it is not ordinary
+VText-centered ingress.
+
+Heresy delta: discovered: no-worker route predicates were an overfit staging
+repair that preserved the deeper heresy of super as direct ingress for
+VText-centered work. introduced: none accepted. repaired: pending route
+invariant implementation.
+
 ## Suggested Goal String
 
 ```text
 Use Parallax on docs/mission-vtext-prompt-decision-notes-m3.2-v0.md. Treat it
 as the M3.2 gate between the settled M3.1 emergency repair and M3 lifecycle
 cutover. Current status is open_handoff with V=6. Preserve Choir Doctrine and
-docs/vtext-agentic-invariants-2026-06-13.md: VText owns canonical document
-versions and may choose researcher, super, both, neither, wait, or blocker
-within its authority envelope. Implement an off-document record_vtext_decision
-tool backed by Dolt, readable from Trace/logs and visible in the VText Sources
-panel as a distinct "VText decisions" section. Do not put agent process
-rationale into canonical VText documents. Rewrite VText and related prompt
-defaults in direct, active, reason-bearing language with strong delegation
-pressure but no forced semantic tool sequence. Mutation class is red for VText
-tools/prompts, runtime schema, Trace/event projection, logs, and VText UI; apply
-Problem Documentation First before code. Append moves to
-docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md. Settlement requires
-focused schema/tool/prompt tests, API/event/log readability proof, Sources-panel
-Playwright proof, runtime/frontend checks for touched surfaces, push/CI/deploy,
-staging identity, and deployed product-path proof; no claim outruns its
-evidence class.
+docs/vtext-agentic-invariants-2026-06-13.md: VText is Choir's versioned artifact
+control plane. Conductor routes exogenous prompt/source/article/mission input
+into VText-owned artifact state; super is downstream execution authority that
+VText may request later through request_super_execution. Supersede the
+no-worker route predicates as overfit staging repair evidence. Keep the
+off-document record_vtext_decision tool backed by Dolt, readable from
+Trace/logs, and visible in the VText Sources panel; never put agent process
+rationale into canonical VText documents. Replace conductor-level super
+preemption for ordinary VText-centered ingress with conductor -> VText artifact
+materialization. Settlement requires focused schema/tool/prompt tests,
+prompt-bar and source/article route tests proving VText before super,
+API/event/log readability proof, Sources-panel Playwright proof,
+runtime/frontend checks for touched surfaces, push/CI/deploy, staging identity,
+and deployed product-path proof; no claim outruns its evidence class.
 ```

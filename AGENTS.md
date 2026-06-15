@@ -190,9 +190,19 @@ obligations, but it must not force VText to call researcher, super, verifier, or
 any semantic appagent merely because prompt text, revision metadata, or an
 acceptance probe mentions that role.
 
+VText is also Choir's artifact control plane. Conductor routes exogenous
+user/app/source input into VText-owned artifact state: prompt-bar requests,
+sourcecycled/news ingestion, article creation, mission work, and most user
+prompts should open or create VText/context first. Super is not the direct
+ingress target for ordinary user or source prompts. VText may later call
+`request_super_execution` when the VText-controlled artifact needs execution,
+coding-agent trees, generated artifacts, verification, candidate work, or other
+privileged action, and downstream researcher/super evidence must attach back to
+the VText/artifact context.
+
 ## Authority Boundaries
 
-- `conductor` routes exogenous user/app/connector input. It is not the semantic babysitter.
+- `conductor` routes exogenous user/app/connector input into VText/artifact state. It is not the semantic babysitter and not a direct-super router for ordinary prompts.
 - Appagents own durable app artifacts. `vtext` owns canonical document versions.
 - `researcher` writes structured findings/evidence, not canonical text or code.
 - `super` is the foreground orchestration root. It can request workers and candidate worlds.
@@ -208,6 +218,11 @@ authority envelope. `edit_vtext` stores a canonical revision; it must not become
 a semantic workflow gate that requires a subsequent researcher/super/verifier
 tool call. Exact required-tool continuation is reserved for narrow mechanical
 tool protocols, not appagent policy.
+
+Prompt bar, source ingestion, and article/news creation should show conductor
+entry followed by VText artifact materialization. `super` before VText is a
+route invariant failure. `super` after VText is valid only when VText requested
+execution through an explicit affordance such as `request_super_execution`.
 
 Prefer asynchronous supervision. A delegation, worker VM run, candidate preview,
 or verification job should leave durable status/evidence and return a handle

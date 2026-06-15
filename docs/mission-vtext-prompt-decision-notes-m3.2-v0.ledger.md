@@ -1037,3 +1037,41 @@ Receipts:
 
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
+
+## 2026-06-15 - VText Control-Plane Ingress Checkpoint
+
+Claim/scope: the previous route-repair frame was too narrow. Repeated staging
+proofs showed conductor -> super -> VText for prompt-bar VText work, and local
+repairs overfit to `no_worker_needed` predicates. Owner clarification promoted
+the deeper invariant: VText is Choir's versioned artifact control plane.
+Conductor routes exogenous prompt/source/article/mission input into
+VText-owned artifact state; super is downstream execution authority invoked by
+VText, not the direct ingress target for ordinary user/source prompts.
+
+Move: document the violated invariant before touching runtime code, promote it
+into doctrine/operating docs/conjecture state, and reset M3.2 around
+conductor -> VText artifact materialization rather than no-worker special-case
+routing. Expected Delta V: convert the failed no-worker repair path into a
+named control-plane heresy and reopen implementation obligations. Actual Delta
+V: V remains 6 until the docs checkpoint is committed, then the next descent is
+runtime route replacement plus tests.
+
+Receipts:
+- `docs/choir-doctrine.md` now states VText as the document/artifact
+  control-plane core and names direct super ingress for VText-centered work as
+  H011.
+- `AGENTS.md` now says prompt-bar, source ingestion, article/news creation, and
+  mission work should enter VText/artifact state before super.
+- `docs/vtext-agentic-invariants-2026-06-13.md` now makes VText-centered
+  ingress a non-negotiable rule and acceptance requirement.
+- `docs/conjecture-assertion-ledger-2026-06.md` adds invariant candidate I8.
+- `docs/mission-vtext-prompt-decision-notes-m3.2-v0.md` adds the
+  VText Control-Plane Ingress checkpoint and supersedes no-worker route
+  predicates as overfit staging repair evidence.
+
+Open edge: commit this docs-only Problem Documentation First checkpoint, then
+remove/quarantine no-worker route predicates and replace conductor-level
+persistent-super preemption for ordinary VText-centered ingress with
+conductor -> VText artifact materialization. Acceptance must prove prompt-bar
+and source/article routes start with VText; super before VText fails; super
+after VText is valid only when VText requested it.

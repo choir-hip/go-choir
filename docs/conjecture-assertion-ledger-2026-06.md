@@ -135,6 +135,20 @@ artifacts, and verification is valid; exact semantic tool sequences are not.
 staging evidence show VText can delegate when needed without runtime or prompt
 text forcing `edit_vtext -> researcher/super` choreography.)
 
+### I8 — VText is Choir's artifact control plane
+
+Conductor routes exogenous user/app/source input into VText-owned artifact
+state by default. Prompt-bar requests, sourcecycled/news ingestion, article
+creation, mission work, and most user prompts should open or create
+VText/context first. VText owns the canonical artifact and then decides whether
+to write/revise, attach or transclude sources, ask researcher, request super
+execution, coordinate coding-agent trees through super, wait, or record an
+off-document decision/blocker. Super is downstream execution authority, not the
+ordinary ingress target for user or source prompts. (Origin: M3.2 staging route
+failures and owner clarification; promote after prompt-bar and source/article
+product-path acceptance prove conductor -> VText first, with any later super
+work requested by VText and attached back to the VText/artifact context.)
+
 ---
 
 ## Open hyperthesis edges (named, not resolved)
