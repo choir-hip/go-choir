@@ -942,3 +942,81 @@ test('VText Sources panel shows bounded revision structure without body text', a
     await page.unroute(diagnosisRoute);
   }
 });
+
+test('VText Sources panel shows off-document decision notes separately', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const stamp = Date.now();
+  const doc = await fetchJSON(page, '/api/vtext/documents', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `Decision Evidence Fixture ${stamp}`,
+    }),
+  });
+
+  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      content: [
+        '# Decision Evidence Fixture',
+        '',
+        'The reader-facing document does not contain agent process rationale.',
+      ].join('\n'),
+      metadata: {
+        source: 'owner_decision_probe',
+      },
+    }),
+  });
+
+  const decisionReason = 'Owner supplied source excerpt, so VText skipped researcher for this revision.';
+  const diagnosisRoute = `**/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/diagnosis?*`;
+  await page.route(diagnosisRoute, async (route) => {
+    expect(route.request().url()).toContain('include_content=false');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        owner_id: 'user-1',
+        doc_id: doc.doc_id,
+        store_path: '',
+        vtext_path: '',
+        document: doc,
+        revisions: [],
+        revision_structures: [],
+        runs: [],
+        events: [],
+        messages: [],
+        decisions: [{
+          decision_id: 'decision-ui-1',
+          owner_id: 'user-1',
+          doc_id: doc.doc_id,
+          loop_id: 'run-vtext-decision-ui',
+          trajectory_id: 'trajectory-vtext-decision-ui',
+          actor_id: 'vtext:' + doc.doc_id,
+          decision_kind: 'delegation_skipped',
+          reason: decisionReason,
+          evidence_refs: ['rev-owner-source', 'source:owner-excerpt'],
+          next_action: 'Use edit_vtext for the reader-facing revision.',
+          created_at: '2026-06-14T20:00:00.000Z',
+        }],
+        evidence: [],
+      }),
+    });
+  });
+
+  const vtextWindow = await openRecentVTextDocument(page, `Decision Evidence Fixture ${stamp}`);
+  try {
+    await vtextWindow.locator('[data-vtext-source-panel]').click();
+    await vtextWindow.locator('[data-vtext-load-diagnosis]').click();
+
+    const decisions = vtextWindow.locator('[data-vtext-decisions]');
+    await expect(decisions).toBeVisible({ timeout: 10000 });
+    await expect(decisions).toContainText('VText decisions');
+    await expect(decisions.locator('[data-vtext-decision]')).toHaveAttribute('data-decision-kind', 'delegation_skipped');
+    await expect(decisions).toContainText(decisionReason);
+    await expect(decisions).toContainText('Use edit_vtext for the reader-facing revision.');
+    await expect(decisions.locator('[data-vtext-decision-refs]')).toContainText('source:owner-excerpt');
+    await expect(vtextWindow.locator('[data-vtext-rendered]')).not.toContainText(decisionReason);
+  } finally {
+    await page.unroute(diagnosisRoute);
+  }
+});

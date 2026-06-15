@@ -109,6 +109,67 @@ func TestVTextListDocumentsByOwner(t *testing.T) {
 	}
 }
 
+func TestVTextDecisionRecordsAreOwnerScopedAndDocumentScoped(t *testing.T) {
+	s := vtextTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := types.Document{
+		DocID:     "doc-decision",
+		OwnerID:   "user-1",
+		Title:     "Decision doc",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	rec := types.VTextDecisionRecord{
+		DecisionID:   "decision-1",
+		OwnerID:      "user-1",
+		DocID:        "doc-decision",
+		RunID:        "run-vtext-1",
+		TrajectoryID: "trajectory-1",
+		ActorID:      "vtext:doc-decision",
+		DecisionKind: "delegation_skipped",
+		Reason:       "The owner supplied enough source material for this revision.",
+		EvidenceRefs: []string{"rev-base", "source:owner-material"},
+		NextAction:   "Edit directly.",
+		CreatedAt:    now,
+	}
+	if err := s.CreateVTextDecision(ctx, rec); err != nil {
+		t.Fatalf("CreateVTextDecision: %v", err)
+	}
+
+	records, err := s.ListVTextDecisionsByDocument(ctx, "user-1", "doc-decision", 10)
+	if err != nil {
+		t.Fatalf("ListVTextDecisionsByDocument: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("decisions len = %d, want 1", len(records))
+	}
+	got := records[0]
+	if got.DecisionID != rec.DecisionID || got.DecisionKind != rec.DecisionKind || got.Reason != rec.Reason || got.NextAction != rec.NextAction {
+		t.Fatalf("decision mismatch: %+v", got)
+	}
+	if len(got.EvidenceRefs) != 2 || got.EvidenceRefs[0] != "rev-base" || got.EvidenceRefs[1] != "source:owner-material" {
+		t.Fatalf("evidence refs = %#v", got.EvidenceRefs)
+	}
+	trajectoryRecords, err := s.ListVTextDecisionsByTrajectory(ctx, "user-1", "trajectory-1", 10)
+	if err != nil {
+		t.Fatalf("ListVTextDecisionsByTrajectory: %v", err)
+	}
+	if len(trajectoryRecords) != 1 || trajectoryRecords[0].DecisionID != rec.DecisionID {
+		t.Fatalf("trajectory decisions = %+v", trajectoryRecords)
+	}
+	otherOwner, err := s.ListVTextDecisionsByDocument(ctx, "user-2", "doc-decision", 10)
+	if err != nil {
+		t.Fatalf("ListVTextDecisionsByDocument other owner: %v", err)
+	}
+	if len(otherOwner) != 0 {
+		t.Fatalf("wrong owner saw decisions: %+v", otherOwner)
+	}
+}
+
 func TestVTextUpdateDocument(t *testing.T) {
 	s := vtextTestStore(t)
 	ctx := context.Background()

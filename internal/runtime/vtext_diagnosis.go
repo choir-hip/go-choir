@@ -19,6 +19,7 @@ type vtextDiagnosisResponse struct {
 	Runs               []types.RunRecord               `json:"runs"`
 	Events             []types.EventRecord             `json:"events"`
 	Messages           []types.ChannelMessage          `json:"messages"`
+	Decisions          []types.VTextDecisionRecord     `json:"decisions,omitempty"`
 	Evidence           []types.EvidenceRecord          `json:"evidence"`
 	ErrorMatches       []string                        `json:"error_matches,omitempty"`
 }

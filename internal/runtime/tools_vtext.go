@@ -19,6 +19,7 @@ import (
 func RegisterVTextTools(registry *ToolRegistry, rt *Runtime) error {
 	for _, tool := range []Tool{
 		newEditVTextTool(rt),
+		newRecordVTextDecisionTool(rt),
 		newRequestSuperExecutionTool(rt),
 		newRequestEmailDraftTool(rt),
 	} {
@@ -116,6 +117,121 @@ func newEditVTextTool(rt *Runtime) Tool {
 			}
 			return toolResultJSON(result)
 		},
+	}
+}
+
+type recordVTextDecisionArgs struct {
+	DocID        string   `json:"doc_id,omitempty"`
+	DecisionKind string   `json:"decision_kind"`
+	Reason       string   `json:"reason"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+	NextAction   string   `json:"next_action,omitempty"`
+}
+
+func newRecordVTextDecisionTool(rt *Runtime) Tool {
+	allowedKinds := []string{
+		"delegation_opened",
+		"delegation_skipped",
+		"delegation_deferred",
+		"wait_for_evidence",
+		"blocker",
+		"no_worker_needed",
+	}
+	return Tool{
+		Name:        "record_vtext_decision",
+		Description: "Record an audit-worthy VText decision outside the canonical document. Use this for reasoned delegation choices, waits, blockers, or no-worker decisions that reviewers may need later. Do not use it for ordinary sentence-level edits, and do not put agent process rationale into document text.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"doc_id": map[string]any{
+				"type":        "string",
+				"description": "The VText document id. Omit only when the current VText run is already scoped to the document.",
+			},
+			"decision_kind": map[string]any{
+				"type":        "string",
+				"enum":        allowedKinds,
+				"description": "Typed decision category.",
+			},
+			"reason": map[string]any{
+				"type":        "string",
+				"description": "Short owner-readable reason. Keep it about the coordination decision, not document prose.",
+			},
+			"evidence_refs": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Optional evidence, run, finding, source, or revision refs that support this decision.",
+			},
+			"next_action": map[string]any{
+				"type":        "string",
+				"description": "Optional concise next action or blocker discriminator.",
+			},
+		}, []string{"decision_kind", "reason"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileVText {
+				return "", fmt.Errorf("record_vtext_decision is only available to vtext agents")
+			}
+			rec := ctxRunRecord(ctx)
+			if rec == nil {
+				return "", fmt.Errorf("record_vtext_decision missing run context")
+			}
+			var in recordVTextDecisionArgs
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode record_vtext_decision args: %w", err)
+			}
+			decisionKind := strings.TrimSpace(in.DecisionKind)
+			if !validVTextDecisionKind(decisionKind) {
+				return "", fmt.Errorf("decision_kind must be one of delegation_opened, delegation_skipped, delegation_deferred, wait_for_evidence, blocker, no_worker_needed")
+			}
+			reason := strings.TrimSpace(in.Reason)
+			if reason == "" {
+				return "", fmt.Errorf("reason must not be empty")
+			}
+			docID := strings.TrimSpace(in.DocID)
+			if docID == "" {
+				docID = strings.TrimSpace(firstNonEmpty(
+					metadataStringValue(rec.Metadata, "doc_id"),
+					rec.ChannelID,
+				))
+			}
+			if docID == "" {
+				return "", fmt.Errorf("doc_id is required when the VText run is not document-scoped")
+			}
+			if _, err := rt.store.GetDocument(ctx, docID, rec.OwnerID); err != nil {
+				return "", fmt.Errorf("get vtext document for decision: %w", err)
+			}
+			now := time.Now().UTC()
+			decision := types.VTextDecisionRecord{
+				DecisionID:   uuid.NewString(),
+				OwnerID:      rec.OwnerID,
+				DocID:        docID,
+				RunID:        rec.RunID,
+				TrajectoryID: trajectoryIDForRun(rec),
+				ActorID:      rec.AgentID,
+				DecisionKind: decisionKind,
+				Reason:       reason,
+				EvidenceRefs: trimNonEmpty(in.EvidenceRefs),
+				NextAction:   strings.TrimSpace(in.NextAction),
+				CreatedAt:    now,
+			}
+			if err := rt.store.CreateVTextDecision(ctx, decision); err != nil {
+				return "", err
+			}
+			rt.emitVTextDecisionRecordedEvent(ctx, rec, decision)
+			return toolResultJSON(map[string]any{
+				"decision_id":   decision.DecisionID,
+				"doc_id":        decision.DocID,
+				"decision_kind": decision.DecisionKind,
+				"status":        "recorded",
+				"created_at":    decision.CreatedAt.Format(time.RFC3339Nano),
+			})
+		},
+	}
+}
+
+func validVTextDecisionKind(kind string) bool {
+	switch kind {
+	case "delegation_opened", "delegation_skipped", "delegation_deferred", "wait_for_evidence", "blocker", "no_worker_needed":
+		return true
+	default:
+		return false
 	}
 }
 

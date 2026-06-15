@@ -128,6 +128,23 @@ type Revision struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// VTextDecisionRecord is an off-document audit note for an agentic VText
+// choice. It records why VText opened, skipped, deferred, or blocked a
+// delegation without turning canonical document prose into a process log.
+type VTextDecisionRecord struct {
+	DecisionID   string    `json:"decision_id"`
+	OwnerID      string    `json:"owner_id"`
+	DocID        string    `json:"doc_id"`
+	RunID        string    `json:"loop_id,omitempty"`
+	TrajectoryID string    `json:"trajectory_id,omitempty"`
+	ActorID      string    `json:"actor_id,omitempty"`
+	DecisionKind string    `json:"decision_kind"`
+	Reason       string    `json:"reason"`
+	EvidenceRefs []string  `json:"evidence_refs,omitempty"`
+	NextAction   string    `json:"next_action,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
 // Citation represents a single citation attached to a document.
 // Citations are stored as JSON arrays in revision records so they
 // round-trip through history (VAL-ETEXT-010).

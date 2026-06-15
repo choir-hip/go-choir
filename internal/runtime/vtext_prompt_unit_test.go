@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,39 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+func TestDefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence(t *testing.T) {
+	raw, err := fs.ReadFile(promptDefaultsFS, "prompt_defaults/vtext.md")
+	if err != nil {
+		t.Fatalf("read default vtext prompt: %v", err)
+	}
+	prompt := string(raw)
+	normalizedPrompt := strings.Join(strings.Fields(prompt), " ")
+	for _, want := range []string{
+		"VText owns canonical document versions",
+		"Use `record_vtext_decision` for audit-worthy off-document choices",
+		"Do not put agent process rationale",
+		"These are obligations and affordances, not a forced tool sequence",
+		"VText may write, ask researcher, ask super, ask both, ask neither, wait, or report a blocker",
+	} {
+		if !strings.Contains(normalizedPrompt, want) {
+			t.Fatalf("default vtext prompt missing %q:\n%s", want, prompt)
+		}
+	}
+	assertNoForcedSemanticDelegation(t, prompt)
+}
+
+func TestRecordVTextDecisionToolDescriptionKeepsDecisionsOffDocument(t *testing.T) {
+	tool := newRecordVTextDecisionTool(&Runtime{})
+	if !strings.Contains(tool.Description, "outside the canonical document") ||
+		!strings.Contains(tool.Description, "Do not use it for ordinary sentence-level edits") ||
+		!strings.Contains(tool.Description, "do not put agent process rationale into document text") {
+		t.Fatalf("record_vtext_decision description is too weak: %q", tool.Description)
+	}
+	if _, ok := tool.Parameters["properties"].(map[string]any)["decision_kind"]; !ok {
+		t.Fatalf("record_vtext_decision schema missing decision_kind: %#v", tool.Parameters)
+	}
+}
 
 func assertNoForcedSemanticDelegation(t *testing.T, prompt string) {
 	t.Helper()

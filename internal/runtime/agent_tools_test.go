@@ -196,7 +196,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 			t.Fatalf("%s spawn_agent role enum = %#v, want only vtext", profile, got)
 		}
 	}
-	for _, name := range []string{"spawn_agent", "cancel_agent", "save_evidence", "read_evidence", "edit_vtext", "request_super_execution"} {
+	for _, name := range []string{"spawn_agent", "cancel_agent", "save_evidence", "read_evidence", "edit_vtext", "record_vtext_decision", "request_super_execution"} {
 		if _, ok := vtext.Lookup(name); !ok {
 			t.Fatalf("vtext missing tool %q", name)
 		}

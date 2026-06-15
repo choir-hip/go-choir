@@ -16,6 +16,7 @@
   export let sourceEntities = [];
   export let sourceSummary = null;
   export let sourceStructures = [];
+  export let sourceDecisions = [];
   export let editEvidence = null;
   export let sourceDiagnosisPending = false;
   export let sourceRepairPending = false;
@@ -166,6 +167,41 @@
                 >
                   table {table.index + 1}: L{table.startLine}-{table.endLine}, {table.columnCount}c/{table.rowCount}r, {table.signature.slice(0, 19)}
                 </span>
+              {/each}
+            </div>
+          {/if}
+        </article>
+      {/each}
+    </div>
+  {/if}
+
+  {#if sourceDecisions.length}
+    <div class="vtext-decision-evidence" data-vtext-decisions>
+      <div class="source-artifact-heading">
+        <span class="evidence-label">VText decisions</span>
+        <strong>{sourceDecisions.length} off-document note{sourceDecisions.length === 1 ? '' : 's'}</strong>
+      </div>
+      {#each sourceDecisions as decision}
+        <article
+          class="vtext-decision-card"
+          data-vtext-decision
+          data-decision-id={decision.decisionID}
+          data-decision-kind={decision.kind}
+        >
+          <div>
+            <strong>{decision.kind || 'decision'}</strong>
+            {#if decision.createdAt}
+              <span>{decision.createdAt}</span>
+            {/if}
+          </div>
+          <p>{decision.reason}</p>
+          {#if decision.nextAction}
+            <p class="decision-next">{decision.nextAction}</p>
+          {/if}
+          {#if decision.evidenceRefs.length}
+            <div class="decision-refs" data-vtext-decision-refs>
+              {#each decision.evidenceRefs as ref}
+                <span>{ref}</span>
               {/each}
             </div>
           {/if}
@@ -442,6 +478,66 @@
   .source-structure-evidence {
     display: grid;
     gap: 0.46rem;
+  }
+
+  .vtext-decision-evidence {
+    display: grid;
+    gap: 0.46rem;
+  }
+
+  .vtext-decision-card {
+    display: grid;
+    gap: 0.38rem;
+    min-width: 0;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 8px;
+    padding: 0.56rem;
+    background: rgba(255, 255, 255, 0.045);
+  }
+
+  .vtext-decision-card > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.38rem;
+    min-width: 0;
+    color: var(--choir-text-muted);
+    font-size: 0.72rem;
+  }
+
+  .vtext-decision-card strong {
+    color: var(--choir-text-primary);
+    font-size: 0.82rem;
+  }
+
+  .vtext-decision-card p {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--choir-text-secondary);
+    font-size: 0.74rem;
+    line-height: 1.34;
+  }
+
+  .vtext-decision-card .decision-next {
+    color: var(--choir-text-primary);
+  }
+
+  .decision-refs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+    min-width: 0;
+  }
+
+  .decision-refs span {
+    max-width: 100%;
+    border: 1px solid var(--choir-border-subtle);
+    border-radius: 999px;
+    padding: 0.16rem 0.42rem;
+    overflow-wrap: anywhere;
+    color: var(--choir-text-muted);
+    font-size: 0.66rem;
   }
 
   .source-structure-card {

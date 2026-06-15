@@ -1820,6 +1820,11 @@ func (h *APIHandler) HandleVTextDiagnosis(w http.ResponseWriter, r *http.Request
 			if messages, err := h.rt.Store().ListChannelMessages(r.Context(), ownerID, docID, 0, limit); err == nil {
 				resp.Messages = messages
 			}
+			if decisions, err := h.rt.Store().ListVTextDecisionsByDocument(r.Context(), ownerID, docID, limit); err == nil {
+				resp.Decisions = decisions
+			} else {
+				log.Printf("vtext api: list decisions for %s: %v", docID, err)
+			}
 		}
 	}
 	if docID != "" {

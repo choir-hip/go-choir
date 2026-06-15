@@ -1075,3 +1075,45 @@ func (rt *Runtime) emitVTextDocumentRevisionEventForRun(ctx context.Context, rec
 		Cause:  events.CauseTaskLifecycle,
 	})
 }
+
+func (rt *Runtime) emitVTextDecisionRecordedEvent(ctx context.Context, rec *types.RunRecord, decision types.VTextDecisionRecord) {
+	payload, err := json.Marshal(map[string]any{
+		"decision_id":   decision.DecisionID,
+		"doc_id":        decision.DocID,
+		"loop_id":       decision.RunID,
+		"trajectory_id": decision.TrajectoryID,
+		"actor_id":      decision.ActorID,
+		"decision_kind": decision.DecisionKind,
+		"reason":        decision.Reason,
+		"evidence_refs": decision.EvidenceRefs,
+		"next_action":   decision.NextAction,
+	})
+	if err != nil {
+		log.Printf("runtime: marshal vtext decision event: %v", err)
+		return
+	}
+	if rec != nil {
+		rt.emitVTextAgentEvent(ctx, rec, types.EventVTextDecisionRecorded, events.CauseToolExecution, payload)
+		return
+	}
+	evRec := &types.EventRecord{
+		EventID:      uuid.New().String(),
+		RunID:        decision.RunID,
+		AgentID:      decision.ActorID,
+		ChannelID:    decision.DocID,
+		OwnerID:      decision.OwnerID,
+		TrajectoryID: decision.TrajectoryID,
+		Timestamp:    decision.CreatedAt,
+		Kind:         types.EventVTextDecisionRecorded,
+		Payload:      payload,
+	}
+	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+		log.Printf("runtime: persist vtext decision event: %v", err)
+		return
+	}
+	rt.bus.Publish(events.RuntimeEvent{
+		Record: *evRec,
+		Actor:  events.ActorRuntime,
+		Cause:  events.CauseToolExecution,
+	})
+}

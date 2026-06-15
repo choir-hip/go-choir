@@ -1,6 +1,7 @@
 import { versionLabelForRevision } from './vtext-editor-state';
 
 const SOURCE_STRUCTURE_DISPLAY_LIMIT = 24;
+const VTEXT_DECISION_DISPLAY_LIMIT = 8;
 
 export function sourceDiagnosisSummary(diagnosis: any = null) {
   if (!diagnosis) return null;
@@ -41,6 +42,20 @@ export function sourceStructureEvidence(diagnosis: any = null) {
       rowCount: Number(table?.row_count) || 0,
       signature: table?.signature || '',
     })) : [],
+  }));
+}
+
+export function sourceDecisionEvidence(diagnosis: any = null) {
+  const decisions = Array.isArray(diagnosis?.decisions) ? diagnosis.decisions : [];
+  return decisions.slice(0, VTEXT_DECISION_DISPLAY_LIMIT).map((decision: any) => ({
+    decisionID: decision?.decision_id || '',
+    runID: decision?.loop_id || '',
+    actorID: decision?.actor_id || '',
+    kind: decision?.decision_kind || '',
+    reason: decision?.reason || '',
+    nextAction: decision?.next_action || '',
+    evidenceRefs: Array.isArray(decision?.evidence_refs) ? decision.evidence_refs.filter(Boolean) : [],
+    createdAt: decision?.created_at || '',
   }));
 }
 

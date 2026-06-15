@@ -103,6 +103,24 @@ CREATE TABLE IF NOT EXISTS vtext_controller_checkpoints (
 
 CREATE INDEX IF NOT EXISTS idx_vtext_controller_owner ON vtext_controller_checkpoints(owner_id);
 
+CREATE TABLE IF NOT EXISTS vtext_decisions (
+	decision_id        VARCHAR(255) PRIMARY KEY,
+	owner_id           VARCHAR(255) NOT NULL,
+	doc_id             VARCHAR(255) NOT NULL,
+	loop_id            VARCHAR(255) NOT NULL DEFAULT '',
+	trajectory_id      VARCHAR(255) NOT NULL DEFAULT '',
+	actor_id           VARCHAR(255) NOT NULL DEFAULT '',
+	decision_kind      VARCHAR(128) NOT NULL,
+	reason             LONGTEXT NOT NULL,
+	evidence_refs_json LONGTEXT NOT NULL DEFAULT '[]',
+	next_action        LONGTEXT NOT NULL DEFAULT '',
+	created_at         DATETIME NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_vtext_decisions_doc ON vtext_decisions(owner_id, doc_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_vtext_decisions_run ON vtext_decisions(owner_id, loop_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_vtext_decisions_trajectory ON vtext_decisions(owner_id, trajectory_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS agent_evidence (
 	evidence_id    VARCHAR(255) PRIMARY KEY,
 	owner_id       VARCHAR(255) NOT NULL,
@@ -701,6 +719,10 @@ func (s *Store) DeleteDocument(ctx context.Context, docID, ownerID string) error
 	)
 	_, _ = s.vtextHandle().ExecContext(ctx,
 		`DELETE FROM vtext_document_aliases WHERE doc_id = ? AND owner_id = ?`,
+		docID, ownerID,
+	)
+	_, _ = s.vtextHandle().ExecContext(ctx,
+		`DELETE FROM vtext_decisions WHERE doc_id = ? AND owner_id = ?`,
 		docID, ownerID,
 	)
 
@@ -1418,6 +1440,59 @@ func computeBlame(chain []types.Revision, head types.Revision) []types.BlameSect
 
 // ----- Scan helpers -----
 
+func scanVTextDecisionRows(rows *sql.Rows) ([]types.VTextDecisionRecord, error) {
+	defer func() { _ = rows.Close() }()
+	var records []types.VTextDecisionRecord
+	for rows.Next() {
+		rec, err := scanVTextDecision(rows)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate vtext decisions: %w", err)
+	}
+	return records, nil
+}
+
+func scanVTextDecision(row interface{ Scan(...any) error }) (types.VTextDecisionRecord, error) {
+	var (
+		rec             types.VTextDecisionRecord
+		evidenceRefsRaw string
+		createdAtRaw    string
+	)
+	if err := row.Scan(
+		&rec.DecisionID,
+		&rec.OwnerID,
+		&rec.DocID,
+		&rec.RunID,
+		&rec.TrajectoryID,
+		&rec.ActorID,
+		&rec.DecisionKind,
+		&rec.Reason,
+		&evidenceRefsRaw,
+		&rec.NextAction,
+		&createdAtRaw,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return types.VTextDecisionRecord{}, ErrNotFound
+		}
+		return types.VTextDecisionRecord{}, fmt.Errorf("scan vtext decision: %w", err)
+	}
+	if strings.TrimSpace(evidenceRefsRaw) != "" {
+		if err := json.Unmarshal([]byte(evidenceRefsRaw), &rec.EvidenceRefs); err != nil {
+			return types.VTextDecisionRecord{}, fmt.Errorf("decode vtext decision evidence refs: %w", err)
+		}
+	}
+	createdAt, err := time.Parse(time.RFC3339Nano, createdAtRaw)
+	if err != nil {
+		return types.VTextDecisionRecord{}, fmt.Errorf("parse vtext decision created_at: %w", err)
+	}
+	rec.CreatedAt = createdAt.UTC()
+	return rec, nil
+}
+
 func scanEvidence(row interface{ Scan(...any) error }) (types.EvidenceRecord, error) {
 	var (
 		rec          types.EvidenceRecord
@@ -1755,6 +1830,79 @@ func (s *Store) MarkAgentMutationStale(ctx context.Context, runID string) error 
 		return fmt.Errorf("mark stale vtext agent mutation: %w", err)
 	}
 	return nil
+}
+
+// CreateVTextDecision inserts an off-document VText decision note.
+func (s *Store) CreateVTextDecision(ctx context.Context, rec types.VTextDecisionRecord) error {
+	evidenceRefs, err := json.Marshal(rec.EvidenceRefs)
+	if err != nil {
+		return fmt.Errorf("marshal vtext decision evidence refs: %w", err)
+	}
+	if len(evidenceRefs) == 0 || string(evidenceRefs) == "null" {
+		evidenceRefs = []byte("[]")
+	}
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = time.Now().UTC()
+	}
+	_, err = s.vtextHandle().ExecContext(ctx,
+		`INSERT INTO vtext_decisions (decision_id, owner_id, doc_id, loop_id, trajectory_id, actor_id, decision_kind, reason, evidence_refs_json, next_action, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.DecisionID,
+		rec.OwnerID,
+		rec.DocID,
+		rec.RunID,
+		rec.TrajectoryID,
+		rec.ActorID,
+		rec.DecisionKind,
+		rec.Reason,
+		string(evidenceRefs),
+		rec.NextAction,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return fmt.Errorf("insert vtext decision: %w", err)
+	}
+	return nil
+}
+
+// ListVTextDecisionsByDocument returns recent off-document decision notes for a
+// document, scoped to its owner.
+func (s *Store) ListVTextDecisionsByDocument(ctx context.Context, ownerID, docID string, limit int) ([]types.VTextDecisionRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.vtextHandle().QueryContext(ctx,
+		`SELECT decision_id, owner_id, doc_id, loop_id, trajectory_id, actor_id, decision_kind, reason, evidence_refs_json, next_action, created_at
+		   FROM vtext_decisions
+		  WHERE owner_id = ? AND doc_id = ?
+		  ORDER BY created_at DESC
+		  LIMIT ?`,
+		ownerID, docID, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query vtext decisions by document: %w", err)
+	}
+	return scanVTextDecisionRows(rows)
+}
+
+// ListVTextDecisionsByTrajectory returns recent decision notes associated with
+// a trajectory, scoped to the owner.
+func (s *Store) ListVTextDecisionsByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.VTextDecisionRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.vtextHandle().QueryContext(ctx,
+		`SELECT decision_id, owner_id, doc_id, loop_id, trajectory_id, actor_id, decision_kind, reason, evidence_refs_json, next_action, created_at
+		   FROM vtext_decisions
+		  WHERE owner_id = ? AND trajectory_id = ?
+		  ORDER BY created_at DESC
+		  LIMIT ?`,
+		ownerID, trajectoryID, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query vtext decisions by trajectory: %w", err)
+	}
+	return scanVTextDecisionRows(rows)
 }
 
 // CreateEvidence inserts a durable evidence record into the embedded Dolt

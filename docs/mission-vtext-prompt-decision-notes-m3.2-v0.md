@@ -79,14 +79,9 @@ auditable through the runtime evidence substrate.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=5:
-1. Dolt schema and store APIs for VText decision rows;
-2. `record_vtext_decision` tool registered for VText with validation and tests;
-3. Trace/log projection and API readability for the decision event;
-4. VText Sources panel shows decisions separately from sources/researcher
-   findings;
-5. prompt defaults/tool descriptions rewritten and tested for direct,
-   reason-bearing, non-forcing register.
+**variant (ranking function) V:** current V=1:
+1. land the behavior change on `origin/main`, monitor CI/deploy, verify staging
+   identity, and run deployed product-path proof.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
 if the tool/table/UI path exceeds one mission, split after the problem
@@ -128,12 +123,16 @@ states reasons without forcing choreography.
   forced-sequence language for broad task classes ("write a short working v1
   first ... Then call `spawn_agent`") and therefore documents the hazard M3.2
   must repair before code changes land.
+- Local implementation complete: `vtext_decisions` Dolt persistence, the
+  VText-only `record_vtext_decision` tool, `vtext.decision.recorded` Trace/log
+  projection, diagnosis API exposure, Sources-panel "VText decisions" section,
+  and prompt/tool-description rewrites now exist in the worktree with focused
+  store/runtime/prompt/API/log tests, frontend build proof, a Playwright
+  Sources-panel proof, and an in-app Browser local app-load check.
 
-**next move:** implement the schema/tool/API/UI/prompt batch with tests. Start
-with the Dolt table and store APIs, then register `record_vtext_decision`, emit
-readable Trace/log evidence, expose decision rows through VText diagnosis for
-the Sources panel, and rewrite prompt defaults without semantic tool-order
-forcing.
+**next move:** commit the implementation, push `origin main`, monitor CI and
+staging deploy, verify staging commit identity, and run deployed product-path
+proof for decision recording plus Sources-panel visibility.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -147,9 +146,9 @@ should be direct, active, and reason-bearing, with less descriptive/passive
 voice and more E-prime style where useful. Owner decision: VText decisions
 should be visible in the VText UI when the Sources panel opens from the toolbar.
 
-**settlement:** not settled. Problem Documentation First is satisfied at
-docs-level only. Settle only when the witness exists with product proof and M3
-can resume with both hazards covered: no forced semantic delegation and no
+**settlement:** not settled. Problem Documentation First and local construct
+proof are satisfied. Settle only after landing and deployed product proof show
+M3 can resume with both hazards covered: no forced semantic delegation and no
 document-body agent work logs.
 
 ## Problem Checkpoint - 2026-06-14

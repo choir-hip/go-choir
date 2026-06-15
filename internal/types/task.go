@@ -318,6 +318,11 @@ const (
 	// revision_id, and current_revision_id so the editor can follow head changes.
 	EventVTextDocumentRevisionCreated EventKind = "vtext.document_revision.created"
 
+	// EventVTextDecisionRecorded is emitted when VText records an off-document
+	// decision note. Decision notes are evidence/provenance, not canonical
+	// document revisions.
+	EventVTextDecisionRecorded EventKind = "vtext.decision.recorded"
+
 	// EventDesktopStateUpdated is emitted when a user's persisted desktop
 	// workspace changes.
 	EventDesktopStateUpdated EventKind = "desktop.state.updated"

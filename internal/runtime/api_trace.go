@@ -151,6 +151,7 @@ type traceMomentReferences struct {
 	DocID                string   `json:"doc_id,omitempty"`
 	RevisionID           string   `json:"revision_id,omitempty"`
 	CurrentRevisionID    string   `json:"current_revision_id,omitempty"`
+	VTextDecisionID      string   `json:"vtext_decision_id,omitempty"`
 	FindingID            string   `json:"finding_id,omitempty"`
 	EvidenceIDs          []string `json:"evidence_ids,omitempty"`
 	RunMemoryEntryID     string   `json:"run_memory_entry_id,omitempty"`
@@ -1169,6 +1170,7 @@ func buildTraceMomentReferences(payload map[string]any) traceMomentReferences {
 		DocID:                payloadString(payload, "doc_id"),
 		RevisionID:           payloadString(payload, "revision_id"),
 		CurrentRevisionID:    payloadString(payload, "current_revision_id"),
+		VTextDecisionID:      payloadString(payload, "decision_id"),
 		FindingID:            payloadString(payload, "finding_id"),
 		EvidenceIDs:          payloadStringSlice(payload, "evidence_ids"),
 		RunMemoryEntryID:     payloadString(payload, "entry_id"),
@@ -1483,6 +1485,13 @@ func traceEventSummary(ev types.EventRecord, payload map[string]any) string {
 			return fmt.Sprintf("document head -> %s", shortTraceID(revisionID))
 		}
 		return "document revision created"
+	case types.EventVTextDecisionRecorded:
+		kind := traceNonEmpty(payloadString(payload, "decision_kind"), "decision")
+		reason := traceExcerpt(payloadString(payload, "reason"), 96)
+		if reason != "" {
+			return fmt.Sprintf("vtext decision %s: %s", kind, reason)
+		}
+		return fmt.Sprintf("vtext decision %s", kind)
 	default:
 		return string(ev.Kind)
 	}
@@ -1502,6 +1511,8 @@ func traceEventTone(ev types.EventRecord) string {
 		return "message"
 	case types.EventToolInvoked, types.EventToolResult:
 		return "tool"
+	case types.EventVTextDecisionRecorded:
+		return "active"
 	default:
 		return "neutral"
 	}

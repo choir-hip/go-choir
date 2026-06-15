@@ -55,6 +55,7 @@
   import { serializeEditorMarkdown } from './vtext-markdown-serializer';
   import { clearSourceJournalFlows, mountSourceJournalFlow } from './vtext-source-flow';
   import {
+    sourceDecisionEvidence,
     sourceDiagnosisSummary,
     sourceEditEvidence,
     sourceStructureEvidence,
@@ -1986,6 +1987,7 @@
   $: if (sourcePanelOpen) ensureSourceReviewSelection(sourceCandidates);
   $: sourceSummary = sourceDiagnosisSummary(sourceDiagnosis);
   $: sourceStructures = sourceStructureEvidence(sourceDiagnosis);
+  $: sourceDecisions = sourceDecisionEvidence(sourceDiagnosis);
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
   $: if (sourcePanelOpen) ensureSourceArtifactSelection();
   $: renderedMarkdown = renderDocumentHTML(editorValue);
@@ -2135,6 +2137,7 @@
           {sourceEntities}
           {sourceSummary}
           {sourceStructures}
+          {sourceDecisions}
           {editEvidence}
           {sourceDiagnosisPending}
           {sourceRepairPending}
