@@ -197,3 +197,51 @@ Expected next move: commit this docs checkpoint before runtime edits. Then
 extract the `edit_vtext` tool result/arguments through product trace/diagnosis
 or read-only VM/store inspection and repair only the transition proven by that
 evidence.
+
+## 2026-06-15 - Root Cause Found: Exact Initial Tool Guard Rejected Same-Tool Duplicates
+
+Read-only product diagnostics against the active guest succeeded after the
+docs checkpoint. The VText document diagnosis for
+`64478c33-ad21-45e7-bd6c-3f1c28590bd1` showed:
+
+- document still had one revision, `version_number=0`, `author_kind=user`;
+- VText activation `20f1b17d-c8b5-4bfe-b17e-2ac546e77f5f` was still
+  `state=running`;
+- the prompt had exact `tool_choice=function:edit_vtext` and only the
+  `edit_vtext` tool definition;
+- loop progress showed provider response `stop_reason=tool_use` with
+  `tool_call_names=["edit_vtext","edit_vtext"]`;
+- immediately after that, runtime emitted `loop.retry` with
+  `reason=model_called_different_initial_tool`, `required_tool=edit_vtext`,
+  and `called_tools=["edit_vtext","edit_vtext"]`.
+
+Root cause:
+
+`toolCallsExactlyMatchName` treated exact initial tool choice as "exactly one
+tool call whose name matches" instead of "every returned tool call must use
+the required name." That made same-tool duplicate responses look like a
+different initial tool. Since the check happens before `executeTools`, the
+existing VText duplicate policy never got to execute the first `edit_vtext`
+and skip the second non-error duplicate.
+
+Local repair:
+
+- `toolCallsExactlyMatchName` now accepts one or more calls only when every
+  returned call name matches the required exact tool.
+- `TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool` reproduces
+  the staging shape: two `edit_vtext` calls under exact initial choice,
+  VText profile context, terminal `edit_vtext`, one executed edit, a non-error
+  duplicate notice for the second call, no initial-tool retry, and one provider
+  call.
+
+Focused receipt:
+
+```text
+nix develop -c go test ./internal/runtime -run 'TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool|TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|TestInitialVTextRunDefaultsMinimalEditContextFromActivation|TestInitialVTextRunWritesFirstAppagentRevisionThroughEdit' -count=1
+ok  	github.com/yusefmosiah/go-choir/internal/runtime	1.284s
+```
+
+Conjecture delta: C8 supported locally. The prompt-bar VText first-draft loop
+is now explained as a pre-tool-execution guard bug, not a missing seed, not a
+failed edit payload, and not a direct-super routing mistake. Settlement still
+requires CI, deploy, and fresh deployed browser/product proof.

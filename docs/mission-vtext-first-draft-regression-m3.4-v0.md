@@ -103,7 +103,7 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: start with the observed staging trace and focused local tests; then
   deploy and prove with browser-driven QA on `https://choir.news`.
 
-variant (ranking function) V: current V=4:
+variant (ranking function) V: current V=3:
 1. completed: record the problem and initial conjectures before code changes;
 2. completed: extract enough failed transition evidence for run
    `386f6c28-5594-4605-ba02-5c90387be3ad`: conductor decision, document id,
@@ -113,9 +113,9 @@ variant (ranking function) V: current V=4:
 4. completed/falsified on staging: implement the narrow repair with focused tests, including
    terminal `edit_vtext` success and defaulting underspecified edit payloads
    from the pending VText activation;
-5. remaining: extract the failed deployed `edit_vtext` tool result/arguments
+5. completed: extract the failed deployed `edit_vtext` tool result/arguments
    from VText activation `20f1b17d-c8b5-4bfe-b17e-2ac546e77f5f`;
-6. remaining: implement the third repair against that failed transition;
+6. completed locally: implement the third repair against that failed transition;
 7. remaining: verify deployed product path with browser/computer-use evidence;
 8. remaining: update M3 goalstring only after deployed proof shows prompt-bar VText V1
    creation and no indefinite pending state.
@@ -184,13 +184,22 @@ position / live conjectures / open edges:
   duplicate-call ordering skips the valid edit, rationale/operation validation
   rejects the write, or trace/tool-result persistence is hidden behind a data
   route timeout.
+- C8 supported and repaired locally: product diagnosis showed the provider
+  returned two `edit_vtext` calls, but the tool loop emitted
+  `model_called_different_initial_tool` and retried before executing any tool.
+  The exact initial-tool guard required exactly one call instead of accepting
+  one or more calls whose names all match the required tool. The existing VText
+  duplicate policy would have executed the first edit and skipped the second,
+  but the guard sat before that policy. Local repair makes the guard accept
+  same-tool duplicate calls and adds a regression test proving one canonical
+  edit executes, the duplicate notice is non-error, and terminal success ends
+  the VText turn.
 
-next move: commit this failed-deployed-proof checkpoint, then extract the
-tool-result/argument payloads for activation
-`20f1b17d-c8b5-4bfe-b17e-2ac546e77f5f` through product trace/diagnosis or a
-read-only VM/store inspection. Only after that, make the next code repair.
-Acceptance still requires non-empty V1, cleared pending state or precise
-blocker, and trace evidence showing conductor -> VText before any super.
+next move: run focused and wider runtime checks, commit/push the local repair,
+monitor CI and Node B deploy, then run a fresh-auth browser/product proof on
+`https://choir.news`. Acceptance still requires non-empty V1, cleared pending
+state or precise blocker, and trace evidence showing conductor -> VText before
+any super.
 
 ledger file: `docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md`
 

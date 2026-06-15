@@ -791,10 +791,15 @@ func exactRequiredToolChoiceName(choice string) (string, bool) {
 
 func toolCallsExactlyMatchName(calls []types.ToolCall, name string) bool {
 	name = strings.TrimSpace(name)
-	if name == "" || len(calls) != 1 {
+	if name == "" || len(calls) == 0 {
 		return false
 	}
-	return strings.TrimSpace(calls[0].Name) == name
+	for _, call := range calls {
+		if strings.TrimSpace(call.Name) != name {
+			return false
+		}
+	}
+	return true
 }
 
 func isExactInitialToolChoicePreconditionError(choice string, err error) bool {

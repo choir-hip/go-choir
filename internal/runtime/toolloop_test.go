@@ -551,6 +551,88 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 	}
 }
 
+func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T) {
+	registry := NewToolRegistry()
+	var edited int
+	if err := registry.Register(Tool{
+		Name:        "edit_vtext",
+		Description: "Edit the VText document.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			edited++
+			return `{"status":"stored","revision_id":"rev-2"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register edit_vtext: %v", err)
+	}
+
+	var choices []string
+	provider := &capturingToolChoiceProvider{responses: []*ToolLoopResponse{{
+		StopReason: "tool_use",
+		ToolCalls: []types.ToolCall{
+			{ID: "call-edit-1", Name: "edit_vtext", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"first"}`)},
+			{ID: "call-edit-2", Name: "edit_vtext", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"second"}`)},
+		},
+		Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+		Model: "test-model",
+	}}, choices: &choices}
+
+	var retrySeen bool
+	var duplicateNoticeSeen bool
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunRetry && phase == "initial_tool_choice" {
+			retrySeen = true
+		}
+		if kind != types.EventToolResult {
+			return
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(payload, &decoded); err != nil {
+			t.Fatalf("decode tool result: %v", err)
+		}
+		if decoded["call_id"] == "call-edit-2" && strings.Contains(fmt.Sprint(decoded["output"]), "duplicate edit_vtext") {
+			duplicateNoticeSeen = true
+		}
+	}
+
+	run := &types.RunRecord{
+		RunID:        "run-vtext",
+		OwnerID:      "owner-1",
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+	}
+	text, _, err := RunToolLoop(
+		WithToolExecutionContext(context.Background(), run),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"write v1"}`)},
+		"You are a VText appagent.",
+		0,
+		emit,
+		nil,
+		WithInitialToolChoice("function:edit_vtext"),
+		WithTerminalToolSuccesses("edit_vtext"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "" {
+		t.Fatalf("text = %q, want empty terminal tool result", text)
+	}
+	if edited != 1 {
+		t.Fatalf("edit_vtext executed %d times, want 1", edited)
+	}
+	if retrySeen {
+		t.Fatal("same-tool duplicate response must not trigger initial tool-choice retry")
+	}
+	if !duplicateNoticeSeen {
+		t.Fatal("missing duplicate edit_vtext notice for second call")
+	}
+	if len(choices) != 1 || choices[0] != "function:edit_vtext" {
+		t.Fatalf("tool choices = %#v, want one exact initial edit_vtext choice", choices)
+	}
+}
+
 func TestRunToolLoopCarriesAssistantReasoningContent(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
