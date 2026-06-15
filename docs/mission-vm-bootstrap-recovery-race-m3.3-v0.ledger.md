@@ -115,3 +115,51 @@ Receipts:
 
 Open edge: commit, push, monitor CI/deploy, prove staging owner-path recovery,
 and report or repair the stale Universal Wire/sourcecycled route separately.
+
+## 2026-06-15T11:15:00Z - Deployed Owner Recovery Proof And Source Route Separation
+
+Claim/scope: the owner bootstrap/recovery substrate repair landed and is
+supported on staging for the owner path, but the Universal Wire platform/source
+route remains a separate unresolved 502 source. The mission should therefore
+handoff with a named remaining edge instead of claiming full settlement.
+
+Move: pushed runtime commit `a1c0ad0d5ba6f7923c19f0346da979a7ea51a818` to
+`origin/main`, monitored CI/deploy, verified staging identity, ran deployed
+owner lifecycle proof, ran an authenticated fresh-owner recovery/status probe,
+and inspected sourcecycled post-deploy logs.
+
+Expected Delta V: -1 for deployed owner-path proof and route separation. Actual
+Delta V: -1. V is now 1 for the remaining Universal Wire platform/source route
+successor blocker.
+
+Receipts:
+
+- CI run `27541798919` completed successfully for
+  `a1c0ad0d5ba6f7923c19f0346da979a7ea51a818`; Node B `Deploy to Staging`
+  completed successfully in the same run.
+- `curl -fsS https://choir.news/health` reported proxy and upstream sandbox
+  deployed commit `a1c0ad0d5ba6f7923c19f0346da979a7ea51a818`, deployed at
+  `2026-06-15T11:04:42Z`.
+- Deployed lifecycle proof passed:
+  `GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news npx --prefix frontend playwright test frontend/tests/adaptive-lifecycle-control-deployed.spec.js --reporter=line`.
+- Fresh-owner deployed recovery/status probe registered
+  `m33-recovery-1781521988690-t9qqci@example.com`, reached authenticated
+  desktop ready in about 8s, observed `/api/compute/status` `200` with
+  `current_computer.state=active` and `runtime.status=ready`, observed
+  `/api/compute/recovery` `200` with redacted `recovery.status=ready`, then
+  observed `/api/shell/bootstrap` `200` for
+  `vm-711255255b16ffdd090879de629fd32d` without manual reload.
+- Staging recovery completed in about 30ms, so it did not produce an aborted
+  browser request. The cancellation-specific predicate remains covered by
+  `TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady`.
+- Deployed `/health` after the probe showed owner/proxy `bootstrap.total` count
+  13 with `http_200` only in the active window, separating the owner bootstrap
+  path from sourcecycled failures.
+- Read-only Node B diagnostics showed `go-choir-sourcecycled.service` still
+  active and still logging repeated `runtime returned 502 Bad Gateway` dispatch
+  attempts after the deploy, including `2026-06-15T11:13:48Z`.
+
+Open edge: open or resume a narrow Universal Wire platform-computer recovery
+mission for `universal-wire-platform` / `platform` before treating
+sourcecycled dispatch health as repaired. Do not hide that 502 class inside
+owner bootstrap health.

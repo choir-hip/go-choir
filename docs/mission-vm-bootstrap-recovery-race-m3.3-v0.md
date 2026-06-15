@@ -49,7 +49,7 @@ before M3 uses vmctl refresh/restart as lifecycle-settlement evidence.
 
 ## Parallax State
 
-status: working
+status: open_handoff
 
 mission conjecture: if bootstrap/recovery becomes a durable, owner-scoped
 computer lifecycle transition that survives browser request cancellation and
@@ -83,7 +83,7 @@ invariants / qualities / domain ramp (I/Q/D):
   staging owner-path proof on `https://choir.news`; optional separate staging
   proof or blocker for the Universal Wire platform route.
 
-variant (ranking function) V: 2.
+variant (ranking function) V: 1.
 1. reproduce or synthesize a deterministic first-load cancel/reload-success
    failure shape; (implemented in
    `TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady`)
@@ -94,8 +94,11 @@ variant (ranking function) V: 2.
 3. implement the narrow durable recovery/status repair with tests; (local proxy
    repair implemented; focused checks, race check, and broad local gate passed)
 4. deploy and prove the owner-path first-load recovery behavior on staging;
+   (supported for fresh owner boot/recovery status on deployed `a1c0ad0d`;
+   cancellation-specific proof remains the deterministic local regression)
 5. separate or repair the stale Universal Wire/sourcecycled 502 route so health
-   counters no longer hide owner bootstrap regressions.
+   counters no longer hide owner bootstrap regressions. (separated and still
+   failing in `go-choir-sourcecycled.service`; successor blocker remains)
 
 budget: one focused paramission before M3. If the fix expands into broad System
 Monitor or storage-retention work, stop with an open handoff and keep M3 blocked
@@ -145,12 +148,30 @@ position / live conjectures / open edges:
   fresh lookup results, avoiding stale route reports after later lifecycle
   changes. Explicit vmctl job records remain a successor only if staging shows
   proxy-owned status is insufficient.
+- C6 supported on staging for owner-path recovery: commit
+  `a1c0ad0d5ba6f7923c19f0346da979a7ea51a818` deployed to proxy and sandbox at
+  `2026-06-15T11:04:42Z`; CI run `27541798919` and Node B deploy passed. A
+  deployed lifecycle proof passed, and a fresh owner product-path probe
+  registered `m33-recovery-1781521988690-t9qqci@example.com`, reached
+  authenticated desktop ready in about 8s, got `/api/compute/recovery`
+  `200` with redacted `recovery.status=ready`, then got
+  `/api/compute/status` `200` and `/api/shell/bootstrap` `200` for sandbox
+  `vm-711255255b16ffdd090879de629fd32d` without manual reload. Staging recovery
+  completed too quickly to produce an aborted browser request, so the
+  cancellation predicate is proven by the deterministic local regression rather
+  than by a slow staging recovery.
+- C7 active successor blocker: the Universal Wire platform/source route remains
+  unhealthy after the owner-path deploy. `go-choir-sourcecycled.service` logged
+  repeated `runtime returned 502 Bad Gateway` dispatch attempts after
+  `2026-06-15T11:04:42Z`. This is separated from owner bootstrap health:
+  deployed `/health` for the owner/proxy path shows `bootstrap.total` all
+  `http_200` in the active window.
 
-next move: commit the runtime fix referencing problem checkpoint `397c1865`,
-push to `origin/main`, monitor CI/deploy, verify staging build identity, and run
-deployed owner-path acceptance. Also inspect/report the Universal
-Wire/sourcecycled platform-route 502 separately so aggregate health does not
-hide owner bootstrap behavior.
+next move: keep M3 lifecycle cutover blocked on the remaining platform/source
+route edge only if M3 proof needs sourcecycled health. Otherwise resume M3 with
+the owner bootstrap substrate repaired, and open a narrow successor for
+Universal Wire platform-computer recovery (`universal-wire-platform` /
+`platform`) before changing sourcecycled dispatch behavior.
 
 ledger file: `docs/mission-vm-bootstrap-recovery-race-m3.3-v0.ledger.md`
 
