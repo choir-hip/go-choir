@@ -1503,3 +1503,50 @@ mission V decrease, but fewer false starts on resume. Actual Delta V: V remains
 Receipt: `scripts/doccheck` passed report-only: 204 docs, 805 warnings, 2633ms.
 
 Open edge: push the docs-only follow-up.
+
+## 2026-06-15T09:20:00Z - Source/News Article Public-Proof Blocker Scoped
+
+Claim/scope: the remaining V=1 sourcecycled/news/article deployed route edge
+has an admissible proof shape in code, but staging currently blocks it at the
+public Universal Wire stories surface. This records a product-surface blocker;
+it does not claim deployed source/news/article route proof.
+
+Move: probe the browser-public product path for Universal Wire article VText
+ownership and downstream attachment evidence. Expected Delta V: either close
+the deployed source/news/article route edge with public receipts, or reduce it
+to a named product-surface blocker. Actual Delta V: V decreases from 1 to 0 by
+accepting the blocker as residual product-path observability debt for a
+successor/source-news pass.
+
+Receipts:
+- Code inspection found the admissible public proof route:
+  `/api/universal-wire/stories` can expose `edition.doc_id`,
+  `edition.included_doc_ids`, `stories[].story_vtext_doc_id`,
+  `stories[].source_state`, `stories[].platform_route_path`, and source
+  manifests; `/api/vtext/documents/{doc_id}/diagnosis` can then expose
+  document revisions, runs, messages, decisions, and events for readable
+  Universal Wire VText docs; `/api/trace/*` can provide route/moment joins.
+- The proof renewed staging Playwright auth with
+  `cd frontend && node scripts/setup-auth-state.mjs --baseUrl https://choir.news`.
+  The helper created authenticated user
+  `qa-1781515100435-tc9c7e@example.com`.
+- Staging `/health` during the proof reported proxy and upstream sandbox
+  `deployed_commit=0a5fb602151c8373086c4a2774e1236faa53831b`.
+- Authenticated browser-public probe artifact:
+  `/tmp/m32-source-news-public-proof-1781515170419.json`.
+- The probe observed `/auth/session` status 200, then called
+  `/api/universal-wire/stories`; it returned HTTP 502 after 30045ms.
+- Because `/api/universal-wire/stories` did not return the edition/article
+  VText doc IDs, the proof could not proceed to the intended
+  `/api/vtext/documents/{doc_id}/diagnosis` and `/api/trace/*` joins.
+- Forbidden-route count was zero. The proof did not use `/api/agent`,
+  `/internal`, `/api/test`, raw event mutation, or manual success seeding.
+- `https://choir.news/health` showed the same deployed commit and recorded an
+  upstream API HTTP 502 with max duration around 30000ms, matching the
+  Universal Wire stories timeout.
+
+Open edge: do not treat the source/news/article deployed route invariant as
+proven. A successor/source-news pass must repair or replace the public proof
+surface, likely starting with the `/api/universal-wire/stories` timeout, before
+claiming source/article artifacts become VText-owned on staging with downstream
+researcher/super work attached back to VText.

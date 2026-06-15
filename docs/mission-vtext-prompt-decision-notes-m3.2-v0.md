@@ -30,7 +30,7 @@ document into an agent work log.
 
 ## Parallax State
 
-status: working
+status: settled
 
 **mission conjecture:** if M3.2 adds an off-document VText decision record,
 exposes those records in Trace/logs and the VText Sources panel, rewrites prompt
@@ -94,11 +94,12 @@ control plane.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=1:
-1. obtain deployed product-path evidence, or record the exact product-surface
-   blocker, for sourcecycled/news ingestion and article creation showing
-   source/article artifacts become VText-owned before downstream researcher or
-   super work attaches back to the VText/artifact context.
+**variant (ranking function) V:** current V=0:
+The last obligation was source/news/article deployed route evidence or an exact
+product-surface blocker. The blocker is recorded: authenticated
+`/api/universal-wire/stories` on staging returned HTTP 502 after about 30s,
+preventing retrieval of edition/article VText IDs for the intended
+`/api/vtext/*/diagnosis` and `/api/trace/*` joins.
 Prompt-bar acceptance is supported on staging: fresh prompt-bar VText ingress
 starts conductor -> VText; super before VText is a failure; super after VText is
 valid only when requested by VText; explicit owner-requested decision notes
@@ -145,10 +146,13 @@ ingress has been repaired for fresh prompt-bar VText submissions.
   proof on `0a5fb602151c8373086c4a2774e1236faa53831b` showed the initial
   VText run requesting super afterward, with requester metadata
   `requested_by_profile=vtext` and requester agent/run equal to the VText run.
-- C0c active: sourcecycled/news ingestion and article creation have focused
-  local route coverage showing processor/reconciler work opens VText first, but
-  the deployed product-path proof for source/article artifacts becoming
-  VText-owned and downstream work attaching back to VText remains unproven.
+- C0c accepted blocker: sourcecycled/news ingestion and article creation have
+  focused local route coverage showing processor/reconciler work opens VText
+  first. Deployed product-path proof remains unproven because the only
+  admissible public index found for article/edition doc IDs,
+  `/api/universal-wire/stories`, returned HTTP 502 after about 30 seconds under
+  renewed authenticated staging proof. This is product-path observability debt,
+  not a conductor-route repair.
 - C1 active: VText needs strong delegation pressure for factual/current/source,
   generated-artifact, execution, and verification work, but this pressure should
   live as reasoned obligation language, not tool-order enforcement.
@@ -156,12 +160,6 @@ ingress has been repaired for fresh prompt-bar VText submissions.
   turning Trace into a product app or VText into a work log.
 - C3 active: the Sources panel is the right owner-facing place to inspect VText
   decision notes because reviewers already open it for provenance.
-- Edge/schema: exact table name and columns remain implementation choices, but
-  the row must at least carry id, run id, document id, actor id, decision kind,
-  reason, evidence refs, next action, and created-at time.
-- Edge/noise: the prompt/tool contract must define "audit-worthy" narrowly
-  enough that VText does not produce a decision note for every ordinary
-  sentence edit.
 - Current implementation state: `vtext_decisions` Dolt persistence, the
   VText-only `record_vtext_decision` tool, Trace/log projection, diagnosis API
   exposure, the Sources-panel "VText decisions" section, prompt/tool register
@@ -179,17 +177,19 @@ ingress has been repaired for fresh prompt-bar VText submissions.
   prompt-bar ingress, no super before VText, no canonical decision-rationale
   leak, an explicit decision row plus Trace/log projection, and downstream
   super only after a VText request.
-- Remaining active edge: sourcecycled/news ingestion and article creation still
-  need deployed product-path evidence, or an exact product-surface blocker,
-  proving source/article artifacts become VText-owned before downstream
-  researcher/super work attaches back.
+- Accepted remaining edge: sourcecycled/news ingestion and article creation
+  still need deployed product-path route proof in a successor/source-news pass.
+  The current public surface blocks that proof: authenticated
+  `/api/universal-wire/stories` on staging timed out at the proxy/upstream API
+  boundary, so the proof could not retrieve the edition/article VText IDs
+  required for VText diagnosis and Trace route joins.
 
-**next move:** decide whether the sourcecycled/news/article deployed route proof
-has an admissible public product path today. If yes, run it and record source or
-article artifact VText ownership plus downstream researcher/super attachment.
-If no, record the exact proof-surface blocker and leave the remaining M3.2 edge
-as product-path observability debt. Do not add conductor-level prompt heuristics
-or direct super ingress; super must remain downstream of the VText run/request.
+**next move:** M3 lifecycle cutover may resume from the M3.2 prompt-bar/control
+plane repair receipts, with a caveat: do not claim deployed source/news/article
+route proof until a successor pass repairs or bypasses the Universal Wire
+stories timeout through an admissible browser-public product surface. Do not add
+conductor-level prompt heuristics or direct super ingress; super must remain
+downstream of the VText run/request.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -203,12 +203,14 @@ should be direct, active, and reason-bearing, with less descriptive/passive
 voice and more E-prime style where useful. Owner decision: VText decisions
 should be visible in the VText UI when the Sources panel opens from the toolbar.
 
-**settlement:** not settled. Problem Documentation First and local construct
-proof are satisfied for the decision-note artifact, but the route repair frame
-was too narrow. Settle only after landing and deployed product proof show M3 can
-resume with all three hazards covered: no forced semantic delegation, no
-document-body agent work logs, and no direct-super ingress that bypasses
-VText-owned artifact state.
+**settlement:** settled for the M3.2 gate with scoped residual debt. Problem
+Documentation First, local construct proof, CI/deploy, and prompt-bar deployed
+proof cover no forced semantic delegation, no document-body agent work logs,
+and no direct-super ingress in the prompt-bar route. Source/news/article
+deployed route proof is not claimed; its next discriminator is a successor
+proof-surface repair for `/api/universal-wire/stories` or another
+browser-public route exposing edition/article VText IDs and downstream
+attachment evidence.
 
 ## Problem Checkpoint - 2026-06-14
 
@@ -833,7 +835,8 @@ deployed prompt-bar super-first ingress.
 ```text
 Use Parallax on docs/mission-vtext-prompt-decision-notes-m3.2-v0.md. Treat it
 as the M3.2 gate between the settled M3.1 emergency repair and M3 lifecycle
-cutover. Current status is working with V=1. Preserve Choir Doctrine and
+cutover. Current status is settled with V=0 and scoped residual
+source/news/article product-surface debt. Preserve Choir Doctrine and
 docs/vtext-agentic-invariants-2026-06-13.md: VText is Choir's versioned artifact
 control plane. Conductor routes exogenous prompt/source/article/mission input
 into VText-owned artifact state; super is downstream execution authority that
@@ -860,11 +863,18 @@ downstream-super submission `b501490e-b662-41c3-bd14-e682c3f72da3` created doc
 record_vtext_decision backed by Dolt, readable from Trace/logs, and visible in
 the VText Sources panel; keep request_super_execution only as a VText
 affordance. Focused local source/article route tests pass, including
-processor/reconciler coverage that starts with VText, but deployed
-sourcecycled/news/article product-path proof remains open. Next move: find an
-admissible browser-public product path for source/news/article route evidence,
-or record the exact product-surface blocker; do not use /api/agent, /internal,
-/api/test, raw event mutation, or manual success seeding. Settlement requires
-the source/news/article deployed edge to be proven or explicitly scoped as
-remaining product-path observability debt; no claim outruns its evidence class.
+processor/reconciler coverage that starts with VText. Deployed
+sourcecycled/news/article route proof is explicitly not claimed: after renewing
+Playwright auth, authenticated staging proof on
+`0a5fb602151c8373086c4a2774e1236faa53831b` called only browser-public product
+routes and found `/api/universal-wire/stories` returning HTTP 502 after about
+30 seconds, with session status 200, matching proxy health's upstream 502
+counter. Artifact:
+`/tmp/m32-source-news-public-proof-1781515170419.json`. This blocks retrieval
+of edition/article VText doc IDs, so the intended `/api/vtext/*/diagnosis` and
+`/api/trace/*` joins cannot prove source/news/article route order today.
+Successor/source-news work must repair or replace that public proof surface
+before claiming deployed source/news/article route evidence. Do not use
+/api/agent, /internal, /api/test, raw event mutation, or manual success seeding.
+M3 may resume from M3.2 with this caveat; no claim outruns its evidence class.
 ```
