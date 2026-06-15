@@ -214,6 +214,45 @@ Receipts:
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
 
+## 2026-06-15 - Staging Redirect-Predicate Repair Checkpoint
+
+Claim/scope: the redirect-predicate repair deployed cleanly and changed the
+route shape, but the deployed proof still failed the durable decision-table
+requirement. The initial loop is now VText rather than super, yet VText still
+created canonical revisions without any matching off-document decision row or
+Trace decision moment.
+
+Move: document the deployed failure before changing runtime decision
+persistence again. Expected Delta V: close the landing/staging proof. Actual
+Delta V: V=1 to V=2, with a VText-initial decision-persistence gap pending.
+
+Receipts:
+- Commit `025fe3020f597637a302c272004b0c8719c7f7a2` passed CI run
+  `27521818228`, Docs Truth Check `27521818222`, and FlakeHub publish
+  `27521818242`.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=025fe3020f597637a302c272004b0c8719c7f7a2`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781493489068.json`.
+- Deployed proof screenshot:
+  `/tmp/vtext-decision-staging-proof-1781493489068.png`.
+- Proof submission `f6dcce66-40dc-44d7-9e5a-4392cb2f3967`, document
+  `b44d2c31-8348-410c-bd99-517a52bbc933`, initial loop
+  `3e411e52-cdc3-4ce8-b992-10cc9b054e2a`.
+- Observed diagnosis decisions `0`, Trace decision moments `0`,
+  `canonical_contains_reason=false`, revision count `2`, forbidden internal
+  routes `[]`.
+- Trace agents included conductor, `super`, and VText; unlike earlier
+  failures, `initial_loop_id` now matched the VText loop.
+- Evidence samples showed the private no-worker reason in the first canonical
+  revision sample and absent from the final revision, so the final state was
+  clean but transient pre-decision canonical pollution still occurred.
+
+Open edge: inspect and repair the prompt-bar-to-VText initial decision
+persistence boundary so the explicit no-worker decision row exists before any
+canonical edit, then rerun focused route/decision tests and deployed
+product-path proof.
+
 ## 2026-06-15 - Staging Route-Carrier Repair Checkpoint
 
 Claim/scope: the route-carrier repair deployed cleanly, but the deployed proof

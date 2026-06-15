@@ -79,8 +79,10 @@ auditable through the runtime evidence substrate.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=1:
-1. reland the behavior change on `origin/main`, monitor CI/deploy, verify
+**variant (ranking function) V:** current V=2:
+1. repair the deployed explicit no-worker VText path so the durable decision
+   row is recorded before any canonical edit can carry the private rationale.
+2. reland the behavior change on `origin/main`, monitor CI/deploy, verify
    staging identity, and run deployed product-path proof.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
@@ -265,9 +267,18 @@ states reasons without forcing choreography.
   relies on owner, conductor profile, existing VText document channel, and
   durable no-worker prompt text. It no longer requires stored prompt-bar app
   metadata fields that the deployed conductor route may not carry.
+- Deployed redirect-predicate repair changed the route shape but still failed
+  M3.2: staging at `025fe3020f597637a302c272004b0c8719c7f7a2` started with a
+  VText loop and produced two revisions, but VText diagnosis returned zero
+  decision rows and Trace returned zero decision moments. The private
+  no-worker reason appeared transiently in the first revision sample before the
+  final revision removed it, so final canonical text was clean but the route
+  still allowed pre-decision canonical pollution.
 
-**next move:** commit the redirect-predicate repair, push `origin main`,
-monitor CI/deploy, verify staging identity, and rerun deployed proof.
+**next move:** inspect and repair the VText initial decision persistence
+boundary for the deployed prompt-bar path now that `initial_loop_id` is VText,
+then rerun focused route/decision tests, push `origin main`, monitor CI/deploy,
+verify staging identity, and rerun deployed proof.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -618,6 +629,57 @@ alone did not settle M3.2.
 Heresy delta: discovered: bypassing initial super preemption is not sufficient
 if VText run metadata still does not drive a durable decision row. introduced:
 none accepted. repaired: pending metadata/recording repair.
+
+## Staging Redirect-Predicate Repair Checkpoint - 2026-06-15
+
+Reliable evidence: commit
+`025fe3020f597637a302c272004b0c8719c7f7a2` passed CI run `27521818228`, Docs
+Truth Check `27521818222`, and FlakeHub publish `27521818242`, including Node
+B staging deploy. Public `https://choir.news/health` reported both proxy and
+upstream sandbox `deployed_commit` equal to that SHA. A deployed product-path
+proof submitted through `/api/prompt-bar` and observed through
+`/api/vtext/*/diagnosis` and `/api/trace/*`, using no forbidden
+browser-public internal routes. Proof artifact
+`/tmp/vtext-decision-staging-proof-1781493489068.json` and screenshot
+`/tmp/vtext-decision-staging-proof-1781493489068.png` recorded submission
+`f6dcce66-40dc-44d7-9e5a-4392cb2f3967`, document
+`b44d2c31-8348-410c-bd99-517a52bbc933`, and initial loop
+`3e411e52-cdc3-4ce8-b992-10cc9b054e2a`. Trace agents were conductor, `super`,
+and VText, but `initial_loop_id` now matched the VText loop. The proof ended
+with diagnosis decisions `0`, Trace decision moments `0`,
+`canonical_contains_reason=false`, revision count `2`, and forbidden internal
+routes `[]`. Evidence samples showed `canonical_contains_reason=true` for the
+first revision and `false` after the final revision, so the private reason was
+transiently written before being removed.
+
+Conjecture delta: relaxing the redirect predicate fixed the specific
+super-first initial-loop symptom, but it did not make the deterministic
+decision row persist on the deployed VText path. The next repair must focus on
+the initial VText decision persistence boundary rather than another broad
+super-route guard: the deployed route can now reach VText first and still edit
+before a durable `vtext_decisions` row exists.
+
+Protected surfaces: prompt-bar-to-VText handoff metadata, pre-activation
+decision recording, VText canonical revision creation, Trace decision
+projection, diagnosis decision exposure, and persistent-super fallback
+routing.
+
+Admissible evidence class: focused runtime tests reproducing the deployed
+VText-initial route shape and proving the decision row exists before any edit;
+deployed product-path proof showing one matching diagnosis decision, one
+matching Trace decision moment, no forbidden routes, and no private reason in
+any observed canonical revision sample.
+
+Rollback path: revert the next decision-persistence repair if it records false
+or duplicate decision notes, blocks ordinary VText edits, or suppresses required
+super routing for real execution work. Keep this checkpoint as evidence that
+final canonical cleanliness does not settle M3.2 when transient pre-decision
+pollution and missing durable decision rows remain.
+
+Heresy delta: discovered: even a VText-initial deployed path can create a
+canonical revision before deterministic off-document decision persistence
+fires. introduced: none accepted. repaired: pending decision-persistence
+repair.
 
 ## Suggested Goal String
 
