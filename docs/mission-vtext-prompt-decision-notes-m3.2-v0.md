@@ -842,9 +842,11 @@ predicate work is superseded as overfit staging evidence. Current pushed repair
 is `0a5fb602151c8373086c4a2774e1236faa53831b`; CI run `27525752356` and Node B
 deploy job `81352762195` passed, and `/health` reported that SHA for proxy and
 sandbox. Deployed browser-public proof from `frontend/` with
-`BASE_URL=https://choir.news npx playwright test tests/vtext-control-plane-staging.tmp.spec.js --workers=1`
-passed the prompt-bar control-plane acceptance: an explicit no-worker decision
-submission `69642d43-81e3-4e27-a22e-1256c06cd41d` created doc
+the temporary staging proof harness now removed passed the prompt-bar
+control-plane acceptance. Do not assume the temp spec path still exists; recreate
+or promote a normal checked-in proof only if this leg must be rerun. Receipt:
+an explicit no-worker decision submission
+`69642d43-81e3-4e27-a22e-1256c06cd41d` created doc
 `797c2145-8f5c-4ad8-85b8-b55d32c02590`, initial VText loop
 `61915809-722a-4044-9ec1-ba94534f1a28`, decision row
 `8bcf0c5b-ffb3-481f-ab6c-1d3b304659cf`, no super runs, no forbidden public

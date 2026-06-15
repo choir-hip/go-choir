@@ -1486,3 +1486,20 @@ Receipts:
 
 Open edge: commit/push this docs-only handoff repair before giving the
 continuation string.
+
+## 2026-06-15T09:07:35Z - Goal-string dead temp-spec repair
+
+Claim/scope: review found that the Suggested Goal String still named
+`tests/vtext-control-plane-staging.tmp.spec.js` as if it were a reusable command,
+but the temporary proof spec had been removed. That would hand the next agent a
+dead path.
+
+Move: rewrite the goal string to treat the prompt-bar proof as a receipt from a
+removed temporary harness, and instruct the next agent to recreate or promote a
+normal checked-in proof only if that leg must be rerun. Expected Delta V: no
+mission V decrease, but fewer false starts on resume. Actual Delta V: V remains
+1.
+
+Receipt: `scripts/doccheck` passed report-only: 204 docs, 805 warnings, 2633ms.
+
+Open edge: push the docs-only follow-up.
