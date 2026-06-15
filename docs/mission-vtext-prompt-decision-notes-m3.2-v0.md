@@ -155,10 +155,15 @@ states reasons without forcing choreography.
   prompts now bypass initial super preemption and reach VText decision
   recording, while ordinary debug/fix/verify/product-mutation prompts still
   trigger super execution.
+- Deployed route repair failed: staging at
+  `f0335bfedd48ccad5487c0addf7d02449801ab86` still produced a `super` run,
+  zero VText decision records, zero Trace decision moments, and leaked the exact
+  no-worker reason into canonical text. The local predicate test did not cover
+  the full prompt-bar route contract.
 
-**next move:** commit the route-preemption repair, push `origin main`, monitor
-CI/deploy, verify staging identity, and rerun staging product-path proof for
-decision recording plus Sources-panel visibility.
+**next move:** checkpoint the deployed route-contract failure, then repair with
+a focused route-level test that exercises prompt-bar VText materialization and
+proves explicit no-worker decision prompts do not create initial `super` runs.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -173,10 +178,10 @@ voice and more E-prime style where useful. Owner decision: VText decisions
 should be visible in the VText UI when the Sources panel opens from the toolbar.
 
 **settlement:** not settled. Problem Documentation First and local construct
-proof are satisfied, but the first staging proof found a prompt/tool-use
-compliance gap. Settle only after landing and deployed product proof show M3 can
-resume with both hazards covered: no forced semantic delegation and no
-document-body agent work logs.
+proof are satisfied, but staging has found prompt compliance, tool-choice,
+route-preemption, and full route-contract gaps. Settle only after landing and
+deployed product proof show M3 can resume with both hazards covered: no forced
+semantic delegation and no document-body agent work logs.
 
 ## Problem Checkpoint - 2026-06-14
 
@@ -251,6 +256,50 @@ Heresy delta: discovered: an available decision tool is insufficient if the
 deployed VText prompt/model can silently ignore an explicit owner request to
 record an off-document decision. introduced: none accepted. repaired: pending
 follow-up prompt/tool compliance repair.
+
+## Staging Route-Contract Checkpoint - 2026-06-15
+
+Reliable evidence: commit
+`f0335bfedd48ccad5487c0addf7d02449801ab86` passed CI run `27518517656` and
+deployed to Node B. Public `https://choir.news/health` reported both proxy and
+upstream sandbox `deployed_commit` equal to that SHA. A deployed product-path
+proof submitted through `/api/prompt-bar` and observed through
+`/api/vtext/*/diagnosis` and `/api/trace/*`, using no forbidden
+browser-public internal routes. Proof artifact
+`/tmp/vtext-decision-staging-proof-1781486690473.json` recorded submission
+`8b77ba79-36cd-4988-9d80-cfc817e876cb`, document
+`a6c409c2-9113-486b-b252-4f86e084d531`, and initial loop
+`8eb718bb-7471-4a64-8f8e-de2142a8912c`. Trace agents included conductor,
+`super`, and VText; diagnosis returned zero decisions; Trace returned zero
+decision moments; `canonical_contains_reason=true`; revision count was 2.
+
+Conjecture delta: the local no-worker predicate was necessary but not sufficient
+because it did not exercise the full prompt-bar VText materialization path. The
+route contract must be tested at the level that creates the VText document and
+chooses between persistent-super handoff and initial VText revision. The repair
+must ensure an explicit, truthful `no_worker_needed` decision note reaches VText
+first, without weakening super routing for ordinary code, artifact,
+verification, or mutation prompts.
+
+Protected surfaces: prompt-bar VText routing, conductor-to-VText materialization,
+initial VText revision metadata/tool choice, persistent-super handoff selection,
+Trace evidence, and canonical VText writes.
+
+Admissible evidence class: focused route-level runtime tests proving the
+no-worker prompt creates an initial VText revision run with exact
+`record_vtext_decision` tool choice and no initial super run; negative route
+tests proving ordinary mutation prompts still use super; deployed product-path
+proof showing diagnosis and Trace decision evidence with the reason absent from
+canonical document text.
+
+Rollback path: revert the route-contract repair if it suppresses needed super
+handoffs for real execution or verification work. Keep the staging checkpoint as
+discovery evidence.
+
+Heresy delta: discovered: predicate-only tests can overstate repair when the
+full product route still spawns `super` and lets private VText rationale leak
+into canonical text. introduced: none accepted. repaired: pending route-contract
+repair.
 
 ## Suggested Goal String
 

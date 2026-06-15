@@ -126,6 +126,39 @@ Receipts:
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
 
+## 2026-06-15 - Prompt-Bar Route-Contract Checkpoint
+
+Claim/scope: the local no-worker route-preemption repair deployed cleanly, but
+the fourth staging proof still created a `super` run, recorded zero VText
+decisions, recorded zero Trace decision moments, and leaked the exact
+no-worker reason into canonical VText text. The local predicate test did not
+cover the full prompt-bar route that creates the document and selects initial
+super versus initial VText.
+
+Move: document the deployed route-contract failure before changing runtime
+routing again. Expected Delta V: reopen the landing-only variant into a narrow
+route-level repair. Actual Delta V: V=1 to V=2, with route-contract repair
+pending.
+
+Receipts:
+- Commit `f0335bfedd48ccad5487c0addf7d02449801ab86` passed CI run
+  `27518517656`, including Node B deploy.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=f0335bfedd48ccad5487c0addf7d02449801ab86`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781486690473.json`.
+- Proof submission `8b77ba79-36cd-4988-9d80-cfc817e876cb`, document
+  `a6c409c2-9113-486b-b252-4f86e084d531`, initial loop
+  `8eb718bb-7471-4a64-8f8e-de2142a8912c`.
+- Trace agents included conductor, `super`, and VText; observed diagnosis
+  decisions `0`, Trace decision moments `0`, `canonical_contains_reason=true`,
+  revision count `2`, forbidden internal routes `[]`.
+
+Open edge: add route-level coverage for prompt-bar VText materialization so an
+explicit `decision_kind no_worker_needed` prompt creates an initial VText
+revision run with exact `record_vtext_decision` and no initial `super` run,
+while ordinary execution/verification/mutation prompts still use super.
+
 ## 2026-06-15 - No-Worker Decision Route-Preemption Checkpoint
 
 Claim/scope: the exact initial tool-choice repair deployed cleanly, but the
