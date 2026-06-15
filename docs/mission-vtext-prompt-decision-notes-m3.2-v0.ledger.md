@@ -378,6 +378,42 @@ Open edge: make explicit owner-requested decision notes select exact
 exact `edit_vtext` for ordinary first-revision work and leaving worker-woken
 turns free to choose.
 
+## 2026-06-15 - Staging Metadata Guarantee Checkpoint
+
+Claim/scope: the deterministic first-turn decision guarantee deployed cleanly,
+but the deployed product path still recorded zero VText decisions and zero
+Trace decision moments. The canonical leak stayed repaired, so the remaining
+gap is the off-document accountability guarantee rather than document-body
+pollution.
+
+Move: document the deployed metadata/route failure before making another
+runtime change. Expected Delta V: reopen landing-only variant into a
+route/metadata repair. Actual Delta V: V=1 to V=2, with the route/metadata
+repair pending.
+
+Receipts:
+- Commit `f244c5446f387ca0df9ef0ebed2188b75de38d17` passed CI run
+  `27519472366`, Docs Truth Check `27519472379`, and FlakeHub publish
+  `27519472396`.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=f244c5446f387ca0df9ef0ebed2188b75de38d17`.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781488672918.json`.
+- Deployed proof screenshot:
+  `/tmp/vtext-decision-staging-proof-1781488672918.png`.
+- Proof submission `72ef2f03-b3d5-4157-9166-52b378443e80`, document
+  `f0740135-8059-403e-a6b3-6c9c4c003883`, initial loop
+  `2c399a26-844b-4207-8d82-2b765c2fe401`.
+- Observed diagnosis decisions `0`, Trace decision moments `0`,
+  `canonical_contains_reason=false`, revision count `2`, forbidden internal
+  routes `[]`.
+
+Open edge: inspect and cover the prompt-bar-to-VText child-run metadata
+boundary so explicit `decision_kind no_worker_needed` metadata reaches
+`executeWithToolLoop` before provider execution; then rerun focused runtime
+tests, push, monitor CI/deploy, verify staging identity, and rerun deployed
+product-path proof.
+
 ## 2026-06-15 - Local Initial Tool-Choice Repair
 
 Claim/scope: explicit owner-requested decision notes now select exact

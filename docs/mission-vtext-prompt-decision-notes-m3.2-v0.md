@@ -179,11 +179,18 @@ states reasons without forcing choreography.
   record in VText run metadata, persist that record before the provider can
   edit, emit the normal VText decision event, and then start the model on
   `edit_vtext` for the reader-facing revision.
+- Deployed first-turn decision guarantee failed: staging at
+  `f244c5446f387ca0df9ef0ebed2188b75de38d17` still produced zero decision
+  records and zero Trace decision moments for the explicit no-worker decision
+  prompt, while the canonical reason leak remained fixed. The local metadata
+  guarantee is not yet reaching the deployed product path.
 
-**next move:** commit the first-turn decision guarantee repair, push
-`origin main`, monitor CI/deploy, verify staging identity, and rerun deployed
-product-path proof for decision row, Trace decision moment, no forbidden routes,
-and no private reason in canonical text.
+**next move:** inspect the deployed-route metadata boundary and add focused
+coverage that proves the explicit no-worker decision metadata reaches the
+actual VText child run before provider execution. Then repair the route,
+rerun focused runtime tests, push `origin main`, monitor CI/deploy, verify
+staging identity, and rerun deployed product-path proof for decision row, Trace
+decision moment, no forbidden routes, and no private reason in canonical text.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -200,9 +207,9 @@ should be visible in the VText UI when the Sources panel opens from the toolbar.
 **settlement:** not settled. Problem Documentation First and local construct
 proof are satisfied, but staging has found prompt compliance, tool-choice,
 route-preemption, route-contract, exact-tool enforcement, and deployed
-first-turn decision guarantee gaps. Settle only after landing and deployed
-product proof show M3 can resume with both hazards covered: no forced semantic
-delegation and no document-body agent work logs.
+metadata/first-turn decision guarantee gaps. Settle only after landing and
+deployed product proof show M3 can resume with both hazards covered: no forced
+semantic delegation and no document-body agent work logs.
 
 ## Problem Checkpoint - 2026-06-14
 
@@ -404,6 +411,48 @@ Heresy delta: discovered: no-leak canonical behavior is not equivalent to
 off-document accountability; VText can write clean reader-facing revisions while
 still omitting the required decision row. introduced: none accepted. repaired:
 pending first-turn decision guarantee repair.
+
+## Staging Metadata Guarantee Checkpoint - 2026-06-15
+
+Reliable evidence: commit
+`f244c5446f387ca0df9ef0ebed2188b75de38d17` passed CI run `27519472366`, Docs
+Truth Check `27519472379`, and FlakeHub publish `27519472396`, then deployed to
+Node B. Public `https://choir.news/health` reported both proxy and upstream
+sandbox `deployed_commit` equal to that SHA. A deployed product-path proof
+submitted through `/api/prompt-bar` and observed through
+`/api/vtext/*/diagnosis` and `/api/trace/*`, using no forbidden browser-public
+internal routes. Proof artifact
+`/tmp/vtext-decision-staging-proof-1781488672918.json` recorded submission
+`72ef2f03-b3d5-4157-9166-52b378443e80`, document
+`f0740135-8059-403e-a6b3-6c9c4c003883`, and initial loop
+`2c399a26-844b-4207-8d82-2b765c2fe401`. The proof ended with diagnosis
+decisions `0`, Trace decision moments `0`, `canonical_contains_reason=false`,
+revision count `2`, and forbidden internal routes `[]`.
+
+Conjecture delta: deterministic local metadata recording did not reach the
+deployed prompt-bar-to-VText execution path. The likely fault is now at the
+route metadata boundary, child-run metadata persistence, or a mismatch between
+the deployed proof prompt and the parser that marks an initial no-worker
+decision as required.
+
+Protected surfaces: prompt-bar materialization, VText child-run constraints and
+metadata, VText first-turn decision recording, Trace decision projection, and
+canonical VText writes.
+
+Admissible evidence class: focused runtime tests that exercise the same
+prompt-bar/child-run boundary as staging and prove the explicit no-worker
+decision metadata reaches `executeWithToolLoop` before provider execution;
+deployed product-path proof showing diagnosis and Trace decision evidence with
+the private reason absent from canonical text.
+
+Rollback path: revert the next route/metadata repair if it records false
+decision notes, records ordinary VText edits too aggressively, or weakens
+super routing for real execution work. Keep this checkpoint as evidence that
+canonical leak prevention alone still does not settle M3.2.
+
+Heresy delta: discovered: local first-turn guarantees can be bypassed by a
+deployed route/metadata boundary even when code-level VText tests pass.
+introduced: none accepted. repaired: pending route/metadata repair.
 
 ## Suggested Goal String
 
