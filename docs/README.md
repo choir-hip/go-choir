@@ -46,8 +46,10 @@ explicitly promotes one as source form.
 - **Active mission portfolio:** `docs/mission-portfolio-2026-06-11.md` and the
   current mission paradoc.
 - **Mission graph:** `docs/mission-graph.yaml` is the machine-readable mission
-  DAG index. It links paradocs and dependency/status metadata; it is not a
-  second mission ledger.
+  DAG and mission-corpus index. It links active paradocs, historical
+  mission-shaped docs, and dependency/status metadata; it is not a second
+  mission ledger, and historical entries remain evidence unless a current
+  paradoc promotes them.
 - **Assertion register:** `docs/conjecture-assertion-ledger-2026-06.md` is the
   canonical home for supported assertions, invariant candidates, and open
   hyperthesis edges.
@@ -78,8 +80,9 @@ explicitly promotes one as source form.
   blind edges with receipts and invalidation triggers.
 - `docs/heresy-detectors.md` - doctrine detector manifest and baseline
   vocabulary for heresy accounting across docs and code.
-- `docs/mission-graph.yaml` - machine-readable mission DAG index. Creating or
-  materially re-scoping a paradoc should update this graph in the same pass.
+- `docs/mission-graph.yaml` - machine-readable mission DAG and mission-corpus
+  index. Creating or materially re-scoping a paradoc should update this graph
+  in the same pass.
 - `docs/mission-docs-truth-system-v1.md` - active docs truth system mission:
   focal docs spine, mission DAG, assertion-register wiring, and code/docs
   heresy baseline.

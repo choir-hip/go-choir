@@ -114,6 +114,27 @@ and settlement criteria — never personas. "You are X" is a banned pattern.
 (Origin: role-free actor protocol; promote after M2 rewrites prompt_defaults
 and the proof mission measures the effect.)
 
+### I6 — VText decision rationale belongs off-document
+
+Canonical VText documents carry reader-facing document content, not agent
+process rationale. When VText skips or chooses researcher/super delegation for
+an audit-worthy reason, the reason should go to an off-document decision record
+that remains linked to the run, document, evidence refs, and UI provenance. The
+document body may carry uncertainty only when that uncertainty belongs to the
+document's truth state. (Origin: M3.2 prompt/decision-notes gate; promote after
+`record_vtext_decision` exists in Dolt, Trace/logs, and the VText Sources
+panel with product-path proof.)
+
+### I7 — Prompt obligations should state reasons without forcing choreography
+
+Prompt defaults should use direct, active, reason-bearing language: name the
+action, name why the obligation matters, and preserve the actor's authority
+envelope. Strong delegation pressure for evidence, execution, generated
+artifacts, and verification is valid; exact semantic tool sequences are not.
+(Origin: M3.1/M3.2 VText prompt repair; promote after prompt-default tests and
+staging evidence show VText can delegate when needed without runtime or prompt
+text forcing `edit_vtext -> researcher/super` choreography.)
+
 ---
 
 ## Open hyperthesis edges (named, not resolved)
@@ -153,6 +174,17 @@ and the proof mission measures the effect.)
   model's reasoning. Scope creep toward "verify the model" is the failure
   mode.
 - **Bound:** every 2027-target claim names this boundary explicitly.
+
+### E5 — Off-document decision notes may become noisy process theater (status: testing)
+
+- **Blind spot:** a `record_vtext_decision` tool can protect canonical VText
+  documents from work-log pollution while still producing a second noisy stream
+  of low-value excuses. If every ordinary edit emits a rationale note, the
+  system merely moves litter from the document into provenance.
+- **Boundary type:** resource / frame_lock.
+- **Bound:** M3.2 must define "audit-worthy" narrowly and test both absence
+  and presence: no note for ordinary edits; a note when VText skips delegation
+  despite an evidence-shaped, execution-shaped, or blocker-shaped request.
 
 ---
 

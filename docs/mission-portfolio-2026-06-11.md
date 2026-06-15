@@ -58,15 +58,19 @@ only when it changes shared assertions, architecture, specs/tests, skills, or
 successor missions.
 
 **variant (ranking function) V:** count unsettled architecture spine and
-substrate gates: M3 lifecycle cutover; M4 continuation deletion; M5
-durable-actor Wire falsifier; M6 route-profile consumer; M8 Dolt rollback
-window; M7 review UI on real promotion substrate. Current V=6.
-Side missions do not decrease this V unless they remove a heresy that blocks
-the spine.
+substrate gates: M3.2 VText prompt register and decision notes; M3 lifecycle
+cutover; M4 continuation deletion; M5 durable-actor Wire falsifier; M6
+route-profile consumer; M8 Dolt rollback window; M7 review UI on real
+promotion substrate. Current V=7. M3.1 is settled as the emergency repair;
+M3.2 is the durable prompt/decision-observability gate that keeps M3 from
+reopening the same failure mode. Side missions do not decrease this V unless
+they remove a heresy that blocks the spine.
 
-**next move:** M3. Do not spend owner attention on Universal Wire completeness
-or review UI polish until M2-M4 remove the old coordination/lifecycle/
-continuation mechanisms.
+**next move:** M3.2 VText prompt register and decision notes
+(`docs/mission-vtext-prompt-decision-notes-m3.2-v0.md`), then M3 proper. Do
+not spend owner attention on Universal Wire completeness or review UI polish
+until M3.2 and M3 protect VText delegation semantics and remove the old
+lifecycle/continuation mechanisms.
 
 **ledger file:** `docs/mission-portfolio-2026-06-11.ledger.md`.
 
@@ -96,7 +100,7 @@ Browser-as-source blocker for M3-M5.
 ## Dependency graph
 
 ```
-M1 trajectory model ──► M2 messaging cutover ──► M3 lifecycle cutover ──► M4 continuation deletion ──► M5 wire on settlement
+M1 trajectory model ──► M2 messaging cutover ──► M3.1 lifecycle recovery ──► M3.2 VText prompt/decision notes ──► M3 lifecycle cutover ──► M4 continuation deletion ──► M5 wire on settlement
                                                                                          (M5 = route-switch evidence gate)
 
 M4 continuation deletion ──► M6 route-flip consumer ──► M8 dolt branching + rollback window ──► M7 changes-app review loop
@@ -107,17 +111,18 @@ M11 corpusd rename ─ independent side PR, anytime
 M12 dead-export sweep ─ independent, coordinate with M4/M7
 ```
 
-Recommended order of *execution* after the 2026-06-12 sequencing correction:
-M9 → M1 (proof mission) → M2 → M3 → M4 → M5 → M6 → M8 → M7, with
-M10/M11/M12 parallel only when they remove architectural ambiguity rather
-than distract from the spine. Earlier text treated M5 as runnable immediately
-after M1 because settlement accounting can be modeled before the
-messaging/lifecycle cutover. That remains true for substrate work, but not
-for the product gate: do not spend owner attention on whether Universal Wire
-is empty or complete until durable actors are working and the old
-continuation/parent-child code has been removed. M5 remains the route-switch
-evidence gate, now after M2-M4. M7 moves after M8 because owner review without
-a real activate/rollback substrate is another product mirage.
+Recommended order of *execution* after the 2026-06-12 sequencing correction,
+the 2026-06-14 M3.1 recovery split, and the M3.2 prompt/decision-notes gate:
+M9 → M1 (proof mission) → M2 → M3.1 → M3.2 → M3 → M4 → M5 → M6 → M8 → M7,
+with M10/M11/M12 parallel only when they remove architectural ambiguity rather
+than distract from the spine. Earlier
+text treated M5 as runnable immediately after M1 because settlement accounting
+can be modeled before the messaging/lifecycle cutover. That remains true for
+substrate work, but not for the product gate: do not spend owner attention on
+whether Universal Wire is empty or complete until durable actors are working
+and the old continuation/parent-child code has been removed. M5 remains the
+route-switch evidence gate, now after M2-M4. M7 moves after M8 because owner
+review without a real activate/rollback substrate is another product mirage.
 
 ## Architecture-first revision — 2026-06-12
 
@@ -254,9 +259,11 @@ for a shim layer rather than distorting the actor semantics.
 **Settlement:** restart amnesia gone (the falsifier passes); ~50 ParentRunID
 test sites migrated with their features; acceptance evidence re-pointed.
 
-**Dependencies / blocked by:** M2, and M3.1 must first remove VText/prompt
-forcing regressions H009-H012/H024/H026 so lifecycle proof is not defined by
-role choreography. **Size:** 2 overnight missions; the big one.
+**Dependencies / blocked by:** M2; M3.1 has settled the immediate
+VText/prompt forcing regressions H009-H012/H024/H026; M3.2 must now land the
+off-document VText decision channel and reason-bearing prompt register so
+lifecycle proof is not defined by role choreography or polluted canonical
+documents. **Size:** 2 overnight missions; the big one.
 
 ## M4 — Continuation deletion (cutover step 5)
 

@@ -39,3 +39,18 @@
   scan, assertion register validation, and report-only policy.
 - Actual ΔV: 8. Remaining V=0; v1 settled. Successor work should review typed
   allow contexts and decide whether fail-on-introduced semantics are safe.
+
+## 2026-06-14 - Mission Corpus Graph Expansion Note
+
+- Claim tested: the settled docs truth system can absorb the mission-corpus
+  indexing update without reopening v1 or turning historical MissionGradient
+  reports into current doctrine.
+- Move: expanded `docs/mission-graph.yaml` from a seed graph into a full
+  mission-shaped-doc index and recorded a post-settlement factual-drift note in
+  the v1 paradoc.
+- Evidence: `go run ./cmd/doccheck` reports 71 mission graph nodes, 14
+  dependency edges, zero ungraphed mission-shaped docs, and no R1/R5/R6/R7
+  structural warnings.
+- Expected ΔV: 0 for v1 settlement; this is factual drift repair and successor
+  infrastructure.
+- Actual ΔV: 0. v1 remains settled.

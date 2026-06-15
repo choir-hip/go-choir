@@ -1,26 +1,29 @@
+---
 schema_version: 0
 generated: false
-status: seed
-description: >
-  Machine-readable mission DAG seed. This file is an index, not a second
-  mission ledger. Parallax State in each paradoc remains the source of current
-  mission state; this graph records discoverability, dependency, and portfolio
-  ordering.
-
+status: indexed
+description: >-
+  Machine-readable mission DAG and mission-corpus index. This file is an index, not a second
+  mission ledger. Parallax State in each paradoc remains the source of current mission state;
+  this graph records discoverability, dependency, portfolio ordering, and historical mission
+  evidence classification.
 rules:
-  - id: graph-is-dag
-    text: Mission dependency edges must remain acyclic.
-  - id: paradoc-updates-graph
-    text: Creating or materially re-scoping a repo paradoc must add or update
-      its node here in the same pass unless the mission is explicitly scratch
-      or outside-repo.
-  - id: no-double-ledger
-    text: Do not transcribe Parallax ledgers into this graph. Link the paradoc
-      and ledger only.
-  - id: doctrine-apex
-    text: This graph inherits docs/choir-doctrine.md and AGENTS.md. It does not
-      override doctrine, operating contract, or mission Parallax State.
-
+- id: graph-is-dag
+  text: Mission dependency edges must remain acyclic.
+- id: paradoc-updates-graph
+  text: >-
+    Creating or materially re-scoping a repo paradoc must add or update its node here in the
+    same pass unless the mission is explicitly scratch or outside-repo.
+- id: no-double-ledger
+  text: Do not transcribe Parallax ledgers into this graph. Link the paradoc and ledger only.
+- id: doctrine-apex
+  text: >-
+    This graph inherits docs/choir-doctrine.md and AGENTS.md. It does not override doctrine,
+    operating contract, or mission Parallax State.
+- id: historical-evidence-preserved
+  text: >-
+    Historical MissionGradient documents and mission reports are indexed for discovery without
+    rewriting their state into current Parallax doctrine.
 node_fields:
   id: stable mission id
   title: human-readable mission title
@@ -31,204 +34,780 @@ node_fields:
   depends_on: mission ids that must settle first
   enables: mission ids this node directly unlocks
   sources: high-authority docs or specs the mission executes against
-
 nodes:
-  - id: portfolio-2026-06-11
-    title: Mission Portfolio
-    path: docs/mission-portfolio-2026-06-11.md
-    ledger: docs/mission-portfolio-2026-06-11.ledger.md
-    status: working
-    kind: spine
-    depends_on: []
-    enables:
-      - m1-trajectory-model
-      - m2-messaging-cutover
-      - m3.1-lifecycle-recovery
-      - m3-lifecycle-cutover
-      - m4-continuation-deletion
-      - m5-wire-on-settlement
-      - docs-truth-system-v1
-    sources:
-      - docs/choir-doctrine.md
-      - docs/choir-rearchitecture-durable-actors-2026-06-11.md
-      - docs/conjecture-learning-proof-theory-2026-06-11.md
-      - docs/conjecture-assertion-ledger-2026-06.md
-
-  - id: m1-trajectory-model
-    title: M1 Trajectory Model
-    path: docs/mission-trajectory-model-v0.md
-    ledger: ""
-    status: settled
-    kind: spine
-    depends_on:
-      - portfolio-2026-06-11
-    enables:
-      - m2-messaging-cutover
-    sources:
-      - docs/mission-portfolio-2026-06-11.md
-
-  - id: m2-messaging-cutover
-    title: M2 Messaging Cutover
-    path: docs/mission-messaging-cutover-v0.md
-    ledger: docs/mission-messaging-cutover-v0.ledger.md
-    status: settled
-    kind: spine
-    depends_on:
-      - m1-trajectory-model
-    enables:
-      - m3.1-lifecycle-recovery
-    sources:
-      - docs/mission-portfolio-2026-06-11.md
-
-  - id: m3.1-lifecycle-recovery
-    title: M3.1 Lifecycle Cutover Regression Recovery
-    path: docs/mission-lifecycle-cutover-m3.1-v0.md
-    ledger: docs/mission-lifecycle-cutover-m3.1-v0.ledger.md
-    status: working
-    kind: spine
-    depends_on:
-      - m2-messaging-cutover
-    enables:
-      - m3-lifecycle-cutover
-    sources:
-      - docs/mission-portfolio-2026-06-11.md
-      - docs/mission-lifecycle-cutover-v0.md
-      - docs/vtext-agentic-invariants-2026-06-13.md
-      - AGENTS.md
-
-  - id: m3-lifecycle-cutover
-    title: M3 Lifecycle Cutover
-    path: docs/mission-lifecycle-cutover-v0.md
-    ledger: docs/mission-lifecycle-cutover-v0.ledger.md
-    status: blocked
-    kind: spine
-    depends_on:
-      - m3.1-lifecycle-recovery
-    enables:
-      - m4-continuation-deletion
-    sources:
-      - docs/mission-portfolio-2026-06-11.md
-
-  - id: m4-continuation-deletion
-    title: M4 Continuation Deletion
-    path: ""
-    ledger: ""
-    status: planned
-    kind: spine
-    depends_on:
-      - m3-lifecycle-cutover
-    enables:
-      - m5-wire-on-settlement
-      - m6-route-flip-consumer
-    sources:
-      - docs/mission-portfolio-2026-06-11.md
-
-  - id: m5-wire-on-settlement
-    title: M5 Wire On Settlement
-    path: docs/mission-wire-on-settlement-v0.md
-    ledger: docs/mission-wire-on-settlement-v0.ledger.md
-    status: open_handoff
-    kind: spine
-    depends_on:
-      - m4-continuation-deletion
-    enables: []
-    sources:
-      - docs/mission-portfolio-2026-06-11.md
-
-  - id: m6-route-flip-consumer
-    title: M6 Route-Profile Consumer
-    path: ""
-    ledger: ""
-    status: planned
-    kind: spine
-    depends_on:
-      - m4-continuation-deletion
-    enables:
-      - m8-dolt-rollback-window
-    sources:
-      - docs/mission-portfolio-2026-06-11.md
-
-  - id: m8-dolt-rollback-window
-    title: M8 Dolt Branching And Rollback Window
-    path: ""
-    ledger: ""
-    status: planned
-    kind: spine
-    depends_on:
-      - m6-route-flip-consumer
-    enables:
-      - m7-review-ui
-    sources:
-      - docs/mission-portfolio-2026-06-11.md
-
-  - id: m7-review-ui
-    title: M7 Changes App Review Loop
-    path: ""
-    ledger: ""
-    status: planned
-    kind: spine
-    depends_on:
-      - m8-dolt-rollback-window
-    enables: []
-    sources:
-      - docs/mission-portfolio-2026-06-11.md
-
-  - id: doc-heresy-checker-v0
-    title: Doc/Heresy Checker v0
-    path: docs/mission-doc-heresy-checker-v0.md
-    ledger: docs/mission-doc-heresy-checker-v0.ledger.md
-    status: settled
-    kind: docs_truth
-    depends_on: []
-    enables:
-      - docs-truth-system-v1
-    sources:
-      - docs/choir-doctrine.md
-      - docs/heresy-detectors.md
-
-  - id: doc-truth-drift-context-v0
-    title: Doc Truth, Drift CI, And Context Packet v0
-    path: docs/mission-doc-truth-drift-ci-context-packet-v0.md
-    ledger: docs/mission-doc-truth-drift-ci-context-packet-v0.ledger.md
-    status: open_handoff
-    kind: docs_truth
-    depends_on:
-      - doc-heresy-checker-v0
-    enables:
-      - docs-truth-system-v1
-    sources:
-      - docs/mission-doc-heresy-checker-v0.md
-      - docs/mission-heresy-detectors-ci-v0.md
-
-  - id: heresy-detectors-ci-v0
-    title: Heresy Detectors CI v0
-    path: docs/mission-heresy-detectors-ci-v0.md
-    ledger: ""
-    status: superseded
-    kind: superseded
-    depends_on: []
-    enables:
-      - docs-truth-system-v1
-    sources:
-      - docs/heresy-detectors.md
-
-  - id: docs-truth-system-v1
-    title: Docs Truth System v1
-    path: docs/mission-docs-truth-system-v1.md
-    ledger: docs/mission-docs-truth-system-v1.ledger.md
-    status: settled
-    kind: docs_truth
-    depends_on:
-      - doc-heresy-checker-v0
-      - doc-truth-drift-context-v0
-      - heresy-detectors-ci-v0
-      - portfolio-2026-06-11
-    enables:
-      - m3-lifecycle-cutover
-      - m4-continuation-deletion
-    sources:
-      - docs/choir-doctrine.md
-      - AGENTS.md
-      - docs/mission-portfolio-2026-06-11.md
-      - docs/conjecture-assertion-ledger-2026-06.md
-      - docs/heresy-detectors.md
+- id: portfolio-2026-06-11
+  title: Mission Portfolio
+  path: docs/mission-portfolio-2026-06-11.md
+  ledger: docs/mission-portfolio-2026-06-11.ledger.md
+  status: working
+  kind: spine
+  depends_on: []
+  enables:
+  - m1-trajectory-model
+  - m2-messaging-cutover
+  - m3.1-lifecycle-recovery
+  - m3.2-vtext-prompt-decision-notes
+  - m3-lifecycle-cutover
+  - m4-continuation-deletion
+  - m5-wire-on-settlement
+  - docs-truth-system-v1
+  sources:
+  - docs/choir-doctrine.md
+  - docs/choir-rearchitecture-durable-actors-2026-06-11.md
+  - docs/conjecture-learning-proof-theory-2026-06-11.md
+  - docs/conjecture-assertion-ledger-2026-06.md
+- id: m1-trajectory-model
+  title: M1 Trajectory Model
+  path: docs/mission-trajectory-model-v0.md
+  ledger: ''
+  status: settled
+  kind: spine
+  depends_on:
+  - portfolio-2026-06-11
+  enables:
+  - m2-messaging-cutover
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: m2-messaging-cutover
+  title: M2 Messaging Cutover
+  path: docs/mission-messaging-cutover-v0.md
+  ledger: docs/mission-messaging-cutover-v0.ledger.md
+  status: settled
+  kind: spine
+  depends_on:
+  - m1-trajectory-model
+  enables:
+  - m3.1-lifecycle-recovery
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: m3.1-lifecycle-recovery
+  title: M3.1 Lifecycle Cutover Regression Recovery
+  path: docs/mission-lifecycle-cutover-m3.1-v0.md
+  ledger: docs/mission-lifecycle-cutover-m3.1-v0.ledger.md
+  status: settled
+  kind: spine
+  depends_on:
+  - m2-messaging-cutover
+  enables:
+  - m3.2-vtext-prompt-decision-notes
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+  - docs/mission-lifecycle-cutover-v0.md
+  - docs/vtext-agentic-invariants-2026-06-13.md
+  - AGENTS.md
+- id: m3.2-vtext-prompt-decision-notes
+  title: M3.2 VText Prompt Register And Decision Notes
+  path: docs/mission-vtext-prompt-decision-notes-m3.2-v0.md
+  ledger: docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md
+  status: open_handoff
+  kind: spine
+  depends_on:
+  - m3.1-lifecycle-recovery
+  enables:
+  - m3-lifecycle-cutover
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+  - docs/mission-lifecycle-cutover-m3.1-v0.md
+  - docs/vtext-agentic-invariants-2026-06-13.md
+  - AGENTS.md
+- id: m3-lifecycle-cutover
+  title: M3 Lifecycle Cutover
+  path: docs/mission-lifecycle-cutover-v0.md
+  ledger: docs/mission-lifecycle-cutover-v0.ledger.md
+  status: blocked
+  kind: spine
+  depends_on:
+  - m3.2-vtext-prompt-decision-notes
+  enables:
+  - m4-continuation-deletion
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: m4-continuation-deletion
+  title: M4 Continuation Deletion
+  path: ''
+  ledger: ''
+  status: planned
+  kind: spine
+  depends_on:
+  - m3-lifecycle-cutover
+  enables:
+  - m5-wire-on-settlement
+  - m6-route-flip-consumer
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: m5-wire-on-settlement
+  title: M5 Wire On Settlement
+  path: docs/mission-wire-on-settlement-v0.md
+  ledger: docs/mission-wire-on-settlement-v0.ledger.md
+  status: open_handoff
+  kind: spine
+  depends_on:
+  - m4-continuation-deletion
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: m6-route-flip-consumer
+  title: M6 Route-Profile Consumer
+  path: ''
+  ledger: ''
+  status: planned
+  kind: spine
+  depends_on:
+  - m4-continuation-deletion
+  enables:
+  - m8-dolt-rollback-window
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: m8-dolt-rollback-window
+  title: M8 Dolt Branching And Rollback Window
+  path: ''
+  ledger: ''
+  status: planned
+  kind: spine
+  depends_on:
+  - m6-route-flip-consumer
+  enables:
+  - m7-review-ui
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: m7-review-ui
+  title: M7 Changes App Review Loop
+  path: ''
+  ledger: ''
+  status: planned
+  kind: spine
+  depends_on:
+  - m8-dolt-rollback-window
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: doc-heresy-checker-v0
+  title: Doc/Heresy Checker v0
+  path: docs/mission-doc-heresy-checker-v0.md
+  ledger: docs/mission-doc-heresy-checker-v0.ledger.md
+  status: settled
+  kind: docs_truth
+  depends_on: []
+  enables:
+  - docs-truth-system-v1
+  sources:
+  - docs/choir-doctrine.md
+  - docs/heresy-detectors.md
+- id: doc-truth-drift-context-v0
+  title: Doc Truth, Drift CI, And Context Packet v0
+  path: docs/mission-doc-truth-drift-ci-context-packet-v0.md
+  ledger: docs/mission-doc-truth-drift-ci-context-packet-v0.ledger.md
+  status: open_handoff
+  kind: docs_truth
+  depends_on:
+  - doc-heresy-checker-v0
+  enables:
+  - docs-truth-system-v1
+  sources:
+  - docs/mission-doc-heresy-checker-v0.md
+  - docs/mission-heresy-detectors-ci-v0.md
+- id: heresy-detectors-ci-v0
+  title: Heresy Detectors CI v0
+  path: docs/mission-heresy-detectors-ci-v0.md
+  ledger: ''
+  status: superseded
+  kind: superseded
+  depends_on: []
+  enables:
+  - docs-truth-system-v1
+  sources:
+  - docs/heresy-detectors.md
+- id: docs-truth-system-v1
+  title: Docs Truth System v1
+  path: docs/mission-docs-truth-system-v1.md
+  ledger: docs/mission-docs-truth-system-v1.ledger.md
+  status: settled
+  kind: docs_truth
+  depends_on:
+  - doc-heresy-checker-v0
+  - doc-truth-drift-context-v0
+  - heresy-detectors-ci-v0
+  - portfolio-2026-06-11
+  enables:
+  - m3-lifecycle-cutover
+  - m4-continuation-deletion
+  sources:
+  - docs/choir-doctrine.md
+  - AGENTS.md
+  - docs/mission-portfolio-2026-06-11.md
+  - docs/conjecture-assertion-ledger-2026-06.md
+  - docs/heresy-detectors.md
+- id: agentic-debugging-vtext-stability-v0
+  title: 'MissionGradient: Agentic Debugging And VText Stability v0'
+  path: docs/mission-agentic-debugging-vtext-stability-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: apps-and-changes-store-sweep-v0
+  title: 'MissionGradient: Apps & Changes Store Sweep v0'
+  path: docs/mission-apps-and-changes-store-sweep-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: campaign-compiler-selfdev-v0
+  title: 'MissionGradient: Campaign Compiler Self-Development v0'
+  path: docs/mission-campaign-compiler-selfdev-v0.md
+  ledger: ''
+  status: planned
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: choir-base-reconciliation-kernel-v0
+  title: 'MissionGradient v0: Choir Base Reconciliation Kernel'
+  path: docs/mission-choir-base-reconciliation-kernel-v0.md
+  ledger: ''
+  status: planned
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: choir-doctrine-upgrade-v0
+  title: Mission - Choir Doctrine Upgrade - v0
+  path: docs/mission-choir-doctrine-upgrade-v0.md
+  ledger: docs/mission-choir-doctrine-upgrade-v0.ledger.md
+  status: settled
+  kind: docs_truth
+  depends_on: []
+  enables: []
+  sources:
+  - docs/choir-doctrine.md
+  - docs/heresy-detectors.md
+- id: choir-grand-deformation-v0
+  title: 'MissionGradient: Choir Grand Deformation v0'
+  path: docs/mission-choir-grand-deformation-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: choir-in-choir-platform-pr-accelerator-v0
+  title: 'Mission: Choir-in-Choir Platform PR Accelerator'
+  path: docs/mission-choir-in-choir-platform-pr-accelerator-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: computer-recovery-system-monitor-v0
+  title: 'MissionGradient: Computer Recovery And System Monitor v0'
+  path: docs/mission-computer-recovery-system-monitor-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: conductor-url-source-routing-h029-v0
+  title: Mission - VText Source Intake And Conductor URL Routing H029 - v0
+  path: docs/mission-conductor-url-source-routing-h029-v0.md
+  ledger: docs/mission-conductor-url-source-routing-h029-v0.ledger.md
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: demo-stability-foundations-v0
+  title: 'Mission: Demo Stability Foundations v0'
+  path: docs/mission-demo-stability-foundations-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: deploy-impact-isolation-cache-v1
+  title: 'MissionGradient: Deploy Impact Isolation And Cache v1'
+  path: docs/mission-deploy-impact-isolation-cache-v1.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: docs-revision-v1
+  title: 'Mission M9: Docs Revision + Heresy Sweep — v1 — 2026-06-11'
+  path: docs/mission-docs-revision-v1.md
+  ledger: ''
+  status: settled
+  kind: docs_truth
+  depends_on: []
+  enables: []
+  sources:
+  - docs/choir-doctrine.md
+  - docs/heresy-detectors.md
+- id: doctrine-conformance-findings-2026-06-13
+  title: Doctrine Conformance Update Report — 2026-06-13
+  path: docs/mission-doctrine-conformance-findings-2026-06-13.md
+  ledger: ''
+  status: open_handoff
+  kind: evidence
+  depends_on: []
+  enables: []
+  sources:
+  - docs/choir-doctrine.md
+- id: email-demo-ingress-v0
+  title: 'MissionGradient: Email Demo Ingress v0'
+  path: docs/mission-email-demo-ingress-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: geometry
+  title: Choir Mission Geometry
+  path: docs/mission-geometry.md
+  ledger: ''
+  status: open_handoff
+  kind: evidence
+  depends_on: []
+  enables: []
+  sources:
+  - docs/choir-doctrine.md
+- id: global-wire-broad-source-vtext-newsroom-v0
+  title: 'Mission: Global Wire Broad-Source VText Newsroom'
+  path: docs/mission-global-wire-broad-source-vtext-newsroom-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: global-wire-hard-cutover-real-newsroom-v0
+  title: 'Mission: Global Wire Hard Cutover To Real VText Newsroom'
+  path: docs/mission-global-wire-hard-cutover-real-newsroom-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: global-wire-living-vtext-newsroom-v1
+  title: 'Mission: Global Wire Living VText Newsroom'
+  path: docs/mission-global-wire-living-vtext-newsroom-v1.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: global-wire-sourcemaxx-publication-system-v0
+  title: 'Mission: Global Wire SourceMaxx Newsroom Runtime'
+  path: docs/mission-global-wire-sourcemaxx-publication-system-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: global-wire-style-vtext-collaborative-storygraph-v0
+  title: 'Mission: Global Wire / Style.vtext Collaborative StoryGraph'
+  path: docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: human-proof-experiment-rerun-v1
+  title: 'MissionGradient: Human-Proof Experiment Rerun v1'
+  path: docs/mission-human-proof-experiment-rerun-v1.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: llm-run-memory-compaction-v0
+  title: LLM Run-Memory Compaction Mission v0
+  path: docs/mission-llm-run-memory-compaction-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: maild-email-ingress-v0
+  title: 'Mission: maild Email Ingress v0'
+  path: docs/mission-maild-email-ingress-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: natural-compaction-pdf-recall-eval-v0
+  title: Natural Compaction Document Recall Eval Mission v0
+  path: docs/mission-natural-compaction-pdf-recall-eval-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: node-b-nix-store-retention-v0
+  title: Node B Nix Store Retention Mission v0
+  path: docs/mission-node-b-nix-store-retention-v0.md
+  ledger: docs/mission-node-b-nix-store-retention-v0.ledger.md
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: node-b-storage-retention-v0
+  title: 'Mission: Node B Storage Retention And VM State Prevention v0'
+  path: docs/mission-node-b-storage-retention-v0.md
+  ledger: docs/mission-node-b-storage-retention-v0.ledger.md
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: platform-source-service-vtext-publication-campaign-v1
+  title: 'MissionGradient Campaign v1: Platform Source Service, VText Sources, And Publication'
+  path: docs/mission-platform-source-service-vtext-publication-campaign-v1.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: provider-config-conformance-v0
+  title: Provider Config Conformance Mission v0
+  path: docs/mission-provider-config-conformance-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: public-pulse-app-v0
+  title: Public Pulse App Mission v0
+  path: docs/mission-public-pulse-app-v0.md
+  ledger: docs/mission-public-pulse-app-v0.ledger.md
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: report-natural-compaction-document-recall-2026-06-09
+  title: 'Mission Report: Natural Compaction Document Recall Eval'
+  path: docs/mission-report-natural-compaction-document-recall-2026-06-09.md
+  ledger: ''
+  status: settled
+  kind: evidence
+  depends_on: []
+  enables: []
+  sources:
+  - docs/choir-doctrine.md
+- id: report-universal-wire-production-recovery-2026-06-10
+  title: 'Mission Report: Universal Wire Production Recovery — 2026-06-10'
+  path: docs/mission-report-universal-wire-production-recovery-2026-06-10.md
+  ledger: ''
+  status: open_handoff
+  kind: evidence
+  depends_on: []
+  enables: []
+  sources:
+  - docs/choir-doctrine.md
+- id: report-wire-community-news-2026-06-09
+  title: 'Mission Report: Wire Community News'
+  path: docs/mission-report-wire-community-news-2026-06-09.md
+  ledger: ''
+  status: settled
+  kind: evidence
+  depends_on: []
+  enables: []
+  sources:
+  - docs/choir-doctrine.md
+- id: research-runtime-evidence-cadence-v1
+  title: 'MissionGradient: Research Runtime Evidence Cadence v1'
+  path: docs/mission-research-runtime-evidence-cadence-v1.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: run-memory-v0
+  title: 'MissionGradient: Choir Run Memory v0'
+  path: docs/mission-run-memory-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: runtime-human-proof-experiment-rerun-v1
+  title: 'MissionGradient: Runtime Human-Proof Experiment Rerun v1'
+  path: docs/mission-runtime-human-proof-experiment-rerun-v1.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: runtime-model-context-substrate-v0
+  title: 'MissionGradient: Runtime Model And Context Substrate v0'
+  path: docs/mission-runtime-model-context-substrate-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: runtime-test-pyramid-hardening-v0
+  title: 'MissionGradient: Runtime Test Pyramid Hardening v0'
+  path: docs/mission-runtime-test-pyramid-hardening-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: search-provider-plane-v1
+  title: 'MissionGradient: Search Provider Plane v1'
+  path: docs/mission-search-provider-plane-v1.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: source-system-hard-review-2026-06-06
+  title: Source System Mission Hard Review
+  path: docs/mission-source-system-hard-review-2026-06-06.md
+  ledger: ''
+  status: open_handoff
+  kind: evidence
+  depends_on: []
+  enables: []
+  sources:
+  - docs/choir-doctrine.md
+- id: source-system-loop8-simplify-v0
+  title: 'Source System Loop 8: Simplify, Stabilize, Modularize'
+  path: docs/mission-source-system-loop8-simplify-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: source-system-simplify-secure-smart-v0
+  title: 'MissionGradient v0: Source System Simplification, Security, And Intelligence'
+  path: docs/mission-source-system-simplify-secure-smart-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: standalone-sourcecycled-data-platform-v0
+  title: 'MissionGradient: Standalone Sourcecycled Data Platform v0'
+  path: docs/mission-standalone-sourcecycled-data-platform-v0.md
+  ledger: ''
+  status: planned
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: super-console-real-zot-cutover-v0
+  title: Super Console Real Zot Cutover
+  path: docs/mission-super-console-real-zot-cutover-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: super-console-source-mount-promotion-v0
+  title: 'MissionGradient: Super Console Source Mount And Promotion v0'
+  path: docs/mission-super-console-source-mount-promotion-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: surface-ontology-cleanup-h027-h029-v0
+  title: Mission - Surface Ontology Cleanup H027-H029 - v0
+  path: docs/mission-surface-ontology-cleanup-h027-h029-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: docs_truth
+  depends_on: []
+  enables: []
+  sources:
+  - docs/choir-doctrine.md
+  - docs/heresy-detectors.md
+- id: vtext-client-ready-source-transclusion-pretext-v0
+  title: 'MissionGradient v0: Client-Ready VText Source Transclusion And Proposal Cleanup'
+  path: docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: vtext-fluid-editing-doc-roundtrip-transclusion-v0
+  title: 'MissionGradient v0: VText Fluid Editing, Document Roundtrip, And Source Transclusion'
+  path: docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md
+  ledger: ''
+  status: settled
+  kind: docs_truth
+  depends_on: []
+  enables: []
+  sources:
+  - docs/choir-doctrine.md
+  - docs/heresy-detectors.md
+- id: vtext-live-cadence-repair-v3
+  title: 'MissionGradient: VText Live Cadence Repair v3'
+  path: docs/mission-vtext-live-cadence-repair-v3.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: vtext-source-entities-multimedia-transclusion-v0
+  title: 'Mission Campaign: VText Source Entities, Multimedia Review, And Transclusion v0'
+  path: docs/mission-vtext-source-entities-multimedia-transclusion-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: vtext-source-viewer-reader-mode-hardening-v0
+  title: 'MissionGradient v0: Source Viewer Reader-Mode Hardening And Source UX Simplification'
+  path: docs/mission-vtext-source-viewer-reader-mode-hardening-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: vtext-version-compare-merge-debuggability-v1
+  title: 'MissionGradient v1: VText Version Compare, Concept Merge, And Debuggability'
+  path: docs/mission-vtext-version-compare-merge-debuggability-v1.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: web-surface-rationalization-v0
+  title: 'MissionGradient: Web Surface Rationalization v0'
+  path: docs/mission-web-surface-rationalization-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: wire-autonomous-ingestion-v1
+  title: 'Mission Archive: Wire Autonomous Ingestion (v1)'
+  path: docs/mission-wire-autonomous-ingestion-v1.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: wire-community-news-v0
+  title: 'MissionGradient: Wire Community News'
+  path: docs/mission-wire-community-news-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: wire-community-news-v1
+  title: 'MissionGradient: Universal Wire (Wire Community News)'
+  path: docs/mission-wire-community-news-v1.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: wire-settlement-substrate-v0
+  title: Mission M5a — Wire Settlement Substrate (split from M5 evidence gate) — v0
+  path: docs/mission-wire-settlement-substrate-v0.md
+  ledger: ''
+  status: open_handoff
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md
+- id: youtube-review-studio-v0
+  title: 'MissionGradient: YouTube And Image Review Studio v0'
+  path: docs/mission-youtube-review-studio-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md

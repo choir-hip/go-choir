@@ -148,8 +148,8 @@ detector accounting.
 position / live conjectures / open edges: doccheck is now a report-only docs
 truth system slice, not just Markdown warning output. The mission graph is a
 seed, so the report records 58 ungraphed historical/current paradocs without
-making that a failure. The assertion ledger has 6 assertions, 5 invariant
-candidates, and 4 open edges. The code/docs heresy baseline has 2413 findings:
+making that a failure. The assertion ledger has 6 assertions, 7 invariant
+candidates, and 5 open edges. The code/docs heresy baseline has 2413 findings:
 1863 `current-violation`, 77 `detector-definition`, 36
 `explicitly-deprecated`, 369 `historical-evidence`, and 68
 `implementation-transitional`. The remaining edge is policy, not mechanics:
@@ -179,6 +179,11 @@ truth spine, doccheck validates graph/register structure, code and docs heresy
 surfaces are scanned with typed contexts, and CI/report behavior remains
 report-only unless an owner-approved introduced-heresy gate exists. Status:
 satisfied for v1 by the evidence packet above.
+
+post-settlement note (2026-06-14): the mission graph has since expanded from a
+seed graph into a mission-corpus index with 71 nodes, 14 dependency edges, and
+zero ungraphed mission-shaped docs under `go run ./cmd/doccheck`; this corrects
+factual drift without reopening v1's original settlement claim.
 
 ## Suggested Goal String
 
