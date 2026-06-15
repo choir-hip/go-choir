@@ -80,8 +80,9 @@ auditable through the runtime evidence substrate.
   and UI visibility are product-path behavior.
 
 **variant (ranking function) V:** current V=2:
-1. repair the deployed explicit no-worker VText path so the durable decision
-   row is recorded before any canonical edit can carry the private rationale.
+1. repair the deployed prompt-bar VText route so explicit no-worker decision
+   prompts cannot enter the persistent-super handoff before a durable decision
+   row exists.
 2. reland the behavior change on `origin/main`, monitor CI/deploy, verify
    staging identity, and run deployed product-path proof.
 
@@ -267,18 +268,21 @@ states reasons without forcing choreography.
   relies on owner, conductor profile, existing VText document channel, and
   durable no-worker prompt text. It no longer requires stored prompt-bar app
   metadata fields that the deployed conductor route may not carry.
-- Deployed redirect-predicate repair changed the route shape but still failed
-  M3.2: staging at `025fe3020f597637a302c272004b0c8719c7f7a2` started with a
-  VText loop and produced two revisions, but VText diagnosis returned zero
-  decision rows and Trace returned zero decision moments. The private
-  no-worker reason appeared transiently in the first revision sample before the
-  final revision removed it, so final canonical text was clean but the route
-  still allowed pre-decision canonical pollution.
+- Deployed redirect-predicate repair still failed M3.2: staging at
+  `025fe3020f597637a302c272004b0c8719c7f7a2` produced zero decision rows and
+  zero Trace decision moments. Follow-up public diagnosis artifact
+  `/tmp/vtext-decision-full-diagnostic-1781493917187.json` showed the stored
+  conductor route still had `initial_handoff=persistent_super`; the later
+  VText run was a scheduled worker-integration turn with no deterministic
+  decision metadata. The private no-worker reason appeared in the user prompt
+  revision and was absent from the final appagent revision, but the off-document
+  decision row never existed.
 
-**next move:** inspect and repair the VText initial decision persistence
-boundary for the deployed prompt-bar path now that `initial_loop_id` is VText,
-then rerun focused route/decision tests, push `origin main`, monitor CI/deploy,
-verify staging identity, and rerun deployed proof.
+**next move:** inspect and repair the prompt-bar route predicate/metadata
+boundary that still allows explicit no-worker VText prompts to enter
+`persistent_super`, then rerun focused route/decision tests, push
+`origin main`, monitor CI/deploy, verify staging identity, and rerun deployed
+proof.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -645,30 +649,41 @@ browser-public internal routes. Proof artifact
 `f6dcce66-40dc-44d7-9e5a-4392cb2f3967`, document
 `b44d2c31-8348-410c-bd99-517a52bbc933`, and initial loop
 `3e411e52-cdc3-4ce8-b992-10cc9b054e2a`. Trace agents were conductor, `super`,
-and VText, but `initial_loop_id` now matched the VText loop. The proof ended
-with diagnosis decisions `0`, Trace decision moments `0`,
+and VText. The proof ended with diagnosis decisions `0`, Trace decision moments `0`,
 `canonical_contains_reason=false`, revision count `2`, and forbidden internal
 routes `[]`. Evidence samples showed `canonical_contains_reason=true` for the
 first revision and `false` after the final revision, so the private reason was
 transiently written before being removed.
 
-Conjecture delta: relaxing the redirect predicate fixed the specific
-super-first initial-loop symptom, but it did not make the deterministic
-decision row persist on the deployed VText path. The next repair must focus on
-the initial VText decision persistence boundary rather than another broad
-super-route guard: the deployed route can now reach VText first and still edit
-before a durable `vtext_decisions` row exists.
+Follow-up public diagnosis artifact
+`/tmp/vtext-decision-full-diagnostic-1781493917187.json` on the same deployed
+commit recorded submission `cf29eb8b-f9f5-45a4-afef-f2abb4ad71bd`, document
+`bc7479ab-2094-4b22-8057-f8f1fa178fc2`, and initial loop
+`fbb2876b-9b01-4a01-9055-a8a58094179d`. Public run metadata showed the
+conductor route persisted `initial_handoff=persistent_super`; the VText run had
+`parent_id=fbb2876b-9b01-4a01-9055-a8a58094179d`, `scheduled_message_seq=2`,
+`request_intent=integrate_worker_findings`, and no
+`vtext_initial_decision_required` metadata. This corrects the initial reading:
+the deployed failure remains a persistent-super route bypass, not a
+VText-initial decision-persistence failure.
 
-Protected surfaces: prompt-bar-to-VText handoff metadata, pre-activation
-decision recording, VText canonical revision creation, Trace decision
-projection, diagnosis decision exposure, and persistent-super fallback
-routing.
+Conjecture delta: relaxing the redirect predicate did not fix the deployed
+super-first route. The next repair must identify why the no-worker route flag
+or prompt-derived predicate is absent at the conductor route branch even though
+the stored seed prompt contains `decision_kind no_worker_needed` and "no
+research or execution worker."
+
+Protected surfaces: prompt-bar route metadata, conductor VText handoff
+selection, persistent-super fallback routing, pre-activation decision
+recording, Trace decision projection, diagnosis decision exposure, and
+canonical VText revision creation.
 
 Admissible evidence class: focused runtime tests reproducing the deployed
-VText-initial route shape and proving the decision row exists before any edit;
-deployed product-path proof showing one matching diagnosis decision, one
-matching Trace decision moment, no forbidden routes, and no private reason in
-any observed canonical revision sample.
+stored-conductor route shape and proving explicit no-worker prompts bypass
+persistent super and create a decision row before any appagent edit; deployed
+product-path proof showing one matching diagnosis decision, one matching Trace
+decision moment, no forbidden routes, and no private reason in the final
+canonical revision.
 
 Rollback path: revert the next decision-persistence repair if it records false
 or duplicate decision notes, blocks ordinary VText edits, or suppresses required
@@ -676,10 +691,10 @@ super routing for real execution work. Keep this checkpoint as evidence that
 final canonical cleanliness does not settle M3.2 when transient pre-decision
 pollution and missing durable decision rows remain.
 
-Heresy delta: discovered: even a VText-initial deployed path can create a
-canonical revision before deterministic off-document decision persistence
-fires. introduced: none accepted. repaired: pending decision-persistence
-repair.
+Heresy delta: discovered: the deployed prompt-bar route can still persist
+`initial_handoff=persistent_super` for explicit no-worker VText prompts even
+after local route and redirect predicates pass. introduced: none accepted.
+repaired: pending route-predicate repair.
 
 ## Suggested Goal String
 

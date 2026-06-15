@@ -216,15 +216,15 @@ deployed product-path proof.
 
 ## 2026-06-15 - Staging Redirect-Predicate Repair Checkpoint
 
-Claim/scope: the redirect-predicate repair deployed cleanly and changed the
-route shape, but the deployed proof still failed the durable decision-table
-requirement. The initial loop is now VText rather than super, yet VText still
-created canonical revisions without any matching off-document decision row or
-Trace decision moment.
+Claim/scope: the redirect-predicate repair deployed cleanly, but the deployed
+proof still failed the durable decision-table requirement. A follow-up public
+diagnosis showed the stored conductor route still selected
+`initial_handoff=persistent_super`; the VText run was only a later scheduled
+worker-integration turn with no deterministic decision metadata.
 
-Move: document the deployed failure before changing runtime decision
-persistence again. Expected Delta V: close the landing/staging proof. Actual
-Delta V: V=1 to V=2, with a VText-initial decision-persistence gap pending.
+Move: document the deployed failure before changing runtime routing again.
+Expected Delta V: close the landing/staging proof. Actual Delta V: V=1 to V=2,
+with the persistent-super route bypass still pending.
 
 Receipts:
 - Commit `025fe3020f597637a302c272004b0c8719c7f7a2` passed CI run
@@ -242,16 +242,24 @@ Receipts:
 - Observed diagnosis decisions `0`, Trace decision moments `0`,
   `canonical_contains_reason=false`, revision count `2`, forbidden internal
   routes `[]`.
-- Trace agents included conductor, `super`, and VText; unlike earlier
-  failures, `initial_loop_id` now matched the VText loop.
+- Trace agents included conductor, `super`, and VText.
 - Evidence samples showed the private no-worker reason in the first canonical
   revision sample and absent from the final revision, so the final state was
   clean but transient pre-decision canonical pollution still occurred.
+- Follow-up public diagnosis artifact:
+  `/tmp/vtext-decision-full-diagnostic-1781493917187.json`.
+- Diagnostic submission `cf29eb8b-f9f5-45a4-afef-f2abb4ad71bd`, document
+  `bc7479ab-2094-4b22-8057-f8f1fa178fc2`, initial loop
+  `fbb2876b-9b01-4a01-9055-a8a58094179d`.
+- Diagnostic public run metadata showed conductor
+  `initial_handoff=persistent_super`; the VText run had
+  `parent_id=fbb2876b-9b01-4a01-9055-a8a58094179d`,
+  `scheduled_message_seq=2`, `request_intent=integrate_worker_findings`, and
+  no `vtext_initial_decision_required` metadata.
 
-Open edge: inspect and repair the prompt-bar-to-VText initial decision
-persistence boundary so the explicit no-worker decision row exists before any
-canonical edit, then rerun focused route/decision tests and deployed
-product-path proof.
+Open edge: inspect and repair the prompt-bar route predicate/metadata boundary
+that still lets explicit no-worker VText prompts enter persistent super, then
+rerun focused route/decision tests and deployed product-path proof.
 
 ## 2026-06-15 - Staging Route-Carrier Repair Checkpoint
 
