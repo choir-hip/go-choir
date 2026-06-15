@@ -271,9 +271,9 @@
     if (ctx?.fileName) return ctx.fileName;
     if (ctx?.sourcePath) {
       const bits = ctx.sourcePath.split('/');
-      return bits[bits.length - 1] || 'VText';
+      return bits[bits.length - 1] || 'Texture';
     }
-    return 'VText';
+    return 'Texture';
   }
 
   function publishWindowContext(nextContext = {}, title = '') {
@@ -294,11 +294,11 @@
     if (!currentDoc?.doc_id) return;
     publishWindowContext({
       docId: currentDoc.doc_id,
-      windowTitle: title || currentDoc.title || appContext.windowTitle || 'VText',
+      windowTitle: title || currentDoc.title || appContext.windowTitle || 'Texture',
       createInitialVersion: false,
       initialContent: '',
       seedPrompt: '',
-    }, title || currentDoc.title || appContext.windowTitle || 'VText');
+    }, title || currentDoc.title || appContext.windowTitle || 'Texture');
   }
 
   function getAuthorLabel() {
@@ -649,7 +649,7 @@
     dispatch('contextchange', {
       windowId,
       appContext,
-      title: appContext.windowTitle || appContext.fileName || 'VText',
+      title: appContext.windowTitle || appContext.fileName || 'Texture',
     });
   }
 
@@ -663,7 +663,7 @@
   async function ensureCurrentRevisionSaved(statusPrefix = 'Saving user version…') {
     if (!currentDoc) return null;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'save_vtext', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'save_vtext', appId: 'vtext', appName: 'Texture', title: currentDoc.title });
       return null;
     }
     if (autosavePromise) {
@@ -900,7 +900,7 @@
           return;
         }
         showRecent = true;
-        saveStatus = 'Recent VTexts';
+        saveStatus = 'Recent Textures';
         await loadRecentDocuments();
         return;
       }
@@ -964,7 +964,7 @@
         dispatch('authexpired');
         return;
       }
-      error = err.message || 'Failed to initialize VText';
+      error = err.message || 'Failed to initialize Texture';
     } finally {
       loading = false;
     }
@@ -1004,7 +1004,7 @@
     lastAutosavedContent = editorValue;
     const ref = buildPublishedTransclusionRef(bundle);
     publishedTransclusions = ref ? [ref] : [];
-    saveStatus = currentUser ? 'Published VText loaded' : 'Guest published VText';
+    saveStatus = currentUser ? 'Published Texture loaded' : 'Guest published Texture';
 
     if (appContext.startPublishedDerivative && currentUser) {
       await createPublishedDerivative({ auto: true });
@@ -1022,7 +1022,7 @@
         dispatch('authexpired');
         return;
       }
-      error = err.message || 'Failed to load recent VTexts';
+      error = err.message || 'Failed to load recent Textures';
     } finally {
       recentLoading = false;
     }
@@ -1078,9 +1078,9 @@
     if (!doc?.doc_id) return;
     publishWindowContext({
       docId: doc.doc_id,
-      windowTitle: doc.title || 'VText',
+      windowTitle: doc.title || 'Texture',
       createInitialVersion: false,
-    }, doc.title || 'VText');
+    }, doc.title || 'Texture');
     await loadContext();
   }
 
@@ -1099,7 +1099,7 @@
     toolbarHideSettleUntil = 0;
     error = '';
     try {
-      currentDoc = await createDocument('Untitled VText');
+      currentDoc = await createDocument('Untitled Texture');
       latestHeadRevisionId = currentDoc.current_revision_id || '';
       revisions = [];
       activeRevisionIndex = -1;
@@ -1108,14 +1108,14 @@
       lastAutosavedContent = '';
       saveStatus = 'Blank document ready';
       await ensureFileManifest();
-      publishCurrentDocumentContext('Untitled VText');
+      publishCurrentDocumentContext('Untitled Texture');
       connectDocumentStream(currentDoc.doc_id);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
-      error = err.message || 'Failed to create VText';
+      error = err.message || 'Failed to create Texture';
       showRecent = true;
     } finally {
       loading = false;
@@ -1125,7 +1125,7 @@
   async function handlePrompt() {
     if (!currentDoc || loading || submitting || agentPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'save_vtext', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'save_vtext', appId: 'vtext', appName: 'Texture', title: currentDoc.title });
       return;
     }
 
@@ -1148,7 +1148,7 @@
         dispatch('authexpired');
         return;
       }
-      error = err.message || 'Failed to prompt VText';
+      error = err.message || 'Failed to prompt Texture';
       saveStatus = 'Prompt failed';
       agentPending = false;
     } finally {
@@ -1182,7 +1182,7 @@
   async function handlePublishCurrent() {
     if (!currentDoc || isPublishedMode || loading || submitting || agentPending || publishedActionPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'publish_vtext', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'publish_vtext', appId: 'vtext', appName: 'Texture', title: currentDoc.title });
       return;
     }
     publishedActionPending = true;
@@ -1212,7 +1212,7 @@
         dispatch('authexpired');
         return;
       }
-      error = err.message || 'Failed to publish VText';
+      error = err.message || 'Failed to publish Texture';
       saveStatus = 'Publish failed';
     } finally {
       publishedActionPending = false;
@@ -1372,7 +1372,7 @@
       return;
     }
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'vtext_diagnosis', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'vtext_diagnosis', appId: 'vtext', appName: 'Texture', title: currentDoc.title });
       return;
     }
     const controller = new AbortController();
@@ -1420,7 +1420,7 @@
   async function handleApplySourceReview() {
     if (!currentDoc?.doc_id || !currentRevision?.revision_id || sourceRepairPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'vtext_source_repair', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'vtext_source_repair', appId: 'vtext', appName: 'Texture', title: currentDoc.title });
       return;
     }
     ensureSourceReviewSelection();
@@ -1491,7 +1491,7 @@
     const entity = selectedSourceEntity();
     if (!currentDoc?.doc_id || !currentRevision?.revision_id || !entity || sourceArtifactPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'vtext_source_artifact', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'vtext_source_artifact', appId: 'vtext', appName: 'Texture', title: currentDoc.title });
       return;
     }
     const sourceURL = sourceArtifactURL.trim() || sourceEntityTargetURL(entity);
@@ -1538,7 +1538,7 @@
     const entity = selectedSourceEntity();
     if (!currentDoc?.doc_id || !currentRevision?.revision_id || !entity || sourceArtifactPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'vtext_source_artifact', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'vtext_source_artifact', appId: 'vtext', appName: 'Texture', title: currentDoc.title });
       return;
     }
     const text = sourceArtifactText.trim();
@@ -1629,7 +1629,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = exported.filename || `published-vtext.${format}`;
+      a.download = exported.filename || `published-texture.${format}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -1758,11 +1758,11 @@
     if (!docID) return '';
     const entity = relatedVTextForDocID(docID);
     const revisionID = vtextEntityPinnedRevisionID(entity, relatedRef?.getAttribute?.('data-vtext-related-revision-id') || '');
-    const title = String(entity?.title || entity?.label || relatedRef?.getAttribute?.('data-vtext-label') || 'Related VText').trim();
+    const title = String(entity?.title || entity?.label || relatedRef?.getAttribute?.('data-vtext-label') || 'Related Texture').trim();
     const snapshot = String(entity?.transclusion?.snapshot_text || entity?.snapshot_text || '').trim();
     dispatch('launchapp', {
       appId: 'vtext',
-      appName: 'VText',
+      appName: 'Texture',
       icon: '📝',
       appContext: {
         windowTitle: title,
@@ -1963,7 +1963,7 @@
     appContext?.appHint === 'universal-wire'
   );
   $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly || isForeignPlatformWireArticle;
-  $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published VText document' : 'VText document';
+  $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published Texture document' : 'Texture document';
   $: editorSurfaceAriaMultiline = isPublishedReadOnly ? undefined : 'true';
   $: revisionLineLabel = isViewingHistorical ? 'Historical' : 'Latest';
   $: previousVersionLabel = activeRevisionIndex > 0 ? versionLabelForRevision(revisions[activeRevisionIndex - 1], activeRevisionIndex - 1) : '';
@@ -2035,9 +2035,9 @@
   {#if showRecent}
     <section class="recent-panel" data-vtext-recent>
       <div class="recent-hero">
-        <p class="eyebrow">VText</p>
+        <p class="eyebrow">Texture</p>
         <h2>Recent living documents</h2>
-        <p>Open an existing document, or start a clean one. Prompt-bar requests still create agentic VTexts directly.</p>
+        <p>Open an existing document, or start a clean one. Prompt-bar requests still create agentic Textures directly.</p>
       </div>
 
       <div class="recent-actions">
@@ -2048,13 +2048,13 @@
 
       <div class="recent-list" data-vtext-recent-list>
         {#if recentLoading}
-          <div class="recent-empty">Loading recent VTexts…</div>
+          <div class="recent-empty">Loading recent Textures…</div>
         {:else if recentDocuments.length === 0}
-          <div class="recent-empty">No VTexts yet.</div>
+          <div class="recent-empty">No Textures yet.</div>
         {:else}
           {#each recentDocuments as doc (doc.doc_id)}
             <button class="recent-card" data-vtext-recent-document on:click={() => handleOpenRecent(doc)}>
-              <span class="recent-title">{doc.title || 'Untitled VText'}</span>
+              <span class="recent-title">{doc.title || 'Untitled Texture'}</span>
               <span class="recent-meta">
                 v{documentCurrentVersionNumber(doc)}
                 {#if doc.last_editor}
@@ -2259,7 +2259,7 @@
   {/if}
 
   <div class="sr-only" aria-live="polite" data-vtext-save-status>{saveStatus}</div>
-  <div class="sr-only" aria-live="polite">{loading ? 'Loading VText…' : ''}</div>
+  <div class="sr-only" aria-live="polite">{loading ? 'Loading Texture…' : ''}</div>
 </div>
 
 <style>

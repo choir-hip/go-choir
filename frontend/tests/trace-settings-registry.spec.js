@@ -143,7 +143,7 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
     ['browser', 'Web Lens', '🌐'],
     ['super-console', 'Super Console', '⌘'],
     ['settings', 'Settings', '⚙️'],
-    ['vtext', 'VText', '📝'],
+    ['vtext', 'Texture', '📝'],
   ];
   for (const [appId, label, icon] of expectedApps) {
     const appIcon = page.locator(`[data-desktop-icon-id="${appId}"]`);

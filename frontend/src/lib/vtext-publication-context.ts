@@ -4,7 +4,7 @@ import {
 } from './vtext-editor-state';
 
 export function titleForPublishedBundle(bundle: any = null) {
-  return bundle?.publication?.title || 'Published VText';
+  return bundle?.publication?.title || 'Published Texture';
 }
 
 export function publicURLForPublishResult(result: any = null, origin = '') {
@@ -49,7 +49,7 @@ export function buildPublishedTransclusionRef(
 export function derivativeContentForPublished(bundle: any = null) {
   const title = titleForPublishedBundle(bundle);
   const source = String(bundle?.artifact?.content || '').trim();
-  const quoted = (source || 'Blank published VText.')
+  const quoted = (source || 'Blank published Texture.')
     .split(/\r?\n/)
     .map((line) => `> ${line}`)
     .join('\n');

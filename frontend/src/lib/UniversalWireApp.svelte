@@ -112,7 +112,7 @@
   function launchVText({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = false, relatedVTexts = [] }) {
     dispatch('launchapp', {
       appId: 'vtext',
-      appName: 'VText',
+      appName: 'Texture',
       icon: '📝',
       appContext: {
         windowTitle: title,
@@ -196,7 +196,7 @@
       {:else}
         <section class="wire-empty-state" data-universal-wire-empty-state>
           <h1>No Wire edition articles yet</h1>
-          <p>Universal Wire will show VText-owned articles here after platform source processing and VText authoring publish an edition.</p>
+          <p>Universal Wire will show Texture-owned articles here after platform source processing and Texture authoring publish an edition.</p>
         </section>
       {/if}
     </section>

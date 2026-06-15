@@ -44,7 +44,7 @@
     {#if comparePending || mergePending}
       <div class="compare-working" role="status" aria-live="polite">
         <span class="work-pulse" aria-hidden="true"></span>
-        <span>{mergePending ? 'Building a reviewable merge preview with the configured VText model.' : 'Comparing versions with the configured VText model.'}</span>
+        <span>{mergePending ? 'Building a reviewable merge preview with the configured Texture model.' : 'Comparing versions with the configured Texture model.'}</span>
       </div>
     {/if}
     {#if compareError && !comparePending && !mergePending}

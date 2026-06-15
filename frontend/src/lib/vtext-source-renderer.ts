@@ -458,8 +458,8 @@ export function renderInlineVTextRef(label: string, docRef: string, relatedVText
   const parsed = parseVTextRelatedRef(docRef);
   const docID = parsed.docID;
   const entity = findVTextEntity(relatedVTexts, docID);
-  const title = String(entity?.title || entity?.label || label || 'related VText').trim();
-  const displayLabel = String(label || entity?.label || title || 'VText').trim();
+  const title = String(entity?.title || entity?.label || label || 'related Texture').trim();
+  const displayLabel = String(label || entity?.label || title || 'Texture').trim();
   const snapshot = String(entity?.transclusion?.snapshot_text || entity?.snapshot_text || '').trim();
   const pinnedRevisionID = vtextEntityPinnedRevisionID(entity, parsed.revisionID);
   const pinnedVersionNumber = vtextEntityPinnedVersionNumber(entity);
@@ -467,7 +467,7 @@ export function renderInlineVTextRef(label: string, docRef: string, relatedVText
   const currentVersionNumber = vtextEntityCurrentVersionNumber(entity);
   const newerVersion = hasNewerVTextVersion(entity, pinnedRevisionID);
   const className = entity ? 'vtext-related-ref' : 'vtext-related-ref vtext-related-ref--missing';
-  return `<span class="${className}" data-vtext-related-ref data-vtext-doc-id="${escapeHTML(docID)}" data-vtext-label="${escapeHTML(displayLabel)}"${pinnedRevisionID ? ` data-vtext-related-revision-id="${escapeHTML(pinnedRevisionID)}" data-vtext-related-pin-state="pinned"` : ''}${pinnedVersionNumber ? ` data-vtext-related-version-number="${escapeHTML(pinnedVersionNumber)}"` : ''}${currentRevisionID ? ` data-vtext-related-current-revision-id="${escapeHTML(currentRevisionID)}"` : ''}${currentVersionNumber ? ` data-vtext-related-current-version-number="${escapeHTML(currentVersionNumber)}"` : ''}${newerVersion ? ' data-vtext-related-has-newer-version="true"' : ''} contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Related VText: ${title}`)}">
+  return `<span class="${className}" data-vtext-related-ref data-vtext-doc-id="${escapeHTML(docID)}" data-vtext-label="${escapeHTML(displayLabel)}"${pinnedRevisionID ? ` data-vtext-related-revision-id="${escapeHTML(pinnedRevisionID)}" data-vtext-related-pin-state="pinned"` : ''}${pinnedVersionNumber ? ` data-vtext-related-version-number="${escapeHTML(pinnedVersionNumber)}"` : ''}${currentRevisionID ? ` data-vtext-related-current-revision-id="${escapeHTML(currentRevisionID)}"` : ''}${currentVersionNumber ? ` data-vtext-related-current-version-number="${escapeHTML(currentVersionNumber)}"` : ''}${newerVersion ? ' data-vtext-related-has-newer-version="true"' : ''} contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Related Texture: ${title}`)}">
     <span class="vtext-related-ref-label">${escapeHTML(displayLabel)}</span>
     <span class="vtext-related-ref-popover" data-vtext-inline-transclusion role="note">
       <strong>${escapeHTML(title)}</strong>

@@ -129,15 +129,15 @@ test('floating desktop icons render with emoji and labels', async ({ page, authe
 });
 
 // ---------------------------------------------------------------
-// Test: VText appears as a first-class desktop app
+// Test: Texture appears as a first-class desktop app
 // ---------------------------------------------------------------
-test('VText appears as a first-class desktop app', async ({ page, authenticator }) => {
+test('Texture appears as a first-class desktop app', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
   const vtextIcon = page.locator('[data-desktop-icon-id="vtext"]');
   await expect(vtextIcon).toBeVisible();
-  await expect(vtextIcon).toContainText('VText');
+  await expect(vtextIcon).toContainText('Texture');
 
   await vtextIcon.dblclick();
 
@@ -146,7 +146,7 @@ test('VText appears as a first-class desktop app', async ({ page, authenticator 
   await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible();
 
   const titleText = page.locator('[data-window-titlebar] .titlvtext');
-  await expect(titleText.first()).toContainText('VText');
+  await expect(titleText.first()).toContainText('Texture');
 });
 
 test('bottom-left Start menu launches registered apps', async ({ page, authenticator }) => {
@@ -265,7 +265,7 @@ test('mobile prompt-surface restore raises the selected app above the current wi
   expect(z[0]).toBeGreaterThan(z[1]);
 });
 
-test('VText recent landing can open a Markdown document without control overlap', async ({ page, authenticator }) => {
+test('Texture recent landing can open a Markdown document without control overlap', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -313,7 +313,7 @@ test('VText recent landing can open a Markdown document without control overlap'
   await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(/Markdown UX Fixture/);
 });
 
-test('VText opens near full mobile workspace and clears the prompt bar', async ({ page, authenticator }) => {
+test('Texture opens near full mobile workspace and clears the prompt bar', async ({ page, authenticator }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);

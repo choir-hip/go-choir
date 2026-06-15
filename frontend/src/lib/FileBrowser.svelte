@@ -712,10 +712,10 @@
                     class="import-vtext-btn"
                     data-import-vtext-btn
                     on:click|stopPropagation={() => handleImportIntoVText(entry)}
-                    title="Open {entry.name} in VText"
-                    aria-label="Open {entry.name} in VText"
+                    title="Open {entry.name} in Texture"
+                    aria-label="Open {entry.name} in Texture"
                   >
-                    VText
+                    Texture
                   </button>
                 {/if}
               {/if}

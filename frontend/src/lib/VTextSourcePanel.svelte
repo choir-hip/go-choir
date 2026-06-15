@@ -178,7 +178,7 @@
   {#if sourceDecisions.length}
     <div class="vtext-decision-evidence" data-vtext-decisions>
       <div class="source-artifact-heading">
-        <span class="evidence-label">VText decisions</span>
+        <span class="evidence-label">Texture decisions</span>
         <strong>{sourceDecisions.length} off-document note{sourceDecisions.length === 1 ? '' : 's'}</strong>
       </div>
       {#each sourceDecisions as decision}

@@ -113,7 +113,7 @@ export const previewTraceSnapshot = {
   trajectory: previewTraceTrajectories[0],
   agents: [
     { agent_id: 'conductor', label: 'conductor', role: 'router', profile: 'foreground', state: 'completed' },
-    { agent_id: 'vtext', label: 'VText', role: 'document owner', profile: 'foreground app', state: 'completed' },
+    { agent_id: 'vtext', label: 'Texture', role: 'document owner', profile: 'foreground app', state: 'completed' },
     { agent_id: 'researcher', label: 'researcher', role: 'research', profile: 'background', state: 'completed' },
     { agent_id: 'verifier', label: 'verifier', role: 'verification', profile: 'read-only', state: 'completed' },
   ],
@@ -123,13 +123,13 @@ export const previewTraceSnapshot = {
     { from_agent_id: 'vtext', to_agent_id: 'verifier', kind: 'review-request' },
   ],
   moments: [
-    { moment_id: 'p1', agent_id: 'conductor', agent_label: 'conductor', kind: 'prompt.received', state: 'completed', tone: 'message', title: 'Prompt routed', summary: 'A writing request is routed to VText.', timestamp: '2026-05-29T08:52:00Z', created_at: '2026-05-29T08:52:00Z', loop_id: 'preview-writing-run' },
-    { moment_id: 'p2', agent_id: 'vtext', agent_label: 'VText', kind: 'document.draft', state: 'completed', tone: 'active', title: 'Draft opened', summary: 'A local draft surface appears before any durable save.', timestamp: '2026-05-29T08:53:00Z', created_at: '2026-05-29T08:53:00Z', loop_id: 'preview-writing-run' },
+    { moment_id: 'p1', agent_id: 'conductor', agent_label: 'conductor', kind: 'prompt.received', state: 'completed', tone: 'message', title: 'Prompt routed', summary: 'A writing request is routed to Texture.', timestamp: '2026-05-29T08:52:00Z', created_at: '2026-05-29T08:52:00Z', loop_id: 'preview-writing-run' },
+    { moment_id: 'p2', agent_id: 'vtext', agent_label: 'Texture', kind: 'document.draft', state: 'completed', tone: 'active', title: 'Draft opened', summary: 'A local draft surface appears before any durable save.', timestamp: '2026-05-29T08:53:00Z', created_at: '2026-05-29T08:53:00Z', loop_id: 'preview-writing-run' },
     { moment_id: 'p3', agent_id: 'researcher', agent_label: 'researcher', kind: 'source.scan', state: 'completed', tone: 'tool', title: 'Sources gathered', summary: 'Example source notes are attached to the draft.', timestamp: '2026-05-29T08:54:00Z', created_at: '2026-05-29T08:54:00Z', loop_id: 'preview-writing-run' },
-    { moment_id: 'p4', agent_id: 'vtext', agent_label: 'VText', kind: 'revision.proposed', state: 'completed', tone: 'success', title: 'Revision proposed', summary: 'The draft advances from v1 to v2.', timestamp: '2026-05-29T08:55:00Z', created_at: '2026-05-29T08:55:00Z', loop_id: 'preview-writing-run' },
+    { moment_id: 'p4', agent_id: 'vtext', agent_label: 'Texture', kind: 'revision.proposed', state: 'completed', tone: 'success', title: 'Revision proposed', summary: 'The draft advances from v1 to v2.', timestamp: '2026-05-29T08:55:00Z', created_at: '2026-05-29T08:55:00Z', loop_id: 'preview-writing-run' },
     { moment_id: 'p5', agent_id: 'researcher', agent_label: 'researcher', kind: 'finding.linked', state: 'completed', tone: 'message', title: 'Finding linked', summary: 'A source note is linked to the active revision.', timestamp: '2026-05-29T08:56:00Z', created_at: '2026-05-29T08:56:00Z', loop_id: 'preview-writing-run' },
     { moment_id: 'p6', agent_id: 'verifier', agent_label: 'verifier', kind: 'review.visual', state: 'completed', tone: 'success', title: 'Preview checked', summary: 'The verifier records that this is local preview evidence only.', timestamp: '2026-05-29T08:57:00Z', created_at: '2026-05-29T08:57:00Z', loop_id: 'preview-writing-run' },
-    { moment_id: 'p7', agent_id: 'vtext', agent_label: 'VText', kind: 'publish.blocked', state: 'completed', tone: 'warn', title: 'Publish locked', summary: 'Publishing is held behind sign-in and owner-scoped state.', timestamp: '2026-05-29T08:58:00Z', created_at: '2026-05-29T08:58:00Z', loop_id: 'preview-writing-run' },
+    { moment_id: 'p7', agent_id: 'vtext', agent_label: 'Texture', kind: 'publish.blocked', state: 'completed', tone: 'warn', title: 'Publish locked', summary: 'Publishing is held behind sign-in and owner-scoped state.', timestamp: '2026-05-29T08:58:00Z', created_at: '2026-05-29T08:58:00Z', loop_id: 'preview-writing-run' },
   ],
   search: {
     attempts: 2,
@@ -161,7 +161,7 @@ export const previewTraceSnapshot = {
         },
       ],
       evidence_refs: [
-        { ref_id: 'preview-vtext', kind: 'local-ui-preview', summary: 'VText opens before sign-in.' },
+        { ref_id: 'preview-vtext', kind: 'local-ui-preview', summary: 'Texture opens before sign-in.' },
         { ref_id: 'preview-trace', kind: 'local-ui-preview', summary: 'Trace layout renders without private trajectories.' },
       ],
       rollback_refs: [],
@@ -182,12 +182,12 @@ export const previewVTextDocument = {
   content: [
     '# What Choir Is',
     '',
-    'Choir is a private, VText-centered computer for durable knowledge work. Documents are versioned artifacts, not chat transcripts, so drafts can be revised, compared, cited, published, and recovered.',
+    'Choir is a private, Texture-centered computer for durable knowledge work. Documents are versioned artifacts, not chat transcripts, so drafts can be revised, compared, cited, published, and recovered.',
     '',
     'The signed-out desktop is a preview of the reading and writing surface. Sign in to connect your durable computer, save revisions, import sources, run agents, publish work, and keep the evidence attached to the artifact.',
   ].join('\n'),
   revisions: [
-    { revision_id: 'v1', label: 'v1', title: 'Artifact', summary: 'VText is the durable surface for writing and revision.' },
+    { revision_id: 'v1', label: 'v1', title: 'Artifact', summary: 'Texture is the durable surface for writing and revision.' },
     { revision_id: 'v2', label: 'v2', title: 'Sources', summary: 'Sources and evidence stay connected to the work.' },
     { revision_id: 'v3', label: 'v3', title: 'Publish', summary: 'Publishing and private computer actions unlock after sign-in.' },
   ],

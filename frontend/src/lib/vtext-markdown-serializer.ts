@@ -13,7 +13,7 @@ function serializeInlineMarkdown(node: Node | null): string {
     return entityID ? `[${label}](source:${entityID})` : label;
   }
   if (element.matches?.('[data-vtext-related-ref]')) {
-    const label = element.getAttribute('data-vtext-label') || element.querySelector?.('.vtext-related-ref-label')?.textContent || 'VText';
+    const label = element.getAttribute('data-vtext-label') || element.querySelector?.('.vtext-related-ref-label')?.textContent || 'Texture';
     const docID = element.getAttribute('data-vtext-doc-id') || '';
     const revisionID = element.getAttribute('data-vtext-related-revision-id') || '';
     const target = vtextRelatedMarkdownTarget(docID, revisionID);

@@ -273,7 +273,7 @@ export async function semanticCompareVText(docId, { sourceRevisionId, targetRevi
   });
 
   if (!res.ok) {
-    await decodeError(res, `Compare VText versions failed (${res.status})`);
+    await decodeError(res, `Compare Texture versions failed (${res.status})`);
   }
 
   return res.json();
@@ -287,7 +287,7 @@ export async function previewVTextMerge(docId, payload = {}) {
   });
 
   if (!res.ok) {
-    await decodeError(res, `Preview VText merge failed (${res.status})`);
+    await decodeError(res, `Preview Texture merge failed (${res.status})`);
   }
 
   return res.json();
@@ -301,7 +301,7 @@ export async function acceptVTextMerge(docId, payload = {}) {
   });
 
   if (!res.ok) {
-    await decodeError(res, `Accept VText merge failed (${res.status})`);
+    await decodeError(res, `Accept Texture merge failed (${res.status})`);
   }
 
   return res.json();
@@ -318,7 +318,7 @@ export async function restoreVTextRevision(docId, { revisionId, mode = 'restore_
   });
 
   if (!res.ok) {
-    await decodeError(res, `Restore VText revision failed (${res.status})`);
+    await decodeError(res, `Restore Texture revision failed (${res.status})`);
   }
 
   return res.json();
@@ -335,7 +335,7 @@ export async function getVTextDiagnosis(docId, limit = 50, options = {}) {
   });
 
   if (!res.ok) {
-    await decodeError(res, `Get VText diagnosis failed (${res.status})`);
+    await decodeError(res, `Get Texture diagnosis failed (${res.status})`);
   }
 
   return res.json();
@@ -349,7 +349,7 @@ export async function repairVTextSourceGaps(docId, payload = {}) {
   });
 
   if (!res.ok) {
-    await decodeError(res, `Repair VText sources failed (${res.status})`);
+    await decodeError(res, `Repair Texture sources failed (${res.status})`);
   }
 
   return res.json();
@@ -363,7 +363,7 @@ export async function attachVTextSourceArtifacts(docId, payload = {}) {
   });
 
   if (!res.ok) {
-    await decodeError(res, `Attach VText source artifacts failed (${res.status})`);
+    await decodeError(res, `Attach Texture source artifacts failed (${res.status})`);
   }
 
   return res.json();
@@ -431,7 +431,7 @@ export async function createAgentRevision(docId, payload = {}) {
   });
 
   if (!res.ok) {
-    await decodeError(res, `VText revise failed (${res.status})`);
+    await decodeError(res, `Texture revise failed (${res.status})`);
   }
 
   return res.json();
@@ -447,7 +447,7 @@ export async function cancelAgentRevision(docId) {
   });
 
   if (!res.ok) {
-    await decodeError(res, `Cancel VText revision failed (${res.status})`);
+    await decodeError(res, `Cancel Texture revision failed (${res.status})`);
   }
 
   return res.json();
@@ -487,7 +487,7 @@ export async function publishVText(docId, { revisionId = '', slug = '', accessPo
   });
 
   if (!res.ok) {
-    await decodeError(res, `Publish VText failed (${res.status})`);
+    await decodeError(res, `Publish Texture failed (${res.status})`);
   }
 
   return res.json();
@@ -529,7 +529,7 @@ export async function searchPublishedVText(query) {
   });
 
   if (!res.ok) {
-    await decodeError(res, `Search published VTexts failed (${res.status})`);
+    await decodeError(res, `Search published Textures failed (${res.status})`);
   }
 
   return res.json();

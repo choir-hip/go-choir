@@ -444,7 +444,7 @@
       sourceContentId: contentItem?.content_id || '',
       appHint: 'content',
       createdFrom: 'web_lens',
-      toastMessage: 'Opened Web Lens snapshot in VText',
+      toastMessage: 'Opened Web Lens snapshot in Texture',
     });
   }
 
@@ -751,7 +751,7 @@
                   on:click={importSnapshotToVText}
                   disabled={!backendSnapshot}
                 >
-                  Open in VText
+                  Open in Texture
                 </button>
               </div>
               {#if backendWarnings.length}

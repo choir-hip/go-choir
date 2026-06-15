@@ -365,3 +365,34 @@ Open edge: continue reducing retired-name residue, rename UI/internal symbols,
 prove edit-affordance common-vs-exceptional naming, delete compatibility shims
 with receipts, and write Texture Protocol v0 only after the working surface is
 settled.
+
+## 2026-06-15 - Local Visible Texture UI Label Slice
+
+Claim: visible product affordances can switch to Texture now while internal
+`vtext` app ids, selectors, storage keys, route shims, and compatibility API
+names remain explicitly deletion-receipted residue for later slices.
+
+Move: update the app registry name/description, desktop launch/status/toast
+copy, Texture editor recent/auth/error/status copy, published fallback copy,
+Universal Wire launch/empty-state copy, Web Lens and Files import affordances,
+source decision labels, related-Texture renderer fallbacks, signed-out preview
+copy, and focused browser tests that assert the desktop app label.
+
+Expected ΔV: 0 until pushed CI/deploy and staging browser proof pass. This is
+the construct portion of the UI-label obligation, not its deployed proof.
+
+Actual ΔV: 0. V remains 5 because the slice has only local build/doccheck
+proof; local Playwright desktop tests could not run without the local Vite and
+service stack on `localhost:4173`.
+
+Receipts:
+- `npm --prefix frontend run build`: pass; existing Svelte warnings remained
+  in `UniversalWireApp.svelte`.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,146 warnings.
+- `npm --prefix frontend run e2e -- tests/desktop-shell-core.spec.js --grep "Texture appears|Texture recent|Texture opens near"`: not product evidence; failed because `http://localhost:4173/` refused connection.
+- `npm --prefix frontend run e2e -- tests/trace-settings-registry.spec.js`: not product evidence; failed because `http://localhost:4173/` refused connection.
+- `git diff --check`: pass before the mission-record edit; rerun required
+  before commit.
+
+Open edge: push the slice, monitor CI and Node B staging deploy identity, then
+run staging browser proof of visible Texture labels and import affordances.

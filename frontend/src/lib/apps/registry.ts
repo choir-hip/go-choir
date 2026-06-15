@@ -109,9 +109,9 @@ export const APP_REGISTRY = [
   },
   {
     id: 'vtext',
-    name: 'VText',
+    name: 'Texture',
     icon: '📝',
-    description: 'Versioned document editor',
+    description: 'Versioned artifact editor',
     component: () => import('../VTextEditor.svelte'),
     launcher: { desk: true, desktopIcon: true, mobileSwitcher: true, order: 50 },
     window: {
@@ -127,7 +127,7 @@ export const APP_REGISTRY = [
     id: 'universal-wire',
     name: 'Universal Wire',
     icon: '🗞️',
-    description: 'Living VText newspaper',
+    description: 'Living Texture newspaper',
     component: () => import('../UniversalWireApp.svelte'),
     launcher: { desk: true, desktopIcon: true, mobileSwitcher: true, order: 65 },
     window: { singleton: true, heavy: true, desktop: { width: 1180, height: 760, minWidth: 820, minHeight: 560 }, compact: compactDefault },

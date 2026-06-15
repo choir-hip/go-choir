@@ -146,7 +146,7 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: docs and detector warnings -> focused local tests -> staging deploy
   identity -> browser product proof -> protocol canonization.
 
-variant (ranking function) V: current V=5; last ΔV=-1:
+variant (ranking function) V: current V=5; last ΔV=0:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
@@ -159,8 +159,8 @@ variant (ranking function) V: current V=5; last ΔV=-1:
 4. current V includes: internal runtime, storage, file, UI data-attribute, and
    compatibility-shim symbols still use the old ontology; product-facing API
    routes and tool affordance names now expose Texture locally;
-5. current V includes: UI labels and browser proof still target the old
-   artifact name;
+5. current V includes: visible UI labels are locally cut over to Texture, but
+   the browser/staging proof for that product surface has not yet run;
 6. current V includes: edit affordance surface still needs common-vs-
    exceptional naming proof;
 7. discharged for local scope: prompt register and registered tool names now
@@ -242,9 +242,15 @@ position / live conjectures / open edges:
   the pinned revision, and show a newer-version marker when the related Texture
   head advances. The deployed proof covered a parent Texture ref with pinned
   child revision v0 and current child revision v1 on staging.
+- C9 active: visible app labels can switch to Texture while internal app ids,
+  selectors, storage keys, and compatibility API names remain deletion-receipted
+  residue. This is locally implemented and build-green but not yet deployed or
+  browser-proven.
 
-next move: continue the broader UI/internal symbol cutover and edit-affordance
-common-vs-exceptional proof before protocol v0.
+next move: push and monitor the visible Texture UI label slice, verify staging
+deploy identity, and run browser product proof that the desktop icon, window
+title, recent landing, file import button, and Web Lens import affordance present
+Texture instead of the retired name.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

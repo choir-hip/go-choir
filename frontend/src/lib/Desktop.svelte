@@ -1125,8 +1125,8 @@
       return;
     }
 
-    openApp('vtext', 'VText', '📝', {
-      windowTitle: 'Published VText',
+    openApp('vtext', 'Texture', '📝', {
+      windowTitle: 'Published Texture',
       publishedRoutePath: normalizedRoutePath,
       publishedGuest: guest,
       allowMultiple: true,
@@ -1248,8 +1248,8 @@
       }
 
       if (decision.app === 'vtext') {
-        promptStatus = `Opening ${decision.title || 'VText'}...`;
-        openApp('vtext', 'VText', '📝', {
+        promptStatus = `Opening ${decision.title || 'Texture'}...`;
+        openApp('vtext', 'Texture', '📝', {
           windowTitle: decision.title || fallbackWindowTitle,
           docId: decision.doc_id || '',
           seedPrompt: decision.seed_prompt || text,
@@ -1289,7 +1289,7 @@
   async function handleOpenTextFile(event) {
     if (!authenticated) {
       const fileName = event.detail?.fileName || 'Preview document';
-      openApp('vtext', 'VText', getAppIcon('vtext'), {
+      openApp('vtext', 'Texture', getAppIcon('vtext'), {
         windowTitle: fileName,
         fileName,
         initialContent: `# ${fileName}\n\nThis is a local preview opened from Files. Sign in to open real private files or save changes.`,
@@ -1321,13 +1321,13 @@
         title: fileName,
         initialContent: content,
       });
-      openApp('vtext', 'VText', '📝', {
+      openApp('vtext', 'Texture', '📝', {
         windowTitle: fileName,
         fileName,
         docId: doc.doc_id,
         sourcePath: pathSegments.join('/'),
       });
-      showToast(importToVText ? `Imported ${fileName} into VText` : `Opened ${fileName} in VText`);
+      showToast(importToVText ? `Imported ${fileName} into Texture` : `Opened ${fileName} in Texture`);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -1365,9 +1365,9 @@
   function handleOpenVTextFromContent(event) {
     if (!authenticated) {
       const detail = event.detail || {};
-      openApp('vtext', 'VText', getAppIcon('vtext'), {
+      openApp('vtext', 'Texture', getAppIcon('vtext'), {
         windowTitle: detail.title || 'Preview note',
-        initialContent: detail.initialContent || `# ${detail.title || 'Preview note'}\n\nThis is a local preview opened from public content. Sign in to save it as durable VText.`,
+        initialContent: detail.initialContent || `# ${detail.title || 'Preview note'}\n\nThis is a local preview opened from public content. Sign in to save it as durable Texture.`,
         seedPrompt: detail.seedPrompt || '',
         sourceUrl: detail.sourceUrl || '',
         sourceContentId: detail.sourceContentId || '',
@@ -1377,7 +1377,7 @@
         preview: true,
         createdFrom: detail.createdFrom || 'content_viewer_preview',
       });
-      showToast(detail.toastMessage || 'Opened local VText preview');
+      showToast(detail.toastMessage || 'Opened local Texture preview');
       return;
     }
     if (!desktopReady) {
@@ -1386,7 +1386,7 @@
     }
     const detail = event.detail || {};
     const docId = detail.docId || '';
-    openApp('vtext', 'VText', '📝', {
+    openApp('vtext', 'Texture', '📝', {
       windowTitle: detail.title || 'Radio Brief',
       docId,
       initialContent: detail.initialContent || '',
@@ -1398,7 +1398,7 @@
       appHint: detail.appHint || '',
       createdFrom: detail.createdFrom || 'content_viewer',
     });
-    showToast(detail.toastMessage || 'Opened in VText');
+    showToast(detail.toastMessage || 'Opened in Texture');
   }
 
   function handleOpenTraceFromContent(event) {
