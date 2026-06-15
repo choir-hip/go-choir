@@ -204,3 +204,63 @@ Receipts:
 Open edge: add vmctl regression coverage and repair the sandbox proxy/platform
 computer readiness path, then deploy and prove sourcecycled can reach the
 platform runtime without hiding owner bootstrap health.
+
+## 2026-06-15T11:46:00Z - Platform Proxy Route Repair Settled
+
+Claim/scope: the remaining Universal Wire/sourcecycled 502 edge was repaired
+inside vmctl routing. The sandbox proxy now ensures/recovers the platform
+computer before reverse-proxying the Universal Wire platform owner, and a
+persisted `booting` platform ownership without an in-memory waiter is recovered
+instead of treated as a live route.
+
+Move: added deterministic vmctl tests, committed runtime repair
+`04a466f8761da772e9198c46011f2ad39018c4b2`, pushed to `origin/main`, monitored
+CI and Node B deploy, verified staging identity, and ran deployed operator
+diagnostics against vmctl's Unix-socket proxy and platform runtime.
+
+Expected Delta V: -1 for repairing and proving the final source/platform route
+edge. Actual Delta V: -1. V is now 0; the mission is settled with a separate
+residual capacity/backpressure risk.
+
+Receipts:
+
+- Problem Documentation First was satisfied by prior docs checkpoint
+  `9c25abce`.
+- Focused and package checks passed after implementation:
+  `nix develop -c go test ./internal/vmctl -run 'TestEnsureUniversalWirePlatformComputer|TestSandboxProxy' -count=1`;
+  `nix develop -c go test ./internal/vmctl -count=1`.
+- Broad local gate passed:
+  `nix develop -c scripts/go-test-local`.
+- CI run `27543626790` completed successfully for
+  `04a466f8761da772e9198c46011f2ad39018c4b2`, including Go vet/build, runtime
+  shards, non-runtime tests, integration smoke, TLA+ model check, docs truth
+  check, and Node B `Deploy to Staging`.
+- `curl -fsS https://choir.news/health` reported status `ok`, vmctl status
+  `ok`, proxy commit and upstream sandbox commit
+  `04a466f8761da772e9198c46011f2ad39018c4b2`, deployed at
+  `2026-06-15T11:40:31Z`.
+- Node B `GET /internal/vmctl/list` over `/run/go-choir/vmctl.sock` showed
+  `vm-universal-wire-platform`, owner `universal-wire-platform`, desktop
+  `platform`, `state=active`, `sandbox_url=http://10.200.55.2:8085`,
+  `epoch=60`, `last_active_at=2026-06-15T11:41:43.827Z`.
+- Node B vmctl logs showed recovery/boot of `vm-universal-wire-platform`,
+  including `vmmanager: booted VM vm-universal-wire-platform
+  (host=http://10.200.55.2:8085 epoch=60)`.
+- Operator route diagnostic:
+  `POST /internal/vmctl/sandbox-proxy/universal-wire-platform/health` over the
+  vmctl Unix socket returned HTTP `405 Method Not Allowed`, proving the proxy
+  reached the runtime instead of timing out on stale `10.200.17.2`.
+- Direct platform health:
+  `GET http://10.200.55.2:8085/health` returned HTTP `200` with
+  `status=ready`, `sandbox_id=vm-universal-wire-platform`, deployed commit
+  `04a466f8761da772e9198c46011f2ad39018c4b2`, disk use about `21.95%`.
+- Sourcecycled logs after the platform route recovery window showed runtime
+  `429 Too Many Requests` backpressure and no checked vmctl `502` or dial
+  timeout route failures.
+
+Residual risk: sourcecycled still cannot submit additional processor runs while
+the platform runtime reports about 45 running processor runs / 50 total running
+runs; that is capacity/backpressure behavior, not the stale vmctl route failure
+this mission repaired. Cancellation-specific owner staging proof remained too
+fast to naturally abort; the exact cancellation predicate is covered by the
+deterministic local regression.

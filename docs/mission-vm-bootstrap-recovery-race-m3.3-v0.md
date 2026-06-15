@@ -30,13 +30,19 @@ before M3 uses vmctl refresh/restart as lifecycle-settlement evidence.
 - Public health still reported aggregate bootstrap instability:
   `bootstrap.total` 52 requests, 40 HTTP 200, 3 HTTP 502, 9 resolve errors,
   max bootstrap duration about 15 seconds.
-- A separate public platform/source route is also stale:
+- A separate public platform/source route was also stale:
   `vm-universal-wire-platform` is persisted as `booting` at
   `http://10.200.17.2:8085`, and `sourcecycled` retries through vmctl's
   Unix-socket sandbox proxy about every 32 seconds with 502s. Node B vmctl logs
   after the owner-path deploy showed reverse-proxy dial timeouts to
   `10.200.17.2:8085`; a direct operator probe to that route timed out. This may
   pollute aggregate health but should not be conflated with the owner boot path.
+- Runtime commit `04a466f8761da772e9198c46011f2ad39018c4b2` repaired that
+  source route by making vmctl ensure/recover the Universal Wire platform
+  computer before sandbox proxy routing. Staging deployed the same commit to
+  proxy and sandbox at `2026-06-15T11:40:31Z`; `vm-universal-wire-platform`
+  recovered active at `http://10.200.55.2:8085`, epoch `60`, and direct
+  platform `/health` returned `ready`.
 
 ## Not This Mission
 
@@ -52,7 +58,7 @@ before M3 uses vmctl refresh/restart as lifecycle-settlement evidence.
 
 ## Parallax State
 
-status: open_handoff
+status: settled
 
 mission conjecture: if bootstrap/recovery becomes a durable, owner-scoped
 computer lifecycle transition that survives browser request cancellation and
@@ -86,7 +92,7 @@ invariants / qualities / domain ramp (I/Q/D):
   staging owner-path proof on `https://choir.news`; optional separate staging
   proof or blocker for the Universal Wire platform route.
 
-variant (ranking function) V: 1.
+variant (ranking function) V: 0.
 1. reproduce or synthesize a deterministic first-load cancel/reload-success
    failure shape; (implemented in
    `TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady`)
@@ -100,8 +106,9 @@ variant (ranking function) V: 1.
    (supported for fresh owner boot/recovery status on deployed `a1c0ad0d`;
    cancellation-specific proof remains the deterministic local regression)
 5. separate or repair the stale Universal Wire/sourcecycled 502 route so health
-   counters no longer hide owner bootstrap regressions. (separated and still
-   failing in `go-choir-sourcecycled.service`; successor blocker remains)
+   counters no longer hide owner bootstrap regressions. (repaired on deployed
+   `04a466f8`; remaining sourcecycled errors are runtime `429` backpressure,
+   not vmctl stale-route 502/dial-timeout failures)
 
 budget: one focused paramission before M3. If the fix expands into broad System
 Monitor or storage-retention work, stop with an open handoff and keep M3 blocked
@@ -121,9 +128,12 @@ recovers without manual reload after a cold/hibernated owner computer, and a
 separate note for the Universal Wire/sourcecycled route.
 
 heresy delta: discovered: recovery logic built for the old disk-full/stale-route
-incident can now present failure while recovery succeeds later. introduced: none
-accepted. repaired: only after deployed proof shows browser request cancellation
-no longer strands or misreports recovery.
+incident can now present failure while recovery succeeds later; vmctl platform
+proxy routing could also treat a persisted `booting` platform ownership as a
+live route after service restart. introduced: none accepted. repaired:
+proxy-owned detached recovery/status now survives foreground cancellation for
+the owner path, and vmctl sandbox proxy ensures/recovers the Universal Wire
+platform computer before routing.
 
 position / live conjectures / open edges:
 - C1 active: the owner-visible bug is a cancellation/control-plane mismatch:
@@ -163,7 +173,7 @@ position / live conjectures / open edges:
   completed too quickly to produce an aborted browser request, so the
   cancellation predicate is proven by the deterministic local regression rather
   than by a slow staging recovery.
-- C7 active: the Universal Wire platform/source route is not just a
+- C7 supported on staging: the Universal Wire platform/source route is not just a
   sourcecycled configuration problem. Sourcecycled now targets vmctl's
   Unix-socket sandbox proxy for `universal-wire-platform`, but `HandleSandboxProxy`
   calls `LiveSandboxURL(owner, "platform")`, which can return the cached route
@@ -172,13 +182,22 @@ position / live conjectures / open edges:
   `vm-universal-wire-platform`, `state=booting`, `sandbox_url=http://10.200.17.2:8085`,
   `epoch=58`; sourcecycled POSTs through the proxy still produce 502s while vmctl
   logs dial timeouts to `10.200.17.2:8085`.
+- C8 supported on staging for platform route repair: commit
+  `04a466f8761da772e9198c46011f2ad39018c4b2` deployed to proxy and sandbox at
+  `2026-06-15T11:40:31Z`; CI run `27543626790` and Node B deploy passed. vmctl
+  recovered `vm-universal-wire-platform` active at `http://10.200.55.2:8085`,
+  `epoch=60`. `POST /internal/vmctl/sandbox-proxy/universal-wire-platform/health`
+  over the vmctl Unix socket returned runtime `405 Method Not Allowed`, proving
+  the proxy reached runtime rather than timing out on stale `10.200.17.2`.
+  Direct `GET http://10.200.55.2:8085/health` returned `ready` on deployed commit
+  `04a466f8761da772e9198c46011f2ad39018c4b2`. Sourcecycled logs after platform
+  recovery show runtime `429 Too Many Requests` backpressure and no vmctl
+  `502`/dial-timeout route failures in the checked window.
 
-next move: implement the narrow platform route repair in vmctl, not in
-sourcecycled: before proxying the Universal Wire platform owner, ensure/recover
-the `universal-wire-platform` / `platform` computer or return an explicit
-service-unavailable error instead of blindly reverse-proxying a stale booting
-route. Add deterministic vmctl coverage for a persisted booting ownership with
-no in-memory boot waiter.
+next move: mission settled. The next realism axis is not this substrate repair:
+sourcecycled/runtime capacity should separately decide whether 45-50 concurrent
+processor runs and `429 Too Many Requests` are acceptable backpressure or need a
+queue/capacity policy change.
 
 ledger file: `docs/mission-vm-bootstrap-recovery-race-m3.3-v0.ledger.md`
 
@@ -194,20 +213,24 @@ means one root cause. It can be stale route, guest disk full, vmctl cleanup leak
 source/platform stale route, or foreground cancellation during a useful refresh.
 The product must expose enough state to distinguish those classes.
 
-settlement: settled only when staging proves owner bootstrap/recovery no longer
-requires manual reload after a cold/hibernated/recovered current computer,
-health separates owner bootstrap from source/platform route failures, and the
-final report records commit, CI, deploy identity, staging proof, rollback refs,
-heresy delta, and residual risk. If source/platform recovery remains unsolved,
-record it as a separate successor blocker rather than hiding it in aggregate
-502s.
+settlement: settled. Owner bootstrap/recovery no longer depends on manual reload
+for the deterministic cancel/reload-success shape; deployed owner-path proof
+passed on staging; source/platform route 502 was repaired and proved against the
+deployed platform runtime. Rollback refs are commits
+`a1c0ad0d5ba6f7923c19f0346da979a7ea51a818` and
+`04a466f8761da772e9198c46011f2ad39018c4b2` on `origin/main` with prior commits
+`397c1865` and `9c25abce` as problem-first checkpoints. Residual risk:
+cancellation-specific staging proof was too fast to abort naturally, so that
+predicate rests on deterministic local regression; sourcecycled still sees
+runtime `429` capacity backpressure, which is distinct from this mission's
+stale-route failure.
 
 ## Suggested Goal String
 
 ```text
 Use Parallax on docs/mission-vm-bootstrap-recovery-race-m3.3-v0.md. Treat it
-as the pre-M3.3 bootstrap/recovery substrate repair before M3 lifecycle
-settlement. Current status is open_handoff with V=5. Preserve Choir Doctrine,
+as the settled pre-M3.3 bootstrap/recovery substrate repair before M3 lifecycle
+settlement. Current status is settled with V=0. Preserve Choir Doctrine,
 AGENTS.md, docs/computer-ontology.md, and the M3.1/M3.2 VText/control-plane
 invariants. The bug is not simply the old disk-full incident: owner bootstrap
 can show BOOTSTRAP FAILED (502) or pending recovery, then manual reload works,
@@ -222,20 +245,9 @@ services, or broaden into the full System Monitor mission without explicit
 evidence and rollback refs. Problem Documentation First applies before code
 changes.
 
-First move: read the Parallax State,
-docs/incident-vm-bootstrap-stale-route-2026-06-09.md,
-frontend/src/lib/Desktop.svelte, internal/proxy/compute_status.go,
-internal/proxy/handlers.go, internal/vmctl/client.go, and
-internal/vmctl/ownership.go. Build a deterministic regression for the
-first-load cancel/reload-success shape: authenticated owner requests recovery,
-the browser request cancels or times out, vmctl still completes refresh, and the
-next bootstrap/status observes ready without manual reload. Then implement the
-narrow durable recovery/status repair. Required verification: focused tests for
-touched paths, runtime shards if runtime/proxy/vmctl changes, frontend tests or
-build if Desktop changes, push to origin/main, CI, Node B deploy, staging health
-identity, and deployed product-path proof that first page load recovers without
-manual reload after a cold/hibernated owner computer. Also separate or explicitly
-record the stale Universal Wire/sourcecycled platform-route 502 so aggregate
-health does not mask owner bootstrap behavior. Settlement requires commit, CI,
-deploy identity, staging proof, rollback refs, heresy delta, and residual risk.
+Resume only if auditing or extending the repair. Required receipts already
+recorded here: deterministic cancellation regression, owner-path staging proof
+on `a1c0ad0d`, platform route staging proof on `04a466f8`, CI/deploy identities,
+rollback refs, heresy delta, and residual risk. The next known realism axis is
+sourcecycled/runtime `429` processor backpressure, not stale vmctl routing.
 ```
