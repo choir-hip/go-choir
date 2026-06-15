@@ -79,11 +79,8 @@ auditable through the runtime evidence substrate.
   frontend Sources-panel proof; then staging proof because VText tools, Trace,
   and UI visibility are product-path behavior.
 
-**variant (ranking function) V:** current V=2:
-1. repair the deployed prompt-bar VText route so explicit no-worker decision
-   prompts cannot enter the persistent-super handoff before a durable decision
-   row exists.
-2. reland the behavior change on `origin/main`, monitor CI/deploy, verify
+**variant (ranking function) V:** current V=1:
+1. reland the behavior change on `origin/main`, monitor CI/deploy, verify
    staging identity, and run deployed product-path proof.
 
 **budget:** one bounded M3.2 mission before M3 lifecycle work resumes. Solvency:
@@ -277,10 +274,13 @@ states reasons without forcing choreography.
   decision metadata. The private no-worker reason appeared in the user prompt
   revision and was absent from the final appagent revision, but the off-document
   decision row never existed.
+- Local structured route-predicate repair complete: conductor VText routing
+  and the super-request redirect now also derive the no-worker route from the
+  structured explicit decision parser used for deterministic decision metadata.
+  Stored-conductor route coverage now waits for completion and asserts the
+  durable `no_worker_needed` decision row, not only the initial loop profile.
 
-**next move:** inspect and repair the prompt-bar route predicate/metadata
-boundary that still allows explicit no-worker VText prompts to enter
-`persistent_super`, then rerun focused route/decision tests, push
+**next move:** commit the structured route-predicate repair, push
 `origin main`, monitor CI/deploy, verify staging identity, and rerun deployed
 proof.
 

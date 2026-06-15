@@ -497,7 +497,8 @@ func (rt *Runtime) redirectPromptBarNoWorkerSuperRequestToVText(ctx context.Cont
 		strings.TrimSpace(requester.Prompt),
 		metadataStringValue(requester.Metadata, "seed_prompt"),
 	}, " ")
-	if !promptBarNoWorkerDecisionRoute(routePrompt) {
+	_, explicitNoWorkerDecisionRoute := explicitNoWorkerDecisionRequestFromPrompt(routePrompt)
+	if !promptBarNoWorkerDecisionRoute(routePrompt) && !explicitNoWorkerDecisionRoute {
 		return nil, false, nil
 	}
 	doc, err := rt.store.GetDocument(ctx, channelID, ownerID)

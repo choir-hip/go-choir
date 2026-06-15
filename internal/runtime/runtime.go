@@ -2099,8 +2099,10 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		metadataStringValue(rec.Metadata, "seed_prompt"),
 	}, " ")
 	combinedPrompt := routePrompt
+	_, explicitNoWorkerDecisionRoute := explicitNoWorkerDecisionRequestFromPrompt(routePrompt)
 	noWorkerDecisionRoute := metadataBoolValue(rec.Metadata, "prompt_bar_no_worker_decision_route") ||
-		promptBarNoWorkerDecisionRoute(routePrompt)
+		promptBarNoWorkerDecisionRoute(routePrompt) ||
+		explicitNoWorkerDecisionRoute
 	if noWorkerDecisionRoute {
 		if rec.Metadata == nil {
 			rec.Metadata = make(map[string]any)

@@ -198,6 +198,22 @@ func TestConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt(t *testing.T
 	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_decision_required") {
 		t.Fatalf("initial run missing deterministic decision metadata: %+v", initialRun.Metadata)
 	}
+	done := waitForPromptBarUnitRunTerminal(t, rt, decision.InitialLoopID, "user-alice", 5*time.Second)
+	if done.State != types.RunCompleted {
+		t.Fatalf("initial vtext state = %q, want completed", done.State)
+	}
+	decisions, err := rt.Store().ListVTextDecisionsByDocument(context.Background(), "user-alice", decision.DocID, 10)
+	if err != nil {
+		t.Fatalf("list decisions: %v", err)
+	}
+	if len(decisions) != 1 {
+		t.Fatalf("decision count = %d, want 1: %+v", len(decisions), decisions)
+	}
+	if decisions[0].RunID != decision.InitialLoopID ||
+		decisions[0].DecisionKind != "no_worker_needed" ||
+		decisions[0].Reason != "M3.2 staging proof: user supplied the needed content and requested no research or execution worker." {
+		t.Fatalf("decision record = %+v", decisions[0])
+	}
 }
 
 func TestPromptBarNoWorkerSuperRequestRedirectsToVText(t *testing.T) {
