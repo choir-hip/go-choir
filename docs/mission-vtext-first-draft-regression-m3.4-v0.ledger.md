@@ -144,3 +144,56 @@ ok  	github.com/yusefmosiah/go-choir/internal/runtime	30.551s
 
 Residual risk: this reinforces existing H001/coagent-passivation cleanup debt,
 but it does not falsify the VText edit-context repair.
+
+## 2026-06-15 - Deployed Second Repair Failed; H001 Remains Live Residue
+
+Deployed proof after `3b7e4c2b1571ca055be4826b686c782292a7a884` falsified the
+second repair as sufficient. CI run `27547552456` passed, Node B deployed the
+commit, and `/health` reported proxy/upstream at the same SHA, but a fresh
+staging prompt still did not create an appagent V1.
+
+Fresh-auth product proof receipt:
+
+- Test owner:
+  `efae891d-8eca-4719-9409-f9de2c8b8999`
+  (`m34-proof-1781528471276@example.com`, Codex test account).
+- Prompt-bar/conductor run:
+  `60a1370c-4b88-43cc-96d4-0541719234e1`.
+- VText activation:
+  `20f1b17d-c8b5-4bfe-b17e-2ac546e77f5f`.
+- VText document:
+  `64478c33-ad21-45e7-bd6c-3f1c28590bd1`.
+- Owner VM:
+  `vm-3797c196ac56cdf0607eb6fe1356cab8` at `10.200.67.2:8085`.
+- Revision polling repeatedly saw only one revision with `author_kind=user`;
+  no appagent revision appeared before the probe was interrupted.
+- Gateway logs showed provider fallback from xiaomi/deepseek `402` responses
+  into repeated ChatGPT calls with `tool_choice=function:edit_vtext`, growing
+  message counts, and no visible V1.
+
+An earlier UI-first proof also failed before product submission because the
+stored browser auth had expired and the desktop readiness locator never became
+authenticated/ready. That is not the VText root cause, but it is an acceptance
+substrate warning: M3.4 settlement needs a fresh-auth browser proof, not stale
+storage state.
+
+Conjecture delta:
+
+- C2/C2b are only partial repairs. Terminal `edit_vtext` handling and defaulted
+  edit context do not explain the deployed loop.
+- The next missing oracle is the actual runtime tool result and arguments for
+  activation `20f1b17d-c8b5-4bfe-b17e-2ac546e77f5f`.
+- Plausible failing transitions now include malformed or over-constrained edit
+  arguments, duplicate `edit_vtext` ordering that skips the valid write after
+  an invalid first call, rationale/operation validation rejecting the write, or
+  tool-result persistence/trace hidden behind data-route timeouts.
+- H001 parent/child ontology is confirmed as live residue because the runtime
+  logs still describe this VText activation with parent/child wording. That is
+  a discovered doctrine violation, not accepted architecture. Use "VText
+  activation", "spawned activation", or "prompt-bar trajectory" in current
+  reasoning unless quoting the residue exactly.
+
+Expected next move: commit this docs checkpoint before runtime edits. Then
+extract the `edit_vtext` tool result/arguments through product trace/diagnosis
+or read-only VM/store inspection and repair only the transition proven by that
+evidence.

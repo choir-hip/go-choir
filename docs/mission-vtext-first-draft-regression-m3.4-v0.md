@@ -103,18 +103,21 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: start with the observed staging trace and focused local tests; then
   deploy and prove with browser-driven QA on `https://choir.news`.
 
-variant (ranking function) V: current V=3:
+variant (ranking function) V: current V=4:
 1. completed: record the problem and initial conjectures before code changes;
 2. completed: extract enough failed transition evidence for run
    `386f6c28-5594-4605-ba02-5c90387be3ad`: conductor decision, document id,
    revisions, VText mutation row, run state, tool result errors, and trace;
 3. completed: identify repeated `edit_vtext` continuation as a tool-loop
    termination mismatch rather than prompt seed loss;
-4. completed locally: implement the narrow repair with focused tests, including
+4. completed/falsified on staging: implement the narrow repair with focused tests, including
    terminal `edit_vtext` success and defaulting underspecified edit payloads
    from the pending VText activation;
-5. remaining: verify deployed product path with browser/computer-use evidence;
-6. remaining: update M3 goalstring only after deployed proof shows prompt-bar VText V1
+5. remaining: extract the failed deployed `edit_vtext` tool result/arguments
+   from VText activation `20f1b17d-c8b5-4bfe-b17e-2ac546e77f5f`;
+6. remaining: implement the third repair against that failed transition;
+7. remaining: verify deployed product path with browser/computer-use evidence;
+8. remaining: update M3 goalstring only after deployed proof shows prompt-bar VText V1
    creation and no indefinite pending state.
 
 budget: one urgent red-surface repair pass before M3. If root cause crosses VM
@@ -136,24 +139,27 @@ cleared or honestly failed, and residual risks.
 
 heresy delta: discovered: the product can open a VText artifact and then leave
 the owner in an indefinite first-draft pending state after repeated tool-use
-responses and VM restart/passivation. Introduced: none accepted. Repaired:
-local repair candidate only; not accepted until deployed browser proof passes.
+responses and VM restart/passivation. Discovered: H001 parent/child ontology
+still appears in runtime logs, APIs, tests, and mission docs. Introduced: none
+accepted. Repaired: none accepted for this deployed regression; local repair
+candidates have been falsified by staging until a fresh proof passes.
 
 position / live conjectures / open edges:
 - C1 supported: prompt-bar seed is not necessarily lost. Code intentionally stores
   prompt-bar input in metadata and starts VText with that prompt while keeping
   visible V0 empty. The real failure is V1 non-creation or pending-state
   recovery.
-- C2 supported and repaired locally: VText agent-revision runs made
+- C2 supported and partially repaired: VText agent-revision runs made
   `edit_vtext` the exact initial tool, but did not treat successful
   `edit_vtext` as terminal. The loop could ask the provider for another turn
   after the canonical document write instead of completing the run.
-- C2b supported and repaired locally: deployed proof after the first repair
-  still looped, which means the first repair did not create a successful
-  terminal edit. The likely failed transition was an underspecified model
-  payload such as content-only `edit_vtext`; runtime can safely derive
-  `doc_id`, `base_revision_id`, and default operation from the single pending
-  VText activation while still rejecting explicit mismatches and stale bases.
+- C2b weakened: deployed proof after the first repair still looped, so the
+  first repair did not create a successful terminal edit. Runtime now derives
+  omitted `doc_id`, `base_revision_id`, and operation from the single pending
+  VText activation, but staging proof after
+  `3b7e4c2b1571ca055be4826b686c782292a7a884` still produced only the
+  user-authored V0 and repeated exact `edit_vtext` provider calls. Defaulting
+  omitted context was necessary at most, not sufficient.
 - C3 active: configured VText provider policy starts with providers returning
   `402 Payment Required`, then falls back to ChatGPT. This adds latency and
   noise but is not yet proven to be the root cause because ChatGPT returned
@@ -171,12 +177,20 @@ position / live conjectures / open edges:
   lifecycle settlement, but it is not the root cause of the first-draft loop
   repair unless deployed proof shows parent/child control still drives this
   prompt-bar VText path.
+- C7 active: the current missing oracle is the actual `edit_vtext` tool
+  execution result and arguments for activation
+  `20f1b17d-c8b5-4bfe-b17e-2ac546e77f5f`. Gateway logs prove repeated
+  provider tool-use attempts but not whether runtime rejects arguments,
+  duplicate-call ordering skips the valid edit, rationale/operation validation
+  rejects the write, or trace/tool-result persistence is hidden behind a data
+  route timeout.
 
-next move: commit and push the second local repair, monitor CI and Node B
-deploy, then run browser/computer-use product proof against `https://choir.news`
-with a fresh prompt-bar submission. Acceptance requires non-empty V1, cleared
-pending state or precise blocker, and trace evidence showing conductor -> VText
-before any super.
+next move: commit this failed-deployed-proof checkpoint, then extract the
+tool-result/argument payloads for activation
+`20f1b17d-c8b5-4bfe-b17e-2ac546e77f5f` through product trace/diagnosis or a
+read-only VM/store inspection. Only after that, make the next code repair.
+Acceptance still requires non-empty V1, cleared pending state or precise
+blocker, and trace evidence showing conductor -> VText before any super.
 
 ledger file: `docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md`
 
@@ -197,5 +211,5 @@ staging.
 ## Suggested Goal String
 
 ```text
-/goal Run docs/mission-vtext-first-draft-regression-m3.4-v0.md with Parallax. Treat this as a red protected-surface repair before M3. Start from the Parallax State, append moves to docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md, and do not change runtime code until the problem checkpoint is committed or preserved. Investigate the failed owner VText activation 386f6c28-5594-4605-ba02-5c90387be3ad and prompt-bar/conductor run 7855146d-59f0-419a-ab99-3ebb0e28481f: conductor decision, VText doc/revisions, mutation state, tool result errors, provider fallback, vmctl duplicate-kill/passivation, and data-route timeouts. Preserve invariants: VText is the artifact control plane; no direct-super ingress for ordinary prompts; no forced researcher/super sequence; no indefinite Writing first draft state. Implement only the narrow root-cause repair, then verify with focused tests, CI, Node B deploy, staging health identity, and browser/computer-use proof that a fresh prompt-bar prompt creates a non-empty V1, clears pending state or records a precise blocker, and shows conductor -> VText before any super.
+/goal Run docs/mission-vtext-first-draft-regression-m3.4-v0.md with Parallax. Treat this as a red protected-surface repair before M3. Start from the Parallax State, append moves to docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md, and do not change runtime code until the failed-deployed-proof checkpoint is committed or preserved. The latest deployed proof after 3b7e4c2b1571ca055be4826b686c782292a7a884 created prompt-bar/conductor run 60a1370c-4b88-43cc-96d4-0541719234e1, VText activation 20f1b17d-c8b5-4bfe-b17e-2ac546e77f5f, document 64478c33-ad21-45e7-bd6c-3f1c28590bd1, owner efae891d-8eca-4719-9409-f9de2c8b8999, and VM vm-3797c196ac56cdf0607eb6fe1356cab8 at 10.200.67.2:8085; it still produced only user-authored V0 while logs repeated exact edit_vtext calls. First extract the edit_vtext tool-result/argument payloads through product trace/diagnosis or read-only VM/store inspection. Preserve invariants: VText is the artifact control plane; no direct-super ingress for ordinary prompts; no forced researcher/super sequence; no indefinite Writing first draft state; parent/child ontology is H001 residue, not accepted architecture. Implement only the narrow root-cause repair, then verify with focused tests, CI, Node B deploy, staging health identity, and browser/computer-use proof that a fresh prompt-bar prompt creates a non-empty V1, clears pending state or records a precise blocker, and shows conductor -> VText before any super.
 ```
