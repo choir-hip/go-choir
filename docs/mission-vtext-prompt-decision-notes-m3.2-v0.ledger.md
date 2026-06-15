@@ -1293,3 +1293,50 @@ prompt-bar route/canonical/decision acceptance passes but the
 execution-shaped prompt still does not request super before the proof timeout,
 checkpoint that separately before changing VText prompt pressure or runtime
 continuation policy.
+
+## 2026-06-15 - Deployed Prompt-Bar Acceptance Partial Pass
+
+Claim/scope: staging at
+`39273a164ce08d6567bc5e05a04099a1167acdca` now satisfies the prompt-bar
+route/canonical/decision part of the M3.2 acceptance, but not the
+downstream-super leg.
+
+Move: checkpoint the deployed partial pass before changing VText prompt
+pressure, proof timeout, or runtime continuation behavior. Expected Delta V:
+close the deployed canonical-control-text obligation and isolate the remaining
+downstream-super proof gap. Actual Delta V: V remains 2 because
+source/news/article product-path proof is still open and the
+execution-shaped prompt did not produce a VText-requested super run.
+
+Receipts:
+- CI run `27524711089` passed for
+  `39273a164ce08d6567bc5e05a04099a1167acdca`.
+- Deploy to Staging (Node B) job `81349710911` passed.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=39273a164ce08d6567bc5e05a04099a1167acdca`.
+- Deployed proof command:
+  `BASE_URL=https://choir.news npx playwright test tests/vtext-control-plane-staging.tmp.spec.js --workers=1`
+  from `frontend/`.
+- Prompt-bar decision proof artifact:
+  `/tmp/vtext-control-plane-staging-proof-1781499079736.json`.
+- Screenshot artifact:
+  `/tmp/vtext-control-plane-staging-proof-1781499079736.png`.
+- Explicit decision submission `7ae7235c-c0a8-406c-b893-a13af767e157`
+  created doc `c183ac21-e0b9-4357-8f1b-0928446e9a28`; its
+  `initial_loop_id=7d2092e3-9bff-480c-9a46-453a7a954206` resolved to profile
+  `vtext`.
+- Decision row `37589f30-d126-4f14-99e5-bfa1485b10ac` existed with the
+  expected `no_worker_needed` reason/evidence, Trace/log projection existed,
+  `canonicalContainsReason=false`, `superRuns=[]`, and forbidden browser-public
+  internal requests were `[]`.
+- Execution-shaped submission for doc `42236563-8560-4c32-8a52-c1e28df17767`
+  started with VText
+  `initial_loop_id=227288c3-d159-466f-8288-3040b934661b`, with conductor as
+  Trace entry and no super-before-VText run. It failed because that VText run
+  remained `running` and no VText-requested super run appeared within the
+  240 second proof window.
+
+Open edge: discriminate whether the execution-shaped miss is proof-window/model
+latency, insufficient VText prompt/tool pressure, or another VText tool-loop
+continuation issue. Do not repair it by restoring conductor direct-super
+ingress or prompt-bar prompt heuristics; super must remain downstream of VText.

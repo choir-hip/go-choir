@@ -379,12 +379,23 @@ ingress has been repaired for fresh prompt-bar VText submissions.
   instruction/context rather than existing canonical prose. Focused tests prove
   the explicit decision row still exists while the seed revision and canonical
   head do not contain the private decision reason.
+- Deployed prompt-bar route/canonical/decision acceptance supported:
+  `39273a164ce08d6567bc5e05a04099a1167acdca` passed CI/deploy, `/health`
+  reported that SHA for proxy and sandbox, and deployed proof artifact
+  `/tmp/vtext-control-plane-staging-proof-1781499079736.json` showed conductor
+  entry, VText initial loop, decision row
+  `37589f30-d126-4f14-99e5-bfa1485b10ac`, no super runs, no forbidden
+  browser-public internal routes, and no canonical decision-rationale leak.
+- Deployed downstream-super leg still failed: the execution-shaped proof
+  submission started conductor -> VText with initial VText loop
+  `227288c3-d159-466f-8288-3040b934661b`, but the VText run remained `running`
+  and did not call `request_super_execution` within the 240 second proof window.
 
-**next move:** commit the prompt-bar intake repair, push, monitor CI/staging
-deploy, verify staging identity, and rerun deployed proof. If the
-downstream-super leg still times out while route/canonical/decision evidence is
-green, record that as a separate VText/model proof-window problem before
-changing prompts or runtime continuation behavior.
+**next move:** commit this deployed partial-acceptance checkpoint, then
+discriminate the downstream-super miss with an extended proof window or focused
+VText prompt/tool evidence. Do not add conductor-level prompt heuristics or
+direct super ingress; any repair must keep super downstream of a VText
+`request_super_execution` decision.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 
@@ -1047,9 +1058,14 @@ VText metadata/context while creating an intentionally blank canonical intake
 revision, and focused route/prompt/source-article tests pass. Keep
 record_vtext_decision backed by Dolt, readable from Trace/logs, and visible in
 the VText Sources panel; keep request_super_execution only as a VText
-affordance. Next move: commit/push the prompt-bar intake repair, monitor
-CI/staging deploy, verify staging identity, then rerun deployed acceptance
-covering prompt-bar plus source/news/article product paths where feasible.
+affordance. Deployed prompt-bar route/canonical/decision acceptance now passes
+on `39273a164ce08d6567bc5e05a04099a1167acdca`, but the execution-shaped leg
+still failed because VText stayed running and did not request super inside the
+240 second proof window. Next move: after committing the partial-acceptance
+checkpoint, discriminate whether the downstream-super miss is proof-window/model
+latency or insufficient VText prompt/tool pressure, then rerun deployed
+acceptance covering prompt-bar plus source/news/article product paths where
+feasible.
 Settlement still requires focused schema/tool/prompt tests, route tests proving
 VText before super, API/event/log readability proof, Sources-panel Playwright
 proof, runtime/frontend checks for touched surfaces, push/CI/deploy, staging
