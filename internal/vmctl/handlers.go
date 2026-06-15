@@ -1030,8 +1030,17 @@ func (h *Handler) HandleSandboxProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	desktopID := UniversalWirePlatformDesktopID
+	if ownerID == UniversalWirePlatformOwnerID {
+		if err := h.registry.EnsureUniversalWirePlatformComputer(r.Context()); err != nil {
+			log.Printf("vmctl: ensure platform sandbox for %s: %v", ownerID, err)
+			writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "platform sandbox is not ready"})
+			return
+		}
+	}
+
 	// Resolve live sandbox URL.
-	sandboxURL, err := h.registry.LiveSandboxURL(ownerID, "platform")
+	sandboxURL, err := h.registry.LiveSandboxURL(ownerID, desktopID)
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: fmt.Sprintf("resolve sandbox for %s: %v", ownerID, err)})
 		return

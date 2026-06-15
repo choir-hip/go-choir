@@ -146,20 +146,81 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 			r.ensureExistingGatewayCredential(vmID)
 			return own, nil
 		case own.State == VMStateBooting:
-			// Another goroutine is booting; wait for it.
-			ch := make(chan *VMOwnership, 1)
-			r.pendingWaiters[key] = append(r.pendingWaiters[key], ch)
-			r.mu.Unlock()
-			select {
-			case <-ctx.Done():
-				r.removePendingWaiter(key, ch)
-				return nil, ctx.Err()
-			case result := <-ch:
-				if result == nil {
-					return nil, fmt.Errorf("platform computer boot failed")
+			if waiters, ok := r.pendingWaiters[key]; ok {
+				// Another goroutine is booting; wait for it.
+				ch := make(chan *VMOwnership, 1)
+				r.pendingWaiters[key] = append(waiters, ch)
+				r.mu.Unlock()
+				select {
+				case <-ctx.Done():
+					r.removePendingWaiter(key, ch)
+					return nil, ctx.Err()
+				case result := <-ch:
+					if result == nil {
+						return nil, fmt.Errorf("platform computer boot failed")
+					}
+					return result, nil
 				}
-				return result, nil
 			}
+
+			// A persisted booting state without an in-memory pending boot can
+			// survive a vmctl restart. Treat it as stale and recover it instead
+			// of letting callers route to the placeholder sandbox URL forever.
+			mgr := r.vmManager
+			if mgr == nil {
+				r.mu.Unlock()
+				return nil, fmt.Errorf("no VM manager configured to recover stale booting platform computer %s", own.VMID)
+			}
+			snapshot := *own
+			r.pendingWaiters[key] = nil
+			r.mu.Unlock()
+
+			info, err := r.ensureActiveVMReady(&snapshot, mgr)
+			if err != nil {
+				r.mu.Lock()
+				current := r.ownerships[key]
+				if current != nil && current.VMID == snapshot.VMID {
+					current.State = VMStateFailed
+					current.StoppedBy = "recovery_failed"
+					r.saveLocked()
+				}
+				waiters := r.pendingWaiters[key]
+				delete(r.pendingWaiters, key)
+				r.mu.Unlock()
+				for _, ch := range waiters {
+					ch <- nil
+				}
+				return nil, fmt.Errorf("recover stale booting platform computer %s: %w", snapshot.VMID, err)
+			}
+
+			r.mu.Lock()
+			current := r.ownerships[key]
+			if current == nil || current.VMID != snapshot.VMID {
+				waiters := r.pendingWaiters[key]
+				delete(r.pendingWaiters, key)
+				r.mu.Unlock()
+				for _, ch := range waiters {
+					ch <- nil
+				}
+				return r.ensureUniversalWirePlatformOwnership(ctx)
+			}
+			if info != nil {
+				current.SandboxURL = info.HostURL
+				current.Epoch = info.Epoch
+			}
+			current.State = VMStateActive
+			current.LastActiveAt = time.Now()
+			current.StoppedBy = ""
+			r.saveLocked()
+			vmID := current.VMID
+			waiters := r.pendingWaiters[key]
+			delete(r.pendingWaiters, key)
+			r.mu.Unlock()
+			for _, ch := range waiters {
+				ch <- current
+			}
+			r.ensureExistingGatewayCredential(vmID)
+			return current, nil
 		default:
 			// Unknown or failed state; treat as needing recovery.
 			mgr := r.vmManager

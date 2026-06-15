@@ -1,7 +1,13 @@
 package vmctl
 
 import (
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestComputerKindForOwnershipPlatform(t *testing.T) {
@@ -50,5 +56,308 @@ func TestEnsureUniversalWirePlatformComputerBootsStableVM(t *testing.T) {
 	own := reg.ownerships[key]
 	if own == nil || own.WarmnessClass != WarmnessClassPublicPlatform {
 		t.Fatalf("expected public_platform ownership, got %#v", own)
+	}
+}
+
+func TestEnsureUniversalWirePlatformComputerRecoversPersistedBootingWithoutWaiter(t *testing.T) {
+	mgr := &mockVMManager{
+		resumeError: errors.New("pending vm cannot resume"),
+		getVMs: map[string]*VMInstanceInfo{
+			UniversalWirePlatformVMID: {
+				HostURL: "http://10.200.17.2:8085",
+				Epoch:   58,
+				Healthy: false,
+				State:   "pending",
+			},
+		},
+		recoverResponse: &VMInstanceInfo{
+			HostURL: "http://10.200.99.2:8085",
+			Epoch:   59,
+			Healthy: true,
+			State:   "running",
+		},
+	}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mgr)
+	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
+	reg.ownerships[key] = &VMOwnership{
+		VMID:          UniversalWirePlatformVMID,
+		UserID:        UniversalWirePlatformOwnerID,
+		DesktopID:     UniversalWirePlatformDesktopID,
+		Kind:          VMKindInteractive,
+		WarmnessClass: WarmnessClassPublicPlatform,
+		Published:     true,
+		SandboxURL:    "http://10.200.17.2:8085",
+		State:         VMStateBooting,
+		Epoch:         58,
+	}
+	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
+
+	err := reg.EnsureUniversalWirePlatformComputer(t.Context())
+	if err != nil {
+		t.Fatalf("EnsureUniversalWirePlatformComputer: %v", err)
+	}
+	if len(mgr.recovers) != 1 || mgr.recovers[0] != UniversalWirePlatformVMID {
+		t.Fatalf("expected recovery for %s, got %#v", UniversalWirePlatformVMID, mgr.recovers)
+	}
+	if len(mgr.recoverCfgs) != 1 || mgr.recoverCfgs[0].ComputerKind != "platform" {
+		t.Fatalf("expected platform recovery config, got %#v", mgr.recoverCfgs)
+	}
+	own := reg.ownerships[key]
+	if own.State != VMStateActive {
+		t.Fatalf("state = %s, want active", own.State)
+	}
+	if own.SandboxURL != "http://10.200.99.2:8085" {
+		t.Fatalf("sandbox URL = %q, want recovered URL", own.SandboxURL)
+	}
+	if own.Epoch != 59 {
+		t.Fatalf("epoch = %d, want 59", own.Epoch)
+	}
+}
+
+func TestEnsureUniversalWirePlatformComputerCoalescesPersistedBootingRecovery(t *testing.T) {
+	mgr := &blockingPlatformRecoverManager{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		info: &VMInstanceInfo{
+			HostURL: "http://10.200.17.2:8085",
+			Epoch:   58,
+			Healthy: false,
+			State:   "pending",
+		},
+		recovered: &VMInstanceInfo{
+			HostURL: "http://10.200.99.2:8085",
+			Epoch:   59,
+			Healthy: true,
+			State:   "running",
+		},
+	}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mgr)
+	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
+	reg.ownerships[key] = &VMOwnership{
+		VMID:          UniversalWirePlatformVMID,
+		UserID:        UniversalWirePlatformOwnerID,
+		DesktopID:     UniversalWirePlatformDesktopID,
+		Kind:          VMKindInteractive,
+		WarmnessClass: WarmnessClassPublicPlatform,
+		Published:     true,
+		SandboxURL:    "http://10.200.17.2:8085",
+		State:         VMStateBooting,
+		Epoch:         58,
+	}
+	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
+
+	errs := make(chan error, 2)
+	go func() {
+		errs <- reg.EnsureUniversalWirePlatformComputer(t.Context())
+	}()
+
+	select {
+	case <-mgr.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first platform recovery to start")
+	}
+
+	go func() {
+		errs <- reg.EnsureUniversalWirePlatformComputer(t.Context())
+	}()
+	waitForPlatformWaiter(t, reg, key, 1)
+
+	close(mgr.release)
+	for i := 0; i < 2; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("EnsureUniversalWirePlatformComputer call %d: %v", i+1, err)
+		}
+	}
+	if calls := mgr.recoverCallCount(); calls != 1 {
+		t.Fatalf("recover calls = %d, want 1", calls)
+	}
+	own := reg.ownerships[key]
+	if own.State != VMStateActive || own.SandboxURL != "http://10.200.99.2:8085" {
+		t.Fatalf("ownership after coalesced recovery = state %s url %q", own.State, own.SandboxURL)
+	}
+}
+
+func TestSandboxProxyEnsuresUniversalWirePlatformBeforeProxying(t *testing.T) {
+	runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/runtime/runs" {
+			t.Fatalf("proxied path = %q, want /internal/runtime/runs", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"run_id":"run-platform"}`))
+	}))
+	defer runtime.Close()
+
+	mgr := &mockVMManager{
+		resumeResponse: &VMInstanceInfo{
+			HostURL: runtime.URL,
+			Epoch:   59,
+			Healthy: true,
+			State:   "running",
+		},
+	}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mgr)
+	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
+	reg.ownerships[key] = &VMOwnership{
+		VMID:          UniversalWirePlatformVMID,
+		UserID:        UniversalWirePlatformOwnerID,
+		DesktopID:     UniversalWirePlatformDesktopID,
+		Kind:          VMKindInteractive,
+		WarmnessClass: WarmnessClassPublicPlatform,
+		Published:     true,
+		SandboxURL:    "http://10.200.17.2:8085",
+		State:         VMStateBooting,
+		Epoch:         58,
+	}
+	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/runs",
+		strings.NewReader(`{"objective":"process source"}`),
+	)
+	req.Header.Set("X-Internal-Caller", "true")
+	rec := httptest.NewRecorder()
+
+	NewHandler(reg).HandleSandboxProxy(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if len(mgr.resumes) != 1 || mgr.resumes[0] != UniversalWirePlatformVMID {
+		t.Fatalf("expected platform resume before proxy, got %#v", mgr.resumes)
+	}
+	own := reg.ownerships[key]
+	if own.State != VMStateActive || own.SandboxURL != runtime.URL {
+		t.Fatalf("ownership after proxy = state %s url %q", own.State, own.SandboxURL)
+	}
+}
+
+func TestSandboxProxyPlatformEnsureFailureReturnsBoundedError(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
+	reg.ownerships[key] = &VMOwnership{
+		VMID:          UniversalWirePlatformVMID,
+		UserID:        UniversalWirePlatformOwnerID,
+		DesktopID:     UniversalWirePlatformDesktopID,
+		Kind:          VMKindInteractive,
+		WarmnessClass: WarmnessClassPublicPlatform,
+		Published:     true,
+		SandboxURL:    "http://10.200.17.2:8085",
+		State:         VMStateBooting,
+		Epoch:         58,
+	}
+	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/runs",
+		strings.NewReader(`{"objective":"process source"}`),
+	)
+	req.Header.Set("X-Internal-Caller", "true")
+	rec := httptest.NewRecorder()
+
+	NewHandler(reg).HandleSandboxProxy(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Body.String(); !strings.Contains(got, "platform sandbox is not ready") {
+		t.Fatalf("response body = %s, want bounded platform-not-ready error", got)
+	}
+	if got := rec.Body.String(); strings.Contains(got, UniversalWirePlatformVMID) || strings.Contains(got, UniversalWirePlatformOwnerID) || strings.Contains(got, "10.200.17.2") {
+		t.Fatalf("response body leaked platform details: %s", got)
+	}
+}
+
+type blockingPlatformRecoverManager struct {
+	started   chan struct{}
+	release   chan struct{}
+	info      *VMInstanceInfo
+	recovered *VMInstanceInfo
+
+	mu           sync.Mutex
+	recoverCalls int
+	startedOnce  sync.Once
+}
+
+func (m *blockingPlatformRecoverManager) BootVM(VMManagerConfig) (*VMInstanceInfo, error) {
+	return nil, errors.New("boot should not be called")
+}
+
+func (m *blockingPlatformRecoverManager) StopVM(string) error {
+	return nil
+}
+
+func (m *blockingPlatformRecoverManager) HibernateVM(string) error {
+	return nil
+}
+
+func (m *blockingPlatformRecoverManager) ResumeVM(string) (*VMInstanceInfo, error) {
+	return nil, errors.New("resume should not be called")
+}
+
+func (m *blockingPlatformRecoverManager) ReattachVM(string, string, int64) (*VMInstanceInfo, error) {
+	return nil, errors.New("reattach should not be called")
+}
+
+func (m *blockingPlatformRecoverManager) RecoverVM(string, VMManagerConfig) (*VMInstanceInfo, error) {
+	m.mu.Lock()
+	m.recoverCalls++
+	m.mu.Unlock()
+	m.startedOnce.Do(func() { close(m.started) })
+	<-m.release
+	m.mu.Lock()
+	m.info = m.recovered
+	m.mu.Unlock()
+	return m.recovered, nil
+}
+
+func (m *blockingPlatformRecoverManager) RefreshVM(string, VMManagerConfig) (*VMInstanceInfo, error) {
+	return nil, errors.New("refresh should not be called")
+}
+
+func (m *blockingPlatformRecoverManager) DestroyVMState(string) error {
+	return nil
+}
+
+func (m *blockingPlatformRecoverManager) GetVM(string) *VMInstanceInfo {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.info
+}
+
+func (m *blockingPlatformRecoverManager) CheckHealth(string) (bool, error) {
+	return false, nil
+}
+
+func (m *blockingPlatformRecoverManager) recoverCallCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.recoverCalls
+}
+
+func waitForPlatformWaiter(t *testing.T, reg *OwnershipRegistry, key string, want int) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-deadline:
+			reg.mu.RLock()
+			got := len(reg.pendingWaiters[key])
+			reg.mu.RUnlock()
+			t.Fatalf("timed out waiting for %d platform waiters; got %d", want, got)
+		case <-ticker.C:
+			reg.mu.RLock()
+			got := len(reg.pendingWaiters[key])
+			reg.mu.RUnlock()
+			if got == want {
+				return
+			}
+		}
 	}
 }
