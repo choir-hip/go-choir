@@ -460,6 +460,12 @@ func (rt *Runtime) startRunAsync(rec *types.RunRecord) {
 func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, ownerID string, metadata map[string]any, decision conductorDecision) (*types.RunRecord, error) {
 	now := time.Now().UTC()
 	runID := uuid.New().String()
+	if promptBarStructuredNoWorkerDecisionKind(prompt) {
+		if metadata == nil {
+			metadata = make(map[string]any)
+		}
+		metadata["prompt_bar_no_worker_decision_route"] = true
+	}
 	metadata = ensureDesktopID(metadata, nil, metadataStringValue(metadata, runMetadataDesktopID))
 	metadata = ensureTrajectoryID(metadata, nil, runID)
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, nil)
@@ -2404,6 +2410,9 @@ func promptBarNoWorkerDecisionRoute(prompt string) bool {
 	if text == "" {
 		return false
 	}
+	if promptBarStructuredNoWorkerDecisionKind(text) {
+		return true
+	}
 	if strings.Contains(text, "no_worker_needed") {
 		return true
 	}
@@ -2411,6 +2420,11 @@ func promptBarNoWorkerDecisionRoute(prompt string) bool {
 		return true
 	}
 	return vtextPromptExplicitlyRequestsNoWorkerDecision(text)
+}
+
+func promptBarStructuredNoWorkerDecisionKind(prompt string) bool {
+	text := strings.ToLower(strings.TrimSpace(prompt))
+	return strings.Contains(text, "decision_kind") && strings.Contains(text, "no_worker")
 }
 
 func vtextPromptExplicitlyRequestsResearcher(prompt string) bool {

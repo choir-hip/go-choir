@@ -291,6 +291,77 @@ Receipts:
 Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
 deployed product-path proof.
 
+## 2026-06-15 - Staging Structured Route-Predicate Repair Checkpoint
+
+Claim/scope: the structured route-predicate repair deployed cleanly, but the
+deployed proof still failed the durable decision-table requirement. Public
+diagnosis showed the stored conductor route still selected
+`initial_handoff=persistent_super`; the VText run was again a later scheduled
+worker-integration turn with no deterministic decision metadata.
+
+Move: document the deployed failure before changing the prompt-bar API
+boundary. Expected Delta V: close the landing/staging proof. Actual Delta V:
+V=1 to V=2, with prompt-bar no-worker route stamping still pending.
+
+Receipts:
+- Commit `3dfee389c5f4105466742b8d9f0576662d55c2ae` passed CI run
+  `27522338867`, Docs Truth Check `27522338874`, and FlakeHub publish
+  `27522338863`.
+- `https://choir.news/health` reported proxy and upstream sandbox
+  `deployed_commit=3dfee389c5f4105466742b8d9f0576662d55c2ae` after the
+  post-deploy upstream settled.
+- Deployed proof artifact:
+  `/tmp/vtext-decision-staging-proof-1781494549750.json`.
+- Deployed proof screenshot:
+  `/tmp/vtext-decision-staging-proof-1781494549750.png`.
+- Proof submission `9cfeef9a-221f-4b05-8b19-dbac1fd3b6ce`, document
+  `1a8edec4-2ecd-4c71-acf3-bd77b59605f6`, initial loop
+  `e02d066c-80a9-41ce-9aa8-cdc2848f55de`.
+- Observed diagnosis decisions `0`, Trace decision moments `0`,
+  `canonical_contains_reason=false`, revision count `2`, forbidden internal
+  routes `[]`.
+- Follow-up public diagnosis artifact:
+  `/tmp/vtext-decision-full-diagnostic-1781494768657.json`.
+- Diagnostic submission `23bd398c-ed82-4e41-a193-928ac64de512`, document
+  `455c0b47-c47d-4cb2-aaf6-3ffa34c6e793`, initial loop
+  `ca8f79b8-48a4-4f4d-b71f-5cb56be8792f`.
+- Diagnostic public run metadata showed conductor
+  `initial_handoff=persistent_super`; the VText run had
+  `parent_id=ca8f79b8-48a4-4f4d-b71f-5cb56be8792f`,
+  `scheduled_message_seq=2`, `request_intent=integrate_worker_findings`, and
+  no `vtext_initial_decision_required` metadata.
+
+Open edge: repair prompt-bar API route stamping so the stored completed
+conductor carries the no-worker route flag before materialization, then rerun
+focused route/decision tests and deployed product-path proof.
+
+## 2026-06-15 - Local Prompt-Bar Boundary Stamping Repair
+
+Claim/scope: the prompt-bar boundary now stamps the no-worker decision route
+inside `completePromptBarDecisionRun` when the submitted prompt carries the
+structured `decision_kind no_worker...` marker. This makes the completed
+conductor run carry the route flag before VText materialization, independent of
+whether the caller pre-populated metadata.
+
+Move: add a narrow structured marker helper, stamp
+`prompt_bar_no_worker_decision_route` while creating the completed conductor
+run, and assert the stored-route test sees that flag before materialization and
+the durable decision row after VText completion. Expected Delta V: close the
+local API-boundary repair. Actual Delta V: V=2 to V=1, leaving landing/staging
+proof.
+
+Receipts:
+- `internal/runtime/runtime.go` stamps `prompt_bar_no_worker_decision_route`
+  in `completePromptBarDecisionRun` for structured no-worker decision prompts.
+- `internal/runtime/prompt_bar_unit_test.go` asserts the completed conductor
+  has that flag before `ensureConductorVTextRoute`.
+- `nix develop -c go test ./internal/runtime -run 'Test(HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt|PromptBarNoWorkerSuperRequestRedirectsToVText|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|ExplicitNoWorkerDecisionPromptParsesInitialDecision)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|RunToolLoopInitialToolChoiceAppliesOnlyFirstCall|RunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition|RunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt|PromptBarNoWorkerSuperRequestRedirectsToVText|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionPromptParsesInitialDecision|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|InitialVTextToolChoiceUsesExactTools|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords|DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof.
+
 ## 2026-06-15 - Staging Route-Carrier Repair Checkpoint
 
 Claim/scope: the route-carrier repair deployed cleanly, but the deployed proof

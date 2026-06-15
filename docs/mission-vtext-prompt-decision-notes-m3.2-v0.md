@@ -279,8 +279,21 @@ states reasons without forcing choreography.
   structured explicit decision parser used for deterministic decision metadata.
   Stored-conductor route coverage now waits for completion and asserts the
   durable `no_worker_needed` decision row, not only the initial loop profile.
+- Deployed structured route-predicate repair failed: staging at
+  `3dfee389c5f4105466742b8d9f0576662d55c2ae` still persisted
+  `initial_handoff=persistent_super` for the explicit no-worker prompt.
+  Public diagnosis artifact
+  `/tmp/vtext-decision-full-diagnostic-1781494768657.json` showed the VText
+  run remained a scheduled `integrate_worker_findings` turn with
+  `scheduled_message_seq=2` and no deterministic decision metadata.
+- Local prompt-bar boundary stamping repair complete: completed prompt-bar
+  conductor runs now stamp `prompt_bar_no_worker_decision_route` when the
+  prompt carries the structured `decision_kind no_worker...` marker, even if
+  the caller did not pre-stamp metadata. Stored-route coverage now asserts the
+  flag exists before materialization and still proves the decision row after
+  VText completion.
 
-**next move:** commit the structured route-predicate repair, push
+**next move:** commit the prompt-bar boundary stamping repair, push
 `origin main`, monitor CI/deploy, verify staging identity, and rerun deployed
 proof.
 
@@ -695,6 +708,62 @@ Heresy delta: discovered: the deployed prompt-bar route can still persist
 `initial_handoff=persistent_super` for explicit no-worker VText prompts even
 after local route and redirect predicates pass. introduced: none accepted.
 repaired: pending route-predicate repair.
+
+## Staging Structured Route-Predicate Repair Checkpoint - 2026-06-15
+
+Reliable evidence: commit
+`3dfee389c5f4105466742b8d9f0576662d55c2ae` passed CI run `27522338867`, Docs
+Truth Check `27522338874`, and FlakeHub publish `27522338863`, including Node
+B staging deploy. Public `https://choir.news/health` reported both proxy and
+upstream sandbox `deployed_commit` equal to that SHA after a short post-deploy
+settling window. A deployed product-path proof submitted through
+`/api/prompt-bar` and observed through `/api/vtext/*/diagnosis` and
+`/api/trace/*`, using no forbidden browser-public internal routes. Proof
+artifact `/tmp/vtext-decision-staging-proof-1781494549750.json` and screenshot
+`/tmp/vtext-decision-staging-proof-1781494549750.png` recorded submission
+`9cfeef9a-221f-4b05-8b19-dbac1fd3b6ce`, document
+`1a8edec4-2ecd-4c71-acf3-bd77b59605f6`, and initial loop
+`e02d066c-80a9-41ce-9aa8-cdc2848f55de`. The proof ended with diagnosis
+decisions `0`, Trace decision moments `0`, `canonical_contains_reason=false`,
+revision count `2`, and forbidden internal routes `[]`.
+
+Follow-up public diagnosis artifact
+`/tmp/vtext-decision-full-diagnostic-1781494768657.json` recorded submission
+`23bd398c-ed82-4e41-a193-928ac64de512`, document
+`455c0b47-c47d-4cb2-aaf6-3ffa34c6e793`, and initial loop
+`ca8f79b8-48a4-4f4d-b71f-5cb56be8792f`. Public run metadata still showed
+conductor `initial_handoff=persistent_super`; the VText run had
+`parent_id=ca8f79b8-48a4-4f4d-b71f-5cb56be8792f`,
+`scheduled_message_seq=2`, `request_intent=integrate_worker_findings`, and no
+`vtext_initial_decision_required` metadata.
+
+Conjecture delta: deriving the no-worker route from the structured parser at
+the conductor and redirect branch did not affect the live prompt-bar route.
+The next repair must stamp or persist the no-worker route at the prompt-bar API
+boundary before completed conductor materialization, using the deployed prompt
+shape itself as the source of truth.
+
+Protected surfaces: prompt-bar API run metadata, conductor route
+materialization, persistent-super fallback routing, VText decision recording,
+Trace decision projection, diagnosis decision exposure, and canonical VText
+revision creation.
+
+Admissible evidence class: focused API route tests proving a prompt-bar
+submission with `decision_kind no_worker_needed` stores the no-worker route
+flag before conductor materialization and creates a durable decision row;
+deployed product-path proof showing one matching diagnosis decision, one
+matching Trace decision moment, no forbidden routes, and no private reason in
+the final canonical revision.
+
+Rollback path: revert the next prompt-bar stamping repair if it sends ordinary
+execution or operational proof requests away from persistent super. Keep this
+checkpoint as evidence that local downstream route predicates alone did not
+change the live prompt-bar boundary.
+
+Heresy delta: discovered: the deployed prompt-bar API boundary can still
+materialize a completed conductor route without the no-worker route flag even
+when downstream conductor and redirect predicates parse the same prompt shape.
+introduced: none accepted. repaired: pending API-boundary stamping repair.
 
 ## Suggested Goal String
 

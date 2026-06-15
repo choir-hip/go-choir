@@ -177,6 +177,9 @@ func TestConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt(t *testing.T
 	if err != nil {
 		t.Fatalf("complete conductor decision: %v", err)
 	}
+	if !metadataBoolValue(rec.Metadata, "prompt_bar_no_worker_decision_route") {
+		t.Fatalf("completed conductor missing no-worker route flag before materialization: %+v", rec.Metadata)
+	}
 
 	decision, err := rt.ensureConductorVTextRoute(context.Background(), rec, "", "")
 	if err != nil {
