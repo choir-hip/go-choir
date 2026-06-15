@@ -11,8 +11,8 @@ import (
 func TestEligibleForAutonomousPublishRequiresCanonicalArticleRevision(t *testing.T) {
 	owner := PlatformOwnerID()
 	meta, _ := json.Marshal(map[string]any{
-		"source":                   "edit_vtext",
-		"revision_role":            RevisionRoleCanonical,
+		"source":                     "edit_texture",
+		"revision_role":              RevisionRoleCanonical,
 		"ingestion_handoff_cycle_id": "cycle-1",
 	})
 	rev := types.Revision{
@@ -35,8 +35,8 @@ func TestEligibleForAutonomousPublishRequiresCanonicalArticleRevision(t *testing
 	}
 
 	inputMeta, _ := json.Marshal(map[string]any{
-		"source":                   "edit_vtext",
-		"revision_role":            RevisionRoleInput,
+		"source":                     "edit_texture",
+		"revision_role":              RevisionRoleInput,
 		"ingestion_handoff_cycle_id": "cycle-1",
 	})
 	inputRev := rev
@@ -46,10 +46,37 @@ func TestEligibleForAutonomousPublishRequiresCanonicalArticleRevision(t *testing
 	}
 }
 
+func TestEligibleForAutonomousPublishAcceptsLegacyEditVTextSource(t *testing.T) {
+	owner := PlatformOwnerID()
+	meta, _ := json.Marshal(map[string]any{
+		"source":                     "edit_vtext", // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
+		"revision_role":              RevisionRoleCanonical,
+		"ingestion_handoff_cycle_id": "cycle-legacy",
+	})
+	rev := types.Revision{
+		RevisionID: "rev-legacy",
+		DocID:      "doc-legacy",
+		OwnerID:    owner,
+		Content:    "# Story\n\nMADRID -- Officials confirmed the route change.",
+		Metadata:   meta,
+	}
+	doc := types.Document{DocID: "doc-legacy", OwnerID: owner, Title: "Story.vtext"}
+	rec := &types.RunRecord{
+		OwnerID: owner,
+		RunID:   "run-legacy",
+		Metadata: map[string]any{
+			"request_intent": "universal_wire_processor_article_revision",
+		},
+	}
+	if !EligibleForAutonomousPublish(doc, rev, rec, owner) {
+		t.Fatal("legacy edit-source revisions should remain eligible during Texture metadata migration")
+	}
+}
+
 func TestEligibleForAutonomousPublishAcceptsWorkerIntegrationArticleEdit(t *testing.T) {
 	owner := PlatformOwnerID()
 	meta, _ := json.Marshal(map[string]any{
-		"source":                     "edit_vtext",
+		"source":                     "edit_texture",
 		"revision_role":              RevisionRoleInput,
 		"artifact_kind":              "source_brief",
 		"vtext_edit_kind":            "vtext_edit",
@@ -80,7 +107,7 @@ func TestEligibleForAutonomousPublishAcceptsWorkerIntegrationArticleEdit(t *test
 func TestEligibleForAutonomousPublishStagingRevisionFixture(t *testing.T) {
 	owner := PlatformOwnerID()
 	meta, _ := json.Marshal(map[string]any{
-		"source":                     "edit_vtext",
+		"source":                     "edit_texture",
 		"revision_role":              RevisionRoleInput,
 		"artifact_kind":              "source_brief",
 		"vtext_edit_kind":            "vtext_edit",
@@ -108,8 +135,8 @@ func TestEligibleForAutonomousPublishStagingRevisionFixture(t *testing.T) {
 func TestEligibleForAutonomousPublishRejectsSeedBrief(t *testing.T) {
 	owner := PlatformOwnerID()
 	meta, _ := json.Marshal(map[string]any{
-		"source":                   "edit_vtext",
-		"revision_role":            RevisionRoleCanonical,
+		"source":                     "edit_texture",
+		"revision_role":              RevisionRoleCanonical,
 		"ingestion_handoff_cycle_id": "cycle-1",
 	})
 	rev := types.Revision{
@@ -135,11 +162,10 @@ func TestEligibleForAutonomousPublishRejectsSeedBrief(t *testing.T) {
 	}
 }
 
-
 func TestEligibleForAutonomousPublishAcceptsRevisionLineageWithoutRunMetadata(t *testing.T) {
 	owner := PlatformOwnerID()
 	meta, _ := json.Marshal(map[string]any{
-		"source":                      "edit_vtext",
+		"source":                      "edit_texture",
 		"revision_role":               RevisionRoleCanonical,
 		"vtext_edit_kind":             "vtext_edit",
 		"source_network_cycle_id":     "cycle-live-1",

@@ -14,6 +14,9 @@ const (
 
 	RequestedByWirePolicy = "wire_publication_policy"
 	PublicationKind       = "universal_wire_autonomous"
+
+	editTextureSource     = "edit_texture"
+	legacyEditVTextSource = "edit_vtext" // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
 )
 
 // PlatformOwnerID returns the durable owner id for the Universal Wire platform computer.
@@ -31,7 +34,7 @@ func EligibleForAutonomousPublish(doc types.Document, rev types.Revision, rec *t
 		return false
 	}
 	meta := decodeMetadata(rev.Metadata)
-	if metadataString(meta, "source") != "edit_vtext" {
+	if !isTextureEditSource(metadataString(meta, "source")) {
 		return false
 	}
 	if sourceNetworkCycleID(meta) == "" || !RevisionIsPublishableWireArticle(meta) {
@@ -78,12 +81,16 @@ func RevisionIsPublishableWireArticle(meta map[string]any) bool {
 	if revisionIsCanonicalArticle(meta) && !revisionIsInput(meta) {
 		return true
 	}
-	if metadataString(meta, "source") == "edit_vtext" &&
+	if isTextureEditSource(metadataString(meta, "source")) &&
 		sourceNetworkCycleID(meta) != "" &&
 		metadataString(meta, "vtext_edit_kind") == "vtext_edit" {
 		return true
 	}
 	return false
+}
+
+func isTextureEditSource(source string) bool {
+	return source == editTextureSource || source == legacyEditVTextSource
 }
 
 func revisionIsCanonicalArticle(meta map[string]any) bool {

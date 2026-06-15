@@ -183,3 +183,32 @@ Evidence / root-cause hypothesis:
 Open edge: repair should accept `edit_texture` as the current source, keep the
 retired source only as deletion-receipted legacy metadata compatibility, and
 prove both `internal/wirepublish` and the failed runtime publication tests.
+
+## 2026-06-15 - Wire Publish Eligibility Compatibility Repair
+
+Claim: Universal Wire autonomous publication should accept the current
+`edit_texture` revision metadata source while preserving legacy stored
+edit-source metadata during the cutover window.
+
+Move: repair `internal/wirepublish` eligibility and Universal Wire read
+projection predicates to treat `edit_texture` as current and retain the retired
+source only behind deletion-receipted compatibility constants. Updated
+`internal/wirepublish` tests so current fixtures use Texture metadata and one
+explicit test proves legacy metadata remains eligible.
+
+Expected ΔV: 0 against the coarse mission variant; this repairs a discovered
+CI regression inside the product-facing route/tool slice rather than
+discharging a new settlement obligation.
+
+Actual ΔV: 0. V remains 7 until pushed CI and staging proof pass.
+
+Receipts:
+- `nix develop -c go test ./internal/wirepublish`: pass.
+- `nix develop -c go test ./internal/runtime -run 'TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformVTexts|TestNormalizeWireArticleSourceServiceProseRewritesBareLabels'`: pass.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,146 warnings.
+- `/tmp/choir-doccheck.json` warning counts after the repair: H1=724, H3=15,
+  H4=3, H5=347, R3=57.
+- `git diff --check`: pass.
+
+Open edge: the repair has not yet passed pushed CI, deployed to staging, or
+received browser/product-path acceptance proof.
