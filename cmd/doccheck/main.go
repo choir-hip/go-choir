@@ -335,6 +335,12 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 	if err != nil {
 		warnings = append(warnings, warning{Rule: "R7", Severity: "warning", Message: fmt.Sprintf("code heresy scan failed: %v", err)})
 	}
+	textureWarnings, err := scanTextureRetiredNames(docs)
+	if err != nil {
+		warnings = append(warnings, warning{Rule: "H5", Severity: "warning", Message: fmt.Sprintf("Texture retired-name scan failed: %v", err)})
+	} else {
+		warnings = append(warnings, textureWarnings...)
+	}
 
 	sortWarnings(warnings)
 	docList := make([]docInfo, 0, len(docs))
@@ -1105,6 +1111,83 @@ func scanCurrentTargetCollapse(path, content string, info *docInfo) []warning {
 	}
 	patterns := []string{"five Go services"}
 	return scanLinePatterns("H4", path, content, patterns, "target/current service topology may be stated as current reality", "compare against cmd/ and docs/current-architecture.md")
+}
+
+func scanTextureRetiredNames(docs map[string]*docInfo) ([]warning, error) {
+	files, err := heresySurfaceFiles(".")
+	if err != nil {
+		return nil, err
+	}
+	var warnings []warning
+	for _, p := range files {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(b), "\n")
+		var firstLine int
+		violations := 0
+		for i, line := range lines {
+			if !hasTextureRetiredName(line) {
+				continue
+			}
+			if isAllowedTextureRetiredNameLine(p, line, docs) {
+				continue
+			}
+			violations++
+			if firstLine == 0 {
+				firstLine = i + 1
+			}
+		}
+		if violations == 0 {
+			continue
+		}
+		warnings = append(warnings, warning{
+			Rule:     "H5",
+			Severity: "warning",
+			Path:     p,
+			Line:     firstLine,
+			Message:  fmt.Sprintf("%d retired Texture predecessor name line(s) appear outside allowed historical/background context", violations),
+			Hint:     "rename to Texture or classify the occurrence as historical evidence, migration residue, or temporary cutover residue with a deletion receipt",
+		})
+	}
+	return warnings, nil
+}
+
+func hasTextureRetiredName(line string) bool {
+	lower := strings.ToLower(line)
+	for _, term := range []string{"vtext", ".vtext", "/api/vtext", "data-vtext", "edit_vtext", "vtext_"} {
+		if strings.Contains(lower, term) {
+			return true
+		}
+	}
+	return false
+}
+
+func isAllowedTextureRetiredNameLine(path, line string, docs map[string]*docInfo) bool {
+	if strings.HasPrefix(path, "cmd/doccheck/") {
+		return true
+	}
+	if path == "docs/why-texture-background-2026-06-15.md" {
+		return true
+	}
+	if info := docs[path]; info != nil {
+		if info.IsEvidence || info.Scope == "historical" {
+			return true
+		}
+	}
+	lower := strings.ToLower(line)
+	if strings.HasPrefix(path, "docs/mission-") {
+		for _, term := range []string{"historical evidence", "retired-name", "retired vtext", "retired v-name", "old v-name", "migration residue", "deletion target", "delete before settlement", "selected affordance line counts", "v-name profile references", "request_super_execution", "data-vtext", "vtext_"} {
+			if strings.Contains(lower, term) {
+				return true
+			}
+		}
+	}
+	if strings.Contains(lower, "texture-cutover-allow:") && (strings.Contains(lower, "delete-by") || strings.Contains(lower, "deletion receipt")) {
+		return true
+	}
+	return false
 }
 
 func scanLinePatterns(rule, path, content string, patterns []string, message, hint string) []warning {

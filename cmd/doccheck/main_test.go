@@ -108,6 +108,52 @@ func TestClassifyHeresyContext(t *testing.T) {
 	}
 }
 
+func TestTextureRetiredNameAllowlist(t *testing.T) {
+	docs := map[string]*docInfo{
+		"docs/historical.md":                      {Path: "docs/historical.md", Scope: "historical", IsEvidence: true},
+		"docs/current.md":                         {Path: "docs/current.md", Scope: "current", IsEvidence: false},
+		"docs/mission-texture-hard-cutover-v0.md": {Path: "docs/mission-texture-hard-cutover-v0.md", Scope: "current", IsEvidence: false},
+	}
+	tests := []struct {
+		path string
+		line string
+		want bool
+	}{
+		{"docs/why-texture-background-2026-06-15.md", "VText was the old name.", true},
+		{"docs/historical.md", "VText was used here.", true},
+		{"docs/mission-texture-hard-cutover-v0.md", "Retired VText evidence remains in the mission.", true},
+		{"docs/mission-texture-hard-cutover-v0.md", "Selected affordance line counts: /api/vtext 505.", true},
+		{"docs/mission-texture-hard-cutover-v0.md", "  `edit_vtext` 390, `request_super_execution` 122.", true},
+		{"cmd/doccheck/main.go", `for _, term := range []string{"vtext"}`, true},
+		{"internal/runtime/vtext.go", "// texture-cutover-allow: vtext route shim; delete-by texture-hard-cutover-v0", true},
+		{"docs/current.md", "VText owns canonical versions.", false},
+		{"internal/runtime/vtext.go", "const path = \"/api/vtext/documents\"", false},
+	}
+	for _, tt := range tests {
+		if got := isAllowedTextureRetiredNameLine(tt.path, tt.line, docs); got != tt.want {
+			t.Fatalf("isAllowedTextureRetiredNameLine(%q, %q) = %v, want %v", tt.path, tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestHasTextureRetiredName(t *testing.T) {
+	tests := []struct {
+		line string
+		want bool
+	}{
+		{"Open the Texture document.", false},
+		{"Open the VText document.", true},
+		{"POST /api/vtext/documents", true},
+		{"data-vtext-editor", true},
+		{"edit_vtext", true},
+	}
+	for _, tt := range tests {
+		if got := hasTextureRetiredName(tt.line); got != tt.want {
+			t.Fatalf("hasTextureRetiredName(%q) = %v, want %v", tt.line, got, tt.want)
+		}
+	}
+}
+
 func hasWarningMessage(warnings []warning, needle string) bool {
 	for _, w := range warnings {
 		if strings.Contains(w.Message, needle) {

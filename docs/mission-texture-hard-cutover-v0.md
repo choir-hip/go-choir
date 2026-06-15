@@ -146,11 +146,12 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: docs and detector warnings -> focused local tests -> staging deploy
   identity -> browser product proof -> protocol canonization.
 
-variant (ranking function) V: current V=9; last ΔV=-1:
+variant (ranking function) V: current V=8; last ΔV=-1:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
-2. current V includes: docs checker retired-name warning rule is not landed;
+2. discharged: docs checker retired-name warning rule is implemented in
+   report-only mode as H5 with the documented allowlist;
 3. current V includes: high-read doctrine and operating docs still require
    Texture reconciliation;
 4. current V includes: runtime/tool/API symbols still use the old ontology;
@@ -204,19 +205,21 @@ position / live conjectures / open edges:
   choice and acceptance quality, not just labels.
 - C2 active: a common patch tool plus an exceptional whole-document recovery
   rewrite will better orient the Texture writer than one overloaded edit tool.
-- C3 testing: the docs checker can carry retired-name warnings now without
-  failing docs-only CI, then become fail-closed after the portfolio clears
-  baseline warnings. The initial warning design and allowlist are documented;
-  implementation remains open.
+- C3 supported for report-only scope: the docs checker now carries H5
+  retired-name warnings without failing docs-only CI. Current baseline:
+  `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json` reports 1,155 total warnings, including 352 H5
+  file-level warnings across AGENTS.md, README.md, cmd, docs, frontend,
+  internal, and specs. Promotion to fail-closed remains future work after the
+  baseline burns down.
 - C4 active: some old mission docs may be cheaper and clearer to delete or
   leave only in git history than to rewrite under the new ontology.
 - C5 active: protocol design before proof risks cathedral-building. The
   protocol should be the last deliverable, distilled from the working minimal
   surface.
 
-next move: land this Problem Documentation First checkpoint, then implement the
-report-only docs checker warning rule and allowlist. Do not touch runtime until
-the checkpoint is committed.
+next move: commit the report-only checker slice, then begin high-read doctrine
+and operating-doc Texture reconciliation before runtime symbol changes.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

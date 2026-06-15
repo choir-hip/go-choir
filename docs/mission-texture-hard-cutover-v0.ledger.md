@@ -52,3 +52,34 @@ Receipts:
 
 Open edge: the report-only checker rule is designed but not implemented; the
 checkpoint still needs to be committed before runtime changes.
+
+## 2026-06-15 - Report-Only Checker Rule
+
+Claim: the docs checker can expose Texture retired-name drift now without
+turning docs-only CI into a fail-closed gate before the baseline is reduced.
+
+Move: construct H5 in `cmd/doccheck` as a file-level warning over docs, Go,
+frontend, prompt, script, workflow, and spec surfaces. Added allowlist handling
+for the Texture historical background doc, manifest-classified historical or
+evidence docs, explicitly labeled historical/migration mission evidence,
+`cmd/doccheck` detector implementation/tests, and temporary code lines marked
+`texture-cutover-allow:` with a deletion receipt.
+
+Expected ΔV: -1 by landing report-only checker coverage while preserving the
+Problem Documentation First checkpoint boundary before runtime changes.
+
+Actual ΔV: -1. V moves from 9 to 8. Runtime behavior and product affordances
+remain unchanged.
+
+Receipts:
+- `go test ./cmd/doccheck`: pass.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,155 warnings.
+- `/tmp/choir-doccheck.json` warning counts: H1=724, H3=19, H4=3, H5=352,
+  R3=57.
+- H5 file-level warning distribution: AGENTS.md=1, README.md=1, cmd=5,
+  docs=136, frontend=66, internal=142, specs=1.
+
+Open edge: H5 is warning-only; high-read docs, prompts, UI, tests, runtime
+symbols, routes, storage names, and tool affordances still need the actual
+Texture cutover.
