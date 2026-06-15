@@ -2029,8 +2029,14 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	}
 
 	userRevisionID := uuid.New().String()
+	routeSeedPrompt := firstNonEmptyString(
+		strings.TrimSpace(decision.SeedPrompt),
+		conductorSeedPrompt(rec),
+		strings.TrimSpace(rec.Prompt),
+		metadataStringValue(rec.Metadata, "seed_prompt"),
+	)
 	userRevisionMetadata := map[string]any{
-		"seed_prompt":         decision.SeedPrompt,
+		"seed_prompt":         routeSeedPrompt,
 		"conductor_loop_id":   rec.RunID,
 		runMetadataOwnerEmail: metadataString(rec.Metadata, runMetadataOwnerEmail),
 		"created_from":        "conductor",
@@ -2046,7 +2052,7 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		OwnerID:     rec.OwnerID,
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: rec.OwnerID,
-		Content:     decision.SeedPrompt,
+		Content:     routeSeedPrompt,
 		Citations:   json.RawMessage("[]"),
 		Metadata:    userRevMeta,
 		CreatedAt:   now,
@@ -2081,14 +2087,26 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 
 	initialPrompt := strings.TrimSpace(objective)
 	if initialPrompt == "" {
-		initialPrompt = strings.TrimSpace(decision.SeedPrompt)
+		initialPrompt = routeSeedPrompt
 	}
 	if initialPrompt == "" {
 		initialPrompt = "Create the first useful current-state version of this vtext document."
 	}
-	combinedPrompt := decision.SeedPrompt + " " + initialPrompt
+	routePrompt := strings.Join([]string{
+		routeSeedPrompt,
+		initialPrompt,
+		strings.TrimSpace(rec.Prompt),
+		metadataStringValue(rec.Metadata, "seed_prompt"),
+	}, " ")
+	combinedPrompt := routePrompt
 	noWorkerDecisionRoute := metadataBoolValue(rec.Metadata, "prompt_bar_no_worker_decision_route") ||
-		promptBarNoWorkerDecisionRoute(combinedPrompt)
+		promptBarNoWorkerDecisionRoute(routePrompt)
+	if noWorkerDecisionRoute {
+		if rec.Metadata == nil {
+			rec.Metadata = make(map[string]any)
+		}
+		rec.Metadata["prompt_bar_no_worker_decision_route"] = true
+	}
 	if vtextPromptNeedsSuperExecution(combinedPrompt) && !noWorkerDecisionRoute {
 		requestCtx := WithToolExecutionContext(ctx, &types.RunRecord{
 			RunID:        rec.RunID,

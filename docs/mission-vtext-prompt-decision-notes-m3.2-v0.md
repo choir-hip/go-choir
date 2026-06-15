@@ -233,11 +233,16 @@ states reasons without forcing choreography.
   initial assignment to `super`; `super` later wakes VText, and VText edits the
   document without any decision row. The bypass happens before VText owns the
   initial route, not inside VText's final edit loop.
+- Local route-carrier repair complete: conductor VText routing now derives the
+  no-worker decision route from every durable prompt carrier available at the
+  route boundary, stamps the no-worker route flag before any super branch, and
+  preserves that prompt as the seed for deterministic VText decision metadata.
+  Focused route/tool-loop/decision tests pass.
 
-**next move:** inspect and repair the conductor-to-super assignment path that
-still lets `super` own the initial loop before the deterministic VText
-decision record exists, then rerun local route coverage before another
-push/deploy/proof loop.
+**next move:** commit the route-carrier repair, push `origin main`, monitor
+CI/deploy, verify staging identity, and rerun deployed product-path proof for
+decision row, Trace decision moment, no forbidden routes, no initial super
+handoff, and no private reason in canonical text.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 

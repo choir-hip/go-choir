@@ -324,6 +324,35 @@ Open edge: inspect and repair the conductor-to-super assignment path for
 explicit no-worker VText decision prompts, then rerun focused local coverage and
 the deployed product-path proof.
 
+## 2026-06-15 - Local Route-Carrier Repair
+
+Claim/scope: explicit no-worker VText decision prompts no longer depend on one
+prompt-bar metadata flag surviving to the conductor route branch. The route now
+derives the no-worker decision from all durable prompt carriers available at
+the boundary, stamps the route flag before any persistent-super branch, and
+preserves that seed prompt for deterministic VText decision metadata.
+
+Move: repair the conductor-to-super assignment path identified by the public
+Trace diagnostic. Expected Delta V: close local repair and return to
+landing/staging proof. Actual Delta V: V=2 to V=1.
+
+Receipts:
+- `internal/runtime/runtime.go` builds a route prompt from parsed decision
+  seed, conductor seed, run prompt, and stored seed metadata before evaluating
+  the no-worker route guard.
+- `internal/runtime/runtime.go` persists
+  `prompt_bar_no_worker_decision_route=true` when the route guard derives from
+  durable prompt text.
+- `internal/runtime/prompt_bar_unit_test.go` adds
+  `TestConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt` for the
+  deployed diagnostic prompt shape without a pre-stamped handler flag.
+- `nix develop -c go test ./internal/runtime -run 'Test(HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|ExplicitNoWorkerDecisionPromptParsesInitialDecision)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|RunToolLoopInitialToolChoiceAppliesOnlyFirstCall|RunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition|RunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionPromptParsesInitialDecision|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|InitialVTextToolChoiceUsesExactTools|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords|DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof.
+
 ## 2026-06-15 - Prompt-Bar Route-Contract Checkpoint
 
 Claim/scope: the local no-worker route-preemption repair deployed cleanly, but

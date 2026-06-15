@@ -158,6 +158,48 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 	}
 }
 
+func TestConductorVTextRouteDerivesNoWorkerDecisionFromStoredPrompt(t *testing.T) {
+	rt, _ := testAPISetup(t)
+
+	prompt := "Create a short VText document titled M32_VTEXT_ROUTE_DIAGNOSTIC. The body should say this marker is a deployed route diagnostic. Keep the document reader-facing only. Because this task is fully supplied and requires no research or execution worker, record an off-document VText decision note with decision_kind no_worker_needed, exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker., evidence ref staging-marker:M32_VTEXT_ROUTE_DIAGNOSTIC, next action Write the concise reader-facing VText revision. Then write the concise reader-facing VText revision."
+	rec, err := rt.completePromptBarDecisionRun(context.Background(), prompt, "user-alice", map[string]any{
+		runMetadataAgentProfile:  AgentProfileConductor,
+		runMetadataAgentRole:     AgentProfileConductor,
+		"input_source":           "prompt_bar",
+		"requested_app":          AgentProfileVText,
+		"initial_document_title": "M32_VTEXT_ROUTE_DIAGNOSTIC",
+		"submission_surface":     "prompt_bar",
+	}, conductorDecision{
+		Action: "open_app",
+		App:    AgentProfileVText,
+		Title:  "M32_VTEXT_ROUTE_DIAGNOSTIC",
+	})
+	if err != nil {
+		t.Fatalf("complete conductor decision: %v", err)
+	}
+
+	decision, err := rt.ensureConductorVTextRoute(context.Background(), rec, "", "")
+	if err != nil {
+		t.Fatalf("ensure conductor vtext route: %v", err)
+	}
+	if got := metadataStringValue(rec.Metadata, "initial_handoff"); got == "persistent_super" {
+		t.Fatalf("initial_handoff = %q, want no initial super handoff", got)
+	}
+	if !metadataBoolValue(rec.Metadata, "prompt_bar_no_worker_decision_route") {
+		t.Fatalf("route should persist no-worker flag derived from stored prompt: %+v", rec.Metadata)
+	}
+	initialRun, err := rt.GetRun(context.Background(), decision.InitialLoopID, "user-alice")
+	if err != nil {
+		t.Fatalf("get initial loop run: %v", err)
+	}
+	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
+		t.Fatalf("initial loop profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
+	}
+	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_decision_required") {
+		t.Fatalf("initial run missing deterministic decision metadata: %+v", initialRun.Metadata)
+	}
+}
+
 func waitForPromptBarUnitRunTerminal(t *testing.T, rt *Runtime, runID, ownerID string, timeout time.Duration) types.RunRecord {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
