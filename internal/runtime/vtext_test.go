@@ -234,6 +234,21 @@ func (p *vtextDecisionThenEditProvider) CallWithTools(ctx context.Context, req T
 	p.calls++
 	switch p.calls {
 	case 1:
+		if req.ToolChoice == exactRequiredToolChoice("edit_vtext") {
+			return &ToolLoopResponse{
+				StopReason: "tool_use",
+				ToolCalls: []types.ToolCall{{
+					ID:   "call-reader-edit",
+					Name: "edit_vtext",
+					Arguments: json.RawMessage(`{
+						"operation":"replace_all",
+						"content":"M32_VTEXT_DECISION_ROUTE_TEST\n\nThis marker is a deployed acceptance probe."
+					}`),
+				}},
+				Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+				Model: "test-model",
+			}, nil
+		}
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
@@ -2010,11 +2025,10 @@ func TestInitialVTextDecisionPromptRejectsPrematureEditBeforeDecision(t *testing
 		strings.Contains(appContent, "M3.2 staging proof: user supplied the needed content") {
 		t.Fatalf("appagent revision leaked private decision rationale: %q", appContent)
 	}
-	if len(provider.choices) < 3 ||
-		provider.choices[0] != exactRequiredToolChoice("record_vtext_decision") ||
-		provider.choices[1] != exactRequiredToolChoice("record_vtext_decision") ||
-		provider.choices[2] != "" {
-		t.Fatalf("tool choices = %#v, want decision exact retry before unconstrained edit", provider.choices)
+	if len(provider.choices) < 2 ||
+		provider.choices[0] != exactRequiredToolChoice("edit_vtext") ||
+		provider.choices[1] != "" {
+		t.Fatalf("tool choices = %#v, want deterministic decision record before initial edit", provider.choices)
 	}
 }
 

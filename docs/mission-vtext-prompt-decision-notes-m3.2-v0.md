@@ -174,11 +174,16 @@ states reasons without forcing choreography.
   Trace decision moments, two VText runs, one super run, and three document
   revisions. Explicit decision-note pressure is still not reaching a durable
   decision row on the deployed model path.
+- Local first-turn decision guarantee repair complete: explicit
+  `decision_kind no_worker_needed` prompts now carry a parsed initial decision
+  record in VText run metadata, persist that record before the provider can
+  edit, emit the normal VText decision event, and then start the model on
+  `edit_vtext` for the reader-facing revision.
 
-**next move:** checkpoint the deployed partial repair, inspect provider/tool-loop
-evidence for why exact `record_vtext_decision` is not producing a durable row,
-then repair the remaining first-turn decision guarantee without weakening
-ordinary VText agency.
+**next move:** commit the first-turn decision guarantee repair, push
+`origin main`, monitor CI/deploy, verify staging identity, and rerun deployed
+product-path proof for decision row, Trace decision moment, no forbidden routes,
+and no private reason in canonical text.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 

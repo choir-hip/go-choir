@@ -159,6 +159,40 @@ distinguish missing exact decision selection, provider noncompliance, and
 decision-tool execution failure; then repair the remaining first-turn decision
 guarantee without turning ordinary VText agency into blanket over-recording.
 
+## 2026-06-15 - Local First-Turn Decision Guarantee Repair
+
+Claim/scope: explicit, owner-supplied `decision_kind no_worker_needed`
+decision-note prompts now produce a durable VText decision row before the
+provider can create a canonical edit. This is limited to the structured
+no-worker decision request shape; ordinary VText decisions still depend on VText
+agency and the `record_vtext_decision` affordance.
+
+Move: parse the explicit no-worker decision note from the prompt into initial
+VText run metadata, record it idempotently at the start of the VText tool-loop
+activation, emit the normal `vtext.decision.recorded` event, and then start the
+model on exact `edit_vtext` for the reader-facing revision. Expected Delta V:
+close local first-turn decision guarantee. Actual Delta V: V=2 to V=1, leaving
+landing/staging proof.
+
+Receipts:
+- `internal/runtime/vtext_agent_revision.go` carries explicit initial
+  no-worker decision metadata into the VText run.
+- `internal/runtime/runtime.go` records the initial VText decision before the
+  provider turn and switches that narrow path to initial `edit_vtext`.
+- `internal/runtime/vtext_prompt_unit_test.go` parses the deployed proof prompt
+  into decision kind, reason, evidence ref, and next action.
+- `internal/runtime/prompt_bar_unit_test.go` proves prompt-bar materialization
+  creates a VText run with deterministic initial decision metadata and initial
+  edit choice.
+- `internal/runtime/vtext_test.go` proves the proof-style prompt records one
+  `no_worker_needed` decision, creates one reader-facing appagent revision, and
+  keeps the private reason out of canonical text.
+- `nix develop -c go test ./internal/runtime -run 'Test(ExplicitNoWorkerDecisionPromptParsesInitialDecision|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|InitialVTextToolChoiceUsesExactTools|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|RunToolLoopInitialToolChoiceAppliesOnlyFirstCall|RunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition|RunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|ExplicitNoWorkerDecisionPromptParsesInitialDecision|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|InitialVTextToolChoiceUsesExactTools|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords|DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence)' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof.
+
 ## 2026-06-15 - Prompt-Bar Route-Contract Checkpoint
 
 Claim/scope: the local no-worker route-preemption repair deployed cleanly, but

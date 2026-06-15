@@ -636,3 +636,31 @@ func TestExplicitNoWorkerDecisionBypassesInitialSuperPreemption(t *testing.T) {
 		t.Fatal("ordinary mutation prompt must not bypass super execution")
 	}
 }
+
+func TestExplicitNoWorkerDecisionPromptParsesInitialDecision(t *testing.T) {
+	prompt := strings.Join([]string{
+		"Create a short VText document titled M32_VTEXT_DECISION_ROUTE_TEST.",
+		"Because this task is fully supplied and requires no research or execution worker,",
+		"record an off-document VText decision note with decision_kind no_worker_needed,",
+		"exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker.,",
+		"evidence ref staging-marker:M32_VTEXT_DECISION_ROUTE_TEST,",
+		"next action Write the concise reader-facing VText revision.",
+		"Then write the concise reader-facing VText revision.",
+	}, " ")
+	decision, ok := explicitNoWorkerDecisionRequestFromPrompt(prompt)
+	if !ok {
+		t.Fatal("proof-style prompt should parse as an explicit initial decision")
+	}
+	if decision.DecisionKind != "no_worker_needed" {
+		t.Fatalf("decision kind = %q", decision.DecisionKind)
+	}
+	if decision.Reason != "M3.2 staging proof: user supplied the needed content and requested no research or execution worker." {
+		t.Fatalf("reason = %q", decision.Reason)
+	}
+	if len(decision.EvidenceRefs) != 1 || decision.EvidenceRefs[0] != "staging-marker:M32_VTEXT_DECISION_ROUTE_TEST" {
+		t.Fatalf("evidence refs = %#v", decision.EvidenceRefs)
+	}
+	if decision.NextAction != "Write the concise reader-facing VText revision" {
+		t.Fatalf("next action = %q", decision.NextAction)
+	}
+}

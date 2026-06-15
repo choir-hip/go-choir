@@ -130,8 +130,11 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
 		t.Fatalf("initial_handoff = %q, want no initial super handoff", got)
 	}
-	if got := initialVTextToolChoice(initialRun); got != exactRequiredToolChoice("record_vtext_decision") {
-		t.Fatalf("initial tool choice = %q, want record_vtext_decision", got)
+	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_decision_required") {
+		t.Fatalf("initial run missing deterministic decision metadata: %+v", initialRun.Metadata)
+	}
+	if got := initialVTextToolChoice(initialRun); got != exactRequiredToolChoice("edit_vtext") {
+		t.Fatalf("initial tool choice = %q, want edit_vtext after deterministic decision record", got)
 	}
 }
 

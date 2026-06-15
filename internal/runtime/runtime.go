@@ -1534,6 +1534,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	ctx = WithToolExecutionContext(ctx, rec)
+	if err := rt.recordExplicitInitialVTextDecisionIfNeeded(ctx, rec); err != nil {
+		rt.handleExecutionError(ctx, rec, err)
+		return
+	}
 	llmConfig := ResolvedLLMConfigFromMetadata(rec.Metadata)
 	renderedSystemPrompt := systemPrompt
 	if registry != nil {
@@ -2173,10 +2177,152 @@ func initialVTextToolChoice(rec *types.RunRecord) string {
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""
 	}
+	if metadataBoolValue(rec.Metadata, "vtext_initial_decision_required") {
+		return exactRequiredToolChoice("edit_vtext")
+	}
 	if vtextPromptExplicitlyRequestsDecisionNote(metadataString(rec.Metadata, "seed_prompt") + " " + metadataStringValue(rec.Metadata, "original_prompt")) {
 		return exactRequiredToolChoice("record_vtext_decision")
 	}
 	return exactRequiredToolChoice("edit_vtext")
+}
+
+func (rt *Runtime) recordExplicitInitialVTextDecisionIfNeeded(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil
+	}
+	if metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" ||
+		!metadataBoolValue(rec.Metadata, "vtext_initial_decision_required") {
+		return nil
+	}
+	docID := metadataStringValue(rec.Metadata, "doc_id")
+	reason := metadataStringValue(rec.Metadata, "vtext_initial_decision_reason")
+	kind := metadataStringValue(rec.Metadata, "vtext_initial_decision_kind")
+	if docID == "" || reason == "" || kind != "no_worker_needed" {
+		return nil
+	}
+	existing, err := rt.store.ListVTextDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
+	if err != nil {
+		return fmt.Errorf("list initial vtext decisions: %w", err)
+	}
+	for _, decision := range existing {
+		if decision.RunID == rec.RunID && decision.DecisionKind == kind && decision.Reason == reason {
+			rec.Metadata["vtext_initial_decision_recorded"] = true
+			return nil
+		}
+	}
+	decision := types.VTextDecisionRecord{
+		DecisionID:   uuid.New().String(),
+		OwnerID:      rec.OwnerID,
+		DocID:        docID,
+		RunID:        rec.RunID,
+		TrajectoryID: trajectoryIDForRun(rec),
+		ActorID:      strings.TrimSpace(rec.AgentID),
+		DecisionKind: kind,
+		Reason:       reason,
+		EvidenceRefs: metadataStringSliceValue(rec.Metadata, "vtext_initial_decision_evidence_refs"),
+		NextAction:   metadataStringValue(rec.Metadata, "vtext_initial_decision_next_action"),
+		CreatedAt:    time.Now().UTC(),
+	}
+	if decision.ActorID == "" {
+		decision.ActorID = "vtext:" + docID
+	}
+	if err := rt.store.CreateVTextDecision(ctx, decision); err != nil {
+		return fmt.Errorf("record initial vtext decision: %w", err)
+	}
+	rt.emitVTextDecisionRecordedEvent(ctx, rec, decision)
+	rec.Metadata["vtext_initial_decision_recorded"] = true
+	return nil
+}
+
+func metadataStringSliceValue(metadata map[string]any, key string) []string {
+	if metadata == nil {
+		return nil
+	}
+	switch values := metadata[key].(type) {
+	case []string:
+		return append([]string(nil), values...)
+	case []any:
+		out := make([]string, 0, len(values))
+		for _, value := range values {
+			if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+				out = append(out, strings.TrimSpace(text))
+			}
+		}
+		return out
+	case string:
+		if strings.TrimSpace(values) == "" {
+			return nil
+		}
+		return []string{strings.TrimSpace(values)}
+	default:
+		return nil
+	}
+}
+
+type explicitInitialVTextDecision struct {
+	DecisionKind string
+	Reason       string
+	EvidenceRefs []string
+	NextAction   string
+}
+
+func explicitNoWorkerDecisionRequestFromPrompt(prompt string) (explicitInitialVTextDecision, bool) {
+	text := strings.TrimSpace(prompt)
+	if !vtextPromptExplicitlyRequestsNoWorkerDecision(text) {
+		return explicitInitialVTextDecision{}, false
+	}
+	lower := strings.ToLower(text)
+	reason := extractDelimitedPromptValue(text, lower, "exact reason ", []string{", evidence ref", ", evidence refs", ", next action", ". then "})
+	if reason == "" {
+		reason = extractDelimitedPromptValue(text, lower, "reason ", []string{", evidence ref", ", evidence refs", ", next action", ". then "})
+	}
+	if reason == "" {
+		return explicitInitialVTextDecision{}, false
+	}
+	evidence := extractDelimitedPromptValue(text, lower, "evidence ref ", []string{", next action", ". then "})
+	if evidence == "" {
+		evidence = extractDelimitedPromptValue(text, lower, "evidence refs ", []string{", next action", ". then "})
+	}
+	nextAction := extractDelimitedPromptValue(text, lower, "next action ", []string{". then ", " then "})
+	return explicitInitialVTextDecision{
+		DecisionKind: "no_worker_needed",
+		Reason:       strings.TrimSpace(reason),
+		EvidenceRefs: splitPromptRefs(evidence),
+		NextAction:   strings.TrimSpace(nextAction),
+	}, true
+}
+
+func extractDelimitedPromptValue(original, lower, marker string, delimiters []string) string {
+	start := strings.Index(lower, marker)
+	if start < 0 {
+		return ""
+	}
+	start += len(marker)
+	end := len(original)
+	tailLower := lower[start:]
+	for _, delimiter := range delimiters {
+		if idx := strings.Index(tailLower, delimiter); idx >= 0 && start+idx < end {
+			end = start + idx
+		}
+	}
+	return strings.Trim(strings.TrimSpace(original[start:end]), " ,")
+}
+
+func splitPromptRefs(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == ';'
+	})
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func vtextPromptExplicitlyRequestsDecisionNote(prompt string) bool {

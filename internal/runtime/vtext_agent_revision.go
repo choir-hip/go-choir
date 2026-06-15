@@ -331,6 +331,13 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 			runMetadata[key] = val
 		}
 	}
+	if decision, ok := explicitNoWorkerDecisionRequestFromPrompt(metadataString(metadata, "seed_prompt") + " " + req.Prompt); ok && scheduledMessageSeq == 0 {
+		runMetadata["vtext_initial_decision_required"] = true
+		runMetadata["vtext_initial_decision_kind"] = decision.DecisionKind
+		runMetadata["vtext_initial_decision_reason"] = decision.Reason
+		runMetadata["vtext_initial_decision_evidence_refs"] = decision.EvidenceRefs
+		runMetadata["vtext_initial_decision_next_action"] = decision.NextAction
+	}
 	if strings.TrimSpace(parentRunID) == "" {
 		if conductorLoopID := metadataString(metadata, "conductor_loop_id"); conductorLoopID != "" {
 			if conductorRun, err := rt.store.GetRun(ctx, conductorLoopID); err == nil && conductorRun.OwnerID == ownerID {
