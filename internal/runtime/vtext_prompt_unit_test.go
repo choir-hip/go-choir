@@ -618,8 +618,8 @@ func TestExplicitNoWorkerDecisionBypassesInitialSuperPreemption(t *testing.T) {
 		"record an off-document VText decision note with decision_kind no_worker_needed.",
 		"Then write the concise reader-facing VText revision.",
 	}, " ")
-	if !vtextPromptNeedsSuperExecution(prompt) {
-		t.Fatal("test prompt should still contain broad super-execution markers")
+	if vtextPromptNeedsSuperExecution(prompt) {
+		t.Fatal("explicit no-worker decision prompt must not trigger super execution")
 	}
 	if !vtextPromptExplicitlyRequestsDecisionNote(prompt) {
 		t.Fatal("test prompt should explicitly request a decision note")

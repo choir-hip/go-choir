@@ -211,12 +211,22 @@ states reasons without forcing choreography.
   forbidden routes. Unlike the prior proof, VText had two runs and the document
   had three revisions, so the route likely reaches initial VText but still
   misses the deterministic decision-record metadata on at least one VText run.
+- Follow-up public Trace diagnostic still showed initial persistent-super
+  preemption: `/tmp/vtext-route-diagnostic-1781490432255.json` on deployed
+  `6be05f87043553e07cebd56940c3d004deaeaebd` showed
+  `initial_loop_id=a5028aa1-9cfb-46db-88ed-f9d6f2b9e9f9` was the `super` run,
+  with VText spawned from that run. The `execution worker` phrase must be
+  excluded inside the super-execution detector itself for explicit no-worker
+  decision prompts.
+- Local detector-level no-worker repair complete: `vtextPromptNeedsSuperExecution`
+  now returns false for explicit prompt-bar no-worker decision routes before
+  scanning super-execution markers, while operational proof prompts still route
+  to persistent super.
 
-**next move:** capture full public Trace for the `6be05f87` route to identify
-the two VText runs and why neither has `vtext_initial_decision_required`. Then
-repair the metadata propagation or recording boundary, rerun local tests, and
-rerun deployed product-path proof for decision row, Trace decision moment, no
-forbidden routes, and no private reason in canonical text.
+**next move:** commit the detector-level no-worker repair, push `origin main`,
+monitor CI/deploy, verify staging identity, and rerun deployed product-path
+proof for decision row, Trace decision moment, no forbidden routes, and no
+private reason in canonical text.
 
 **ledger file:** `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`.
 

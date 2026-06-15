@@ -159,6 +159,36 @@ Open edge: capture full public Trace for this route shape, identify both VText
 runs and why neither records the deterministic no-worker decision, then repair
 the metadata propagation or recording boundary.
 
+## 2026-06-15 - Local Super-Execution Detector No-Worker Repair
+
+Claim/scope: the prompt-bar route flag alone did not stop deployed initial
+persistent-super preemption. A fresh public Trace diagnostic on deployed
+`6be05f87043553e07cebd56940c3d004deaeaebd` showed
+`initial_loop_id=a5028aa1-9cfb-46db-88ed-f9d6f2b9e9f9` was still the super run,
+and VText was spawned from that run. The repair moves the explicit no-worker
+guard into `vtextPromptNeedsSuperExecution` so the phrase "execution worker"
+cannot trigger super preemption when the prompt also carries `no_worker_needed`.
+
+Move: make `vtextPromptNeedsSuperExecution` return false for
+`promptBarNoWorkerDecisionRoute` before scanning super markers; keep negative
+coverage that ordinary operational proof prompts still request persistent super.
+Expected Delta V: close the local detector repair. Actual Delta V: V=2 to V=1,
+leaving landing/staging proof.
+
+Receipts:
+- Public diagnostic proof artifact:
+  `/tmp/vtext-route-diagnostic-1781490432255.json`.
+- `internal/runtime/runtime.go` excludes explicit no-worker decision routes in
+  `vtextPromptNeedsSuperExecution`.
+- `internal/runtime/vtext_prompt_unit_test.go` asserts the proof-style prompt
+  no longer needs super execution.
+- `nix develop -c go test ./internal/runtime -run 'Test(HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|ExplicitNoWorkerDecisionPromptParsesInitialDecision|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|InitialVTextToolChoiceUsesExactTools|RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'Test(RunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|RunToolLoopInitialToolChoiceAppliesOnlyFirstCall|RunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition|RunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError|InitialVTextDecisionPromptRejectsPrematureEditBeforeDecision|HandlePromptBarExplicitNoWorkerDecisionStartsWithVText|HandlePromptBarOperationalProofInitialRunRequestsPersistentSuper|ExplicitNoWorkerDecisionPromptParsesInitialDecision|ExplicitNoWorkerDecisionBypassesInitialSuperPreemption|InitialVTextToolChoiceUsesExactTools|RecordVTextDecisionToolPersistsAndEmitsReadableEvent|VTextDiagnosisAndTraceLogsIncludeDecisionRecords|DefaultVTextPromptUsesDecisionNotesWithoutForcedSemanticSequence)' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoop' -count=1`
+
+Open edge: commit, push, monitor CI/deploy, verify staging identity, and rerun
+deployed product-path proof.
+
 ## 2026-06-15 - Staging Partial Enforcement Checkpoint
 
 Claim/scope: the exact initial tool enforcement repair deployed cleanly and

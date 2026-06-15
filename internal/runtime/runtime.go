@@ -2427,6 +2427,9 @@ func vtextPromptNeedsSuperExecution(prompt string) bool {
 	if text == "" {
 		return false
 	}
+	if promptBarNoWorkerDecisionRoute(text) {
+		return false
+	}
 	superMarkers := []string{
 		"app/harness",
 		"choir-in-choir",
