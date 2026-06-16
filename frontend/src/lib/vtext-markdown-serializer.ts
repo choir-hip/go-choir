@@ -1,4 +1,4 @@
-import { vtextRelatedMarkdownTarget } from './vtext-source-renderer';
+import { textureRelatedMarkdownTarget } from './vtext-source-renderer';
 
 function serializeInlineMarkdown(node: Node | null): string {
   if (!node) return '';
@@ -16,8 +16,8 @@ function serializeInlineMarkdown(node: Node | null): string {
     const label = element.getAttribute('data-texture-label') || element.querySelector?.('.vtext-related-ref-label')?.textContent || 'Texture';
     const docID = element.getAttribute('data-texture-doc-id') || '';
     const revisionID = element.getAttribute('data-texture-related-revision-id') || '';
-    const target = vtextRelatedMarkdownTarget(docID, revisionID);
-    return target ? `[${label}](vtext:${target})` : label;
+    const target = textureRelatedMarkdownTarget(docID, revisionID);
+    return target ? `[${label}](texture:${target})` : label;
   }
   if (element.closest?.('[data-texture-source-flow]')) return '';
   if (element.closest?.('[data-texture-source-entity]')) return '';

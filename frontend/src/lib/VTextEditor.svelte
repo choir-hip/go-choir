@@ -47,11 +47,11 @@
   import VTextToolbar from './VTextToolbar.svelte';
   import { sourceEntityLaunchPayload } from './vtext-source-launcher';
   import {
-    parseVTextRelatedRef,
+    parseTextureRelatedRef,
     sourceEntityID,
     sourceEntityTargetURL,
     sourceEntityTitle,
-    vtextEntityPinnedRevisionID,
+    textureEntityPinnedRevisionID,
   } from './vtext-source-renderer';
   import { renderMarkdownBlocks } from './vtext-markdown-renderer';
   import { serializeEditorMarkdown } from './vtext-markdown-serializer';
@@ -191,21 +191,23 @@
     });
   }
 
-  function revisionRelatedVTexts(revision = currentRevision) {
+  function revisionRelatedTextures(revision = currentRevision) {
     const metadata = revision?.metadata || {};
+    if (Array.isArray(metadata.related_textures)) return metadata.related_textures;
     if (Array.isArray(metadata.related_vtexts)) return metadata.related_vtexts;
+    if (Array.isArray(appContext.relatedTextures)) return appContext.relatedTextures;
     if (Array.isArray(appContext.relatedVTexts)) return appContext.relatedVTexts;
     return [];
   }
 
-  function relatedVTextDocID(entity) {
-    return parseVTextRelatedRef(entity?.target?.doc_id || entity?.doc_id || entity?.document_id || '').docID;
+  function relatedTextureDocID(entity) {
+    return parseTextureRelatedRef(entity?.target?.doc_id || entity?.doc_id || entity?.document_id || '').docID;
   }
 
-  function relatedVTextForDocID(docID) {
-    const normalized = parseVTextRelatedRef(docID).docID;
+  function relatedTextureForDocID(docID) {
+    const normalized = parseTextureRelatedRef(docID).docID;
     if (!normalized) return null;
-    return revisionRelatedVTexts().find((entity) => relatedVTextDocID(entity) === normalized) || null;
+    return revisionRelatedTextures().find((entity) => relatedTextureDocID(entity) === normalized) || null;
   }
 
   function currentSourceRepairCandidates(content = editorValue, gaps = revisionSourceGaps(currentRevision)) {
@@ -255,7 +257,7 @@
     const entities = revisionSourceEntities();
     return renderMarkdownBlocks(value, entities, {
       emptyHTML: '<p class="empty-doc">Blank document.</p>',
-      relatedVTexts: revisionRelatedVTexts(),
+      relatedTextures: revisionRelatedTextures(),
     });
   }
 
@@ -448,8 +450,11 @@
     if (Array.isArray(appContext.sourceEntities) && appContext.sourceEntities.length) {
       metadata.source_entities = appContext.sourceEntities;
     }
-    if (Array.isArray(appContext.relatedVTexts) && appContext.relatedVTexts.length) {
-      metadata.related_vtexts = appContext.relatedVTexts;
+    const relatedTextures = Array.isArray(appContext.relatedTextures) && appContext.relatedTextures.length
+      ? appContext.relatedTextures
+      : (Array.isArray(appContext.relatedVTexts) ? appContext.relatedVTexts : []);
+    if (relatedTextures.length) {
+      metadata.related_textures = relatedTextures;
     }
     if (publishedBundle?.publication?.id) {
       metadata.source_publication_id = publishedBundle.publication.id;
@@ -1753,11 +1758,11 @@
     return entityID;
   }
 
-  function handleRelatedVTextOpen(relatedRef) {
+  function handleRelatedTextureOpen(relatedRef) {
     const docID = String(relatedRef?.getAttribute?.('data-texture-doc-id') || '').trim();
     if (!docID) return '';
-    const entity = relatedVTextForDocID(docID);
-    const revisionID = vtextEntityPinnedRevisionID(entity, relatedRef?.getAttribute?.('data-texture-related-revision-id') || '');
+    const entity = relatedTextureForDocID(docID);
+    const revisionID = textureEntityPinnedRevisionID(entity, relatedRef?.getAttribute?.('data-texture-related-revision-id') || '');
     const title = String(entity?.title || entity?.label || relatedRef?.getAttribute?.('data-texture-label') || 'Related Texture').trim();
     const snapshot = String(entity?.transclusion?.snapshot_text || entity?.snapshot_text || '').trim();
     dispatch('launchapp', {
@@ -1770,9 +1775,9 @@
         initialRevisionId: authenticated ? revisionID : '',
         initialContent: snapshot ? `# ${title}\n\n${snapshot}` : '',
         createInitialVersion: false,
-        createdFrom: 'vtext_related_transclusion',
+        createdFrom: 'texture_related_transclusion',
         sourcePath: '',
-        appHint: appContext.appHint || 'vtext',
+        appHint: appContext.appHint || 'texture',
         allowMultiple: true,
       },
     });
@@ -1813,7 +1818,7 @@
     if (docID && docID === relatedOpenPointerHandledDocID && Date.now() - relatedOpenPointerHandledAt < 800) {
       return;
     }
-    handleRelatedVTextOpen(relatedRef);
+    handleRelatedTextureOpen(relatedRef);
   }
 
   function handleEditorKeydown(event) {
@@ -1821,7 +1826,7 @@
     if (relatedRef && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();
       event.stopPropagation();
-      handleRelatedVTextOpen(relatedRef);
+      handleRelatedTextureOpen(relatedRef);
       return;
     }
     const sourceRef = event.target?.closest?.('[data-texture-source-ref]');
@@ -1918,7 +1923,7 @@
     if (!relatedRef) return;
     event.preventDefault();
     event.stopPropagation();
-    relatedOpenPointerHandledDocID = handleRelatedVTextOpen(relatedRef);
+    relatedOpenPointerHandledDocID = handleRelatedTextureOpen(relatedRef);
     relatedOpenPointerHandledAt = Date.now();
   }
 

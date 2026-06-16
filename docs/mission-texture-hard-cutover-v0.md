@@ -1619,22 +1619,25 @@ position / live conjectures / open edges:
   source-label and empty-state app surface; deployed story-field proof remains
   open until staging has an edition story payload or a product path creates one
   without manually seeding success records.
-- C23 active for Texture related-transclusion metadata/context scope:
-  read-only inventory found live current-surface residue in
-  `metadata.related_vtexts`, frontend app context `relatedVTexts`,
-  `target_kind: 'vtext_document'`, and inline ref helper/export names such as
-  `parseVTextRelatedRef` and `renderInlineVTextRef`. This slice excludes
-  storage table names, `.vtext` file suffixes/source paths, durable `vtext:`
-  actor ids, and `canonical_vtext_source_path`. The intended repair is to
-  write and prefer `related_textures` / `relatedTextures`,
-  `texture_document`, and Texture-named helper exports while keeping explicit
-  read fallback for already-authored legacy metadata and markdown syntax.
+- C23 supported for local Texture related-transclusion metadata/context scope:
+  current frontend writers now prefer `related_textures`,
+  `relatedTextures`, `texture_document`, `texture:` markdown refs, and
+  Texture-named helper exports. The editor and markdown renderer keep explicit
+  legacy read/parser fallback for `related_vtexts`, `relatedVTexts`, and
+  `vtext:` refs. Focused related-transclusion tests, frontend build, and
+  residue searches pass locally. Storage table names, `.vtext` file
+  suffixes/source paths, durable `vtext:` actor ids,
+  `canonical_vtext_source_path`, source-contract app-open expectations, and
+  protocol v0 remain adjacent residue.
 
-next move: implement C23's frontend metadata/context rename, prove focused
-transclusion/editor/Universal Wire coverage plus residue searches, then decide
-whether the behavior slice requires staging deploy proof or can remain local
-until a broader staging Texture document proof batch. Keep protocol v0 unwritten
-until the remaining working-surface proofs are complete.
+next move: commit and push C23, monitor CI/deploy/staging identity, and run a
+deployed Texture related-transclusion proof if a bounded product path is
+reachable without manually seeding success records. If deployed proof is not
+reachable, record the blocker precisely and select the next residue class
+among stale source-contract/app-launcher expectations, durable metadata keys,
+storage/file suffixes, durable actor ids, deployed Universal Wire story-field
+proof, and protocol v0. Keep protocol v0 unwritten until the remaining
+working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

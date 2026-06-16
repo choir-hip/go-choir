@@ -13,11 +13,11 @@ import {
   sourceEntityOpenPlan,
   renderInlineMarkdown,
   publicationSourceEntityToLocal,
-  parseVTextRelatedRef,
+  parseTextureRelatedRef,
   selectorTextQuote,
   sourceEvidenceState,
   sourceEvidenceStateLabel,
-  vtextRelatedMarkdownTarget,
+  textureRelatedMarkdownTarget,
 } from '../src/lib/vtext-source-renderer.ts';
 import { buildSourceReviewPayload } from '../src/lib/vtext-source-review.js';
 import { browserOpenableSourceURL } from '../src/lib/source-url.ts';
@@ -93,15 +93,15 @@ test('source inline excerpts prefer selected transclusion over full reader snaps
   expect(sourceEntityInlineExcerptText(entity)).toBe('Selected bounded citation excerpt.');
 });
 
-test('related VText inline refs render as native transclusion refs', () => {
+test('related Texture inline refs render as native transclusion refs', () => {
   const html = renderInlineMarkdown(
-    'Read the related [grid update](vtext:doc-grid-story).',
+    'Read the related [grid update](texture:doc-grid-story).',
     [],
     [{
       label: 'grid update',
       title: 'Grid operators add reserve alerts as heat forecast shifts north',
       target: {
-        target_kind: 'vtext_document',
+        target_kind: 'texture_document',
         doc_id: 'doc-grid-story',
         current_revision_id: 'rev-grid-v2',
         current_version_number: 2,
@@ -125,17 +125,35 @@ test('related VText inline refs render as native transclusion refs', () => {
   expect(html).toContain('Forecast changes moved stress toward northern reserve margins.');
 });
 
-test('related VText refs parse and format pinned revision targets', () => {
-  expect(parseVTextRelatedRef('doc-grid-story@rev-grid-v1')).toEqual({
+test('legacy vtext inline refs still render as Texture transclusion refs', () => {
+  const html = renderInlineMarkdown(
+    'Read the related [grid update](vtext:doc-grid-story@rev-grid-v1).',
+    [],
+    [{
+      label: 'grid update',
+      title: 'Grid operators add reserve alerts as heat forecast shifts north',
+      target: {
+        target_kind: 'texture_document',
+        doc_id: 'doc-grid-story',
+      },
+    }],
+  );
+
+  expect(html).toContain('data-texture-related-ref');
+  expect(html).toContain('data-texture-related-revision-id="rev-grid-v1"');
+});
+
+test('related Texture refs parse and format pinned revision targets', () => {
+  expect(parseTextureRelatedRef('doc-grid-story@rev-grid-v1')).toEqual({
     docID: 'doc-grid-story',
     revisionID: 'rev-grid-v1',
   });
-  expect(parseVTextRelatedRef('doc-grid-story')).toEqual({
+  expect(parseTextureRelatedRef('doc-grid-story')).toEqual({
     docID: 'doc-grid-story',
     revisionID: '',
   });
-  expect(vtextRelatedMarkdownTarget('doc-grid-story', 'rev-grid-v1')).toBe('doc-grid-story@rev-grid-v1');
-  expect(vtextRelatedMarkdownTarget('doc-grid-story', '')).toBe('doc-grid-story');
+  expect(textureRelatedMarkdownTarget('doc-grid-story', 'rev-grid-v1')).toBe('doc-grid-story@rev-grid-v1');
+  expect(textureRelatedMarkdownTarget('doc-grid-story', '')).toBe('doc-grid-story');
 });
 
 test('source evidence states normalize to typed reader labels', () => {

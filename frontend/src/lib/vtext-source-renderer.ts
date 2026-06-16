@@ -384,11 +384,11 @@ export function renderInlineSourceRef(label: string, entityID: string, sourceEnt
   </span>`;
 }
 
-function vtextEntityDocID(entity: any): string {
+function textureEntityDocID(entity: any): string {
   return String(entity?.target?.doc_id || entity?.doc_id || entity?.document_id || '').trim();
 }
 
-export function parseVTextRelatedRef(value: unknown): { docID: string; revisionID: string } {
+export function parseTextureRelatedRef(value: unknown): { docID: string; revisionID: string } {
   const raw = String(value || '').trim();
   if (!raw) return { docID: '', revisionID: '' };
   const atIndex = raw.indexOf('@');
@@ -399,14 +399,14 @@ export function parseVTextRelatedRef(value: unknown): { docID: string; revisionI
   };
 }
 
-export function vtextRelatedMarkdownTarget(docID: unknown, revisionID: unknown = ''): string {
+export function textureRelatedMarkdownTarget(docID: unknown, revisionID: unknown = ''): string {
   const normalizedDocID = String(docID || '').trim();
   const normalizedRevisionID = String(revisionID || '').trim();
   if (!normalizedDocID) return '';
   return normalizedRevisionID ? `${normalizedDocID}@${normalizedRevisionID}` : normalizedDocID;
 }
 
-export function vtextEntityPinnedRevisionID(entity: any, explicitRevisionID = ''): string {
+export function textureEntityPinnedRevisionID(entity: any, explicitRevisionID = ''): string {
   return String(
     explicitRevisionID ||
     entity?.transclusion?.revision_id ||
@@ -419,7 +419,7 @@ export function vtextEntityPinnedRevisionID(entity: any, explicitRevisionID = ''
   ).trim();
 }
 
-function vtextEntityPinnedVersionNumber(entity: any): string {
+function textureEntityPinnedVersionNumber(entity: any): string {
   return String(
     entity?.transclusion?.version_number ??
     entity?.transclusion?.target_version_number ??
@@ -429,43 +429,43 @@ function vtextEntityPinnedVersionNumber(entity: any): string {
   ).trim();
 }
 
-function vtextEntityCurrentRevisionID(entity: any): string {
+function textureEntityCurrentRevisionID(entity: any): string {
   return String(entity?.target?.current_revision_id || entity?.current_revision_id || '').trim();
 }
 
-function vtextEntityCurrentVersionNumber(entity: any): string {
+function textureEntityCurrentVersionNumber(entity: any): string {
   return String(entity?.target?.current_version_number ?? entity?.current_version_number ?? '').trim();
 }
 
-function hasNewerVTextVersion(entity: any, pinnedRevisionID = ''): boolean {
+function hasNewerTextureVersion(entity: any, pinnedRevisionID = ''): boolean {
   if (!entity) return false;
-  const pinnedVersionRaw = vtextEntityPinnedVersionNumber(entity);
-  const currentVersionRaw = vtextEntityCurrentVersionNumber(entity);
+  const pinnedVersionRaw = textureEntityPinnedVersionNumber(entity);
+  const currentVersionRaw = textureEntityCurrentVersionNumber(entity);
   const pinnedVersion = Number(pinnedVersionRaw);
   const currentVersion = Number(currentVersionRaw);
   if (pinnedVersionRaw && currentVersionRaw && Number.isFinite(pinnedVersion) && Number.isFinite(currentVersion) && currentVersion > pinnedVersion) return true;
-  const currentRevisionID = vtextEntityCurrentRevisionID(entity);
+  const currentRevisionID = textureEntityCurrentRevisionID(entity);
   return !!pinnedRevisionID && !!currentRevisionID && currentRevisionID !== pinnedRevisionID;
 }
 
-export function findVTextEntity(relatedVTexts: any[] = [], docID = ''): any | null {
-  const normalized = parseVTextRelatedRef(docID).docID;
+export function findTextureEntity(relatedTextures: any[] = [], docID = ''): any | null {
+  const normalized = parseTextureRelatedRef(docID).docID;
   if (!normalized) return null;
-  return relatedVTexts.find((entity) => vtextEntityDocID(entity) === normalized) || null;
+  return relatedTextures.find((entity) => textureEntityDocID(entity) === normalized) || null;
 }
 
-export function renderInlineVTextRef(label: string, docRef: string, relatedVTexts: any[] = []): string {
-  const parsed = parseVTextRelatedRef(docRef);
+export function renderInlineTextureRef(label: string, docRef: string, relatedTextures: any[] = []): string {
+  const parsed = parseTextureRelatedRef(docRef);
   const docID = parsed.docID;
-  const entity = findVTextEntity(relatedVTexts, docID);
+  const entity = findTextureEntity(relatedTextures, docID);
   const title = String(entity?.title || entity?.label || label || 'related Texture').trim();
   const displayLabel = String(label || entity?.label || title || 'Texture').trim();
   const snapshot = String(entity?.transclusion?.snapshot_text || entity?.snapshot_text || '').trim();
-  const pinnedRevisionID = vtextEntityPinnedRevisionID(entity, parsed.revisionID);
-  const pinnedVersionNumber = vtextEntityPinnedVersionNumber(entity);
-  const currentRevisionID = vtextEntityCurrentRevisionID(entity);
-  const currentVersionNumber = vtextEntityCurrentVersionNumber(entity);
-  const newerVersion = hasNewerVTextVersion(entity, pinnedRevisionID);
+  const pinnedRevisionID = textureEntityPinnedRevisionID(entity, parsed.revisionID);
+  const pinnedVersionNumber = textureEntityPinnedVersionNumber(entity);
+  const currentRevisionID = textureEntityCurrentRevisionID(entity);
+  const currentVersionNumber = textureEntityCurrentVersionNumber(entity);
+  const newerVersion = hasNewerTextureVersion(entity, pinnedRevisionID);
   const className = entity ? 'vtext-related-ref' : 'vtext-related-ref vtext-related-ref--missing';
   return `<span class="${className}" data-texture-related-ref data-texture-doc-id="${escapeHTML(docID)}" data-texture-label="${escapeHTML(displayLabel)}"${pinnedRevisionID ? ` data-texture-related-revision-id="${escapeHTML(pinnedRevisionID)}" data-texture-related-pin-state="pinned"` : ''}${pinnedVersionNumber ? ` data-texture-related-version-number="${escapeHTML(pinnedVersionNumber)}"` : ''}${currentRevisionID ? ` data-texture-related-current-revision-id="${escapeHTML(currentRevisionID)}"` : ''}${currentVersionNumber ? ` data-texture-related-current-version-number="${escapeHTML(currentVersionNumber)}"` : ''}${newerVersion ? ' data-texture-related-has-newer-version="true"' : ''} contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Related Texture: ${title}`)}">
     <span class="vtext-related-ref-label">${escapeHTML(displayLabel)}</span>
@@ -483,7 +483,7 @@ function sourceEntityInlineLabel(entity: any, fallback = 'source'): string {
   return String(entity?.label || title || fallback || 'source').trim();
 }
 
-export function renderInlineMarkdown(value: unknown, sourceEntities: any[] = [], relatedVTexts: any[] = []): string {
+export function renderInlineMarkdown(value: unknown, sourceEntities: any[] = [], relatedTextures: any[] = []): string {
   let html = escapeHTML(value);
   html = html.replace(/\[([^\]]+)\]\(source:([^)]+)\)/g, (_match, label, entityID) =>
     renderInlineSourceRef(label, entityID, sourceEntities)
@@ -492,8 +492,11 @@ export function renderInlineMarkdown(value: unknown, sourceEntities: any[] = [],
     const entity = findSourceEntity(sourceEntities, entityID);
     return renderInlineSourceRef(sourceEntityInlineLabel(entity), entityID, sourceEntities);
   });
+  html = html.replace(/\[([^\]]+)\]\(texture:([^)]+)\)/g, (_match, label, docID) =>
+    renderInlineTextureRef(label, docID, relatedTextures)
+  );
   html = html.replace(/\[([^\]]+)\]\(vtext:([^)]+)\)/g, (_match, label, docID) =>
-    renderInlineVTextRef(label, docID, relatedVTexts)
+    renderInlineTextureRef(label, docID, relatedTextures)
   );
   html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');

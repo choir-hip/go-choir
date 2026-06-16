@@ -109,7 +109,7 @@
       .filter(Boolean);
   }
 
-  function launchTexture({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = false, relatedVTexts = [] }) {
+  function launchTexture({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = false, relatedTextures = [] }) {
     dispatch('launchapp', {
       appId: 'texture',
       appName: 'Texture',
@@ -121,7 +121,7 @@
         createInitialVersion,
         createdFrom,
         sourcePath,
-        relatedVTexts,
+        relatedTextures,
         appHint: 'universal-wire',
         platformRead: true,
         allowMultiple: true,
@@ -141,7 +141,7 @@
       sourcePath: `universal-wire/${story.id}.story.vtext`,
       docId,
       createInitialVersion: false,
-      relatedVTexts: storyRelatedTextures(story),
+      relatedTextures: storyRelatedTextures(story),
     });
   }
 </script>

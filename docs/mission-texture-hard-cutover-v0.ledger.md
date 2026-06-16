@@ -2323,3 +2323,63 @@ Receipts:
 Open edge: implement the C23 behavior slice with Texture-named writer/context
 paths and helper exports; retain explicit legacy read fallback; run focused
 frontend coverage, build, and residue searches.
+
+## 2026-06-16 - Local Repair: Related Texture Metadata Keys
+
+Claim: current related-transclusion writers and helper APIs can move to Texture
+names without breaking already-authored legacy related metadata or markdown
+refs.
+
+Move: rename frontend related-transclusion helper exports to
+`parseTextureRelatedRef`, `textureRelatedMarkdownTarget`,
+`textureEntityPinnedRevisionID`, `findTextureEntity`, and
+`renderInlineTextureRef`; make the editor prefer `metadata.related_textures`
+and app context `relatedTextures`; make Universal Wire launch Texture with
+`relatedTextures`; serialize related refs as `texture:`; keep explicit legacy
+read/parser fallback for `related_vtexts`, `relatedVTexts`, and `vtext:`.
+
+Expected ΔV: support C23 locally; no coarse V decrease until CI, deploy, and
+deployed product evidence or a precise staging blocker are recorded.
+
+Actual ΔV: C23 is supported for local frontend scope. V remains 2.
+
+Protected surfaces: Texture editor revision metadata serialization, inline
+related Texture rendering, related Texture open dispatch, Universal Wire story
+launch context, markdown serializer/parser behavior, and focused frontend tests.
+
+Admissible evidence class: focused related-transclusion Playwright tests,
+frontend build, residue searches, CI, staging deploy identity, and deployed
+Texture related-transclusion proof or a recorded staging-data blocker.
+
+Rollback path: revert the C23 frontend changes to restore old primary
+`related_vtexts` / `relatedVTexts` / `vtext:` write paths if revision
+serialization, inline rendering, or related Texture open behavior regresses.
+Persisted revisions stay readable because the repair keeps legacy fallbacks.
+
+Heresy delta: repaired locally for current frontend writer/context/helper
+names; legacy related metadata and markdown syntax remain deletion-receipted
+read compatibility, not current write targets.
+
+Receipts:
+- Focused related-transclusion tests passed:
+  `npm --prefix frontend run e2e -- --project=chromium tests/vtext-source-entities.spec.js -g "related Texture|legacy vtext"`.
+- Frontend build passed:
+  `npm --prefix frontend run build`, with existing Universal Wire warnings for
+  unused `currentUser` and `.wire-state` selectors.
+- Helper-name residue search found no current-code hits:
+  `rg -n "parseVTextRelatedRef|vtextRelatedMarkdownTarget|vtextEntityPinnedRevisionID|findVTextEntity|renderInlineVTextRef" frontend/src frontend/tests -g '!frontend/dist/**'`.
+- Legacy related-name search now finds only explicit read/parser fallbacks,
+  legacy-compat tests, and unrelated auth-intent compatibility:
+  `rg -n "related_vtexts|relatedVTexts|vtext_document|\\(vtext:" frontend/src frontend/tests -g '!frontend/dist/**'`.
+- Current Texture-name search shows `related_textures`, `relatedTextures`,
+  `texture_document`, and `texture:` on the current writer/context path:
+  `rg -n "related_textures|relatedTextures|texture_document|\\(texture:" frontend/src frontend/tests -g '!frontend/dist/**'`.
+
+Observer note: the broad `vtext-source-entities` file run without a preview
+server failed unrelated browser-backed tests with `localhost:4173` connection
+refusals and exposed existing stale source-contract expectations for
+`appId: vtext` where current code returns `texture`. Those are adjacent source
+contract/app-launcher residue, not evidence against C23.
+
+Open edge: push the behavior commit, monitor CI/deploy, verify staging identity,
+and attempt deployed related-transclusion proof or record the smallest blocker.
