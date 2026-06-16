@@ -3142,3 +3142,45 @@ broader `.vtext` file/alias suffix design, durable `vtext:` actor ids, storage
 table names, `/pub/vtext` public route compatibility policy, and Universal Wire
 deployed story-field proof once staging can provide an edition story payload
 through product paths.
+
+## 2026-06-16 - Problem Checkpoint: Public Legacy Publication Routes
+
+Claim: C29 is an admissible bounded residue class. Current frontend/browser
+route recognition and source-reader fixtures still treat `/pub/vtext/...` as
+current public route spelling, but current publication minting already uses
+`/pub/texture/...`; backend support for stored legacy public route rows should
+remain explicit compatibility residue until a later storage migration decides
+whether to rewrite or delete those rows.
+
+Move: read-only inventory over frontend public route recognition, desktop route
+normalization, source-reader/publication tests, platform route normalization,
+and proxy resolve/export tests; document the problem before behavior changes.
+
+Expected ΔV: no coarse V decrease. This checkpoint creates the admissible first
+commit for the C29 behavior slice and should make the next move unambiguous.
+
+Actual ΔV: documentation checkpoint only; C29 remains active.
+
+Receipts:
+- `frontend/src/App.svelte` recognizes both `/pub/texture/...` and
+  `/pub/vtext/...` for public first-load route detection.
+- `frontend/src/lib/Desktop.svelte` normalizes both `/pub/texture/...` and
+  `/pub/vtext/...` when opening public publication routes.
+- `frontend/tests/vtext-source-entities.spec.js` contains `/pub/vtext/...`
+  source-reader/publication fixtures.
+- `internal/platform/service.go` still defines `legacyPublicVTextPrefix =
+  "/pub/vtext/"` and normalizes trailing slashes for stored legacy route rows.
+- `internal/platform/service_test.go` manually inserts a legacy `/pub/vtext/...`
+  route row and asserts backend bundle resolution still works.
+- `internal/proxy/platform_public_test.go` verifies unresolved
+  `/pub/vtext/private` resolve/export requests return 404 through the proxy,
+  proving the proxy forwards old spelling rather than rejecting it at the
+  boundary.
+- Problem checkpoint added to
+  `docs/mission-texture-hard-cutover-v0.md` with conjecture delta, protected
+  surfaces, admissible evidence class, rollback path, heresy delta, and next
+  behavior slice design.
+
+Open edge: commit and push the docs checkpoint, monitor Docs Truth Check, then
+implement the C29 frontend/browser route recognition and fixture repair while
+leaving backend stored-route migration as a separate explicit edge.

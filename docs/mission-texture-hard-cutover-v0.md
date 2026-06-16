@@ -1616,6 +1616,86 @@ Next behavior slice design:
 - push, monitor CI/deploy, and prove the live DOM source class surface on
   staging through product browser evidence.
 
+## Problem Checkpoint: Public Legacy Publication Routes
+
+Mutation class: `green` documentation and evidence only. No frontend source,
+runtime behavior, public route resolution, platform storage, API contract, test,
+or persistent state changed in this checkpoint.
+
+Read-only search on 2026-06-16 shows that the old public route ontology remains
+partly active outside historical evidence:
+
+- `frontend/src/App.svelte` treats both `/pub/texture/...` and `/pub/vtext/...`
+  as public Texture route paths during first-page load;
+- `frontend/src/lib/Desktop.svelte` normalizes both `/pub/texture/...` and
+  `/pub/vtext/...` when opening public publication routes inside the desktop;
+- `frontend/tests/vtext-source-entities.spec.js` uses `/pub/vtext/...` fixture
+  paths in publication source-reader tests, so local frontend evidence still
+  trains current tests on old public route spelling;
+- `internal/platform/service.go` defines `legacyPublicVTextPrefix =
+  "/pub/vtext/"` and `normalizePublicationRoutePath` trims trailing slashes for
+  stored legacy public route rows;
+- `internal/platform/service_test.go` manually inserts a legacy `/pub/vtext/...`
+  route row and asserts backend bundle resolution still works;
+- `internal/proxy/platform_public_test.go` verifies public resolve/export
+  return 404 for an unresolved `/pub/vtext/private` route, which proves the
+  proxy forwards the route to platformd instead of rejecting old public route
+  spelling at the proxy boundary.
+
+This residue is narrower than storage table names, durable `vtext:` actor ids,
+`.vtext` file suffixes, and public API route shims. It is broader than a
+frontend string cleanup because `/pub/...` paths are user-visible publication
+URLs and route compatibility can affect existing stored publication rows.
+
+Conjecture delta: current user-facing browser/UI route recognition can stop
+canonizing arbitrary `/pub/vtext/...` paths while backend platformd keeps a
+small, explicitly documented legacy-row read shim until a later storage/public
+route migration decides whether to rewrite or delete those rows. New
+publication minting already uses `/pub/texture/...`; this slice should move
+frontend/public-reader fixtures to `/pub/texture/...` and document the backend
+legacy prefix as remaining compatibility residue instead of silently treating it
+as current product vocabulary.
+
+Protected surfaces: public publication URLs, first-load public route detection,
+desktop public route normalization, published-reader/source-reader fixtures,
+platform route normalization, proxy publication resolve/export behavior, and
+staging publication proof for current `/pub/texture/...` routes.
+
+Admissible evidence class: frontend build and focused tests/search proving
+current browser/UI/source-reader fixtures use `/pub/texture/...`; focused
+platform/proxy tests proving generated routes stay `/pub/texture/...` and the
+legacy backend shim remains explicit; CI/deploy identity if runtime/frontend
+behavior changes; deployed product proof that a newly published Texture uses and
+loads through `/pub/texture/...`. This slice does not claim storage migration
+or deletion of existing legacy public route rows.
+
+Rollback path: restore frontend recognition of `/pub/vtext/...` as a public
+route if deployed publication readers or source windows regress, and retain the
+backend legacy read shim until a separately documented storage migration
+provides stronger evidence.
+
+Heresy delta: discovered: after current publication minting moved to
+`/pub/texture/...`, browser/UI route recognition and source-reader fixtures
+still normalize old public route spelling as if it were current. Introduced:
+none in this checkpoint. Repaired target: current public route product and
+frontend proof surfaces should speak `/pub/texture/...`; backend `/pub/vtext/...`
+support remains an explicitly named compatibility shim with a deletion/migration
+edge.
+
+Next behavior slice design:
+
+- remove `/pub/vtext/...` from frontend first-load public route recognition and
+  desktop route normalization;
+- update frontend source-reader/publication fixtures from `/pub/vtext/...` to
+  `/pub/texture/...`;
+- add or update focused tests/search so current frontend surfaces no longer
+  use `/pub/vtext/...`;
+- leave `internal/platform` legacy route normalization and proxy forwarding
+  behavior in place with explicit comments/receipts, because rewriting stored
+  public route rows is a separate storage migration;
+- push, monitor CI/deploy for behavior changes, and prove a newly published
+  Texture opens through `/pub/texture/...` on staging.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -1706,13 +1786,16 @@ SHA; and deployed browser proof created a Texture document, opened it in the
 Texture app, clicked a source ref, and observed Texture live/source-flow classes
 with no scoped retired classes. This slice excludes frontend file/module names,
 storage tables, `.vtext` file suffixes, durable `vtext:` actor ids,
-`PublishVText` Go symbols, and `/pub/vtext` public route compatibility.
+`PublishVText` Go symbols, and `/pub/vtext` public route compatibility. C29 is
+active for public legacy publication routes: current browser/UI route
+recognition and frontend source-reader fixtures still treat `/pub/vtext/...` as
+current public Texture spelling, while backend platformd keeps a legacy stored
+route-row read shim that should remain explicit until storage migration.
 
-next move: choose the next high-leverage residue class: broader `.vtext`
-file/alias suffix design, durable `vtext:` actor ids, storage table names,
-`/pub/vtext` public route compatibility policy, or Universal Wire deployed
-story-field proof when product data exists. Keep protocol v0 unwritten until
-remaining working-surface proofs are complete.
+next move: commit the C29 problem checkpoint, then remove `/pub/vtext/...` from
+frontend public-route recognition and current frontend fixtures while leaving
+the backend legacy stored-route shim documented and in place. Keep protocol v0
+unwritten until remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -1741,11 +1824,13 @@ Texture route/tool/prompt slices, deployed prompt-bar -> conductor -> Texture
 first-revision proof, deployed pinned-transclusion proof, visible UI proof,
 source-contract open-surface proof, canonical source-path metadata repair,
 publication fallback label repair, C27 deployed exported HTML class-name proof,
-and C28 deployed live editor source class proof are landed. Choose the next
-residue class from file/storage/actor/public-route/Universal-Wire edges. Keep
-frontend file/module names, storage schema, `.vtext` file suffixes, durable
-`vtext:` actor ids, `PublishVText` Go symbols, `/pub/vtext` public route
-compatibility, and protocol v0 out of completed C28.
+and C28 deployed live editor source class proof are landed. C29 is active:
+commit the public legacy publication route checkpoint, then remove
+`/pub/vtext/...` from frontend public-route recognition and current frontend
+fixtures while leaving the backend legacy stored-route shim explicit and
+documented. Keep storage schema, `.vtext` file suffixes, durable `vtext:` actor
+ids, `PublishVText` Go symbols, backend stored-route migration, Universal Wire
+story-field proof, and protocol v0 out of C29.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to
