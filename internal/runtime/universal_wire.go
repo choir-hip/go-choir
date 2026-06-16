@@ -767,7 +767,7 @@ func normalizeWireArticleRevisionForRead(rev types.Revision) types.Revision {
 		OwnerID: strings.TrimSpace(rev.OwnerID),
 		Metadata: map[string]any{
 			"request_intent":             "integrate_worker_findings",
-			"type":                       "vtext_agent_revision",
+			"type":                       textureAgentRevisionTaskType,
 			"ingestion_handoff_cycle_id": sourceNetworkCycleID(meta),
 		},
 	}

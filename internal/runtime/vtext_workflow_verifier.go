@@ -300,8 +300,8 @@ func verifyWorkerRunToolCausality(runs []types.RunRecord, events []types.EventRe
 		childProfile := agentProfileForRun(&run)
 		switch {
 		case childProfile == AgentProfileVText:
-			if metadataStringValue(run.Metadata, "type") != "vtext_agent_revision" {
-				return fmt.Errorf("child vtext run %s is not a vtext_agent_revision", run.RunID)
+			if !isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+				return fmt.Errorf("child Texture run %s is not a Texture agent revision", run.RunID)
 			}
 		case parentProfile == AgentProfileVText && childProfile == AgentProfileResearcher:
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {

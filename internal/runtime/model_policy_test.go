@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -125,6 +126,24 @@ func TestFallbackModelPolicyUsesGeneratedMimoDefaults(t *testing.T) {
 	multimodal := policy.Resolve("verifier_multimodal")
 	if multimodal.Provider != "xiaomi" || multimodal.Model != "mimo-v2.5" {
 		t.Fatalf("multimodal verifier selection = %+v", multimodal)
+	}
+}
+
+func TestGeneratedModelPolicyUsesTextureRoleKey(t *testing.T) {
+	raw := defaultModelPolicyText(Config{})
+	if !strings.Contains(raw, "[roles.texture]") {
+		t.Fatalf("generated model policy missing [roles.texture]:\n%s", raw)
+	}
+	if strings.Contains(raw, "[roles.vtext]") {
+		t.Fatalf("generated model policy should not emit current [roles.vtext]:\n%s", raw)
+	}
+	policy, err := parseModelPolicy(raw, "/System/model-policy.toml")
+	if err != nil {
+		t.Fatalf("parse generated model policy: %v", err)
+	}
+	texture := policy.Resolve(AgentProfileTexture)
+	if texture.Provider != "xiaomi" || texture.Model != "mimo-v2.5" {
+		t.Fatalf("texture selection = %+v, want generated Xiaomi default", texture)
 	}
 }
 

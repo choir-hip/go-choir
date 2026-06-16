@@ -19,6 +19,9 @@ const (
 	rewriteTextureSource  = "rewrite_texture"
 	editTextureSource     = "edit_texture" // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
 	legacyEditVTextSource = "edit_vtext"   // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
+
+	textureAgentRevisionTaskType     = "texture_agent_revision"
+	legacyVTextAgentRevisionTaskType = "vtext_agent_revision"
 )
 
 // PlatformOwnerID returns the durable owner id for the Universal Wire platform computer.
@@ -70,10 +73,19 @@ func IsWireArticleRevisionRun(rec *types.RunRecord) bool {
 	if strings.HasPrefix(intent, "universal_wire_") && strings.HasSuffix(intent, "_article_revision") {
 		return true
 	}
-	if metadataString(rec.Metadata, "type") != "vtext_agent_revision" {
+	if !isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
 		return false
 	}
 	return sourceNetworkCycleID(rec.Metadata) != ""
+}
+
+func isTextureAgentRevisionTaskType(value string) bool {
+	switch strings.TrimSpace(value) {
+	case textureAgentRevisionTaskType, legacyVTextAgentRevisionTaskType:
+		return true
+	default:
+		return false
+	}
 }
 
 // RevisionIsPublishableWireArticle reports whether revision metadata describes a

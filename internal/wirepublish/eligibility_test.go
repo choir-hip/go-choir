@@ -90,17 +90,21 @@ func TestEligibleForAutonomousPublishAcceptsWorkerIntegrationArticleEdit(t *test
 		Metadata:   meta,
 	}
 	doc := types.Document{DocID: "doc-worker", OwnerID: owner, Title: "Story.vtext"}
-	rec := &types.RunRecord{
-		OwnerID: owner,
-		RunID:   "run-worker",
-		Metadata: map[string]any{
-			"type":                       "vtext_agent_revision",
-			"request_intent":             "integrate_worker_findings",
-			"ingestion_handoff_cycle_id": "cycle-worker-1",
-		},
-	}
-	if !EligibleForAutonomousPublish(doc, rev, rec, owner) {
-		t.Fatal("worker-integration article edits with ingestion lineage should be eligible")
+	for _, taskType := range []string{textureAgentRevisionTaskType, legacyVTextAgentRevisionTaskType} {
+		t.Run(taskType, func(t *testing.T) {
+			rec := &types.RunRecord{
+				OwnerID: owner,
+				RunID:   "run-worker",
+				Metadata: map[string]any{
+					"type":                       taskType,
+					"request_intent":             "integrate_worker_findings",
+					"ingestion_handoff_cycle_id": "cycle-worker-1",
+				},
+			}
+			if !EligibleForAutonomousPublish(doc, rev, rec, owner) {
+				t.Fatal("worker-integration article edits with ingestion lineage should be eligible")
+			}
+		})
 	}
 }
 

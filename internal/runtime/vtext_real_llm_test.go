@@ -848,8 +848,8 @@ func TestVTextAgentRevisionRealLLMProviderMetadata(t *testing.T) {
 		t.Fatal("task metadata should not be nil")
 	}
 	taskType, _ := statusResp.Metadata["type"].(string)
-	if taskType != "vtext_agent_revision" {
-		t.Errorf("metadata.type = %q, want %q", taskType, "vtext_agent_revision")
+	if taskType != textureAgentRevisionTaskType {
+		t.Errorf("metadata.type = %q, want %q", taskType, textureAgentRevisionTaskType)
 	}
 
 	metadataDocID, _ := statusResp.Metadata["doc_id"].(string)

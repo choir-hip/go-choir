@@ -246,7 +246,7 @@ func resolveRunIdentity(ownerID, sandboxID string, metadata map[string]any, pare
 	rawProfile := metadataStringValue(metadata, runMetadataAgentProfile)
 	profile := rawProfile
 	if profile == "" {
-		if parent != nil && strings.TrimSpace(parent.AgentProfile) != "" && metadataStringValue(metadata, "type") != "vtext_agent_revision" {
+		if parent != nil && strings.TrimSpace(parent.AgentProfile) != "" && !isTextureAgentRevisionTaskType(metadataStringValue(metadata, "type")) {
 			profile = parent.AgentProfile
 		} else {
 			profile = agentProfileForRun(&types.RunRecord{Metadata: metadata})
@@ -967,7 +967,7 @@ func (rt *Runtime) createAgentMutationForRun(ctx context.Context, rec *types.Run
 	if rt == nil || rt.store == nil || rec == nil {
 		return
 	}
-	if metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
+	if !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return
 	}
 	mutation := agentMutationForRun(rec)
@@ -1287,7 +1287,7 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 					continue
 				}
 				progressed = true
-				if metadataString(rec.Metadata, "type") == "vtext_agent_revision" {
+				if isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
 					if err := rt.store.MarkAgentMutationStale(ctx, rec.RunID); err != nil {
 						log.Printf("runtime: boot passivation: stale mutation %s: %v", rec.RunID, err)
 					}
@@ -1511,7 +1511,7 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 			cause = events.CauseToolExecution
 		}
 		// Also emit vtext-specific progress events for agent revision runs.
-		if taskType, _ := rec.Metadata["type"].(string); taskType == "vtext_agent_revision" {
+		if taskType, _ := rec.Metadata["type"].(string); isTextureAgentRevisionTaskType(taskType) {
 			if docID, _ := rec.Metadata["doc_id"].(string); docID != "" {
 				if kind == types.EventRunProgress {
 					progressPayload, _ := json.Marshal(map[string]string{
@@ -1602,7 +1602,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		WithToolLoopLLMConfig(llmConfig),
 		WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
-	if metadataString(rec.Metadata, "type") == "vtext_agent_revision" {
+	if isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialVTextToolChoice(rec)))
 		toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses(
 			"patch_texture",
@@ -2187,7 +2187,7 @@ func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
 }
 
 func initialVTextToolChoice(rec *types.RunRecord) string {
-	if rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
+	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return ""
 	}
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
@@ -2206,7 +2206,7 @@ func (rt *Runtime) recordExplicitInitialVTextDecisionIfNeeded(ctx context.Contex
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil
 	}
-	if metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" ||
+	if !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) ||
 		!metadataBoolValue(rec.Metadata, "vtext_initial_decision_required") {
 		return nil
 	}
@@ -2287,8 +2287,8 @@ func explicitVTextSuperExecutionRequestFromPrompt(prompt string) (explicitInitia
 			objective = text
 		}
 		return explicitInitialVTextSuperRequest{
-			Objective: "VText requests downstream super execution for this document: " + objective,
-			Reason:    "Owner explicitly requested downstream super execution after VText materialization.",
+			Objective: "Texture requests downstream super execution for this document: " + objective,
+			Reason:    "Owner explicitly requested downstream super execution after Texture materialization.",
 		}, true
 	}
 	return explicitInitialVTextSuperRequest{}, false
@@ -2298,7 +2298,7 @@ func (rt *Runtime) recordExplicitInitialVTextSuperRequestIfNeeded(ctx context.Co
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil
 	}
-	if metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" ||
+	if !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) ||
 		!metadataBoolValue(rec.Metadata, "vtext_initial_super_request_required") ||
 		metadataBoolValue(rec.Metadata, "vtext_initial_super_request_recorded") {
 		return nil
@@ -2590,7 +2590,7 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 	}
 
 	taskType, _ := rec.Metadata["type"].(string)
-	if taskType != "vtext_agent_revision" {
+	if !isTextureAgentRevisionTaskType(taskType) {
 		return nil
 	}
 
@@ -3107,7 +3107,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 
 	// If this is an vtext agent revision task, mark the mutation as failed
 	// and emit the vtext-specific failure event.
-	if taskType, _ := rec.Metadata["type"].(string); taskType == "vtext_agent_revision" {
+	if taskType, _ := rec.Metadata["type"].(string); isTextureAgentRevisionTaskType(taskType) {
 		_ = rt.store.FailAgentMutation(persistCtx, rec.RunID)
 		if docID, _ := rec.Metadata["doc_id"].(string); docID != "" {
 			failPayload, _ := json.Marshal(map[string]string{

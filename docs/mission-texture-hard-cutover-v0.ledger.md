@@ -4301,3 +4301,59 @@ Receipts:
 Open edge: implement current Texture task/profile/model-policy names with
 legacy read/fallback compatibility, then prove with focused runtime/model-policy
 tests, runtime shards, CI/deploy identity, and deployed prompt-bar/Trace proof.
+
+## 2026-06-16 - Local Repair: C38 Task/Profile/Model-Policy Payloads
+
+Claim: C38 locally repairs current task/profile/model-policy payload naming
+without removing legacy compatibility.
+
+Move: implement current Texture task-type emission, current visible
+`role=texture` tool/prompt affordances, current generated `[roles.texture]`
+model-policy defaults, and current wire eligibility while preserving legacy
+`vtext_agent_revision`, `role=vtext`, and `[roles.vtext]` read/fallback paths.
+Expected ΔV: move the next payload residue from documented problem to
+local-supported repair, with deployed support still open.
+
+Actual ΔV: C38 is local-supported; coarse V remains 2 until commit/CI/deploy
+and deployed prompt-bar/Trace proof complete.
+
+Receipts:
+
+- Added centralized task-type compatibility around current
+  `texture_agent_revision` and legacy `vtext_agent_revision`.
+- New/current revision-run metadata, synthetic Universal Wire normalization
+  records, runtime task-type inference, Texture write-tool authorization,
+  persistence mutation selection, workflow verification, and wire publication
+  eligibility now recognize current Texture revision task records.
+- Conductor, processor, and reconciler current spawn affordances now present
+  `role=texture`; tests prove current Texture handoffs return
+  `texture:<doc_id>`, `profile:"texture"`, `role:"texture"`, and
+  `type:"texture_agent_revision"`.
+- A conductor repeat-spawn fixture still uses legacy `role:"vtext"` and dedupes
+  to the already-materialized Texture route, proving legacy role input remains
+  readable during the migration.
+- Generated model-policy defaults now emit `[roles.texture]`; tests prove the
+  generated policy omits current `[roles.vtext]` while legacy `[roles.vtext]`
+  policies still resolve for Texture selection.
+- Focused runtime packet
+  `nix develop -c go test ./internal/runtime -run 'TestTextureActorIdentityCompatibility|TestTextureAgentRevisionTaskTypeCompatibility|TestTextureModelPolicyRoleUsesLegacySelectionKey|TestGeneratedModelPolicyUsesTextureRoleKey|TestAgentToolProfiles|TestConductorCanSpawnTextureAndTextureCanSpawnResearcher|TestWireProcessorCanSpawnVTextArticleRevision|TestVTextAgentRevisionRealLLMMetadata' -count=1`
+  passed.
+- `nix develop -c go test ./internal/wirepublish -count=1` passed.
+- Widened touched-package packet
+  `nix develop -c go test ./internal/runtime ./internal/wirepublish -run 'Test.*Texture|Test.*VText|Test.*ModelPolicy|Test.*Prompt|Test.*Agent|Test.*Wire|Test.*Eligibility' -count=1`
+  passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed all four sequential
+  runtime shards.
+- `git diff --check` passed.
+- Scoped current-emission search
+  `rg -n '"vtext_agent_revision"|role=vtext|\[roles\.vtext\]|spawn_agent with role=vtext|VText owns|VText requests|VText agent' internal/runtime internal/wirepublish -g '!**/*_test.go'`
+  now returns only explicit compatibility/fallback anchors:
+  `legacyVTextAgentRevisionTaskType = "vtext_agent_revision"` in runtime and
+  wirepublish, plus the legacy generated model-policy fallback
+  `[roles.vtext]`.
+
+Open edge: commit/push, monitor CI and deploy, verify staging identity, and run
+deployed prompt-bar -> conductor -> Texture product proof using public
+product/Trace evidence only. Table/database symbols, durable stored actor ids,
+stored route rows, Universal Wire edition refs, deployed Universal Wire
+story-field proof, and protocol v0 remain outside C38.

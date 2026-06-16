@@ -2827,12 +2827,12 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: read-only checkpoint
-documented the task/profile/model-policy payload residue after C37; no runtime
-repair decrease is claimed. Coarse V remains 2 because database/table names,
-`vtext_agent_revision` task type, prompt/tool schema wording, model-policy
-keys, stored legacy routes, Universal Wire edition refs, deployed Universal
-Wire story-field proof, and protocol v0 remain.
+variant (ranking function) V: current V=2; last ΔV: C38 local repair moved
+task/profile/model-policy payload residue from documented problem to
+local-supported behavior, pending commit/CI/deploy/staging proof. Coarse V
+remains 2 because landing/deployed proof for C38, database/table names, stored
+legacy routes, Universal Wire edition refs, deployed Universal Wire story-field
+proof, and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -2988,13 +2988,21 @@ The task/profile/model-policy checkpoint is now documented: scoped inventory
 found 57 `vtext_agent_revision` hits and 325 scoped profile/role/requested-app
 hits, plus current prompt-default and `[roles.vtext]` model-policy residue. No
 runtime repair is claimed by that checkpoint.
+C38 is local-supported for the first task/profile/model-policy behavior slice:
+new/current Texture revision runs emit `texture_agent_revision`; current
+conductor/processor/reconciler visible spawn affordances and prompt defaults
+use `role=texture` / Texture wording; generated model-policy defaults emit
+`[roles.texture]`; wire publication eligibility accepts the current task type;
+and legacy `vtext_agent_revision`, `role=vtext`, and `[roles.vtext]` remain
+readable/fallback inputs. Focused runtime/wirepublish packets, full
+wirepublish, sequential runtime shards, `git diff --check`, and scoped
+current-emission search pass locally. This is not yet deployed-supported.
 
-next move: implement the first task/profile/model-policy behavior slice:
-current Texture revision runs and current visible role/model-policy affordances
-should use Texture naming, while legacy `vtext_agent_revision`, `role=vtext`,
-and `[roles.vtext]` remain readable/fallback inputs. Keep table/database,
-durable stored actor-id, stored route-row, Universal Wire edition, and protocol
-work out of this slice.
+next move: land C38 by committing and pushing the behavior/docs repair, monitor
+CI/deploy, verify staging commit identity, then run deployed prompt-bar ->
+conductor -> Texture product proof using public product/Trace evidence only.
+Keep table/database, durable stored actor-id, stored route-row, Universal Wire
+edition, and protocol work out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

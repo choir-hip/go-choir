@@ -139,7 +139,7 @@ provider = "deepseek"
 model = "deepseek-v4-flash"
 reasoning = "medium"
 
-[roles.vtext]
+[roles.texture]
 provider = "xiaomi"
 model = "mimo-v2.5"
 reasoning = "medium"

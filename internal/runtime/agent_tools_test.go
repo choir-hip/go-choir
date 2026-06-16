@@ -194,8 +194,8 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s missing spawn_agent", profile)
 		}
-		if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 1 || got[0] != AgentProfileVText {
-			t.Fatalf("%s spawn_agent role enum = %#v, want only vtext", profile, got)
+		if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 1 || got[0] != AgentProfileTexture {
+			t.Fatalf("%s spawn_agent role enum = %#v, want only texture", profile, got)
 		}
 	}
 	for _, name := range []string{"spawn_agent", "cancel_agent", "save_evidence", "read_evidence", "patch_texture", "rewrite_texture", "record_texture_decision", "request_super_execution"} {
@@ -1726,7 +1726,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerAcrossTrajectoryRuns(t *testing.T
 	}
 }
 
-func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
+func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
@@ -1745,8 +1745,8 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	conductorRegistry := rt.ToolRegistryForProfile(AgentProfileConductor)
 	if spawnTool, ok := conductorRegistry.Lookup("spawn_agent"); !ok {
 		t.Fatal("conductor missing spawn_agent")
-	} else if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 1 || got[0] != AgentProfileVText {
-		t.Fatalf("conductor spawn_agent role enum = %#v, want only %q", got, AgentProfileVText)
+	} else if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 1 || got[0] != AgentProfileTexture {
+		t.Fatalf("conductor spawn_agent role enum = %#v, want only %q", got, AgentProfileTexture)
 	}
 	if _, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
 		"objective":"research should be owned by vtext, not conductor",
@@ -1754,15 +1754,15 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	}`)); err == nil {
 		t.Fatal("conductor should not be allowed to spawn researcher")
 	}
-	// Conductor spawn_agent role=vtext without channel_id materializes a new
+	// Conductor spawn_agent role=texture without channel_id materializes a new
 	// document route (the conductor user-prompt handoff owns document
 	// creation; channel_id is only meaningful for revising existing docs).
 	vtextSpawnRaw, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
 		"objective":"create v0 and own the document",
-		"role":"vtext"
+		"role":"texture"
 	}`))
 	if err != nil {
-		t.Fatalf("conductor spawn vtext: %v", err)
+		t.Fatalf("conductor spawn texture: %v", err)
 	}
 	var vtextSpawn struct {
 		AgentID           string `json:"agent_id"`
@@ -1775,51 +1775,52 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 		InitialRevisionID string `json:"initial_revision_id"`
 	}
 	if err := json.Unmarshal([]byte(vtextSpawnRaw), &vtextSpawn); err != nil {
-		t.Fatalf("decode vtext spawn: %v", err)
+		t.Fatalf("decode texture spawn: %v", err)
 	}
-	if vtextSpawn.AgentID != "vtext:"+vtextSpawn.ChannelID {
-		t.Fatalf("vtext spawn agent_id = %q, want vtext:%s", vtextSpawn.AgentID, vtextSpawn.ChannelID)
+	if vtextSpawn.AgentID != "texture:"+vtextSpawn.ChannelID {
+		t.Fatalf("texture spawn agent_id = %q, want texture:%s", vtextSpawn.AgentID, vtextSpawn.ChannelID)
 	}
-	if vtextSpawn.Profile != AgentProfileVText {
-		t.Fatalf("vtext spawn profile = %q, want %q", vtextSpawn.Profile, AgentProfileVText)
+	if vtextSpawn.Profile != AgentProfileTexture {
+		t.Fatalf("texture spawn profile = %q, want %q", vtextSpawn.Profile, AgentProfileTexture)
 	}
 	if vtextSpawn.ChannelID == "" {
-		t.Fatal("vtext spawn channel_id should not be empty")
+		t.Fatal("texture spawn channel_id should not be empty")
 	}
 	if vtextSpawn.RunID == "" {
-		t.Fatal("vtext spawn loop_id should point to the initial product-path vtext run")
+		t.Fatal("texture spawn loop_id should point to the initial product-path Texture run")
 	}
 	if vtextSpawn.State != "open" {
-		t.Fatalf("vtext spawn state = %q, want open", vtextSpawn.State)
+		t.Fatalf("texture spawn state = %q, want open", vtextSpawn.State)
 	}
 	if vtextSpawn.UserRevisionID == "" || vtextSpawn.FramingRevisionID != "" || vtextSpawn.InitialRevisionID != vtextSpawn.UserRevisionID {
-		t.Fatalf("unexpected vtext spawn revision ids: %+v", vtextSpawn)
+		t.Fatalf("unexpected texture spawn revision ids: %+v", vtextSpawn)
 	}
-	// A repeat conductor vtext spawn on the same conductor run must dedupe to
-	// the already-materialized document instead of opening a second route.
+	// A repeat conductor legacy role=vtext spawn on the same conductor run must
+	// dedupe to the already-materialized Texture document instead of opening a
+	// second route.
 	repeatSpawnRaw, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
 		"objective":"create v0 and own the document",
 		"role":"vtext",
 		"channel_id":"doc-work"
 	}`))
 	if err != nil {
-		t.Fatalf("conductor repeat spawn vtext: %v", err)
+		t.Fatalf("conductor repeat legacy spawn vtext: %v", err)
 	}
 	var repeatSpawn struct {
 		ChannelID string `json:"channel_id"`
 	}
 	if err := json.Unmarshal([]byte(repeatSpawnRaw), &repeatSpawn); err != nil {
-		t.Fatalf("decode repeat vtext spawn: %v", err)
+		t.Fatalf("decode repeat legacy vtext spawn: %v", err)
 	}
 	if repeatSpawn.ChannelID != vtextSpawn.ChannelID {
-		t.Fatalf("repeat vtext spawn channel_id = %q, want deduped %q", repeatSpawn.ChannelID, vtextSpawn.ChannelID)
+		t.Fatalf("repeat legacy vtext spawn channel_id = %q, want deduped %q", repeatSpawn.ChannelID, vtextSpawn.ChannelID)
 	}
 	vtextAgent, err := s.GetAgent(context.Background(), vtextSpawn.AgentID)
 	if err != nil {
-		t.Fatalf("get vtext agent: %v", err)
+		t.Fatalf("get texture agent: %v", err)
 	}
 	if vtextAgent.ChannelID != vtextSpawn.ChannelID {
-		t.Fatalf("vtext agent channel_id = %q, want %q", vtextAgent.ChannelID, vtextSpawn.ChannelID)
+		t.Fatalf("texture agent channel_id = %q, want %q", vtextAgent.ChannelID, vtextSpawn.ChannelID)
 	}
 	parentAfterSpawn, err := s.GetRun(context.Background(), conductorTask.RunID)
 	if err != nil {
@@ -1843,7 +1844,7 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	if err := json.Unmarshal([]byte(parentAfterSpawn.Result), &parentDecision); err != nil {
 		t.Fatalf("decode conductor result: %v", err)
 	}
-	if parentDecision.Action != "open_app" || parentDecision.App != AgentProfileVText {
+	if parentDecision.Action != "open_app" || parentDecision.App != AgentProfileTexture {
 		t.Fatalf("unexpected conductor decision: %+v", parentDecision)
 	}
 	if parentDecision.DocID != vtextSpawn.ChannelID {
@@ -2002,11 +2003,11 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 
 	spawnVTextRaw, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"write a source-grounded article from this processor brief about Fed rates and inflation",
-		"role":"vtext",
+		"role":"texture",
 		"channel_id":"universal-wire-story-candidate"
 	}`))
 	if err != nil {
-		t.Fatalf("processor spawn vtext: %v", err)
+		t.Fatalf("processor spawn texture: %v", err)
 	}
 	var vtextSpawn struct {
 		AgentID         string         `json:"agent_id"`
@@ -2022,11 +2023,11 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	if err := json.Unmarshal([]byte(spawnVTextRaw), &vtextSpawn); err != nil {
 		t.Fatalf("decode processor vtext spawn: %v", err)
 	}
-	if vtextSpawn.Profile != AgentProfileVText || vtextSpawn.Role != AgentProfileVText {
-		t.Fatalf("processor vtext spawn profile/role = %+v", vtextSpawn)
+	if vtextSpawn.Profile != AgentProfileTexture || vtextSpawn.Role != AgentProfileTexture {
+		t.Fatalf("processor texture spawn profile/role = %+v", vtextSpawn)
 	}
-	if vtextSpawn.DocID == "" || vtextSpawn.AgentID != "vtext:"+vtextSpawn.DocID || vtextSpawn.ChannelID != vtextSpawn.DocID {
-		t.Fatalf("processor vtext spawn did not return normal vtext handle: %+v", vtextSpawn)
+	if vtextSpawn.DocID == "" || vtextSpawn.AgentID != "texture:"+vtextSpawn.DocID || vtextSpawn.ChannelID != vtextSpawn.DocID {
+		t.Fatalf("processor texture spawn did not return normal Texture handle: %+v", vtextSpawn)
 	}
 	if !vtextSpawn.CreatedDocument || vtextSpawn.SeedRevisionID == "" || vtextSpawn.LoopID == "" {
 		t.Fatalf("processor vtext spawn missing document/revision/run identity: %+v", vtextSpawn)
@@ -2073,8 +2074,8 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get processor-spawned vtext run: %v", err)
 	}
-	if vtextRun.AgentID != "vtext:"+vtextSpawn.DocID || vtextRun.ChannelID != vtextSpawn.DocID || metadataString(vtextRun.Metadata, "type") != "vtext_agent_revision" {
-		t.Fatalf("processor vtext run is not a vtext revision run: %+v", vtextRun)
+	if vtextRun.AgentID != "texture:"+vtextSpawn.DocID || vtextRun.ChannelID != vtextSpawn.DocID || metadataString(vtextRun.Metadata, "type") != textureAgentRevisionTaskType {
+		t.Fatalf("processor texture run is not a Texture revision run: %+v", vtextRun)
 	}
 	runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-alice", 100)
 	if err != nil {
@@ -2220,11 +2221,11 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	reconcilerRegistry := rt.ToolRegistryForProfile(AgentProfileReconciler)
 	reconcilerVTextRaw, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
 		"objective":"draft a correction/update VText from this corpus reconciliation",
-		"role":"vtext",
+		"role":"texture",
 		"channel_id":"`+vtextSpawn.DocID+`"
 	}`))
 	if err != nil {
-		t.Fatalf("reconciler spawn vtext: %v", err)
+		t.Fatalf("reconciler spawn texture: %v", err)
 	}
 	var reconcilerVTextSpawn struct {
 		DocID              string `json:"doc_id"`
@@ -2247,8 +2248,8 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get reconciler-spawned vtext run: %v", err)
 	}
-	if reconcilerVTextRun.AgentID != "vtext:"+vtextSpawn.DocID || reconcilerVTextRun.ChannelID != vtextSpawn.DocID || metadataString(reconcilerVTextRun.Metadata, "type") != "vtext_agent_revision" {
-		t.Fatalf("reconciler vtext run is not a vtext revision run: %+v", reconcilerVTextRun)
+	if reconcilerVTextRun.AgentID != "texture:"+vtextSpawn.DocID || reconcilerVTextRun.ChannelID != vtextSpawn.DocID || metadataString(reconcilerVTextRun.Metadata, "type") != textureAgentRevisionTaskType {
+		t.Fatalf("reconciler texture run is not a Texture revision run: %+v", reconcilerVTextRun)
 	}
 	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
 		"objective":"verify claims independently",

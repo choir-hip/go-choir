@@ -138,7 +138,7 @@ func (rt *Runtime) executeTextureEditTool(ctx context.Context, toolName string, 
 		return "", fmt.Errorf("%s is only available to Texture agents", toolName)
 	}
 	rec := ctxRunRecord(ctx)
-	if rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
+	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return "", fmt.Errorf("%s requires a Texture agent revision run", toolName)
 	}
 	rev, err := rt.commitVTextToolEdit(context.Background(), rec, in)
@@ -301,7 +301,7 @@ func (rt *Runtime) executeRequiredEmailDraftContinuation(ctx context.Context, re
 }
 
 func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *types.RunRecord, in editVTextArgs, rev types.Revision) (vtextRequiredContinuation, bool) {
-	if rt == nil || rt.store == nil || rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
+	if rt == nil || rt.store == nil || rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return vtextRequiredContinuation{}, false
 	}
 	docID := strings.TrimSpace(in.DocID)

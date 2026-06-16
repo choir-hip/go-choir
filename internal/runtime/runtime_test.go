@@ -589,8 +589,8 @@ func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testin
 			want: []string{
 				"Universal Wire source-understanding agent",
 				"SourceItem batches",
-				"`spawn_agent` with `role=vtext`",
-				"VText owns canonical article prose and researcher follow-up on the document channel",
+				"`spawn_agent` with `role=texture`",
+				"Texture owns canonical article prose and researcher follow-up on the document channel",
 				"record_wire_processor_decision",
 				"update_coagent",
 			},
@@ -600,9 +600,9 @@ func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testin
 			profile: AgentProfileReconciler,
 			want: []string{
 				"corpus-level Universal Wire story agent",
-				"existing published VTexts",
-				"`spawn_agent` with `role=vtext`",
-				"VText owns canonical article prose and researcher follow-up on the document channel",
+				"existing published Textures",
+				"`spawn_agent` with `role=texture`",
+				"Texture owns canonical article prose and researcher follow-up on the document channel",
 				"update_coagent",
 			},
 		},

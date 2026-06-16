@@ -307,11 +307,11 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 	contextMode := vtextAgentRevisionContextMode(currentRevision, previousRevision)
 	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, recentWorkerMessages, nil)
 
-	// Create the runtime run with vtext agent revision metadata.
+	// Create the runtime run with Texture agent revision metadata.
 	// Carry forward durable context keys from the current head revision
 	// so they survive into appagent revision metadata.
 	runMetadata := map[string]any{
-		"type":                "vtext_agent_revision",
+		"type":                textureAgentRevisionTaskType,
 		"agent_profile":       AgentProfileTexture,
 		"agent_role":          AgentProfileTexture,
 		"agent_id":            currentTextureAgentID(doc.DocID),

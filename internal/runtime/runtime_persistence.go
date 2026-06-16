@@ -65,7 +65,7 @@ func persistSubmittedRun(ctx context.Context, st runSubmissionStore, bus *events
 }
 
 func agentMutationForRun(rec *types.RunRecord) *store.AgentMutation {
-	if rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
+	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return nil
 	}
 	docID := metadataStringValue(rec.Metadata, "doc_id")

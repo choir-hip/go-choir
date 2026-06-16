@@ -66,6 +66,18 @@ func TestTextureActorIdentityCompatibility(t *testing.T) {
 	}
 }
 
+func TestTextureAgentRevisionTaskTypeCompatibility(t *testing.T) {
+	if !isTextureAgentRevisionTaskType(textureAgentRevisionTaskType) {
+		t.Fatalf("%q should be recognized as current Texture revision task type", textureAgentRevisionTaskType)
+	}
+	if !isTextureAgentRevisionTaskType(legacyVTextAgentRevisionTaskType) {
+		t.Fatalf("%q should remain recognized as legacy Texture revision task type", legacyVTextAgentRevisionTaskType)
+	}
+	if isTextureAgentRevisionTaskType("researcher") {
+		t.Fatal("unrelated task type should not be recognized as Texture revision task type")
+	}
+}
+
 func TestTextureModelPolicyRoleUsesLegacySelectionKey(t *testing.T) {
 	raw := `
 [defaults]

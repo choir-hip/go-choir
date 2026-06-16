@@ -46,7 +46,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 	roleDescription := "Canonical role/profile name. Allowed target roles for this caller: " + strings.Join(allowedTargets, ", ") + "."
 	description := "Spawn an allowed child agent run for the current " + spec.Profile + " profile."
 	if spec.Profile == AgentProfileConductor {
-		description = "Open a VText document from a top-level conductor route. Conductor does not spawn researcher, super, or co-super workers."
+		description = "Open a Texture document from a top-level conductor route. Conductor does not spawn researcher, super, or co-super workers."
 	}
 	return Tool{
 		Name:        "spawn_agent",
@@ -59,15 +59,15 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			"slot":                    map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For vsuper spawning co-super children: use implementation for the candidate writer first; use verifier only after implementation commit/package/blocker evidence exists. Reusing a live slot returns the existing child instead of launching a duplicate."},
 			"model":                   map[string]any{"type": "string"},
 			"model_policy_overlay_id": map[string]any{"type": "string", "description": "Optional owner-visible model policy overlay id from System/model-policy-overlays/<id>.toml. Use this for eval/model arms instead of passing provider metadata directly."},
-			"title":                   map[string]any{"type": "string", "description": "For role=vtext from processor or reconciler: optional VText document title for a new article."},
+			"title":                   map[string]any{"type": "string", "description": "For role=texture from processor or reconciler: optional Texture document title for a new article."},
 			"initial_content": map[string]any{
 				"type":        "string",
-				"description": "For role=vtext from processor or reconciler: optional source/brief seed revision for the VText before the VText agent writes the article.",
+				"description": "For role=texture from processor or reconciler: optional source/brief seed revision for the Texture before the Texture agent writes the article.",
 			},
 			"source_item_ids": map[string]any{
 				"type":        "array",
 				"items":       map[string]any{"type": "string"},
-				"description": "For role=vtext from processor: the exact source item ids this story handoff covers. Required when the processor request contains multiple source items.",
+				"description": "For role=texture from processor: the exact source item ids this story handoff covers. Required when the processor request contains multiple source items.",
 			},
 		}, []string{"objective", "role"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -810,7 +810,10 @@ func canonicalAllowedDelegateTargets(targets []string) []string {
 	out := make([]string, 0, len(targets))
 	seen := make(map[string]bool, len(targets))
 	for _, target := range targets {
-		target = canonicalAgentProfile(target)
+		target = strings.TrimSpace(target)
+		if target != AgentProfileTexture {
+			target = canonicalAgentProfile(target)
+		}
 		if target == "" || seen[target] {
 			continue
 		}
