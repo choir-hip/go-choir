@@ -4581,3 +4581,78 @@ Receipts:
 Open edge: next high-ΔV move is storage/table and durable actor/stored-route
 residue, unless the deployed Universal Wire story-field proof becomes cheaper
 through product-path story creation. Protocol v0 remains last.
+
+## 2026-06-16 - Problem Checkpoint: Storage And Persistent Route Residue
+
+Claim: after C39, the highest-ΔV remaining Texture cutover problem is protected
+persistent-state residue: Dolt/app table names, platform publication storage,
+durable actor compatibility, stored public route rows, and Universal Wire
+edition/transclusion refs. No runtime repair is claimed in this move.
+
+Move: read-only inventory and Problem Documentation First checkpoint. Expected
+ΔV: no repair decrease; convert the storage/persistent-state residue into a
+typed problem with compatibility, migration, proof, and rollback requirements.
+
+Actual ΔV: coarse V remains 2. The next behavior slice must be narrower than
+"rename all storage": either platform/public route-row migration evidence or a
+current Texture schema alias/migration layer for user Texture tables.
+
+Receipts:
+
+- Read `docs/computer-ontology.md` before touching the storage/persistent-state
+  surface. The relevant rule is that Dolt/app state, artifact/provenance graph,
+  and route identity are separate ledgers; shared changes must become typed
+  artifacts, and route switches need rollback evidence.
+- `rg -n "CREATE TABLE IF NOT EXISTS (vtext|platform_vtext)|database=vtext|legacyVTextWorkspace|go-choir-vtext|legacyPublicVTextPrefix|/pub/vtext|vtext:|AgentProfileVText|vtext_agent_revision|Wire\\.vtext|universalWireEditionSourcePath|platform_vtext" internal -g '!**/*_test.go' | tee /tmp/choir-c40-storage-nontest-inventory.txt | wc -l`
+  found 97 non-test hits.
+- The non-test inventory clusters by file included:
+  `internal/store/vtext.go` (11), `internal/platform/store.go` (8),
+  `internal/runtime/runtime.go` (8), `internal/runtime/tool_profiles.go` (13),
+  `internal/runtime/vtext_workflow_verifier.go` (6),
+  `internal/runtime/universal_wire.go` (6), `internal/runtime/model_policy.go`
+  (5), and `internal/platform/service.go` (4).
+- Current protected storage symbols include `vtext_documents`,
+  `vtext_revisions`, `vtext_document_aliases`, `vtext_agent_mutations`,
+  `vtext_controller_checkpoints`, `vtext_decisions`, `database=vtext`,
+  `platform_vtext_documents`, and `platform_vtext_revisions`.
+- Current compatibility residues include legacy `.vtext` / `go-choir-vtext`
+  workspace fallback, durable `vtext:<doc_id>` actor matching, stored
+  `/pub/vtext/...` route-prefix readability, `universal-wire/Wire.vtext`, and
+  `vtext:` transclusion refs.
+- `rg -n "CREATE TABLE IF NOT EXISTS (vtext|platform_vtext)|database=vtext|legacyVTextWorkspace|go-choir-vtext|legacyPublicVTextPrefix|/pub/vtext|vtext:|AgentProfileVText|vtext_agent_revision|Wire\\.vtext|universalWireEditionSourcePath|platform_vtext" internal/**/*_test.go frontend/tests -g '!frontend/dist/**' | tee /tmp/choir-c40-storage-test-inventory.txt | wc -l`
+  found 423 test/frontend-test hits.
+- `rg -n "texture-cutover-allow|legacy.*vtext|LegacyVText|legacyVText|legacy_vtext|published_vtext|private_vtext|/pub/vtext|vtext_opened|LegacyEventVText" internal docs frontend -g '!frontend/dist/**' | tee /tmp/choir-c40-allowance-candidates.txt | wc -l`
+  found 551 allowance/legacy-candidate hits.
+
+Compatibility and proof requirements:
+
+- Existing user Texture documents, revisions, aliases, decisions, and mutation
+  records must remain readable.
+- Existing platform publications and stored legacy route rows must remain
+  resolvable until an idempotent migration rewrites or explicitly shims them.
+- Durable legacy actor ids and stored Trace/run records must remain readable;
+  new current actor ids should continue to be Texture.
+- Any storage migration must be typed, idempotent, separately testable, and
+  reversible by commit rollback plus no destructive data rewrite without an
+  explicit migration rollback path.
+- Product proof must use public product APIs and staging identity, not manual
+  database seeding or browser-public internal routes.
+
+Protected surfaces and rollback:
+
+- Mutation class for the future repair is red: Dolt/app state, platform
+  publication state, route identity, durable actor compatibility, and
+  Universal Wire edition/transclusion state are protected.
+- Admissible evidence: focused store/platform/runtime tests, runtime shards
+  when runtime compatibility changes, doccheck, scoped residue search, CI,
+  staging deploy identity, and deployed public-route/API proof for the chosen
+  slice.
+- Rollback path depends on the chosen sub-slice. Source-only alias/shim changes
+  can be reverted. Any data migration needs a before/after route/table receipt
+  and explicit down/compatibility behavior before it can land.
+- Heresy delta: discovered persistent-state V-name residue; repair is not yet
+  claimed.
+
+Open edge: select the first bounded C40 repair. Prefer platform/public route-row
+or user Texture table alias/migration work over a broad all-at-once storage
+rename. Keep Universal Wire story-field proof and protocol v0 separate.

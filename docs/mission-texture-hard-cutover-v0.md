@@ -2827,11 +2827,12 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C39 is
-deployed-supported for current Trace/run-acceptance evidence naming while
-preserving legacy readability. Coarse V remains 2 because database/table names,
-stored legacy routes, Universal Wire edition refs, deployed Universal Wire
-story-field proof, and protocol v0 remain.
+variant (ranking function) V: current V=2; last ΔV: C40 read-only inventory
+typed storage/table, durable actor, stored-route, and Universal Wire edition
+residue as the next protected-surface problem. Coarse V remains 2 because no
+storage/runtime repair is claimed yet, and database/table names, stored legacy
+routes, Universal Wire edition refs, deployed Universal Wire story-field proof,
+and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -3026,11 +3027,24 @@ with zero legacy `vtext.*` event kinds, and synthesized run acceptance
 `runacc-49da5125339dded1c5b1` with checkpoints `submitted` and
 `texture_opened`. The remaining scoped C39 non-test residue is explicit legacy
 compatibility plus one legacy prompt parser branch.
+C40 storage/persistent-state residue is now documented but not repaired:
+read-only inventory found 97 non-test hits across `internal/store`,
+`internal/platform`, and runtime compatibility surfaces, plus 423 test/frontend
+hits. The residue includes `vtext_*` Dolt table names and `database=vtext`,
+platform `platform_vtext_*` tables, legacy `.vtext` workspace fallback,
+durable `vtext:` actor compatibility, stored `/pub/vtext/...` route-row
+compatibility, and `universal-wire/Wire.vtext` / `vtext:` transclusion refs.
+Future repair is red because it touches Dolt/app state, platform publication
+state, route identity, and durable actor compatibility. Compatibility
+requirements: existing user/platform data and stored legacy public routes must
+remain readable, migration must be idempotent, and no opaque computer state may
+be promoted without typed evidence.
 
-next move: choose the next high-ΔV slice toward V=1: storage/table and durable
-actor/stored-route residue, or deployed Universal Wire story-field proof if
-staging can create a story payload through product path without manual success
-seeding. Keep protocol work last.
+next move: design and implement the first bounded C40 repair slice. Prefer a
+typed, reversible storage boundary with explicit legacy read compatibility over
+a broad rename: either platform/public route-row migration evidence, or a
+current Texture schema alias/migration layer for user Texture tables. Keep
+deployed Universal Wire story-field proof and protocol work out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
