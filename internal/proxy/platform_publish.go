@@ -17,7 +17,7 @@ import (
 
 const maxPublishedSourceSnapshotRunes = 20000
 
-type publishVTextRequest struct {
+type publishTextureRequest struct {
 	DocID        string          `json:"doc_id"`
 	RevisionID   string          `json:"revision_id,omitempty"`
 	Slug         string          `json:"slug,omitempty"`
@@ -25,14 +25,14 @@ type publishVTextRequest struct {
 	ExportPolicy json.RawMessage `json:"export_policy,omitempty"`
 }
 
-type sandboxVTextDocument struct {
+type sandboxTextureDocument struct {
 	DocID             string `json:"doc_id"`
 	OwnerID           string `json:"owner_id"`
 	Title             string `json:"title"`
 	CurrentRevisionID string `json:"current_revision_id,omitempty"`
 }
 
-type sandboxVTextRevision struct {
+type sandboxTextureRevision struct {
 	RevisionID string          `json:"revision_id"`
 	DocID      string          `json:"doc_id"`
 	OwnerID    string          `json:"owner_id"`
@@ -56,7 +56,7 @@ type sandboxContentItem struct {
 	Provenance   json.RawMessage `json:"provenance,omitempty"`
 }
 
-func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
@@ -74,7 +74,7 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 	}
 	h.lifecycle.record("platform_publish.auth", "ok", time.Since(authStarted))
 
-	var req publishVTextRequest
+	var req publishTextureRequest
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
@@ -113,10 +113,10 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 	}
 	h.lifecycle.record("platform_publish.resolve", "ok", time.Since(resolveStarted))
 
-	var doc sandboxVTextDocument
+	var doc sandboxTextureDocument
 	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/documents/"+url.PathEscape(req.DocID), authResult.UserID, &doc); err != nil {
 		log.Printf("proxy: platform publish fetch document: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private vtext document"})
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private texture document"})
 		h.lifecycle.record("platform_publish.private_read", "document_error", time.Since(started))
 		return
 	}
@@ -134,10 +134,10 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var rev sandboxVTextRevision
+	var rev sandboxTextureRevision
 	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/revisions/"+url.PathEscape(req.RevisionID), authResult.UserID, &rev); err != nil {
 		log.Printf("proxy: platform publish fetch revision: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private vtext revision"})
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private texture revision"})
 		h.lifecycle.record("platform_publish.private_read", "revision_error", time.Since(started))
 		return
 	}
@@ -155,7 +155,7 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 	}
 	h.lifecycle.record("platform_publish.private_read", "ok", time.Since(started))
 
-	platformReq := platform.PublishVTextRequest{
+	platformReq := platform.PublishTextureRequest{
 		OwnerID:          authResult.UserID,
 		SourceDocID:      doc.DocID,
 		SourceRevisionID: rev.RevisionID,
@@ -171,7 +171,7 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 	platformResp, status, err := h.postPlatformPublication(r, platformReq)
 	if err != nil {
 		log.Printf("proxy: platform publish post platformd: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to publish vtext"})
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to publish texture"})
 		h.lifecycle.record("platform_publish.platformd", "error", time.Since(started))
 		h.lifecycle.record("platform_publish.total", "platform_error", time.Since(started))
 		return
@@ -182,7 +182,7 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 		h.lifecycle.record("platform_publish.total", lifecycleHTTPStatus(status), time.Since(started))
 		return
 	}
-	if resp, ok := platformResp.(*platform.PublishVTextResponse); ok && resp.RoutePath != "" {
+	if resp, ok := platformResp.(*platform.PublishTextureResponse); ok && resp.RoutePath != "" {
 		resp.PublicURL = publicURLForRoute(r, resp.RoutePath)
 	}
 	writeJSON(w, status, platformResp)
@@ -580,7 +580,7 @@ func (h *Handler) importSandboxURLContent(r *http.Request, sandboxBase, userID, 
 	return item, nil
 }
 
-func (h *Handler) postPlatformPublication(r *http.Request, req platform.PublishVTextRequest) (any, int, error) {
+func (h *Handler) postPlatformPublication(r *http.Request, req platform.PublishTextureRequest) (any, int, error) {
 	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/publications/texture")
 	if err != nil {
 		return nil, 0, err
@@ -605,7 +605,7 @@ func (h *Handler) postPlatformPublication(r *http.Request, req platform.PublishV
 		return nil, resp.StatusCode, fmt.Errorf("read platformd response: %w", err)
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		var out platform.PublishVTextResponse
+		var out platform.PublishTextureResponse
 		if err := json.Unmarshal(body, &out); err != nil {
 			return nil, resp.StatusCode, fmt.Errorf("decode platformd response: %w", err)
 		}

@@ -67,11 +67,11 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		return
 	}
 
-	var doc sandboxVTextDocument
-	var rev sandboxVTextRevision
+	var doc sandboxTextureDocument
+	var rev sandboxTextureRevision
 	if strings.TrimSpace(req.Title) != "" || strings.TrimSpace(req.Content) != "" || len(req.Metadata) > 0 || len(req.Citations) > 0 {
-		doc = sandboxVTextDocument{DocID: req.DocID, OwnerID: platformOwner, Title: strings.TrimSpace(req.Title)}
-		rev = sandboxVTextRevision{RevisionID: req.RevisionID, DocID: req.DocID, OwnerID: platformOwner, Content: req.Content, Citations: req.Citations, Metadata: req.Metadata}
+		doc = sandboxTextureDocument{DocID: req.DocID, OwnerID: platformOwner, Title: strings.TrimSpace(req.Title)}
+		rev = sandboxTextureRevision{RevisionID: req.RevisionID, DocID: req.DocID, OwnerID: platformOwner, Content: req.Content, Citations: req.Citations, Metadata: req.Metadata}
 	} else {
 		if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/vtext/documents/"+url.PathEscape(req.DocID), platformOwner, &doc); err != nil {
 			log.Printf("proxy: wire publish fetch document: %v", err)
@@ -131,7 +131,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 	}
 
 	wireReq := wirepublish.BuildAutonomousPublishRequest(docType, revType, rec, enrichedMetadata)
-	platformReq := platform.PublishVTextRequest{
+	platformReq := platform.PublishTextureRequest{
 		OwnerID:          wireReq.OwnerID,
 		SourceDocID:      wireReq.SourceDocID,
 		SourceRevisionID: wireReq.SourceRevisionID,

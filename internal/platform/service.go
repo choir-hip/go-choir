@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	publicTexturePrefix     = "/pub/texture/"
+	publicTexturePrefix = "/pub/texture/"
 	// texture-cutover-allow: stored legacy public route rows stay readable until a public_routes migration rewrites or deletes them.
 	legacyPublicVTextPrefix = "/pub/vtext/"
 	textMediaType           = "text/plain; charset=utf-8"
@@ -133,7 +133,7 @@ func (s *Service) GetPlatformVTextRevision(ctx context.Context, revisionID strin
 	return s.store.GetVTextRevision(ctx, revisionID)
 }
 
-func (s *Service) PublishVText(ctx context.Context, req PublishVTextRequest) (*PublishVTextResponse, error) {
+func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest) (*PublishTextureResponse, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")
 	}
@@ -320,11 +320,11 @@ func (s *Service) PublishVText(ctx context.Context, req PublishVTextRequest) (*P
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("platform publish: commit transaction: %w", err)
 	}
-	if err := s.store.commitDolt(ctx, "publish vtext revision "+req.SourceRevisionID); err != nil {
+	if err := s.store.commitDolt(ctx, "publish texture revision "+req.SourceRevisionID); err != nil {
 		return nil, err
 	}
 
-	return &PublishVTextResponse{
+	return &PublishTextureResponse{
 		PublicationID:        publicationID,
 		ProposalID:           proposalID,
 		PublicationVersionID: versionID,

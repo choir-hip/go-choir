@@ -12,13 +12,13 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 )
 
-func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing.T) {
+func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	var gotPlatformReq platform.PublishVTextRequest
+	var gotPlatformReq platform.PublishTextureRequest
 	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/platform/publications/texture" {
 			t.Fatalf("platformd path: got %s", r.URL.Path)
@@ -31,7 +31,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
+		_ = json.NewEncoder(w).Encode(platform.PublishTextureResponse{
 			PublicationID:        "pub-1",
 			PublicationVersionID: "pubver-1",
 			RoutePath:            "/pub/texture/my-note-pub1",
@@ -49,14 +49,14 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/texture/documents/doc-1":
-			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
+			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
 				DocID:             "doc-1",
 				OwnerID:           "user-1",
 				Title:             "My Note",
 				CurrentRevisionID: "rev-head",
 			})
 		case "/api/texture/revisions/rev-2":
-			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
 				RevisionID: "rev-2",
 				DocID:      "doc-1",
 				OwnerID:    "user-1",
@@ -98,7 +98,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	req.Header.Set("X-Authenticated-User", "attacker")
 	w := httptest.NewRecorder()
 
-	h.HandleVTextPublication(w, req)
+	h.HandleTexturePublication(w, req)
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status: got %d body %s", w.Code, w.Body.String())
@@ -131,7 +131,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	if snapshot["original_media_type"] != "text/html; charset=utf-8" {
 		t.Fatalf("reader snapshot original_media_type = %#v, want source html type", snapshot["original_media_type"])
 	}
-	var resp platform.PublishVTextResponse
+	var resp platform.PublishTextureResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	}
 }
 
-func TestHandleVTextPublicationRejectsMalformedPolicy(t *testing.T) {
+func TestHandleTexturePublicationRejectsMalformedPolicy(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -174,7 +174,7 @@ func TestHandleVTextPublicationRejectsMalformedPolicy(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	w := httptest.NewRecorder()
 
-	h.HandleVTextPublication(w, req)
+	h.HandleTexturePublication(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status: got %d body %s", w.Code, w.Body.String())
@@ -187,13 +187,13 @@ func TestHandleVTextPublicationRejectsMalformedPolicy(t *testing.T) {
 	}
 }
 
-func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
+func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	var gotPlatformReq platform.PublishVTextRequest
+	var gotPlatformReq platform.PublishTextureRequest
 	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/platform/publications/texture" {
 			t.Fatalf("platformd path: got %s", r.URL.Path)
@@ -203,7 +203,7 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
+		_ = json.NewEncoder(w).Encode(platform.PublishTextureResponse{
 			PublicationID:        "pub-url",
 			PublicationVersionID: "pubver-url",
 			RoutePath:            "/pub/texture/url-note-pub1",
@@ -222,14 +222,14 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/texture/documents/doc-url":
-			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
+			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
 				DocID:             "doc-url",
 				OwnerID:           "user-1",
 				Title:             "URL Note",
 				CurrentRevisionID: "rev-url",
 			})
 		case "/api/texture/revisions/rev-url":
-			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
 				RevisionID: "rev-url",
 				DocID:      "doc-url",
 				OwnerID:    "user-1",
@@ -286,7 +286,7 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	w := httptest.NewRecorder()
 
-	h.HandleVTextPublication(w, req)
+	h.HandleTexturePublication(w, req)
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status: got %d body %s", w.Code, w.Body.String())
@@ -327,20 +327,20 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 	}
 }
 
-func TestHandleVTextPublicationRecordsURLSnapshotImportFailureState(t *testing.T) {
+func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	var gotPlatformReq platform.PublishVTextRequest
+	var gotPlatformReq platform.PublishTextureRequest
 	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&gotPlatformReq); err != nil {
 			t.Fatalf("decode platform request: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
+		_ = json.NewEncoder(w).Encode(platform.PublishTextureResponse{
 			PublicationID:        "pub-failed-url",
 			PublicationVersionID: "pubver-failed-url",
 			RoutePath:            "/pub/texture/failed-url",
@@ -354,14 +354,14 @@ func TestHandleVTextPublicationRecordsURLSnapshotImportFailureState(t *testing.T
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/texture/documents/doc-url":
-			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
+			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
 				DocID:             "doc-url",
 				OwnerID:           "user-1",
 				Title:             "URL Note",
 				CurrentRevisionID: "rev-url",
 			})
 		case "/api/texture/revisions/rev-url":
-			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
 				RevisionID: "rev-url",
 				DocID:      "doc-url",
 				OwnerID:    "user-1",
@@ -390,7 +390,7 @@ func TestHandleVTextPublicationRecordsURLSnapshotImportFailureState(t *testing.T
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	w := httptest.NewRecorder()
 
-	h.HandleVTextPublication(w, req)
+	h.HandleTexturePublication(w, req)
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status: got %d body %s", w.Code, w.Body.String())
@@ -411,20 +411,20 @@ func TestHandleVTextPublicationRecordsURLSnapshotImportFailureState(t *testing.T
 	}
 }
 
-func TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots(t *testing.T) {
+func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	var gotPlatformReq platform.PublishVTextRequest
+	var gotPlatformReq platform.PublishTextureRequest
 	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&gotPlatformReq); err != nil {
 			t.Fatalf("decode platform request: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
+		_ = json.NewEncoder(w).Encode(platform.PublishTextureResponse{
 			PublicationID:        "pub-private",
 			PublicationVersionID: "pubver-private",
 			RoutePath:            "/pub/texture/private-note-pub",
@@ -438,14 +438,14 @@ func TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots(t *testing.T
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/texture/documents/doc-private":
-			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
+			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
 				DocID:             "doc-private",
 				OwnerID:           "user-1",
 				Title:             "Private Note",
 				CurrentRevisionID: "rev-private",
 			})
 		case "/api/texture/revisions/rev-private":
-			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
 				RevisionID: "rev-private",
 				DocID:      "doc-private",
 				OwnerID:    "user-1",
@@ -479,7 +479,7 @@ func TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots(t *testing.T
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	w := httptest.NewRecorder()
 
-	h.HandleVTextPublication(w, req)
+	h.HandleTexturePublication(w, req)
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status: got %d body %s", w.Code, w.Body.String())

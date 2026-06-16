@@ -3469,3 +3469,46 @@ Open edge: run doccheck and commit this checkpoint, then rename the C31
 publication/export helper/API symbols while preserving JSON fields, HTTP
 routes, storage schema, stored route compatibility, `.vtext` file suffixes,
 and durable `vtext:` actor ids.
+
+## 2026-06-16 - Local Evidence: C31 Publication Helper Symbols
+
+Claim: C31 can repair active publication/export helper and API symbols without
+changing publication routes, JSON fields, storage schema, or stored public route
+compatibility.
+
+Move: construct by renaming platform, proxy, wirepublish, runtime, and frontend
+publication helper symbols to Texture names. Expected ΔV: no coarse V decrease
+until CI/deploy and deployed publication proof; local-supported status should
+remove the active helper-symbol residue from the export/storage coarse bucket.
+
+Actual ΔV: C31 moved from documented to local-supported. Mission V remains 2
+until deployment and staging proof are recorded.
+
+Receipts:
+
+- Checkpoint commit `268db43c234f57fdea6e65870b11568805706e7c` was pushed
+  first, and Docs Truth Check run `27598505265` passed.
+- `internal/platform` now uses `PublishTextureRequest`,
+  `PublishTextureResponse`, `Service.PublishTexture`, and
+  `HandleInternalPublishTexture`.
+- `internal/proxy` now uses `HandleTexturePublication`,
+  `publishTextureRequest`, and `sandboxTextureDocument` /
+  `sandboxTextureRevision` helper structs.
+- `internal/wirepublish`, `internal/runtime`, and the Texture editor publish
+  callsite now use Texture-named publication helpers.
+- `nix develop -c go test ./internal/platform ./internal/proxy
+  ./internal/wirepublish ./internal/runtime -run
+  'TestInternalPublishRequiresInternalCallerAndBundleResolve|TestRegisteredTextureRoutesExcludeLegacyVTextPlatformPrefix|TestPublishTextureCreatesImmutablePublicRecords|TestPublicationFallbackDefaultsUseTextureLabels|TestPublicationPersistedDefaultTitlesUseTextureLabels|TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestHandleTexturePublication|TestHandleInternalWirePlatformPublishPostsToPlatformd|TestWirePlatform|TestWirePublication|TestPostPlatformPublication|TestBuildAutonomousPublishRequest'
+  -count=1` passed.
+- `npm --prefix frontend run build` passed with only pre-existing Universal
+  Wire warnings.
+- Scoped C31 residue search found no targeted helper/API hits for
+  `PublishVText`, `publishVText`, `publishVTextRequest`,
+  `HandleInternalPublishVText`, `HandleVTextPublication`,
+  `HandlePublicVText`, `sandboxVTextDocument`, `sandboxVTextRevision`,
+  `failed to publish vtext`, or `publish vtext` in the touched publication
+  surfaces.
+
+Open edge: commit and push the behavior repair, monitor CI/deploy, verify
+staging identity, and run deployed publication proof. Do not claim storage,
+file suffix, durable actor-id, stored public-route-row, or protocol-v0 repair.

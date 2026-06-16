@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type PublishVTextRequest struct {
+type PublishTextureRequest struct {
 	OwnerID          string          `json:"owner_id"`
 	SourceDocID      string          `json:"source_doc_id"`
 	SourceRevisionID string          `json:"source_revision_id"`
@@ -20,7 +20,7 @@ type PublishVTextRequest struct {
 	RequestedBy      string          `json:"requested_by,omitempty"`
 }
 
-type PublishVTextResponse struct {
+type PublishTextureResponse struct {
 	PublicationID        string   `json:"publication_id"`
 	ProposalID           string   `json:"proposal_id"`
 	PublicationVersionID string   `json:"publication_version_id"`

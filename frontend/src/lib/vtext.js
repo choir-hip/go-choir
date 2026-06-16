@@ -471,7 +471,7 @@ export function openDocumentStream(docId, { onEvent, onError } = {}) {
   return source;
 }
 
-export async function publishVText(docId, { revisionId = '', slug = '', accessPolicy = null, exportPolicy = null } = {}) {
+export async function publishTexture(docId, { revisionId = '', slug = '', accessPolicy = null, exportPolicy = null } = {}) {
   const payload = {
     doc_id: docId,
     revision_id: revisionId,

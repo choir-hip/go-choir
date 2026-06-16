@@ -27,7 +27,7 @@ type wirePlatformPublishRequest struct {
 	RunMetadata   json.RawMessage `json:"run_metadata,omitempty"`
 }
 
-func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
+func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
 	if rt == nil {
 		return nil, fmt.Errorf("runtime unavailable")
 	}
@@ -93,7 +93,7 @@ func fallbackWirePublishURLFromBases(bases []string) string {
 	return ""
 }
 
-func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
+func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
 	payload := wirePlatformPublishRequest{
 		DocID:      doc.DocID,
 		RevisionID: rev.RevisionID,
@@ -146,14 +146,14 @@ func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc
 		}
 		return nil, fmt.Errorf("%s", apiErr.Error)
 	}
-	var out wirepublish.PublishVTextResponse
+	var out wirepublish.PublishTextureResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("decode wire publish response: %w", err)
 	}
 	return &out, nil
 }
 
-func (rt *Runtime) persistWirePlatformPublicationRef(ctx context.Context, ownerID string, rev types.Revision, pub *wirepublish.PublishVTextResponse) error {
+func (rt *Runtime) persistWirePlatformPublicationRef(ctx context.Context, ownerID string, rev types.Revision, pub *wirepublish.PublishTextureResponse) error {
 	if rt == nil || rt.store == nil || pub == nil {
 		return fmt.Errorf("persist wire publication ref: unavailable")
 	}

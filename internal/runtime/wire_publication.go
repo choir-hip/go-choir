@@ -180,7 +180,7 @@ func (rt *Runtime) recordWirePublicationTrajectoryRef(ctx context.Context, rec *
 	return nil
 }
 
-func wirePublicationTrajectoryRef(pub *wirepublish.PublishVTextResponse) string {
+func wirePublicationTrajectoryRef(pub *wirepublish.PublishTextureResponse) string {
 	if pub == nil {
 		return ""
 	}

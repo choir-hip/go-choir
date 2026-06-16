@@ -121,7 +121,7 @@ func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	svc := NewService(store, filepath.Join(root, "artifacts"))
 
-	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "owner-defaults",
 		SourceDocID:      "doc-defaults",
 		SourceRevisionID: "rev-defaults",
@@ -129,7 +129,7 @@ func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 		RequestedBy:      "owner-defaults",
 	})
 	if err != nil {
-		t.Fatalf("PublishVText: %v", err)
+		t.Fatalf("PublishTexture: %v", err)
 	}
 	if !strings.HasPrefix(resp.RoutePath, "/pub/texture/untitled-texture-") {
 		t.Fatalf("default route path = %q, want /pub/texture/untitled-texture-*", resp.RoutePath)
@@ -405,7 +405,7 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 		t.Fatalf("marshal source metadata: %v", err)
 	}
 
-	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
@@ -415,7 +415,7 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 		RequestedBy:      "user-1",
 	})
 	if err != nil {
-		t.Fatalf("PublishVText: %v", err)
+		t.Fatalf("PublishTexture: %v", err)
 	}
 
 	docxExport, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "docx")
@@ -549,7 +549,7 @@ func TestPublicationMarkdownExportNormalizesMalformedTableTailRows(t *testing.T)
 		"End of proposal.",
 	}, "\n")
 
-	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
@@ -558,7 +558,7 @@ func TestPublicationMarkdownExportNormalizesMalformedTableTailRows(t *testing.T)
 		RequestedBy:      "user-1",
 	})
 	if err != nil {
-		t.Fatalf("PublishVText: %v", err)
+		t.Fatalf("PublishTexture: %v", err)
 	}
 
 	exported, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "md")
@@ -603,7 +603,7 @@ func TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusi
 		}},
 	})
 
-	got, err := buildPublicationSourceMetadata(PublishVTextRequest{Metadata: metadata})
+	got, err := buildPublicationSourceMetadata(PublishTextureRequest{Metadata: metadata})
 	if err != nil {
 		t.Fatalf("buildPublicationSourceMetadata: %v", err)
 	}
@@ -666,7 +666,7 @@ func TestBuildPublicationSourceMetadataPreservesSelectorSet(t *testing.T) {
 		}},
 	})
 
-	got, err := buildPublicationSourceMetadata(PublishVTextRequest{Metadata: metadata})
+	got, err := buildPublicationSourceMetadata(PublishTextureRequest{Metadata: metadata})
 	if err != nil {
 		t.Fatalf("buildPublicationSourceMetadata: %v", err)
 	}
@@ -747,7 +747,7 @@ func TestPublicationExportPreservesCanonicalEvidenceStateMatrix(t *testing.T) {
 		t.Fatalf("marshal metadata: %v", err)
 	}
 
-	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-evidence-matrix",
 		SourceRevisionID: "rev-evidence-matrix",
@@ -757,7 +757,7 @@ func TestPublicationExportPreservesCanonicalEvidenceStateMatrix(t *testing.T) {
 		RequestedBy:      "user-1",
 	})
 	if err != nil {
-		t.Fatalf("PublishVText: %v", err)
+		t.Fatalf("PublishTexture: %v", err)
 	}
 
 	bundle, err := svc.GetPublicationBundleByRoute(context.Background(), resp.RoutePath)
@@ -901,7 +901,7 @@ func TestPublicationExportPreservesSourceContractMatrix(t *testing.T) {
 		t.Fatalf("marshal metadata: %v", err)
 	}
 
-	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-source-contract-matrix",
 		SourceRevisionID: "rev-source-contract-matrix",
@@ -911,7 +911,7 @@ func TestPublicationExportPreservesSourceContractMatrix(t *testing.T) {
 		RequestedBy:      "user-1",
 	})
 	if err != nil {
-		t.Fatalf("PublishVText: %v", err)
+		t.Fatalf("PublishTexture: %v", err)
 	}
 
 	bundle, err := svc.GetPublicationBundleByRoute(context.Background(), resp.RoutePath)
@@ -956,7 +956,7 @@ func TestBuildPublicationSourceMetadataDefaultsMissingSelectorKind(t *testing.T)
 		}},
 	})
 
-	got, err := buildPublicationSourceMetadata(PublishVTextRequest{Metadata: metadata})
+	got, err := buildPublicationSourceMetadata(PublishTextureRequest{Metadata: metadata})
 	if err != nil {
 		t.Fatalf("buildPublicationSourceMetadata: %v", err)
 	}
@@ -1000,7 +1000,7 @@ func TestBuildPublicationSourceMetadataNormalizesLegacyEvidenceAliases(t *testin
 				}},
 			})
 
-			got, err := buildPublicationSourceMetadata(PublishVTextRequest{Metadata: metadata})
+			got, err := buildPublicationSourceMetadata(PublishTextureRequest{Metadata: metadata})
 			if err != nil {
 				t.Fatalf("buildPublicationSourceMetadata: %v", err)
 			}
@@ -1039,7 +1039,7 @@ func TestBuildPublicationSourceMetadataNormalizesOpenSurface(t *testing.T) {
 		}},
 	})
 
-	got, err := buildPublicationSourceMetadata(PublishVTextRequest{Metadata: metadata})
+	got, err := buildPublicationSourceMetadata(PublishTextureRequest{Metadata: metadata})
 	if err != nil {
 		t.Fatalf("buildPublicationSourceMetadata: %v", err)
 	}
@@ -1063,7 +1063,7 @@ func TestBuildPublicationSourceMetadataNormalizesOpenSurface(t *testing.T) {
 	}
 }
 
-func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
+func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	artifactsRoot := filepath.Join(root, "artifacts")
 	svc := NewService(store, artifactsRoot)
@@ -1110,7 +1110,7 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
@@ -1121,7 +1121,7 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 		RequestedBy:      "user-1",
 	})
 	if err != nil {
-		t.Fatalf("PublishVText: %v", err)
+		t.Fatalf("PublishTexture: %v", err)
 	}
 	if resp.State != "published" {
 		t.Fatalf("state: got %q", resp.State)
@@ -1404,13 +1404,13 @@ func TestPublicationPublicSurfacesEnforceVisibilityPolicy(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	svc := NewService(store, filepath.Join(root, "artifacts"))
 
-	publishWithVisibility := func(t *testing.T, visibility string) *PublishVTextResponse {
+	publishWithVisibility := func(t *testing.T, visibility string) *PublishTextureResponse {
 		t.Helper()
 		accessPolicy, _ := json.Marshal(map[string]any{
 			"visibility": visibility,
 			"route":      "public",
 		})
-		resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+		resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 			OwnerID:          "user-1",
 			SourceDocID:      "doc-" + visibility,
 			SourceRevisionID: "rev-" + visibility,
@@ -1420,7 +1420,7 @@ func TestPublicationPublicSurfacesEnforceVisibilityPolicy(t *testing.T) {
 			RequestedBy:      "user-1",
 		})
 		if err != nil {
-			t.Fatalf("PublishVText %s: %v", visibility, err)
+			t.Fatalf("PublishTexture %s: %v", visibility, err)
 		}
 		return resp
 	}

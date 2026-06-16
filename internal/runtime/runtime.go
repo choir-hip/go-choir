@@ -51,7 +51,7 @@ type Runtime struct {
 	wirePublishDebounceMu sync.Mutex
 	wirePublishDebouncer  *wirePublishDebouncer
 	wirePublishTimer      vtextWakeTimer
-	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishVTextResponse, error)
+	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
 	vtextEditMu           sync.Mutex
 	superRequestMu        sync.Mutex
 	childSpawnMu          sync.Mutex

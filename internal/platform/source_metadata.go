@@ -37,7 +37,7 @@ type publicationTransclusionInput struct {
 	EntityJSON         json.RawMessage
 }
 
-func buildPublicationSourceMetadata(req PublishVTextRequest) (publicationSourceMetadata, error) {
+func buildPublicationSourceMetadata(req PublishTextureRequest) (publicationSourceMetadata, error) {
 	metadata := publicationSourceMetadata{
 		AccessPolicy: defaultPublicationAccessPolicy(),
 		ExportPolicy: defaultPublicationExportPolicy(),

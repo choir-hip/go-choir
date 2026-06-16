@@ -49,7 +49,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) HandleInternalPublishVText(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleInternalPublishTexture(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -58,21 +58,21 @@ func (h *Handler) HandleInternalPublishVText(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
-	var req PublishVTextRequest
+	var req PublishTextureRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
-	resp, err := h.service.PublishVText(r.Context(), req)
+	resp, err := h.service.PublishTexture(r.Context(), req)
 	if err != nil {
-		log.Printf("platformd: publish vtext: %v", err)
+		log.Printf("platformd: publish texture: %v", err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusCreated, resp)
 }
 
-func (h *Handler) HandlePublicVText(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandlePublicTexture(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusNotFound, apiError{Error: "platformd does not render public HTML"})
 }
 
@@ -318,7 +318,7 @@ func (h *Handler) HandleInternalGetVTextRevision(w http.ResponseWriter, r *http.
 
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
-	s.HandleFunc("/internal/platform/publications/texture", h.HandleInternalPublishVText)
+	s.HandleFunc("/internal/platform/publications/texture", h.HandleInternalPublishTexture)
 	s.HandleFunc("/internal/platform/publications/resolve", h.HandleInternalResolvePublication)
 	s.HandleFunc("/internal/platform/publications/export", h.HandleInternalExportPublication)
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)

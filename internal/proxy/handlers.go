@@ -442,7 +442,7 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	case path == "/api/platform/texture/publications":
-		h.HandleVTextPublication(w, r)
+		h.HandleTexturePublication(w, r)
 		return
 	case path == "/api/platform/publications/resolve":
 		h.HandlePlatformPublicationResolve(w, r)

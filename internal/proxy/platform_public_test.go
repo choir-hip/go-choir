@@ -179,7 +179,7 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 			if r.Header.Get("X-Authenticated-User") != "reader-1" {
 				t.Fatalf("sandbox trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
 			}
-			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
+			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
 				DocID:             "doc-1",
 				OwnerID:           "reader-1",
 				Title:             "My derivative",
@@ -189,7 +189,7 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 			if r.Header.Get("X-Authenticated-User") != "reader-1" {
 				t.Fatalf("sandbox trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
 			}
-			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
 				RevisionID: "rev-1",
 				DocID:      "doc-1",
 				OwnerID:    "reader-1",

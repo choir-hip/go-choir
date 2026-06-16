@@ -2,10 +2,10 @@ package wirepublish
 
 import "encoding/json"
 
-// PublishVTextRequest is the platformd internal publish payload shape used by
+// PublishTextureRequest is the platformd internal publish payload shape used by
 // autonomous Wire publication. Kept in wirepublish so sandbox runtime does not
 // import internal/platform.
-type PublishVTextRequest struct {
+type PublishTextureRequest struct {
 	OwnerID          string          `json:"owner_id"`
 	SourceDocID      string          `json:"source_doc_id"`
 	SourceRevisionID string          `json:"source_revision_id"`
@@ -20,9 +20,9 @@ type PublishVTextRequest struct {
 	RequestedBy      string          `json:"requested_by,omitempty"`
 }
 
-// PublishVTextResponse is the platformd publish response subset persisted on
+// PublishTextureResponse is the platformd publish response subset persisted on
 // wire article revisions for staging evidence.
-type PublishVTextResponse struct {
+type PublishTextureResponse struct {
 	PublicationID        string `json:"publication_id"`
 	PublicationVersionID string `json:"publication_version_id"`
 	RoutePath            string `json:"route_path"`

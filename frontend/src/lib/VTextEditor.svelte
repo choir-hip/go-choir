@@ -23,7 +23,7 @@
     listRevisions,
     openDocumentStream,
     previewVTextMerge,
-    publishVText,
+    publishTexture,
     resolvePublication,
     restoreVTextRevision,
     semanticCompareVText,
@@ -1200,7 +1200,7 @@
         throw new Error('No revision is available to publish');
       }
       saveStatus = `Publishing ${versionLabel}...`;
-      publishResult = await publishVText(currentDoc.doc_id, {
+      publishResult = await publishTexture(currentDoc.doc_id, {
         revisionId: revision.revision_id,
         accessPolicy: buildExplicitPublishAccessPolicy(),
         exportPolicy: buildExplicitPublishExportPolicy(),

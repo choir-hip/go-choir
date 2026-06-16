@@ -59,8 +59,8 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 			"trajectory_id":  "traj-publish-slice",
 		},
 	}
-	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
-		return &wirepublish.PublishVTextResponse{
+	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
+		return &wirepublish.PublishTextureResponse{
 			PublicationID:        "pub-wire-test",
 			PublicationVersionID: "pubver-wire-test",
 			RoutePath:            "wire/madrid-dispatch",
@@ -176,7 +176,7 @@ func TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails(t *testi
 			"trajectory_id":  "traj-publish-fail",
 		},
 	}
-	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishVTextResponse, error) {
+	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
 		return nil, context.Canceled
 	}
 	handler.rt.maybeAutonomousPublishWireArticle(ctx, story, rev, rec)

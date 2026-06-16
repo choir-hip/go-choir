@@ -1889,6 +1889,46 @@ is the current code-symbol boundary only. C31 does not claim storage migration,
 durable actor-id migration, `.vtext` suffix migration, stored public-route-row
 migration, or protocol v0.
 
+## 2026-06-16 - C31 Local Evidence: Publication Helper Symbols
+
+C31 local repair changed current publication/export code vocabulary while
+preserving deployed contracts:
+
+- `internal/platform` now exposes `PublishTextureRequest`,
+  `PublishTextureResponse`, `Service.PublishTexture`, and
+  `HandleInternalPublishTexture` on the existing
+  `/internal/platform/publications/texture` route.
+- `internal/wirepublish`, `internal/runtime`, and `internal/proxy` now use
+  `PublishTexture*` response/request types for Wire publication flow.
+- `internal/proxy` now uses `HandleTexturePublication`,
+  `publishTextureRequest`, and sandbox Texture helper structs while keeping
+  JSON fields and `/api/platform/texture/publications` behavior unchanged.
+- `frontend/src/lib/vtext.js` now exports `publishTexture`, and
+  `VTextEditor.svelte` calls that Texture-named helper.
+
+Local evidence on 2026-06-16:
+
+- Problem checkpoint commit
+  `268db43c234f57fdea6e65870b11568805706e7c` landed first; Docs Truth Check
+  run `27598505265` passed.
+- `nix develop -c go test ./internal/platform ./internal/proxy
+  ./internal/wirepublish ./internal/runtime -run
+  'TestInternalPublishRequiresInternalCallerAndBundleResolve|TestRegisteredTextureRoutesExcludeLegacyVTextPlatformPrefix|TestPublishTextureCreatesImmutablePublicRecords|TestPublicationFallbackDefaultsUseTextureLabels|TestPublicationPersistedDefaultTitlesUseTextureLabels|TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestHandleTexturePublication|TestHandleInternalWirePlatformPublishPostsToPlatformd|TestWirePlatform|TestWirePublication|TestPostPlatformPublication|TestBuildAutonomousPublishRequest'
+  -count=1` passed.
+- `npm --prefix frontend run build` passed with only the pre-existing
+  Universal Wire warnings for the unused `currentUser` export and unused
+  `.wire-state` selectors.
+- Scoped C31 residue search found no targeted helper/API hits for
+  `PublishVText`, `publishVText`, `publishVTextRequest`,
+  `HandleInternalPublishVText`, `HandleVTextPublication`,
+  `HandlePublicVText`, `sandboxVTextDocument`, `sandboxVTextRevision`,
+  `failed to publish vtext`, or `publish vtext` in the touched publication
+  surfaces.
+
+Heresy delta: repaired locally for publication/export helper/API symbol
+vocabulary. Storage tables, `.vtext` suffixes, durable `vtext:` actor ids,
+stored `/pub/vtext/...` route rows, and protocol v0 remain explicit residue.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -1996,15 +2036,14 @@ after a manual forced staging deploy, staging reports the pushed head SHA, and
 deployed Universal Wire UI proof shows both `Style.vtext` and `Style.texture`
 style labels absent from the visible app. Canonical `.vtext` import/storage
 behavior and Universal Wire deployed story-field proof stay out of scope. C31
-is documented as the next orange slice: publication/export helper and API
-symbols should move to Texture names while preserving JSON fields, current
-Texture routes, stored public route compatibility, storage tables, and durable
-actor ids.
+is locally supported: publication/export helper and API symbols now use Texture
+names while preserving JSON fields, current Texture routes, stored public route
+compatibility, storage tables, and durable actor ids. Deployment and staging
+publication proof remain open.
 
-next move: commit the C31 Problem Documentation First checkpoint, then rename
-publication/export helper/API symbols from VText to Texture inside the bounded
-C31 surface. Keep protocol v0 unwritten until remaining working-surface proofs
-are complete.
+next move: commit and push C31 behavior, monitor CI/deploy, verify staging
+identity, and run deployed publication proof. Keep protocol v0 unwritten until
+remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

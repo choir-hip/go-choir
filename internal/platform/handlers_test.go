@@ -16,7 +16,7 @@ func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	handler := NewHandler(NewService(store, filepath.Join(root, "artifacts")))
 
-	body, _ := json.Marshal(PublishVTextRequest{
+	body, _ := json.Marshal(PublishTextureRequest{
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
@@ -25,7 +25,7 @@ func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 		RequestedBy:      "user-1",
 	})
 	denied := httptest.NewRecorder()
-	handler.HandleInternalPublishVText(denied, httptest.NewRequest(http.MethodPost, "/internal/platform/publications/texture", bytes.NewReader(body)))
+	handler.HandleInternalPublishTexture(denied, httptest.NewRequest(http.MethodPost, "/internal/platform/publications/texture", bytes.NewReader(body)))
 	if denied.Code != http.StatusForbidden {
 		t.Fatalf("missing internal caller: got %d, want %d", denied.Code, http.StatusForbidden)
 	}
@@ -33,11 +33,11 @@ func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/internal/platform/publications/texture", bytes.NewReader(body))
 	req.Header.Set("X-Internal-Caller", "true")
 	w := httptest.NewRecorder()
-	handler.HandleInternalPublishVText(w, req)
+	handler.HandleInternalPublishTexture(w, req)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("publish status: got %d body %s", w.Code, w.Body.String())
 	}
-	var resp PublishVTextResponse
+	var resp PublishTextureResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode publish response: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 	}
 
 	publicW := httptest.NewRecorder()
-	handler.HandlePublicVText(publicW, httptest.NewRequest(http.MethodGet, resp.RoutePath, nil))
+	handler.HandlePublicTexture(publicW, httptest.NewRequest(http.MethodGet, resp.RoutePath, nil))
 	if publicW.Code != http.StatusNotFound {
 		t.Fatalf("platformd public HTML route should be disabled, got %d", publicW.Code)
 	}

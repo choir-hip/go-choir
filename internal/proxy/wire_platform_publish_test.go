@@ -31,13 +31,13 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/internal/vtext/documents/doc-wire-proxy", "/api/texture/documents/doc-wire-proxy":
-			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
+			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
 				DocID:   "doc-wire-proxy",
 				OwnerID: platformOwner,
 				Title:   "Proxy story.vtext",
 			})
 		case "/internal/vtext/revisions/rev-wire-proxy", "/api/texture/revisions/rev-wire-proxy":
-			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
 				RevisionID: "rev-wire-proxy",
 				DocID:      "doc-wire-proxy",
 				OwnerID:    platformOwner,
@@ -45,7 +45,7 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 				Metadata:   meta,
 			})
 		case "/api/texture/documents/doc-wire-proxy/revisions":
-			_ = json.NewEncoder(w).Encode([]sandboxVTextRevision{{RevisionID: "rev-wire-proxy", DocID: "doc-wire-proxy", OwnerID: platformOwner, Content: "# Proxy story", Metadata: meta}})
+			_ = json.NewEncoder(w).Encode([]sandboxTextureRevision{{RevisionID: "rev-wire-proxy", DocID: "doc-wire-proxy", OwnerID: platformOwner, Content: "# Proxy story", Metadata: meta}})
 		default:
 			// Async sync goroutine may hit unexpected paths; log instead of fatal.
 			w.WriteHeader(http.StatusNotFound)
@@ -59,7 +59,7 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 			if r.Header.Get("X-Internal-Caller") != "true" {
 				t.Fatalf("platformd internal header missing")
 			}
-			var req platform.PublishVTextRequest
+			var req platform.PublishTextureRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("decode platform request: %v", err)
 			}
@@ -67,7 +67,7 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 				t.Fatalf("platform request = %+v", req)
 			}
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
+			_ = json.NewEncoder(w).Encode(platform.PublishTextureResponse{
 				PublicationID: "pub-proxy",
 				RoutePath:     "wire/proxy-story",
 			})
@@ -105,7 +105,7 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	var resp platform.PublishVTextResponse
+	var resp platform.PublishTextureResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
