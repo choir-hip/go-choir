@@ -224,7 +224,7 @@ test('published source entity quote falls back to transclusion source selector s
     },
   }, {
     bundle: {
-      route: { path: '/pub/vtext/selector-set-source' },
+      route: { path: '/pub/texture/selector-set-source' },
       transclusions: [{
         source_entity_id: 'src-published-selector-set',
         source_selector: {
@@ -313,7 +313,7 @@ test('Source Viewer renders publication transclusion selector-set quote without 
             appHint: 'content',
             sourceEntity,
             sourceEntityId: sourceEntity.entity_id,
-            publishedRoutePath: '/pub/vtext/transclusion-selector-set-fixture',
+            publishedRoutePath: '/pub/texture/transclusion-selector-set-fixture',
             publishedGuest: true,
           },
         }],
@@ -825,7 +825,7 @@ test('published source readers prefer publication snapshots over loaded content 
       entity_id: 'src-published-snapshot-fallback',
       kind: 'content_item',
       label: 'Published snapshot fallback source',
-      publication_route_path: '/pub/vtext/published-snapshot-fixture',
+      publication_route_path: '/pub/texture/published-snapshot-fixture',
       target: {
         target_kind: 'content_item',
         content_id: item.content_id,

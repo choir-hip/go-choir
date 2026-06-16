@@ -1085,7 +1085,7 @@
 
   function normalizePublicRoutePath(routePath) {
     const normalized = `/${String(routePath || '').trim().replace(/^\/+/, '')}`;
-    if (normalized.startsWith('/pub/texture/') || normalized.startsWith('/pub/vtext/')) {
+    if (normalized.startsWith('/pub/texture/')) {
       return normalized.replace(/\/+$/, '');
     }
     return normalized;

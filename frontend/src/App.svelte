@@ -387,7 +387,7 @@
 
   import { onMount } from 'svelte';
   function isPublicTextureRoutePath(pathname) {
-    return pathname.startsWith('/pub/texture/') || pathname.startsWith('/pub/vtext/');
+    return pathname.startsWith('/pub/texture/');
   }
 
   onMount(() => {

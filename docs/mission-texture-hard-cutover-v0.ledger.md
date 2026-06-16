@@ -3184,3 +3184,49 @@ Receipts:
 Open edge: commit and push the docs checkpoint, monitor Docs Truth Check, then
 implement the C29 frontend/browser route recognition and fixture repair while
 leaving backend stored-route migration as a separate explicit edge.
+
+## 2026-06-16 - Local Repair: Public Legacy Publication Routes
+
+Claim: C29 repairs current frontend/browser public route vocabulary without
+claiming backend storage migration. New/current product surfaces should use
+`/pub/texture/...`; stored `/pub/vtext/...` public route rows remain a tagged
+backend compatibility shim until a later migration rewrites or deletes them.
+
+Move: remove `/pub/vtext/...` from frontend first-load public route recognition
+and desktop public route normalization, update source-reader/publication
+fixtures to `/pub/texture/...`, tag the backend legacy prefix as cutover
+compatibility residue, and run focused local verification.
+
+Expected ΔV: support C29 locally and make deployed proof the only remaining
+obligation for this slice; no coarse V decrease until CI/deploy/staging proof
+passes.
+
+Actual ΔV: C29 is local-supported. V remains 2.
+
+Receipts:
+- Docs checkpoint commit:
+  `4aa9bf294047fa1e2ff5a124d4392755a414a5c9 docs: checkpoint public legacy texture routes`.
+- Docs Truth Check run `27596756722` passed for the checkpoint.
+- `frontend/src/App.svelte` now recognizes only `/pub/texture/...` for public
+  Texture first-load routes.
+- `frontend/src/lib/Desktop.svelte` now normalizes only `/pub/texture/...` as a
+  public Texture route.
+- `frontend/tests/vtext-source-entities.spec.js` publication/source-reader
+  fixture route paths now use `/pub/texture/...`.
+- `internal/platform/service.go` keeps `legacyPublicVTextPrefix` but tags it as
+  `texture-cutover-allow` compatibility residue pending public route storage
+  migration.
+- Scoped current-frontend search returned no hits:
+  `rg -n "pub/vtext|/pub/vtext" frontend/src frontend/tests/vtext-source-entities.spec.js --glob '!frontend/dist/**'`.
+- Wider platform/proxy/frontend route search shows only the documented backend
+  legacy shim/tests:
+  `internal/platform/service.go`, `internal/platform/service_test.go`, and
+  `internal/proxy/platform_public_test.go`.
+- `npm --prefix frontend run build` passed.
+- `nix develop -c go test ./internal/proxy -count=1` passed.
+- `nix develop -c go test ./internal/platform -run 'TestPublishVTextCreatesImmutablePublicRecords' -count=1` passed.
+
+Open edge: commit and push the behavior slice, monitor CI/deploy, verify staging
+identity, and run deployed product proof that a newly published Texture mints
+and loads through `/pub/texture/...` while current frontend surfaces do not
+carry `/pub/vtext/...`.
