@@ -3040,20 +3040,21 @@ state, route identity, and durable actor compatibility. Compatibility
 requirements: existing user/platform data and stored legacy public routes must
 remain readable, migration must be idempotent, and no opaque computer state may
 be promoted without typed evidence.
-C40a is locally supported and awaiting landing proof: current platform
-`/internal/platform/texture/*` sync/read routes now use Texture-named Go
-request/response types, store/service methods, handlers, proxy async-sync
-helper, publication metadata enrichment helper, logs/errors, and Dolt commit
-messages. The existing `platform_vtext_*` storage tables remain the explicit
-compatibility substrate for persisted rows; this slice does not rewrite table
-names, route rows, or stored data. Focused package proof passed for
-`go test ./internal/platform ./internal/proxy`; staging proof is still required
-after commit/deploy.
+C40a is deployed-supported: current platform `/internal/platform/texture/*`
+sync/read routes now use Texture-named Go request/response types,
+store/service methods, handlers, proxy async-sync helper, publication metadata
+enrichment helper, logs/errors, and Dolt commit messages. The existing
+`platform_vtext_*` storage tables remain the explicit compatibility substrate
+for persisted rows; this slice does not rewrite table names, route rows, or
+stored data. Focused package proof, CI run `27612192131`, deploy job
+`81639495038`, staging health for commit
+`fd57e00c4a854008a8d5a681d80c9ec4b077b8e6`, and deployed public platform
+publication proof passed.
 
-next move: land C40a through CI/deploy/staging proof, then choose the next
-storage repair: either a typed table alias/migration layer for user/platform
-Texture rows or an idempotent public-route-row migration/alias proof. Keep
-deployed Universal Wire story-field proof and protocol work out of this slice.
+next move: choose the next storage repair: either a typed table alias/migration
+layer for user/platform Texture rows or an idempotent public-route-row
+migration/alias proof. Keep deployed Universal Wire story-field proof and
+protocol work out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

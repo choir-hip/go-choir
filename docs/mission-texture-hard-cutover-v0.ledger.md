@@ -4712,3 +4712,51 @@ Protected surfaces and rollback:
 Open edge: land C40a through CI/deploy/staging identity and product proof. Then
 choose the next storage repair: typed table alias/migration layer or
 idempotent public-route-row migration/alias proof.
+
+## 2026-06-16 - C40a Landing Proof
+
+Claim: C40a is deployed-supported at the platform Texture sync/read boundary
+scope. It is not a table-name, stored-route-row, durable actor, Universal Wire,
+or protocol repair.
+
+Move: settle C40a scope with CI, staging deploy identity, and deployed public
+product-path proof. Expected ΔV: promote C40a from local support to deployed
+support; coarse V remains 2.
+
+Actual ΔV: C40a deployed-supported. Coarse V remains 2.
+
+Receipts:
+
+- Behavior commit `fd57e00c4a854008a8d5a681d80c9ec4b077b8e6`
+  (`platform: rename texture sync boundary`) pushed to `origin/main`.
+- CI run `27612192131` passed, including Go vet/build, non-runtime tests,
+  integration-tagged smoke, Docs Truth Check, TLA+ model check, all four
+  runtime shards, and staging deploy.
+- Deploy job `81639495038` passed.
+- Separate Docs Truth Check run `27612192088` passed.
+- FlakeHub publish run `27612191932` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `fd57e00c4a854008a8d5a681d80c9ec4b077b8e6`, deployed at
+  `2026-06-16T10:50:04Z`; receipt stored at `/tmp/choir-c40a-health.json`.
+- Deployed product proof:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities"`
+  passed. The proof created a Texture, published it through
+  `/api/platform/texture/publications`, resolved/exported the current
+  `/pub/texture/...` publication route, opened the published reader, and
+  exercised source/transclusion/publication metadata through browser-public
+  product APIs.
+
+Protected surfaces and rollback:
+
+- Mutation class: red; protected surfaces touched are platform Texture
+  sync/read APIs, platform publication metadata enrichment, proxy asynchronous
+  platform sync, and persisted platform Texture row readability.
+- Rollback path: revert commit
+  `fd57e00c4a854008a8d5a681d80c9ec4b077b8e6`. No data migration was introduced.
+- Heresy delta: repaired current platform boundary naming; table/database
+  names, public stored route rows, durable actor compatibility, Universal Wire
+  edition refs, and protocol v0 remain open.
+
+Open edge: next storage repair should choose either a typed table
+alias/migration layer for user/platform Texture rows or an idempotent
+public-route-row migration/alias proof.
