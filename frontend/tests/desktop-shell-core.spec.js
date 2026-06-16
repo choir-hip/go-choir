@@ -542,13 +542,13 @@ test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in v
     const entries = await res.json();
     if (!Array.isArray(entries)) return null;
     for (const entry of entries) {
-      if (!entry?.name?.endsWith('.vtext')) continue;
+      if (!entry?.name?.endsWith('.texture')) continue;
       const fileRes = await fetch('/api/files/' + encodeURIComponent(entry.name), { credentials: 'include' });
       if (!fileRes.ok) continue;
       const text = await fileRes.text();
       try {
         const shortcut = JSON.parse(text);
-        if (shortcut?.kind === 'vtext' && shortcut?.doc_id === docId) return entry.name;
+        if (shortcut?.kind === 'texture' && shortcut?.doc_id === docId) return entry.name;
       } catch {
         // Keep scanning; malformed files are not the shortcut for this doc.
       }
@@ -556,7 +556,7 @@ test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in v
     return null;
   }, manifestDocId, { timeout: 10000 });
   const fileName = await fileNameHandle.jsonValue();
-  expect(fileName.endsWith('.vtext')).toBe(true);
+  expect(fileName.endsWith('.texture')).toBe(true);
 
   const filePath = '/api/files/' + encodeURIComponent(fileName);
 
@@ -565,7 +565,7 @@ test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in v
     return res.text();
   }, filePath);
   const parsedBefore = JSON.parse(shortcutBefore);
-  expect(parsedBefore.kind).toBe('vtext');
+  expect(parsedBefore.kind).toBe('texture');
   expect(parsedBefore.doc_id).toBe(manifestDocId);
 
   const revisedContent = 'Ahaha with a real file alias';
@@ -577,7 +577,7 @@ test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in v
     return res.text();
   }, filePath);
   const parsedAfter = JSON.parse(shortcutAfter);
-  expect(parsedAfter.kind).toBe('vtext');
+  expect(parsedAfter.kind).toBe('texture');
   expect(parsedAfter.doc_id).toBe(manifestDocId);
 
   await openAppViaIcon(page, 'files');

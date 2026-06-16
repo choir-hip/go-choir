@@ -425,7 +425,9 @@
   }
 
   function isVTextShortcutPath(sourcePath) {
-    return typeof sourcePath === 'string' && sourcePath.toLowerCase().endsWith('.vtext');
+    if (typeof sourcePath !== 'string') return false;
+    const lower = sourcePath.toLowerCase();
+    return lower.endsWith('.texture') || lower.endsWith('.vtext');
   }
 
   function documentCurrentVersionNumber(doc = currentDoc) {

@@ -3629,3 +3629,33 @@ deployed product proof for imported Markdown/plain text plus manifest
 `.texture` behavior. C32 does not repair storage workspace/table names, durable
 `vtext:` actor ids, stored `/pub/vtext/...` rows, Universal Wire edition
 `Wire.vtext`, Universal Wire deployed story-field payload proof, or protocol v0.
+
+## 2026-06-16 - Review Correction: C32 Frontend Shortcut Coverage
+
+Claim: independent diff review found C32 frontend gaps before final deployed
+proof, and the follow-up repair keeps the same bounded file-suffix surface.
+
+Move: prover shift plus correction. Expected ΔV: no coarse V decrease; remove
+review-discovered local frontend gaps before re-running CI/deploy.
+
+Actual ΔV: C32 remains locally-supported, with review gaps repaired; mission V
+remains 2 pending staging product proof.
+
+Receipts:
+
+- Independent reviewer `c32_diff_review` found stale `.vtext` shortcut handling
+  in `frontend/src/lib/VTextEditor.svelte`, stale `.vtext` manifest expectations
+  in `frontend/tests/desktop-shell-core.spec.js`, and missing Universal Wire
+  story-open coverage.
+- `frontend/src/lib/VTextEditor.svelte` now recognizes both `.texture` and
+  legacy `.vtext` shortcut paths, matching File Browser/backend recognition.
+- `frontend/tests/desktop-shell-core.spec.js` now expects prompt-created
+  manifests to use `.texture` and `kind:"texture"`.
+- `frontend/tests/universal-wire-app.spec.js` now clicks a mocked Universal Wire
+  story, opens its Texture document, and fails if `.story.texture` triggers an
+  unexpected manifest ensure.
+- `npm --prefix frontend run build` passed again with the same pre-existing
+  Universal Wire Svelte warnings.
+
+Open edge: commit/push the review correction, monitor the superseding CI/deploy,
+verify staging identity, and run deployed product proof.
