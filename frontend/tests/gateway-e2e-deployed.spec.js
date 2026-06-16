@@ -216,7 +216,7 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
 
     const { status: finalStatus, decision } = await waitForPromptSubmissionDecision(page, responseBody.submission_id);
     expect(decision.action).toBe('open_app');
-    expect(decision.app).toBe('vtext');
+    expect(decision.app).toBe('texture');
     expect(decision.doc_id).toBeTruthy();
     expect(decision.user_revision_id).toBeTruthy();
     expect(decision.framing_revision_id).toBeTruthy();

@@ -57,8 +57,8 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	if got := metadataStringValue(rec.Metadata, "input_source"); got != "prompt_bar" {
 		t.Fatalf("input_source: got %q, want prompt_bar", got)
 	}
-	if got := metadataStringValue(rec.Metadata, "requested_app"); got != AgentProfileVText {
-		t.Fatalf("requested_app: got %q, want %q", got, AgentProfileVText)
+	if got := metadataStringValue(rec.Metadata, "requested_app"); got != AgentProfileTexture {
+		t.Fatalf("requested_app: got %q, want %q", got, AgentProfileTexture)
 	}
 	if got := metadataStringValue(rec.Metadata, "seed_prompt"); got != "Draft a research plan" {
 		t.Fatalf("seed_prompt: got %q", got)
@@ -67,13 +67,13 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	if err := json.Unmarshal([]byte(rec.Result), &decision); err != nil {
 		t.Fatalf("decode prompt-bar decision: %v\n%s", err, rec.Result)
 	}
-	if decision.Action != "open_app" || decision.App != AgentProfileVText || decision.DocID == "" {
-		t.Fatalf("prompt-bar decision = %+v, want immediate vtext route", decision)
+	if decision.Action != "open_app" || decision.App != AgentProfileTexture || decision.DocID == "" {
+		t.Fatalf("prompt-bar decision = %+v, want immediate Texture route", decision)
 	}
-	// Materialized vtext routes no longer carry initial_content; the prompt
-	// is preserved as the document's durable user revision instead.
+	// Materialized Texture routes no longer carry initial_content; prompt-bar
+	// text is preserved as instruction metadata until Texture writes prose.
 	if decision.InitialContent != "" {
-		t.Fatalf("initial_content = %q, want empty (prompt lives in the user revision)", decision.InitialContent)
+		t.Fatalf("initial_content = %q, want empty (prompt lives in metadata)", decision.InitialContent)
 	}
 	doc, err := rt.store.GetDocument(context.Background(), decision.DocID, "user-alice")
 	if err != nil {
@@ -86,8 +86,15 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get seed prompt revision: %v", err)
 	}
-	if !strings.Contains(rev.Content, "Draft a research plan") {
-		t.Fatalf("seed revision content = %q, want prompt-derived content", rev.Content)
+	if rev.Content != "" {
+		t.Fatalf("seed revision content = %q, want empty prompt-bar instruction revision", rev.Content)
+	}
+	revMeta := decodeRevisionMetadata(rev.Metadata)
+	if metadataString(revMeta, "seed_prompt") != "Draft a research plan" {
+		t.Fatalf("seed revision metadata = %#v, want seed prompt", revMeta)
+	}
+	if !metadataBoolValue(revMeta, "prompt_bar_instruction_revision") {
+		t.Fatalf("prompt_bar_instruction_revision = %v, want true", revMeta["prompt_bar_instruction_revision"])
 	}
 
 	statusReq := authenticatedRequest(http.MethodGet, "/api/prompt-bar/submissions/"+resp.SubmissionID, "", "user-alice")
@@ -103,12 +110,12 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	if status.Decision == nil || status.Decision.DocID != decision.DocID {
 		t.Fatalf("status decision = %+v, want doc_id %q", status.Decision, decision.DocID)
 	}
-	superAgent, err := rt.store.GetAgent(context.Background(), persistentSuperAgentID("user-alice"))
+	textureAgent, err := rt.store.GetAgent(context.Background(), currentTextureAgentID(decision.DocID))
 	if err != nil {
-		t.Fatalf("persistent super agent missing: %v", err)
+		t.Fatalf("Texture agent missing: %v", err)
 	}
-	if superAgent.Profile != AgentProfileSuper || superAgent.Role != AgentProfileSuper {
-		t.Fatalf("persistent super identity = %q/%q, want %q/%q", superAgent.Profile, superAgent.Role, AgentProfileSuper, AgentProfileSuper)
+	if textureAgent.Profile != AgentProfileTexture || textureAgent.Role != AgentProfileTexture {
+		t.Fatalf("Texture agent identity = %q/%q, want %q/%q", textureAgent.Profile, textureAgent.Role, AgentProfileTexture, AgentProfileTexture)
 	}
 }
 
@@ -3093,7 +3100,7 @@ func TestHandleRunSubmissionPreservesMetadata(t *testing.T) {
 		t.Fatalf("input_source: got %q, want prompt_bar", got)
 	}
 	if got, _ := rec.Metadata["requested_app"].(string); got != AgentProfileVText {
-		t.Fatalf("requested_app: got %q, want %q", got, AgentProfileVText)
+		t.Fatalf("requested_app: got %q, want legacy explicit %q", got, AgentProfileVText)
 	}
 }
 

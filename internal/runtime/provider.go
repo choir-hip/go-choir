@@ -109,13 +109,13 @@ done:
 	}
 	result := p.Result
 	if agentProfileForRun(task) == AgentProfileConductor &&
-		metadataStringValue(task.Metadata, "requested_app") == AgentProfileVText &&
+		isTextureDecisionApp(metadataStringValue(task.Metadata, "requested_app")) &&
 		result == "Task completed successfully (stub provider)." {
 		seedPrompt := conductorSeedPrompt(task)
 		title := buildInitialVTextTitle(seedPrompt, "")
 		decision, _ := json.Marshal(map[string]any{
 			"action":                 "open_app",
-			"app":                    AgentProfileVText,
+			"app":                    AgentProfileTexture,
 			"title":                  title,
 			"seed_prompt":            seedPrompt,
 			"create_initial_version": false,

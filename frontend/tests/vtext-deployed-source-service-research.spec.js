@@ -165,7 +165,7 @@ test('deployed researcher source_search becomes VText source entities', async ({
   const body = await response.json();
   const decision = await waitForPromptDecision(page, body.submission_id);
   expect(decision.action).toBe('open_app');
-  expect(decision.app).toBe('vtext');
+  expect(decision.app).toBe('texture');
   expect(decision.doc_id).toBeTruthy();
 
   const { snapshot, hitsByItemId } = await waitForSuccessfulSourceSearch(page, body.submission_id);

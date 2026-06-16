@@ -468,7 +468,7 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestedApp := AgentProfileVText
+	requestedApp := AgentProfileTexture
 	var contentSourceURL, contentMediaType, contentAppHint string
 	if appHint, sourceURL, mediaType, ok := classifyPromptBarContentIntent(text); ok {
 		requestedApp = appHint
@@ -506,10 +506,10 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 			AppHint:   contentAppHint,
 		}
 		rec, err = h.rt.completePromptBarDecisionRun(r.Context(), text, ownerID, metadata, decision)
-	} else if requestedApp == AgentProfileVText {
+	} else if isTextureDecisionApp(requestedApp) {
 		decision := conductorDecision{
 			Action: "open_app",
-			App:    AgentProfileVText,
+			App:    AgentProfileTexture,
 			Title:  buildInitialVTextTitle(text, ""),
 		}
 		rec, err = h.rt.completePromptBarDecisionRun(r.Context(), text, ownerID, metadata, decision)

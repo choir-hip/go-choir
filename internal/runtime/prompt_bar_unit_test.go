@@ -281,12 +281,12 @@ func TestConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt(t *testing.T
 		runMetadataAgentProfile:  AgentProfileConductor,
 		runMetadataAgentRole:     AgentProfileConductor,
 		"input_source":           "prompt_bar",
-		"requested_app":          AgentProfileVText,
+		"requested_app":          AgentProfileTexture,
 		"initial_document_title": "M32_VTEXT_ROUTE_DIAGNOSTIC",
 		"submission_surface":     "prompt_bar",
 	}, conductorDecision{
 		Action: "open_app",
-		App:    AgentProfileVText,
+		App:    AgentProfileTexture,
 		Title:  "M32_VTEXT_ROUTE_DIAGNOSTIC",
 	})
 	if err != nil {

@@ -63,8 +63,8 @@ func (rt *Runtime) VerifyVTextWorkflow(ctx context.Context, opts VTextWorkflowVe
 		_ = json.Unmarshal([]byte(raw), &decision)
 		decision = fillConductorDecisionFromRun(&conductor, decision)
 	}
-	if decision.Action != "open_app" || decision.App != AgentProfileVText || strings.TrimSpace(decision.DocID) == "" {
-		return report, fmt.Errorf("conductor did not route to vtext: %+v", decision)
+	if decision.Action != "open_app" || !isTextureDecisionApp(decision.App) || strings.TrimSpace(decision.DocID) == "" {
+		return report, fmt.Errorf("conductor did not route to Texture: %+v", decision)
 	}
 	doc, err := rt.store.GetDocument(ctx, decision.DocID, ownerID)
 	if err != nil {

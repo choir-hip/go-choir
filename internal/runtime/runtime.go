@@ -1802,13 +1802,26 @@ func conductorSeedPrompt(rec *types.RunRecord) string {
 
 func conductorRequestedApp(rec *types.RunRecord) string {
 	if rec == nil {
-		return AgentProfileVText
+		return AgentProfileTexture
 	}
 	requestedApp, _ := rec.Metadata["requested_app"].(string)
 	if strings.TrimSpace(requestedApp) == "" {
-		requestedApp = AgentProfileVText
+		requestedApp = AgentProfileTexture
 	}
-	return strings.TrimSpace(requestedApp)
+	requestedApp = strings.TrimSpace(requestedApp)
+	if isTextureDecisionApp(requestedApp) {
+		return AgentProfileTexture
+	}
+	return requestedApp
+}
+
+func isTextureDecisionApp(app string) bool {
+	switch strings.ToLower(strings.TrimSpace(app)) {
+	case AgentProfileTexture, AgentProfileVText:
+		return true
+	default:
+		return false
+	}
 }
 
 func conductorWindowTitle(rec *types.RunRecord, seedPrompt string) string {
@@ -1844,7 +1857,8 @@ func fillConductorDecisionFromRun(rec *types.RunRecord, decision conductorDecisi
 		if strings.TrimSpace(decision.SeedPrompt) == "" {
 			decision.SeedPrompt = seedPrompt
 		}
-		if decision.App == AgentProfileVText {
+		if isTextureDecisionApp(decision.App) {
+			decision.App = AgentProfileTexture
 			decision.CreateInitialVersion = ptrBool(false)
 			decision.InitialContent = ""
 		}
@@ -1905,7 +1919,7 @@ func mergeStoredConductorRoute(rec *types.RunRecord, stored types.RunRecord) {
 	var storedDecision conductorDecision
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stored.Result)), &storedDecision); err == nil &&
 		storedDecision.Action == "open_app" &&
-		storedDecision.App == AgentProfileVText &&
+		isTextureDecisionApp(storedDecision.App) &&
 		strings.TrimSpace(storedDecision.DocID) != "" {
 		rec.Result = stored.Result
 	}
@@ -1916,7 +1930,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 	if rec == nil {
 		out, err := json.Marshal(defaultDecision)
 		if err != nil {
-			return `{"action":"open_app","app":"vtext","title":"VText","seed_prompt":"","create_initial_version":false}`
+			return `{"action":"open_app","app":"texture","title":"VText","seed_prompt":"","create_initial_version":false}`
 		}
 		return string(out)
 	}
@@ -1927,9 +1941,9 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 			switch strings.TrimSpace(parsed.Action) {
 			case "toast":
 				parsed = fillConductorDecisionFromRun(rec, parsed)
-				if metadataStringValue(rec.Metadata, "doc_id") != "" && metadataStringValue(rec.Metadata, "requested_app") == AgentProfileVText {
+				if metadataStringValue(rec.Metadata, "doc_id") != "" && isTextureDecisionApp(metadataStringValue(rec.Metadata, "requested_app")) {
 					parsed.Action = "open_app"
-					parsed.App = AgentProfileVText
+					parsed.App = AgentProfileTexture
 					parsed = fillConductorDecisionFromRun(rec, parsed)
 				}
 			case "open_app":
@@ -1948,7 +1962,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 
 	out, err := json.Marshal(defaultDecision)
 	if err != nil {
-		return `{"action":"open_app","app":"vtext","title":"VText","seed_prompt":"","create_initial_version":false}`
+		return `{"action":"open_app","app":"texture","title":"VText","seed_prompt":"","create_initial_version":false}`
 	}
 	return string(out)
 }
@@ -1982,7 +1996,7 @@ func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDec
 	if rec == nil || metadataStringValue(rec.Metadata, "input_source") != "prompt_bar" {
 		return ""
 	}
-	if conductorRequestedApp(rec) != AgentProfileVText {
+	if !isTextureDecisionApp(conductorRequestedApp(rec)) {
 		return ""
 	}
 	seedPrompt := strings.TrimSpace(decision.SeedPrompt)
@@ -2023,14 +2037,14 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 				initialContent = parsedDecision.InitialContent
 			}
 			if parsedDecision.Action == "open_app" &&
-				parsedDecision.App == AgentProfileVText &&
+				isTextureDecisionApp(parsedDecision.App) &&
 				strings.TrimSpace(parsedDecision.DocID) != "" {
 				return fillConductorDecisionFromRun(rec, parsedDecision), nil
 			}
 		}
 	}
 	existing := fillConductorDecisionFromRun(rec, conductorDecision{})
-	if existing.Action == "open_app" && existing.App == AgentProfileVText && strings.TrimSpace(existing.DocID) != "" {
+	if existing.Action == "open_app" && isTextureDecisionApp(existing.App) && strings.TrimSpace(existing.DocID) != "" {
 		return existing, nil
 	}
 
@@ -2156,14 +2170,14 @@ func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
 		return
 	}
 	if decision.Action == "toast" &&
-		metadataStringValue(rec.Metadata, "requested_app") == AgentProfileVText &&
+		isTextureDecisionApp(metadataStringValue(rec.Metadata, "requested_app")) &&
 		metadataStringValue(rec.Metadata, "input_source") == "prompt_bar" {
 		if _, err := rt.ensureConductorVTextRoute(context.Background(), rec, "", decision.InitialContent); err != nil {
 			log.Printf("runtime: conductor run %s: materialize prompt-bar vtext route: %v", rec.RunID, err)
 		}
 		return
 	}
-	if decision.Action != "open_app" || decision.App != AgentProfileVText || strings.TrimSpace(decision.DocID) != "" {
+	if decision.Action != "open_app" || !isTextureDecisionApp(decision.App) || strings.TrimSpace(decision.DocID) != "" {
 		return
 	}
 

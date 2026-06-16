@@ -228,7 +228,7 @@ test('prompt bar can route coding work through a background worker VM AppChangeP
   const submitted = await (await promptBarResponse).json();
   const decision = await waitForPromptDecision(page, submitted.submission_id);
   expect(decision.action).toBe('open_app');
-  expect(decision.app).toBe('vtext');
+  expect(decision.app).toBe('texture');
   expect(decision.doc_id || '').toBeTruthy();
 
   const initial = await loadVTextState(page, decision.doc_id);

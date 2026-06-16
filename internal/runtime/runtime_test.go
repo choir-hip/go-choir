@@ -82,7 +82,7 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 		runMetadataAgentProfile:  "conductor",
 		runMetadataAgentRole:     "conductor",
 		"input_source":           "prompt_bar",
-		"requested_app":          "vtext",
+		"requested_app":          AgentProfileTexture,
 		"seed_prompt":            "hi",
 		"initial_document_title": "hi",
 	})
@@ -113,8 +113,8 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if result.Action != "open_app" {
 		t.Fatalf("action: got %q, want open_app", result.Action)
 	}
-	if result.App != AgentProfileVText {
-		t.Fatalf("app: got %q, want %q", result.App, AgentProfileVText)
+	if result.App != AgentProfileTexture {
+		t.Fatalf("app: got %q, want %q", result.App, AgentProfileTexture)
 	}
 	if result.SeedPrompt != "hi" {
 		t.Fatalf("seed_prompt: got %q, want hi", result.SeedPrompt)
@@ -176,7 +176,7 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	}
 	foundInitialVTextRun := false
 	for _, run := range runs {
-		if run.AgentProfile == AgentProfileVText && run.RunID == result.InitialRunID {
+		if run.AgentProfile == AgentProfileTexture && run.RunID == result.InitialRunID {
 			foundInitialVTextRun = true
 		}
 	}
@@ -214,8 +214,8 @@ func TestConductorDecisionNormalizesToastAfterMaterializedVTextRoute(t *testing.
 	if err := json.Unmarshal([]byte(normalizeConductorDecision(rec)), &result); err != nil {
 		t.Fatalf("decode normalized decision: %v", err)
 	}
-	if result.Action != "open_app" || result.App != AgentProfileVText {
-		t.Fatalf("normalized decision = action %q app %q, want open_app/%s", result.Action, result.App, AgentProfileVText)
+	if result.Action != "open_app" || result.App != AgentProfileTexture {
+		t.Fatalf("normalized decision = action %q app %q, want open_app/%s", result.Action, result.App, AgentProfileTexture)
 	}
 	if result.DocID != "doc-vtext-route" || result.InitialRevisionID != "rev-framing" {
 		t.Fatalf("normalized decision lost route metadata: %+v", result)
@@ -233,7 +233,7 @@ func TestConductorPromptBarStructuredDecisionMaterializesVTextRoute(t *testing.T
 		runMetadataAgentProfile:  AgentProfileConductor,
 		runMetadataAgentRole:     AgentProfileConductor,
 		"input_source":           "prompt_bar",
-		"requested_app":          AgentProfileVText,
+		"requested_app":          AgentProfileTexture,
 		"seed_prompt":            "make a durable document",
 		"initial_document_title": "make a durable document",
 	})
@@ -249,8 +249,8 @@ func TestConductorPromptBarStructuredDecisionMaterializesVTextRoute(t *testing.T
 	if err := json.Unmarshal([]byte(stored.Result), &result); err != nil {
 		t.Fatalf("decode result: %v\n%s", err, stored.Result)
 	}
-	if result.Action != "open_app" || result.App != AgentProfileVText || result.DocID == "" {
-		t.Fatalf("conductor result = %+v, want materialized vtext route", result)
+	if result.Action != "open_app" || result.App != AgentProfileTexture || result.DocID == "" {
+		t.Fatalf("conductor result = %+v, want materialized Texture route", result)
 	}
 	// Conductor decisions no longer ship canonical document content; the
 	// vtext agent owns authoring, so any provider-supplied initial_content
@@ -275,8 +275,15 @@ func TestConductorPromptBarStructuredDecisionMaterializesVTextRoute(t *testing.T
 	if err != nil {
 		t.Fatalf("get seed prompt revision: %v", err)
 	}
-	if !strings.Contains(rev.Content, "make a durable document") {
-		t.Fatalf("seed revision content = %q, want durable user prompt revision", rev.Content)
+	if rev.Content != "" {
+		t.Fatalf("seed revision content = %q, want empty prompt-bar instruction revision", rev.Content)
+	}
+	revMeta := decodeRevisionMetadata(rev.Metadata)
+	if metadataString(revMeta, "seed_prompt") != "make a durable document" {
+		t.Fatalf("seed revision metadata = %#v, want seed prompt", revMeta)
+	}
+	if !metadataBoolValue(revMeta, "prompt_bar_instruction_revision") {
+		t.Fatalf("prompt_bar_instruction_revision = %v, want true", revMeta["prompt_bar_instruction_revision"])
 	}
 }
 
@@ -291,7 +298,7 @@ func TestConductorPromptBarVTextRouteFallsBackToSeedPromptContent(t *testing.T) 
 		runMetadataAgentProfile:  AgentProfileConductor,
 		runMetadataAgentRole:     AgentProfileConductor,
 		"input_source":           "prompt_bar",
-		"requested_app":          AgentProfileVText,
+		"requested_app":          AgentProfileTexture,
 		"seed_prompt":            "Draft fallback content",
 		"initial_document_title": "Fallback document",
 	})
@@ -307,14 +314,14 @@ func TestConductorPromptBarVTextRouteFallsBackToSeedPromptContent(t *testing.T) 
 	if err := json.Unmarshal([]byte(stored.Result), &result); err != nil {
 		t.Fatalf("decode result: %v\n%s", err, stored.Result)
 	}
-	if result.Action != "open_app" || result.App != AgentProfileVText || result.DocID == "" {
-		t.Fatalf("conductor result = %+v, want materialized vtext route", result)
+	if result.Action != "open_app" || result.App != AgentProfileTexture || result.DocID == "" {
+		t.Fatalf("conductor result = %+v, want materialized Texture route", result)
 	}
-	// initial_content is intentionally empty on materialized vtext routes;
-	// the seed prompt is preserved as the document's durable user revision
-	// instead.
+	// initial_content is intentionally empty on materialized Texture routes;
+	// prompt-bar text is preserved as instruction metadata until Texture writes
+	// prose.
 	if result.InitialContent != "" {
-		t.Fatalf("initial_content = %q, want empty (seed prompt lives in the user revision)", result.InitialContent)
+		t.Fatalf("initial_content = %q, want empty (seed prompt lives in metadata)", result.InitialContent)
 	}
 	doc, err := s.GetDocument(context.Background(), result.DocID, "user-alice")
 	if err != nil {
@@ -324,8 +331,15 @@ func TestConductorPromptBarVTextRouteFallsBackToSeedPromptContent(t *testing.T) 
 	if err != nil {
 		t.Fatalf("get fallback revision: %v", err)
 	}
-	if !strings.Contains(rev.Content, "Draft fallback content") {
-		t.Fatalf("fallback revision content = %q, want seed prompt content", rev.Content)
+	if rev.Content != "" {
+		t.Fatalf("fallback revision content = %q, want empty prompt-bar instruction revision", rev.Content)
+	}
+	revMeta := decodeRevisionMetadata(rev.Metadata)
+	if metadataString(revMeta, "seed_prompt") != "Draft fallback content" {
+		t.Fatalf("fallback revision metadata = %#v, want seed prompt", revMeta)
+	}
+	if !metadataBoolValue(revMeta, "prompt_bar_instruction_revision") {
+		t.Fatalf("prompt_bar_instruction_revision = %v, want true", revMeta["prompt_bar_instruction_revision"])
 	}
 }
 

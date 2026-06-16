@@ -2438,6 +2438,63 @@ Rollback path for the later behavior slice: revert the payload commit to resume
 new prompt decisions as `app:"vtext"` while retaining the C35 actor/profile
 identity commit.
 
+## Local Repair: C36 Prompt Decision App Payload
+
+Mutation class: `red`. This changes browser-public prompt-bar decision
+payloads and conductor materialization/verification behavior on a protected
+artifact ingress path.
+
+Conjecture delta: new/current prompt-bar Texture decisions can return and store
+`app: "texture"` / `requested_app="texture"` while legacy `vtext` decisions
+remain accepted and normalize to Texture at runtime and frontend acceptance
+boundaries.
+
+Protected surfaces: `/api/prompt-bar`, `/api/prompt-bar/submissions`,
+conductor decision normalization, prompt-bar materialization, provider fallback
+decisions, workflow verification, and deployed frontend acceptance assertions.
+
+Repair made locally:
+
+- Prompt-bar default requests now store `requested_app="texture"`.
+- New immediate prompt-bar Texture decisions and stub-provider conductor
+  fallback decisions now emit `app:"texture"`.
+- Runtime conductor decision normalization accepts both `texture` and legacy
+  `vtext`, then fills Texture decisions outward as `texture`.
+- Stored prompt routes with legacy `app:"vtext"` remain accepted when they
+  already carry a document id.
+- Workflow verification accepts both old and new decision app ids for the
+  compatibility window.
+- Frontend deployed specs now assert current prompt submissions return
+  `decision.app === "texture"`.
+
+Local evidence:
+
+- `nix develop -c go test ./internal/runtime -run 'TestTextureActorIdentityCompatibility|TestTextureModelPolicyRoleUsesLegacySelectionKey|TestPromptBar|TestConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt|Test.*VTextWorkflow' -count=1`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestHandlePromptBarCreatesServerOwnedConductorRun|TestConductorTaskNormalizesStructuredRouteResult|TestConductorDecisionNormalizesToastAfterMaterializedVTextRoute|TestConductorPromptBarStructuredDecisionMaterializesVTextRoute|TestConductorPromptBarVTextRouteFallsBackToSeedPromptContent|TestHandleRunSubmissionPreservesMetadata' -count=1`
+  passed after stale prompt decision assertions were updated.
+- `nix develop -c env SHARD_INDEX=0 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`
+  passed.
+- `nix develop -c env SHARD_INDEX=1 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`
+  passed.
+- `nix develop -c env SHARD_INDEX=2 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`
+  passed.
+- `nix develop -c env SHARD_INDEX=3 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`
+  passed.
+- `npm --prefix frontend run build` passed with existing Svelte unused
+  export/selector and chunk-size warnings.
+- `git diff --check` passed.
+
+Rollback path: revert the C36 payload commit. That restores new prompt
+decisions to `app:"vtext"` / `requested_app="vtext"` while preserving the C35
+Texture actor/profile identity commit.
+
+Heresy delta: repaired locally for the prompt decision app payload. Remaining
+residue includes `vtext_agent_revision`, prompt/tool `role=vtext` affordance
+wording, model-policy key naming, table/database symbols, content import app
+hints for Markdown/plain text, stored route rows, and Universal Wire edition
+refs.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2474,13 +2531,13 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C35 deployed-supported the
-first actor/profile identity slice: new/current Texture appagent writes use
-`texture` profile/role and `texture:<doc_id>` ids while legacy `vtext` reads
-remain compatible. Coarse V remains 2 because database/table names,
-`vtext_agent_revision` task type, prompt/tool schema wording, prompt submission
-decision `app: "vtext"`, stored legacy routes, Universal Wire edition refs,
-deployed Universal Wire story-field proof, and protocol v0 remain.
+variant (ranking function) V: current V=2; last ΔV: C36 is locally repaired but
+not yet deployed: new/current prompt-bar Texture decisions return/store
+`app: "texture"` / `requested_app="texture"` while legacy `vtext` decisions
+remain accepted. Coarse V remains 2 because database/table names,
+`vtext_agent_revision` task type, prompt/tool schema wording, content import
+app hints, stored legacy routes, Universal Wire edition refs, deployed
+Universal Wire story-field proof, and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -2614,12 +2671,18 @@ identity repair into a forced workflow or role sequence. This slice leaves
 prompt submission `app: "vtext"`, Trace/front-end acceptance assertions,
 table/database symbols, and model-policy key naming for separate documented
 cuts.
+C36 is locally repaired pending commit/push/CI/deploy/staging proof: current
+prompt-bar Texture decisions now emit `app:"texture"` and
+`requested_app="texture"`, while runtime/frontend boundaries still accept
+legacy `vtext` decisions. Focused runtime tests, all four runtime shards,
+frontend build, and `git diff --check` passed locally. This slice excludes task
+type, tool profile, model-policy key, table/database, content app-hint, and
+stored route-row migration.
 
-next move: cut the small prompt decision payload slice now that the residue is
-documented: new prompt-bar Texture decisions should return/store
-`app: "texture"` / `requested_app="texture"` while legacy `vtext` decisions
-remain accepted. Do not fold task type, tool profile, model-policy, table, or
-route-row migration into this payload slice.
+next move: commit and push C36, monitor CI/deploy, verify staging build
+identity, then run deployed prompt-bar product proof that status decisions
+return `app:"texture"` while Trace still shows conductor before Texture and no
+legacy `vtext:<doc_id>` actor.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

@@ -4054,3 +4054,36 @@ Open edge: implement the small payload slice only: new/current prompt decisions
 return/store `texture`; legacy `vtext` decisions remain accepted; do not fold
 task type, tool profile, model-policy, table, or route-row migration into this
 slice.
+
+## 2026-06-16 - Local Repair: C36 Prompt Decision App Payload
+
+Claim: current prompt-bar Texture decisions should report the current app id in
+browser-public status while accepting legacy `vtext` decisions during the
+compatibility window.
+
+Move: update prompt-bar defaults, immediate conductor decisions, provider
+fallback decisions, conductor decision normalization, workflow verification, and
+frontend deployed assertions so new/current decisions return/store `texture`
+and legacy `vtext` routes remain readable. Expected ΔV: local repair of one
+small C35 residue; coarse V remains 2 until deployed proof and broader storage,
+task, model-policy, route-row, and protocol residues are settled.
+
+Actual ΔV: locally repaired only. C36 is pending commit, push, CI, deploy,
+staging identity, and deployed prompt-bar product proof.
+
+Receipts:
+
+- `nix develop -c go test ./internal/runtime -run 'TestTextureActorIdentityCompatibility|TestTextureModelPolicyRoleUsesLegacySelectionKey|TestPromptBar|TestConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt|Test.*VTextWorkflow' -count=1`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestHandlePromptBarCreatesServerOwnedConductorRun|TestConductorTaskNormalizesStructuredRouteResult|TestConductorDecisionNormalizesToastAfterMaterializedVTextRoute|TestConductorPromptBarStructuredDecisionMaterializesVTextRoute|TestConductorPromptBarVTextRouteFallsBackToSeedPromptContent|TestHandleRunSubmissionPreservesMetadata' -count=1`
+  passed.
+- Runtime shards 0/4, 1/4, 2/4, and 3/4 passed via
+  `nix develop -c env SHARD_INDEX=<n> TOTAL_SHARDS=4 scripts/go-test-runtime-shards`.
+- `npm --prefix frontend run build` passed with existing Svelte unused
+  export/selector and chunk-size warnings.
+- `git diff --check` passed.
+
+Open edge: commit and push the repair, monitor CI/deploy, verify staging build
+identity, and run deployed proof that `/api/prompt-bar/submissions/{id}`
+returns `decision.app:"texture"` while Trace still shows conductor before the
+Texture actor and no legacy `vtext:<doc_id>` actor.

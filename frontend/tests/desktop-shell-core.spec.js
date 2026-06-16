@@ -474,7 +474,7 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
 
   const decision = await waitForPromptSubmissionDecision(page, submitted.submission_id);
   expect(decision.action).toBe('open_app');
-  expect(decision.app).toBe('vtext');
+  expect(decision.app).toBe('texture');
 
   const vtextWindow = page.locator('[data-texture-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });

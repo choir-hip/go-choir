@@ -187,7 +187,7 @@ test('dry-run vtext plumbing demo uses seeded worker updates and artifacts', asy
   const conductorSubmitted = await (await conductorResponse).json();
   const conductorDecision = await waitForPromptDecision(page, conductorSubmitted.submission_id);
   expect(conductorDecision.action).toBe('open_app');
-  expect(conductorDecision.app).toBe('vtext');
+  expect(conductorDecision.app).toBe('texture');
   expect(conductorDecision.initial_loop_id || '').toBeTruthy();
 
   const vtextWindow = page.locator('[data-texture-app]').last();

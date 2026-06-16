@@ -188,7 +188,7 @@ test('deployed prompt-bar VText flow uses live search for current 2026 evidence'
 
     const decision = await waitForPromptDecision(page, body.submission_id);
     expect(decision.action).toBe('open_app');
-    expect(decision.app).toBe('vtext');
+    expect(decision.app).toBe('texture');
     expect(decision.doc_id).toBeTruthy();
 
     const vtextWindow = page.locator('[data-texture-app]').last();

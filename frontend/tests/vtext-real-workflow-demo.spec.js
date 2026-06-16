@@ -209,7 +209,7 @@ test('real vtext workflow demo uses live LLM, search, generated artifact, and ve
   const conductorSubmitted = await (await conductorResponse).json();
   const conductorDecision = await waitForPromptDecision(page, conductorSubmitted.submission_id, 120_000);
   expect(conductorDecision.action).toBe('open_app');
-  expect(conductorDecision.app).toBe('vtext');
+  expect(conductorDecision.app).toBe('texture');
   expect(conductorDecision.initial_loop_id || '').toBeTruthy();
 
   const initialState = await loadVTextState(page, conductorDecision.doc_id);

@@ -1797,7 +1797,7 @@ func appHintForMedia(mediaType, sourceURL, filePath string) string {
 
 func normalizeAppHint(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "vtext", "browser", "content", "files", "pdf", "epub", "slides", "image", "video", "audio", "podcast":
+	case "texture", "vtext", "browser", "content", "files", "pdf", "epub", "slides", "image", "video", "audio", "podcast":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "files"
