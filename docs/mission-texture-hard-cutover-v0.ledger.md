@@ -1461,3 +1461,75 @@ Receipts:
 Open edge: push the repair, monitor CI/deploy, then prove on staging that new
 publications mint `/pub/texture/...`, public reader and export APIs work, and
 legacy `/pub/vtext/...` public routes remain accepted.
+
+## 2026-06-16 - Deployed Public Publication Route Identity Repair
+
+Claim: deployed Choir can mint new public publication URLs under
+`/pub/texture/...` while preserving existing `/pub/vtext/...` public link state
+for resolve, export, and direct public reader entry.
+
+Move: push commit `65502a706ef1adba7fc2d1ed5428e3f709f9d2d0`, monitor CI and
+deploy, verify staging build identity, and run a deployed Playwright product
+proof for new and legacy public routes.
+
+Expected ΔV: support C18 for deployed scope; no coarse V decrease because
+storage/file suffixes, metadata keys, actor IDs/app route labels, and protocol
+v0 residue remain.
+
+Actual ΔV: C18 is supported for deployed public-route scope. V remains 2.
+
+Conjecture delta: new public-route identity can teach Texture without a
+database rewrite or redirect, as long as legacy route rows remain accepted.
+
+Protected surfaces: platform route generation, public route lookup/export,
+frontend direct public reader entry, published Texture window deduplication,
+proxy publication public URL projection, staging deployment identity, and
+browser-public product path.
+
+Admissible evidence class: CI, deploy job, staging health identity, and
+deployed browser product proof that creates a public publication, observes a
+`/pub/texture/...` route, resolves/exports/opens it, and resolves/exports/opens
+an existing `/pub/vtext/...` route.
+
+Rollback path: restore `/pub/vtext/...` route minting, remove
+`/pub/texture/...` public-reader prefix recognition, and revert route
+expectations if later deployed public reader or export regressions appear.
+
+Heresy delta: repaired for deployed new public route minting. Existing
+`/pub/vtext/...` public routes remain deliberate legacy compatibility state,
+not a current new-publication minting path.
+
+Receipts:
+- CI run `27590698503` passed for commit
+  `65502a706ef1adba7fc2d1ed5428e3f709f9d2d0`.
+- Deploy job `81570766605` succeeded.
+- Docs Truth Check run `27590698536` passed, and FlakeHub publish run
+  `27590698504` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `65502a706ef1adba7fc2d1ed5428e3f709f9d2d0`, deployed at
+  `2026-06-16T02:50:42Z`.
+- Deployed Playwright product proof registered
+  `texture-public-route-proof-1781578657650-ce9lel@example.com`, created
+  document `79579ae6-f620-4194-9a0a-afabee56a1fd`, created revision
+  `e673f6f3-3c80-4577-9699-be146f996283`, and published publication
+  `pub-19a8e51e-732d-498e-814c-fe18aa37568a` /
+  version `pubver-4f361ae5-30e0-4ed6-b9a8-6dd1edb9c2ef`.
+- New route
+  `/pub/texture/texture-public-route-proof-1781578657650-pub19a8e51e7`
+  resolved with trailing slash normalization, exported Markdown with proof
+  content, appeared in retrieval search for `1781578657650`, and opened in one
+  published Texture reader window.
+- Legacy route
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` resolved
+  with trailing slash normalization, exported Markdown, and opened in one
+  published Texture reader window.
+- Forbidden browser-public request count was zero for `/internal/*`,
+  `/api/agent/*`, `/api/test/*`, `/api/prompts`, and `/api/events`.
+- Evidence artifact:
+  `/tmp/choir-texture-route-proof-1781578657650.json`; screenshots:
+  `/tmp/choir-texture-route-proof/new-texture-route-1781578657650.png` and
+  `/tmp/choir-texture-route-proof/legacy-vtext-route-1781578657650.png`.
+
+Open edge: select the next bounded residue class among storage
+schema/workspace/file suffixes, metadata keys, actor IDs/app route labels, and
+protocol v0.

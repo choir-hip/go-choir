@@ -388,6 +388,58 @@ Heresy delta: repaired locally for new public route minting; legacy
 `/pub/vtext/...` public links remain explicit compatibility state pending
 deployed proof and any later redirect/migration policy.
 
+## Deployed Repair: Public Publication Route Identity
+
+Mutation class: `orange`, deployed behavior evidence for the public route
+identity repair.
+
+Conjecture delta: deployed Choir can mint new public publication URLs under
+`/pub/texture/...` while preserving existing `/pub/vtext/...` public link state
+for resolve, export, and direct public reader entry.
+
+Deployed evidence on 2026-06-16:
+
+- Commit `65502a706ef1adba7fc2d1ed5428e3f709f9d2d0` passed CI run
+  `27590698503`; the deploy job `81570766605` succeeded.
+- Docs Truth Check run `27590698536` passed, and FlakeHub publish run
+  `27590698504` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `65502a706ef1adba7fc2d1ed5428e3f709f9d2d0`, deployed at
+  `2026-06-16T02:50:42Z`.
+- Deployed Playwright product proof registered fresh user
+  `texture-public-route-proof-1781578657650-ce9lel@example.com`, created
+  Texture document `79579ae6-f620-4194-9a0a-afabee56a1fd`, created revision
+  `e673f6f3-3c80-4577-9699-be146f996283`, and published publication
+  `pub-19a8e51e-732d-498e-814c-fe18aa37568a` /
+  version `pubver-4f361ae5-30e0-4ed6-b9a8-6dd1edb9c2ef`.
+- The new route was
+  `/pub/texture/texture-public-route-proof-1781578657650-pub19a8e51e7`.
+  Public resolve normalized the route with a trailing slash back to that exact
+  path, public Markdown export returned the same route and proof content, and
+  retrieval search for `1781578657650` returned the new `/pub/texture/...`
+  route.
+- Direct browser navigation to the new route opened one Texture window and one
+  published reader, displaying proof stamp `1781578657650`.
+- Legacy route
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` resolved
+  with trailing slash normalization, exported Markdown, and opened in the
+  published Texture reader.
+- The browser proof observed zero forbidden product-path requests to
+  `/internal/*`, `/api/agent/*`, `/api/test/*`, `/api/prompts`, or
+  `/api/events`.
+
+Evidence artifact: `/tmp/choir-texture-route-proof-1781578657650.json`.
+Screenshots: `/tmp/choir-texture-route-proof/new-texture-route-1781578657650.png`
+and `/tmp/choir-texture-route-proof/legacy-vtext-route-1781578657650.png`.
+
+Rollback path remains: restore `/pub/vtext/...` route minting and remove
+`/pub/texture/...` public-reader prefix recognition if later deployed public
+reader/export regressions appear.
+
+Heresy delta: repaired for deployed new public route minting. Existing
+`/pub/vtext/...` public routes remain deliberate legacy compatibility state,
+not a current new-publication minting path.
+
 ## Problem Checkpoint: `edit_texture` Compatibility Alias
 
 Mutation class: `green` documentation and evidence only. No runtime behavior,
@@ -752,20 +804,16 @@ position / live conjectures / open edges:
   live-alias residue search, CI run `27589732107`, deploy job `81567905099`,
   staging identity for commit `c6db0df57bd06a22e392fd89eb0f4ee1f4c1bcc1`, and
   deployed prompt-bar/Trace proof all pass.
-- C18 locally supported pending CI/deploy: new publication reader URLs now mint
-  under `/pub/texture/...`; existing `/pub/vtext/...` public link state remains
-  accepted for resolve/export and frontend reader entry. Focused platform and
-  proxy tests plus frontend build pass locally. Local Playwright was blocked by
-  pre-existing platformd Dolt state and must be replaced by deployed staging
-  proof after CI/deploy.
+- C18 supported for deployed public-route scope: new public publication reader
+  URLs now mint under `/pub/texture/...`; existing `/pub/vtext/...` public link
+  state remains accepted for resolve/export and frontend reader entry. CI run
+  `27590698503`, deploy job `81570766605`, staging identity for commit
+  `65502a706ef1adba7fc2d1ed5428e3f709f9d2d0`, and deployed Playwright
+  publication/read/export proof all pass.
 
 next move: select the next bounded residue class among storage
-schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
-and protocol v0. The selected next slice is public publication route identity:
-push the local repair, monitor CI/deploy, then prove on staging that a new
-publication mints `/pub/texture/...`, opens in the public reader, exports
-through the public publication API, and that a legacy `/pub/vtext/...` route is
-still accepted. Keep protocol v0 unwritten until the remaining working-surface
+schema/workspace/file suffixes, metadata keys, actor IDs/app route labels, and
+protocol v0. Keep protocol v0 unwritten until the remaining working-surface
 proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
