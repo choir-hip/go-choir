@@ -578,7 +578,7 @@ func TestTexturePromptPrioritizesSuperAfterResearchForMixedObligation(t *testing
 	assertNoForcedSemanticDelegation(t, request)
 }
 
-func TestInitialTextureToolChoiceUsesExactTools(t *testing.T) {
+func TestInitialTextureToolChoiceRequiresActionWithoutExactFiltering(t *testing.T) {
 	tests := []struct {
 		name     string
 		metadata map[string]any
@@ -590,7 +590,7 @@ func TestInitialTextureToolChoiceUsesExactTools(t *testing.T) {
 				"type":            "texture_agent_revision",
 				"original_prompt": "what is the weather in boston now",
 			},
-			want: "function:patch_texture",
+			want: "required",
 		},
 		{
 			name: "mutable product work does not force super request",
@@ -598,7 +598,7 @@ func TestInitialTextureToolChoiceUsesExactTools(t *testing.T) {
 				"type":            "texture_agent_revision",
 				"original_prompt": "debug and fix the runtime gateway",
 			},
-			want: "function:patch_texture",
+			want: "required",
 		},
 		{
 			name: "community wire operational proof does not force super request",
@@ -606,7 +606,7 @@ func TestInitialTextureToolChoiceUsesExactTools(t *testing.T) {
 				"type":        "texture_agent_revision",
 				"seed_prompt": "Universal Wire staging proof request: run the existing source-refresh/research/projection/publication flow, create or approve an Article Texture, update universal-wire/Wire.texture, then leave evidence ids and verifier proof.",
 			},
-			want: "function:patch_texture",
+			want: "required",
 		},
 		{
 			name: "creative direct document work edits texture",
@@ -614,15 +614,15 @@ func TestInitialTextureToolChoiceUsesExactTools(t *testing.T) {
 				"type":            "texture_agent_revision",
 				"original_prompt": "tell me a story about computers",
 			},
-			want: "function:patch_texture",
+			want: "required",
 		},
 		{
-			name: "explicit decision note starts with decision record",
+			name: "explicit decision note keeps full affordance",
 			metadata: map[string]any{
 				"type":            "texture_agent_revision",
 				"original_prompt": "Create a short Texture document. Record an off-document Texture decision note with decision_kind no_worker_needed first.",
 			},
-			want: "function:record_texture_decision",
+			want: "required",
 		},
 		{
 			name: "worker wake leaves texture free to choose",
@@ -641,9 +641,6 @@ func TestInitialTextureToolChoiceUsesExactTools(t *testing.T) {
 			})
 			if got != tc.want {
 				t.Fatalf("initialTextureToolChoice = %q, want %q", got, tc.want)
-			}
-			if got == "required" {
-				t.Fatal("Texture must not use broad required tool choice")
 			}
 		})
 	}

@@ -139,6 +139,7 @@ type textureEditToolProvider struct {
 	resultFunc func(prompt string) string
 	delay      time.Duration
 	choices    []string
+	firstTools []ToolDefinition
 }
 
 func newTextureEditToolProvider(result string) *textureEditToolProvider {
@@ -173,6 +174,9 @@ func (p *textureEditToolProvider) Execute(ctx context.Context, task *types.RunRe
 
 func (p *textureEditToolProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
+	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+	}
 	if p.delay > 0 {
 		timer := time.NewTimer(p.delay)
 		select {
@@ -217,8 +221,9 @@ func (p *textureEditToolProvider) CallWithTools(ctx context.Context, req ToolLoo
 
 type textureDecisionThenEditProvider struct {
 	Provider
-	choices []string
-	calls   int
+	choices    []string
+	firstTools []ToolDefinition
+	calls      int
 }
 
 func (p *textureDecisionThenEditProvider) ProviderName() string {
@@ -231,34 +236,12 @@ func (p *textureDecisionThenEditProvider) Execute(ctx context.Context, task *typ
 
 func (p *textureDecisionThenEditProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
+	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+	}
 	p.calls++
 	switch p.calls {
 	case 1:
-		if req.ToolChoice == exactRequiredToolChoice("patch_texture") {
-			return &ToolLoopResponse{
-				StopReason: "tool_use",
-				ToolCalls: []types.ToolCall{{
-					ID:   "call-reader-edit",
-					Name: "patch_texture",
-					Arguments: json.RawMessage(`{
-						"edits":[{"op":"append","text":"M32_TEXTURE_DECISION_ROUTE_TEST\n\nThis marker is a deployed acceptance probe."}]
-					}`),
-				}},
-				Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
-				Model: "test-model",
-			}, nil
-		}
-		return &ToolLoopResponse{
-			StopReason: "tool_use",
-			ToolCalls: []types.ToolCall{{
-				ID:        "call-wrong-edit",
-				Name:      "patch_texture",
-				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"private reason leaked"}]}`),
-			}},
-			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
-			Model: "test-model",
-		}, nil
-	case 2:
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
@@ -274,7 +257,7 @@ func (p *textureDecisionThenEditProvider) CallWithTools(ctx context.Context, req
 			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
 			Model: "test-model",
 		}, nil
-	case 3:
+	case 2:
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
@@ -347,6 +330,20 @@ func toolDefinitionsContain(defs []ToolDefinition, name string) bool {
 		}
 	}
 	return false
+}
+
+func assertFullInitialTextureAffordance(t *testing.T, defs []ToolDefinition) {
+	t.Helper()
+	for _, name := range []string{
+		"patch_texture",
+		"record_texture_decision",
+		"spawn_agent",
+		"request_super_execution",
+	} {
+		if !toolDefinitionsContain(defs, name) {
+			t.Fatalf("initial Texture tool definitions missing %s: %+v", name, defs)
+		}
+	}
 }
 
 func editTextureToolCallFromLegacyResult(prompt, raw string) (types.ToolCall, error) {
@@ -1862,7 +1859,8 @@ func TestTextureSystemPromptSharesChoirCoreContext(t *testing.T) {
 
 type textureMinimalEditProvider struct {
 	Provider
-	choices []string
+	choices    []string
+	firstTools []ToolDefinition
 }
 
 func (p *textureMinimalEditProvider) ProviderName() string {
@@ -1875,6 +1873,9 @@ func (p *textureMinimalEditProvider) Execute(ctx context.Context, task *types.Ru
 
 func (p *textureMinimalEditProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
+	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+	}
 	if messagesContainToolCall(req.Messages, "spawn_agent") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "conductor handoff complete", Model: "test-model"}, nil
 	}
@@ -1898,6 +1899,299 @@ func (p *textureMinimalEditProvider) CallWithTools(ctx context.Context, req Tool
 		}},
 		Model: "test-model",
 	}, nil
+}
+
+type textureWriteAndResearchProvider struct {
+	Provider
+	choices    []string
+	firstTools []ToolDefinition
+	wrote      bool
+}
+
+func (p *textureWriteAndResearchProvider) ProviderName() string {
+	return "texture-write-and-research"
+}
+
+func (p *textureWriteAndResearchProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+}
+
+func (p *textureWriteAndResearchProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.choices = append(p.choices, req.ToolChoice)
+	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+	}
+	if messagesContainToolCall(req.Messages, "spawn_agent") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "handoff complete", Model: "test-model"}, nil
+	}
+	lastUser := extractLastUserMessage(req.Messages)
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls:  []types.ToolCall{conductorSpawnTextureToolCall(lastUser)},
+			Model:      "test-model",
+		}, nil
+	}
+	if p.wrote || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+	}
+	p.wrote = true
+	return &ToolLoopResponse{
+		StopReason: "tool_use",
+		ToolCalls: []types.ToolCall{
+			{
+				ID:        "call-write-working-revision",
+				Name:      "patch_texture",
+				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"FIRST_TURN_WRITE_AND_RESEARCH\n\nWorking revision while researcher evidence is pending."}]}`),
+			},
+			{
+				ID:   "call-open-researcher",
+				Name: "spawn_agent",
+				Arguments: json.RawMessage(`{
+					"role":"researcher",
+					"objective":"Research the owner request and send concise evidence back to this Texture."
+				}`),
+			},
+		},
+		Model: "test-model",
+	}, nil
+}
+
+type textureResearchEvidenceLoopProvider struct {
+	Provider
+	mu                 sync.Mutex
+	choices            []string
+	firstTools         []ToolDefinition
+	initialTextureDone bool
+	researchUpdateDone bool
+	wakeTextureDone    bool
+}
+
+func (p *textureResearchEvidenceLoopProvider) ProviderName() string {
+	return "texture-research-evidence-loop"
+}
+
+func (p *textureResearchEvidenceLoopProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+}
+
+func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.mu.Lock()
+	p.choices = append(p.choices, req.ToolChoice)
+	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+	}
+	p.mu.Unlock()
+
+	if messagesContainToolCall(req.Messages, "update_coagent") ||
+		messagesContainToolCall(req.Messages, "spawn_agent") ||
+		messagesContainToolCall(req.Messages, "patch_texture") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+	}
+
+	if toolDefinitionsContain(req.ToolDefinitions, "update_coagent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		p.mu.Lock()
+		alreadyUpdated := p.researchUpdateDone
+		p.researchUpdateDone = true
+		p.mu.Unlock()
+		if alreadyUpdated {
+			return &ToolLoopResponse{StopReason: "end_turn", Text: "research update already sent", Model: "test-model"}, nil
+		}
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:   "call-research-update",
+				Name: "update_coagent",
+				Arguments: json.RawMessage(`{
+					"update_id":"texture-created-research-evidence",
+					"summary":"Researcher evidence returned to Texture.",
+					"findings":["TEXTURE_CREATED_RESEARCH_EVIDENCE: public signal requires a cautious current-state revision."],
+					"evidence":[
+						{
+							"kind":"web_page",
+							"source_uri":"https://example.com/current-signal",
+							"title":"Current signal evidence",
+							"content":"A current signal exists, but claims must stay scoped and cite worker evidence."
+						}
+					],
+					"notes":["Use this evidence in the next Texture revision."]
+				}`),
+			}},
+			Model: "test-model",
+		}, nil
+	}
+
+	lastUser := extractLastUserMessage(req.Messages)
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls:  []types.ToolCall{conductorSpawnTextureToolCall(lastUser)},
+			Model:      "test-model",
+		}, nil
+	}
+	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+	}
+
+	p.mu.Lock()
+	initialDone := p.initialTextureDone
+	if !p.initialTextureDone {
+		p.initialTextureDone = true
+	}
+	wakeDone := p.wakeTextureDone
+	if initialDone && !p.wakeTextureDone {
+		p.wakeTextureDone = true
+	}
+	p.mu.Unlock()
+
+	if !initialDone {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{
+				{
+					ID:        "call-initial-working-revision",
+					Name:      "patch_texture",
+					Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_INITIAL_WORKING_REVISION\n\nResearcher evidence has been requested and is pending."}]}`),
+				},
+				{
+					ID:   "call-spawn-researcher",
+					Name: "spawn_agent",
+					Arguments: json.RawMessage(`{
+						"role":"researcher",
+						"objective":"Return one current-signal evidence packet to this Texture with update_coagent."
+					}`),
+				},
+			},
+			Model: "test-model",
+		}, nil
+	}
+	if !wakeDone {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-evidence-backed-revision",
+				Name:      "patch_texture",
+				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_V2_FROM_RESEARCH_EVIDENCE\n\nThe later revision incorporates TEXTURE_CREATED_RESEARCH_EVIDENCE and keeps current claims scoped to the worker packet."}]}`),
+			}},
+			Model: "test-model",
+		}, nil
+	}
+	return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+}
+
+type textureSuperEvidenceLoopProvider struct {
+	Provider
+	mu                 sync.Mutex
+	choices            []string
+	firstTools         []ToolDefinition
+	initialTextureDone bool
+	superUpdateDone    bool
+	wakeTextureDone    bool
+}
+
+func (p *textureSuperEvidenceLoopProvider) ProviderName() string {
+	return "texture-super-evidence-loop"
+}
+
+func (p *textureSuperEvidenceLoopProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+}
+
+func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.mu.Lock()
+	p.choices = append(p.choices, req.ToolChoice)
+	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+	}
+	p.mu.Unlock()
+
+	if messagesContainToolCall(req.Messages, "update_coagent") ||
+		messagesContainToolCall(req.Messages, "request_super_execution") ||
+		messagesContainToolCall(req.Messages, "patch_texture") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+	}
+
+	if toolDefinitionsContain(req.ToolDefinitions, "update_coagent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		p.mu.Lock()
+		alreadyUpdated := p.superUpdateDone
+		p.superUpdateDone = true
+		p.mu.Unlock()
+		if alreadyUpdated {
+			return &ToolLoopResponse{StopReason: "end_turn", Text: "super update already sent", Model: "test-model"}, nil
+		}
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:   "call-super-update",
+				Name: "update_coagent",
+				Arguments: json.RawMessage(`{
+					"update_id":"texture-created-super-evidence",
+					"summary":"Super execution evidence returned to Texture.",
+					"artifacts":["artifacts/texture-super-proof.txt"],
+					"tests":["test -f artifacts/texture-super-proof.txt"],
+					"proposals":["TEXTURE_CREATED_SUPER_EVIDENCE: execution proof is ready for Texture synthesis."],
+					"notes":["Use this execution evidence in the next Texture revision."]
+				}`),
+			}},
+			Model: "test-model",
+		}, nil
+	}
+
+	lastUser := extractLastUserMessage(req.Messages)
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls:  []types.ToolCall{conductorSpawnTextureToolCall(lastUser)},
+			Model:      "test-model",
+		}, nil
+	}
+	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+	}
+
+	p.mu.Lock()
+	initialDone := p.initialTextureDone
+	if !p.initialTextureDone {
+		p.initialTextureDone = true
+	}
+	wakeDone := p.wakeTextureDone
+	if initialDone && !p.wakeTextureDone {
+		p.wakeTextureDone = true
+	}
+	p.mu.Unlock()
+
+	if !initialDone {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{
+				{
+					ID:        "call-initial-execution-revision",
+					Name:      "patch_texture",
+					Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_INITIAL_EXECUTION_REVISION\n\nSuper execution evidence has been requested and is pending."}]}`),
+				},
+				{
+					ID:   "call-request-super",
+					Name: "request_super_execution",
+					Arguments: json.RawMessage(`{
+						"objective":"Create artifacts/texture-super-proof.txt and report artifact/test evidence back to this Texture."
+					}`),
+				},
+			},
+			Model: "test-model",
+		}, nil
+	}
+	if !wakeDone {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-super-evidence-backed-revision",
+				Name:      "patch_texture",
+				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_V2_FROM_SUPER_EVIDENCE\n\nThe later revision incorporates TEXTURE_CREATED_SUPER_EVIDENCE and names the execution artifact as pending owner review."}]}`),
+			}},
+			Model: "test-model",
+		}, nil
+	}
+	return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 }
 
 func TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testing.T) {
@@ -1943,11 +2237,12 @@ func TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *test
 	if !foundAppAgent {
 		t.Fatalf("expected appagent revision over user-provided text, got %+v", revs)
 	}
-	if len(provider.choices) == 0 || provider.choices[0] != exactRequiredToolChoice("patch_texture") {
-		t.Fatalf("initial texture tool_choice = %#v, want first choice %q", provider.choices, exactRequiredToolChoice("patch_texture"))
+	if len(provider.choices) == 0 || provider.choices[0] != "required" {
+		t.Fatalf("initial texture tool_choice = %#v, want first choice required", provider.choices)
 	}
+	assertFullInitialTextureAffordance(t, provider.firstTools)
 	if len(provider.choices) != 1 {
-		t.Fatalf("texture provider calls = %d choices=%#v, want one terminal patch_texture turn", len(provider.choices), provider.choices)
+		t.Fatalf("texture provider calls = %d choices=%#v, want one terminal Texture turn", len(provider.choices), provider.choices)
 	}
 }
 
@@ -2025,6 +2320,300 @@ func TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit(t *testing.T) {
 	}
 }
 
+func TestInitialTextureRunCanWriteAndSpawnResearcherInSameFirstTurn(t *testing.T) {
+	t.Parallel()
+	provider := &textureWriteAndResearchProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+
+	h, s, rt := textureAPISetupWithProvider(t, provider, true)
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Research current signals, write a working Texture, and ask researcher for evidence."}`, "user-1")
+	w := httptest.NewRecorder()
+	h.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("prompt-bar status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	var submission promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&submission); err != nil {
+		t.Fatalf("decode prompt-bar response: %v", err)
+	}
+	if state := waitForTaskCompletion(t, h, submission.SubmissionID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("conductor state = %q, want completed", state)
+	}
+	conductor, err := rt.GetRun(context.Background(), submission.SubmissionID, "user-1")
+	if err != nil {
+		t.Fatalf("get conductor run: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	if decision.DocID == "" || decision.InitialLoopID == "" {
+		t.Fatalf("conductor did not create texture route: %+v", decision)
+	}
+	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("initial texture state = %q, want completed", state)
+	}
+	if len(provider.choices) == 0 || provider.choices[0] != "required" {
+		t.Fatalf("initial texture tool choices = %#v, want required first choice", provider.choices)
+	}
+	assertFullInitialTextureAffordance(t, provider.firstTools)
+	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	var wroteRevision bool
+	for _, rev := range revs {
+		if rev.AuthorKind == types.AuthorAppAgent && strings.Contains(rev.Content, "FIRST_TURN_WRITE_AND_RESEARCH") {
+			wroteRevision = true
+		}
+	}
+	if !wroteRevision {
+		t.Fatalf("initial Texture turn did not write expected appagent revision: %+v", revs)
+	}
+	runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-1", 100)
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	var researcher *types.RunRecord
+	for i := range runs {
+		if runs[i].ParentRunID == decision.InitialLoopID && runs[i].AgentProfile == AgentProfileResearcher {
+			researcher = &runs[i]
+			break
+		}
+	}
+	if researcher == nil {
+		t.Fatalf("initial Texture turn did not spawn researcher; runs=%+v", runs)
+	}
+	if researcher.ChannelID != decision.DocID || trajectoryIDForRun(researcher) != submission.SubmissionID {
+		t.Fatalf("researcher route = channel %q trajectory %q, want %s/%s; run=%+v", researcher.ChannelID, trajectoryIDForRun(researcher), decision.DocID, submission.SubmissionID, *researcher)
+	}
+}
+
+func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
+	t.Parallel()
+	provider := &textureResearchEvidenceLoopProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+	clock := &fakeTextureWakeClock{}
+
+	h, s, rt := textureAPISetupWithProviderAndOptions(t, provider, true, withTextureWakeAfterFuncForTest(clock.afterFunc))
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"What's new in current infrastructure signals? Write a cautious working Texture and ask researcher for evidence."}`, "user-1")
+	w := httptest.NewRecorder()
+	h.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("prompt-bar status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	var submission promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&submission); err != nil {
+		t.Fatalf("decode prompt-bar response: %v", err)
+	}
+	if state := waitForTaskCompletion(t, h, submission.SubmissionID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("conductor state = %q, want completed", state)
+	}
+	conductor, err := rt.GetRun(context.Background(), submission.SubmissionID, "user-1")
+	if err != nil {
+		t.Fatalf("get conductor run: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	if decision.DocID == "" || decision.InitialLoopID == "" {
+		t.Fatalf("conductor did not create texture route: %+v", decision)
+	}
+	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("initial texture state = %q, want completed", state)
+	}
+	assertFullInitialTextureAffordance(t, provider.firstTools)
+
+	var researcherRun *types.RunRecord
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-1", 100)
+		if err != nil {
+			t.Fatalf("list runs: %v", err)
+		}
+		for i := range runs {
+			if runs[i].ParentRunID == decision.InitialLoopID && runs[i].AgentProfile == AgentProfileResearcher {
+				researcherRun = &runs[i]
+				break
+			}
+		}
+		if researcherRun != nil && researcherRun.State.Terminal() {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if researcherRun == nil {
+		t.Fatal("Texture-created researcher run was not found")
+	}
+	if researcherRun.State != types.RunCompleted {
+		t.Fatalf("researcher state = %q, want completed; run=%+v", researcherRun.State, *researcherRun)
+	}
+
+	updates, err := s.ListWorkerUpdatesByTrajectory(context.Background(), "user-1", submission.SubmissionID, 20)
+	if err != nil {
+		t.Fatalf("list worker updates: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("worker updates = %+v, want exactly one researcher update", updates)
+	}
+	update := updates[0]
+	if update.Role != AgentProfileResearcher ||
+		update.AgentID != researcherRun.AgentID ||
+		update.TargetAgentID != currentTextureAgentID(decision.DocID) ||
+		update.ChannelID != decision.DocID ||
+		update.MessageSeq == 0 {
+		t.Fatalf("researcher update route = %+v, researcher=%+v", update, *researcherRun)
+	}
+
+	clock.fireAll()
+	revs := waitForRevisionCount(t, s, decision.DocID, "user-1", 3, 5*time.Second)
+	var evidenceRev *types.Revision
+	for i := range revs {
+		if revs[i].AuthorKind == types.AuthorAppAgent && strings.Contains(revs[i].Content, "TEXTURE_V2_FROM_RESEARCH_EVIDENCE") {
+			evidenceRev = &revs[i]
+			break
+		}
+	}
+	if evidenceRev == nil {
+		t.Fatalf("Texture did not create V2 from researcher evidence; revs=%+v", revs)
+	}
+	if evidenceRev.VersionNumber < 2 {
+		t.Fatalf("evidence revision version = %d, want V2 or later; rev=%+v", evidenceRev.VersionNumber, *evidenceRev)
+	}
+	meta := decodeRevisionMetadata(evidenceRev.Metadata)
+	consumed := metadataSlice(t, meta, "worker_updates_consumed")
+	if len(consumed) != 1 {
+		t.Fatalf("worker_updates_consumed length = %d, want 1; metadata=%+v", len(consumed), meta)
+	}
+	consumedUpdate := consumed[0].(map[string]any)
+	if got := int64(consumedUpdate["seq"].(float64)); got != update.MessageSeq {
+		t.Fatalf("consumed worker seq = %d, want %d", got, update.MessageSeq)
+	}
+	if got, _ := consumedUpdate["from_loop_id"].(string); got != researcherRun.RunID {
+		t.Fatalf("consumed from_loop_id = %q, want %q", got, researcherRun.RunID)
+	}
+	doc, err := s.GetDocument(context.Background(), decision.DocID, "user-1")
+	if err != nil {
+		t.Fatalf("get document: %v", err)
+	}
+	if doc.CurrentRevisionID != evidenceRev.RevisionID {
+		t.Fatalf("document head = %q, want evidence revision %q", doc.CurrentRevisionID, evidenceRev.RevisionID)
+	}
+}
+
+func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
+	t.Parallel()
+	provider := &textureSuperEvidenceLoopProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+
+	h, s, rt := textureAPISetupWithProvider(t, provider, true)
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Create a Texture that needs execution evidence. Ask super to produce a tiny artifact proof before finalizing."}`, "user-1")
+	w := httptest.NewRecorder()
+	h.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("prompt-bar status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	var submission promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&submission); err != nil {
+		t.Fatalf("decode prompt-bar response: %v", err)
+	}
+	if state := waitForTaskCompletion(t, h, submission.SubmissionID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("conductor state = %q, want completed", state)
+	}
+	conductor, err := rt.GetRun(context.Background(), submission.SubmissionID, "user-1")
+	if err != nil {
+		t.Fatalf("get conductor run: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	if decision.DocID == "" || decision.InitialLoopID == "" {
+		t.Fatalf("conductor did not create texture route: %+v", decision)
+	}
+	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("initial texture state = %q, want completed", state)
+	}
+	assertFullInitialTextureAffordance(t, provider.firstTools)
+
+	var superRun *types.RunRecord
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-1", 100)
+		if err != nil {
+			t.Fatalf("list runs: %v", err)
+		}
+		for i := range runs {
+			if runs[i].AgentProfile == AgentProfileSuper &&
+				runs[i].AgentID == persistentSuperAgentID("user-1") &&
+				trajectoryIDForRun(&runs[i]) == submission.SubmissionID {
+				superRun = &runs[i]
+				break
+			}
+		}
+		if superRun != nil && superRun.State.Terminal() {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if superRun == nil {
+		t.Fatal("Texture-created persistent super run was not found")
+	}
+	if superRun.State != types.RunCompleted {
+		t.Fatalf("super state = %q, want completed; run=%+v", superRun.State, *superRun)
+	}
+	if metadataStringValue(superRun.Metadata, "requested_by_profile") != AgentProfileTexture {
+		t.Fatalf("super requested_by_profile = %q, want texture; metadata=%+v", metadataStringValue(superRun.Metadata, "requested_by_profile"), superRun.Metadata)
+	}
+
+	updates, err := s.ListWorkerUpdatesByTrajectory(context.Background(), "user-1", submission.SubmissionID, 20)
+	if err != nil {
+		t.Fatalf("list worker updates: %v", err)
+	}
+	var superUpdate *types.WorkerUpdateRecord
+	for i := range updates {
+		if updates[i].Role == AgentProfileSuper && updates[i].TargetAgentID == currentTextureAgentID(decision.DocID) {
+			superUpdate = &updates[i]
+			break
+		}
+	}
+	if superUpdate == nil {
+		t.Fatalf("missing super update back to Texture; updates=%+v", updates)
+	}
+	if superUpdate.AgentID != superRun.AgentID ||
+		superUpdate.ChannelID != decision.DocID ||
+		superUpdate.MessageSeq == 0 ||
+		len(superUpdate.Artifacts) == 0 ||
+		len(superUpdate.Tests) == 0 {
+		t.Fatalf("super update route/evidence = %+v, super=%+v", *superUpdate, *superRun)
+	}
+
+	revs := waitForRevisionCount(t, s, decision.DocID, "user-1", 3, 5*time.Second)
+	var evidenceRev *types.Revision
+	for i := range revs {
+		if revs[i].AuthorKind == types.AuthorAppAgent && strings.Contains(revs[i].Content, "TEXTURE_V2_FROM_SUPER_EVIDENCE") {
+			evidenceRev = &revs[i]
+			break
+		}
+	}
+	if evidenceRev == nil {
+		t.Fatalf("Texture did not create V2 from super evidence; revs=%+v", revs)
+	}
+	if evidenceRev.VersionNumber < 2 {
+		t.Fatalf("evidence revision version = %d, want V2 or later; rev=%+v", evidenceRev.VersionNumber, *evidenceRev)
+	}
+	meta := decodeRevisionMetadata(evidenceRev.Metadata)
+	consumed := metadataSlice(t, meta, "worker_updates_consumed")
+	if len(consumed) != 1 {
+		t.Fatalf("worker_updates_consumed length = %d, want 1; metadata=%+v", len(consumed), meta)
+	}
+	consumedUpdate := consumed[0].(map[string]any)
+	if got := int64(consumedUpdate["seq"].(float64)); got != superUpdate.MessageSeq {
+		t.Fatalf("consumed worker seq = %d, want %d", got, superUpdate.MessageSeq)
+	}
+	if got, _ := consumedUpdate["from_loop_id"].(string); got != superRun.RunID {
+		t.Fatalf("consumed from_loop_id = %q, want %q", got, superRun.RunID)
+	}
+}
+
 func TestInitialTextureRunDefaultsMinimalEditContextFromActivation(t *testing.T) {
 	t.Parallel()
 	provider := &textureMinimalEditProvider{Provider: NewStubProvider(1 * time.Millisecond)}
@@ -2057,9 +2646,10 @@ func TestInitialTextureRunDefaultsMinimalEditContextFromActivation(t *testing.T)
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial texture state = %q, want completed", state)
 	}
-	if len(provider.choices) != 1 || provider.choices[0] != exactRequiredToolChoice("patch_texture") {
-		t.Fatalf("texture provider choices = %#v, want one terminal patch_texture turn", provider.choices)
+	if len(provider.choices) != 1 || provider.choices[0] != "required" {
+		t.Fatalf("texture provider choices = %#v, want one terminal required Texture turn", provider.choices)
 	}
+	assertFullInitialTextureAffordance(t, provider.firstTools)
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
 	if err != nil {
 		t.Fatalf("list revisions: %v", err)
@@ -2154,10 +2744,11 @@ func TestInitialTextureDecisionPromptRejectsPrematureEditBeforeDecision(t *testi
 		t.Fatalf("appagent revision leaked private decision rationale: %q", appContent)
 	}
 	if len(provider.choices) < 2 ||
-		provider.choices[0] != exactRequiredToolChoice("patch_texture") ||
+		provider.choices[0] != "required" ||
 		provider.choices[1] != "" {
-		t.Fatalf("tool choices = %#v, want deterministic decision record before initial edit", provider.choices)
+		t.Fatalf("tool choices = %#v, want required first turn and free follow-up after decision record", provider.choices)
 	}
+	assertFullInitialTextureAffordance(t, provider.firstTools)
 }
 
 func TestTexturePromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {

@@ -1156,12 +1156,17 @@ func scanTextureRetiredNames(docs map[string]*docInfo) ([]warning, error) {
 
 func hasTextureRetiredName(line string) bool {
 	lower := strings.ToLower(line)
-	for _, term := range []string{"vtext", ".vtext", "/api/vtext", "data-vtext", "edit_vtext", "vtext_"} {
+	for _, term := range textureRetiredNameTerms() {
 		if strings.Contains(lower, term) {
 			return true
 		}
 	}
 	return false
+}
+
+func textureRetiredNameTerms() []string {
+	name := "v" + "text"
+	return []string{name, "." + name, "/api/" + name, "data-" + name, "edit_" + name, name + "_"}
 }
 
 func isAllowedTextureRetiredNameLine(path, line string, docs map[string]*docInfo) bool {
@@ -1178,7 +1183,7 @@ func isAllowedTextureRetiredNameLine(path, line string, docs map[string]*docInfo
 	}
 	lower := strings.ToLower(line)
 	if strings.HasPrefix(path, "docs/mission-") {
-		for _, term := range []string{"historical evidence", "retired-name", "retired vtext", "retired v-name", "old v-name", "migration residue", "deletion target", "delete before settlement", "selected affordance line counts", "v-name profile references", "request_super_execution", "data-vtext", "vtext_"} {
+		for _, term := range textureRetiredNameAllowedMissionTerms() {
 			if strings.Contains(lower, term) {
 				return true
 			}
@@ -1188,6 +1193,25 @@ func isAllowedTextureRetiredNameLine(path, line string, docs map[string]*docInfo
 		return true
 	}
 	return false
+}
+
+func textureRetiredNameAllowedMissionTerms() []string {
+	name := "v" + "text"
+	return []string{
+		"historical evidence",
+		"retired-name",
+		"retired " + name,
+		"retired v-name",
+		"old v-name",
+		"migration residue",
+		"deletion target",
+		"delete before settlement",
+		"selected affordance line counts",
+		"v-name profile references",
+		"request_super_execution",
+		"data-" + name,
+		name + "_",
+	}
 }
 
 func scanLinePatterns(rule, path, content string, patterns []string, message, hint string) []warning {

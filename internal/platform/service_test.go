@@ -92,12 +92,6 @@ func TestPlatformTextureStoreWritesCurrentTables(t *testing.T) {
 	if got := platformTableCount(t, store, "platform_texture_revisions"); got != 1 {
 		t.Fatalf("platform_texture_revisions count = %d, want 1", got)
 	}
-	if got := platformTableCount(t, store, "platform_texture_documents"); got != 0 {
-		t.Fatalf("platform_texture_documents count = %d, want 0 for current writes", got)
-	}
-	if got := platformTableCount(t, store, "platform_texture_revisions"); got != 0 {
-		t.Fatalf("platform_texture_revisions count = %d, want 0 for current writes", got)
-	}
 
 	doc, err := store.GetTextureDocument(ctx, "doc-current")
 	if err != nil {
@@ -115,21 +109,21 @@ func TestPlatformTextureStoreWritesCurrentTables(t *testing.T) {
 	}
 }
 
-func TestPlatformTextureStoreMigratesLegacyTablesAtBootstrap(t *testing.T) {
+func TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	ctx := context.Background()
 	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 
 	if _, err := store.db.ExecContext(ctx, `INSERT INTO platform_texture_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-		"doc-legacy", "owner-legacy", "Legacy Texture", now, now); err != nil {
-		t.Fatalf("insert legacy document: %v", err)
+		"doc-existing", "owner-existing", "Existing Texture", now, now); err != nil {
+		t.Fatalf("insert existing document: %v", err)
 	}
 	if _, err := store.db.ExecContext(ctx, `INSERT INTO platform_texture_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at) VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?)`,
-		"rev-legacy", "doc-legacy", "owner-legacy", "agent", "legacy-texture", "legacy table content", "[]", `{"source":"legacy"}`, now); err != nil {
-		t.Fatalf("insert legacy revision: %v", err)
+		"rev-existing", "doc-existing", "owner-existing", "agent", "texture", "existing table content", "[]", `{"source":"test"}`, now); err != nil {
+		t.Fatalf("insert existing revision: %v", err)
 	}
 	if err := store.Bootstrap(ctx); err != nil {
-		t.Fatalf("Bootstrap with legacy rows: %v", err)
+		t.Fatalf("Bootstrap with existing rows: %v", err)
 	}
 	if got := platformTableCount(t, store, "platform_texture_documents"); got != 1 {
 		t.Fatalf("platform_texture_documents count after bootstrap = %d, want 1", got)
@@ -147,19 +141,19 @@ func TestPlatformTextureStoreMigratesLegacyTablesAtBootstrap(t *testing.T) {
 		t.Fatalf("platform_texture_revisions count after second bootstrap = %d, want 1", got)
 	}
 
-	doc, err := store.GetTextureDocument(ctx, "doc-legacy")
+	doc, err := store.GetTextureDocument(ctx, "doc-existing")
 	if err != nil {
-		t.Fatalf("GetTextureDocument legacy: %v", err)
+		t.Fatalf("GetTextureDocument existing: %v", err)
 	}
-	if doc.OwnerID != "owner-legacy" || doc.Title != "Legacy Texture" {
-		t.Fatalf("legacy document = %+v, want owner/title copied", doc)
+	if doc.OwnerID != "owner-existing" || doc.Title != "Existing Texture" {
+		t.Fatalf("existing document = %+v, want owner/title preserved", doc)
 	}
-	rev, err := store.GetTextureRevision(ctx, "rev-legacy")
+	rev, err := store.GetTextureRevision(ctx, "rev-existing")
 	if err != nil {
-		t.Fatalf("GetTextureRevision legacy: %v", err)
+		t.Fatalf("GetTextureRevision existing: %v", err)
 	}
-	if rev.DocID != "doc-legacy" || rev.Content != "legacy table content" {
-		t.Fatalf("legacy revision = %+v, want copied revision", rev)
+	if rev.DocID != "doc-existing" || rev.Content != "existing table content" {
+		t.Fatalf("existing revision = %+v, want preserved revision", rev)
 	}
 }
 
@@ -201,16 +195,10 @@ func TestPublicationFallbackDefaultsUseTextureLabels(t *testing.T) {
 	if doc.Title != defaultPublishedTextureTitle {
 		t.Fatalf("publication document title = %q, want %q", doc.Title, defaultPublishedTextureTitle)
 	}
-	if strings.Contains(doc.Title, "Texture") {
-		t.Fatalf("publication document title retained retired name: %q", doc.Title)
-	}
 
 	coreXML := docxCoreXML(bundle)
 	if !strings.Contains(coreXML, "<dc:title>"+defaultPublishedTextureTitle+"</dc:title>") {
 		t.Fatalf("DOCX core title missing Texture fallback: %s", coreXML)
-	}
-	if strings.Contains(coreXML, "Published Texture") {
-		t.Fatalf("DOCX core title retained retired name: %s", coreXML)
 	}
 
 	if got := publicationExportFilename("", "", "txt"); got != defaultPublishedTextureSlugBase+".txt" {
@@ -246,8 +234,8 @@ func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 	if publicationTitle != defaultUntitledTextureTitle {
 		t.Fatalf("publication title = %q, want %q", publicationTitle, defaultUntitledTextureTitle)
 	}
-	if strings.Contains(publicationTitle, "Texture") || strings.Contains(publicationSlug, "texture") {
-		t.Fatalf("publication default retained retired name: title=%q slug=%q", publicationTitle, publicationSlug)
+	if !strings.Contains(publicationTitle, "Texture") || !strings.Contains(publicationSlug, "texture") {
+		t.Fatalf("publication default missing Texture name: title=%q slug=%q", publicationTitle, publicationSlug)
 	}
 
 	publishedExport, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "txt")
@@ -257,8 +245,8 @@ func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 	if !strings.HasPrefix(publishedExport.Filename, "untitled-texture-") {
 		t.Fatalf("default export filename = %q, want untitled-texture-*", publishedExport.Filename)
 	}
-	if strings.Contains(publishedExport.Filename, "texture") {
-		t.Fatalf("default export filename retained retired name: %q", publishedExport.Filename)
+	if !strings.Contains(publishedExport.Filename, "texture") {
+		t.Fatalf("default export filename missing Texture name: %q", publishedExport.Filename)
 	}
 
 	proposal, err := svc.SubmitPublicationProposal(context.Background(), SubmitPublicationProposalRequest{
@@ -280,8 +268,8 @@ func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 	if proposalTitle != defaultTextureProposalTitle {
 		t.Fatalf("proposal title = %q, want %q", proposalTitle, defaultTextureProposalTitle)
 	}
-	if strings.Contains(proposalTitle, "Texture") {
-		t.Fatalf("proposal default retained retired name: %q", proposalTitle)
+	if !strings.Contains(proposalTitle, "Texture") {
+		t.Fatalf("proposal default missing Texture name: %q", proposalTitle)
 	}
 }
 
@@ -1332,17 +1320,6 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	}
 	if !strings.Contains(exported.Content, `choir-export-profile" content="default-professional"`) || !strings.Contains(exported.Content, `.texture-table`) {
 		t.Fatalf("html export missing default professional profile: %s", exported.Content)
-	}
-	for _, retiredClass := range []string{
-		"texture-publication",
-		"texture-source-ref",
-		"texture-table",
-		"texture-sources",
-		"texture-sources-heading",
-	} {
-		if strings.Contains(exported.Content, retiredClass) {
-			t.Fatalf("html export retained retired class/id %q: %s", retiredClass, exported.Content)
-		}
 	}
 	for _, textureClass := range []string{
 		`class="texture-publication"`,

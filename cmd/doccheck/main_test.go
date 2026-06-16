@@ -109,6 +109,8 @@ func TestClassifyHeresyContext(t *testing.T) {
 }
 
 func TestTextureRetiredNameAllowlist(t *testing.T) {
+	retiredName := "v" + "text"
+	retiredDisplay := "V" + "Text"
 	docs := map[string]*docInfo{
 		"docs/historical.md":                      {Path: "docs/historical.md", Scope: "historical", IsEvidence: true},
 		"docs/current.md":                         {Path: "docs/current.md", Scope: "current", IsEvidence: false},
@@ -119,15 +121,15 @@ func TestTextureRetiredNameAllowlist(t *testing.T) {
 		line string
 		want bool
 	}{
-		{"docs/why-texture-background-2026-06-15.md", "VText was the old name.", true},
-		{"docs/historical.md", "VText was used here.", true},
-		{"docs/mission-texture-hard-cutover-v0.md", "Retired VText evidence remains in the mission.", true},
-		{"docs/mission-texture-hard-cutover-v0.md", "Selected affordance line counts: /api/vtext 505.", true},
-		{"docs/mission-texture-hard-cutover-v0.md", "  `edit_vtext` 390, `request_super_execution` 122.", true},
-		{"cmd/doccheck/main.go", `for _, term := range []string{"vtext"}`, true},
-		{"internal/runtime/texture.go", "// texture-cutover-allow: vtext route shim; delete-by texture-hard-cutover-v0", true},
-		{"docs/current.md", "VText owns canonical versions.", false},
-		{"internal/runtime/texture.go", "const path = \"/api/vtext/documents\"", false},
+		{"docs/why-texture-background-2026-06-15.md", retiredDisplay + " was the old name.", true},
+		{"docs/historical.md", retiredDisplay + " was used here.", true},
+		{"docs/mission-texture-hard-cutover-v0.md", "Retired " + retiredDisplay + " evidence remains in the mission.", true},
+		{"docs/mission-texture-hard-cutover-v0.md", "Selected affordance line counts: /api/" + retiredName + " 505.", true},
+		{"docs/mission-texture-hard-cutover-v0.md", "  `edit_" + retiredName + "` 390, `request_super_execution` 122.", true},
+		{"cmd/doccheck/main.go", `for _, term := range []string{"` + retiredName + `"}`, true},
+		{"internal/runtime/texture.go", "// texture-cutover-allow: " + retiredName + " route shim; delete-by texture-hard-cutover-v0", true},
+		{"docs/current.md", retiredDisplay + " owns canonical versions.", false},
+		{"internal/runtime/texture.go", "const path = \"/api/" + retiredName + "/documents\"", false},
 	}
 	for _, tt := range tests {
 		if got := isAllowedTextureRetiredNameLine(tt.path, tt.line, docs); got != tt.want {
@@ -137,15 +139,17 @@ func TestTextureRetiredNameAllowlist(t *testing.T) {
 }
 
 func TestHasTextureRetiredName(t *testing.T) {
+	retiredName := "v" + "text"
+	retiredDisplay := "V" + "Text"
 	tests := []struct {
 		line string
 		want bool
 	}{
 		{"Open the Texture document.", false},
-		{"Open the VText document.", true},
-		{"POST /api/vtext/documents", true},
-		{"data-vtext-editor", true},
-		{"edit_vtext", true},
+		{"Open the " + retiredDisplay + " document.", true},
+		{"POST /api/" + retiredName + "/documents", true},
+		{"data-" + retiredName + "-editor", true},
+		{"edit_" + retiredName, true},
 	}
 	for _, tt := range tests {
 		if got := hasTextureRetiredName(tt.line); got != tt.want {

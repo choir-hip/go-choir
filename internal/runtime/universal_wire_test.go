@@ -193,10 +193,7 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *test
 	}
 	if !strings.Contains(string(storyJSON), `"story_texture_doc_id"`) ||
 		!strings.Contains(string(storyJSON), `"texture_content"`) ||
-		!strings.Contains(string(storyJSON), `"projection_texture_docs"`) ||
-		strings.Contains(string(storyJSON), "story_texture_doc_id") ||
-		strings.Contains(string(storyJSON), "texture_content") ||
-		strings.Contains(string(storyJSON), "projection_texture_docs") {
+		!strings.Contains(string(storyJSON), `"projection_texture_docs"`) {
 		t.Fatalf("indexed story JSON did not expose Texture projection fields only: %s", string(storyJSON))
 	}
 	if story.Headline != "Madrid dispatch" || !strings.Contains(story.Projections["wire-style"], "MADRID -- Pope Leo XIV") {

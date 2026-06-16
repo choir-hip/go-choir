@@ -13,13 +13,13 @@ is the domain its evidence covers; receipts are named artifacts.
 
 ## Assertions (supported, with receipts)
 
-### A1 — VText delegation tool-scope is enforced in code
+### A1 — Texture delegation tool-scope is enforced in code
 
-- **Claim:** VText agents cannot spawn co-super or vsuper; spawn targets are
+- **Claim:** Texture agents cannot spawn co-super or vsuper; spawn targets are
   exactly `[researcher]`, enforced at call time; super is reachable only via
   `request_super_execution` (routes to the persistent super, never spawns).
 - **Receipts:** `internal/runtime/tool_profiles.go:223-229` (AllowedDelegateTargets),
-  `tool_profiles.go:314` (canDelegateTo), `tools_vtext.go:194-237`.
+  `tool_profiles.go:314` (canDelegateTo), `tools_texture.go:194-237`.
 - **Scope:** tool-level enforcement only. Does NOT cover continuation-path
   authority handoffs (that is the M2–M4 cutover work).
 - **Invalidation triggers:** any change to RegisterCoAgentTools or roleSpec.
@@ -114,15 +114,15 @@ and settlement criteria — never personas. "You are X" is a banned pattern.
 (Origin: role-free actor protocol; promote after M2 rewrites prompt_defaults
 and the proof mission measures the effect.)
 
-### I6 — VText decision rationale belongs off-document
+### I6 — Texture decision rationale belongs off-document
 
-Canonical VText documents carry reader-facing document content, not agent
-process rationale. When VText skips or chooses researcher/super delegation for
+Canonical Texture documents carry reader-facing document content, not agent
+process rationale. When Texture skips or chooses researcher/super delegation for
 an audit-worthy reason, the reason should go to an off-document decision record
 that remains linked to the run, document, evidence refs, and UI provenance. The
 document body may carry uncertainty only when that uncertainty belongs to the
 document's truth state. (Origin: M3.2 prompt/decision-notes gate; promote after
-`record_vtext_decision` exists in Dolt, Trace/logs, and the VText Sources
+`record_texture_decision` exists in Dolt, Trace/logs, and the Texture Sources
 panel with product-path proof.)
 
 ### I7 — Prompt obligations should state reasons without forcing choreography
@@ -131,23 +131,23 @@ Prompt defaults should use direct, active, reason-bearing language: name the
 action, name why the obligation matters, and preserve the actor's authority
 envelope. Strong delegation pressure for evidence, execution, generated
 artifacts, and verification is valid; exact semantic tool sequences are not.
-(Origin: M3.1/M3.2 VText prompt repair; promote after prompt-default tests and
-staging evidence show VText can delegate when needed without runtime or prompt
-text forcing `edit_vtext -> researcher/super` choreography.)
+(Origin: M3.1/M3.2 Texture prompt repair; promote after prompt-default tests and
+staging evidence show Texture can delegate when needed without runtime or prompt
+text forcing `edit_texture -> researcher/super` choreography.)
 
-### I8 — VText is Choir's artifact control plane
+### I8 — Texture is Choir's artifact control plane
 
-Conductor routes exogenous user/app/source input into VText-owned artifact
+Conductor routes exogenous user/app/source input into Texture-owned artifact
 state by default. Prompt-bar requests, sourcecycled/news ingestion, article
 creation, mission work, and most user prompts should open or create
-VText/context first. VText owns the canonical artifact and then decides whether
+Texture/context first. Texture owns the canonical artifact and then decides whether
 to write/revise, attach or transclude sources, ask researcher, request super
 execution, coordinate coding-agent trees through super, wait, or record an
 off-document decision/blocker. Super is downstream execution authority, not the
 ordinary ingress target for user or source prompts. (Origin: M3.2 staging route
 failures and owner clarification; promote after prompt-bar and source/article
-product-path acceptance prove conductor -> VText first, with any later super
-work requested by VText and attached back to the VText/artifact context.)
+product-path acceptance prove conductor -> Texture first, with any later super
+work requested by Texture and attached back to the Texture/artifact context.)
 
 ---
 
@@ -191,13 +191,13 @@ work requested by VText and attached back to the VText/artifact context.)
 
 ### E5 — Off-document decision notes may become noisy process theater (status: testing)
 
-- **Blind spot:** a `record_vtext_decision` tool can protect canonical VText
+- **Blind spot:** a `record_texture_decision` tool can protect canonical Texture
   documents from work-log pollution while still producing a second noisy stream
   of low-value excuses. If every ordinary edit emits a rationale note, the
   system merely moves litter from the document into provenance.
 - **Boundary type:** resource / frame_lock.
 - **Bound:** M3.2 must define "audit-worthy" narrowly and test both absence
-  and presence: no note for ordinary edits; a note when VText skips delegation
+  and presence: no note for ordinary edits; a note when Texture skips delegation
   despite an evidence-shaped, execution-shaped, or blocker-shaped request.
 
 ---

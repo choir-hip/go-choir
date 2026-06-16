@@ -134,9 +134,6 @@ func TestGeneratedModelPolicyUsesTextureRoleKey(t *testing.T) {
 	if !strings.Contains(raw, "[roles.texture]") {
 		t.Fatalf("generated model policy missing [roles.texture]:\n%s", raw)
 	}
-	if strings.Contains(raw, "[roles.texture]") {
-		t.Fatalf("generated model policy should not emit current [roles.texture]:\n%s", raw)
-	}
 	policy, err := parseModelPolicy(raw, "/System/model-policy.toml")
 	if err != nil {
 		t.Fatalf("parse generated model policy: %v", err)

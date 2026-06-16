@@ -3115,6 +3115,62 @@ Protected surfaces and rollback:
 - Heresy delta: discovered and bounded user-store table-name residue; no repair
   claimed yet.
 
+## Local Repair: User-Store Texture Table Identity
+
+Mutation class: `red`, because this changes user-computer Dolt/app state
+identity for canonical Texture document storage and appagent mutation/control
+state.
+
+Conjecture delta: current user-store Texture methods can read and write
+`texture_*` tables while legacy `vtext_*` tables remain in place and copy
+forward idempotently during bootstrap.
+
+Protected surfaces: user Texture document persistence, revision versioning,
+source-path aliases, agent mutation scheduling/delivery state, controller
+checkpoints, decision evidence, existing workspace bootstrap, and rollback to
+older binaries that still expect `vtext_*`.
+
+Local evidence on 2026-06-16:
+
+- `internal/store/vtext.go` now creates current `texture_documents`,
+  `texture_revisions`, `texture_document_aliases`,
+  `texture_agent_mutations`, `texture_controller_checkpoints`, and
+  `texture_decisions` tables while retaining the legacy `vtext_*` tables in
+  schema.
+- Bootstrap ensures legacy compatibility columns, creates current and legacy
+  version indexes, copies legacy rows into current `texture_*` tables with
+  `INSERT IGNORE`, and backfills version numbers in `texture_revisions`.
+- Current document, revision, alias, agent-mutation, controller-checkpoint, and
+  decision store methods now read/write `texture_*` tables.
+- `TestVTextStoreWritesCurrentTextureTables` proves fresh current writes land
+  in `texture_*` and add no rows to legacy `vtext_*`.
+- `TestVTextStoreMigratesLegacyTablesAtBootstrap` proves legacy-only rows for
+  all six table families copy forward through repeated bootstrap and are
+  readable through current store APIs.
+- Focused store packet
+  `nix develop -c go test ./internal/store -run 'TestVTextStoreWritesCurrentTextureTables|TestVTextStoreMigratesLegacyTablesAtBootstrap|TestVTextBackfillsLegacyRevisionVersionNumbers|TestVTextCreateDocument|TestOpenCreatesDatabase'`
+  passed.
+- `nix develop -c go test ./internal/store` passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed.
+- `scripts/doccheck --report /tmp/choir-doccheck-c43-user-table-behavior.md --json /tmp/choir-doccheck-c43-user-table-behavior.json`
+  passed in report-only mode with 212 docs and 1,112 warnings.
+- `git diff --check` passed.
+- Scoped non-test residue search
+  `rg -n "\bvtext_documents\b|\bvtext_revisions\b|\bvtext_document_aliases\b|\bvtext_agent_mutations\b|\bvtext_controller_checkpoints\b|\bvtext_decisions\b" internal/store -g '!**/*_test.go'`
+  now finds only retained legacy schema, legacy compatibility-column checks,
+  legacy version-index creation, and copy-forward migration reads.
+
+Rollback path: source revert restores current code reads/writes to `vtext_*`.
+Existing legacy rows remain in place. Rows created only in `texture_*` after
+this cutover would need a reverse copy into `vtext_*` before running an older
+binary that must see them; the repair intentionally stops dual-writing current
+rows to legacy tables.
+
+Heresy delta: repaired locally for user-store table identity. Durable
+`vtext:<doc_id>` actor compatibility, function/type names, platform migration
+compatibility code, stored `/pub/vtext/...` route rows, Universal Wire
+`vtext:` refs/story-field proof, and protocol v0 remain open.
+
 ## Parallax State
 
 status: open_handoff
@@ -3142,9 +3198,10 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C43 problem checkpoint
-documented user-store `vtext_*` table identity residue and the bounded
-migration design, but no runtime repair is claimed yet. C41 is
+variant (ranking function) V: current V=2; last ΔV: C43 is locally supported
+for user-store table identity but not yet deployed-supported. Current
+user-store methods now target `texture_*` tables, legacy `vtext_*` rows copy
+forward idempotently, and legacy tables remain for rollback. C41 is
 deployed-supported for user-store database identity: fresh/current Texture
 workspaces open with `database=texture` while legacy `database=vtext`
 workspaces remain readable. C40b is
@@ -3414,20 +3471,20 @@ CI run `27616117172`, deploy job `81652699154`, staging health for commit
 `c749e31b21da04575a8477872eb65ac6d881d8b2`, and deployed browser-public
 platform-backed Texture read proof passed. Universal Wire staging acceptance
 still observed zero articles, so deployed story-field proof remains open.
-C43 is documented but not repaired: current user-store workspaces use the
-`texture` Dolt database, but the current tables inside that database remain
-`vtext_documents`, `vtext_revisions`, `vtext_document_aliases`,
-`vtext_agent_mutations`, `vtext_controller_checkpoints`, and
-`vtext_decisions`. The planned repair is an idempotent copy-forward migration
-into `texture_*` tables with legacy tables retained for rollback and older
-binaries.
+C43 is locally supported for user-store table identity: current bootstrap
+creates `texture_documents`, `texture_revisions`,
+`texture_document_aliases`, `texture_agent_mutations`,
+`texture_controller_checkpoints`, and `texture_decisions`, copies legacy
+`vtext_*` rows forward idempotently, and current store methods read/write the
+current tables. Focused store tests, full `internal/store`, runtime shards,
+doccheck, diff check, and scoped residue search passed locally. Legacy tables
+remain as compatibility state, but current code intentionally stops
+dual-writing them.
 
-next move: implement C43 user-store table identity migration: create and
-bootstrap `texture_*` tables, copy legacy rows forward idempotently, move
-current store reads/writes to `texture_*`, prove fresh writes do not add legacy
-rows and legacy-only rows remain readable, then land through CI/deploy/staging
-product proof. Keep durable actor/profile compatibility, Universal Wire
-story-field proof, and protocol v0 out of this slice.
+next move: land C43 through independent diff review, commit, push, CI/deploy,
+staging identity, and deployed Texture product proof. Keep durable
+actor/profile compatibility, Universal Wire story-field proof, and protocol v0
+out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -3483,13 +3540,14 @@ scope. C42 is deployed-supported for platform table identity:
 `platform_texture_*` is the current platform document storage substrate,
 legacy `platform_vtext_*` rows are copied forward idempotently, and staging
 platform-backed read proof passed. Next move is the next bounded remaining
-slice: C43 user-store table identity migration is documented but not repaired.
-Implement current `texture_*` user-store tables, copy legacy `vtext_*` rows
-forward idempotently, move current store reads/writes to `texture_*`, prove
-fresh writes avoid legacy tables and legacy-only rows stay readable, then land
-through CI/deploy/staging product proof. Durable actor/profile compatibility,
-deployed Universal Wire story-field proof, and protocol v0 remain open. Keep
-protocol v0 out until the working surface is proven.
+slice: C43 user-store table identity migration is locally supported but not
+yet landed. Current user-store `texture_*` tables exist, legacy `vtext_*` rows
+copy forward idempotently, current store methods target `texture_*`, and local
+store/runtime/doccheck/residue proof passed. Land C43 through independent diff
+review, commit, push, CI/deploy, staging identity, and deployed Texture product
+proof. Durable actor/profile compatibility, deployed Universal Wire story-field
+proof, and protocol v0 remain open. Keep protocol v0 out until the working
+surface is proven.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to

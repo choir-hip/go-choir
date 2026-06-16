@@ -156,8 +156,8 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 	if !metadataBoolValue(initialRun.Metadata, "texture_initial_decision_required") {
 		t.Fatalf("initial run missing deterministic decision metadata: %+v", initialRun.Metadata)
 	}
-	if got := initialTextureToolChoice(initialRun); got != exactRequiredToolChoice("patch_texture") {
-		t.Fatalf("initial tool choice = %q, want patch_texture after deterministic decision record", got)
+	if got := initialTextureToolChoice(initialRun); got != "required" {
+		t.Fatalf("initial tool choice = %q, want \"required\" so the first Texture turn keeps its full tool affordance", got)
 	}
 	done := waitForPromptBarUnitRunTerminal(t, rt, decision.InitialLoopID, "user-alice", 5*time.Second)
 	if done.State != types.RunCompleted {
@@ -181,6 +181,17 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 	}
 	if strings.Contains(seedRev.Content, decisions[0].Reason) {
 		t.Fatalf("prompt-bar seed revision leaked decision reason into canonical text: %q", seedRev.Content)
+	}
+	intake := handler.textureDocumentResponse(context.Background(), types.Document{
+		DocID:             decision.DocID,
+		OwnerID:           "user-alice",
+		Title:             "Texture",
+		CurrentRevisionID: seedRev.RevisionID,
+		CreatedAt:         seedRev.CreatedAt,
+		UpdatedAt:         seedRev.CreatedAt,
+	})
+	if intake.IntakePrompt != prompt {
+		t.Fatalf("intake prompt = %q, want original prompt", intake.IntakePrompt)
 	}
 	doc, err := rt.Store().GetDocument(context.Background(), decision.DocID, "user-alice")
 	if err != nil {

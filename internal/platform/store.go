@@ -334,30 +334,6 @@ CREATE TABLE IF NOT EXISTS platform_texture_revisions (
 	PRIMARY KEY (revision_id),
 	INDEX idx_platform_texture_revisions_doc (doc_id, created_at)
 );
-
-CREATE TABLE IF NOT EXISTS platform_texture_documents (
-	doc_id VARCHAR(255) NOT NULL,
-	owner_id VARCHAR(255) NOT NULL,
-	title LONGTEXT NOT NULL,
-	created_at DATETIME NOT NULL,
-	updated_at DATETIME NOT NULL,
-	PRIMARY KEY (doc_id)
-);
-
-CREATE TABLE IF NOT EXISTS platform_texture_revisions (
-	revision_id VARCHAR(255) NOT NULL,
-	doc_id VARCHAR(255) NOT NULL,
-	owner_id VARCHAR(255) NOT NULL,
-	parent_revision_id VARCHAR(255) NOT NULL DEFAULT '',
-	author_kind VARCHAR(64) NOT NULL DEFAULT '',
-	author_label VARCHAR(255) NOT NULL DEFAULT '',
-	content LONGTEXT NOT NULL,
-	citations LONGTEXT NOT NULL DEFAULT '[]',
-	metadata LONGTEXT NOT NULL DEFAULT '{}',
-	created_at DATETIME NOT NULL,
-	PRIMARY KEY (revision_id),
-	INDEX idx_platform_texture_revisions_doc (doc_id, created_at)
-);
 `
 
 func OpenStore(dsn string) (*Store, error) {

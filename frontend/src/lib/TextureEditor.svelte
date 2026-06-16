@@ -108,6 +108,7 @@
   let currentDoc = null;
   let currentRevision = null;
   let revisions = [];
+  let intakePrompt = '';
   let activeRevisionIndex = -1;
   let editorValue = '';
   let initializedKey = '';
@@ -857,6 +858,7 @@
     currentDoc = null;
     currentRevision = null;
     revisions = [];
+    intakePrompt = '';
     activeRevisionIndex = -1;
     editorValue = '';
     lastAutosavedContent = '';
@@ -926,6 +928,7 @@
 
       if (appContext.docId) {
         currentDoc = await getDocument(appContext.docId);
+        intakePrompt = currentDoc?.intake_prompt || '';
         latestHeadRevisionId = currentDoc.current_revision_id || '';
         await refreshRevisions(currentDoc.doc_id, appContext.initialRevisionId || '');
         applyDocumentWorkState(currentDoc);
@@ -939,6 +942,7 @@
         }
       } else {
         currentDoc = await createDocument(normalizeTitle(appContext));
+        intakePrompt = '';
         editorValue = initialValue || '';
 
         if (appContext.createInitialVersion && initialValue) {
@@ -2139,6 +2143,13 @@
       </div>
     {/if}
 
+    {#if intakePrompt}
+      <section class="intake-band" data-texture-intake>
+        <span class="intake-label">Prompt</span>
+        <p data-texture-intake-prompt>{intakePrompt}</p>
+      </section>
+    {/if}
+
     <div class="document-body" data-texture-document-body>
       {#if sourcePanelOpen}
         <TextureSourcePanel
@@ -2289,6 +2300,37 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+
+  .intake-band {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.7rem;
+    align-items: start;
+    padding: 0.58rem 0.82rem;
+    border-bottom: 1px solid var(--choir-border);
+    background: var(--choir-surface-app);
+    color: var(--choir-text);
+  }
+
+  .intake-label {
+    font-size: 0.68rem;
+    line-height: 1.25;
+    font-weight: 780;
+    text-transform: uppercase;
+    color: var(--choir-text-muted);
+  }
+
+  .intake-band p {
+    margin: 0;
+    min-width: 0;
+    max-height: 3.7rem;
+    overflow: auto;
+    font-size: 0.82rem;
+    line-height: 1.38;
+    color: var(--choir-text-accent);
+    overflow-wrap: anywhere;
   }
 
   .work-banner {

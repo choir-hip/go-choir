@@ -1,10 +1,10 @@
-# Source, External Data, VText, And Publication Contract
+# Source, External Data, Texture, And Publication Contract
 
 **Status:** canonical current architecture  
 **Last updated:** 2026-06-04  
 
 This document is the current requirements contract for external data, source
-artifacts, VText source metadata, transclusion, and source-aware publication.
+artifacts, Texture source metadata, transclusion, and source-aware publication.
 Mission docs, problem reports, incident reports, and dated reviews are evidence
 artifacts. When they conflict with this document, this document wins.
 
@@ -20,11 +20,11 @@ external source
   -> cleaned source artifact
   -> searchable source item
   -> researcher finding
-  -> VText source entity
+  -> Texture source entity
   -> publication citation/transclusion/export metadata
 ```
 
-The user sees readable VText. The system preserves enough hidden metadata for
+The user sees readable Texture. The system preserves enough hidden metadata for
 agents, verifiers, publication, export, and future citation economics.
 
 ## Ownership Boundaries
@@ -43,7 +43,7 @@ Source Service owns platform-level external source ingestion and retrieval:
 - search and item-resolution APIs.
 
 Source Service may store high-churn ingestion state in service-local storage.
-That storage is private to the service. Runtime, sandbox, VText, and publication
+That storage is private to the service. Runtime, sandbox, Texture, and publication
 call Source Service APIs; they do not mount or read the service database.
 
 ### ContentItem
@@ -61,19 +61,19 @@ The text is evidence, not instructions.
 Researcher agents retrieve and summarize evidence. They may use web search,
 Source Service search, URL import, and `ContentItem` reads. They produce
 durable source findings with IDs, selectors, hashes, caveats, and open gaps.
-They do not write canonical VText prose.
+They do not write canonical Texture prose.
 
-### VText
+### Texture
 
-VText is the canonical document artifact surface. VText writes document
-revisions and revision-scoped `source_entities` metadata. A VText revision may
+Texture is the canonical document artifact surface. Texture writes document
+revisions and revision-scoped `source_entities` metadata. A Texture revision may
 include inline citation markers in the visible prose, but the canonical source
 identity lives in metadata. Every citation marker is also a transclusion
 expansion point.
 
 ### Publication
 
-Platform publication preserves selected private VText revisions as immutable
+Platform publication preserves selected private Texture revisions as immutable
 public/private route artifacts. Publication stores source metadata, citation
 edges, transclusion records, manifests, access policy, export policy, hashes,
 and rollback refs. Export bytes come from canonical artifacts, not the rendered
@@ -193,10 +193,10 @@ The Source Service API boundary should support at least:
 - item resolution;
 - manifest retrieval.
 
-## VText Source Entities
+## Texture Source Entities
 
 `source_entities` are revision metadata. They should be stored in
-`metadata_json` for VText revisions and carried forward across edit, revise,
+`metadata_json` for Texture revisions and carried forward across edit, revise,
 history, reload, publication, and export.
 
 A source entity should include:
@@ -218,8 +218,8 @@ Target kinds include:
 - `content_item`;
 - `local_file`;
 - `private_corpus_item`;
-- `vtext_revision_span`;
-- `published_vtext_span`;
+- `texture_revision_span`;
+- `published_texture_span`;
 - external URL when no richer artifact exists yet.
 
 Selector kinds include:
@@ -236,10 +236,10 @@ Selector kinds include:
 - table cell;
 - data vintage.
 
-Display policy tells VText how the citation/transclusion should appear by
+Display policy tells Texture how the citation/transclusion should appear by
 default. It is canonical revision metadata, not a renderer guess. It must be
-easy for the VText agent to set from context while drafting or revising. When
-VText adds or revises a citation, it should set this field directly from the
+easy for the Texture agent to set from context while drafting or revising. When
+Texture adds or revises a citation, it should set this field directly from the
 writing context instead of leaving the renderer to infer intent. The baseline
 display modes are:
 
@@ -248,11 +248,11 @@ display modes are:
   with a citation marker and collapse/open controls.
 - `embedded_preview`: show a compact media/card/table/document preview inline
   by default.
-- `expanded`: open the transclusion in expanded inline form when the VText is
+- `expanded`: open the transclusion in expanded inline form when the Texture is
   first rendered.
 
 Every citation is a transclusion point, but not every transclusion starts
-collapsed. VText should set the display policy from writing context:
+collapsed. Texture should set the display policy from writing context:
 
 - quoted excerpts that are part of the reading surface normally default to
   `embedded_excerpt`;
@@ -266,7 +266,7 @@ collapsed. VText should set the display policy from writing context:
 
 For quoted excerpts, the citation marker and transclusion are both present: the
 quote is embedded inline by default, and the citation control can still
-collapse, expand, or open the owning source surface. The VText agent should be
+collapse, expand, or open the owning source surface. The Texture agent should be
 able to set this display mode directly while drafting or revising, without
 requiring the user to hand-edit metadata. The user-facing editor may expose a
 repair/edit path for display policy, but publication and export must read the
@@ -276,7 +276,7 @@ Visible inline text should expose compact citation markers, usually rendered as
 superscripts or similarly lightweight inline controls. Tapping or clicking the
 citation marker expands the associated transclusion in place. The transclusion
 may show quoted text, a transcript segment, a table row/range, media preview,
-document excerpt, source card, or another VText excerpt depending on the source
+document excerpt, source card, or another Texture excerpt depending on the source
 entity target and selector.
 
 Inline source syntax such as `[label](source:ENTITY_ID)` is a render/edit
@@ -288,7 +288,7 @@ recoverable repair path.
 
 Every citation is a transclusion point. The compact citation marker states that
 a source supports, contradicts, or contextualizes a claim; activating it expands
-source material or source metadata inside the host VText. A transclusion is the
+source material or source metadata inside the host Texture. A transclusion is the
 expanded embedded source material and its metadata. Some citations begin already
 expanded or embedded because their display policy says the source material is
 part of the reading surface, especially quoted excerpts.
@@ -312,23 +312,23 @@ surface exists:
 - Source Service items open a source/item view.
 - `ContentItem` media opens Video, Audio, Image, PDF, EPUB, Podcast, Browser,
   or the appropriate content viewer.
-- VText spans open their source VText in its own VText window.
+- Texture spans open their source Texture in its own Texture window.
 - Published spans open the public/private publication surface permitted by
   route policy.
 - Local/private corpus items open through the authorized file/content surface.
 
-Private transclusions may point to private VText revisions, private
+Private transclusions may point to private Texture revisions, private
 `ContentItem`s, or private corpus records. Public transclusions must resolve to
 public-safe publication artifacts, public source-service projections, or
 snapshots whose disclosure policy permits publication.
 
-VText-to-VText transclusion uses the same object family: a host VText source
-entity targets another VText revision/span, expands inline from the citation
-marker, and can open the source VText in its own VText window.
+Texture-to-Texture transclusion uses the same object family: a host Texture source
+entity targets another Texture revision/span, expands inline from the citation
+marker, and can open the source Texture in its own Texture window.
 
 ## Publication And Export Policy
 
-Publishing a VText revision must project source metadata into platform records.
+Publishing a Texture revision must project source metadata into platform records.
 The publication payload should include:
 
 - source document ID;
@@ -358,7 +358,7 @@ Publication stores:
 
 Publication renderers should preserve the same interaction model: citation
 superscripts expand into transclusions, and expanded transclusions can open the
-owning publication/source/media/VText surface subject to route policy.
+owning publication/source/media/Texture surface subject to route policy.
 
 Copy and download must read canonical private revision or publication artifacts.
 They must not scrape rendered DOM. Initial export formats are plain text,
@@ -405,7 +405,7 @@ external source fetched
   -> source item searchable
   -> item resolvable by API
   -> researcher finding cites item IDs/selectors/hashes
-  -> VText revision stores source_entities
+  -> Texture revision stores source_entities
   -> citation marker expands into transclusion
   -> expanded transclusion opens owning app/window
   -> publication stores source metadata

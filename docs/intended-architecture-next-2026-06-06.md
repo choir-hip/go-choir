@@ -21,7 +21,7 @@ Choir should stabilize around this stack:
 
 ```text
 automatic computer
-  -> durable VText/source/news substrate
+  -> durable Texture/source/news substrate
   -> Choir Base file/sync/share substrate
   -> native desktop control surface
   -> Automatic Radio voice/listening surface
@@ -39,10 +39,10 @@ Target:
 - Source Service has clear ownership of external source ingestion, fetch
   records, raw snapshots, cleaned items, source health, search, and item
   resolution.
-- VText source entities are the document-level representation for citations,
-  transclusions, source spans, media timestamps, and other VTexts.
+- Texture source entities are the document-level representation for citations,
+  transclusions, source spans, media timestamps, and other Textures.
 - News becomes a first-class app/newspaper surface over source items, findings,
-  clusters, and VText issues/briefs. Its story model should be
+  clusters, and Texture issues/briefs. Its story model should be
   multiperspectival: claims, counterclaims, source positions, evidence gaps,
   confidence changes, corrections, and time history should remain visible
   instead of being flattened into an oracle-style summary. Source provenance
@@ -55,51 +55,51 @@ Target:
   usually trigger live external lookup to find missing coverage, check
   freshness, and broaden the claim range, while preserving which claims came
   from the owned ledger versus live search.
-- Email/newsletter projection uses the same VText/source artifact path rather
+- Email/newsletter projection uses the same Texture/source artifact path rather
   than a parallel newsletter system.
 
 Graduation evidence:
 
 - staging source search/import proof;
-- VText source entity rendering and revision metadata proof;
+- Texture source entity rendering and revision metadata proof;
 - news/front-page app proof with real source items;
 - citation/export/publication proof for at least one source-backed document.
 
-## VText Style
+## Texture Style
 
 Target:
 
-- `Style.vtext` artifacts are first-class VTexts, not static prompt snippets. They contain
+- `Style.texture` artifacts are first-class Textures, not static prompt snippets. They contain
   human-readable guidance, machine-readable style profiles, corpus manifests,
   exemplars, review notes, anti-model-tic observations, and open questions.
 - A person, team, client, or publication may own multiple contextual styles.
   Style is treated as authored IP: versioned, citeable, permissioned,
   composable, and eventually publishable/distributable.
-- Client style learning starts from corpus ingestion and VText edit history:
+- Client style learning starts from corpus ingestion and Texture edit history:
   accepted edits, rejected drafts, explicit notes, positive voice signals, and
   corrective feedback become reviewable candidate style observations that
-  propose `Style.vtext` revisions rather than silently mutating an invisible
+  propose `Style.texture` revisions rather than silently mutating an invisible
   profile.
 - Style support has two sides: preserve the client's distinctive contextual
   voice, and prevent generic assistant/model tics from laundering that voice
   into average AI-polished prose.
-- Multiple scoped `Style.vtext` artifacts can apply to one person or client by document
+- Multiple scoped `Style.texture` artifacts can apply to one person or client by document
   type, audience, channel, matter/project, and privacy boundary.
 - Generation uses a compact style packet: measured style fingerprint,
   relevant style observations, model-tic warnings, voice-preservation intent,
   and a small set of context-matched exemplars.
 - Fine-tuning/adapters are optional later deployment paths after corpus quality,
-  privacy policy, and style-eval failures justify them. `Style.vtext` remains
+  privacy policy, and style-eval failures justify them. `Style.texture` remains
   the control artifact even when a tuned model is used.
 
 Graduation evidence:
 
-- corpus -> `Style.vtext` extraction with cited examples;
-- VText generation that applies selected `Style.vtext` artifacts and retrieved exemplars;
+- corpus -> `Style.texture` extraction with cited examples;
+- Texture generation that applies selected `Style.texture` artifacts and retrieved exemplars;
 - style review output over generated and edited text, including
   voice-preservation and model-tic diagnostics;
 - edit-to-candidate-observation flow with reviewable provenance;
-- context routing that applies different `Style.vtext` artifacts for at least two document
+- context routing that applies different `Style.texture` artifacts for at least two document
   types or audiences.
 
 ## Choir Base
@@ -150,7 +150,7 @@ Target:
 - Automatic Radio is the screenless operating surface for the automatic
   computer, not just TTS over articles.
 - Playback should continue indefinitely by walking breadth/depth over relevant
-  source items, VTexts, podcasts, videos, emails, private work artifacts, and
+  source items, Textures, podcasts, videos, emails, private work artifacts, and
   agent updates.
 - User speech is both control and content. A user can interrupt, redirect,
   monologue, publish a take, or create source material for later retrieval.
@@ -165,7 +165,7 @@ Graduation evidence:
 - news/source queue can continuously produce fresh relevant items;
 - source-ledger and live-search retrieval combine into weighted story manifests;
 - STT creates durable transcripts with speaker/time metadata;
-- TTS reads VText/source-backed content with queue state;
+- TTS reads Texture/source-backed content with queue state;
 - user interruptions change queue direction without ending the session;
 - private workflow radio has access-policy-aware retrieval.
 
@@ -184,7 +184,7 @@ thin client
 ```
 
 The same product objects should appear across that continuum: computer, source
-artifact, VText, Base item, AppChangePackage/adoption, publication, run
+artifact, Texture, Base item, AppChangePackage/adoption, publication, run
 acceptance, and rollback refs.
 
 ## Graduation Rule

@@ -35,7 +35,7 @@ Update this document when a mission changes any of the following:
   auth-on-mutation, mobile geometry, or logged-out read/explore;
 - VM/computer lifecycle behavior that affects user-visible boot, warmness,
   hibernation, recovery, or priority classes;
-- candidate, promotion, package, run-acceptance, Trace, or VText evidence
+- candidate, promotion, package, run-acceptance, Trace, or Texture evidence
   surfaces;
 - the line between platform substrate deploys and user-computer promotion.
 
@@ -116,7 +116,7 @@ preference for its roles and tasks.
 
 The target state is:
 
-- any configured compatible model can serve conductor, VText, researcher,
+- any configured compatible model can serve conductor, Texture, researcher,
   super, vsuper, co-super, verifier, or future roles;
 - ChatGPT, Fireworks DeepSeek V4 Flash/Pro, Fireworks Kimi K2.6, and later
   catalog models are selectable by policy wherever the current turn's
@@ -136,7 +136,7 @@ The target state is:
 
 This policy model deliberately separates "recommended defaults" from
 "compatible execution." A strong coding model may be the default for `super` or
-`vsuper`, and a fast writing model may be the default for VText, but those are
+`vsuper`, and a fast writing model may be the default for Texture, but those are
 computer policy choices. They must remain changeable without creating
 role-specific provider assumptions in the runtime. The operational test is
 per-turn compatibility: if the next turn is text-only, a text-only model such as
@@ -195,7 +195,7 @@ Known gaps:
   proof across more real user accounts;
 - unified log/evidence live sync and long-lived real-account multi-device
   sessions still need broader product-path proof; deployed live-sync proof now
-  covers media recents/progress, Files changes, VText recent updates, shared
+  covers media recents/progress, Files changes, Texture recent updates, shared
   app roster/order, session-local focus/geometry, and `/api/ws?after_seq=`
   catch-up on top of the driver-lease state model;
 - the Shelf/prompt bar must keep shrinking when input is empty and only grow
@@ -213,20 +213,20 @@ Known gaps:
 
 | App | Current state | Known gaps / next realism axis |
 | --- | --- | --- |
-| **Files** | First-class file browser with navigation, upload, text-to-VText open, known media routing to Image/Audio/Video/PDF/EPUB apps, and live file-change notifications for the current directory. Unknown binaries still download. | Keep proving that PDF/EPUB/media open in apps instead of downloading. Add richer previews only through app boundaries and broaden live file events into richer change history. |
-| **VText** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. Target direction is a multimedia computational-essay surface with typed snippets for sources, media, evidence, candidate demo videos, interactive graphics, and nested VTexts. | Continue version-advancement stability hardening. Add durable snippet/embed records, Pretext-powered responsive reading/layout, expansion into owning app windows, and video-first candidate approval reports without mixing worker patches directly into canonical text. |
-| **Trace Evidence** | Trace remains as structured evidence, unified logs, run bundles, acceptance records, and diagnosis artifacts. The visual Trace app is no longer a product direction and should be unshipped rather than redesigned. | Preserve machine-readable evidence for zot, VText reports, run acceptance, and operator diagnosis. Do not keep an emergency human Trace UI. |
+| **Files** | First-class file browser with navigation, upload, text-to-Texture open, known media routing to Image/Audio/Video/PDF/EPUB apps, and live file-change notifications for the current directory. Unknown binaries still download. | Keep proving that PDF/EPUB/media open in apps instead of downloading. Add richer previews only through app boundaries and broaden live file events into richer change history. |
+| **Texture** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. Target direction is a multimedia computational-essay surface with typed snippets for sources, media, evidence, candidate demo videos, interactive graphics, and nested Textures. | Continue version-advancement stability hardening. Add durable snippet/embed records, Pretext-powered responsive reading/layout, expansion into owning app windows, and video-first candidate approval reports without mixing worker patches directly into canonical text. |
+| **Trace Evidence** | Trace remains as structured evidence, unified logs, run bundles, acceptance records, and diagnosis artifacts. The visual Trace app is no longer a product direction and should be unshipped rather than redesigned. | Preserve machine-readable evidence for zot, Texture reports, run acceptance, and operator diagnosis. Do not keep an emergency human Trace UI. |
 | **Web Lens** | Explicit live/original web inspection surface. It still carries legacy `browser` implementation IDs, data attributes, session tables, and iframe behavior, but the product object is Web Lens, not a general manual Browser app. Durable web-derived sources should default to Source Viewer/reader artifacts before live/original inspection. | Rename or quarantine browser-session implementation residue over time. Backend control/screenshot support remains a distinct substrate frontier for Web Lens, source acquisition, and candidate-computer inspection; it must not become a bypass around product APIs or the primary source-gathering workflow. |
-| **Super Console** | Target replacement for Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It reads unified logs/source/files/process state, can run command-actuation such as `!` commands, patches/rebuilds/restarts locally, verifies, and writes markdown diagnosis reports that VText can open. | Do not expose raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple chat-agent sessions. It is repair mode when VText/MAS malfunctions. |
+| **Super Console** | Target replacement for Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It reads unified logs/source/files/process state, can run command-actuation such as `!` commands, patches/rebuilds/restarts locally, verifies, and writes markdown diagnosis reports that Texture can open. | Do not expose raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple chat-agent sessions. It is repair mode when Texture/MAS malfunctions. |
 | **Settings** | Account, runtime health, server-backed theme presets/editing, and low-level promotion/adoption evidence. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Settings should not be the main owner-facing install surface; Features owns ordinary change discovery and adoption. Runtime health still needs a true push source rather than opportunistic event refreshes. |
 | **Compute Monitor** | First-class app for user-computer health and recovery. It uses authenticated product APIs to show only the current user's current computer, background candidate computers, warmness/protection, current runtime health, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. Manual refresh UI has been removed. | Add true event-backed computer status updates, trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
 | **Features** (`frontend/src/lib/FeaturesApp.svelte`, app id `features`, registry name "Features") | Launcher-facing catalog app that replaced "Apps & Changes" in the 2026-05-28/31 frontend redesign cutover (registry.ts:193-201). It lists `AppChangePackage`s as a catalog with status pills (available/importing/ready/active/rolled back/blocked), and a detail pane with demo video/screenshot, summary, and a "View details" technical panel (source package id, import/adoption id, build/runtime/UI digests, rollback recorded/pending, evidence refs). Actions: **Import** (creates an adoption for `TARGET_COMPUTER_ID = 'primary'` and kicks off an async verify with email notification on completion/block); **Activate**, which as of 2026-06-11 (commit `77f65651`) first POSTs `/api/adoptions/{id}/approve` (the resurrected owner-approval gate, producing status `owner_approved`) and then POSTs `/promote` — `promote` now requires `owner_approved` status server-side; **Roll back** (requires a recorded rollback ref); **Roll forward** (requires a rolled-back adoption with both runtime and UI digests). Live updates arrive via `/api/ws`-backed SSE on `app_change_package.published`, `app_adoption.proposed`, `app_adoption.verification_started`, `app_adoption.verified`, `app_adoption.blocked`, `app_adoption.promoted`, and `app_adoption.rolled_back`; the backend also now emits `app_adoption.owner_approved` (types.EventAppAdoptionOwnerApproved) when the approval gate fires, but the Features app's live-event handler does not yet include that kind in its refresh trigger list (verify on next touch). | Promotion mechanics: "Activate" updates the `ComputerSourceLineageRecord` (`ActiveSourceRef`, digests, `RouteProfile`) — a durable pointer flip in product state. Nothing yet consumes `RouteProfile`: there is no route switch, process restart, or binary swap. Two new server-side guards landed 2026-06-11: promote requires `owner_approved` (the approve step above), and a freshness CAS blocks promotion with a "re-verify" error if the foreground lineage moved since verification. Making the route flip real is **planned**, not shipped: portfolio M6 (route-flip consumer, promotion record + reconciler) and the design in `docs/system-v1-one-cut-2026-06-11.md` Cut 4; see also `docs/choir-promotion-protocol-conjecture-2026-06-11.md`. A preview endpoint exists at `/api/adoptions/{id}/preview/*` (requires a verified recipient build) but the Features UI never calls it; wiring a Try-it-now flow to it is portfolio M7 ("cheapest high-value fix in the system"). `TARGET_COMPUTER_ID` is hardcoded to `'primary'` (single-computer assumption). See "Design intent, not shipped" below for Uninstall/Disable/portfolio-review/Trace-integration intentions that predate the cutover and were not carried into Features. |
-| **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and VText radio continuity later. |
+| **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and Texture radio continuity later. |
 | **Image** | First-class app with source resolution, title, fit/original, zoom controls, rotate left/right, reset, and image rendering. | Add pan/drag, touch/pinch behavior, folder gallery navigation, richer metadata, and persisted viewer state. |
-| **Audio** | First-class app with play/pause, 15s back, 30s forward, scrubber, speed, current/duration, native audio fallback, server-backed recents, and server-backed playback-position sync. | Add queue/playlist from Files, metadata, Media Session integration, transcript/VText hook, and keyboard controls. |
-| **Video** | First-class app for native video and YouTube embeds. Native video has custom/native controls, speed/seek, server-backed recents, and server-backed playback-position sync. | Add fullscreen/theater fit, captions/subtitles, transcript/VText hook, playlist/folder navigation, and consistent YouTube/native control surfaces. |
+| **Audio** | First-class app with play/pause, 15s back, 30s forward, scrubber, speed, current/duration, native audio fallback, server-backed recents, and server-backed playback-position sync. | Add queue/playlist from Files, metadata, Media Session integration, transcript/Texture hook, and keyboard controls. |
+| **Video** | First-class app for native video and YouTube embeds. Native video has custom/native controls, speed/seek, server-backed recents, and server-backed playback-position sync. | Add fullscreen/theater fit, captions/subtitles, transcript/Texture hook, playlist/folder navigation, and consistent YouTube/native control surfaces. |
 | **PDF** | Real reader path using PDF.js: browser-fetchable PDFs render to canvas pages with actual page count, page navigation, zoom/fit width/fit page, text search, and server-backed recents. Files/prompt routes can open the PDF app. | Add thumbnails/outline, annotations, richer text selection, and server-side/import fallback for CORS-blocked remote PDFs. |
-| **EPUB** | Real reader path using EPUB archive parsing: browser-fetchable EPUBs parse container/package/spine, render chapters as safe text blocks, expose chapter selection, font/width/progress controls, search, server-backed recents, and server-backed reading-position sync. Extracted text still renders as a reader source. | Add richer XHTML formatting, EPUB nav/TOC semantics, bookmarks, image assets, server-side extraction, and VText/transclusion handoff. |
+| **EPUB** | Real reader path using EPUB archive parsing: browser-fetchable EPUBs parse container/package/spine, render chapters as safe text blocks, expose chapter selection, font/width/progress controls, search, server-backed recents, and server-backed reading-position sync. Extracted text still renders as a reader source. | Add richer XHTML formatting, EPUB nav/TOC semantics, bookmarks, image assets, server-side extraction, and Texture/transclusion handoff. |
 | **ContentViewer** | Legacy generic content surface still exists in code but is not the place to add media behavior. | Do not put new app work here. Retain only as fallback/dispatcher/inspector until it can be safely retired or narrowed. |
 
 ## Features: design intent, not shipped
@@ -288,15 +288,15 @@ behavior.
   everything-viewer.
 - Files, launcher, prompt/conductor decisions, and public routes should converge
   on the same app identity for the same artifact.
-- VText may embed snippets from other apps, but the full-control surface remains
+- Texture may embed snippets from other apps, but the full-control surface remains
   the owning app. Embedded snippets are durable artifact references and layout
   intent; they are not a reason to collapse Image, Audio, Video, Podcast, PDF,
   EPUB, Trace Evidence, Features, or Web Lens back into a generic viewer.
-- Each VText snippet should expose an expansion target that opens the relevant
-  app/window while preserving the reader's VText position. Multi-window reading
-  is a core affordance for sources, demos, media, nested VTexts, and evidence.
+- Each Texture snippet should expose an expansion target that opens the relevant
+  app/window while preserving the reader's Texture position. Multi-window reading
+  is a core affordance for sources, demos, media, nested Textures, and evidence.
 - Candidate coding work intended for human approval should be video-first when
-  visual or temporal behavior matters. The VText approval packet should embed
+  visual or temporal behavior matters. The Texture approval packet should embed
   the demo video if available, then link package/diff refs, verifier evidence,
   Trace/run-acceptance refs, rollback path, risks, and follow-up requests.
 - Primary app chrome should expose the user's task first. Provenance, source
@@ -324,7 +324,7 @@ behavior.
 - Product apps should not expose manual Refresh/Reload controls to repair
   stale data. Web Lens page reload remains live-web navigation, not Choir state
   synchronization.
-- Existing VText and Trace SSE streams remain valid scoped transports where
+- Existing Texture and Trace SSE streams remain valid scoped transports where
   they preserve stronger revision/trajectory catch-up semantics.
 
 ## Current Proof Anchors
@@ -374,31 +374,31 @@ Recent deployed platform proof for live multi-device computer sync:
 - result: `1 passed`;
 - proof used one desktop context at `1440x920` and one mobile context at
   `390x844` for the same fresh authenticated user computer;
-- proof covered shared app instance convergence for Files, Audio, and VText;
-  desktop focus stayed on Files while mobile focus stayed on VText; desktop
-  Files geometry remained stable while mobile drove Audio/VText;
+- proof covered shared app instance convergence for Files, Audio, and Texture;
+  desktop focus stayed on Files while mobile focus stayed on Texture; desktop
+  Files geometry remained stable while mobile drove Audio/Texture;
 - proof covered media recents/progress without localStorage or manual refresh:
   the mobile Audio app showed the proof audio and `0:42 / 6:00`, while the
   mobile product API returned `current_time: 42`;
-- proof covered Files and VText content updates: mobile Files showed
-  `live-sync-proof-1779474356092.txt`, and mobile VText recent showed
-  `Live sync VText proof 1779474356092`;
+- proof covered Files and Texture content updates: mobile Files showed
+  `live-sync-proof-1779474356092.txt`, and mobile Texture recent showed
+  `Live sync Texture proof 1779474356092`;
 - proof covered websocket catch-up from `/api/ws?after_seq=6`, returning missed
   `media.recent.updated`, `media.progress.updated`,
   `desktop.driver_lease.updated`, `desktop.app_instances.updated`,
   `desktop.window_placement.updated`, `file.changed`, and
-  `vtext.document_revision.created` events;
+  `texture.document_revision.created` events;
 - proof covered Desktop Overview convergence: desktop and mobile card/map app
-  ids all matched `files`, `audio`, `vtext` while local focus/z-index and
+  ids all matched `files`, `audio`, `texture` while local focus/z-index and
   placement remained session-specific;
 - artifacts:
   `test-results/live-sync-driver-lease-staging-20260522T182540Z/metrics.json`,
   `desktop-driver-files.png`, `mobile-passive-files-synced.png`,
   `desktop-overview-order.png`, `mobile-overview-order.png`,
   `desktop-after-app-content-sync.png`, and
-  `mobile-driver-vtext-content-sync.png`.
+  `mobile-driver-texture-content-sync.png`.
 
-Recent deployed platform proof for Apps & Changes, VText reports, and benchmark
+Recent deployed platform proof for Apps & Changes, Texture reports, and benchmark
 evidence (historical: this proof predates the 2026-05-28/31 frontend redesign
 cutover that replaced "Apps & Changes" with the `features` app described
 above; the underlying adoption/promotion product APIs and evidence model are
@@ -424,7 +424,7 @@ portfolio review panel no longer ship):
 - staging health reported proxy and sandbox commit
   `22410dafff91cdc4edcddfa65ffa609c2973e928`;
 - deployed product proof artifacts:
-  `test-results/apps-changes-vtext-report-staging-2026-05-21T00-50-49-966Z/apps-changes-vtext-report-proof.json`;
+  `test-results/apps-changes-texture-report-staging-2026-05-21T00-50-49-966Z/apps-changes-texture-report-proof.json`;
   `test-results/apps-changes-benchmark-reports-staging-2026-05-21T01-33-57-228Z/apps-changes-benchmark-reports-proof.json`;
   `test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/apps-changes-removal-model-proof.json`;
   `test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/apps-changes-removal-run-acceptance-proof.json`;
@@ -432,9 +432,9 @@ portfolio review panel no longer ship):
   `test-results/apps-changes-portfolio-aggregation-staging-2026-05-21T03-55-47-000Z/apps-changes-portfolio-aggregation-proof.json`;
 - proof covered Apps & Changes opening from the Desk on desktop and `390x844`
   mobile, four ordinary Change cards without package ids, collapsed Technical
-  refs, mission VText dashboard creation/opening, and Chiron per-change VText
+  refs, mission Texture dashboard creation/opening, and Chiron per-change Texture
   report creation/opening;
-- follow-up proof covered all four per-change VText reports on desktop and
+- follow-up proof covered all four per-change Texture reports on desktop and
   `390x844` mobile, with package refs, source/recipient acceptance refs,
   pulled manifest hashes, benchmark status, and artifact links inside the
   reports;
@@ -497,7 +497,7 @@ portfolio review panel no longer ship):
   runtime build duration `5m22.71091975s`, and UI build duration
   `7.927733702s`.
 - that proof captured `desktop-apps-changes-portfolio.png`,
-  `desktop-portfolio-vtext.png`, `desktop-trace-from-portfolio.png`, and
+  `desktop-portfolio-texture.png`, `desktop-trace-from-portfolio.png`, and
   `mobile-390x844-apps-changes-portfolio.png`, with DOM metrics showing four
   portfolio Changes, four reports, four benchmark/media links, one accepted
   record, and no visible Chiron package id in ordinary portfolio UI.
@@ -518,7 +518,7 @@ Recent deployed platform proof for the media split and reader sweep:
 - commit: `c42108fc2b322e60b4d65c815ab3f8e2aee5dfa2`;
 - staging health: proxy and sandbox reported the same commit after deploy;
 - local and staging Playwright covered Files opening PDF/EPUB, content app
-  prompt routing, launcher/shell smoke, VText/Trace coexistence, and Podcast
+  prompt routing, launcher/shell smoke, Texture/Trace coexistence, and Podcast
   player/mobile episode scrolling;
 - screenshot/DOM artifacts were captured under
   `test-results/real-media-apps-c42108f/`.
@@ -545,7 +545,7 @@ Recent deployed platform proof for mobile real desktop and Desktop Overview:
 - deployed Playwright:
   historical mobile overview proof command against the old staging hostname;
 - result: `2 passed`;
-- proof covered Files, VText, Trace, and Podcast as overlapping non-fullscreen
+- proof covered Files, Texture, Trace, and Podcast as overlapping non-fullscreen
   windows on `390x844` and desktop, with drag, resize, minimize, restore,
   Desktop Overview focus, and background suspension controls.
 
@@ -580,7 +580,7 @@ Recent deployed platform proof for live-spatial Desktop Overview previews:
 - deployed ordinary-session Playwright:
   historical mobile overview proof command against the old staging hostname;
 - result: `2 passed`;
-- ordinary proof covered Files, VText, Trace, and Podcast as overlapping
+- ordinary proof covered Files, Texture, Trace, and Podcast as overlapping
   windows on `390x844` and desktop, with bounded live Overview previews and
   fallback cards;
 - deployed heavy-session Playwright:
@@ -594,7 +594,7 @@ Recent deployed platform proof for live-spatial Desktop Overview previews:
   screenshots, duplicated app mounts, persisted preview captures, fake
   thumbnails, host/global telemetry, or phone-mode simplification.
 
-Recent deployed runtime proof for async supervision and VText worker-update
+Recent deployed runtime proof for async supervision and Texture worker-update
 dashboards:
 
 - behavior commits:
@@ -613,17 +613,17 @@ dashboards:
 - evidence directories:
   `test-results/async-supervision-runtime-proof-846cfbb-20260523T075607Z`
   and
-  `test-results/async-supervision-runtime-proof-846cfbb-vtextwait-20260523T080251Z`;
+  `test-results/async-supervision-runtime-proof-846cfbb-texturewait-20260523T080251Z`;
 - Playwright trace/video:
   `frontend/test-results/async-supervision-runtime--aad53-evidence-or-precise-blocker-chromium/trace.zip`
   and
   `frontend/test-results/async-supervision-runtime--aad53-evidence-or-precise-blocker-chromium/video.webm`;
-- result: `1 passed` in the VText-wait proof;
+- result: `1 passed` in the Texture-wait proof;
 - trajectory/submission:
   `2d45d210-cce7-4276-9ec8-b68d62cafb68`;
 - accepted run acceptance:
   `runacc-0addeeafd0abe7c9154d` at `staging-smoke-level`;
-- VText dashboard document:
+- Texture dashboard document:
   `b7663242-616b-4a23-a80f-bc7065f059fb`, final head revision
   `192cfee2-2601-4664-b945-db4eeb94e95f`;
 - worker proof:
@@ -632,13 +632,13 @@ dashboards:
   `vm-2e6c63b2b834b6441c324cb32f82d24f`, worker
   `worker-c38f1d6d33760bd2`;
 - proof covered successful `submit_worker_update` mirroring into the active
-  VText channel (`worker_submit_update_mirrored`,
-  `mirrored_worker_update_count=1`), VText synthesis into an owner-readable
+  Texture channel (`worker_submit_update_mirrored`,
+  `mirrored_worker_update_count=1`), Texture synthesis into an owner-readable
   request/start/observe/finish dashboard, Trace-visible worker events, and
   runtime-supervision run acceptance without AppChangePackage requirements;
 - first Chiron sequential rerun after that proof did not produce a package:
   evidence directory `test-results/chiron-sequential-20260523T081544Z`,
-  trajectory `d850d92a-b90d-48f3-842a-f9fa5d5d3a37`, VText dashboard
+  trajectory `d850d92a-b90d-48f3-842a-f9fa5d5d3a37`, Texture dashboard
   `bcb8329e-ce45-426c-9bc5-5552fca3208f`, run acceptance
   `runacc-86cb5ab95084483a9084` at `staging-smoke-level`, and outcome
   `no_matching_package`. That probe isolated the next runtime gap:
@@ -679,12 +679,12 @@ Markdown document.
 The highest-gradient UX gaps are:
 
 1. PDF needs thumbnails/outline, selection, annotation, and CORS/import fallback.
-2. EPUB needs richer formatting, assets, bookmarks, and VText handoff.
+2. EPUB needs richer formatting, assets, bookmarks, and Texture handoff.
 3. Image needs pan/touch/gallery/persisted viewer state.
 4. Audio and Video need queues, metadata, Media Session, transcripts, and richer
    Files context.
 5. Unified logs/evidence must stay machine-readable for long runs.
-6. VText must remain stable while live updates and Super Console repair reports
+6. Texture must remain stable while live updates and Super Console repair reports
    exist alongside it.
 7. Shelf/Desk/Desktop Overview behavior needs richer mobile desktop proof,
    live thumbnails, and configurable Shelf placement.

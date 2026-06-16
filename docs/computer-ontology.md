@@ -84,7 +84,7 @@ Do not force every change through one storage abstraction.
 | Ledger | Owns | Typical promotion |
 | --- | --- | --- |
 | VM/OS/runtime | machine image, installed packages, running services, local caches, process environment | snapshot/cutover, rebuild from typed inputs, or discard |
-| Dolt/app state | vtexts, appagent state, prompts, traces, run memory, theme records, file metadata, promotion records | Dolt branch/commit merge with app invariants |
+| Dolt/app state | textures, appagent state, prompts, traces, run memory, theme records, file metadata, promotion records | Dolt branch/commit merge with app invariants |
 | Source/build | Go code, Svelte code, tests, Nix/package recipes, app bundles | git-like patch/commit or typed package import |
 | Blob/content store | uploaded files, generated media, PDFs, audio, images, patch artifacts | content-addressed hash plus Dolt/artifact metadata |
 | Artifact/provenance graph | claims, citations, source anchors, verifier results, trace refs, promotion certificates | graph merge with provenance completeness checks |
@@ -142,7 +142,7 @@ Examples:
 - change a theme;
 - add podcast index data;
 - update prompts or agent definitions;
-- merge a vtext/app state branch.
+- merge a texture/app state branch.
 
 The target is not `origin/main` and not the global staging deployment. The target
 is the user's active computer.

@@ -407,7 +407,7 @@ causal structure rather than frozen provenance.
 `detectors:` verifier checks over parent runs, trace edge inference from root
 and child runs.
 
-`evidence:` [internal/runtime/vtext_workflow_verifier.go](../internal/runtime/vtext_workflow_verifier.go), <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
+`evidence:` [internal/runtime/texture_workflow_verifier.go](../internal/runtime/texture_workflow_verifier.go),
 [internal/runtime/api_trace.go](../internal/runtime/api_trace.go).
 
 `why it violates the spec:` operator-facing and test-facing truth surfaces keep
@@ -533,12 +533,12 @@ after a canonical write.
 
 `detectors:` `requiredContinuationAfterTextureEdit`, `explicitResearcher`,
 `runMetadataExplicitResearcher`, `explicit_researcher_request`,
-`durableMetadataKeys`, `vtextEditResearcherIntentText`, <!-- texture-cutover-allow: internal detector symbol; deletion receipt: texture-hard-cutover-v0 -->
-`vtextTrajectoryHasResearcherParticipation`, <!-- texture-cutover-allow: internal detector symbol; deletion receipt: texture-hard-cutover-v0 -->
+`durableMetadataKeys`, `textureEditResearcherIntentText`,
+`textureTrajectoryHasResearcherParticipation`,
 `next_required_tool=spawn_agent`.
 
-`evidence:` [internal/runtime/tools_vtext.go](../internal/runtime/tools_vtext.go), <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
-[internal/runtime/vtext_test.go](../internal/runtime/vtext_test.go), <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
+`evidence:` [internal/runtime/tools_texture.go](../internal/runtime/tools_texture.go),
+[internal/runtime/texture_test.go](../internal/runtime/texture_test.go),
 [docs/texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md).
 
 `why it violates the spec:` it turns Texture from an appagent into a workflow
@@ -559,7 +559,7 @@ agents.
 
 `detectors:` prompt-bar routing heuristics that select super for Texture-class
 objectives, source/article ingestion paths that create super work before a
-Texture/context artifact exists, `vtextPromptNeedsSuperExecution`, <!-- texture-cutover-allow: internal detector symbol; deletion receipt: texture-hard-cutover-v0 -->
+Texture/context artifact exists, `texturePromptNeedsSuperExecution`,
 `prompt_bar_no_worker_decision_route`, no-worker route predicates that patch
 individual prompts instead of removing the direct-super ingress path.
 
@@ -586,11 +586,11 @@ decision/blocker.
 signal.
 
 `detectors:` substring-based intent inference for researcher or super routing,
-`vtextPromptExplicitlyRequestsResearcher`, `promptBarExplicitResearcherIntent`, <!-- texture-cutover-allow: internal detector symbol; deletion receipt: texture-hard-cutover-v0 -->
-`vtextPromptNeedsSuperExecution`, keyword lists that force super execution. <!-- texture-cutover-allow: internal detector symbol; deletion receipt: texture-hard-cutover-v0 -->
+`texturePromptExplicitlyRequestsResearcher`, `promptBarExplicitResearcherIntent`,
+`texturePromptNeedsSuperExecution`, keyword lists that force super execution.
 
 `evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
-[internal/runtime/tools_vtext.go](../internal/runtime/tools_vtext.go). <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
+[internal/runtime/tools_texture.go](../internal/runtime/tools_texture.go).
 
 `why it violates the spec:` prose is treated as authority metadata and silently
 changes routing semantics.
@@ -878,8 +878,8 @@ specific semantic workers as a required sequence.
 scripts in Texture prompt defaults.
 
 `evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
-`internal/runtime/prompt_defaults/vtext.md`, <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
-`internal/runtime/vtext_agent_revision.go`. <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
+`internal/runtime/prompt_defaults/texture.md`,
+`internal/runtime/texture_agent_revision.go`.
 
 `why it violates the spec:` prompt text is architecture when it controls agent
 behavior. Moving forcing from runtime code into prompts still violates Texture

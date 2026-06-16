@@ -249,7 +249,7 @@ The browser never talks to Dolt. A signed-in user calls the proxy product API to
 publish a selected private Texture revision; the proxy reads that revision from
 the user's resolved computer and submits only the public projection to
 `platformd`. Public published snapshots now resolve through the Svelte Choir
-shell and Texture app at the current `/pub/vtext/...` compatibility route (`texture-cutover-allow:` public route shim; deletion receipt: `texture-hard-cutover-v0`): signed-out visitors get a guest read-only Texture
+shell and Texture app at the current `/pub/texture/...` compatibility route (`texture-cutover-allow:` public route shim; deletion receipt: `texture-hard-cutover-v0`): signed-out visitors get a guest read-only Texture
 surface, signed-in users can create private derivatives and proposals, and proxy
 read APIs fetch sanitized publication bundles from internal-only `platformd`
 endpoints. Platform services still never gain write access to the live private
@@ -283,7 +283,7 @@ Code-present/current foundations:
    app state is tracked in
    [platform-os-app-state.md](platform-os-app-state.md).
 5. Platform publication has `platformd`, proxy publish/read APIs, public
-   `/pub/vtext/...` compatibility routes (`texture-cutover-allow:` public route shim; deletion receipt: `texture-hard-cutover-v0`), sanitized publication
+   `/pub/texture/...` compatibility routes (`texture-cutover-allow:` public route shim; deletion receipt: `texture-hard-cutover-v0`), sanitized publication
    bundles, export, retrieval search, proposal delivery state, and
    private-derivative/proposal flows.
 6. The source/Wire substrate has current code in `cmd/sourcecycled`,

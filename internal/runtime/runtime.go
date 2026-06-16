@@ -2183,6 +2183,13 @@ func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
 	}
 }
 
+// initialTextureToolChoice constrains only whether the first Texture turn must
+// act, never which tool it picks. A first Texture turn is required to make a
+// durable tool call, but it chooses among its full affordance — patch_texture,
+// rewrite_texture, spawn_agent, record_texture_decision, request_super_execution,
+// request_email_draft. This is a mechanical "take an action" invariant, not a
+// prompt classifier, exact-tool imprisonment, or fixed role choreography: the
+// model, not the runtime, decides whether to write, delegate, decide, or block.
 func initialTextureToolChoice(rec *types.RunRecord) string {
 	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return ""
@@ -2190,13 +2197,7 @@ func initialTextureToolChoice(rec *types.RunRecord) string {
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""
 	}
-	if metadataBoolValue(rec.Metadata, "texture_initial_decision_required") {
-		return exactRequiredToolChoice("patch_texture")
-	}
-	if texturePromptExplicitlyRequestsDecisionNote(metadataString(rec.Metadata, "seed_prompt") + " " + metadataStringValue(rec.Metadata, "original_prompt")) {
-		return exactRequiredToolChoice("record_texture_decision")
-	}
-	return exactRequiredToolChoice("patch_texture")
+	return "required"
 }
 
 func (rt *Runtime) recordExplicitInitialTextureDecisionIfNeeded(ctx context.Context, rec *types.RunRecord) error {
@@ -2944,7 +2945,14 @@ func (rt *Runtime) workerUpdateRevisionMetadata(ctx context.Context, ownerID, do
 	}
 	out["worker_updates_checkpoint_seq"] = checkpointSeq
 
-	messages, err := rt.store.ListChannelMessages(ctx, ownerID, docID, checkpointSeq, 500)
+	messageAfterSeq := checkpointSeq
+	if scheduledSeq > 0 && checkpointSeq >= scheduledSeq {
+		if previousSeq := rt.previousTextureWorkerMetadataSeq(ctx, ownerID, docID); previousSeq < scheduledSeq {
+			messageAfterSeq = previousSeq
+		}
+	}
+
+	messages, err := rt.store.ListChannelMessages(ctx, ownerID, docID, messageAfterSeq, 500)
 	if err != nil {
 		log.Printf("runtime: load texture worker update messages for metadata: %v", err)
 		return out
@@ -2982,6 +2990,55 @@ func (rt *Runtime) workerUpdateRevisionMetadata(ctx context.Context, ownerID, do
 	out["worker_updates_skipped"] = skipped
 	out["worker_updates_pending"] = pending
 	return out
+}
+
+func (rt *Runtime) previousTextureWorkerMetadataSeq(ctx context.Context, ownerID, docID string) int64 {
+	if rt == nil || rt.store == nil {
+		return 0
+	}
+	doc, err := rt.store.GetDocument(ctx, docID, ownerID)
+	if err != nil || strings.TrimSpace(doc.CurrentRevisionID) == "" {
+		return 0
+	}
+	rev, err := rt.store.GetRevision(ctx, doc.CurrentRevisionID, ownerID)
+	if err != nil {
+		return 0
+	}
+	meta := decodeRevisionMetadata(rev.Metadata)
+	return maxTextureWorkerMetadataSeq(meta)
+}
+
+func maxTextureWorkerMetadataSeq(meta map[string]any) int64 {
+	maxSeq := int64(metadataIntValue(meta, "worker_updates_scheduled_seq"))
+	if checkpointSeq := int64(metadataIntValue(meta, "worker_updates_checkpoint_seq")); checkpointSeq > maxSeq {
+		maxSeq = checkpointSeq
+	}
+	for _, key := range []string{"worker_updates_consumed", "worker_updates_skipped"} {
+		for _, item := range metadataArray(meta[key]) {
+			itemMeta, _ := item.(map[string]any)
+			if seq := int64(metadataIntValue(itemMeta, "seq")); seq > maxSeq {
+				maxSeq = seq
+			}
+		}
+	}
+	return maxSeq
+}
+
+func metadataArray(value any) []any {
+	switch items := value.(type) {
+	case []any:
+		return items
+	case []textureWorkerUpdateMetadata:
+		out := make([]any, 0, len(items))
+		for _, item := range items {
+			out = append(out, map[string]any{
+				"seq": item.Seq,
+			})
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func summarizeWorkerUpdateForMetadata(message types.ChannelMessage, reason string) textureWorkerUpdateMetadata {
