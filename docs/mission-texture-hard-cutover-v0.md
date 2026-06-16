@@ -493,6 +493,54 @@ Next behavior slice design:
   that a signed-out Texture action opens an auth overlay whose pending intent
   is Texture-named while legacy `app=vtext` still opens Texture.
 
+## Local Repair: Texture Auth Intent Labels
+
+Mutation class: `orange`, because this changes frontend auth-required intent
+kinds, Texture app registry auth requirements, auth overlay test affordances,
+and post-auth replay normalization.
+
+Conjecture delta: new frontend Texture actions can emit Texture-named auth
+intent kinds while the auth overlay and replay boundary still accepts
+deletion-receipted legacy intent names and legacy `?app=vtext&doc=...` URL
+compatibility.
+
+Protected surfaces: Texture app registry auth requirements, Texture editor
+auth-required dispatches, auth overlay copy, post-auth app replay, legacy
+intent replay, legacy `?app=vtext&doc=...` URL compatibility, and signed-out
+public preview Texture actions.
+
+Local evidence on 2026-06-16:
+
+- `npm --prefix frontend run build` passed. Vite reported the existing
+  Universal Wire warnings for unused `currentUser` and `.wire-state`
+  selectors.
+- `npm --prefix frontend run e2e -- --project=chromium
+  tests/auth-entry-ui.spec.js --grep "signed-out Texture publish"` passed
+  against an explicit local Vite preview server.
+- A broader
+  `npm --prefix frontend run e2e -- --project=chromium
+  tests/auth-entry-ui.spec.js` attempt failed before app execution because no
+  local server was listening on `localhost:4173`; this was harness setup, not a
+  product assertion.
+- Producer residue search
+  `rg -n "save_vtext|revise_vtext|publish_vtext|vtext_diagnosis|vtext_source_repair|vtext_source_artifact|published_vtext_edit|private_vtext_document" frontend/src frontend/tests -g '!frontend/dist'`
+  now finds only the explicit legacy normalization map in `frontend/src/App.svelte`
+  and the out-of-scope provenance marker
+  `created_from: 'vtext_source_artifact_ui'`.
+
+Rollback path: restore old intent strings in Texture editor dispatches,
+registry auth requirements, and App replay/message handling if auth overlay
+replay or legacy app URL compatibility regresses.
+
+Heresy delta: repaired locally for new frontend auth intent labels; durable
+actor ids, storage symbols, and source/provenance metadata remain separate
+discovered residue.
+
+Open edge: push the repair, monitor CI/deploy, verify staging identity, and run
+a deployed browser proof that a signed-out Texture action exposes a
+Texture-named auth intent while legacy `?app=vtext&doc=...` still opens
+Texture.
+
 ## Problem Checkpoint: `edit_texture` Compatibility Alias
 
 Mutation class: `green` documentation and evidence only. No runtime behavior,
@@ -863,19 +911,17 @@ position / live conjectures / open edges:
   `27590698503`, deploy job `81570766605`, staging identity for commit
   `65502a706ef1adba7fc2d1ed5428e3f709f9d2d0`, and deployed Playwright
   publication/read/export proof all pass.
-- C19 active: frontend auth-required intent kinds still use old-name tokens
-  even though they now describe Texture actions. This is a small
-  product-facing label/replay surface, distinct from durable `vtext:<doc_id>`
-  actor ids, storage tables, and provenance metadata. The next behavior slice
-  should emit Texture-named auth intents while preserving legacy intent replay
-  and legacy `app=vtext` URL compatibility.
+- C19 supported for local auth-intent scope: frontend Texture actions now emit
+  Texture-named auth intents, the registry requires Texture-named mutable
+  intents, and App replay/message handling accepts deletion-receipted legacy
+  intent names. Local build and focused signed-out Texture publish overlay
+  proof pass. Staging CI/deploy/browser proof is still open.
 
-next move: select the next bounded residue class among storage
-schema/workspace/file suffixes, metadata keys, actor IDs/app route labels, and
-protocol v0. The selected next slice is frontend auth intent labels: emit
-Texture-named auth intents, keep legacy replay compatibility, prove local
-frontend behavior, then deploy and prove staging auth overlay behavior. Keep
-protocol v0 unwritten until the remaining working-surface proofs are complete.
+next move: push the local Texture auth-intent repair, monitor CI/deploy, verify
+staging identity, and prove on staging that a signed-out Texture action exposes
+a Texture-named auth intent while legacy `?app=vtext&doc=...` still opens
+Texture. Keep protocol v0 unwritten until the remaining working-surface proofs
+are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

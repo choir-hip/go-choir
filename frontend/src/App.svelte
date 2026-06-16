@@ -55,10 +55,29 @@
   let universalWirePublicStatus = '';
   let universalWirePublicError = '';
   const THEME_BOOT_CACHE_KEY = 'choir.theme.boot.v2';
+  const LEGACY_TEXTURE_AUTH_INTENTS: Record<string, string> = {
+    save_vtext: 'save_texture',
+    revise_vtext: 'revise_texture',
+    publish_vtext: 'publish_texture',
+    vtext_diagnosis: 'texture_diagnosis',
+    vtext_source_repair: 'texture_source_repair',
+    vtext_source_artifact: 'texture_source_artifact',
+    published_vtext_edit: 'published_texture_edit',
+    private_vtext_document: 'private_texture_document',
+  };
 
   $: isAuthenticated = authState === 'signed_in';
   $: authIntentMessage = getAuthIntentMessage(pendingAuthIntent);
   $: isUniversalWirePublicReader = !!universalWirePublicToken;
+
+  function normalizeTextureAuthIntentKind(kind) {
+    const normalized = String(kind || '');
+    return LEGACY_TEXTURE_AUTH_INTENTS[normalized] || normalized;
+  }
+
+  function isTextureAuthIntent(intent, ...kinds) {
+    return kinds.includes(normalizeTextureAuthIntentKind(intent?.kind));
+  }
 
   function startAuthenticatedPrewarm() {
     const now = Date.now();
@@ -104,16 +123,16 @@
     if (intent.kind === 'app_launch') {
       return `Open ${intent.appName || 'this app'} with your private computer state.`;
     }
-    if (intent.kind === 'save_vtext') return 'Save this Texture revision to your computer.';
-    if (intent.kind === 'publish_vtext') return 'Publish this Texture as owner-scoped work.';
+    if (isTextureAuthIntent(intent, 'save_texture')) return 'Save this Texture revision to your computer.';
+    if (isTextureAuthIntent(intent, 'publish_texture')) return 'Publish this Texture as owner-scoped work.';
     if (intent.kind === 'file_upload') return 'Upload files into your private computer.';
     if (intent.kind === 'file_mutation') return 'Change files on your private computer.';
     if (String(intent.kind || '').startsWith('email')) return 'Use your mailbox, drafts, and send approval.';
     if (String(intent.kind || '').startsWith('podcast')) return 'Subscribe, import, search providers, or sync playback.';
-    if (intent.kind === 'published_vtext_edit') {
+    if (isTextureAuthIntent(intent, 'published_texture_edit')) {
       return `Edit your version of ${intent.title || 'this published Texture'}.`;
     }
-    if (intent.kind === 'private_vtext_document') {
+    if (isTextureAuthIntent(intent, 'private_texture_document')) {
       return `Open ${intent.title || 'this Texture document'} from your private computer.`;
     }
     return 'Continue with private computer state.';
@@ -139,7 +158,7 @@
       };
       return;
     }
-    if (intent?.kind === 'published_vtext_edit') {
+    if (isTextureAuthIntent(intent, 'published_texture_edit')) {
       appReplay = {
         id: `app-replay-${++appReplayCounter}`,
         appId: 'texture',
@@ -154,7 +173,7 @@
       };
       return;
     }
-    if (intent?.kind === 'private_vtext_document' && intent.docId) {
+    if (isTextureAuthIntent(intent, 'private_texture_document') && intent.docId) {
       appReplay = {
         id: `app-replay-${++appReplayCounter}`,
         appId: 'texture',
@@ -191,7 +210,7 @@
         return null;
       }
       return {
-        kind: 'private_vtext_document',
+        kind: 'private_texture_document',
         source: 'url',
         docId,
         title: (params.get('title') || '').trim() || 'Texture',
@@ -494,7 +513,7 @@
       {/if}
     </main>
     {#if authOverlayOpen && !isAuthenticated}
-      <div class="auth-overlay" data-auth-overlay>
+      <div class="auth-overlay" data-auth-overlay data-auth-intent-kind={pendingAuthIntent?.kind || ''}>
         <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Use a passkey to continue">
           <button
             class="auth-overlay-close"
@@ -532,7 +551,7 @@
       on:authrequired={handleAuthRequired}
     />
     {#if authOverlayOpen && !isAuthenticated}
-      <div class="auth-overlay" data-auth-overlay>
+      <div class="auth-overlay" data-auth-overlay data-auth-intent-kind={pendingAuthIntent?.kind || ''}>
         <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Use a passkey to continue">
           <button
             class="auth-overlay-close"

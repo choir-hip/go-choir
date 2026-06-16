@@ -534,7 +534,7 @@
 
   function requestPublishedEditAuth() {
     dispatch('authrequired', {
-      kind: 'published_vtext_edit',
+      kind: 'published_texture_edit',
       routePath: publishedRoutePath || appContext.publishedRoutePath || '',
       title: titleForPublishedBundle(),
     });
@@ -663,7 +663,7 @@
   async function ensureCurrentRevisionSaved(statusPrefix = 'Saving user version…') {
     if (!currentDoc) return null;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'save_vtext', appId: 'texture', appName: 'Texture', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'save_texture', appId: 'texture', appName: 'Texture', title: currentDoc.title });
       return null;
     }
     if (autosavePromise) {
@@ -1125,7 +1125,7 @@
   async function handlePrompt() {
     if (!currentDoc || loading || submitting || agentPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'save_vtext', appId: 'texture', appName: 'Texture', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'save_texture', appId: 'texture', appName: 'Texture', title: currentDoc.title });
       return;
     }
 
@@ -1182,7 +1182,7 @@
   async function handlePublishCurrent() {
     if (!currentDoc || isPublishedMode || loading || submitting || agentPending || publishedActionPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'publish_vtext', appId: 'texture', appName: 'Texture', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'publish_texture', appId: 'texture', appName: 'Texture', title: currentDoc.title });
       return;
     }
     publishedActionPending = true;
@@ -1372,7 +1372,7 @@
       return;
     }
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'vtext_diagnosis', appId: 'texture', appName: 'Texture', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'texture_diagnosis', appId: 'texture', appName: 'Texture', title: currentDoc.title });
       return;
     }
     const controller = new AbortController();
@@ -1420,7 +1420,7 @@
   async function handleApplySourceReview() {
     if (!currentDoc?.doc_id || !currentRevision?.revision_id || sourceRepairPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'vtext_source_repair', appId: 'texture', appName: 'Texture', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'texture_source_repair', appId: 'texture', appName: 'Texture', title: currentDoc.title });
       return;
     }
     ensureSourceReviewSelection();
@@ -1491,7 +1491,7 @@
     const entity = selectedSourceEntity();
     if (!currentDoc?.doc_id || !currentRevision?.revision_id || !entity || sourceArtifactPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'vtext_source_artifact', appId: 'texture', appName: 'Texture', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'texture_source_artifact', appId: 'texture', appName: 'Texture', title: currentDoc.title });
       return;
     }
     const sourceURL = sourceArtifactURL.trim() || sourceEntityTargetURL(entity);
@@ -1538,7 +1538,7 @@
     const entity = selectedSourceEntity();
     if (!currentDoc?.doc_id || !currentRevision?.revision_id || !entity || sourceArtifactPending) return;
     if (!authenticated) {
-      dispatch('authrequired', { kind: 'vtext_source_artifact', appId: 'texture', appName: 'Texture', title: currentDoc.title });
+      dispatch('authrequired', { kind: 'texture_source_artifact', appId: 'texture', appName: 'Texture', title: currentDoc.title });
       return;
     }
     const text = sourceArtifactText.trim();

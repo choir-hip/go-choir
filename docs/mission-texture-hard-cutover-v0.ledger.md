@@ -1593,3 +1593,56 @@ Receipts:
 Open edge: implement the behavior slice after this checkpoint: emit
 Texture-named frontend auth intents, preserve legacy replay and legacy app URL
 compatibility, then prove locally and on staging.
+
+## 2026-06-16 - Local Repair: Texture Auth Intent Labels
+
+Claim: new frontend Texture actions can emit Texture-named auth intent kinds
+while the auth overlay/replay boundary still accepts old in-memory intent names
+and legacy `?app=vtext&doc=...` URL compatibility.
+
+Move: rename Texture editor auth-required dispatches and registry mutable-intent
+requirements to Texture names, add a legacy intent normalization map in
+`App.svelte`, expose the pending auth intent kind as a nonvisual overlay test
+attribute, and add a signed-out Texture publish overlay proof.
+
+Expected ΔV: support C19 locally; no coarse V decrease until CI, deploy, and
+staging proof are recorded.
+
+Actual ΔV: C19 is supported for local auth-intent scope. V remains 2.
+
+Conjecture delta: frontend auth overlay labels can teach Texture without
+touching durable `vtext:<doc_id>` actor ids, storage tables, publication
+predicates, or source/provenance metadata.
+
+Protected surfaces: Texture app registry auth requirements, Texture editor
+auth-required dispatches, auth overlay copy and replay, legacy intent replay,
+legacy app URL compatibility, and signed-out public preview Texture actions.
+
+Admissible evidence class: frontend build, focused signed-out Playwright proof,
+producer-residue search, CI, staging deploy identity, and deployed browser
+proof for signed-out Texture auth overlay plus legacy app URL compatibility.
+
+Rollback path: restore old intent strings in editor dispatches, registry
+requirements, and App replay/message handling if auth replay or legacy app URL
+compatibility regresses.
+
+Heresy delta: repaired locally for new frontend auth intent labels; durable
+actor ids, storage symbols, and source/provenance metadata remain discovered
+residue.
+
+Receipts:
+- `npm --prefix frontend run build` passed, with the existing Universal Wire
+  warnings for unused `currentUser` and `.wire-state` selectors.
+- `npm --prefix frontend run e2e -- --project=chromium
+  tests/auth-entry-ui.spec.js --grep "signed-out Texture publish"` passed
+  against an explicit Vite preview server.
+- The broader `auth-entry-ui.spec.js` run was attempted first and failed before
+  app execution because no local server was listening on `localhost:4173`.
+- Producer residue search for old auth intent names across `frontend/src` and
+  `frontend/tests` now finds only the explicit legacy normalization map in
+  `frontend/src/App.svelte` plus the out-of-scope
+  `created_from: 'vtext_source_artifact_ui'` provenance marker.
+
+Open edge: push, monitor CI/deploy, verify staging identity, then run deployed
+browser proof that a signed-out Texture action exposes a Texture-named auth
+intent while legacy `?app=vtext&doc=...` still opens Texture.

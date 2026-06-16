@@ -131,7 +131,7 @@ export const APP_REGISTRY = [
       desktop: { width: 960, height: 720, minWidth: 680, minHeight: 520 },
       compact: compactDefault,
     },
-    auth: { preview: 'public-preview', requiresAuthFor: ['save_vtext', 'revise_vtext', 'publish_vtext'] },
+    auth: { preview: 'public-preview', requiresAuthFor: ['save_texture', 'revise_texture', 'publish_texture'] },
     theme: { surface: 'document', shellDataAttr: 'data-texture-app', contentClass: 'vtext-content' },
   },
   {
@@ -142,7 +142,7 @@ export const APP_REGISTRY = [
     component: () => import('../UniversalWireApp.svelte'),
     launcher: { desk: true, desktopIcon: true, mobileSwitcher: true, order: 65 },
     window: { singleton: true, heavy: true, desktop: { width: 1180, height: 760, minWidth: 820, minHeight: 560 }, compact: compactDefault },
-    auth: { preview: 'public-preview', requiresAuthFor: ['save_vtext', 'publish_vtext'] },
+    auth: { preview: 'public-preview', requiresAuthFor: ['save_texture', 'publish_texture'] },
     theme: { surface: 'standard', shellDataAttr: 'data-universal-wire-window', contentClass: 'universal-wire-content' },
   },
   {

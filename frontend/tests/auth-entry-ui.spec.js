@@ -199,6 +199,22 @@ test('signed-out prompt intent opens auth overlay without prompt-bar mutation', 
   expect(promptRequests).toHaveLength(0);
 });
 
+test('signed-out Texture publish intent uses Texture-named auth intent', async ({
+  page,
+}) => {
+  await page.goto(BASE_URL);
+  const texture = page.locator('[data-texture-editor]').first();
+  await expect(texture).toBeVisible({ timeout: 15000 });
+
+  await texture.locator('[data-texture-publish]').click();
+  await texture.locator('[data-texture-publish-confirm]').click();
+
+  const overlay = page.locator('[data-auth-overlay]');
+  await expect(overlay).toBeVisible();
+  await expect(overlay).toHaveAttribute('data-auth-intent-kind', 'publish_texture');
+  await expect(page.locator('[data-auth-intent]')).toContainText('Publish this Texture');
+});
+
 test('signed-out prompt survives registration and resumes through product prompt-bar', async ({
   page,
   authenticator,
