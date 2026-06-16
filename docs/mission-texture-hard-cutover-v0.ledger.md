@@ -3512,3 +3512,35 @@ Receipts:
 Open edge: commit and push the behavior repair, monitor CI/deploy, verify
 staging identity, and run deployed publication proof. Do not claim storage,
 file suffix, durable actor-id, stored public-route-row, or protocol-v0 repair.
+
+## 2026-06-16 - Deployed Evidence: C31 Publication Helper Symbols
+
+Claim: C31 is deployed-supported at its bounded scope: active publication/export
+helper and API symbols use Texture names while publication routes, JSON fields,
+storage schema, stored public-route compatibility, and durable actor ids stay
+unchanged.
+
+Move: push C31 behavior, monitor CI/deploy, confirm staging identity, and run a
+deployed publication proof. Expected ΔV: close the C31 helper-symbol sub-edge
+without decreasing coarse mission V until storage/file/actor/stored-route
+residue, Universal Wire story-field proof, and protocol v0 are resolved.
+
+Actual ΔV: C31 moved from local-supported to deployed-supported. Mission V
+remains 2.
+
+Receipts:
+
+- Behavior commit `90746bccead98b839c1c8cc3fa5c537a80ce66fe` pushed C31.
+- CI run `27598740366` passed all gates and deploy job `81594789846` passed.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `90746bccead98b839c1c8cc3fa5c537a80ce66fe`, deployed at
+  `2026-06-16T06:31:08Z`.
+- Deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  --project=chromium tests/vtext-source-service-publication.spec.js -g
+  'publishes source-service source entities as expandable transclusions and
+  canonical exports'`.
+
+Open edge: choose the next residue class. C31 does not repair storage tables,
+`.vtext` file suffixes, durable `vtext:` actor ids, stored `/pub/vtext/...`
+route rows, Universal Wire deployed story-field payload proof, or protocol v0.

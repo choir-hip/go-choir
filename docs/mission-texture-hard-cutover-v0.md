@@ -1929,6 +1929,22 @@ Heresy delta: repaired locally for publication/export helper/API symbol
 vocabulary. Storage tables, `.vtext` suffixes, durable `vtext:` actor ids,
 stored `/pub/vtext/...` route rows, and protocol v0 remain explicit residue.
 
+Deployed evidence on 2026-06-16:
+
+- Behavior commit `90746bccead98b839c1c8cc3fa5c537a80ce66fe` was pushed to
+  `origin/main`.
+- CI run `27598740366` passed, including Docs Truth Check, frontend build, Go
+  vet/build, non-runtime tests, runtime shards, integration smoke, TLA+, and
+  deploy job `81594789846`.
+- Staging health reported proxy and sandbox commit
+  `90746bccead98b839c1c8cc3fa5c537a80ce66fe`, deployed at
+  `2026-06-16T06:31:08Z`.
+- Deployed publication proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  --project=chromium tests/vtext-source-service-publication.spec.js -g
+  'publishes source-service source entities as expandable transclusions and
+  canonical exports'`.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2036,13 +2052,14 @@ after a manual forced staging deploy, staging reports the pushed head SHA, and
 deployed Universal Wire UI proof shows both `Style.vtext` and `Style.texture`
 style labels absent from the visible app. Canonical `.vtext` import/storage
 behavior and Universal Wire deployed story-field proof stay out of scope. C31
-is locally supported: publication/export helper and API symbols now use Texture
-names while preserving JSON fields, current Texture routes, stored public route
-compatibility, storage tables, and durable actor ids. Deployment and staging
-publication proof remain open.
+is deployed-supported: publication/export helper and API symbols now use
+Texture names while preserving JSON fields, current Texture routes, stored
+public route compatibility, storage tables, and durable actor ids. CI/deploy
+passed, staging reports the pushed SHA, and deployed publication proof passed.
 
-next move: commit and push C31 behavior, monitor CI/deploy, verify staging
-identity, and run deployed publication proof. Keep protocol v0 unwritten until
+next move: choose the next remaining residue class among storage/file suffixes,
+durable actor ids, stored public-route rows, Universal Wire deployed
+story-field proof, or protocol v0 after proof. Keep protocol v0 unwritten until
 remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
