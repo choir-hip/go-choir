@@ -227,6 +227,41 @@ Remaining scope: storage schema/workspace/file suffixes, metadata keys,
 `/pub/vtext/...` route identity, `edit_texture` compatibility alias deletion,
 public preview Trace fixture agent ids, and protocol v0.
 
+## Problem Checkpoint: Public Preview Trace Fixture Residue
+
+Mutation class: `green` documentation and evidence only. No frontend source,
+runtime behavior, schema, API, prompt default, UI, test, or persistent state
+changed in this checkpoint.
+
+Read-only search on 2026-06-16 shows that the next small residue class is a
+public-preview Trace fixture in `frontend/src/lib/public-preview-data.ts`. It
+still names the Texture actor as `agent_id: 'vtext'`, routes preview edges
+through `vtext`, and records preview moments against `agent_id: 'vtext'`.
+This is distinct from durable runtime agent ids such as `vtext:<doc_id>` and
+from storage symbols such as `vtext_revisions`; it is local signed-out fixture
+data.
+
+Receipts:
+
+- `rg -n "agent_id: 'vtext'|to_agent_id: 'vtext'|from_agent_id: 'vtext'"`
+  on `frontend/src/lib/public-preview-data.ts` found seven fixture hits.
+- `rg -n "previewTraceSnapshot|previewTraceTrajectories" . -g '!frontend/dist' -g '!node_modules'`
+  found only the fixture definitions themselves, with no consumers.
+- The fixture's acceptance text says "Trace layout renders without private
+  trajectories", which conflicts with the current doctrine guardrail that Trace
+  is evidence/topology, not a normal public product surface.
+
+Next behavior/source slice design:
+
+- delete the unused `previewTraceTrajectories` and `previewTraceSnapshot`
+  fixture exports instead of renaming their actor ids, so the mission does not
+  preserve a dead Trace product preview;
+- keep the live `previewVTextDocument` export for the signed-out Texture app
+  preview, leaving its exported symbol name for a later broader frontend file
+  and API-name migration;
+- prove with frontend build and residue searches that no public-preview Trace
+  fixture actor id remains.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -451,11 +486,15 @@ position / live conjectures / open edges:
   `data-app-id="texture"` and legacy `app=vtext` compatibility. Storage
   table/workspace/file and metadata symbols are much broader and require
   separate migration design.
+- C16 active: the public-preview Trace fixture is unused local preview data
+  carrying stale `vtext` actor ids. Because the fixture has no consumers and
+  Trace is not a public product surface, the preferred repair is deletion rather
+  than renaming.
 
-next move: select the next bounded residue class among storage
+next move: delete the unused public-preview Trace fixture exports, verify
+frontend build and residue searches, then return to storage
 schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
-`edit_texture` compatibility alias deletion, public preview Trace fixture
-agent ids, and protocol v0.
+`edit_texture` compatibility alias deletion, and protocol v0.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

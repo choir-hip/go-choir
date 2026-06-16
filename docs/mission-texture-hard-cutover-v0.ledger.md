@@ -1050,3 +1050,45 @@ Open edge: select the next bounded residue class among storage
 schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
 `edit_texture` compatibility alias deletion, public preview Trace fixture agent
 ids, and protocol v0.
+
+## 2026-06-16 - Public Preview Trace Fixture Residue Checkpoint
+
+Claim: the next smallest residue class is not a storage or runtime agent-id
+migration; it is an unused public-preview Trace fixture that keeps the old
+Texture actor id alive in signed-out fixture data.
+
+Move: read-only inventory and Problem Documentation First checkpoint before
+touching `frontend/src/lib/public-preview-data.ts`.
+
+Expected ΔV: 0 global, but selects a bounded residue class with low blast
+radius and high clarity.
+
+Actual ΔV: 0. The problem is documented and the next slice is scoped: delete
+the unused fixture exports rather than rename them.
+
+Conjecture delta: deleting unused Trace preview fixture data better advances
+Texture ontology than renaming its stale actor ids, because Trace is
+evidence/topology and not a public product surface.
+
+Protected surfaces: signed-out preview data, public desktop preview bundle, and
+frontend build.
+
+Admissible evidence class: frontend build and residue searches proving the
+fixture exports have no consumers and no public-preview Trace `vtext` actor id
+remains.
+
+Rollback path: restore the fixture definitions if a real consumer is found.
+
+Heresy delta: discovered unused Trace fixture residue; no repair claimed yet.
+
+Receipts:
+- `rg -n "agent_id: 'vtext'|to_agent_id: 'vtext'|from_agent_id: 'vtext'"`
+  on `frontend/src/lib/public-preview-data.ts` found seven fixture hits.
+- `rg -n "previewTraceSnapshot|previewTraceTrajectories" . -g '!frontend/dist' -g '!node_modules'`
+  found only the fixture definitions themselves, with no consumers.
+- The fixture acceptance text frames "Trace layout" as public preview data,
+  conflicting with the current doctrine guardrail that Trace is evidence and
+  topology, not a normal public surface.
+
+Open edge: delete the unused fixture exports, verify frontend build and residue
+searches, then select the next storage/API/protocol residue class.
