@@ -2639,6 +2639,56 @@ Heresy delta: repaired locally for current text-like content app-hint payloads;
 no task type, tool profile wording, model-policy key, table/database, durable
 actor id, stored route-row, or Universal Wire edition repair is claimed.
 
+## Deployed Repair: Content App-Hint Payload
+
+Mutation class: `orange`, deployed behavior evidence for the content app-hint
+payload repair.
+
+Conjecture delta: deployed Choir now emits Texture app hints for new/current
+text-like content items and prompt-bar content decisions while preserving
+legacy `vtext` hint readability through normalization.
+
+Deployed evidence on 2026-06-16:
+
+- Commit `79768c1c13bfe5d83039ee7d50df90cab37b2218` passed CI run
+  `27607329387`.
+- Deploy job `81622826865` succeeded.
+- Separate Docs Truth Check run `27607329663` and FlakeHub publish run
+  `27607329354` completed successfully for the same commit.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `79768c1c13bfe5d83039ee7d50df90cab37b2218`, deployed at
+  `2026-06-16T09:18:43Z`.
+- Deployed Playwright/browser proof registered fresh user
+  `texture-content-hint-proof-1781601738637@example.com`, opened Markdown
+  source path `proofs/content-app-hint-1781601738637.md` through
+  `/api/texture/files/open`, and created Texture document
+  `46a95437-6c31-4a1a-bc92-65439cd4359d`.
+- The original content item
+  `a3ee73bf-d31a-46df-9c8c-31746000b4aa` returned `media_type:
+  "text/markdown"` and `app_hint: "texture"`.
+- A public authenticated `/api/content/items` create for `text/plain` returned
+  `app_hint: "texture"`.
+- Prompt-bar submission `542fa507-8676-402d-ae50-399be0c619e8` for single URL
+  `https://example.com/content-app-hint-1781601738637.md` completed with
+  `decision.app: "texture"`, `decision.app_hint: "texture"`,
+  `decision.media_type: "text/markdown"`, and the same source URL.
+- Browser navigation to the Texture document showed one
+  `data-window-app-id="texture"` window and zero legacy `vtext` windows.
+- The proof observed zero forbidden product-path requests to `/internal/*`,
+  `/api/agent/*`, `/api/test/*`, `/api/prompts`, or `/api/events`.
+
+Evidence artifact: `/tmp/choir-c37-content-app-hint-1781601738637.json`.
+Screenshot: `/tmp/choir-c37-content-app-hint-1781601738637.png`.
+
+Rollback path remains: revert commit
+`79768c1c13bfe5d83039ee7d50df90cab37b2218` if later deployed content-item or
+prompt-bar content decision regressions appear.
+
+Heresy delta: repaired for deployed current text-like content app-hint payloads.
+Task type, tool profile wording, model-policy keys, table/database symbols,
+durable actor ids, stored route rows, Universal Wire edition refs, and protocol
+v0 remain outside C37.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2675,14 +2725,13 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C37 locally repaired the
+variant (ranking function) V: current V=2; last ΔV: C37 deployed-supported the
 content app-hint payload slice: new/current text-like Texture content
-projections emit `app_hint:"texture"` while legacy `vtext` hints remain
-accepted. Coarse V remains 2 because the C37 behavior still needs landing,
-CI/deploy identity, and staging product proof, and because database/table names,
-`vtext_agent_revision` task type, prompt/tool schema wording, stored legacy
-routes, Universal Wire edition refs, deployed Universal Wire story-field proof,
-and protocol v0 remain.
+projections and prompt-bar content decisions emit `app_hint:"texture"` while
+legacy `vtext` hints remain accepted. Coarse V remains 2 because
+database/table names, `vtext_agent_revision` task type, prompt/tool schema
+wording, model-policy keys, stored legacy routes, Universal Wire edition refs,
+deployed Universal Wire story-field proof, and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -2824,22 +2873,23 @@ frontend build, doccheck, CI run `27605982668`, deploy job `81618326388`,
 staging health, and targeted deployed prompt-bar/Trace proof passed. This slice
 excludes task type, tool profile, model-policy key, table/database, content
 app-hint, and stored route-row migration.
-C37 is locally supported for content app-hint payload identity: current DOCX,
-Markdown, plain text, Markdown lineage, and derived transcript content
-projections now emit `app_hint:"texture"`; tests and deployed Markdown lineage
-fixtures now expect current Texture hints; scoped current-emission search,
-focused runtime packets, sequential runtime shards, frontend build, doccheck,
-and diff checks passed. This slice still requires commit/push, CI/deploy
-identity, and staging product proof before it is deployed-supported. It
-excludes `vtext_agent_revision`, tool/profile wording, model-policy keys,
+C37 is deployed-supported for content app-hint payload identity: current DOCX,
+Markdown, plain text, Markdown lineage, derived transcript content, and
+prompt-bar content decisions now emit `app_hint:"texture"`; tests and deployed
+Markdown lineage fixtures expect current Texture hints; scoped
+current-emission search, focused runtime packets, sequential runtime shards,
+frontend build, doccheck, diff checks, CI run `27607329387`, deploy job
+`81622826865`, staging identity, and deployed browser/API proof passed. This
+slice excludes `vtext_agent_revision`, tool/profile wording, model-policy keys,
 table/database/storage symbols, durable actor ids, stored route rows, Universal
 Wire edition refs, and protocol v0.
 
-next move: finish the C37 landing loop: commit and push the app-hint payload
-repair; monitor CI and deploy; verify staging commit identity; then run
-deployed product/API proof that new/current text-like content items and
-prompt-bar content decisions expose `app_hint:"texture"` with no forbidden
-internal-route shortcut.
+next move: perform a read-only inventory and Problem Documentation First
+checkpoint for the next payload residue slice: `vtext_agent_revision` task
+type, prompt/tool profile wording, and model-policy key naming. Do not make
+behavior changes before the checkpoint names compatibility, rollback, and proof
+requirements, and do not fold table/database or stored route-row migration into
+that slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

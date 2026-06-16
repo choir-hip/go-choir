@@ -4210,3 +4210,51 @@ Open edge: commit/push, monitor CI/deploy, verify staging identity, and run
 deployed content app-hint product proof. Task type, tool profile wording,
 model-policy keys, table/database symbols, durable actor ids, stored route rows,
 Universal Wire edition refs, and protocol v0 remain outside C37.
+
+## 2026-06-16 - Deployed Repair: C37 Content App-Hint Payload
+
+Claim: C37 is deployed-supported for current text-like content app-hint payload
+identity.
+
+Move: monitor CI/deploy, verify staging commit identity, and run deployed
+browser/API product proof. Expected ΔV: deploy-support the app-hint payload
+repair without changing coarse V=2.
+
+Actual ΔV: C37 deployed-supported; coarse V remains 2.
+
+Receipts:
+
+- Commit `79768c1c13bfe5d83039ee7d50df90cab37b2218`
+  (`runtime: emit texture content app hints`) pushed to `origin/main`.
+- CI run `27607329387` passed.
+- Docs Truth Check run `27607329663` passed.
+- FlakeHub publish run `27607329354` passed.
+- Deploy job `81622826865` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `79768c1c13bfe5d83039ee7d50df90cab37b2218`, deployed at
+  `2026-06-16T09:18:43Z`.
+- Deployed browser/API proof recorded
+  `/tmp/choir-c37-content-app-hint-1781601738637.json` and screenshot
+  `/tmp/choir-c37-content-app-hint-1781601738637.png`.
+- The proof registered
+  `texture-content-hint-proof-1781601738637@example.com`, opened Markdown
+  source path `proofs/content-app-hint-1781601738637.md` through
+  `/api/texture/files/open`, and created Texture document
+  `46a95437-6c31-4a1a-bc92-65439cd4359d`.
+- Original content item `a3ee73bf-d31a-46df-9c8c-31746000b4aa` returned
+  `media_type:"text/markdown"` and `app_hint:"texture"`.
+- A public authenticated `/api/content/items` create for `text/plain` returned
+  `app_hint:"texture"`.
+- Prompt-bar submission `542fa507-8676-402d-ae50-399be0c619e8` for
+  `https://example.com/content-app-hint-1781601738637.md` completed with
+  `decision.app:"texture"`, `decision.app_hint:"texture"`,
+  `decision.media_type:"text/markdown"`, and the same source URL.
+- Browser navigation to the Texture document observed one
+  `data-window-app-id="texture"` window and zero legacy `vtext` windows.
+- The proof observed zero forbidden product-path requests to `/internal/*`,
+  `/api/agent/*`, `/api/test/*`, `/api/prompts`, or `/api/events`.
+
+Open edge: next pass should document the task/profile/model-policy payload
+residue before behavior changes. Table/database symbols, durable actor ids,
+stored route rows, Universal Wire edition refs, deployed Universal Wire
+story-field proof, and protocol v0 remain outside C37.
