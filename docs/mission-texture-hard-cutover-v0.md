@@ -171,7 +171,7 @@ Next behavior slice design:
   browser/DOM proof that the Texture app renders under `data-app-id="texture"`
   while legacy `app=vtext` URL or saved state still opens the same app.
 
-## Local Repair: Texture App Identity
+## Repair: Texture App Identity
 
 Mutation class: `orange`, because this changes frontend app identity, app
 launch/replay behavior, desktop persistence/restore normalization, source-open
@@ -203,11 +203,29 @@ Local evidence on 2026-06-16:
 Rollback path: revert the behavior commit to restore canonical `vtext` app ids
 and remove the frontend/runtime normalization shims.
 
-Heresy delta: repaired locally for app identity; no storage/table/file/metadata
+Deployed evidence on 2026-06-16:
+
+- Commit `f27c00154f4eb1025075cc6eb6b76383324dd5f1` passed CI run
+  `27588733421`.
+- Deploy job `81564942700` succeeded.
+- Staging health at `https://choir.news/health` reported proxy and sandbox
+  commit `f27c00154f4eb1025075cc6eb6b76383324dd5f1`, deployed at
+  `2026-06-16T01:55:03Z`.
+- Staging Playwright DOM proof on `https://choir.news/` found one
+  `data-app-id="texture"` window, zero `data-app-id="vtext"` windows, one
+  `data-desktop-icon-id="texture"` icon, zero legacy `vtext` desktop icons, and
+  restored public preview window id `public-preview-texture`.
+- Staging Playwright DOM proof on
+  `https://choir.news/?app=vtext&doc=legacy-proof-doc&title=Legacy%20Texture`
+  found one Texture window, zero legacy `vtext` windows, visible Texture text,
+  and no visible `VText` text.
+
+Heresy delta: repaired for deployed app identity; no storage/table/file/metadata
 symbol repair claimed.
 
-Remaining evidence before claim: push, CI, Node B staging deploy identity, and
-staging DOM proof for `data-app-id="texture"` plus legacy app-id compatibility.
+Remaining scope: storage schema/workspace/file suffixes, metadata keys,
+`/pub/vtext/...` route identity, `edit_texture` compatibility alias deletion,
+public preview Trace fixture agent ids, and protocol v0.
 
 ## Non-Goals
 
@@ -425,16 +443,19 @@ position / live conjectures / open edges:
   `81562610983` deployed commit `019e7a9d78f94e78da91ae2ddc6200dd7dee0184`,
   and staging route probes showed the new Texture control route reaches
   method/auth gates while the old control route returns 404.
-- C15 locally supported pending deploy: app identity and storage symbols are
-  distinct residue classes. The canonical app registry now uses
+- C15 supported for deployed app identity scope: app identity and storage
+  symbols are distinct residue classes. The canonical app registry now uses
   `id: 'texture'`; frontend app launch/replay/source-open/public-preview paths
   now target Texture; frontend and runtime desktop-state boundaries normalize
-  deletion-receipted legacy `vtext` app ids. Storage table/workspace/file and
-  metadata symbols are much broader and require separate migration design.
+  deletion-receipted legacy `vtext` app ids; staging DOM proof shows canonical
+  `data-app-id="texture"` and legacy `app=vtext` compatibility. Storage
+  table/workspace/file and metadata symbols are much broader and require
+  separate migration design.
 
-next move: push the app-identity behavior commit, monitor CI/deploy, verify
-Node B staging identity, and run staging DOM proof for canonical
-`data-app-id="texture"` plus legacy app-id compatibility.
+next move: select the next bounded residue class among storage
+schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
+`edit_texture` compatibility alias deletion, public preview Trace fixture
+agent ids, and protocol v0.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

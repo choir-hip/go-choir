@@ -994,11 +994,13 @@ desktop-store paths through that canonical id; normalize deletion-receipted
 legacy `vtext` app ids at frontend launch/restore and runtime desktop-state API
 boundaries.
 
-Expected ΔV: local support for C15, with no V decrease claimed until CI, deploy,
-and staging DOM proof land.
+Expected ΔV: support C15 for the app-identity sub-surface, with no global V
+decrease claimed until the remaining residue classes are selected.
 
-Actual ΔV: pending deploy. Local evidence supports the repair, but the mission
-state remains open until the landing loop proves the deployed behavior.
+Actual ΔV: C15 is supported for deployed app-identity scope. The global mission
+state remains open because storage schema/workspace/file suffixes, metadata
+keys, `/pub/vtext/...` route identity, `edit_texture` compatibility alias
+deletion, public preview Trace fixture agent ids, and protocol v0 remain open.
 
 Conjecture delta: canonical app identity can move to Texture without stranding
 existing persisted desktop windows, if legacy app ids are normalized at the
@@ -1016,7 +1018,7 @@ open Texture.
 Rollback path: revert the behavior commit to restore canonical `vtext` app ids
 and remove the normalization shims.
 
-Heresy delta: repaired locally for app identity; no storage/table/file/metadata
+Heresy delta: repaired for deployed app identity; no storage/table/file/metadata
 symbol repair claimed.
 
 Receipts:
@@ -1029,8 +1031,22 @@ Receipts:
 - App-id residue search:
   `rg -n "appId: 'vtext'|appId: \"vtext\"|id: 'vtext'|id: \"vtext\"|openApp\\('vtext'|getAppIcon\\('vtext'|public-preview-vtext|data-app-id=\"vtext\"" frontend/src internal -g '!frontend/dist'`
   returned only public preview Trace fixture agent ids.
+- Commit `f27c00154f4eb1025075cc6eb6b76383324dd5f1` passed CI run
+  `27588733421`; deploy job `81564942700` succeeded.
+- Separate `Docs Truth Check` run `27588733442` and FlakeHub publish run
+  `27588733436` completed successfully for the same commit.
+- Staging health at `https://choir.news/health` reported proxy and sandbox
+  commit `f27c00154f4eb1025075cc6eb6b76383324dd5f1`, deployed at
+  `2026-06-16T01:55:03Z`.
+- Staging Playwright DOM proof for `https://choir.news/` returned:
+  `textureWindows=1`, `legacyWindows=0`, `textureIcons=1`, `legacyIcons=0`,
+  `previewWindowIds=["public-preview-texture"]`.
+- Staging Playwright DOM proof for
+  `https://choir.news/?app=vtext&doc=legacy-proof-doc&title=Legacy%20Texture`
+  returned: `textureWindows=1`, `legacyWindows=0`,
+  `bodyMentionsTexture=true`, `bodyMentionsVText=false`.
 
-Open edge: push the behavior commit, monitor CI/deploy, run staging DOM proof,
-then return to storage schema/workspace/file suffixes, metadata keys,
-`/pub/vtext/...` route identity, `edit_texture` compatibility alias deletion,
-and protocol v0.
+Open edge: select the next bounded residue class among storage
+schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
+`edit_texture` compatibility alias deletion, public preview Trace fixture agent
+ids, and protocol v0.
