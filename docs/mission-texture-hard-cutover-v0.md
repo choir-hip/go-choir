@@ -1619,12 +1619,22 @@ position / live conjectures / open edges:
   source-label and empty-state app surface; deployed story-field proof remains
   open until staging has an edition story payload or a product path creates one
   without manually seeding success records.
+- C23 active for Texture related-transclusion metadata/context scope:
+  read-only inventory found live current-surface residue in
+  `metadata.related_vtexts`, frontend app context `relatedVTexts`,
+  `target_kind: 'vtext_document'`, and inline ref helper/export names such as
+  `parseVTextRelatedRef` and `renderInlineVTextRef`. This slice excludes
+  storage table names, `.vtext` file suffixes/source paths, durable `vtext:`
+  actor ids, and `canonical_vtext_source_path`. The intended repair is to
+  write and prefer `related_textures` / `relatedTextures`,
+  `texture_document`, and Texture-named helper exports while keeping explicit
+  read fallback for already-authored legacy metadata and markdown syntax.
 
-next move: select the next bounded residue class among general Texture metadata
-keys, durable actor ids, storage/file suffixes, stale frontend app-launcher test
-labels, deployed story-field proof when a Universal Wire story payload is
-reachable, and protocol v0. Keep protocol v0 unwritten until the remaining
-working-surface proofs are complete.
+next move: implement C23's frontend metadata/context rename, prove focused
+transclusion/editor/Universal Wire coverage plus residue searches, then decide
+whether the behavior slice requires staging deploy proof or can remain local
+until a broader staging Texture document proof batch. Keep protocol v0 unwritten
+until the remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

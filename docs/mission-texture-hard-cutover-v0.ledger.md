@@ -2265,3 +2265,61 @@ Receipts:
 Open edge: prove deployed `story_texture_doc_id`,
 `projection_texture_docs`, and `texture_content` when staging has a Universal
 Wire story payload reachable through product paths.
+
+## 2026-06-16 - Problem Checkpoint: Related Texture Metadata Keys
+
+Claim: related-transclusion metadata and frontend app context names are a
+bounded live Texture surface that can be repaired separately from storage table
+names, `.vtext` file suffixes/source paths, durable `vtext:` actor ids,
+`canonical_vtext_source_path`, and protocol v0.
+
+Move: document the read-only residue inventory, conjecture delta, protected
+surfaces, admissible evidence class, rollback path, heresy delta, adjacent
+non-goals, and next behavior-slice design before changing frontend metadata
+serialization or render helpers.
+
+Expected ΔV: no coarse V decrease; C23 becomes active with the required Problem
+Documentation First checkpoint in place.
+
+Actual ΔV: no coarse V decrease. C23 is active and ready for implementation.
+
+Protected surfaces: Texture editor revision metadata serialization,
+Texture document rendering of related transclusion refs, related Texture open
+dispatch, Universal Wire story-to-Texture app context, focused frontend tests,
+and markdown serializer/renderer helper exports.
+
+Admissible evidence class: focused frontend tests for source entities,
+markdown lineage/editor behavior, Universal Wire related launch context,
+frontend build, current-code retired-name residue searches, CI, and staging
+deploy/browser proof if the slice changes deployed product behavior enough to
+claim staging support.
+
+Rollback path: restore `related_vtexts`, `relatedVTexts`, `vtext_document`, and
+old helper exports as the primary write path if editor metadata persistence,
+inline related transclusion rendering, pinned revision open behavior, or
+Universal Wire story launch regresses. Keep legacy read fallback during the
+repair so persisted revisions remain readable.
+
+Heresy delta: discovered in read-only inventory, not yet repaired. The slice
+will repair current writer/context/helper names while preserving explicitly
+deletion-receipted legacy metadata reads.
+
+Receipts:
+- `frontend/src/lib/VTextEditor.svelte` reads `metadata.related_vtexts`,
+  writes `metadata.related_vtexts`, consumes `appContext.relatedVTexts`, and
+  calls `parseVTextRelatedRef` / `vtextEntityPinnedRevisionID`.
+- `frontend/src/lib/UniversalWireApp.svelte` emits `relatedVTexts` in Texture
+  launch context while already using `target_kind: 'texture_document'`.
+- `frontend/src/lib/vtext-source-renderer.ts` exports
+  `parseVTextRelatedRef`, `vtextRelatedMarkdownTarget`,
+  `vtextEntityPinnedRevisionID`, `findVTextEntity`, and
+  `renderInlineVTextRef`; it still parses markdown `vtext:` refs as the
+  current inline compatibility syntax.
+- `frontend/src/lib/vtext-markdown-renderer.ts` names the renderer option
+  `relatedVTexts`.
+- Focused search:
+  `rg -n "related_vtexts|relatedVTexts|vtext_document|canonical_vtext_source_path|related VText|VText entity|findVTextEntity|renderInlineVTextRef|parseVTextRelatedRef|vtextEntity|data-texture-related|target_kind.*vtext" internal frontend/src frontend/tests -g '!frontend/dist/**'`.
+
+Open edge: implement the C23 behavior slice with Texture-named writer/context
+paths and helper exports; retain explicit legacy read fallback; run focused
+frontend coverage, build, and residue searches.
