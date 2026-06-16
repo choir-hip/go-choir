@@ -2197,3 +2197,37 @@ Receipts:
 Open edge: push the behavior commit, monitor CI/deploy, verify staging commit
 identity, and run deployed Universal Wire acceptance proof with available auth
 state.
+
+## 2026-06-16 - Staging Evidence Checkpoint: Empty Universal Wire Edition
+
+Claim: the first deployed Universal Wire proof attempt exposed an acceptance
+oracle gap rather than enough evidence to reject the C22 runtime/frontend
+change.
+
+Move: record CI/deploy identity and the failed deployed proof before changing
+the staging acceptance spec.
+
+Expected ΔV: no coarse V decrease; C22 moves from local-only support to
+deployed source-label/app-surface evidence with deployed story-field proof
+still open.
+
+Actual ΔV: no coarse V decrease. The acceptance oracle gap is documented.
+
+Receipts:
+- CI run `27593330137` passed for commit
+  `9f332529d209e82df86056176ffac2d31d2c5df1`.
+- Deploy job `81578635355` succeeded.
+- Docs Truth Check run `27593330130` passed; FlakeHub publish run
+  `27593330160` passed.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `9f332529d209e82df86056176ffac2d31d2c5df1`, deployed at
+  `2026-06-16T04:05:57Z`.
+- Deployed Playwright proof attempt
+  `GO_CHOIR_RUN_UNIVERSAL_WIRE_STAGING=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/universal-wire-staging-acceptance.spec.js`
+  failed because the API returned `source="universal-wire-edition-texture"`
+  with `stories.length === 0`, while the spec assumed an edition source always
+  contains at least one story.
+
+Open edge: repair the staging acceptance spec to prove Texture source labels
+and empty-state app behavior without claiming story payload fields when staging
+has no Universal Wire edition stories; rerun deployed proof.

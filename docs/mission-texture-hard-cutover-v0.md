@@ -1229,6 +1229,59 @@ remaining outside this slice includes `.vtext` aliases/source paths,
 `vtext_agent_revision` metadata types, Style.vtext style-source language,
 general `related_vtexts` metadata, storage tables, and platform table names.
 
+## Staging Evidence Checkpoint: Universal Wire Empty Edition Acceptance Gap
+
+Mutation class: `green` documentation and evidence only. No test, runtime,
+frontend, product API, staging state, or persistent data changed in this
+checkpoint.
+
+Staging evidence on 2026-06-16 after deploying commit
+`9f332529d209e82df86056176ffac2d31d2c5df1` exposed an acceptance-oracle gap:
+the deployed Universal Wire stories API returned the new
+`universal-wire-edition-texture` source label with an empty `stories` array.
+The staging acceptance spec assumed that an edition source always implies at
+least one story and failed before it could observe a deployed story payload's
+`story_texture_doc_id` field.
+
+Receipts:
+
+- Pushed behavior commit:
+  `9f332529d209e82df86056176ffac2d31d2c5df1`
+  (`runtime: rename texture wire projection labels`), after docs checkpoint
+  `e7a61b9e`.
+- CI run `27593330137` passed, including all runtime shards, non-runtime tests,
+  integration-tagged smoke, Go vet/build, Docs Truth Check job, TLA+ model
+  check, frontend build, final Go gate, and staging deploy.
+- Deploy job `81578635355` succeeded.
+- Docs Truth Check run `27593330130` passed; FlakeHub publish run
+  `27593330160` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `9f332529d209e82df86056176ffac2d31d2c5df1`, deployed at
+  `2026-06-16T04:05:57Z`.
+- Deployed Playwright proof attempt
+  `GO_CHOIR_RUN_UNIVERSAL_WIRE_STAGING=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/universal-wire-staging-acceptance.spec.js`
+  failed because `stories.source === "universal-wire-edition-texture"` and
+  `stories.stories.length === 0`; the assertion expected length greater than
+  zero.
+
+Conjecture delta: the deployed proof must distinguish "Universal Wire source
+labels and app surface are cut over" from "staging currently has at least one
+edition story payload available to inspect." Empty editions can still prove the
+source-label and app-empty-state parts of C22, but they cannot prove deployed
+story payload field names until staging has an edition story or a product path
+creates one without manually seeding success records.
+
+Rollback path: no runtime rollback is indicated by this evidence alone. If the
+empty edition reflects a story-indexing regression rather than normal staging
+data shape, restore the prior Universal Wire story projection behavior while
+investigating platform publication verification.
+
+Heresy delta: discovered: the Universal Wire deployed acceptance oracle
+conflated edition existence with story availability. Introduced: none in this
+checkpoint. Repaired target: update the acceptance spec to pass on empty
+edition state while still asserting Texture labels and app surface, and leave
+deployed story-field proof open until an actual story payload is reachable.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -1510,20 +1563,23 @@ position / live conjectures / open edges:
   AppChangePackage review-evidence proof all pass. Universal Wire story
   projection fields, general Texture metadata keys, durable actor ids, storage
   tables, and file suffixes are adjacent residue outside this slice.
-- C22 supported for local Universal Wire projection scope: current story
+- C22 supported for local Universal Wire projection scope and partially
+  supported for deployed source-label/app-surface scope: current story
   payloads now emit Texture-named projection/document/content fields and
   Texture source labels, frontend Universal Wire opens stories through
   `story_texture_doc_id` first and emits `texture_document` related launch
   targets, focused runtime tests pass, runtime shards pass, frontend build
   passes, and current-code residue search finds old story projection labels
-  only in explicit legacy fallback or absence assertions. Staging CI/deploy and
-  deployed Universal Wire product proof remain open.
+  only in explicit legacy fallback or absence assertions. CI run
+  `27593330137`, deploy job `81578635355`, and staging identity for commit
+  `9f332529d209e82df86056176ffac2d31d2c5df1` pass. The first deployed
+  Universal Wire proof reached the new `universal-wire-edition-texture` source
+  label but found an empty edition, so deployed story-field proof remains open.
 
-next move: commit and push the Universal Wire projection behavior slice, monitor
-CI/deploy, verify staging identity, then run deployed Universal Wire acceptance
-proof for the stories API/app surface if reachable with available authenticated
-state. Keep protocol v0 unwritten until the remaining working-surface proofs are
-complete.
+next move: update the Universal Wire staging acceptance spec so empty deployed
+editions prove source-label/app-empty-state behavior without claiming story
+payload fields, rerun the deployed proof, then record the result. Keep protocol
+v0 unwritten until the remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
