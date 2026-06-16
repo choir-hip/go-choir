@@ -115,7 +115,7 @@ func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc
 	if err != nil {
 		return nil, fmt.Errorf("marshal wire publish request: %w", err)
 	}
-	target := wireURL + "/internal/wire/platform/publications/vtext"
+	target := wireURL + "/internal/wire/platform/publications/texture"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("build wire publish request: %w", err)

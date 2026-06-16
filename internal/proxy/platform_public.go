@@ -203,7 +203,7 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var doc sandboxVTextDocument
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/vtext/documents/"+url.PathEscape(req.DocID), authResult.UserID, &doc); err != nil {
+	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/documents/"+url.PathEscape(req.DocID), authResult.UserID, &doc); err != nil {
 		log.Printf("proxy: platform proposal fetch document: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private vtext document"})
 		return
@@ -220,7 +220,7 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var rev sandboxVTextRevision
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/vtext/revisions/"+url.PathEscape(req.RevisionID), authResult.UserID, &rev); err != nil {
+	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/revisions/"+url.PathEscape(req.RevisionID), authResult.UserID, &rev); err != nil {
 		log.Printf("proxy: platform proposal fetch revision: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private vtext revision"})
 		return

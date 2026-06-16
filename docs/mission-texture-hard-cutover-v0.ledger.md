@@ -841,3 +841,65 @@ Receipts:
 
 Open edge: implement and land the platform publication control-route cutover,
 then continue storage/app-id/file/metadata naming and protocol v0.
+
+## 2026-06-16 - Platform Publication Control Route Cutover
+
+Claim: platform/proxy/internal publication control routes can stop teaching the
+retired artifact name while preserving existing `/pub/vtext/...` published
+reader URLs as live route identity for a separate migration plan.
+
+Move: rename the public platform publish caller and proxy dispatch to
+`/api/platform/texture/publications`; rename the internal Wire publish route to
+`/internal/wire/platform/publications/texture`; rename platformd publish, sync,
+document-read, and revision-read routes to `/internal/platform/texture...`;
+switch publication private reads to `/api/texture`; add explicit old-route
+absence checks.
+
+Expected ΔV: 0 against coarse V=2, with bounded descent on the
+platform/internal publication-symbol sub-surface.
+
+Actual ΔV: 0 against V=2. The platform publication control-route sub-surface is
+locally discharged, with CI/deploy/staging proof still pending. Storage tables,
+file names, app ids, metadata keys, `/pub/vtext/...` public route identity,
+`edit_texture` compatibility alias, and Texture Protocol v0 remain open.
+
+Conjecture delta: supported locally that publication control routes can move to
+Texture naming without renaming live public article URLs.
+
+Protected surfaces: public proxy API routing, platformd internal routing, Wire
+autonomous publication, publication read/sync paths, frontend publish caller,
+and deployment routing.
+
+Admissible evidence class at this point: local route-focused tests, full
+touched-package tests, frontend build, runtime shard evidence, report-only
+doccheck, residue search, and diff check. CI, deploy identity, and staging route
+probe remain required before claiming deployed support.
+
+Receipts:
+- Focused local route tests passed:
+  `nix develop -c go test ./internal/proxy ./internal/platform ./internal/wirepublish ./internal/runtime -run 'TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection|TestHandleVTextPublicationRejectsMalformedPolicy|TestHandleVTextPublicationPublishesPublicURLSourceSnapshots|TestHandleVTextPublicationRecordsURLSnapshotImportFailureState|TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots|TestHandleInternalWirePlatformPublishPostsToPlatformd|TestIsPlatformVTextReadRequest|TestProtectedAPIResolveTarget_VTextReadsNotRoutedThroughSandbox|TestInternalPublishRequiresInternalCallerAndBundleResolve|TestRegisteredTextureRoutesExcludeLegacyVTextPlatformPrefix|TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformVTexts|TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformVTexts|TestResolveUniversalWireVTextReadOwnerAllowsEditionTranscludedPlatformDoc|TestPublishWireArticleToPlatform|TestPostPlatformPublication'`.
+- Full touched-package tests passed:
+  `nix develop -c go test ./internal/proxy ./internal/platform ./internal/wirepublish`.
+- Local runtime shard script passed:
+  `nix develop -c scripts/go-test-runtime-shards`.
+- Frontend production build passed:
+  `npm --prefix frontend run build`; pre-existing `UniversalWireApp.svelte`
+  unused export/CSS selector warnings and the chunk-size warning remained.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,129 warnings.
+- Residue search:
+  `rg -n "api/platform/vtext|platformPath\\('/vtext|internal/platform/(publications/vtext|vtext)|internal/wire/platform/publications/vtext|/api/vtext" frontend/src/lib/vtext.js internal/proxy internal/platform internal/wirepublish internal/runtime/wire_platform_publish.go internal/runtime/universal_wire.go`
+  returned only explicit deletion receipts or negative tests:
+  the proxy 404 branch for `/api/platform/vtext/publications`, legacy publish
+  route 404 test, old platformd registered-route absence tests, and old
+  `/api/vtext` platform-read negative cases.
+- `git diff --check`: pass.
+
+Rollback path: revert the future behavior commit to restore the old platform
+publication control routes and private publication reads.
+
+Heresy delta: repaired for local route-control scope; no storage/public-route
+or protocol repair claimed.
+
+Open edge: land the behavior commit, verify CI/deploy/staging route behavior,
+then continue storage/app-id/file/metadata naming and protocol v0.

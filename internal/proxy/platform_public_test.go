@@ -175,7 +175,7 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/vtext/documents/doc-1":
+		case "/api/texture/documents/doc-1":
 			if r.Header.Get("X-Authenticated-User") != "reader-1" {
 				t.Fatalf("sandbox trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
 			}
@@ -185,7 +185,7 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 				Title:             "My derivative",
 				CurrentRevisionID: "rev-1",
 			})
-		case "/api/vtext/revisions/rev-1":
+		case "/api/texture/revisions/rev-1":
 			if r.Header.Get("X-Authenticated-User") != "reader-1" {
 				t.Fatalf("sandbox trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
 			}

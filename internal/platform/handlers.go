@@ -233,9 +233,9 @@ func (h *Handler) HandleInternalGetVTextDocument(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
-	docID := strings.TrimPrefix(r.URL.Path, "/internal/platform/vtext/documents/")
+	docID := strings.TrimPrefix(r.URL.Path, "/internal/platform/texture/documents/")
 	if docID == r.URL.Path {
-		docID = strings.TrimPrefix(r.URL.Path, "/internal/platform/vtext/documents")
+		docID = strings.TrimPrefix(r.URL.Path, "/internal/platform/texture/documents")
 	}
 	docID = strings.TrimSuffix(docID, "/revisions")
 	docID = strings.Trim(docID, "/")
@@ -270,7 +270,7 @@ func (h *Handler) HandleInternalListVTextRevisions(w http.ResponseWriter, r *htt
 		h.HandleInternalGetVTextDocument(w, r)
 		return
 	}
-	path := strings.TrimPrefix(r.URL.Path, "/internal/platform/vtext/documents/")
+	path := strings.TrimPrefix(r.URL.Path, "/internal/platform/texture/documents/")
 	docID := strings.TrimSuffix(path, "/revisions")
 	docID = strings.Trim(docID, "/")
 	docID = strings.TrimSpace(docID)
@@ -296,7 +296,7 @@ func (h *Handler) HandleInternalGetVTextRevision(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
-	revisionID := strings.TrimPrefix(r.URL.Path, "/internal/platform/vtext/revisions/")
+	revisionID := strings.TrimPrefix(r.URL.Path, "/internal/platform/texture/revisions/")
 	revisionID = strings.Trim(revisionID, "/")
 	revisionID = strings.TrimSpace(revisionID)
 	if revisionID == "" {
@@ -318,16 +318,16 @@ func (h *Handler) HandleInternalGetVTextRevision(w http.ResponseWriter, r *http.
 
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
-	s.HandleFunc("/internal/platform/publications/vtext", h.HandleInternalPublishVText)
+	s.HandleFunc("/internal/platform/publications/texture", h.HandleInternalPublishVText)
 	s.HandleFunc("/internal/platform/publications/resolve", h.HandleInternalResolvePublication)
 	s.HandleFunc("/internal/platform/publications/export", h.HandleInternalExportPublication)
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)
 	s.HandleFunc("/internal/platform/proposal-deliveries/state", h.HandleInternalProposalDeliveryState)
 	s.HandleFunc("/internal/platform/publications/", h.HandleInternalPublicationProposal)
-	s.HandleFunc("/internal/platform/vtext/sync", h.HandleInternalSyncVTextDocument)
-	s.HandleFunc("/internal/platform/vtext/revisions/", h.HandleInternalGetVTextRevision)
-	s.HandleFunc("/internal/platform/vtext/documents/", h.HandleInternalListVTextRevisions)
-	s.HandleFunc("/internal/platform/vtext/documents", h.HandleInternalGetVTextDocument)
+	s.HandleFunc("/internal/platform/texture/sync", h.HandleInternalSyncVTextDocument)
+	s.HandleFunc("/internal/platform/texture/revisions/", h.HandleInternalGetVTextRevision)
+	s.HandleFunc("/internal/platform/texture/documents/", h.HandleInternalListVTextRevisions)
+	s.HandleFunc("/internal/platform/texture/documents", h.HandleInternalGetVTextDocument)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

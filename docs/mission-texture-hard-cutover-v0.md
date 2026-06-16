@@ -187,8 +187,8 @@ invariants / qualities / domain ramp (I/Q/D):
   identity -> browser product proof -> protocol canonization.
 
 variant (ranking function) V: current V=2; last ΔV=0 against the coarse
-variant, with registered router/extractor old-route normalization landed and
-deployed:
+variant, with platform publication control-route cutover locally supported and
+landing pending:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
@@ -199,12 +199,13 @@ deployed:
    been reconciled to Texture or line-labeled as historical/deletion residue;
    `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
    /tmp/choir-doccheck.json` now reports no H5 warnings for that high-read set;
-4. current V includes: storage, file, app-id, metadata, and platform/internal
-   publication symbols still use the old ontology; frontend `data-vtext-*`
-   attributes, frontend `/api/vtext` compatibility-route deletion target test
-   probes, the browser-public `/api/vtext` route registration, the product API
-   tool allowlist shim, registered-router old-route normalization, and direct
-   Texture handler test paths are discharged;
+4. current V includes: storage, file, app-id, and metadata symbols still use
+   the old ontology; frontend `data-vtext-*` attributes, frontend `/api/vtext`
+   compatibility-route deletion target test probes, the browser-public
+   `/api/vtext` route registration, the product API tool allowlist shim,
+   registered-router old-route normalization, direct Texture handler test
+   paths, and platform/proxy/internal publication control routes are discharged
+   for local scope;
 5. discharged: visible UI labels and import affordances are cut over to
    Texture and proven on staging through browser product evidence;
 6. discharged: the edit affordance surface has a common `patch_texture` tool
@@ -327,17 +328,20 @@ position / live conjectures / open edges:
   `/api/texture`, and `/api/vtext` remains only in explicit legacy-route
   refusal tests for this runtime slice. CI run `27587124142` passed and Node B
   staging health reported commit `247e28415bb7b5a656b9d83072288403666c9c8a`.
-- C14 active: platform publication control routes still expose old-name
-  endpoints (`/api/platform/vtext/publications`,
-  `/internal/wire/platform/publications/vtext`,
-  `/internal/platform/publications/vtext`, and
-  `/internal/platform/vtext/...`). `/pub/vtext/...` is separately classified as
-  live route identity and should not be renamed without redirect/rollback
-  policy.
+- C14 supported for local route-control scope, landing pending: platform
+  publication control routes now use Texture paths
+  (`/api/platform/texture/publications`,
+  `/internal/wire/platform/publications/texture`,
+  `/internal/platform/publications/texture`, and
+  `/internal/platform/texture/...`), and private publication reads use
+  `/api/texture`. The retired public control route returns 404, platformd
+  registered-route tests reject the old internal prefixes, and `/pub/vtext/...`
+  remains separately classified as live public route identity until a redirect
+  and rollback policy exists.
 
-next move: cut over platform/proxy/internal publication control routes from
-`vtext` to `texture`, while preserving `/pub/vtext/...` public route identity
-for a later explicit migration plan.
+next move: land the platform publication control-route cutover, monitor CI and
+Node B deploy identity, then probe staging so the old control route is absent
+while the new Texture control route reaches its expected method/auth gate.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

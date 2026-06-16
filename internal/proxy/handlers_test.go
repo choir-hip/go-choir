@@ -2109,7 +2109,7 @@ func TestAuthenticatedVTextRouteIsForwarded(t *testing.T) {
 	gotUser := ""
 	gotPath := ""
 	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/vtext/documents", func(w http.ResponseWriter, r *http.Request) {
+	sandboxMux.HandleFunc("/api/texture/documents", func(w http.ResponseWriter, r *http.Request) {
 		gotUser = r.Header.Get("X-Authenticated-User")
 		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
@@ -2132,7 +2132,7 @@ func TestAuthenticatedVTextRouteIsForwarded(t *testing.T) {
 
 	accessToken := issueTestAccessJWT(priv, "user-authenticated")
 
-	req := httptest.NewRequest(http.MethodGet, "/api/vtext/documents", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/texture/documents", nil)
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: accessToken})
 	w := httptest.NewRecorder()
 	h.HandleAPI(w, req)
@@ -2144,8 +2144,8 @@ func TestAuthenticatedVTextRouteIsForwarded(t *testing.T) {
 	if gotUser != "user-authenticated" {
 		t.Fatalf("forwarded X-Authenticated-User: got %q, want %q", gotUser, "user-authenticated")
 	}
-	if gotPath != "/api/vtext/documents" {
-		t.Fatalf("forwarded path: got %q, want %q", gotPath, "/api/vtext/documents")
+	if gotPath != "/api/texture/documents" {
+		t.Fatalf("forwarded path: got %q, want %q", gotPath, "/api/texture/documents")
 	}
 }
 
@@ -2985,10 +2985,10 @@ func TestProtectedAPIResolveTarget_UniversalWireStoriesUsePlatformComputer(t *te
 // resolve through vmctl ownership (VAL-VM-002).
 
 func TestProtectedAPIResolveTarget_VTextReadsNotRoutedThroughSandbox(t *testing.T) {
-	// VText reads with read_owner=universal-wire-platform are intercepted
+	// Texture reads with read_owner=universal-wire-platform are intercepted
 	// by isPlatformVTextReadRequest in HandleAPI and served from platformd.
 	// They should NOT route through protectedAPIResolveTarget to the sandbox.
-	req := httptest.NewRequest(http.MethodGet, "/api/vtext/documents/doc-wire-1?read_owner="+vmctl.UniversalWirePlatformOwnerID, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/texture/documents/doc-wire-1?read_owner="+vmctl.UniversalWirePlatformOwnerID, nil)
 	ownerID, desktopID := protectedAPIResolveTarget(req, "user-alice", vmctl.PrimaryDesktopID)
 	if ownerID != "user-alice" {
 		t.Fatalf("ownerID = %q, want %q (platformd intercepts before this)", ownerID, "user-alice")
@@ -2997,29 +2997,31 @@ func TestProtectedAPIResolveTarget_VTextReadsNotRoutedThroughSandbox(t *testing.
 		t.Fatalf("desktopID = %q, want %q", desktopID, vmctl.PrimaryDesktopID)
 	}
 
-	// Plain VText reads without read_owner still go to caller sandbox.
-	req = httptest.NewRequest(http.MethodGet, "/api/vtext/documents/doc-wire-1", nil)
+	// Plain Texture reads without read_owner still go to caller sandbox.
+	req = httptest.NewRequest(http.MethodGet, "/api/texture/documents/doc-wire-1", nil)
 	ownerID, desktopID = protectedAPIResolveTarget(req, "user-alice", vmctl.PrimaryDesktopID)
 	if ownerID != "user-alice" || desktopID != vmctl.PrimaryDesktopID {
-		t.Fatalf("plain vtext read resolve = (%q, %q), want caller desktop", ownerID, desktopID)
+		t.Fatalf("plain texture read resolve = (%q, %q), want caller desktop", ownerID, desktopID)
 	}
 }
 
 func TestIsPlatformVTextReadRequest(t *testing.T) {
-	// Positive cases — read-only VText reads with read_owner param.
+	// Positive cases — read-only Texture reads with read_owner param.
 	cases := []struct {
 		method string
 		path   string
 		want   bool
 	}{
-		{http.MethodGet, "/api/vtext/documents/doc-1?read_owner=universal-wire-platform", true},
-		{http.MethodGet, "/api/vtext/documents/doc-1/revisions?read_owner=universal-wire-platform", true},
-		{http.MethodGet, "/api/vtext/revisions/rev-1?read_owner=universal-wire-platform", true},
-		{http.MethodHead, "/api/vtext/documents/doc-1?read_owner=universal-wire-platform", true},
+		{http.MethodGet, "/api/texture/documents/doc-1?read_owner=universal-wire-platform", true},
+		{http.MethodGet, "/api/texture/documents/doc-1/revisions?read_owner=universal-wire-platform", true},
+		{http.MethodGet, "/api/texture/revisions/rev-1?read_owner=universal-wire-platform", true},
+		{http.MethodHead, "/api/texture/documents/doc-1?read_owner=universal-wire-platform", true},
 		// Negative cases.
-		{http.MethodGet, "/api/vtext/documents/doc-1", false},
-		{http.MethodGet, "/api/vtext/documents/doc-1?read_owner=other-user", false},
-		{http.MethodPost, "/api/vtext/documents/doc-1?read_owner=universal-wire-platform", false},
+		{http.MethodGet, "/api/texture/documents/doc-1", false},
+		{http.MethodGet, "/api/texture/documents/doc-1?read_owner=other-user", false},
+		{http.MethodPost, "/api/texture/documents/doc-1?read_owner=universal-wire-platform", false},
+		{http.MethodGet, "/api/vtext/documents/doc-1?read_owner=universal-wire-platform", false},
+		{http.MethodGet, "/api/vtext/revisions/rev-1?read_owner=universal-wire-platform", false},
 		{http.MethodGet, "/api/universal-wire/stories?read_owner=universal-wire-platform", false},
 	}
 	for _, tc := range cases {

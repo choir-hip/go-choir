@@ -21,7 +21,7 @@
  *   POST   /api/content/items                      — create owner-scoped content item
  *   POST   /api/content/import-url                 — import readable URL content
  *   POST   /api/content/import-file                — import an existing user-computer file
- *   POST   /api/platform/vtext/publications        — publish selected VText revision
+ *   POST   /api/platform/texture/publications      — publish selected Texture revision
  *   GET    /api/platform/publications/resolve      — resolve public publication bundle
  *   GET    /api/platform/publications/export       — export canonical publication artifact
  *   GET    /api/platform/retrieval/search          — search public published spans
@@ -480,7 +480,7 @@ export async function publishVText(docId, { revisionId = '', slug = '', accessPo
   if (accessPolicy && typeof accessPolicy === 'object') payload.access_policy = accessPolicy;
   if (exportPolicy && typeof exportPolicy === 'object') payload.export_policy = exportPolicy;
 
-  const res = await fetchWithRenewal(platformPath('/vtext/publications'), {
+  const res = await fetchWithRenewal(platformPath('/texture/publications'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

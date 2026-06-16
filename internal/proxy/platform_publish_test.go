@@ -20,7 +20,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 
 	var gotPlatformReq platform.PublishVTextRequest
 	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/internal/platform/publications/vtext" {
+		if r.URL.Path != "/internal/platform/publications/texture" {
 			t.Fatalf("platformd path: got %s", r.URL.Path)
 		}
 		if r.Header.Get("X-Internal-Caller") != "true" {
@@ -48,14 +48,14 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/vtext/documents/doc-1":
+		case "/api/texture/documents/doc-1":
 			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
 				DocID:             "doc-1",
 				OwnerID:           "user-1",
 				Title:             "My Note",
 				CurrentRevisionID: "rev-head",
 			})
-		case "/api/vtext/revisions/rev-2":
+		case "/api/texture/revisions/rev-2":
 			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
 				RevisionID: "rev-2",
 				DocID:      "doc-1",
@@ -93,7 +93,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-1","revision_id":"rev-2","slug":"my-note","access_policy":{"visibility":"unlisted","route":"public"},"export_policy":{"copy_allowed":true,"download_allowed":false,"formats":["md"]}}`))
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/texture/publications", strings.NewReader(`{"doc_id":"doc-1","revision_id":"rev-2","slug":"my-note","access_policy":{"visibility":"unlisted","route":"public"},"export_policy":{"copy_allowed":true,"download_allowed":false,"formats":["md"]}}`))
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	req.Header.Set("X-Authenticated-User", "attacker")
 	w := httptest.NewRecorder()
@@ -138,6 +138,14 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	if resp.PublicURL != "https://choir.news/pub/vtext/my-note-pub1" {
 		t.Fatalf("public url: got %q", resp.PublicURL)
 	}
+
+	legacyReq := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-1","revision_id":"rev-2"}`))
+	legacyReq.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
+	legacyW := httptest.NewRecorder()
+	h.HandleAPI(legacyW, legacyReq)
+	if legacyW.Code != http.StatusNotFound {
+		t.Fatalf("legacy platform publish status: got %d body %s, want 404", legacyW.Code, legacyW.Body.String())
+	}
 }
 
 func TestHandleVTextPublicationRejectsMalformedPolicy(t *testing.T) {
@@ -162,7 +170,7 @@ func TestHandleVTextPublicationRejectsMalformedPolicy(t *testing.T) {
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-1","access_policy":["public"],"export_policy":{"download_allowed":true}}`))
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/texture/publications", strings.NewReader(`{"doc_id":"doc-1","access_policy":["public"],"export_policy":{"download_allowed":true}}`))
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	w := httptest.NewRecorder()
 
@@ -187,7 +195,7 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 
 	var gotPlatformReq platform.PublishVTextRequest
 	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/internal/platform/publications/vtext" {
+		if r.URL.Path != "/internal/platform/publications/texture" {
 			t.Fatalf("platformd path: got %s", r.URL.Path)
 		}
 		if err := json.NewDecoder(r.Body).Decode(&gotPlatformReq); err != nil {
@@ -213,14 +221,14 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/vtext/documents/doc-url":
+		case "/api/texture/documents/doc-url":
 			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
 				DocID:             "doc-url",
 				OwnerID:           "user-1",
 				Title:             "URL Note",
 				CurrentRevisionID: "rev-url",
 			})
-		case "/api/vtext/revisions/rev-url":
+		case "/api/texture/revisions/rev-url":
 			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
 				RevisionID: "rev-url",
 				DocID:      "doc-url",
@@ -274,7 +282,7 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-url","revision_id":"rev-url","slug":"url-note"}`))
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/texture/publications", strings.NewReader(`{"doc_id":"doc-url","revision_id":"rev-url","slug":"url-note"}`))
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	w := httptest.NewRecorder()
 
@@ -345,14 +353,14 @@ func TestHandleVTextPublicationRecordsURLSnapshotImportFailureState(t *testing.T
 	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/vtext/documents/doc-url":
+		case "/api/texture/documents/doc-url":
 			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
 				DocID:             "doc-url",
 				OwnerID:           "user-1",
 				Title:             "URL Note",
 				CurrentRevisionID: "rev-url",
 			})
-		case "/api/vtext/revisions/rev-url":
+		case "/api/texture/revisions/rev-url":
 			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
 				RevisionID: "rev-url",
 				DocID:      "doc-url",
@@ -378,7 +386,7 @@ func TestHandleVTextPublicationRecordsURLSnapshotImportFailureState(t *testing.T
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-url","revision_id":"rev-url","slug":"url-note"}`))
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/texture/publications", strings.NewReader(`{"doc_id":"doc-url","revision_id":"rev-url","slug":"url-note"}`))
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	w := httptest.NewRecorder()
 
@@ -429,14 +437,14 @@ func TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots(t *testing.T
 	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/vtext/documents/doc-private":
+		case "/api/texture/documents/doc-private":
 			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
 				DocID:             "doc-private",
 				OwnerID:           "user-1",
 				Title:             "Private Note",
 				CurrentRevisionID: "rev-private",
 			})
-		case "/api/vtext/revisions/rev-private":
+		case "/api/texture/revisions/rev-private":
 			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
 				RevisionID: "rev-private",
 				DocID:      "doc-private",
@@ -467,7 +475,7 @@ func TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots(t *testing.T
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-private","revision_id":"rev-private"}`))
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/texture/publications", strings.NewReader(`{"doc_id":"doc-private","revision_id":"rev-private"}`))
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	w := httptest.NewRecorder()
 

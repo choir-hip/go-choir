@@ -163,7 +163,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 	writeJSON(w, status, platformResp)
 }
 
-// sandboxRevisionEntry matches the sandbox /api/vtext/revisions list item shape.
+// sandboxRevisionEntry matches the sandbox /api/texture/revisions list item shape.
 type sandboxRevisionEntry struct {
 	RevisionID       string          `json:"revision_id"`
 	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
@@ -182,7 +182,7 @@ func (h *Handler) syncVTextToPlatformd(r *http.Request, sandboxURL, ownerID, doc
 	ctx := r.Context()
 
 	var revisions []sandboxRevisionEntry
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/vtext/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &revisions); err != nil {
+	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &revisions); err != nil {
 		log.Printf("proxy: sync vtext to platformd: fetch revisions for %s: %v", docID, err)
 		return
 	}
@@ -208,7 +208,7 @@ func (h *Handler) syncVTextToPlatformd(r *http.Request, sandboxURL, ownerID, doc
 		})
 	}
 
-	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/vtext/sync")
+	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/texture/sync")
 	if err != nil {
 		log.Printf("proxy: sync vtext to platformd: build URL: %v", err)
 		return

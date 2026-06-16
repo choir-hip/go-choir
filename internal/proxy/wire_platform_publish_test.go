@@ -19,8 +19,8 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 	}
 	platformOwner := wirepublish.PlatformOwnerID()
 	meta, _ := json.Marshal(map[string]any{
-		"source":                   "edit_vtext",
-		"revision_role":            wirepublish.RevisionRoleCanonical,
+		"source":                     "edit_vtext",
+		"revision_role":              wirepublish.RevisionRoleCanonical,
 		"ingestion_handoff_cycle_id": "cycle-proxy",
 	})
 
@@ -30,13 +30,13 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/internal/vtext/documents/doc-wire-proxy", "/api/vtext/documents/doc-wire-proxy":
+		case "/internal/vtext/documents/doc-wire-proxy", "/api/texture/documents/doc-wire-proxy":
 			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
 				DocID:   "doc-wire-proxy",
 				OwnerID: platformOwner,
 				Title:   "Proxy story.vtext",
 			})
-		case "/internal/vtext/revisions/rev-wire-proxy", "/api/vtext/revisions/rev-wire-proxy":
+		case "/internal/vtext/revisions/rev-wire-proxy", "/api/texture/revisions/rev-wire-proxy":
 			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
 				RevisionID: "rev-wire-proxy",
 				DocID:      "doc-wire-proxy",
@@ -44,7 +44,7 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 				Content:    "# Proxy story\n\nMADRID -- Officials confirmed the route change.",
 				Metadata:   meta,
 			})
-		case "/api/vtext/documents/doc-wire-proxy/revisions":
+		case "/api/texture/documents/doc-wire-proxy/revisions":
 			_ = json.NewEncoder(w).Encode([]sandboxVTextRevision{{RevisionID: "rev-wire-proxy", DocID: "doc-wire-proxy", OwnerID: platformOwner, Content: "# Proxy story", Metadata: meta}})
 		default:
 			// Async sync goroutine may hit unexpected paths; log instead of fatal.
@@ -55,7 +55,7 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 
 	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/internal/platform/publications/vtext":
+		case "/internal/platform/publications/texture":
 			if r.Header.Get("X-Internal-Caller") != "true" {
 				t.Fatalf("platformd internal header missing")
 			}
@@ -71,7 +71,7 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 				PublicationID: "pub-proxy",
 				RoutePath:     "wire/proxy-story",
 			})
-		case "/internal/platform/vtext/sync":
+		case "/internal/platform/texture/sync":
 			// Async sync of all revisions — just accept it.
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]any{"doc_id": "test", "revision_count": 0})
@@ -97,7 +97,7 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 		"run_id":         "run-proxy",
 		"request_intent": "universal_wire_processor_article_revision",
 	})
-	req := httptest.NewRequest(http.MethodPost, "/internal/wire/platform/publications/vtext", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/internal/wire/platform/publications/texture", bytes.NewReader(body))
 	req.Header.Set("X-Internal-Caller", "true")
 	req.Header.Set("X-Authenticated-User", platformOwner)
 	w := httptest.NewRecorder()

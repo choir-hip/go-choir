@@ -114,7 +114,7 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 	h.lifecycle.record("platform_publish.resolve", "ok", time.Since(resolveStarted))
 
 	var doc sandboxVTextDocument
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/vtext/documents/"+url.PathEscape(req.DocID), authResult.UserID, &doc); err != nil {
+	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/documents/"+url.PathEscape(req.DocID), authResult.UserID, &doc); err != nil {
 		log.Printf("proxy: platform publish fetch document: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private vtext document"})
 		h.lifecycle.record("platform_publish.private_read", "document_error", time.Since(started))
@@ -135,7 +135,7 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 	}
 
 	var rev sandboxVTextRevision
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/vtext/revisions/"+url.PathEscape(req.RevisionID), authResult.UserID, &rev); err != nil {
+	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/revisions/"+url.PathEscape(req.RevisionID), authResult.UserID, &rev); err != nil {
 		log.Printf("proxy: platform publish fetch revision: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private vtext revision"})
 		h.lifecycle.record("platform_publish.private_read", "revision_error", time.Since(started))
@@ -581,7 +581,7 @@ func (h *Handler) importSandboxURLContent(r *http.Request, sandboxBase, userID, 
 }
 
 func (h *Handler) postPlatformPublication(r *http.Request, req platform.PublishVTextRequest) (any, int, error) {
-	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/publications/vtext")
+	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/publications/texture")
 	if err != nil {
 		return nil, 0, err
 	}

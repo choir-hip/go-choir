@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
 )
 
 // PostPlatformPublication calls platformd's internal publish endpoint.
@@ -17,7 +16,7 @@ func PostPlatformPublication(ctx context.Context, client *http.Client, platformd
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
-	target := strings.TrimRight(strings.TrimSpace(platformdURL), "/") + "/internal/platform/publications/vtext"
+	target := strings.TrimRight(strings.TrimSpace(platformdURL), "/") + "/internal/platform/publications/texture"
 	data, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal platform publish request: %w", err)

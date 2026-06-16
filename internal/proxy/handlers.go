@@ -439,6 +439,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusGone, errorResponse{Error: "terminal app has been replaced by Super Console"})
 		return
 	case path == "/api/platform/vtext/publications":
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+		return
+	case path == "/api/platform/texture/publications":
 		h.HandleVTextPublication(w, r)
 		return
 	case path == "/api/platform/publications/resolve":
@@ -992,27 +995,27 @@ func (h *Handler) HandlePlatformVTextRead(w http.ResponseWriter, r *http.Request
 	path := r.URL.Path
 	var platformdPath string
 	switch {
-	case strings.HasPrefix(path, "/api/vtext/documents/") && strings.HasSuffix(path, "/revisions"):
-		docID := strings.TrimPrefix(path, "/api/vtext/documents/")
+	case strings.HasPrefix(path, "/api/texture/documents/") && strings.HasSuffix(path, "/revisions"):
+		docID := strings.TrimPrefix(path, "/api/texture/documents/")
 		docID = strings.TrimSuffix(docID, "/revisions")
-		platformdPath = "/internal/platform/vtext/documents/" + url.PathEscape(docID) + "/revisions"
-	case strings.HasPrefix(path, "/api/vtext/documents/") && strings.HasSuffix(path, "/history"):
-		docID := strings.TrimPrefix(path, "/api/vtext/documents/")
+		platformdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID) + "/revisions"
+	case strings.HasPrefix(path, "/api/texture/documents/") && strings.HasSuffix(path, "/history"):
+		docID := strings.TrimPrefix(path, "/api/texture/documents/")
 		docID = strings.TrimSuffix(docID, "/history")
-		platformdPath = "/internal/platform/vtext/documents/" + url.PathEscape(docID) + "/revisions"
-	case strings.HasPrefix(path, "/api/vtext/documents/") && strings.HasSuffix(path, "/stream"):
+		platformdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID) + "/revisions"
+	case strings.HasPrefix(path, "/api/texture/documents/") && strings.HasSuffix(path, "/stream"):
 		// Published articles don't need live SSE; return empty event stream
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 		w.WriteHeader(http.StatusOK)
 		return
-	case strings.HasPrefix(path, "/api/vtext/documents/"):
-		docID := strings.TrimPrefix(path, "/api/vtext/documents/")
-		platformdPath = "/internal/platform/vtext/documents/" + url.PathEscape(docID)
-	case strings.HasPrefix(path, "/api/vtext/revisions/"):
-		revisionID := strings.TrimPrefix(path, "/api/vtext/revisions/")
-		platformdPath = "/internal/platform/vtext/revisions/" + url.PathEscape(revisionID)
+	case strings.HasPrefix(path, "/api/texture/documents/"):
+		docID := strings.TrimPrefix(path, "/api/texture/documents/")
+		platformdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID)
+	case strings.HasPrefix(path, "/api/texture/revisions/"):
+		revisionID := strings.TrimPrefix(path, "/api/texture/revisions/")
+		platformdPath = "/internal/platform/texture/revisions/" + url.PathEscape(revisionID)
 	default:
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
@@ -1059,10 +1062,10 @@ func isPlatformVTextReadRequest(r *http.Request) bool {
 		return false
 	}
 	path := r.URL.Path
-	if strings.HasPrefix(path, "/api/vtext/documents/") {
+	if strings.HasPrefix(path, "/api/texture/documents/") {
 		return true
 	}
-	return strings.HasPrefix(path, "/api/vtext/revisions/")
+	return strings.HasPrefix(path, "/api/texture/revisions/")
 }
 
 func RegisterRoutes(s *server.Server, h *Handler) {
@@ -1079,5 +1082,5 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	// vmctl control endpoints are internal-only; they must not be
 	// exposed as public browser-facing routes.
 	s.HandleFunc("/internal/vmctl/", h.HandleVMctlDeny)
-	s.HandleFunc("/internal/wire/platform/publications/vtext", h.HandleInternalWirePlatformPublish)
+	s.HandleFunc("/internal/wire/platform/publications/texture", h.HandleInternalWirePlatformPublish)
 }

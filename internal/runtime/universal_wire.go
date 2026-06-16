@@ -165,8 +165,8 @@ func (h *APIHandler) platformdHasPublishedVText(ctx context.Context, docID, revi
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
 	for _, path := range []string{
-		"/internal/platform/vtext/documents/" + url.PathEscape(strings.TrimSpace(docID)),
-		"/internal/platform/vtext/revisions/" + url.PathEscape(strings.TrimSpace(revisionID)),
+		"/internal/platform/texture/documents/" + url.PathEscape(strings.TrimSpace(docID)),
+		"/internal/platform/texture/revisions/" + url.PathEscape(strings.TrimSpace(revisionID)),
 	} {
 		target := base + path
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
