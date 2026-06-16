@@ -2110,3 +2110,36 @@ Receipts:
 Open edge: select the next bounded residue class among Universal Wire story
 projection metadata, general Texture metadata keys, durable actor ids,
 storage/file suffixes, stale frontend app-launcher test labels, and protocol v0.
+
+## 2026-06-16 - Problem Checkpoint: Universal Wire Story Projection Labels
+
+Claim: Universal Wire story projection labels are a bounded live product API and
+frontend-launch residue class that can be repaired without touching broader
+storage, file suffix, actor-id, Style.vtext, or general metadata migrations.
+
+Move: document the read-only residue inventory, conjecture delta, protected
+surfaces, admissible evidence class, rollback path, heresy delta, adjacent
+non-goals, and next behavior-slice design before changing runtime/frontend
+code.
+
+Expected ΔV: no coarse V decrease; C22 becomes active with the required Problem
+Documentation First checkpoint in place.
+
+Actual ΔV: no coarse V decrease. C22 is active and ready for implementation.
+
+Receipts:
+- `internal/types/wire.go` still defines JSON fields
+  `projection_vtext_docs`, `story_vtext_doc_id`, and `vtext_content`.
+- `internal/runtime/universal_wire.go` still emits
+  `source-network-vtext-*`, `source-network-vtext-index`, and
+  `universal-wire-*-vtext` story/source labels.
+- `frontend/src/lib/UniversalWireApp.svelte` still reads
+  `story_vtext_doc_id`, creates `gw-vtext-*` related entities, uses
+  `target_kind: 'vtext_document'`, and opens `.story.vtext` source paths.
+- `frontend/tests/universal-wire-app.spec.js` still stubs current Universal
+  Wire payloads with old story ids/source labels/copy.
+
+Open edge: implement the C22 behavior slice, prove focused runtime/frontend
+coverage and residue searches locally, then push, monitor CI/deploy, and run a
+deployed Universal Wire product proof if reachable without manually seeding
+success records.

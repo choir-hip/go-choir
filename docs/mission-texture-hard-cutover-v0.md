@@ -1081,6 +1081,88 @@ Heresy delta: repaired for the deployed model-visible `edit_texture`
 compatibility alias; legacy `source=edit_texture` and `source=edit_vtext`
 metadata compatibility remains discovered migration residue.
 
+## Problem Checkpoint: Universal Wire Story Projection Label Residue
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+frontend source, API contract, test fixture, storage, file alias, platform
+publication, or persistent state changed in this checkpoint.
+
+Read-only search on 2026-06-16 shows that Universal Wire's live story
+projection contract still teaches the retired artifact ontology at the product
+API and frontend-open boundary. The residue is bounded to the Universal Wire
+story projection fields and story/source-state labels; broader `.vtext`
+shortcut files, storage table names, durable `vtext:` actor labels, source
+metadata keys, and Style.vtext prompt/style-source language remain separate
+migration surfaces.
+
+Conjecture delta: new Universal Wire story projections can emit Texture-named
+document/content fields and source-state labels while the frontend consumes the
+current Texture fields first and, only if needed, carries deletion-receipted
+legacy read fallback for existing staged or persisted story payloads.
+
+Protected surfaces: `/api/universal-wire/stories` response JSON, runtime story
+publication verification checks, Universal Wire frontend story-open and related
+Texture launch context, source-state labels, focused runtime/frontend tests,
+and deployed browser product proof for opening a Universal Wire story as
+Texture.
+
+Admissible evidence class: focused Universal Wire runtime tests, frontend build
+or focused Universal Wire Playwright tests, residue search for the old emitted
+story projection fields in current code, CI/deploy identity if behavior changes
+land, and deployed staging product proof through public authenticated product
+paths.
+
+Rollback path: restore the prior Universal Wire story field emitters and
+frontend consumers if story indexing, platform publication verification,
+related Texture launches, or Universal Wire frontend rendering regresses.
+
+Heresy delta: discovered: Universal Wire still emits and consumes old-name
+story projection labels after route/tool/app/provenance cutovers. Introduced:
+none in this checkpoint. Repaired target: new Universal Wire story projection
+payloads and frontend story launches should teach Texture without pretending
+that storage, file suffix, actor id, or style-source residue is fixed.
+
+Receipts:
+
+- `internal/types/wire.go` still defines `ProjectionVTextDocs` with JSON
+  `projection_vtext_docs`, `StoryVTextDoc` with JSON
+  `story_vtext_doc_id`, and `VTextContent` with JSON `vtext_content`.
+- `internal/runtime/universal_wire.go` still emits story ids and source state
+  labels such as `source-network-vtext-*` and
+  `source-network-vtext-index`, uses `StoryVTextDoc` for platform publication
+  verification, and returns `universal-wire-vtext-index` /
+  `universal-wire-edition-vtext` source labels.
+- `frontend/src/lib/UniversalWireApp.svelte` still reads
+  `story_vtext_doc_id`, creates related entities as `gw-vtext-*`, uses
+  `target_kind: 'vtext_document'`, and opens story source paths ending in
+  `.story.vtext`.
+- `frontend/tests/universal-wire-app.spec.js` still stubs
+  `source-network-vtext-*`, `universal-wire-vtext-index`, and visible copy
+  saying `VText article`.
+- Adjacent residue kept out of this slice includes `internal/store/vtext.go`
+  storage tables, `platform_vtext_documents`, `.vtext` shortcut/alias files,
+  durable `vtext:<doc_id>` author labels, `related_vtexts` metadata,
+  source-renderer `vtext_document` compatibility beyond Universal Wire launch
+  context, and Style.vtext selection prompt language.
+
+Next behavior slice design:
+
+- emit `projection_texture_docs`, `story_texture_doc_id`, and
+  `texture_content` from Universal Wire stories;
+- rename new source labels toward `source-network-texture-*`,
+  `source-network-texture-index`, and `universal-wire-*-texture` where they
+  are current payload/state labels rather than persisted storage keys;
+- update Universal Wire frontend story-open and related launch code to consume
+  Texture fields first, with legacy fallback only if tests prove current
+  payload compatibility needs it;
+- keep `.vtext` shortcut file names, durable `vtext:` actor labels, storage
+  tables, and general `related_vtexts` metadata out of scope for this slice;
+- prove locally with focused runtime Universal Wire tests, frontend build or
+  focused Universal Wire Playwright tests, residue searches for the old story
+  projection emitters, then push, monitor CI/deploy, verify staging identity,
+  and run deployed Universal Wire product proof if the behavior is reachable
+  without manually seeding success records.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -1362,10 +1444,18 @@ position / live conjectures / open edges:
   AppChangePackage review-evidence proof all pass. Universal Wire story
   projection fields, general Texture metadata keys, durable actor ids, storage
   tables, and file suffixes are adjacent residue outside this slice.
+- C22 active: Universal Wire story projection metadata is a bounded product API
+  and frontend-launch residue class. The Problem Checkpoint above documents the
+  old emitted fields (`projection_vtext_docs`, `story_vtext_doc_id`,
+  `vtext_content`), story/source labels, frontend consumers, protected
+  surfaces, evidence class, rollback path, and adjacent surfaces deliberately
+  left out of scope.
 
-next move: select the next bounded residue class among Universal Wire story
-projection metadata, general Texture metadata keys, durable actor ids,
-storage/file suffixes, stale frontend app-launcher test labels, and protocol v0.
+next move: implement the Universal Wire story projection label slice: emit
+Texture-named story document/content fields and source-state labels, update the
+frontend consumer to prefer Texture fields, keep only deletion-receipted legacy
+fallback if required by tests, run focused runtime/frontend proof and residue
+searches, then land and prove staging if behavior changes reach production.
 Keep protocol v0 unwritten until the remaining working-surface proofs are
 complete.
 
