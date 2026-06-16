@@ -59,6 +59,110 @@ func openTestPlatformStore(t *testing.T) (*Store, string) {
 	return s, root
 }
 
+func platformTableCount(t *testing.T, s *Store, table string) int64 {
+	t.Helper()
+	var count int64
+	if err := s.db.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
+		t.Fatalf("count %s: %v", table, err)
+	}
+	return count
+}
+
+func TestPlatformTextureStoreWritesCurrentTables(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+
+	if err := store.UpsertTextureDocument(ctx, "doc-current", "owner-current", "Current Texture"); err != nil {
+		t.Fatalf("UpsertTextureDocument: %v", err)
+	}
+	if err := store.UpsertTextureRevision(ctx, PlatformTextureRevision{
+		RevisionID:  "rev-current",
+		DocID:       "doc-current",
+		OwnerID:     "owner-current",
+		AuthorKind:  "agent",
+		AuthorLabel: "texture",
+		Content:     "current table content",
+	}); err != nil {
+		t.Fatalf("UpsertTextureRevision: %v", err)
+	}
+
+	if got := platformTableCount(t, store, "platform_texture_documents"); got != 1 {
+		t.Fatalf("platform_texture_documents count = %d, want 1", got)
+	}
+	if got := platformTableCount(t, store, "platform_texture_revisions"); got != 1 {
+		t.Fatalf("platform_texture_revisions count = %d, want 1", got)
+	}
+	if got := platformTableCount(t, store, "platform_vtext_documents"); got != 0 {
+		t.Fatalf("platform_vtext_documents count = %d, want 0 for current writes", got)
+	}
+	if got := platformTableCount(t, store, "platform_vtext_revisions"); got != 0 {
+		t.Fatalf("platform_vtext_revisions count = %d, want 0 for current writes", got)
+	}
+
+	doc, err := store.GetTextureDocument(ctx, "doc-current")
+	if err != nil {
+		t.Fatalf("GetTextureDocument: %v", err)
+	}
+	if doc.Title != "Current Texture" {
+		t.Fatalf("document title = %q, want Current Texture", doc.Title)
+	}
+	revs, err := store.ListTextureRevisions(ctx, "doc-current")
+	if err != nil {
+		t.Fatalf("ListTextureRevisions: %v", err)
+	}
+	if len(revs) != 1 || revs[0].RevisionID != "rev-current" || revs[0].Content != "current table content" {
+		t.Fatalf("current revisions = %+v, want rev-current content", revs)
+	}
+}
+
+func TestPlatformTextureStoreMigratesLegacyTablesAtBootstrap(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO platform_vtext_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		"doc-legacy", "owner-legacy", "Legacy Texture", now, now); err != nil {
+		t.Fatalf("insert legacy document: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO platform_vtext_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at) VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?)`,
+		"rev-legacy", "doc-legacy", "owner-legacy", "agent", "legacy-texture", "legacy table content", "[]", `{"source":"legacy"}`, now); err != nil {
+		t.Fatalf("insert legacy revision: %v", err)
+	}
+	if err := store.Bootstrap(ctx); err != nil {
+		t.Fatalf("Bootstrap with legacy rows: %v", err)
+	}
+	if got := platformTableCount(t, store, "platform_texture_documents"); got != 1 {
+		t.Fatalf("platform_texture_documents count after bootstrap = %d, want 1", got)
+	}
+	if got := platformTableCount(t, store, "platform_texture_revisions"); got != 1 {
+		t.Fatalf("platform_texture_revisions count after bootstrap = %d, want 1", got)
+	}
+	if err := store.Bootstrap(ctx); err != nil {
+		t.Fatalf("Bootstrap second run: %v", err)
+	}
+	if got := platformTableCount(t, store, "platform_texture_documents"); got != 1 {
+		t.Fatalf("platform_texture_documents count after second bootstrap = %d, want 1", got)
+	}
+	if got := platformTableCount(t, store, "platform_texture_revisions"); got != 1 {
+		t.Fatalf("platform_texture_revisions count after second bootstrap = %d, want 1", got)
+	}
+
+	doc, err := store.GetTextureDocument(ctx, "doc-legacy")
+	if err != nil {
+		t.Fatalf("GetTextureDocument legacy: %v", err)
+	}
+	if doc.OwnerID != "owner-legacy" || doc.Title != "Legacy Texture" {
+		t.Fatalf("legacy document = %+v, want owner/title copied", doc)
+	}
+	rev, err := store.GetTextureRevision(ctx, "rev-legacy")
+	if err != nil {
+		t.Fatalf("GetTextureRevision legacy: %v", err)
+	}
+	if rev.DocID != "doc-legacy" || rev.Content != "legacy table content" {
+		t.Fatalf("legacy revision = %+v, want copied revision", rev)
+	}
+}
+
 func decodeBase64(value string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(value)
 }

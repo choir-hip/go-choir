@@ -311,6 +311,30 @@ CREATE TABLE IF NOT EXISTS rollback_refs (
 	created_at DATETIME NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS platform_texture_documents (
+	doc_id VARCHAR(255) NOT NULL,
+	owner_id VARCHAR(255) NOT NULL,
+	title LONGTEXT NOT NULL,
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	PRIMARY KEY (doc_id)
+);
+
+CREATE TABLE IF NOT EXISTS platform_texture_revisions (
+	revision_id VARCHAR(255) NOT NULL,
+	doc_id VARCHAR(255) NOT NULL,
+	owner_id VARCHAR(255) NOT NULL,
+	parent_revision_id VARCHAR(255) NOT NULL DEFAULT '',
+	author_kind VARCHAR(64) NOT NULL DEFAULT '',
+	author_label VARCHAR(255) NOT NULL DEFAULT '',
+	content LONGTEXT NOT NULL,
+	citations LONGTEXT NOT NULL DEFAULT '[]',
+	metadata LONGTEXT NOT NULL DEFAULT '{}',
+	created_at DATETIME NOT NULL,
+	PRIMARY KEY (revision_id),
+	INDEX idx_platform_texture_revisions_doc (doc_id, created_at)
+);
+
 CREATE TABLE IF NOT EXISTS platform_vtext_documents (
 	doc_id VARCHAR(255) NOT NULL,
 	owner_id VARCHAR(255) NOT NULL,
@@ -389,16 +413,71 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, schemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap schema: %w", err)
 	}
+	migratedPlatformRows, err := s.MigrateLegacyPlatformVTextTables(ctx)
+	if err != nil {
+		return err
+	}
 	migratedRoutes, err := s.MigrateLegacyPublicVTextRoutes(ctx)
 	if err != nil {
 		return err
 	}
-	if migratedRoutes > 0 {
+	switch {
+	case migratedPlatformRows > 0 && migratedRoutes > 0:
+		if err := s.commitDolt(ctx, "migrate legacy platform texture storage and public route aliases"); err != nil {
+			return err
+		}
+	case migratedPlatformRows > 0:
+		if err := s.commitDolt(ctx, "migrate legacy platform vtext tables to texture tables"); err != nil {
+			return err
+		}
+	case migratedRoutes > 0:
 		if err := s.commitDolt(ctx, "migrate legacy public vtext routes to texture aliases"); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Store) MigrateLegacyPlatformVTextTables(ctx context.Context) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("platform store: nil database")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("platform table migration: begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var docsBefore, revsBefore int64
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM platform_texture_documents`).Scan(&docsBefore); err != nil {
+		return 0, fmt.Errorf("platform table migration: count texture documents before: %w", err)
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM platform_texture_revisions`).Scan(&revsBefore); err != nil {
+		return 0, fmt.Errorf("platform table migration: count texture revisions before: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT IGNORE INTO platform_texture_documents (doc_id, owner_id, title, created_at, updated_at)
+SELECT doc_id, owner_id, title, created_at, updated_at
+FROM platform_vtext_documents`); err != nil {
+		return 0, fmt.Errorf("platform table migration: copy legacy documents: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT IGNORE INTO platform_texture_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at)
+SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at
+FROM platform_vtext_revisions`); err != nil {
+		return 0, fmt.Errorf("platform table migration: copy legacy revisions: %w", err)
+	}
+	var docsAfter, revsAfter int64
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM platform_texture_documents`).Scan(&docsAfter); err != nil {
+		return 0, fmt.Errorf("platform table migration: count texture documents after: %w", err)
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM platform_texture_revisions`).Scan(&revsAfter); err != nil {
+		return 0, fmt.Errorf("platform table migration: count texture revisions after: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("platform table migration: commit transaction: %w", err)
+	}
+	return (docsAfter - docsBefore) + (revsAfter - revsBefore), nil
 }
 
 func (s *Store) MigrateLegacyPublicVTextRoutes(ctx context.Context) (int64, error) {
@@ -497,7 +576,7 @@ func (s *Store) commitDolt(ctx context.Context, message string) error {
 func (s *Store) UpsertTextureDocument(ctx context.Context, docID, ownerID, title string) error {
 	now := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO platform_vtext_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE title=VALUES(title), updated_at=VALUES(updated_at)`,
+		`INSERT INTO platform_texture_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE title=VALUES(title), updated_at=VALUES(updated_at)`,
 		docID, ownerID, title, now, now)
 	return err
 }
@@ -514,7 +593,7 @@ func (s *Store) UpsertTextureRevision(ctx context.Context, rev PlatformTextureRe
 		rev.Metadata = json.RawMessage("{}")
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO platform_vtext_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE content=VALUES(content), citations=VALUES(citations), metadata=VALUES(metadata)`,
+		`INSERT INTO platform_texture_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE content=VALUES(content), citations=VALUES(citations), metadata=VALUES(metadata)`,
 		rev.RevisionID, rev.DocID, rev.OwnerID, rev.ParentRevisionID, rev.AuthorKind, rev.AuthorLabel, rev.Content, string(rev.Citations), string(rev.Metadata), rev.CreatedAt)
 	return err
 }
@@ -522,7 +601,7 @@ func (s *Store) UpsertTextureRevision(ctx context.Context, rev PlatformTextureRe
 func (s *Store) GetTextureDocument(ctx context.Context, docID string) (*PlatformTextureDocument, error) {
 	var doc PlatformTextureDocument
 	err := s.db.QueryRowContext(ctx,
-		`SELECT doc_id, owner_id, title FROM platform_vtext_documents WHERE doc_id = ?`, docID).Scan(&doc.DocID, &doc.OwnerID, &doc.Title)
+		`SELECT doc_id, owner_id, title FROM platform_texture_documents WHERE doc_id = ?`, docID).Scan(&doc.DocID, &doc.OwnerID, &doc.Title)
 	if err != nil {
 		return nil, err
 	}
@@ -531,7 +610,7 @@ func (s *Store) GetTextureDocument(ctx context.Context, docID string) (*Platform
 
 func (s *Store) ListTextureRevisions(ctx context.Context, docID string) ([]PlatformTextureRevision, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at FROM platform_vtext_revisions WHERE doc_id = ? ORDER BY created_at ASC`, docID)
+		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at FROM platform_texture_revisions WHERE doc_id = ? ORDER BY created_at ASC`, docID)
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +633,7 @@ func (s *Store) GetTextureRevision(ctx context.Context, revisionID string) (*Pla
 	var rev PlatformTextureRevision
 	var citationsStr, metadataStr string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at FROM platform_vtext_revisions WHERE revision_id = ?`, revisionID).Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.ParentRevisionID, &rev.AuthorKind, &rev.AuthorLabel, &rev.Content, &citationsStr, &metadataStr, &rev.CreatedAt)
+		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at FROM platform_texture_revisions WHERE revision_id = ?`, revisionID).Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.ParentRevisionID, &rev.AuthorKind, &rev.AuthorLabel, &rev.Content, &citationsStr, &metadataStr, &rev.CreatedAt)
 	if err != nil {
 		return nil, err
 	}

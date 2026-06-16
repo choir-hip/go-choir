@@ -2965,6 +2965,62 @@ Protected surfaces and rollback:
 - Heresy delta: discovered and bounded platform table-name residue; no repair
   claimed yet.
 
+## Local Repair: Platform Texture Table Identity
+
+Mutation class: `red`, because this changes platform Dolt/app state identity
+for Texture document sync/read behavior.
+
+Conjecture delta: current platform Texture document sync/read can use
+`platform_texture_documents` and `platform_texture_revisions` while legacy
+`platform_vtext_*` rows are copied forward idempotently and left in place for
+rollback compatibility.
+
+Protected surfaces: platform Texture document sync, revision sync/read,
+platform store bootstrap, existing platform Dolt rows, publication document
+routes that read platform Texture rows, and rollback to older binaries that
+still expect `platform_vtext_*`.
+
+Local evidence on 2026-06-16:
+
+- `internal/platform/store.go` now creates current `platform_texture_documents`
+  and `platform_texture_revisions` tables while retaining legacy
+  `platform_vtext_*` tables in the bootstrap schema.
+- Platform bootstrap runs `MigrateLegacyPlatformVTextTables`, which copies
+  legacy documents and revisions into the current tables with `INSERT IGNORE`
+  and remains idempotent on repeated bootstrap.
+- `UpsertTextureDocument`, `UpsertTextureRevision`, `GetTextureDocument`,
+  `ListTextureRevisions`, and `GetTextureRevision` now target
+  `platform_texture_*` tables.
+- `TestPlatformTextureStoreWritesCurrentTables` proves current writes populate
+  `platform_texture_*` tables and do not add rows to `platform_vtext_*`.
+- `TestPlatformTextureStoreMigratesLegacyTablesAtBootstrap` proves legacy-only
+  rows copy forward through repeated bootstrap and are readable through current
+  Texture store methods after migration.
+- `nix develop -c go test ./internal/platform -run 'TestPlatformTextureStoreWritesCurrentTables|TestPlatformTextureStoreMigratesLegacyTablesAtBootstrap|TestSyncTextureDocument|TestGetTextureDocument|TestInternalPublishRequiresInternalCallerAndBundleResolve'`
+  passed.
+- `nix develop -c go test ./internal/platform` passed.
+- `nix develop -c go test ./internal/proxy -run 'TestPlatformPublicationResolveIsPublicAndInternalOnly|TestPlatformPublicationResolveAndExportPropagateNotFound|TestHandleVTextPublication|TestPlatformTexture'`
+  passed.
+- `nix develop -c go test ./internal/platform ./internal/proxy` passed.
+- `scripts/doccheck --report /tmp/choir-doccheck-c42-platform-table-behavior.md --json /tmp/choir-doccheck-c42-platform-table-behavior.json`
+  passed in report-only mode with 212 docs and 1,112 warnings.
+- `git diff --check` passed.
+- Scoped residue search
+  `rg -n "platform_vtext_documents|platform_vtext_revisions" internal/platform internal/proxy internal/runtime internal/wirepublish -g '!**/*_test.go'`
+  now finds only retained legacy schema and copy-forward migration reads in
+  `internal/platform/store.go`.
+
+Rollback path: source revert restores current code reads/writes to
+`platform_vtext_*`. Existing legacy rows remain in place. Rows created only in
+`platform_texture_*` after this cutover would need a reverse copy into
+`platform_vtext_*` before running an older binary that must see them; the
+repair intentionally stops dual-writing current rows to the legacy tables.
+
+Heresy delta: repaired locally for platform table identity. User-store
+`vtext_*` tables, durable `vtext:<doc_id>` actor compatibility, stored
+`/pub/vtext/...` route rows, Universal Wire `vtext:` refs, and protocol v0
+remain open.
+
 ## Parallax State
 
 status: open_handoff
@@ -3254,17 +3310,17 @@ runtime shards, doccheck, `git diff --check`, scoped `database=vtext` non-test
 store search, CI run `27614905254`, deploy job `81648551589`, staging health
 for commit `fc166e4fbe1a93122cd6fb57e5c408d3cc864ff3`, and deployed Texture
 publication proof passed.
-C42 platform table identity residue is now documented: platform Texture
-sync/read routes and store methods are current-named, but platform document
-storage still creates and uses `platform_vtext_documents` and
-`platform_vtext_revisions`. The next bounded repair is platform table identity
-only: create `platform_texture_*` tables, idempotently copy legacy rows forward
-at bootstrap, move current reads/writes to current tables, and retain legacy
-tables for rollback/read compatibility.
+C42 is locally supported for platform table identity: platform bootstrap now
+creates current `platform_texture_*` tables, copies legacy `platform_vtext_*`
+rows forward idempotently, and current store methods read/write
+`platform_texture_*`. Legacy tables remain as compatibility state, but current
+code intentionally stops dual-writing them. Coarse V remains 2 until CI/deploy
+and staging product proof land.
 
-next move: implement C42 platform table identity. Keep user-store `vtext_*`
-tables, durable actor/profile compatibility, stored route-row compatibility,
-Universal Wire story-field proof, and protocol work out of this slice.
+next move: land C42 through CI/deploy/staging identity and deployed product
+proof. Keep user-store `vtext_*` tables, durable actor/profile compatibility,
+stored route-row compatibility, Universal Wire story-field proof, and protocol
+work out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
