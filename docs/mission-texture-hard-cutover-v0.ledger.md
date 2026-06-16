@@ -2882,3 +2882,35 @@ Open edge: choose the next residue class. The strongest candidates are broader
 names, `/pub/vtext` public route compatibility policy, exported HTML/CSS class
 names, and the deployed Universal Wire story-field proof once staging can
 provide an edition story payload through product paths.
+
+## 2026-06-16 - Problem Checkpoint: Exported HTML Texture Class Names
+
+Claim: C27 is an admissible bounded residue class. Platform HTML publication
+exports are current generated artifacts that still emit retired-name CSS
+classes/ids, but the repair can avoid live editor CSS, storage/file suffixes,
+durable actor ids, public route compatibility, and broad Go API symbols.
+
+Move: read-only inventory over platform HTML export rendering, embedded profile
+CSS, and focused platform tests; document the problem before behavior changes;
+compact the oversized Parallax State so the current handoff is state-shaped
+instead of a ledger mirror.
+
+Expected ΔV: no coarse V decrease. This checkpoint creates the admissible first
+commit for the C27 behavior slice and should make the next move unambiguous.
+
+Actual ΔV: documentation checkpoint only; C27 remains active.
+
+Receipts:
+- `internal/platform/export_html.go` currently emits `vtext-publication`,
+  `vtext-table`, `vtext-source-ref`, `vtext-sources`, and
+  `vtext-sources-heading` in generated HTML and CSS.
+- `internal/platform/service_test.go` asserts the old HTML class contract.
+- Problem checkpoint added to
+  `docs/mission-texture-hard-cutover-v0.md` with conjecture delta, protected
+  surfaces, admissible evidence class, rollback path, heresy delta, and next
+  behavior slice design.
+- The Parallax State in `docs/mission-texture-hard-cutover-v0.md` was compacted
+  to current claims/open edges with C27 as the next move.
+
+Open edge: commit and push the docs checkpoint, monitor Docs Truth Check, then
+implement C27 behavior changes.

@@ -1467,6 +1467,75 @@ Next behavior slice design:
   where existing coverage is missing, then push, monitor CI/deploy, and prove
   the behavior on staging through product publication/read/export surfaces.
 
+## Problem Checkpoint: Exported HTML Texture Class Names
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+export bytes, frontend source, test fixture, public route, API contract, or
+persistent state changed in this checkpoint.
+
+Read-only search on 2026-06-16 shows that the platform HTML publication export
+still emits retired-name CSS classes in generated artifacts:
+
+- `internal/platform/export_html.go` writes
+  `class="vtext-publication"` on the exported `<article>`;
+- table exports use `class="vtext-table"` and profile CSS selectors
+  `.vtext-table`;
+- source citation links use `class="vtext-source-ref"` and profile CSS
+  selectors `.vtext-source-ref`;
+- the source list uses `.vtext-sources` plus `vtext-sources-heading`;
+- `internal/platform/service_test.go` asserts those old classes as the
+  expected HTML export contract.
+
+This is not the same surface as the live editor's internal `.vtext-source-ref`
+classes, storage tables, durable `vtext:` actor ids, `.vtext` file aliases, or
+`/pub/vtext/...` legacy route identity. It is a current exported artifact
+contract, however: new downloaded/published HTML should teach Texture in its
+semantic CSS hooks and accessibility ids.
+
+Conjecture delta: current HTML exports can switch their generated artifact
+classes and ids to Texture names without changing source manifests,
+publication routes, JSON-LD, profile metadata, or the live editor renderer.
+The repair should not attempt broad frontend CSS class migration in the same
+slice.
+
+Protected surfaces: platform HTML export rendering, embedded export profile
+CSS, source citation anchors, source-list accessibility ids, focused platform
+tests, deployed publication HTML export proof, and any downstream consumers of
+new exported HTML class names.
+
+Admissible evidence class: focused platform tests asserting Texture-named HTML
+export classes/ids and old-class absence, current-code residue search proving
+the scoped export classes no longer appear outside negative assertions or
+separate live-editor residue, CI/deploy identity, and deployed product-path
+proof that a new HTML publication export from staging contains Texture-named
+classes and no retired export classes.
+
+Rollback path: restore the previous V-name HTML classes/ids and test
+expectations if generated HTML layout, source anchors, source lists, or export
+profile styling regresses.
+
+Heresy delta: discovered: after route, source-contract, fallback-label, and
+metadata repairs, exported HTML artifacts still carry old ontology in CSS
+hooks. Introduced: none in this checkpoint. Repaired target: new platform HTML
+exports should emit Texture-named artifact classes while live editor CSS,
+storage names, actor ids, file suffixes, and public legacy routes remain
+separate residue classes.
+
+Next behavior slice design:
+
+- rename generated HTML export classes/ids from `vtext-publication`,
+  `vtext-table`, `vtext-source-ref`, and `vtext-sources*` to
+  `texture-publication`, `texture-table`, `texture-source-ref`, and
+  `texture-sources*`;
+- update embedded export profile CSS selectors to match the generated classes;
+- update focused platform tests for the HTML export contract and old-class
+  absence;
+- keep live editor `.vtext-source-ref` classes, frontend renderer classes,
+  storage, actor ids, `.vtext` suffixes, and `/pub/vtext` compatibility out of
+  scope;
+- push, monitor CI/deploy, and prove the new exported HTML artifact surface on
+  staging through product publication/export APIs.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -1482,364 +1551,92 @@ status: open_handoff
 
 mission conjecture: if Choir hard-cuts the artifact control-plane ontology to
 Texture across docs, code, prompts, UI, tests, tool names, acceptance, and
-checker warnings, while preserving the core prompt-bar -> conductor -> Texture
-revision loop under deployed product proof, then the M3 lifecycle portfolio can
-resume from a cleaner ontology with less route confusion and fewer hidden
-workflow gates.
+checker warnings while preserving the deployed prompt-bar -> conductor ->
+Texture revision loop, then M3 can resume with less route confusion and fewer
+hidden workflow gates.
 
 deeper goal (G): make Texture the stable semantic substrate for directing
-autonomous results and compounding learnings, so safe self-development,
-source/news articles, style, research, super evidence, and future media
-projections all share one artifact-native control plane.
+autonomous results and compounding learnings across source/news articles,
+style, research, super evidence, and future media projections.
 
-witness/spec (A/S):
-- replace current user-facing, agent-facing, code-facing, and docs-facing uses
-  of the retired V-name with Texture;
-- preserve historical explanation only in
-  `docs/why-texture-background-2026-06-15.md` and explicitly historical
-  mission evidence;
-- repair or preserve the deployed prompt-bar -> conductor -> Texture first
-  revision loop;
-- split the overloaded edit affordance into a common patch tool and an
-  exceptional whole-document recovery rewrite, unless investigation proves a
-  smaller surface is clearer;
-- add report-only docs checker coverage for retired-name drift and later
-  promote it to CI failure after the warning baseline is burned down;
-- canonize `docs/texture-protocol-v0.md` only after implementation proof shows
-  the minimal protocol surface.
+witness/spec (A/S): retire the old V-name except historical/background
+evidence; preserve one Texture writer and human canonical edits; keep super
+downstream of Texture for privileged execution; avoid runtime semantic decision
+trees; keep transclusions pinned by default with newer-version indicators; leave
+`docs/texture-protocol-v0.md` until the working surface is proven.
 
-invariants / qualities / domain ramp (I/Q/D):
-- I: Texture owns canonical artifact meaning and learning; super owns
-  privileged execution.
-- I: among agents, one Texture writer writes canonical Texture state; other
-  agents produce evidence, proposals, receipts, faults, diffs, source packets,
-  and promotion claims.
-- I: human direct edits remain canonical revisions.
-- I: every Texture version is immutable, addressable, comparable, restorable,
-  and forkable.
-- I: transclusions pin version refs by default and the UI shows when newer
-  versions exist.
-- I: runtime protects mechanical invariants, not semantic decision trees.
-- I: no indefinite dual path. Compatibility shims, if unavoidable for one
-  deploy, must have deletion receipts before settlement.
-- Q: names should teach distributional expectations. The common edit tool
-  should sound common; the whole-document rewrite tool should sound
-  exceptional.
-- Q: product proof must use browser/computer-driven interaction on staging, not
-  only API probes or local tests.
-- D ramp: docs and detector warnings -> focused local tests -> staging deploy
-  identity -> browser product proof -> protocol canonization.
+invariants / qualities / domain ramp (I/Q/D): Texture owns canonical artifact
+meaning and learning; other agents produce evidence/proposals/receipts/faults;
+every version is immutable, addressable, comparable, restorable, and forkable;
+compatibility shims need deletion receipts; proof moves from docs/checker ->
+focused local tests -> CI/deploy identity -> staging browser/product proof ->
+protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV=0 against the coarse
-variant, with platform publication control-route cutover landed and deployed:
-1. discharged: old-name inventory across code, docs, prompts, API routes,
-   database tables, frontend labels, tests, scripts, and checker manifests is
-   documented in the Problem Checkpoint above;
-2. discharged: docs checker retired-name warning rule is implemented in
-   report-only mode as H5 with the documented allowlist;
-3. discharged: high-read doctrine, README/index, current architecture,
-   runtime-invariants, mission portfolio, mission graph, and this paradoc have
-   been reconciled to Texture or line-labeled as historical/deletion residue;
-   `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
-   /tmp/choir-doccheck.json` now reports no H5 warnings for that high-read set;
-4. current V includes: storage, file, and metadata symbols still use
-   the old ontology; frontend `data-vtext-*` attributes, frontend `/api/vtext`
-   compatibility-route deletion target test probes, the browser-public
-   `/api/vtext` route registration, the product API tool allowlist shim,
-   registered-router old-route normalization, direct Texture handler test
-   paths, and platform/proxy/internal publication control routes are discharged;
-   publication fallback/default labels and export filenames are discharged for
-   deployed reachable product scope plus CI-covered platform fallback defaults;
-5. discharged: visible UI labels and import affordances are cut over to
-   Texture and proven on staging through browser product evidence;
-6. discharged: the edit affordance surface has a common `patch_texture` tool
-   and an exceptional `rewrite_texture` tool; the model-visible `edit_texture`
-   compatibility alias is deleted and staging product proof shows the
-   prompt-bar Texture first revision stored through `patch_texture`;
-7. discharged for local scope: prompt register and registered tool names now
-   use Texture-oriented wording and `patch_texture` / `rewrite_texture` /
-   `record_texture_decision` affordances without adding runtime semantic
-   decision trees;
-8. discharged for the current product-facing slice: deployed prompt-bar ->
-   conductor -> Texture first-revision proof passed under `/api/texture` and
-   `patch_texture`, with no `edit_texture` or super-before-Texture trace;
-9. discharged: transclusion pinned-ref plus newer-version indicator behavior is
-   locally focused-test green and proven on staging with browser/product UI
-   evidence;
-10. current V includes: Texture Protocol v0 is intentionally unwritten until
-    the working minimal surface is proven.
+variant (ranking function) V: current V=2. Discharged: retired-name inventory,
+report-only H5 docs checker, high-read docs reconciliation, browser-public
+`/api/texture` route and old `/api/vtext` refusal, registered-router
+normalization, platform publication control routes, app identity, visible UI
+labels/import affordances, `patch_texture`/`rewrite_texture` affordances,
+`edit_texture` alias deletion, prompt-bar -> conductor -> Texture first
+revision proof, pinned transclusions/newer-version proof, source metadata,
+package/provenance, Universal Wire local story projection plus deployed empty
+state/source-label proof, related Texture refs, source-contract open surface,
+canonical source-path metadata, public route minting, publication fallback
+labels, and C26 deployed evidence. Remaining coarse obligations: storage/file
+symbols plus durable actor/public-route/export residue, and protocol v0 after
+proof.
 
-budget: one broad red-surface cutover mission before M3 resumes. If the rename
-reveals a distinct product regression, split the regression into a child
-paradoc only after documenting it here.
+budget: one broad red-surface cutover mission before M3 resumes; split only if
+a distinct product regression appears after documenting it here.
 
-authority / bounds: mutation class target is `red`; this document creation is
-`green`. Protected surfaces for execution: canonical artifact writes, prompt
-bar routing, conductor route materialization, Texture prompts/tools, Trace and
-acceptance projection, UI labels, docs checker, deployment routing, and any
-database migrations. Apply Problem Documentation First before behavior fixes.
+authority / bounds: target mutation class remains `red`; each slice names its
+actual class. Protected surfaces include canonical artifact writes, prompt-bar
+routing, conductor materialization, Texture prompts/tools, Trace/acceptance
+projection, UI labels, docs checker, deployment routing, publication exports,
+and database/storage migrations. Apply Problem Documentation First before
+behavior changes.
 
-evidence packet:
-- retired-name inventory and allowlist;
-- docs checker report with new warning family in report-only mode;
-- focused tests for route, tool, prompt, and revision behavior;
-- local sharded runtime tests when runtime changes land;
-- pushed commits with CI run ids;
-- Node B staging deploy identity for behavior-changing commits;
-- browser/computer-use proof of prompt-bar submission creating a Texture,
-  non-empty first appagent revision, history navigation, sources panel, and no
-  super-before-Texture route;
-- proof of pinned transclusion with newer-version indicator, or an explicit
-  blocker if the UI surface is absent;
-- final retired-name search showing only allowed historical/background
-  occurrences;
-- protocol v0 created only after the preceding proof.
+evidence packet: mission checkpoints and ledger receipts; docs checker report;
+focused tests for each touched surface; local runtime shards when runtime
+changes land; pushed commits; CI run ids; Node B deploy identity; staging
+browser/product proof; retired-name searches; final protocol v0 distilled from
+proof.
 
-heresy delta: discovered: the old ontology is now visible as a system-wide
-drift source rather than a harmless implementation name. Introduced: none
-accepted. Repaired target: delete dual-path naming, direct-super ingress
-ambiguity, workflow-forcing prompts, and overloaded edit affordances where this
-mission proves them.
+heresy delta: discovered: the old ontology is a system-wide drift source.
+Introduced: none accepted. Repaired target: delete dual-path naming,
+direct-super ingress ambiguity, workflow-forcing prompts, and overloaded edit
+affordances where this mission proves the repair.
 
-position / live conjectures / open edges:
-- C1 active: the hard rename is a vocabulary shift that should change route
-  choice and acceptance quality, not just labels.
-- C2 supported for deployed common-path scope: a common `patch_texture` tool
-  plus an exceptional `rewrite_texture` tool better orients the Texture writer
-  than one overloaded edit tool. Staging prompt-bar proof created a Texture
-  first revision through `patch_texture` metadata and Trace; the compatibility
-  alias deletion receipt is landed under C17.
-- C3 supported for report-only scope: the docs checker now carries H5
-  retired-name warnings without failing docs-only CI. Current baseline:
-  `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
-  /tmp/choir-doccheck.json` reports 1,130 total warnings, including 335 H5
-  file-level warnings across AGENTS.md, cmd, docs, frontend,
-  internal, and specs. Promotion to fail-closed remains future work after the
-  baseline burns down.
-- C4 active: some old mission docs may be cheaper and clearer to delete or
-  leave only in git history than to rewrite under the new ontology.
-- C5 active: protocol design before proof risks cathedral-building. The
-  protocol should be the last deliverable, distilled from the working minimal
-  surface.
-- C6 supported for deployed product-route scope: `/api/texture` is registered
-  and exercised by focused tests, frontend API callers, and staging
-  Playwright product proof. The browser-public `/api/vtext` route and
-  `product_api_request` allowlist shim are deleted and deployed; prior staging
-  route proof showed `/api/texture/documents` reached the auth gate while
-  `/api/vtext/documents` and `/api/vtext/diff` returned plain 404. Remaining
-  browser-public route residue is gone. The follow-on registered
-  router/extractor dependency on `/api/vtext` is also removed and deployed;
-  authenticated legacy-route 404 behavior for that internal dispatch slice is
-  covered by registered-router tests because the current browser automation
-  session could not issue same-origin API fetches after deploy.
-- C7 repaired and CI-green: CI exposed a Universal Wire publication compatibility
-  regression. The route/tool slice made new Texture revisions write
-  `source=edit_texture`, but the `internal/wirepublish` autonomous publication
-  eligibility package still accepted only the retired edit-source metadata.
-  Result: runtime shards 2 and 3 failed before staging deploy, with missing
-  edition transclusion and missing in-flight publication work item evidence.
-  The repair accepts current Texture metadata plus deletion-receipted legacy
-  metadata in the wire publish/read predicates; the rerun passed CI and staged.
-- C8 supported for deployed transclusion scope: related Texture refs now carry
-  pinned revision identity, preserve the pin through editor serialization, open
-  the pinned revision, and show a newer-version marker when the related Texture
-  head advances. The deployed proof covered a parent Texture ref with pinned
-  child revision v0 and current child revision v1 on staging.
-- C9 supported for deployed visible-UI scope: visible app labels can switch to Texture while internal app ids,
-  selectors, storage keys, and compatibility API names remain deletion-receipted
-  residue. Staging proof covered the desktop icon, window title, recent landing,
-  Files import button, and Web Lens import button.
-- C10 supported for deployed common-path scope: `patch_texture` is the exact
-  initial Texture write choice and staging Trace showed no successful
-  `edit_texture` result for the proof trajectory. The later alias-deletion
-  receipt is now also landed under C17.
-- C11 supported for high-read docs scope: README, docs index, doctrine,
-  current architecture, runtime invariants, mission portfolio, mission graph,
-  and this paradoc now teach Texture as the current artifact control-plane
-  ontology. Remaining old-name hits in that set are line-labeled historical
-  mission paths, internal detector symbols, or compatibility route deletion
-  targets; the high-read H5 subset is empty.
-- C12 supported for frontend selector/probe scope: frontend source and tests
-  no longer contain `data-vtext` selectors or `/api/vtext` product API probes.
-  CI, staging deploy identity, and deployed DOM proof show `data-texture-*`
-  selectors render and the old editor/toolbar selectors do not. Remaining
-  frontend H5 warnings are app/file names, metadata keys, platform/internal
-  publication terms, and historical test names.
-- C13 supported for deployed registered-router normalization scope: the Texture
-  router now dispatches on `/api/texture` directly, the shared doc/revision ID
-  extractors only parse `/api/texture`, direct Texture API tests use
-  `/api/texture`, and `/api/vtext` remains only in explicit legacy-route
-  refusal tests for this runtime slice. CI run `27587124142` passed and Node B
-  staging health reported commit `247e28415bb7b5a656b9d83072288403666c9c8a`.
-- C14 supported for deployed route-control scope: platform publication control
-  routes now use Texture paths
-  (`/api/platform/texture/publications`,
-  `/internal/wire/platform/publications/texture`,
-  `/internal/platform/publications/texture`, and
-  `/internal/platform/texture/...`), and private publication reads use
-  `/api/texture`. The retired public control route returns 404, platformd
-  registered-route tests reject the old internal prefixes, and `/pub/vtext/...`
-  remains separately classified as live public route identity until a redirect
-  and rollback policy exists. CI run `27587958358` passed, deploy job
-  `81562610983` deployed commit `019e7a9d78f94e78da91ae2ddc6200dd7dee0184`,
-  and staging route probes showed the new Texture control route reaches
-  method/auth gates while the old control route returns 404.
-- C15 supported for deployed app identity scope: app identity and storage
-  symbols are distinct residue classes. The canonical app registry now uses
-  `id: 'texture'`; frontend app launch/replay/source-open/public-preview paths
-  now target Texture; frontend and runtime desktop-state boundaries normalize
-  deletion-receipted legacy `vtext` app ids; staging DOM proof shows canonical
-  `data-app-id="texture"` and legacy `app=vtext` compatibility. Storage
-  table/workspace/file and metadata symbols are much broader and require
-  separate migration design.
-- C16 supported for deployed public-preview fixture scope: the unused
-  public-preview Trace fixture exports were deleted instead of renamed. Frontend
-  build passes, residue search no longer finds `previewTraceSnapshot`,
-  `previewTraceTrajectories`, `preview-trace`, "Trace layout", or
-  public-preview `vtext` actor ids in `frontend/src`, CI/deploy passed for
-  commit `3037e1f92971e7324a8bb8c3e356474e4eee2cc6`, and staging DOM proof
-  shows the signed-out Texture preview still renders without the deleted Trace
-  fixture language.
-- C17 supported for deployed alias-deletion scope: the model-visible
-  `edit_texture` compatibility alias is removed from Texture tool registration,
-  terminal handling, new-write fallback metadata, and duplicate-write fixtures.
-  `patch_texture`/`rewrite_texture` remain the live Texture write tools.
-  Persisted `source=edit_texture` and `source=edit_vtext` publication metadata
-  compatibility remains separate migration residue and is intentionally
-  preserved. Focused runtime tests, wirepublish tests, runtime shards,
-  live-alias residue search, CI run `27589732107`, deploy job `81567905099`,
-  staging identity for commit `c6db0df57bd06a22e392fd89eb0f4ee1f4c1bcc1`, and
-  deployed prompt-bar/Trace proof all pass.
-- C18 supported for deployed public-route scope: new public publication reader
-  URLs now mint under `/pub/texture/...`; existing `/pub/vtext/...` public link
-  state remains accepted for resolve/export and frontend reader entry. CI run
-  `27590698503`, deploy job `81570766605`, staging identity for commit
-  `65502a706ef1adba7fc2d1ed5428e3f709f9d2d0`, and deployed Playwright
-  publication/read/export proof all pass.
-- C19 supported for deployed auth-intent scope: frontend Texture actions now emit
-  Texture-named auth intents, the registry requires Texture-named mutable
-  intents, and App replay/message handling accepts deletion-receipted legacy
-  intent names. Local build, focused signed-out Texture publish overlay proof,
-  CI run `27591417530`, deploy job `81572916777`, staging identity for commit
-  `2f13598d37be2807f8cefe9258300a1a798a081c`, and deployed Playwright proof
-  for signed-out auth overlay plus legacy `app=vtext` deep link all pass.
-- C20 supported for deployed source-metadata scope: new source repair and source
-  artifact paths now emit `texture_source_gap_repair`,
-  `texture_source_artifact_attachment`, and `texture_source_artifact_ui`.
-  Focused comprehensive runtime tests and frontend build pass; live residue
-  search finds no old `vtext_source_gap_repair`,
-  `vtext_source_artifact_attachment`, or `vtext_source_artifact_ui` hits in
-  `internal`, `frontend/src`, or `frontend/tests`. CI run `27591835245`,
-  deploy job `81574215697`, staging identity for commit
-  `39d0c2ba125c81d59b34002685a9ce19ec98eda0`, and deployed source repair
-  browser/API proof all pass. Adjacent fields such as
-  `canonical_vtext_source_path`, `related_vtexts`, platform publication
-  predicates, app-package `vtext_doc_id`, durable actor ids, and storage
-  symbols remain broader migration surfaces.
-- C21 supported for deployed package/provenance scope: new AppChangePackage
-  human-proof refs now emit `texture_doc_id` and `texture_revision_id`, vsuper
-  package prompt defaults ask for Texture narratives, review evidence recognizes
-  Texture narrative refs and keeps explicit legacy package-provenance read
-  compatibility, and platform publication provenance now writes
-  `private_texture_revision`, `choir-private:texture/...`,
-  `publish_texture_revision`, and `choir.platform.publish_texture.v0`.
-  Focused comprehensive runtime tests, focused platform tests with direct row
-  assertions, frontend build, doccheck, and residue searches pass locally.
-  CI run `27592592351`, deploy job `81576474144`, staging identity for commit
-  `24bff527b56e8f76e1ba3066dd5c71d52543120e`, and deployed
-  AppChangePackage review-evidence proof all pass. Universal Wire story
-  projection fields, general Texture metadata keys, durable actor ids, storage
-  tables, and file suffixes are adjacent residue outside this slice.
-- C22 supported for local Universal Wire projection scope and deployed
-  source-label/app-empty-state scope: current story
-  payloads now emit Texture-named projection/document/content fields and
-  Texture source labels, frontend Universal Wire opens stories through
-  `story_texture_doc_id` first and emits `texture_document` related launch
-  targets, focused runtime tests pass, runtime shards pass, frontend build
-  passes, and current-code residue search finds old story projection labels
-  only in explicit legacy fallback or absence assertions. CI run
-  `27593330137`, deploy job `81578635355`, and staging identity for commit
-  `9f332529d209e82df86056176ffac2d31d2c5df1` pass. The first deployed
-  Universal Wire proof reached the new `universal-wire-edition-texture` source
-  label but found an empty edition. The repaired deployed proof passes for the
-  source-label and empty-state app surface; deployed story-field proof remains
-  open until staging has an edition story payload or a product path creates one
-  without manually seeding success records.
-- C23 supported for deployed Texture related-transclusion metadata/context scope:
-  current frontend writers now prefer `related_textures`,
-  `relatedTextures`, `texture_document`, `texture:` markdown refs, and
-  Texture-named helper exports. The editor and markdown renderer keep explicit
-  legacy read/parser fallback for `related_vtexts`, `relatedVTexts`, and
-  `vtext:` refs. Focused related-transclusion tests, frontend build, residue
-  searches, CI, staging deploy identity, and deployed browser/API proof pass.
-  Storage table names, `.vtext` file suffixes/source paths, durable `vtext:`
-  actor ids, `canonical_vtext_source_path`, source-contract app-open
-  expectations, and protocol v0 remain adjacent residue.
-- C24 supported for deployed source-contract publication Texture open-surface
-  scope: shared source-contract schema now canonizes the publication open
-  surface as `texture`; Go exposes `OpenSurfaceTexture`; frontend source-open
-  plans return `openSurface: "texture"` and `mode: "published_texture"`;
-  current publication source entity writers emit `published_texture_span`;
-  legacy `vtext` / `published_vtext*` tokens remain explicit aliases/read
-  compatibility. Focused source-contract, platform, proxy, frontend
-  source-plan tests, frontend build, residue searches, CI/deploy, staging
-  identity, and deployed product API proof pass. The deployed proof published a
-  child Texture, cited it from a parent Texture with raw
-  `open_surface: "publication-version"`, and observed the resolved/exported
-  publication source entity normalized to `open_surface: "texture"`. Storage
-  table names, `/pub/vtext` legacy public routes, durable actor ids, generic
-  `publication_version` platform identity, and broader prompt-bar route proofs
-  remain adjacent residue.
-- C25 supported for deployed canonical source-path metadata scope: current user
-  and appagent Texture revision writers now emit
-  `canonical_texture_source_path`; durable metadata carry-forward promotes
-  legacy `canonical_vtext_source_path` parent/run metadata into the
-  Texture-named key without carrying the legacy key forward as a current
-  writer. Focused comprehensive runtime tests, frontend build, residue
-  searches, CI/deploy, staging identity, and deployed product-path metadata
-  proof pass. The deployed proof opened/imported a text file through
-  `/api/texture/files/open`, created a first durable Texture revision, and
-  observed `canonical_texture_source_path` without
-  `canonical_vtext_source_path`. `.vtext` suffixes, storage tables, durable
-  `vtext:` actor ids, `/pub/vtext` public route compatibility, and Style.vtext
-  style-source language remain out of scope for this slice.
-- C26 supported for deployed reachable product scope plus CI-covered platform
-  fallback defaults: publication fallback/default writers now mint
-  `Published Texture`, `Untitled Texture`, `Texture proposal`, and
-  `published-texture` fallback basenames. Focused platform tests prove the
-  empty-title/default writer paths that are not reachable through the
-  browser-public publication API because Texture document creation requires a
-  title and proxy publication uses that document title. The reachable deployed
-  product proof published a titled Texture through
-  `/api/platform/texture/publications`, resolved/exported it, and opened the
-  public reader with `Published Texture document` aria labeling, Texture route
-  minting, and no V-name in route/export filenames. This slice intentionally
-  excludes `/pub/vtext/...` route identity, `PublishVText` Go API symbols,
-  storage names, and exported HTML/CSS class names.
+position / live conjectures / open edges: C1 vocabulary shift remains active;
+C2-C3 and C6-C26 are supported at the scopes recorded in the ledger, with C22's
+deployed Universal Wire story-field proof still open until staging has a story
+payload or product path creates one without manual success seeding. C4 remains
+active for old mission docs that may be clearer to leave historical. C5 remains
+active: protocol v0 is last. C27 is active from the new checkpoint: platform
+HTML publication exports still emit `vtext-publication`, `vtext-table`,
+`vtext-source-ref`, and `vtext-sources*` classes/ids in generated artifacts.
+This slice excludes live editor CSS classes, storage tables, `.vtext` file
+suffixes, durable `vtext:` actor ids, `PublishVText` Go symbols, and
+`/pub/vtext` public route compatibility.
 
-next move: choose the next high-leverage residue class. The strongest remaining
-candidates are broader `.vtext` file/alias suffix design, durable `vtext:`
-actor ids, storage table names, `/pub/vtext` public route compatibility policy,
-exported HTML/CSS class names, and the deployed Universal Wire story-field
-proof when staging has an edition story payload or a product path creates one
-without manually seeding success records. Keep protocol v0 unwritten until the
-remaining working-surface proofs are complete.
+next move: commit and push the C27 docs checkpoint, monitor Docs Truth Check,
+then rename generated HTML export classes/ids and embedded CSS to Texture names,
+run focused platform tests and residue searches, push behavior through CI/deploy,
+and prove staging HTML export output through product publication/export APIs.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
 version / lineage: spawned from M3.4 readiness review and the 2026-06-15
-Texture rename discussion. Blocks M3 until either settled or explicitly scoped
-as a narrower dependency.
+Texture rename discussion. Blocks M3 until settled or explicitly narrowed.
 
 learning state: Texture exists to direct results with autonomy and facilitate
-learnings. The rename must preserve that reason, not collapse into branding or
-API churn.
+learnings; the rename must preserve that reason, not collapse into branding.
 
-settlement: settled only when the repo has no non-allowed retired-name
-occurrences, Texture docs and doctrine agree, warning-only checker coverage is
-landed, deployed product proof shows the core Texture revision loop, the
-transclusion UI rule is proven or blocked with a successor, and a minimal
-Texture Protocol v0 is canonized from the working surface.
+settlement: settled only when non-allowed retired-name occurrences are gone or
+explicitly scoped as remaining residue, Texture docs/doctrine agree, checker
+coverage and report receipts exist, deployed core Texture loop and transclusion
+proofs are recorded, and minimal Texture Protocol v0 is canonized from the
+working surface.
 
 ## Suggested Goal String
 
@@ -1849,24 +1646,20 @@ program for the Texture hard cutover before M3 resumes. Texture is the promoted
 ontology for Choir's versioned, transclusive artifact control plane; the old
 V-name is migration residue allowed only in the historical background doc and
 explicit historical mission evidence. Current status is open_handoff with V=2.
-The read-only retired-name inventory, Problem Documentation First checkpoint,
-report-only H5 docs checker, operating-contract/high-read-doc Texture
-reconciliation, and a deployed product-facing route/tool/prompt slice plus
-deployed transclusion pinned-ref/newer-version proof, visible UI label proof,
-and deployed `patch_texture` common-path proof are landed. Continue renaming docs/code/
-prompts/UI/tests/tool affordances toward Texture; frontend `data-texture-*`
-selectors, frontend `/api/texture` probes, browser-public Texture route
-registration, product API allowlist cutover, registered-router normalization,
-deployed source-contract Texture open-surface normalization, and the C25
-canonical Texture source-path metadata deployed repair, and C26 publication
-fallback/default label repair are landed while deeper backend/internal old-name residue
-remains.
-Preserve one Texture writer among agents, keep human
-direct edits canonical, keep super downstream of Texture for privileged
-execution, and avoid runtime semantic decision trees. Do
-not canonize a Texture Protocol upfront; make protocol v0 the last deliverable
-after the working minimal product surface is proven. Append moves to
-docs/mission-texture-hard-cutover-v0.ledger.md and settle only with CI, staging
+The inventory, report-only H5 docs checker, high-read docs reconciliation,
+Texture route/tool/prompt slices, deployed prompt-bar -> conductor -> Texture
+first-revision proof, deployed pinned-transclusion proof, visible UI proof,
+source-contract open-surface proof, canonical source-path metadata repair, and
+publication fallback label repair are landed. C27 is active: commit the exported
+HTML class-name checkpoint, then rename generated platform HTML export
+classes/ids from V-name to Texture names and prove through CI, staging identity,
+and product publication/export proof. Keep live editor CSS classes, storage
+schema, `.vtext` file suffixes, durable `vtext:` actor ids, `PublishVText` Go
+symbols, `/pub/vtext` public route compatibility, and protocol v0 out of C27.
+Preserve one Texture writer among agents, keep human direct edits canonical,
+keep super downstream of Texture for privileged execution, and avoid runtime
+semantic decision trees. Append moves to
+`docs/mission-texture-hard-cutover-v0.ledger.md`; settle only with CI, staging
 identity, deployed acceptance, retired-name search receipts, checker report,
 and a minimal protocol distilled from proof.
 ```
