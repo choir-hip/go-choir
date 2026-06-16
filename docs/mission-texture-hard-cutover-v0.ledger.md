@@ -1353,3 +1353,58 @@ Receipts:
 Open edge: select the next bounded residue class among storage
 schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
 and protocol v0.
+
+## 2026-06-16 - Public Publication Route Identity Checkpoint
+
+Claim: `/pub/vtext/...` is live public link state, not merely a handler name,
+so the next behavior move must distinguish new Texture route minting from
+legacy public-link preservation.
+
+Move: read-only inventory of publication route generation, public-reader
+frontend entry, and route expectations in current tests; document the next
+behavior slice before code changes.
+
+Expected ΔV: 0 global; C18 becomes active and the public route-identity slice
+is scoped.
+
+Actual ΔV: 0. Problem Documentation First checkpoint landed in docs only.
+
+Conjecture delta: new publication URLs can teach Texture without breaking
+existing `/pub/vtext/...` rows if the system mints `/pub/texture/...` for new
+publications and keeps old route rows resolvable/readable.
+
+Protected surfaces for the later behavior slice: platform route generation,
+public route lookup/export, frontend direct public reader entry, published
+Texture window deduplication, and product publication tests.
+
+Admissible evidence class for the later behavior slice: focused platform,
+proxy, and frontend publication tests, CI, staging deploy identity, a deployed
+publication proof that a new route is `/pub/texture/...`, and a legacy route
+proof or fixture that `/pub/vtext/...` remains accepted.
+
+Rollback path for the later behavior slice: restore `/pub/vtext/...` route
+minting and frontend prefix recognition if new `/pub/texture/...` routes fail
+public reader or publication export behavior.
+
+Heresy delta: discovered route-identity compatibility risk; no behavior repair
+claimed yet.
+
+Receipts:
+- `internal/platform/service.go` still defines `publicVTextPrefix =
+  "/pub/vtext/"`, uses it to construct new `routePath` values, trims it to
+  derive publication slugs, and only applies trailing-slash normalization for
+  that prefix.
+- `frontend/src/App.svelte` only recognizes direct public reader entry for
+  paths that start with `/pub/vtext/`.
+- `frontend/src/lib/Desktop.svelte` only normalizes and deduplicates public
+  reader paths with the `/pub/vtext/` prefix.
+- `frontend/tests/file-browser.spec.js` and
+  `frontend/tests/vtext-source-service-publication.spec.js` still expect newly
+  published routes to match `^/pub/vtext/`.
+- Platform/proxy public publication tests still fixture resolve/export routes
+  under `/pub/vtext/...`, confirming legacy route preservation needs explicit
+  coverage.
+
+Open edge: implement the behavior slice after this checkpoint: mint
+`/pub/texture/...` for new publications, preserve `/pub/vtext/...` reads, and
+prove both locally before CI/staging.

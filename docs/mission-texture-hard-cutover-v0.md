@@ -300,6 +300,52 @@ Rollback path: restore the deleted fixture exports if a real consumer is found.
 Heresy delta: repaired for deployed unused public-preview Trace fixture residue;
 no durable runtime agent-id or storage-symbol repair claimed.
 
+## Problem Checkpoint: Public Publication Route Identity
+
+Mutation class: `green` documentation and evidence only. No route generation,
+database state, frontend routing, API behavior, prompt default, test, or
+deployment surface changed in this checkpoint.
+
+Read-only search on 2026-06-16 shows that publication control routes are now
+Texture-named, but newly published public reader URLs still mint under
+`/pub/vtext/...`. This is live public route identity, not the same surface as
+the browser-public `/api/texture` document API or platform/internal publication
+control routes already cut over.
+
+Receipts:
+
+- `internal/platform/service.go` still defines `publicVTextPrefix =
+  "/pub/vtext/"` and constructs new `routePath` values from that prefix in
+  `PublishVText`.
+- The same file stores the slug by trimming `publicVTextPrefix` and only
+  normalizes trailing slashes for routes with that prefix in
+  `normalizePublicationRoutePath`.
+- `frontend/src/App.svelte` only recognizes direct public reader entry when
+  `window.location.pathname.startsWith('/pub/vtext/')`.
+- `frontend/src/lib/Desktop.svelte` only normalizes public reader paths with
+  the `/pub/vtext/` prefix before opening a published Texture window or
+  deduplicating already-open published windows.
+- Product tests still assert newly published route paths match
+  `^/pub/vtext/` in `frontend/tests/file-browser.spec.js` and
+  `frontend/tests/vtext-source-service-publication.spec.js`; platform and proxy
+  tests still fixture public routes under `/pub/vtext/...`.
+
+Next behavior slice design:
+
+- mint new publication reader routes under `/pub/texture/...`;
+- continue resolving and exporting existing stored `/pub/vtext/...` rows
+  through `/api/platform/publications/resolve` and
+  `/api/platform/publications/export`, because those rows are public link state;
+- make the frontend public reader recognize both `/pub/texture/...` and
+  deletion-receipted legacy `/pub/vtext/...` route paths so existing public
+  links keep opening Texture;
+- avoid database rewrites or silent external-link redirects in this slice; a
+  redirect/migration policy can be a later settlement move after new
+  Texture-named URLs are proven;
+- prove locally with platform route generation/read tests, proxy public
+  resolve/export tests, and frontend publication tests that new routes are
+  Texture-named while legacy reader paths are still accepted.
+
 ## Problem Checkpoint: `edit_texture` Compatibility Alias
 
 Mutation class: `green` documentation and evidence only. No runtime behavior,
@@ -664,12 +710,18 @@ position / live conjectures / open edges:
   live-alias residue search, CI run `27589732107`, deploy job `81567905099`,
   staging identity for commit `c6db0df57bd06a22e392fd89eb0f4ee1f4c1bcc1`, and
   deployed prompt-bar/Trace proof all pass.
+- C18 active: new publication reader URLs still mint under `/pub/vtext/...`
+  even though publication control routes are Texture-named. The next bounded
+  slice should mint `/pub/texture/...` for new publications while preserving
+  existing `/pub/vtext/...` public link state for resolve/export and frontend
+  reader entry.
 
 next move: select the next bounded residue class among storage
 schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
-and protocol v0. The `edit_texture` alias deletion slice is landed and proven
-on staging; keep protocol v0 unwritten until the remaining working-surface
-proofs are complete.
+and protocol v0. The selected next slice is public publication route identity:
+mint new `/pub/texture/...` reader routes while preserving existing
+`/pub/vtext/...` public links. Keep protocol v0 unwritten until the remaining
+working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
