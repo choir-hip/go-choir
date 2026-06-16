@@ -4006,8 +4006,11 @@ func TestVTextPlainTextImportCarriesMigrationMetadataToFirstDurableRevision(t *t
 	if v1Meta["import_manifest"] == nil || v1Meta["migration_manifest"] == nil {
 		t.Fatalf("v1 did not carry import/migration metadata: %#v", v1Meta)
 	}
-	if v1Meta["canonical_vtext_source_path"] == nil {
-		t.Fatalf("v1 missing canonical_vtext_source_path: %#v", v1Meta)
+	if v1Meta[canonicalTextureSourcePathMetadataKey] == nil {
+		t.Fatalf("v1 missing %s: %#v", canonicalTextureSourcePathMetadataKey, v1Meta)
+	}
+	if _, ok := v1Meta[legacyCanonicalVTextSourcePathKey]; ok {
+		t.Fatalf("v1 emitted legacy %s: %#v", legacyCanonicalVTextSourcePathKey, v1Meta)
 	}
 	v1MigrationManifest := v1Meta["migration_manifest"].(map[string]any)
 	if v1MigrationManifest["migration_adapter"] != "plain_text_to_vtext_projection" {
@@ -4108,9 +4111,12 @@ func TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTa
 	if meta["vtext_structure_stabilized"] != true {
 		t.Fatalf("metadata did not record structure stabilization: %#v", meta)
 	}
-	canonicalPath, ok := meta["canonical_vtext_source_path"].(string)
+	canonicalPath, ok := meta[canonicalTextureSourcePathMetadataKey].(string)
 	if !ok || filepath.Ext(canonicalPath) != ".vtext" {
-		t.Fatalf("canonical_vtext_source_path = %#v, want .vtext", meta["canonical_vtext_source_path"])
+		t.Fatalf("%s = %#v, want .vtext", canonicalTextureSourcePathMetadataKey, meta[canonicalTextureSourcePathMetadataKey])
+	}
+	if _, ok := meta[legacyCanonicalVTextSourcePathKey]; ok {
+		t.Fatalf("revision emitted legacy %s: %#v", legacyCanonicalVTextSourcePathKey, meta)
 	}
 	sourcePath, err := s.GetDocumentAliasSourcePath(ctx, "user-1", opened.DocID)
 	if err != nil {
@@ -6616,9 +6622,12 @@ func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 		t.Fatalf("revisions = %+v, want appagent v1 canonical edit", revs)
 	}
 	meta := decodeRevisionMetadata(revs[0].Metadata)
-	canonicalPath, ok := meta["canonical_vtext_source_path"].(string)
+	canonicalPath, ok := meta[canonicalTextureSourcePathMetadataKey].(string)
 	if !ok || filepath.Ext(canonicalPath) != ".vtext" {
-		t.Fatalf("canonical_vtext_source_path = %#v, want .vtext", meta["canonical_vtext_source_path"])
+		t.Fatalf("%s = %#v, want .vtext", canonicalTextureSourcePathMetadataKey, meta[canonicalTextureSourcePathMetadataKey])
+	}
+	if _, ok := meta[legacyCanonicalVTextSourcePathKey]; ok {
+		t.Fatalf("appagent revision emitted legacy %s: %#v", legacyCanonicalVTextSourcePathKey, meta)
 	}
 	if meta["import_manifest"] == nil || meta["migration_manifest"] == nil {
 		t.Fatalf("appagent v1 did not carry import/migration metadata: %#v", meta)

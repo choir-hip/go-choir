@@ -638,7 +638,7 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 	}
 	if canonicalPath != "" {
 		revMeta = mergeVTextRevisionMetadata(revMeta, map[string]any{
-			"canonical_vtext_source_path": canonicalPath,
+			canonicalTextureSourcePathMetadataKey: canonicalPath,
 		})
 	}
 	now := time.Now().UTC()

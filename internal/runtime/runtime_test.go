@@ -1566,9 +1566,10 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 	}
 
 	parentMeta, _ := json.Marshal(map[string]any{
-		"seed_prompt":       "write a haiku about cats",
-		"source_path":       "/notes/cats.md",
-		"conductor_loop_id": "task-original-conductor",
+		"seed_prompt":                     "write a haiku about cats",
+		"source_path":                     "/notes/cats.md",
+		legacyCanonicalVTextSourcePathKey: "/notes/cats.vtext",
+		"conductor_loop_id":               "task-original-conductor",
 	})
 	parentRev := types.Revision{
 		RevisionID: "rev-parent-meta",
@@ -1606,6 +1607,12 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 	if resultMap["source_path"] != "/notes/cats.md" {
 		t.Errorf("source_path: got %v, want '/notes/cats.md'", resultMap["source_path"])
 	}
+	if resultMap[canonicalTextureSourcePathMetadataKey] != "/notes/cats.vtext" {
+		t.Errorf("%s: got %v, want '/notes/cats.vtext'", canonicalTextureSourcePathMetadataKey, resultMap[canonicalTextureSourcePathMetadataKey])
+	}
+	if _, ok := resultMap[legacyCanonicalVTextSourcePathKey]; ok {
+		t.Errorf("%s carried forward unexpectedly: %v", legacyCanonicalVTextSourcePathKey, resultMap[legacyCanonicalVTextSourcePathKey])
+	}
 	if resultMap["conductor_loop_id"] != "task-original-conductor" {
 		t.Errorf("conductor_loop_id: got %v, want 'task-original-conductor'", resultMap["conductor_loop_id"])
 	}
@@ -1616,5 +1623,20 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 	}
 	if resultMap["loop_id"] != "task-agent-1" {
 		t.Errorf("loop_id: got %v, want 'task-agent-1'", resultMap["loop_id"])
+	}
+
+	rec.Metadata = map[string]any{
+		"type":                            "vtext_agent_revision",
+		legacyCanonicalVTextSourcePathKey: "/notes/run-metadata.vtext",
+	}
+	result = rt.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil)
+	if err := json.Unmarshal(result, &resultMap); err != nil {
+		t.Fatalf("unmarshal run metadata result: %v", err)
+	}
+	if resultMap[canonicalTextureSourcePathMetadataKey] != "/notes/run-metadata.vtext" {
+		t.Errorf("%s from run metadata: got %v, want '/notes/run-metadata.vtext'", canonicalTextureSourcePathMetadataKey, resultMap[canonicalTextureSourcePathMetadataKey])
+	}
+	if _, ok := resultMap[legacyCanonicalVTextSourcePathKey]; ok {
+		t.Errorf("%s from run metadata carried forward unexpectedly: %v", legacyCanonicalVTextSourcePathKey, resultMap[legacyCanonicalVTextSourcePathKey])
 	}
 }

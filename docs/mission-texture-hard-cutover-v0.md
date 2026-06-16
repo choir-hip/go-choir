@@ -1717,21 +1717,21 @@ position / live conjectures / open edges:
   table names, `/pub/vtext` legacy public routes, durable actor ids, generic
   `publication_version` platform identity, and broader prompt-bar route proofs
   remain adjacent residue.
-- C25 active: current user and appagent Texture revision writers still emit
-  `canonical_vtext_source_path` as durable source-path metadata. The selected
-  bounded repair is to emit `canonical_texture_source_path` for new revisions
-  while promoting legacy `canonical_vtext_source_path` parent/run metadata into
-  the Texture-named key for read/carry-forward compatibility. `.vtext` suffixes,
-  storage tables, durable `vtext:` actor ids, `/pub/vtext` public route
-  compatibility, and Style.vtext style-source language are explicitly out of
-  scope for this slice.
+- C25 supported for local canonical source-path metadata scope: current user
+  and appagent Texture revision writers now emit
+  `canonical_texture_source_path`; durable metadata carry-forward promotes
+  legacy `canonical_vtext_source_path` parent/run metadata into the
+  Texture-named key without carrying the legacy key forward as a current
+  writer. Focused comprehensive runtime tests, frontend build, and residue
+  searches pass locally. `.vtext` suffixes, storage tables, durable `vtext:`
+  actor ids, `/pub/vtext` public route compatibility, and Style.vtext
+  style-source language remain out of scope for this slice.
 
-next move: implement C25 by adding the Texture-named canonical source-path
-metadata key, updating user/appagent revision writers and durable carry-forward
-alias promotion, adjusting focused runtime/frontend tests, running focused
-verification and residue searches, then push and monitor CI/deploy if runtime
-behavior changes land. Keep protocol v0 unwritten until the remaining
-working-surface proofs are complete.
+next move: commit and push C25, monitor CI/deploy/staging identity, then run a
+deployed product-path metadata proof that creates a Texture revision from a
+file-open/import lineage path and observes `canonical_texture_source_path`
+without `canonical_vtext_source_path`. Keep protocol v0 unwritten until the
+remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -1766,7 +1766,7 @@ prompts/UI/tests/tool affordances toward Texture; frontend `data-texture-*`
 selectors, frontend `/api/texture` probes, browser-public Texture route
 registration, product API allowlist cutover, registered-router normalization,
 deployed source-contract Texture open-surface normalization, and the C25
-canonical Texture source-path metadata checkpoint are landed while deeper
+canonical Texture source-path metadata local repair are landed while deeper
 backend/internal old-name residue
 remains.
 Preserve one Texture writer among agents, keep human

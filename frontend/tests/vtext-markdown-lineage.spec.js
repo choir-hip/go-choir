@@ -210,7 +210,8 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
 
   expect(v1.version_number).toBe(1);
   expect(v1.parent_revision_id).toBe(v0Doc.current_revision_id);
-  expect(v1.metadata?.canonical_vtext_source_path).toMatch(/\.vtext$/);
+  expect(v1.metadata?.canonical_texture_source_path).toMatch(/\.vtext$/);
+  expect(v1.metadata?.canonical_vtext_source_path).toBeUndefined();
   expect(v1.metadata?.import_manifest?.source_media_type).toBe('text/markdown');
   expect(v1.metadata?.migration_manifest?.migration_adapter).toBe('markdown_to_vtext_projection');
   expect(v1.content).toContain('| VText | Canonical editable document identity. |');
@@ -299,7 +300,8 @@ test('Imported plain text advances to canonical .vtext with migration metadata a
 
   expect(v1.version_number).toBe(1);
   expect(v1.parent_revision_id).toBe(v0Doc.current_revision_id);
-  expect(v1.metadata?.canonical_vtext_source_path).toMatch(/\.vtext$/);
+  expect(v1.metadata?.canonical_texture_source_path).toMatch(/\.vtext$/);
+  expect(v1.metadata?.canonical_vtext_source_path).toBeUndefined();
   expect(v1.metadata?.import_manifest?.source_media_type).toBe('text/plain');
   expect(v1.metadata?.migration_manifest).toMatchObject({
     source_kind: 'text',

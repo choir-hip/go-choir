@@ -331,6 +331,7 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 			runMetadata[key] = val
 		}
 	}
+	promoteCanonicalTextureSourcePath(runMetadata, metadata)
 	initialPromptText := metadataString(metadata, "seed_prompt") + " " + req.Prompt
 	if decision, ok := explicitNoWorkerDecisionRequestFromPrompt(initialPromptText); ok && scheduledMessageSeq == 0 {
 		runMetadata["vtext_initial_decision_required"] = true

@@ -1145,7 +1145,7 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 	}
 	if canonicalPath, err := h.ensureCanonicalVTextProjectionPath(r.Context(), ownerID, doc); err == nil && canonicalPath != "" {
 		metadata = mergeVTextRevisionMetadata(metadata, map[string]any{
-			"canonical_vtext_source_path": canonicalPath,
+			canonicalTextureSourcePathMetadataKey: canonicalPath,
 		})
 	} else if err != nil {
 		log.Printf("vtext api: ensure canonical vtext projection path: %v", err)

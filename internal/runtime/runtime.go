@@ -2766,6 +2766,11 @@ func (rt *Runtime) maybeWakeVTextOnWorkerMessage(ctx context.Context, ownerID st
 	rt.scheduleVTextWorkerWake(ownerID, doc.DocID, fromRunID)
 }
 
+const (
+	canonicalTextureSourcePathMetadataKey = "canonical_texture_source_path"
+	legacyCanonicalVTextSourcePathKey     = "canonical_vtext_source_path"
+)
+
 // durableMetadataKeys lists the revision metadata keys that must survive
 // across appagent revisions so that subsequent revise requests retain
 // the original user context (seed_prompt, source_path, etc.).
@@ -2773,7 +2778,7 @@ var durableMetadataKeys = []string{
 	"seed_prompt",
 	runMetadataExplicitResearcher,
 	"source_path",
-	"canonical_vtext_source_path",
+	canonicalTextureSourcePathMetadataKey,
 	"import_manifest",
 	"migration_manifest",
 	"conductor_loop_id",
@@ -2816,6 +2821,7 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 					meta[key] = val
 				}
 			}
+			promoteCanonicalTextureSourcePath(meta, parentMeta)
 		}
 	}
 
@@ -2827,6 +2833,9 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 				// Run metadata takes precedence over parent revision.
 				meta[key] = val
 			}
+		}
+		if val, ok := canonicalTextureSourcePathMetadataValue(rec.Metadata); ok {
+			meta[canonicalTextureSourcePathMetadataKey] = val
 		}
 	}
 	if wirepublish.IsWireArticleRevisionRun(rec) {

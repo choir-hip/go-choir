@@ -2654,3 +2654,52 @@ Receipts:
 Open edge: implement C25 with `canonical_texture_source_path` writes and legacy
 `canonical_vtext_source_path` promotion into the Texture-named key, then run
 focused runtime/frontend verification and residue searches.
+
+## 2026-06-16 - Local Repair: Canonical Texture Source Path Metadata
+
+Claim: current Texture revision writers can emit
+`canonical_texture_source_path` while preserving legacy
+`canonical_vtext_source_path` read/carry-forward compatibility.
+
+Move: add Texture and legacy metadata-key constants; replace current user and
+appagent revision writer keys with `canonical_texture_source_path`; update
+durable metadata carry-forward to promote legacy parent/run
+`canonical_vtext_source_path` into the Texture-named key without carrying the
+legacy key forward; update focused runtime and frontend metadata assertions.
+
+Expected ΔV: support C25 locally; no coarse V decrease until CI/deploy and
+deployed metadata proof are recorded.
+
+Actual ΔV: C25 is supported for local runtime/frontend test scope. V remains 2.
+
+Protected surfaces: user revision creation, appagent `patch_texture` revision
+creation, appagent run metadata seeding, durable metadata carry-forward,
+file-open projection lineage, Markdown/source-lineage import metadata, and
+focused runtime/frontend tests.
+
+Admissible evidence class: focused comprehensive runtime tests, frontend build,
+current-writer residue search, CI/deploy identity, and deployed product-path
+metadata proof after push.
+
+Rollback path: restore `canonical_vtext_source_path` as the emitted durable
+metadata key and remove Texture-name promotion if source-path lineage is lost
+or if legacy revision compatibility regresses.
+
+Heresy delta: repaired locally for current source-path metadata writers;
+legacy `canonical_vtext_source_path` remains explicit read/carry-forward
+compatibility.
+
+Receipts:
+- Focused comprehensive runtime tests passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestBuildAppagentRevisionMetadataPreservesDurableKeys|TestVTextPlainTextImportCarriesMigrationMetadataToFirstDurableRevision|TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTable|TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle' -count=1`.
+- Frontend build and generated-contract check passed:
+  `npm --prefix frontend run build`.
+- Current-code legacy key search found only the legacy compatibility constant
+  and negative frontend assertions:
+  `rg -n "canonical_vtext_source_path" internal/runtime frontend/src frontend/tests -g '!frontend/dist/**'`.
+- Current-code Texture key search found the new runtime constant and frontend
+  expectations:
+  `rg -n "canonical_texture_source_path" internal/runtime frontend/src frontend/tests -g '!frontend/dist/**'`.
+
+Open edge: push C25, monitor CI/deploy, verify staging identity, and run a
+deployed product-path metadata proof against staging.

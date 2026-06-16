@@ -12,14 +12,24 @@ import (
 
 func carryForwardDurableVTextMetadata(raw, parentRaw json.RawMessage) json.RawMessage {
 	parentMeta := decodeRevisionMetadata(parentRaw)
-	if len(parentMeta) == 0 {
-		return raw
-	}
 	meta := decodeRevisionMetadata(raw)
 	if meta == nil {
 		meta = map[string]any{}
 	}
 	changed := false
+	if promoteCanonicalTextureSourcePath(meta, meta) {
+		changed = true
+	}
+	if len(parentMeta) == 0 {
+		if !changed {
+			return raw
+		}
+		data, err := json.Marshal(meta)
+		if err != nil {
+			return raw
+		}
+		return data
+	}
 	for _, key := range durableMetadataKeys {
 		if hasNonEmptyVTextMetadataValue(meta[key]) {
 			continue
@@ -31,6 +41,9 @@ func carryForwardDurableVTextMetadata(raw, parentRaw json.RawMessage) json.RawMe
 		meta[key] = val
 		changed = true
 	}
+	if promoteCanonicalTextureSourcePath(meta, parentMeta) {
+		changed = true
+	}
 	if !changed {
 		return raw
 	}
@@ -39,6 +52,30 @@ func carryForwardDurableVTextMetadata(raw, parentRaw json.RawMessage) json.RawMe
 		return raw
 	}
 	return data
+}
+
+func promoteCanonicalTextureSourcePath(meta map[string]any, source map[string]any) bool {
+	if meta == nil || source == nil || hasNonEmptyVTextMetadataValue(meta[canonicalTextureSourcePathMetadataKey]) {
+		return false
+	}
+	if val, ok := canonicalTextureSourcePathMetadataValue(source); ok {
+		meta[canonicalTextureSourcePathMetadataKey] = val
+		return true
+	}
+	return false
+}
+
+func canonicalTextureSourcePathMetadataValue(source map[string]any) (any, bool) {
+	if source == nil {
+		return nil, false
+	}
+	if val, ok := source[canonicalTextureSourcePathMetadataKey]; ok && hasNonEmptyVTextMetadataValue(val) {
+		return val, true
+	}
+	if val, ok := source[legacyCanonicalVTextSourcePathKey]; ok && hasNonEmptyVTextMetadataValue(val) {
+		return val, true
+	}
+	return nil, false
 }
 
 func hasNonEmptyVTextMetadataValue(value any) bool {
