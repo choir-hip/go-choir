@@ -2749,3 +2749,33 @@ Open edge: choose the next residue class. The strongest candidates are broader
 names, `/pub/vtext` public route compatibility policy, and the deployed
 Universal Wire story-field proof once staging can provide an edition story
 payload through product paths.
+
+## 2026-06-16 - Problem Checkpoint: Publication Fallback Texture Labels
+
+Claim: C26 is an admissible bounded residue class. Current publication
+fallback/default writers still mint the retired ontology in owner-visible and
+exported surfaces, but the repair can avoid broad route identity, storage,
+`PublishVText` API symbol, and exported CSS-class migration.
+
+Move: read-only inventory over platform publication writers/readers and
+frontend publication acceptance expectations, then document the problem before
+behavior changes.
+
+Expected ΔV: no coarse V decrease. This checkpoint buys the admissible first
+commit for a behavior-changing C26 slice and should support a later behavior
+repair covering default publication titles, proposal titles, DOCX metadata,
+export filename basenames, and published-reader accessibility expectations.
+
+Actual ΔV: documentation checkpoint only; C26 remains active.
+
+Receipts:
+- `rg -n "Published VText|published-vtext|Untitled VText|VText proposal|Published Texture|published-texture|aria-label=.*Published|Published Vtext" internal/platform internal/proxy frontend/src frontend/tests -g '!frontend/dist/**'`
+  found scoped current fallback/default residues in platform publication code
+  and one stale frontend publication-reader test expectation.
+- Problem checkpoint added to
+  `docs/mission-texture-hard-cutover-v0.md` with conjecture delta, protected
+  surfaces, admissible evidence class, rollback path, heresy delta, and next
+  behavior slice design.
+
+Open edge: commit and push the docs checkpoint, monitor the report-only docs
+truth checker, then implement C26 behavior changes.
