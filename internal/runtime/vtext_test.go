@@ -430,7 +430,7 @@ func TestVTextAPICreateDocument(t *testing.T) {
 	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "My Document"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -459,7 +459,7 @@ func TestVTextAPICreateDocumentAuth(t *testing.T) {
 	h, _ := vtextAPISetup(t)
 
 	// No auth header.
-	req := httptest.NewRequest(http.MethodPost, "/api/vtext/documents",
+	req := httptest.NewRequest(http.MethodPost, "/api/texture/documents",
 		bytes.NewReader([]byte(`{"title":"test"}`)))
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -567,7 +567,7 @@ func TestVTextCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t *
 		t.Fatalf("create pending mutation: %v", err)
 	}
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+doc.DocID+"/cancel", nil)
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+doc.DocID+"/cancel", nil)
 	w := httptest.NewRecorder()
 	h.HandleVTextCancelAgentRevision(w, req)
 	if w.Code != http.StatusOK {
@@ -630,7 +630,7 @@ func TestVTextAPIListDocuments(t *testing.T) {
 
 	// Create 2 documents.
 	for _, title := range []string{"Doc A", "Doc B"} {
-		req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+		req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 			map[string]string{"title": title})
 		w := httptest.NewRecorder()
 		h.HandleVTextCreateDocument(w, req)
@@ -640,7 +640,7 @@ func TestVTextAPIListDocuments(t *testing.T) {
 	}
 
 	// List documents.
-	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents", nil)
+	req := vtextRequest(t, http.MethodGet, "/api/texture/documents", nil)
 	w := httptest.NewRecorder()
 	h.HandleVTextListDocuments(w, req)
 
@@ -664,7 +664,7 @@ func TestVTextAPIGetDocument(t *testing.T) {
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Test Doc"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -672,7 +672,7 @@ func TestVTextAPIGetDocument(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&createResp)
 
 	// Get the document.
-	req = vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+createResp.DocID, nil)
+	req = vtextRequest(t, http.MethodGet, "/api/texture/documents/"+createResp.DocID, nil)
 	w = httptest.NewRecorder()
 	h.HandleVTextDocument(w, req)
 
@@ -696,7 +696,7 @@ func TestVTextAPICreateRevisionUserEdit(t *testing.T) {
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Test Doc"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -710,7 +710,7 @@ func TestVTextAPICreateRevisionUserEdit(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
@@ -741,7 +741,7 @@ func TestVTextAPICreateRevisionCanonicalizesAliasedImportedDocumentTitle(t *test
 	h, s := vtextAPISetup(t)
 	ctx := context.Background()
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "legacy-import.md"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -757,7 +757,7 @@ func TestVTextAPICreateRevisionCanonicalizesAliasedImportedDocumentTitle(t *test
 	}
 
 	revReq := vtextCreateRevisionRequest{Content: "Imported projection first durable edit"}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 	if w.Code != http.StatusCreated {
@@ -784,7 +784,7 @@ func TestVTextAPIListRevisionsReturnsDurableVersionNumbersPastFifty(t *testing.T
 	t.Parallel()
 	h, _ := vtextAPISetup(t)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Many Versions"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -803,7 +803,7 @@ func TestVTextAPIListRevisionsReturnsDurableVersionNumbersPastFifty(t *testing.T
 			Content:          fmt.Sprintf("Document body v%d", i),
 			ParentRevisionID: parentID,
 		}
-		req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+		req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 		w = httptest.NewRecorder()
 		h.HandleVTextRevisions(w, req)
 		if w.Code != http.StatusCreated {
@@ -818,7 +818,7 @@ func TestVTextAPIListRevisionsReturnsDurableVersionNumbersPastFifty(t *testing.T
 		parentID = latest.RevisionID
 	}
 
-	req = vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docResp.DocID+"/revisions?limit=10000", nil)
+	req = vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docResp.DocID+"/revisions?limit=10000", nil)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 	if w.Code != http.StatusOK {
@@ -838,7 +838,7 @@ func TestVTextAPIListRevisionsReturnsDurableVersionNumbersPastFifty(t *testing.T
 		t.Fatalf("oldest VersionNumber = %d, want 0", listResp.Revisions[54].VersionNumber)
 	}
 
-	req = vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docResp.DocID, nil)
+	req = vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docResp.DocID, nil)
 	w = httptest.NewRecorder()
 	h.HandleVTextDocument(w, req)
 	if w.Code != http.StatusOK {
@@ -863,7 +863,7 @@ func TestVTextAPICreateRevisionIgnoresAppAgentAuthorFields(t *testing.T) {
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Test Doc"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -876,7 +876,7 @@ func TestVTextAPICreateRevisionIgnoresAppAgentAuthorFields(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
@@ -887,7 +887,7 @@ func TestVTextAPICreateRevisionIgnoresAppAgentAuthorFields(t *testing.T) {
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: "appagent",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
@@ -914,7 +914,7 @@ func TestVTextAPIIgnoresInvalidAuthorKind(t *testing.T) {
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Test Doc"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -929,7 +929,7 @@ func TestVTextAPIIgnoresInvalidAuthorKind(t *testing.T) {
 		AuthorKind:  "worker",
 		AuthorLabel: "worker-1",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
@@ -952,7 +952,7 @@ func TestVTextAPIGetHistory(t *testing.T) {
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Test Doc"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -965,7 +965,7 @@ func TestVTextAPIGetHistory(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
@@ -974,12 +974,12 @@ func TestVTextAPIGetHistory(t *testing.T) {
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: "appagent",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
 	// Get history.
-	req = vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docResp.DocID+"/history", nil)
+	req = vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docResp.DocID+"/history", nil)
 	w = httptest.NewRecorder()
 	h.HandleVTextHistory(w, req)
 
@@ -1008,7 +1008,7 @@ func TestVTextAPIGetDiff(t *testing.T) {
 	h, _ := vtextAPISetup(t)
 
 	// Create a document and revisions.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Test Doc"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -1020,7 +1020,7 @@ func TestVTextAPIGetDiff(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 	var rev1Resp vtextRevisionResponse
@@ -1031,7 +1031,7 @@ func TestVTextAPIGetDiff(t *testing.T) {
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: "appagent",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 	var rev2Resp vtextRevisionResponse
@@ -1039,7 +1039,7 @@ func TestVTextAPIGetDiff(t *testing.T) {
 
 	// Get diff.
 	req = vtextRequest(t, http.MethodGet,
-		"/api/vtext/diff?from="+rev1Resp.RevisionID+"&to="+rev2Resp.RevisionID, nil)
+		"/api/texture/diff?from="+rev1Resp.RevisionID+"&to="+rev2Resp.RevisionID, nil)
 	w = httptest.NewRecorder()
 	h.HandleVTextDiff(w, req)
 
@@ -1066,7 +1066,7 @@ func TestVTextAPIGetBlame(t *testing.T) {
 	h, _ := vtextAPISetup(t)
 
 	// Create a document and revisions.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Test Doc"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -1078,7 +1078,7 @@ func TestVTextAPIGetBlame(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
@@ -1087,7 +1087,7 @@ func TestVTextAPIGetBlame(t *testing.T) {
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: "appagent",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 	var rev2Resp vtextRevisionResponse
@@ -1095,7 +1095,7 @@ func TestVTextAPIGetBlame(t *testing.T) {
 
 	// Get blame.
 	req = vtextRequest(t, http.MethodGet,
-		"/api/vtext/revisions/"+rev2Resp.RevisionID+"/blame", nil)
+		"/api/texture/revisions/"+rev2Resp.RevisionID+"/blame", nil)
 	w = httptest.NewRecorder()
 	h.HandleVTextBlame(w, req)
 
@@ -1122,7 +1122,7 @@ func TestVTextAPISnapshotDoesNotMutateHead(t *testing.T) {
 	h, s := vtextAPISetup(t)
 
 	// Create a document.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Test Doc"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -1135,7 +1135,7 @@ func TestVTextAPISnapshotDoesNotMutateHead(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 	var rev1Resp vtextRevisionResponse
@@ -1146,13 +1146,13 @@ func TestVTextAPISnapshotDoesNotMutateHead(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
 	// View the first (historical) revision.
 	req = vtextRequest(t, http.MethodGet,
-		"/api/vtext/revisions/"+rev1Resp.RevisionID, nil)
+		"/api/texture/revisions/"+rev1Resp.RevisionID, nil)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevision(w, req)
 
@@ -1186,9 +1186,9 @@ func TestVTextAPIAuthGating(t *testing.T) {
 		method string
 		path   string
 	}{
-		{http.MethodGet, "/api/vtext/documents"},
-		{http.MethodPost, "/api/vtext/documents"},
-		{http.MethodGet, "/api/vtext/diff"},
+		{http.MethodGet, "/api/texture/documents"},
+		{http.MethodPost, "/api/texture/documents"},
+		{http.MethodGet, "/api/texture/diff"},
 	}
 
 	for _, ep := range endpoints {
@@ -1196,9 +1196,9 @@ func TestVTextAPIAuthGating(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		switch {
-		case strings.HasPrefix(ep.path, "/api/vtext/documents"):
+		case strings.HasPrefix(ep.path, "/api/texture/documents"):
 			h.HandleVTextDocumentsRoot(w, req)
-		case strings.HasPrefix(ep.path, "/api/vtext/diff"):
+		case strings.HasPrefix(ep.path, "/api/texture/diff"):
 			h.HandleVTextDiff(w, req)
 		}
 
@@ -1215,7 +1215,7 @@ func TestVTextAPICitationsMetadataRoundTrip(t *testing.T) {
 	h, _ := vtextAPISetup(t)
 
 	// Create a document.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Test Doc"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -1236,7 +1236,7 @@ func TestVTextAPICitationsMetadataRoundTrip(t *testing.T) {
 		Citations:   citJSON,
 		Metadata:    metaJSON,
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
@@ -1247,7 +1247,7 @@ func TestVTextAPICitationsMetadataRoundTrip(t *testing.T) {
 
 	// Get the revision back and check citations/metadata.
 	req = vtextRequest(t, http.MethodGet,
-		"/api/vtext/revisions/"+revResp.RevisionID, nil)
+		"/api/texture/revisions/"+revResp.RevisionID, nil)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevision(w, req)
 
@@ -1539,7 +1539,7 @@ func createDocWithUserRevision(t *testing.T, h *APIHandler) (string, string) {
 	t.Helper()
 
 	// Create a document.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Test Doc"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -1555,7 +1555,7 @@ func createDocWithUserRevision(t *testing.T, h *APIHandler) (string, string) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 	if w.Code != http.StatusCreated {
@@ -1704,7 +1704,7 @@ func createUserRevisionFromCurrentHead(t *testing.T, h *APIHandler, s *store.Sto
 	if err != nil {
 		t.Fatalf("get document before user revision: %v", err)
 	}
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
 		Content:          content,
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      "user",
@@ -1763,7 +1763,7 @@ func TestVTextAgentRevisionCreatesCanonicalRevision(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	// Submit an agent revision request.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Make it more formal"})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -1907,7 +1907,7 @@ func TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testin
 	h, s, _ := vtextAPISetupWithProvider(t, provider, true)
 	docID, _ := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Make the supplied text more formal."})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -2220,7 +2220,7 @@ func TestVTextAgentRevisionAppliesStructuredEdit(t *testing.T) {
 	h, s, _ := vtextAPISetupWithProvider(t, provider, true)
 	docID, _ := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Integrate the addressed worker update."})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -2260,7 +2260,7 @@ func TestVTextAgentRevisionIgnoresRawStubProviderResult(t *testing.T) {
 	h, s, _ := vtextAPISetupWithProvider(t, NewStubProvider(1*time.Millisecond), false)
 	docID, _ := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Revise with the default stub provider."})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -2289,7 +2289,7 @@ func TestVTextAgentRevisionIgnoresProviderFinalJSONEdit(t *testing.T) {
 	h, s, _ := vtextAPISetupWithProvider(t, provider, true)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Return a legacy structured edit as final text."})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -2327,7 +2327,7 @@ func TestVTextAgentRevisionRejectsMalformedEditVTextToolCall(t *testing.T) {
 	h, s, _ := vtextAPISetupWithProvider(t, provider, true)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Apply an invalid edit."})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -2357,7 +2357,7 @@ func TestVTextStaleAgentRevisionRejectsEditAfterUserEdit(t *testing.T) {
 	h, s, _ := vtextAPISetupWithProvider(t, provider, true)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Produce a draft from the current document."})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -2384,7 +2384,7 @@ func TestVTextStaleAgentRevisionRejectsEditAfterUserEdit(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	userEditReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
+	userEditReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
 		Content:          "Fresh user edit should survive.",
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      "user",
@@ -2473,7 +2473,7 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 		t.Fatalf("initial revision = %+v, want user seed revision %s", initialRevs[0], decision.UserRevisionID)
 	}
 
-	initialReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+decision.DocID+"/revise",
+	initialReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+decision.DocID+"/revise",
 		map[string]string{"prompt": "Start a long stochastic workflow."})
 	initialW := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(initialW, initialReq)
@@ -2655,7 +2655,7 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 		t.Fatalf("trajectory events missing causality markers: channel=%v vtext_revision=%v events=%+v", hasChannelMessage, hasVTextRevision, events)
 	}
 
-	cancelReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+decision.DocID+"/revise",
+	cancelReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+decision.DocID+"/revise",
 		map[string]string{"prompt": "CANCEL_RUN_MARKER"})
 	cancelW := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(cancelW, cancelReq)
@@ -2698,7 +2698,7 @@ func TestVTextWorkerMessageAutoWakeCreatesFollowUpRevision(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "user",
 	}
-	userRevReqBody := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", userRevReq)
+	userRevReqBody := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", userRevReq)
 	userRevW := httptest.NewRecorder()
 	h.HandleVTextRevisions(userRevW, userRevReqBody)
 	if userRevW.Code != http.StatusCreated {
@@ -2808,7 +2808,7 @@ func TestVTextWorkerMessageAutoWakeBatchesRapidMessages(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "user",
 	}
-	userRevReqBody := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", userRevReq)
+	userRevReqBody := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", userRevReq)
 	userRevW := httptest.NewRecorder()
 	h.HandleVTextRevisions(userRevW, userRevReqBody)
 	if userRevW.Code != http.StatusCreated {
@@ -3023,7 +3023,7 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "user",
 	}
-	userRevReqBody := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", userRevReq)
+	userRevReqBody := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", userRevReq)
 	userRevW := httptest.NewRecorder()
 	h.HandleVTextRevisions(userRevW, userRevReqBody)
 	if userRevW.Code != http.StatusCreated {
@@ -3131,7 +3131,7 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "user",
 	}
-	userRevReqBody := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", userRevReq)
+	userRevReqBody := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", userRevReq)
 	userRevW := httptest.NewRecorder()
 	h.HandleVTextRevisions(userRevW, userRevReqBody)
 	if userRevW.Code != http.StatusCreated {
@@ -3236,7 +3236,7 @@ func TestVTextWorkerMessageDuringActiveRevisionTriggersLaterFollowUp(t *testing.
 	h, s, rt := vtextAPISetupWithProvider(t, provider, true)
 	docID, _ := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Produce the next draft now"})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -3603,7 +3603,7 @@ func TestHandleTestVTextResearchFindingsUsesResearcherToolPath(t *testing.T) {
 
 	docID, _ := createDocWithUserRevision(t, h)
 
-	revReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	revReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Write the first draft"})
 	revW := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(revW, revReq)
@@ -3663,7 +3663,7 @@ func TestHandleTestVTextWorkerUpdateUsesStructuredToolPath(t *testing.T) {
 
 	docID, _ := createDocWithUserRevision(t, h)
 
-	revReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	revReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Write the first draft"})
 	revW := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(revW, revReq)
@@ -3784,14 +3784,14 @@ func TestVTextAgentRevisionInheritsConductorTrajectoryFromRevisionMetadata(t *te
 		Metadata:         metadata,
 		ParentRevisionID: baseRevisionID,
 	}
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", revReq)
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", revReq)
 	w := httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create conductor-linked revision: status = %d, body: %s", w.Code, w.Body.String())
 	}
 
-	agentReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	agentReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"intent": "revise"})
 	agentW := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(agentW, agentReq)
@@ -3823,7 +3823,7 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 
 	openReq := func(initialContent string) *httptest.ResponseRecorder {
-		req := vtextRequest(t, http.MethodPost, "/api/vtext/files/open", map[string]string{
+		req := vtextRequest(t, http.MethodPost, "/api/texture/files/open", map[string]string{
 			"source_path":     "notes/ai-news.md",
 			"title":           "ai-news.md",
 			"initial_content": initialContent,
@@ -3911,7 +3911,7 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	if migrationManifest["migration_adapter"] != "markdown_to_vtext_projection" || migrationManifest["source_gap_policy"] != "repairable_gap_no_invented_citations" {
 		t.Fatalf("migration manifest = %#v", migrationManifest)
 	}
-	exportReq := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+firstResp.DocID+"/export?format=md", nil)
+	exportReq := vtextRequest(t, http.MethodGet, "/api/texture/documents/"+firstResp.DocID+"/export?format=md", nil)
 	exportW := httptest.NewRecorder()
 	h.HandleVTextRouter(exportW, exportReq)
 	if exportW.Code != http.StatusOK {
@@ -3936,7 +3936,7 @@ func TestVTextPlainTextImportCarriesMigrationMetadataToFirstDurableRevision(t *t
 		"",
 		"Imported source text should become canonical VText.",
 	}, "\n")
-	openReq := vtextRequest(t, http.MethodPost, "/api/vtext/files/open", map[string]string{
+	openReq := vtextRequest(t, http.MethodPost, "/api/texture/files/open", map[string]string{
 		"source_path":     "notes/plain-proposal.txt",
 		"title":           "plain-proposal.txt",
 		"initial_content": initialContent,
@@ -3985,7 +3985,7 @@ func TestVTextPlainTextImportCarriesMigrationMetadataToFirstDurableRevision(t *t
 	}
 
 	v1Content := initialContent + "\n\nFirst durable revision keeps import lineage."
-	revReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+opened.DocID+"/revisions", vtextCreateRevisionRequest{
+	revReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+opened.DocID+"/revisions", vtextCreateRevisionRequest{
 		Content:          v1Content,
 		ParentRevisionID: opened.CurrentRevisionID,
 		Metadata:         json.RawMessage(`{"created_from":"plain_text_v1_user_edit"}`),
@@ -4025,7 +4025,7 @@ func TestVTextPlainTextImportCarriesMigrationMetadataToFirstDurableRevision(t *t
 		t.Fatalf("original text alias docID = %q, err = %v, want %q", docID, err, opened.DocID)
 	}
 
-	exportReq := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+opened.DocID+"/export?format=md", nil)
+	exportReq := vtextRequest(t, http.MethodGet, "/api/texture/documents/"+opened.DocID+"/export?format=md", nil)
 	exportW := httptest.NewRecorder()
 	h.HandleVTextRouter(exportW, exportReq)
 	if exportW.Code != http.StatusOK {
@@ -4057,7 +4057,7 @@ func TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTa
 		"",
 		"Closing paragraph.",
 	}, "\n")
-	openReq := vtextRequest(t, http.MethodPost, "/api/vtext/files/open", map[string]string{
+	openReq := vtextRequest(t, http.MethodPost, "/api/texture/files/open", map[string]string{
 		"source_path":     "proposals/legal-cloud.md",
 		"title":           "legal-cloud.md",
 		"initial_content": initialContent,
@@ -4081,7 +4081,7 @@ func TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTa
 		"",
 		"Closing paragraph with a user edit.",
 	}, "\n")
-	revReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+opened.DocID+"/revisions", vtextCreateRevisionRequest{
+	revReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+opened.DocID+"/revisions", vtextCreateRevisionRequest{
 		Content: collapsedDraft,
 		Metadata: json.RawMessage(`{
 			"source_path":"proposals/legal-cloud.md",
@@ -4267,7 +4267,7 @@ func TestVTextRestoreRevisionNormalizesMalformedTableTailRows(t *testing.T) {
 	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
-	createDocReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents", vtextCreateDocRequest{
+	createDocReq := vtextRequest(t, http.MethodPost, "/api/texture/documents", vtextCreateDocRequest{
 		Title: "Restore Table Tail Fixture",
 	})
 	w := httptest.NewRecorder()
@@ -4294,7 +4294,7 @@ func TestVTextRestoreRevisionNormalizesMalformedTableTailRows(t *testing.T) {
 		"",
 		"End of proposal.",
 	}, "\n")
-	sourceReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+doc.DocID+"/revisions", vtextCreateRevisionRequest{
+	sourceReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+doc.DocID+"/revisions", vtextCreateRevisionRequest{
 		Content: malformedSource,
 		Metadata: json.RawMessage(`{
 			"created_from":"historical_import",
@@ -4320,7 +4320,7 @@ func TestVTextRestoreRevisionNormalizesMalformedTableTailRows(t *testing.T) {
 	}
 
 	currentContent := strings.Replace(malformedSource, "Legal Cloud", "Legal Cloud Current", 1)
-	currentReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+doc.DocID+"/revisions", vtextCreateRevisionRequest{
+	currentReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+doc.DocID+"/revisions", vtextCreateRevisionRequest{
 		Content:          currentContent,
 		ParentRevisionID: sourceResp.RevisionID,
 		Metadata:         json.RawMessage(`{"created_from":"current_head"}`),
@@ -4331,7 +4331,7 @@ func TestVTextRestoreRevisionNormalizesMalformedTableTailRows(t *testing.T) {
 		t.Fatalf("create current revision: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
 	}
 
-	restoreReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+doc.DocID+"/restore", vtextRestoreRevisionRequest{
+	restoreReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+doc.DocID+"/restore", vtextRestoreRevisionRequest{
 		RevisionID: sourceResp.RevisionID,
 		Mode:       "primary",
 	})
@@ -4413,7 +4413,7 @@ func TestVTextImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 	t.Parallel()
 	h, s, _ := vtextAPISetupWithRuntime(t)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	req := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/legal-cloud.md",
 		Title:      "legal-cloud.md",
 		Versions: []vtextMarkdownLineageVersion{
@@ -4563,7 +4563,7 @@ func TestVTextImportMarkdownLineageResolvesCitationMarkers(t *testing.T) {
 		},
 	}
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	req := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath:     "proposals/legal-cloud-sourced.md",
 		Title:          "legal-cloud-sourced.md",
 		SourceEntities: []vtextSourceEntity{entity},
@@ -4687,7 +4687,7 @@ func TestVTextUserSaveAndAgentRevisePreserveSourcesAndTableShape(t *testing.T) {
 		"",
 		"End of proposal.",
 	}, "\n")
-	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	importReq := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath:     "proposals/legal-cloud-sourced.md",
 		Title:          "legal-cloud-sourced.md",
 		SourceEntities: []vtextSourceEntity{entity},
@@ -4719,7 +4719,7 @@ func TestVTextUserSaveAndAgentRevisePreserveSourcesAndTableShape(t *testing.T) {
 	}
 
 	userContent := strings.Replace(parentRev.Content, "A private legal cloud solves this.", "A private legal cloud addresses this.", 1)
-	userReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/revisions", vtextCreateRevisionRequest{
+	userReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/revisions", vtextCreateRevisionRequest{
 		Content:          userContent,
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      "owner",
@@ -4749,7 +4749,7 @@ func TestVTextUserSaveAndAgentRevisePreserveSourcesAndTableShape(t *testing.T) {
 		t.Fatalf("user revision table changed:\nparent:\n%s\nuser:\n%s", parentTables[0].Text, userRev.Content)
 	}
 
-	reviseReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/revise",
+	reviseReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/revise",
 		map[string]string{"intent": "revise"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, reviseReq)
@@ -4802,7 +4802,7 @@ func TestVTextUserSaveRemovesDuplicateMarkdownTableSeparator(t *testing.T) {
 		"",
 		"End of proposal.",
 	}, "\n")
-	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	importReq := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath:     "proposals/table-separator-proof.md",
 		Title:          "table-separator-proof.md",
 		SourceEntities: []vtextSourceEntity{entity},
@@ -4835,7 +4835,7 @@ func TestVTextUserSaveRemovesDuplicateMarkdownTableSeparator(t *testing.T) {
 
 	userContent := strings.Replace(parentRev.Content, "A private legal cloud solves this", "A private legal cloud addresses this", 1)
 	userContent = strings.Replace(userContent, "| --- | --- |\n| Agent |", "| --- | --- |\n| --- | --- |\n| Agent |", 1)
-	userReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/revisions", vtextCreateRevisionRequest{
+	userReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/revisions", vtextCreateRevisionRequest{
 		Content:          userContent,
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      "owner",
@@ -4907,7 +4907,7 @@ func TestVTextSourceGapRepairCreatesRevision(t *testing.T) {
 		},
 	}
 
-	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	importReq := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/legal-cloud-repairable.md",
 		Title:      "legal-cloud-repairable.md",
 		Versions: []vtextMarkdownLineageVersion{{
@@ -4925,7 +4925,7 @@ func TestVTextSourceGapRepairCreatesRevision(t *testing.T) {
 		t.Fatalf("decode import response: %v", err)
 	}
 
-	repairReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
+	repairReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
 		BaseRevisionID: imported.CurrentRevisionID,
 		SourceEntities: []vtextSourceEntity{
 			entity,
@@ -4997,7 +4997,7 @@ func TestVTextSourceGapRepairPreservesUnrepairedGaps(t *testing.T) {
 			UntrustedSourceText: true,
 		},
 	}
-	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	importReq := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/legal-cloud-partial-repair.md",
 		Title:      "legal-cloud-partial-repair.md",
 		Versions: []vtextMarkdownLineageVersion{{
@@ -5015,7 +5015,7 @@ func TestVTextSourceGapRepairPreservesUnrepairedGaps(t *testing.T) {
 		t.Fatalf("decode import response: %v", err)
 	}
 
-	repairReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
+	repairReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
 		SourceEntities: []vtextSourceEntity{entity},
 		CitationResolutions: []vtextCitationMarkerResolution{{
 			Marker:   "[1]",
@@ -5051,7 +5051,7 @@ func TestVTextSourceGapRepairPreservesUnrepairedGaps(t *testing.T) {
 func TestVTextSourceGapRepairCanOmitNoSourceNeededMarker(t *testing.T) {
 	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
-	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	importReq := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/legal-cloud-no-source-needed.md",
 		Title:      "legal-cloud-no-source-needed.md",
 		Versions: []vtextMarkdownLineageVersion{{
@@ -5069,7 +5069,7 @@ func TestVTextSourceGapRepairCanOmitNoSourceNeededMarker(t *testing.T) {
 		t.Fatalf("decode import response: %v", err)
 	}
 
-	repairReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
+	repairReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
 		CitationResolutions: []vtextCitationMarkerResolution{{
 			Marker: "[2]",
 			Action: "no_source_needed",
@@ -5115,7 +5115,7 @@ func TestVTextSourceGapRepairCanOmitNoSourceNeededMarker(t *testing.T) {
 func TestVTextSourceGapRepairRejectsUnknownEntity(t *testing.T) {
 	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
-	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	importReq := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/legal-cloud-bad-repair.md",
 		Title:      "legal-cloud-bad-repair.md",
 		Versions: []vtextMarkdownLineageVersion{{
@@ -5133,7 +5133,7 @@ func TestVTextSourceGapRepairRejectsUnknownEntity(t *testing.T) {
 		t.Fatalf("decode import response: %v", err)
 	}
 
-	repairReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
+	repairReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
 		CitationResolutions: []vtextCitationMarkerResolution{{
 			Marker:   "[1]",
 			EntityID: "missing-source",
@@ -5182,7 +5182,7 @@ func TestVTextSourceArtifactAttachmentCreatesMetadataOnlyRevision(t *testing.T) 
 			UntrustedSourceText: true,
 		},
 	}
-	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	importReq := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath:     "proposals/source-attachment.md",
 		Title:          "source-attachment.md",
 		SourceEntities: []vtextSourceEntity{entity},
@@ -5224,7 +5224,7 @@ func TestVTextSourceArtifactAttachmentCreatesMetadataOnlyRevision(t *testing.T) 
 		t.Fatalf("create content item: %v", err)
 	}
 
-	attachReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-attachments", vtextSourceArtifactAttachmentRequest{
+	attachReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-attachments", vtextSourceArtifactAttachmentRequest{
 		BaseRevisionID: imported.CurrentRevisionID,
 		Attachments: []vtextSourceArtifactAttachment{{
 			EntityID:  "src-public-rule",
@@ -5286,7 +5286,7 @@ func TestVTextSourceArtifactAttachmentRejectsEmptyContentItem(t *testing.T) {
 			UntrustedSourceText: true,
 		},
 	}
-	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	importReq := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath:     "proposals/source-attachment-empty.md",
 		Title:          "source-attachment-empty.md",
 		SourceEntities: []vtextSourceEntity{entity},
@@ -5320,7 +5320,7 @@ func TestVTextSourceArtifactAttachmentRejectsEmptyContentItem(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create content item: %v", err)
 	}
-	attachReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-attachments", vtextSourceArtifactAttachmentRequest{
+	attachReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-attachments", vtextSourceArtifactAttachmentRequest{
 		Attachments: []vtextSourceArtifactAttachment{{
 			EntityID:  "src-empty",
 			ContentID: "content-empty",
@@ -5380,7 +5380,7 @@ func TestVTextImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 		t.Fatalf("CreateContentItem latest: %v", err)
 	}
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	req := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/legal-cloud-content-backed.md",
 		Title:      "legal-cloud-content-backed.md",
 		Versions: []vtextMarkdownLineageVersion{
@@ -5454,7 +5454,7 @@ func TestVTextImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 func TestVTextImportMarkdownLineageRejectsMissingContentItem(t *testing.T) {
 	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	req := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/missing-content-item.md",
 		Title:      "missing-content-item.md",
 		Versions: []vtextMarkdownLineageVersion{{
@@ -5475,7 +5475,7 @@ func TestVTextImportMarkdownLineageRejectsMissingContentItem(t *testing.T) {
 func TestVTextImportMarkdownLineageRejectsUnknownCitationEntity(t *testing.T) {
 	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+	req := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", vtextMarkdownLineageImportRequest{
 		SourcePath: "proposals/bad-sourced.md",
 		Title:      "bad-sourced.md",
 		Versions: []vtextMarkdownLineageVersion{{
@@ -5505,14 +5505,14 @@ func TestVTextImportMarkdownLineageRejectsExistingAlias(t *testing.T) {
 			Content: "Initial version",
 		}},
 	}
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", body)
+	req := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", body)
 	first := httptest.NewRecorder()
 	h.HandleVTextRouter(first, req)
 	if first.Code != http.StatusCreated {
 		t.Fatalf("first import: status = %d, want %d; body: %s", first.Code, http.StatusCreated, first.Body.String())
 	}
 
-	secondReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", body)
+	secondReq := vtextRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", body)
 	second := httptest.NewRecorder()
 	h.HandleVTextRouter(second, secondReq)
 	if second.Code != http.StatusConflict {
@@ -5532,7 +5532,7 @@ func TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 
 	openFile := func(sourcePath, title, initialContent string) vtextOpenFileResponse {
-		req := vtextRequest(t, http.MethodPost, "/api/vtext/files/open", map[string]string{
+		req := vtextRequest(t, http.MethodPost, "/api/texture/files/open", map[string]string{
 			"source_path":     sourcePath,
 			"title":           title,
 			"initial_content": initialContent,
@@ -5633,7 +5633,7 @@ func TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot(t *testing.T) {
 	}
 
 	openFile := func(sourcePath string) vtextOpenFileResponse {
-		req := vtextRequest(t, http.MethodPost, "/api/vtext/files/open", map[string]string{
+		req := vtextRequest(t, http.MethodPost, "/api/texture/files/open", map[string]string{
 			"source_path": sourcePath,
 			"title":       filepath.Base(sourcePath),
 		})
@@ -5766,7 +5766,7 @@ func TestVTextEnsureManifestCreatesAliasAndFile(t *testing.T) {
 
 	docID, _ := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/manifest", nil)
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/manifest", nil)
 	w := httptest.NewRecorder()
 	h.HandleVTextRouter(w, req)
 	if w.Code != http.StatusOK {
@@ -5821,7 +5821,7 @@ func TestVTextEnsureManifestReusesExistingAlias(t *testing.T) {
 
 	docID, _ := createDocWithUserRevision(t, h)
 
-	firstReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/manifest", nil)
+	firstReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/manifest", nil)
 	firstW := httptest.NewRecorder()
 	h.HandleVTextRouter(firstW, firstReq)
 	if firstW.Code != http.StatusOK {
@@ -5832,7 +5832,7 @@ func TestVTextEnsureManifestReusesExistingAlias(t *testing.T) {
 		t.Fatalf("decode first ensure manifest response: %v", err)
 	}
 
-	secondReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/manifest", nil)
+	secondReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/manifest", nil)
 	secondW := httptest.NewRecorder()
 	h.HandleVTextRouter(secondW, secondReq)
 	if secondW.Code != http.StatusOK {
@@ -5860,7 +5860,7 @@ func TestVTextCreateRevisionRejectsStaleHead(t *testing.T) {
 	h, _, _ := vtextAPISetupWithRuntime(t)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 
-	headReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
+	headReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
 		Content:          "Latest head",
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      "alice",
@@ -5872,7 +5872,7 @@ func TestVTextCreateRevisionRejectsStaleHead(t *testing.T) {
 		t.Fatalf("create head revision: status = %d, want %d; body: %s", headW.Code, http.StatusCreated, headW.Body.String())
 	}
 
-	staleReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
+	staleReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
 		Content:          "Stale write",
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      "alice",
@@ -5890,7 +5890,7 @@ func TestVTextCreateRevisionRebasesAllowedStaleUserDraft(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 
-	headReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
+	headReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
 		Content:          "Initial content.\n\nAgent-added latest head detail.",
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      "alice",
@@ -5906,7 +5906,7 @@ func TestVTextCreateRevisionRebasesAllowedStaleUserDraft(t *testing.T) {
 		t.Fatalf("decode head response: %v", err)
 	}
 
-	staleReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
+	staleReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
 		Content:          "Initial content.\n\nUser dirty draft detail.",
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      "alice",
@@ -5953,7 +5953,7 @@ func TestVTextDocumentStreamSendsSnapshot(t *testing.T) {
 	h, s := vtextAPISetup(t)
 	docID, _ := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID+"/stream", nil)
+	req := vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docID+"/stream", nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
@@ -6012,7 +6012,7 @@ func TestVTextDocumentResponseReportsPendingAgentMutation(t *testing.T) {
 		t.Fatalf("create pending mutation: %v", err)
 	}
 
-	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID, nil)
+	req := vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docID, nil)
 	w := httptest.NewRecorder()
 	h.HandleVTextDocument(w, req)
 	if w.Code != http.StatusOK {
@@ -6063,7 +6063,7 @@ func TestVTextDocumentResponseReconcilesPendingMutationFromCurrentHead(t *testin
 		t.Fatalf("create appagent head revision: %v", err)
 	}
 
-	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID, nil)
+	req := vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docID, nil)
 	w := httptest.NewRecorder()
 	h.HandleVTextDocument(w, req)
 	if w.Code != http.StatusOK {
@@ -6104,7 +6104,7 @@ func TestVTextDiagnosisReportsCurrentRevisionVersion(t *testing.T) {
 		t.Fatalf("create second revision: %v", err)
 	}
 
-	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID+"/diagnosis?limit=10", nil)
+	req := vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docID+"/diagnosis?limit=10", nil)
 	w := httptest.NewRecorder()
 	h.HandleVTextDiagnosis(w, req)
 	if w.Code != http.StatusOK {
@@ -6157,7 +6157,7 @@ func TestVTextDiagnosisCanOmitRevisionContentForStructureEvidence(t *testing.T) 
 		t.Fatalf("create structure revision: %v", err)
 	}
 
-	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID+"/diagnosis?limit=10&include_content=false", nil)
+	req := vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docID+"/diagnosis?limit=10&include_content=false", nil)
 	w := httptest.NewRecorder()
 	h.HandleVTextDiagnosis(w, req)
 	if w.Code != http.StatusOK {
@@ -6186,7 +6186,7 @@ func TestVTextDocumentStreamEmitsHeadChangeAfterAgentRevision(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	docID, _ := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID+"/stream", nil)
+	req := vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docID+"/stream", nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
@@ -6199,7 +6199,7 @@ func TestVTextDocumentStreamEmitsHeadChangeAfterAgentRevision(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	revReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	revReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Make it more formal"})
 	revW := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(revW, revReq)
@@ -6264,7 +6264,7 @@ func TestVTextDocumentStreamEmitsHeadChangeAfterUserRevision(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID+"/stream", nil)
+	req := vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docID+"/stream", nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
@@ -6277,7 +6277,7 @@ func TestVTextDocumentStreamEmitsHeadChangeAfterUserRevision(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	createReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
+	createReq := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
 		Content:          "User-authored next head",
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      "alice",
@@ -6347,7 +6347,7 @@ func TestVTextAgentRevisionAuthRequired(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	// No auth header.
-	req := httptest.NewRequest(http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := httptest.NewRequest(http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		bytes.NewReader([]byte(`{"prompt":"test"}`)))
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -6367,7 +6367,7 @@ func TestVTextAgentRevisionPreservesUserAndAppAgentAttribution(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	// Submit an agent revision.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Improve the text"})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -6386,7 +6386,7 @@ func TestVTextAgentRevisionPreservesUserAndAppAgentAttribution(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 	}
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", revReq)
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 	if w.Code != http.StatusCreated {
@@ -6433,7 +6433,7 @@ func TestVTextAgentRevisionNoWorkerAuthorship(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	// Submit an agent revision.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Make it better"})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -6467,7 +6467,7 @@ func TestVTextAgentRevisionNoDuplicateOnRenewalRetry(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	// Submit an agent revision.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Make it concise"})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -6477,7 +6477,7 @@ func TestVTextAgentRevisionNoDuplicateOnRenewalRetry(t *testing.T) {
 	// Simulate a renewal/retry by submitting the same request again
 	// before the task completes. The idempotency check should return
 	// the same task ID.
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Make it concise"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -7341,7 +7341,7 @@ func TestVTextAgentRevisionProgressEvents(t *testing.T) {
 	bus := s // We'll use the store to query events after completion.
 
 	// Submit an agent revision.
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"prompt": "Add more detail"})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -7404,7 +7404,7 @@ func TestVTextAgentRevisionAcceptsReviseEventWithoutPrompt(t *testing.T) {
 
 	docID, _ := createDocWithUserRevision(t, h)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"intent": "revise"})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -7455,7 +7455,7 @@ func TestVTextDiagnosisIncludesDocumentChannelRuns(t *testing.T) {
 		}
 	}
 
-	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID+"/diagnosis?limit=3", nil)
+	req := vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docID+"/diagnosis?limit=3", nil)
 	w := httptest.NewRecorder()
 	h.HandleVTextRouter(w, req)
 	if w.Code != http.StatusOK {
@@ -7494,14 +7494,14 @@ func TestVTextAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 	}
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", revReq)
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", revReq)
 	w := httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create media revision: status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req = vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"intent": "revise"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -7634,7 +7634,7 @@ func TestVTextAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *test
 		t.Fatalf("AppendChannelMessage: %v", err)
 	}
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		map[string]string{"intent": "integrate_worker_findings"})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -7750,7 +7750,7 @@ func TestVTextAgentRevisionDocumentNotFound(t *testing.T) {
 	t.Parallel()
 	h, _, _ := vtextAPISetupWithRuntime(t)
 
-	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/nonexistent/revise",
+	req := vtextRequest(t, http.MethodPost, "/api/texture/documents/nonexistent/revise",
 		map[string]string{"prompt": "test"})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -7769,7 +7769,7 @@ func TestVTextAgentRevisionWrongOwner(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	// Use a different user.
-	req := httptest.NewRequest(http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+	req := httptest.NewRequest(http.MethodPost, "/api/texture/documents/"+docID+"/revise",
 		bytes.NewReader([]byte(`{"prompt":"test"}`)))
 	req.Header.Set("X-Authenticated-User", "user-2")
 	w := httptest.NewRecorder()

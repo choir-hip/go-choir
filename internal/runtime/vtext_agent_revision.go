@@ -19,7 +19,7 @@ import (
 )
 
 // vtextAgentRevisionRequest is the JSON payload for
-// POST /api/vtext/documents/{id}/revise.
+// POST /api/texture/documents/{id}/revise.
 // Submitting a natural-language revision request from within an open document
 // creates a new canonical revision attributable to the appagent
 // (VAL-ETEXT-003).
@@ -48,7 +48,7 @@ type vtextCancelRevisionResponse struct {
 }
 
 // HandleVTextAgentRevision handles POST
-// /api/vtext/documents/{id}/revise.
+// /api/texture/documents/{id}/revise.
 //
 // It creates a runtime task that, when completed, will create a canonical
 // appagent-authored revision. The task ID is returned so the client can
@@ -125,7 +125,7 @@ func (h *APIHandler) HandleVTextAgentRevision(w http.ResponseWriter, r *http.Req
 }
 
 // HandleVTextCancelAgentRevision handles POST
-// /api/vtext/documents/{id}/cancel. It cancels the pending VText appagent
+// /api/texture/documents/{id}/cancel. It cancels the pending VText appagent
 // revision trajectory without changing the canonical document head.
 func (h *APIHandler) HandleVTextCancelAgentRevision(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

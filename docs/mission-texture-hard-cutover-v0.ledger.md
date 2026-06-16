@@ -730,3 +730,44 @@ Receipts:
 Open edge: internal `normalizeTextureAPIPath`, app ids, filenames, storage
 symbols, metadata keys, platform/internal publication names, `edit_texture`
 compatibility alias, and final Texture Protocol v0 remain open.
+
+## 2026-06-16 - Registered Router Normalization Cutover
+
+Claim: after the public `/api/vtext` route deletion, the registered Texture
+router and direct handler tests can stop internally normalizing Texture paths
+through `/api/vtext` without changing Texture API behavior.
+
+Move: remove `normalizeTextureAPIPath`, route `HandleVTextRouter` directly on
+`/api/texture`, make document/revision ID extraction require `/api/texture`,
+update Texture API route comments, and mechanically move direct VText API tests
+from `/api/vtext` to `/api/texture`. Preserve explicit legacy-route refusal
+tests for registered routes and `product_api_request`.
+
+Expected ΔV: 0 against the coarse V=2, with a bounded descent on the internal
+registered-router normalization sub-surface.
+
+Actual ΔV: 0 locally. The registered-router/extractor old-route normalization
+slice is discharged locally, but this is not yet a deployed claim. Storage
+tables, file names, app ids, metadata keys, platform/internal publication
+symbols, role/type/function names, the `edit_texture` compatibility alias, and
+Texture Protocol v0 remain open.
+
+Receipts:
+- Focused local runtime tests passed:
+  `nix develop -c go test ./internal/runtime -run 'TestRegisteredTextureRoutesExcludeLegacyVTextPrefix|TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs|TestProductAPIRequestToolRefusesLegacyVTextRoute|TestHandleVTextDocumentsRootUsesTextureRoutes|TestVTextAPI(GetDocument|CreateRevisionUserEdit|GetHistory|GetDiff)|TestVTextAPIAuthGating'`.
+- Local runtime shard script passed:
+  `nix develop -c scripts/go-test-runtime-shards`. The visible stream showed
+  shard 0/4, 1/4, and 2/4 passing before completion.
+- Explicit local runtime shard 3 passed:
+  `nix develop -c env SHARD_INDEX=3 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`.
+- Residue search:
+  `rg -n 'normalizeTextureAPIPath|/api/vtext|vtext endpoint not found|legacyVText.*PathPrefix' internal/runtime/api.go internal/runtime/vtext.go internal/runtime/vtext_agent_revision.go internal/runtime/vtext_diagnosis.go internal/runtime/*_test.go`
+  returned only explicit `/api/vtext` refusal tests in `api_test.go` and
+  `tools_product_api_test.go`.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,129 warnings;
+  warning counts `H1=718`, `H3=15`, `H4=3`, `H5=336`, `R3=57`.
+- `git diff --check`: pass.
+
+Open edge: CI, staging deploy identity, deployed route proof, and all deeper
+storage/app-id/file/metadata/platform publication naming remain open.

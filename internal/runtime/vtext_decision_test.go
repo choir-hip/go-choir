@@ -113,7 +113,7 @@ func TestVTextDiagnosisAndTraceLogsIncludeDecisionRecords(t *testing.T) {
 	}
 	rt.emitVTextDecisionRecordedEvent(ctx, run, decision)
 
-	diagReq := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID+"/diagnosis?limit=10", nil)
+	diagReq := vtextRequest(t, http.MethodGet, "/api/texture/documents/"+docID+"/diagnosis?limit=10", nil)
 	diagW := httptest.NewRecorder()
 	h.HandleVTextDiagnosis(diagW, diagReq)
 	if diagW.Code != http.StatusOK {

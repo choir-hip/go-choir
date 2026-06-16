@@ -1794,54 +1794,60 @@ func RegisterVTextRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/texture/", h.HandleVTextRouter)
 }
 
+const (
+	textureAPIPathPrefix       = "/api/texture/"
+	textureDocumentsPathPrefix = "/api/texture/documents/"
+	textureRevisionsPathPrefix = "/api/texture/revisions/"
+)
+
 // HandleVTextRouter dispatches Texture API requests based on URL path and
 // method. It handles all paths under /api/texture/ that are not matched by
 // the exact /api/texture/documents route.
 //
 // Route mapping:
 //
-//	POST   /api/vtext/files/open               → resolve/create aliased file document
-//	POST   /api/vtext/markdown-lineage/import  → migrate ordered Markdown snapshots into VText revisions
-//	POST   /api/vtext/documents/{id}/manifest  → ensure a filesystem manifestation
-//	GET    /api/vtext/documents/{id}           → get document
-//	PUT    /api/vtext/documents/{id}           → update document
-//	DELETE /api/vtext/documents/{id}           → delete document
-//	POST   /api/vtext/documents/{id}/revisions → create revision
-//	GET    /api/vtext/documents/{id}/revisions → list revisions
-//	GET    /api/vtext/documents/{id}/stream    → document-scoped stream
-//	POST   /api/vtext/documents/{id}/revise   → submit a document revise request
-//	GET    /api/vtext/documents/{id}/compare  → semantic compare
-//	POST   /api/vtext/documents/{id}/merge-preview → preview concept merge
-//	POST   /api/vtext/documents/{id}/accept-merge → accept merge preview
-//	POST   /api/vtext/documents/{id}/source-repairs → repair unresolved source gaps
-//	POST   /api/vtext/documents/{id}/source-attachments → attach source artifacts to existing source entities
-//	POST   /api/vtext/documents/{id}/restore  → restore historical revision as latest
-//	GET    /api/vtext/documents/{id}/diagnosis → owner-scoped diagnosis bundle
-//	GET    /api/vtext/documents/{id}/export    → export current VText revision
-//	GET    /api/vtext/documents/{id}/history   → revision history
-//	GET    /api/vtext/revisions/{id}          → get revision (snapshot)
-//	GET    /api/vtext/revisions/{id}/blame     → blame revision
-//	GET    /api/vtext/diff                     → diff two revisions
+//	POST   /api/texture/files/open               → resolve/create aliased file document
+//	POST   /api/texture/markdown-lineage/import  → migrate ordered Markdown snapshots into Texture revisions
+//	POST   /api/texture/documents/{id}/manifest  → ensure a filesystem manifestation
+//	GET    /api/texture/documents/{id}           → get document
+//	PUT    /api/texture/documents/{id}           → update document
+//	DELETE /api/texture/documents/{id}           → delete document
+//	POST   /api/texture/documents/{id}/revisions → create revision
+//	GET    /api/texture/documents/{id}/revisions → list revisions
+//	GET    /api/texture/documents/{id}/stream    → document-scoped stream
+//	POST   /api/texture/documents/{id}/revise    → submit a document revise request
+//	GET    /api/texture/documents/{id}/compare   → semantic compare
+//	POST   /api/texture/documents/{id}/merge-preview → preview concept merge
+//	POST   /api/texture/documents/{id}/accept-merge → accept merge preview
+//	POST   /api/texture/documents/{id}/source-repairs → repair unresolved source gaps
+//	POST   /api/texture/documents/{id}/source-attachments → attach source artifacts to existing source entities
+//	POST   /api/texture/documents/{id}/restore   → restore historical revision as latest
+//	GET    /api/texture/documents/{id}/diagnosis → owner-scoped diagnosis bundle
+//	GET    /api/texture/documents/{id}/export    → export current Texture revision
+//	GET    /api/texture/documents/{id}/history   → revision history
+//	GET    /api/texture/revisions/{id}           → get revision (snapshot)
+//	GET    /api/texture/revisions/{id}/blame     → blame revision
+//	GET    /api/texture/diff                     → diff two revisions
 func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
-	path := normalizeTextureAPIPath(r.URL.Path)
+	path := r.URL.Path
 
 	// Diff endpoint: /api/texture/diff
-	if path == "/api/vtext/diff" {
+	if path == "/api/texture/diff" {
 		h.HandleVTextDiff(w, r)
 		return
 	}
-	if path == "/api/vtext/files/open" {
+	if path == "/api/texture/files/open" {
 		h.HandleVTextOpenFile(w, r)
 		return
 	}
-	if path == "/api/vtext/markdown-lineage/import" {
+	if path == "/api/texture/markdown-lineage/import" {
 		h.HandleVTextImportMarkdownLineage(w, r)
 		return
 	}
 
-	// Revision item: /api/vtext/revisions/{id}
-	if strings.HasPrefix(path, "/api/vtext/revisions/") {
-		// Check for blame suffix: /api/vtext/revisions/{id}/blame
+	// Revision item: /api/texture/revisions/{id}
+	if strings.HasPrefix(path, textureRevisionsPathPrefix) {
+		// Check for blame suffix: /api/texture/revisions/{id}/blame
 		if strings.HasSuffix(path, "/blame") {
 			h.HandleVTextBlame(w, r)
 			return
@@ -1850,34 +1856,34 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Document sub-paths: /api/vtext/documents/{id}/...
-	if strings.HasPrefix(path, "/api/vtext/documents/") {
-		// Extract the part after /api/vtext/documents/
-		rest := strings.TrimPrefix(path, "/api/vtext/documents/")
+	// Document sub-paths: /api/texture/documents/{id}/...
+	if strings.HasPrefix(path, textureDocumentsPathPrefix) {
+		// Extract the part after /api/texture/documents/
+		rest := strings.TrimPrefix(path, textureDocumentsPathPrefix)
 
 		// Check for sub-resource suffixes.
 		if strings.HasSuffix(rest, "/revisions") {
-			// /api/vtext/documents/{id}/revisions
+			// /api/texture/documents/{id}/revisions
 			h.HandleVTextRevisions(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/manifest") {
-			// /api/vtext/documents/{id}/manifest
+			// /api/texture/documents/{id}/manifest
 			h.HandleVTextEnsureManifest(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/stream") {
-			// /api/vtext/documents/{id}/stream
+			// /api/texture/documents/{id}/stream
 			h.HandleVTextDocumentStream(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/revise") {
-			// /api/vtext/documents/{id}/revise
+			// /api/texture/documents/{id}/revise
 			h.HandleVTextAgentRevision(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/cancel") {
-			// /api/vtext/documents/{id}/cancel
+			// /api/texture/documents/{id}/cancel
 			h.HandleVTextCancelAgentRevision(w, r)
 			return
 		}
@@ -1914,31 +1920,21 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if strings.HasSuffix(rest, "/agent-revision") {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "vtext endpoint not found"})
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "texture endpoint not found"})
 			return
 		}
 		if strings.HasSuffix(rest, "/history") {
-			// /api/vtext/documents/{id}/history
+			// /api/texture/documents/{id}/history
 			h.HandleVTextHistory(w, r)
 			return
 		}
 
-		// Otherwise, it's a document item: /api/vtext/documents/{id}
+		// Otherwise, it's a document item: /api/texture/documents/{id}
 		h.HandleVTextDocument(w, r)
 		return
 	}
 
-	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "vtext endpoint not found"})
-}
-
-func normalizeTextureAPIPath(path string) string {
-	if strings.HasPrefix(path, "/api/texture/") {
-		return "/api/vtext/" + strings.TrimPrefix(path, "/api/texture/")
-	}
-	if path == "/api/texture" {
-		return "/api/vtext"
-	}
-	return path
+	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "texture endpoint not found"})
 }
 
 // HandleVTextDocumentsRoot routes POST to create and GET to list at

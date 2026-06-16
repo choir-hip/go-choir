@@ -147,7 +147,8 @@ invariants / qualities / domain ramp (I/Q/D):
   identity -> browser product proof -> protocol canonization.
 
 variant (ranking function) V: current V=2; last ΔV=0 against the coarse
-variant, with frontend selector/probe residue burned down:
+variant, with registered router/extractor old-route normalization locally
+burned down and CI/deploy pending:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
@@ -158,12 +159,12 @@ variant, with frontend selector/probe residue burned down:
    been reconciled to Texture or line-labeled as historical/deletion residue;
    `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
    /tmp/choir-doccheck.json` now reports no H5 warnings for that high-read set;
-4. current V includes: internal runtime normalization, storage, file, app-id,
-   metadata, and platform/internal publication symbols still use the old
-   ontology; frontend `data-vtext-*` attributes, frontend `/api/vtext`
-   compatibility-route deletion target test probes, the browser-public
-   `/api/vtext` route registration, and the product API tool allowlist shim are
-   discharged;
+4. current V includes: storage, file, app-id, metadata, and platform/internal
+   publication symbols still use the old ontology; frontend `data-vtext-*`
+   attributes, frontend `/api/vtext` compatibility-route deletion target test
+   probes, the browser-public `/api/vtext` route registration, the product API
+   tool allowlist shim, registered-router old-route normalization, and direct
+   Texture handler test paths are discharged locally pending CI/deploy;
 5. discharged: visible UI labels and import affordances are cut over to
    Texture and proven on staging through browser product evidence;
 6. discharged: the edit affordance surface has a common `patch_texture` tool
@@ -241,8 +242,9 @@ position / live conjectures / open edges:
   `product_api_request` allowlist shim are deleted and deployed; staging route
   proof shows `/api/texture/documents` reaches the auth gate while
   `/api/vtext/documents` and `/api/vtext/diff` return plain 404. Remaining
-  route residue is internal normalization and old internal symbols, not a
-  browser-public compatibility path.
+  browser-public route residue is gone. A local follow-on removes the
+  registered router/extractor dependency on `/api/vtext` and moves direct
+  Texture API handler tests to `/api/texture`; CI/deploy proof is pending.
 - C7 repaired and CI-green: CI exposed a Universal Wire publication compatibility
   regression. The route/tool slice made new Texture revisions write
   `source=edit_texture`, but the `internal/wirepublish` autonomous publication
@@ -277,11 +279,16 @@ position / live conjectures / open edges:
   selectors render and the old editor/toolbar selectors do not. Remaining
   frontend H5 warnings are app/file names, metadata keys, platform/internal
   publication terms, and historical test names.
+- C13 supported locally for registered-router normalization scope: the Texture
+  router now dispatches on `/api/texture` directly, the shared doc/revision ID
+  extractors only parse `/api/texture`, direct Texture API tests use
+  `/api/texture`, and `/api/vtext` remains only in explicit legacy-route
+  refusal tests for this runtime slice. CI/deploy proof is pending.
 
-next move: cut over internal runtime normalization, app ids, storage, file
-names, metadata names, and platform/internal publication symbols toward
-Texture, then write protocol v0 only after the remaining working surface is
-settled.
+next move: land the registered-router normalization cutover through CI,
+staging deploy identity, and deployed route proof; then cut over app ids,
+storage, file names, metadata names, and platform/internal publication symbols
+toward Texture before protocol v0.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

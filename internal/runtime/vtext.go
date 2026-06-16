@@ -5,18 +5,18 @@
 //
 // API endpoints:
 //
-//	POST   /api/vtext/documents          — create a new document
-//	GET    /api/vtext/documents          — list documents for the authenticated user
-//	GET    /api/vtext/documents/{id}     — get a document by ID
-//	PUT    /api/vtext/documents/{id}     — update a document (e.g., title)
-//	DELETE /api/vtext/documents/{id}     — delete a document and its revisions
-//	POST   /api/vtext/documents/{id}/revisions — create a user-authored revision
-//	GET    /api/vtext/documents/{id}/revisions — list revisions for a document
-//	GET    /api/vtext/documents/{id}/stream — stream document lifecycle changes
-//	GET    /api/vtext/revisions/{id}    — get a specific revision (snapshot)
-//	GET    /api/vtext/documents/{id}/history — get revision history with attribution
-//	GET    /api/vtext/diff?from={id}&to={id} — diff two revisions
-//	GET    /api/vtext/revisions/{id}/blame — blame a revision
+//	POST   /api/texture/documents          — create a new document
+//	GET    /api/texture/documents          — list documents for the authenticated user
+//	GET    /api/texture/documents/{id}     — get a document by ID
+//	PUT    /api/texture/documents/{id}     — update a document (e.g., title)
+//	DELETE /api/texture/documents/{id}     — delete a document and its revisions
+//	POST   /api/texture/documents/{id}/revisions — create a user-authored revision
+//	GET    /api/texture/documents/{id}/revisions — list revisions for a document
+//	GET    /api/texture/documents/{id}/stream — stream document lifecycle changes
+//	GET    /api/texture/revisions/{id}    — get a specific revision (snapshot)
+//	GET    /api/texture/documents/{id}/history — get revision history with attribution
+//	GET    /api/texture/diff?from={id}&to={id} — diff two revisions
+//	GET    /api/texture/revisions/{id}/blame — blame a revision
 package runtime
 
 import (
@@ -50,12 +50,12 @@ var (
 
 // ----- Request/Response types -----
 
-// vtextCreateDocRequest is the JSON payload for POST /api/vtext/documents.
+// vtextCreateDocRequest is the JSON payload for POST /api/texture/documents.
 type vtextCreateDocRequest struct {
 	Title string `json:"title"`
 }
 
-// vtextCreateDocResponse is the JSON response for POST /api/vtext/documents.
+// vtextCreateDocResponse is the JSON response for POST /api/texture/documents.
 type vtextCreateDocResponse struct {
 	DocID     string `json:"doc_id"`
 	OwnerID   string `json:"owner_id"`
@@ -158,7 +158,7 @@ type vtextDocumentExportResponse struct {
 	ContentHash string `json:"content_hash"`
 }
 
-// vtextDocumentResponse is the JSON response for GET /api/vtext/documents/{id}.
+// vtextDocumentResponse is the JSON response for GET /api/texture/documents/{id}.
 type vtextDocumentResponse struct {
 	DocID                string `json:"doc_id"`
 	OwnerID              string `json:"owner_id"`
@@ -187,18 +187,18 @@ type vtextDocumentStreamEvent struct {
 	Error             string `json:"error,omitempty"`
 }
 
-// vtextUpdateDocRequest is the JSON payload for PUT /api/vtext/documents/{id}.
+// vtextUpdateDocRequest is the JSON payload for PUT /api/texture/documents/{id}.
 type vtextUpdateDocRequest struct {
 	Title string `json:"title"`
 }
 
-// vtextListDocsResponse is the JSON response for GET /api/vtext/documents.
+// vtextListDocsResponse is the JSON response for GET /api/texture/documents.
 type vtextListDocsResponse struct {
 	Documents []vtextDocumentResponse `json:"documents"`
 }
 
 // vtextCreateRevisionRequest is the public JSON payload for
-// POST /api/vtext/documents/{id}/revisions. The public route always creates
+// POST /api/texture/documents/{id}/revisions. The public route always creates
 // user-authored revisions; author_kind/author_label are accepted only for
 // older clients and are not authority-bearing.
 type vtextCreateRevisionRequest struct {
@@ -227,19 +227,19 @@ type vtextRevisionResponse struct {
 }
 
 // vtextListRevisionsResponse is the JSON response for
-// GET /api/vtext/documents/{id}/revisions.
+// GET /api/texture/documents/{id}/revisions.
 type vtextListRevisionsResponse struct {
 	Revisions []vtextRevisionResponse `json:"revisions"`
 }
 
 // vtextHistoryResponse is the JSON response for
-// GET /api/vtext/documents/{id}/history.
+// GET /api/texture/documents/{id}/history.
 type vtextHistoryResponse struct {
 	DocID   string               `json:"doc_id"`
 	Entries []types.HistoryEntry `json:"entries"`
 }
 
-// vtextDiffResponse is the JSON response for GET /api/vtext/diff.
+// vtextDiffResponse is the JSON response for GET /api/texture/diff.
 type vtextDiffResponse struct {
 	types.DiffResult
 }
@@ -324,12 +324,10 @@ type vtextRestoreRevisionRequest struct {
 // extractDocID extracts the document ID from the URL path.
 // Expected pattern: /api/texture/documents/{docID}/...
 func extractDocID(path string) string {
-	path = normalizeTextureAPIPath(path)
-	const prefix = "/api/vtext/documents/"
-	if !strings.HasPrefix(path, prefix) {
+	if !strings.HasPrefix(path, textureDocumentsPathPrefix) {
 		return ""
 	}
-	rest := strings.TrimPrefix(path, prefix)
+	rest := strings.TrimPrefix(path, textureDocumentsPathPrefix)
 	// The docID is the first path segment.
 	parts := strings.SplitN(rest, "/", 2)
 	return parts[0]
@@ -338,12 +336,10 @@ func extractDocID(path string) string {
 // extractRevisionID extracts the revision ID from the URL path.
 // Expected pattern: /api/texture/revisions/{revisionID}/...
 func extractRevisionID(path string) string {
-	path = normalizeTextureAPIPath(path)
-	const prefix = "/api/vtext/revisions/"
-	if !strings.HasPrefix(path, prefix) {
+	if !strings.HasPrefix(path, textureRevisionsPathPrefix) {
 		return ""
 	}
-	rest := strings.TrimPrefix(path, prefix)
+	rest := strings.TrimPrefix(path, textureRevisionsPathPrefix)
 	parts := strings.SplitN(rest, "/", 2)
 	return parts[0]
 }
@@ -396,7 +392,7 @@ func writeSSEData(w http.ResponseWriter, payload any) {
 
 // ----- Handler methods -----
 
-// HandleVTextCreateDocument handles POST /api/vtext/documents.
+// HandleVTextCreateDocument handles POST /api/texture/documents.
 // It creates a new document with a durable document identity (VAL-ETEXT-001).
 func (h *APIHandler) HandleVTextCreateDocument(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -828,7 +824,7 @@ func (h *APIHandler) HandleVTextExportDocument(w http.ResponseWriter, r *http.Re
 	})
 }
 
-// HandleVTextListDocuments handles GET /api/vtext/documents.
+// HandleVTextListDocuments handles GET /api/texture/documents.
 // It returns documents owned by the authenticated user.
 func (h *APIHandler) HandleVTextListDocuments(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -858,7 +854,7 @@ func (h *APIHandler) HandleVTextListDocuments(w http.ResponseWriter, r *http.Req
 	writeAPIJSON(w, http.StatusOK, resp)
 }
 
-// HandleVTextDocument handles GET/PUT/DELETE /api/vtext/documents/{id}.
+// HandleVTextDocument handles GET/PUT/DELETE /api/texture/documents/{id}.
 
 func internalVTextDocumentIDFromPath(path string) string {
 	const prefix = "/internal/vtext/documents/"
@@ -1066,7 +1062,7 @@ func (h *APIHandler) handleVTextDeleteDocument(w http.ResponseWriter, r *http.Re
 }
 
 // HandleVTextRevisions handles POST and GET
-// /api/vtext/documents/{id}/revisions.
+// /api/texture/documents/{id}/revisions.
 func (h *APIHandler) HandleVTextRevisions(w http.ResponseWriter, r *http.Request) {
 	docID := extractDocID(r.URL.Path)
 	if docID == "" {
@@ -1424,7 +1420,7 @@ func (h *APIHandler) handleVTextListRevisions(w http.ResponseWriter, r *http.Req
 	writeAPIJSON(w, http.StatusOK, resp)
 }
 
-// HandleVTextRevision handles GET /api/vtext/revisions/{id}.
+// HandleVTextRevision handles GET /api/texture/revisions/{id}.
 // Opening a historical revision does not mutate the document head
 // (VAL-ETEXT-007: historical snapshots can be opened without mutating head).
 func (h *APIHandler) HandleVTextRevision(w http.ResponseWriter, r *http.Request) {
@@ -1468,7 +1464,7 @@ func (h *APIHandler) HandleVTextRevision(w http.ResponseWriter, r *http.Request)
 	writeAPIJSON(w, http.StatusOK, revisionResponseFromRecord(rev))
 }
 
-// HandleVTextHistory handles GET /api/vtext/documents/{id}/history.
+// HandleVTextHistory handles GET /api/texture/documents/{id}/history.
 // It returns the revision history with explicit attribution metadata
 // (VAL-ETEXT-006: version history lists revisions with explicit
 // attribution metadata).
@@ -1513,7 +1509,7 @@ func (h *APIHandler) HandleVTextHistory(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// HandleVTextDocumentStream handles GET /api/vtext/documents/{id}/stream.
+// HandleVTextDocumentStream handles GET /api/texture/documents/{id}/stream.
 // It provides a document-scoped SSE transport so the editor can follow the
 // canonical document head instead of polling a specific loop ID.
 func (h *APIHandler) HandleVTextDocumentStream(w http.ResponseWriter, r *http.Request) {
@@ -1678,7 +1674,7 @@ func vtextStreamEventFromRecord(rec types.EventRecord) (vtextDocumentStreamEvent
 	return event, true
 }
 
-// HandleVTextDiff handles GET /api/vtext/diff?from={id}&to={id}.
+// HandleVTextDiff handles GET /api/texture/diff?from={id}&to={id}.
 // It compares selected from and to revisions and shows the changed
 // sections (VAL-ETEXT-008: diff view compares selected revisions and
 // changed sections).
@@ -1869,7 +1865,7 @@ func (h *APIHandler) HandleVTextDiagnosis(w http.ResponseWriter, r *http.Request
 	writeAPIJSON(w, http.StatusOK, resp)
 }
 
-// HandleVTextBlame handles GET /api/vtext/revisions/{id}/blame.
+// HandleVTextBlame handles GET /api/texture/revisions/{id}/blame.
 // It provides section-level attribution that distinguishes whether the
 // last editor was the user or the agent (VAL-ETEXT-009: blame identifies
 // the last editor per section).

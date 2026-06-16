@@ -53,7 +53,7 @@ type vtextTableStructureSummary struct {
 }
 
 // vtextBlameResponse is the JSON response for
-// GET /api/vtext/revisions/{id}/blame.
+// GET /api/texture/revisions/{id}/blame.
 type vtextBlameResponse struct {
 	types.BlameResult
 }

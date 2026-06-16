@@ -320,7 +320,7 @@ func TestVTextAgentRevisionRealLLM(t *testing.T) {
 	t.Logf("Testing with provider: %s", providerName)
 
 	// Step 1: Create a document.
-	req := vtextRealLLMRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRealLLMRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Real LLM Test Document"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -343,7 +343,7 @@ func TestVTextAgentRevisionRealLLM(t *testing.T) {
 		AuthorLabel: "alice",
 	}
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
@@ -360,7 +360,7 @@ func TestVTextAgentRevisionRealLLM(t *testing.T) {
 	// Step 3: Submit agent revision prompt.
 	revisionPrompt := "Rewrite this in a formal, professional tone. Keep the same meaning but use professional language."
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revise",
+		"/api/texture/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": revisionPrompt})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -483,7 +483,7 @@ func TestVTextAgentRevisionRealLLMCodeGeneration(t *testing.T) {
 	t.Logf("Testing code generation with provider: %s", providerName)
 
 	// Create document.
-	req := vtextRealLLMRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRealLLMRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Code Generation Test"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -500,7 +500,7 @@ func TestVTextAgentRevisionRealLLMCodeGeneration(t *testing.T) {
 		AuthorLabel: "dev",
 	}
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 	if w.Code != http.StatusCreated {
@@ -509,7 +509,7 @@ func TestVTextAgentRevisionRealLLMCodeGeneration(t *testing.T) {
 
 	// Submit agent revision requesting code.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revise",
+		"/api/texture/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Write a complete Python function that calculates fibonacci numbers. Include a docstring and handle edge cases."})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -566,7 +566,7 @@ func TestVTextAgentRevisionRealLLMEventsEmitted(t *testing.T) {
 	t.Logf("Testing event emission with provider: %s", providerName)
 
 	// Create document and user revision.
-	req := vtextRealLLMRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRealLLMRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Event Test"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -579,13 +579,13 @@ func TestVTextAgentRevisionRealLLMEventsEmitted(t *testing.T) {
 		AuthorLabel: "alice",
 	}
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
 	// Submit agent revision.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revise",
+		"/api/texture/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Make it shorter"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -660,7 +660,7 @@ func TestVTextAgentRevisionRealLLMMutationIdempotency(t *testing.T) {
 	h, s, _, _ := vtextRealLLMSetup(t)
 
 	// Create document and user revision.
-	req := vtextRealLLMRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRealLLMRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Idempotency Test"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -673,13 +673,13 @@ func TestVTextAgentRevisionRealLLMMutationIdempotency(t *testing.T) {
 		AuthorLabel: "alice",
 	}
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
 	// Submit agent revision.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revise",
+		"/api/texture/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Improve this document"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -688,7 +688,7 @@ func TestVTextAgentRevisionRealLLMMutationIdempotency(t *testing.T) {
 
 	// Retry — should return same task ID.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revise",
+		"/api/texture/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Improve this document"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -739,7 +739,7 @@ func TestVTextAgentRevisionRealLLMStreamingDeltas(t *testing.T) {
 	t.Logf("Testing streaming deltas with provider: %s", providerName)
 
 	// Create document and user revision.
-	req := vtextRealLLMRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRealLLMRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Streaming Test"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -752,13 +752,13 @@ func TestVTextAgentRevisionRealLLMStreamingDeltas(t *testing.T) {
 		AuthorLabel: "alice",
 	}
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
 	// Submit agent revision.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revise",
+		"/api/texture/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Expand this to a paragraph"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -805,7 +805,7 @@ func TestVTextAgentRevisionRealLLMProviderMetadata(t *testing.T) {
 	t.Logf("Testing provider metadata with provider: %s", providerName)
 
 	// Create document and user revision.
-	req := vtextRealLLMRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRealLLMRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "Metadata Test"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -818,13 +818,13 @@ func TestVTextAgentRevisionRealLLMProviderMetadata(t *testing.T) {
 		AuthorLabel: "alice",
 	}
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
 	// Submit agent revision.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revise",
+		"/api/texture/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Rewrite this concisely"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -870,7 +870,7 @@ func TestVTextAgentRevisionRealLLMFullHistory(t *testing.T) {
 	t.Logf("Testing full history with provider: %s", providerName)
 
 	// Create document.
-	req := vtextRealLLMRequest(t, http.MethodPost, "/api/vtext/documents",
+	req := vtextRealLLMRequest(t, http.MethodPost, "/api/texture/documents",
 		map[string]string{"title": "History Test"})
 	w := httptest.NewRecorder()
 	h.HandleVTextCreateDocument(w, req)
@@ -884,13 +884,13 @@ func TestVTextAgentRevisionRealLLMFullHistory(t *testing.T) {
 		AuthorLabel: "alice",
 	}
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
 	// Agent revision 1.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revise",
+		"/api/texture/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Make it more detailed"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -909,13 +909,13 @@ func TestVTextAgentRevisionRealLLMFullHistory(t *testing.T) {
 		AuthorLabel: "alice",
 	}
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleVTextRevisions(w, req)
 
 	// Agent revision 2.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/revise",
+		"/api/texture/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Summarize the content"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
