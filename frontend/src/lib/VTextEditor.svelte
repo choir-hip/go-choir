@@ -2408,7 +2408,7 @@
     text-underline-offset: 0.18em;
   }
 
-  .rendered-doc :global(.vtext-source-ref) {
+  .rendered-doc :global(.texture-source-ref) {
     position: relative;
     display: inline-flex;
     align-items: center;
@@ -2428,7 +2428,7 @@
     cursor: pointer;
   }
 
-  .rendered-doc :global(.vtext-source-ref[data-source-expansion-surface="media"][data-expanded="true"]) {
+  .rendered-doc :global(.texture-source-ref[data-source-expansion-surface="media"][data-expanded="true"]) {
     display: inline-grid;
     grid-template-columns: auto minmax(12rem, 1fr);
     align-items: start;
@@ -2442,12 +2442,12 @@
     vertical-align: baseline;
   }
 
-  .rendered-doc :global(.vtext-source-ref:focus-visible) {
+  .rendered-doc :global(.texture-source-ref:focus-visible) {
     outline: 2px solid var(--choir-state-active-glow);
     outline-offset: 2px;
   }
 
-  .rendered-doc :global(.vtext-source-ref--missing) {
+  .rendered-doc :global(.texture-source-ref--missing) {
     border-color: var(--choir-status-danger);
   }
 
@@ -2500,7 +2500,7 @@
     gap: 0.42rem;
   }
 
-  .rendered-doc :global(.vtext-source-ref-popover) {
+  .rendered-doc :global(.texture-source-ref-popover) {
     position: absolute;
     z-index: 30;
     left: 0;
@@ -2519,7 +2519,7 @@
     text-transform: none;
   }
 
-  .rendered-doc :global(.vtext-source-ref[data-source-expansion-surface="media"][data-expanded="true"] .vtext-source-ref-popover) {
+  .rendered-doc :global(.texture-source-ref[data-source-expansion-surface="media"][data-expanded="true"] .texture-source-ref-popover) {
     position: static;
     z-index: auto;
     display: grid;
@@ -2530,13 +2530,13 @@
     box-shadow: none;
   }
 
-  .rendered-doc :global(.vtext-source-ref-popover strong),
-  .rendered-doc :global(.vtext-source-ref-popover span) {
+  .rendered-doc :global(.texture-source-ref-popover strong),
+  .rendered-doc :global(.texture-source-ref-popover span) {
     display: block;
   }
 
-  .rendered-doc :global(.vtext-source-ref:not([data-expanded="true"]):hover .vtext-source-ref-popover),
-  .rendered-doc :global(.vtext-source-ref:not([data-expanded="true"]):focus .vtext-source-ref-popover) {
+  .rendered-doc :global(.texture-source-ref:not([data-expanded="true"]):hover .texture-source-ref-popover),
+  .rendered-doc :global(.texture-source-ref:not([data-expanded="true"]):focus .texture-source-ref-popover) {
     display: block;
   }
 
@@ -2613,7 +2613,7 @@
     font-size: 0.72rem;
   }
 
-  .rendered-doc :global(.vtext-source-open) {
+  .rendered-doc :global(.texture-source-open) {
     margin-top: 0.62rem;
     border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
@@ -2626,7 +2626,7 @@
     cursor: pointer;
   }
 
-  .rendered-doc :global(.vtext-source-open:hover) {
+  .rendered-doc :global(.texture-source-open:hover) {
     background: var(--choir-state-selected);
   }
 

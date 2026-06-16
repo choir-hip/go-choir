@@ -3046,3 +3046,45 @@ Receipts:
 
 Open edge: commit and push the docs checkpoint, monitor Docs Truth Check, then
 implement C28 behavior changes.
+
+## 2026-06-16 - Local Repair: Live Editor Texture Source Classes
+
+Claim: C28 repairs the current live editor DOM/CSS class vocabulary for source
+refs and source journal flows without widening into frontend file/module names,
+storage/file suffixes, durable actor ids, Go publication symbols, or public
+route compatibility.
+
+Move: mechanically rename scoped live source-ref/source-flow classes and CSS
+custom properties from retired-name forms to Texture forms, repair the accidental
+module import-path rename, then run frontend build plus scoped retired-name
+search.
+
+Expected ΔV: support C28 locally and make the deployed proof the only remaining
+obligation for this slice; no coarse V decrease until CI/deploy/staging proof
+passes.
+
+Actual ΔV: C28 is local-supported. V remains 2.
+
+Receipts:
+- Docs checkpoint commit:
+  `b61659e1163eb662b945c6f0a0150ca469dee791 docs: checkpoint live editor texture source classes`.
+- Docs Truth Check run `27596230390` passed for the checkpoint.
+- `frontend/src/lib/vtext-source-renderer.ts`,
+  `frontend/src/lib/vtext-markdown-serializer.ts`,
+  `frontend/src/lib/VTextEditor.svelte`,
+  `frontend/src/lib/vtext-source-flow.ts`,
+  `frontend/src/lib/vtext-source-flow.css`, and
+  `frontend/tests/vtext-source-entities.spec.js` now use
+  `texture-source-ref*`, `texture-source-journal-*`,
+  `texture-source-flow-close`, `texture-source-open`, and
+  `--texture-source-flow-*` for the scoped live editor/source-flow surface.
+- `npm --prefix frontend run build` passed.
+- Scoped retired-class search returned no hits:
+  `rg -n "vtext-source-ref|vtext-source-journal|vtext-source-open|vtext-source-flow-close|--vtext-source-flow" frontend/src/lib frontend/tests/vtext-source-entities.spec.js`.
+- Scoped Texture-class search shows the replacement classes in renderer,
+  serializer, editor CSS, source-flow CSS/DOM builder, and focused tests:
+  `rg -n "texture-source-ref|texture-source-journal|texture-source-open|texture-source-flow-close|--texture-source-flow" frontend/src/lib frontend/tests/vtext-source-entities.spec.js`.
+
+Open edge: commit and push the behavior slice, monitor CI/deploy, verify staging
+identity, and run deployed browser/product proof that live source refs and
+source journal flows emit Texture classes without the scoped retired classes.

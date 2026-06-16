@@ -2,8 +2,8 @@
   display: none !important;
 }
 
-.rendered-doc .vtext-source-ref[data-source-flow-mounted="true"],
-.rendered-doc .vtext-source-ref[data-source-flow-mounted="true"][data-expanded="true"] {
+.rendered-doc .texture-source-ref[data-source-flow-mounted="true"],
+.rendered-doc .texture-source-ref[data-source-flow-mounted="true"][data-expanded="true"] {
   display: inline-flex;
   grid-template-columns: none;
   min-width: 1.1rem;
@@ -16,52 +16,52 @@
   vertical-align: super;
 }
 
-.rendered-doc .vtext-source-ref[data-source-flow-mounted="true"] .vtext-source-ref-popover,
-.rendered-doc .vtext-source-journal-flow .vtext-source-ref-popover {
+.rendered-doc .texture-source-ref[data-source-flow-mounted="true"] .texture-source-ref-popover,
+.rendered-doc .texture-source-journal-flow .texture-source-ref-popover {
   display: none !important;
 }
 
-.rendered-doc .vtext-source-journal-flow {
+.rendered-doc .texture-source-journal-flow {
   position: relative;
   margin: 0.28rem 0 1.05rem;
   color: var(--choir-text-primary);
   font: inherit;
-  line-height: var(--vtext-source-flow-line-height);
+  line-height: var(--texture-source-flow-line-height);
 }
 
-.rendered-doc .vtext-source-journal-lines {
+.rendered-doc .texture-source-journal-lines {
   position: absolute;
   inset: 0;
 }
 
-.rendered-doc .vtext-source-journal-line {
+.rendered-doc .texture-source-journal-line {
   position: absolute;
   display: block;
-  min-height: var(--vtext-source-flow-line-height);
+  min-height: var(--texture-source-flow-line-height);
   color: var(--choir-text-primary);
   font: inherit;
-  line-height: var(--vtext-source-flow-line-height);
+  line-height: var(--texture-source-flow-line-height);
   white-space: pre;
 }
 
-.rendered-doc .vtext-source-journal-fragment {
+.rendered-doc .texture-source-journal-fragment {
   display: inline;
   white-space: pre;
 }
 
-.rendered-doc .vtext-source-journal-fragment--source .vtext-source-ref {
+.rendered-doc .texture-source-journal-fragment--source .texture-source-ref {
   vertical-align: super;
 }
 
-.rendered-doc .vtext-source-journal-note {
+.rendered-doc .texture-source-journal-note {
   position: absolute;
   top: 0;
   right: 0;
   z-index: 1;
   display: block;
-  width: var(--vtext-source-flow-note-width);
-  max-width: calc(100% - var(--vtext-source-flow-gap) - 12rem);
-  min-height: calc(var(--vtext-source-flow-line-height) * 7);
+  width: var(--texture-source-flow-note-width);
+  max-width: calc(100% - var(--texture-source-flow-gap) - 12rem);
+  min-height: calc(var(--texture-source-flow-line-height) * 7);
   margin: 0;
   border-left: 2px solid var(--choir-border-strong);
   padding: 0.08rem 0 0.16rem 0.86rem;
@@ -73,8 +73,8 @@
   text-transform: none;
 }
 
-.rendered-doc .vtext-source-journal-flow[data-texture-source-flow-mode="stacked"] .vtext-source-journal-note {
-  top: var(--vtext-source-flow-stacked-note-top);
+.rendered-doc .texture-source-journal-flow[data-texture-source-flow-mode="stacked"] .texture-source-journal-note {
+  top: var(--texture-source-flow-stacked-note-top);
   right: auto;
   left: 0;
   width: min(34rem, 100%);
@@ -83,7 +83,7 @@
   border-left-width: 2px;
 }
 
-.rendered-doc .vtext-source-journal-cite {
+.rendered-doc .texture-source-journal-cite {
   display: block;
   color: var(--choir-text-accent);
   font-size: 0.94rem;
@@ -92,7 +92,7 @@
   line-height: 1.22;
 }
 
-.rendered-doc .vtext-source-journal-body {
+.rendered-doc .texture-source-journal-body {
   margin-top: 0.36rem;
   color: var(--choir-text-primary);
   font-size: 0.86rem;
@@ -100,7 +100,7 @@
   line-height: 1.36;
 }
 
-.rendered-doc .vtext-source-journal-actions {
+.rendered-doc .texture-source-journal-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -108,8 +108,8 @@
   margin-top: 0.42rem;
 }
 
-.rendered-doc .vtext-source-journal-note .vtext-source-journal-actions .vtext-source-open,
-.rendered-doc .vtext-source-journal-note .vtext-source-journal-actions .vtext-source-flow-close {
+.rendered-doc .texture-source-journal-note .texture-source-journal-actions .texture-source-open,
+.rendered-doc .texture-source-journal-note .texture-source-journal-actions .texture-source-flow-close {
   margin-top: 0;
   border: 0;
   border-radius: 0;
@@ -125,26 +125,26 @@
   cursor: pointer;
 }
 
-.rendered-doc .vtext-source-journal-note .vtext-source-journal-actions .vtext-source-flow-close {
+.rendered-doc .texture-source-journal-note .texture-source-journal-actions .texture-source-flow-close {
   color: var(--choir-text-muted);
   font-weight: 640;
 }
 
 @media (max-width: 720px) {
-  .rendered-doc .vtext-source-journal-flow {
+  .rendered-doc .texture-source-journal-flow {
     height: auto !important;
     max-width: 100%;
     min-width: 0;
     overflow: hidden;
   }
 
-  .rendered-doc .vtext-source-journal-lines {
+  .rendered-doc .texture-source-journal-lines {
     position: static;
     max-width: 100%;
     min-width: 0;
   }
 
-  .rendered-doc .vtext-source-journal-line {
+  .rendered-doc .texture-source-journal-line {
     position: static;
     display: block;
     width: auto !important;
@@ -155,17 +155,17 @@
     word-break: break-word;
   }
 
-  .rendered-doc .vtext-source-journal-fragment {
+  .rendered-doc .texture-source-journal-fragment {
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
   }
 
-  .rendered-doc .vtext-source-journal-fragment[style] {
+  .rendered-doc .texture-source-journal-fragment[style] {
     margin-left: 0 !important;
   }
 
-  .rendered-doc .vtext-source-journal-note {
+  .rendered-doc .texture-source-journal-note {
     position: static;
     width: auto;
     max-width: 100%;
@@ -175,18 +175,18 @@
     word-break: break-word;
   }
 
-  .rendered-doc .vtext-source-journal-flow[data-texture-source-flow-mode="stacked"] .vtext-source-journal-note {
+  .rendered-doc .texture-source-journal-flow[data-texture-source-flow-mode="stacked"] .texture-source-journal-note {
     width: auto;
     max-width: 100%;
   }
 
-  .rendered-doc .vtext-source-journal-actions {
+  .rendered-doc .texture-source-journal-actions {
     max-width: 100%;
     min-width: 0;
   }
 
-  .rendered-doc .vtext-source-journal-note .vtext-source-journal-actions .vtext-source-open,
-  .rendered-doc .vtext-source-journal-note .vtext-source-journal-actions .vtext-source-flow-close {
+  .rendered-doc .texture-source-journal-note .texture-source-journal-actions .texture-source-open,
+  .rendered-doc .texture-source-journal-note .texture-source-journal-actions .texture-source-flow-close {
     max-width: 100%;
     overflow-wrap: anywhere;
   }

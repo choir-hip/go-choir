@@ -202,14 +202,14 @@ function sourceFlowText(node: Node | null, activeSourceRef: Element): string {
   if (node.nodeType !== Node.ELEMENT_NODE) return '';
   const element = node as Element;
   if (element.matches?.('[data-texture-source-ref]')) {
-    const label = element.querySelector?.('.vtext-source-ref-label')?.textContent || element.getAttribute('data-source-label') || '';
+    const label = element.querySelector?.('.texture-source-ref-label')?.textContent || element.getAttribute('data-source-label') || '';
     return label ? ` ${label} ` : ' ';
   }
   return Array.from(node.childNodes).map((child) => sourceFlowText(child, activeSourceRef)).join('');
 }
 
 function sourceRefFlowItem(element: Element): SourceJournalFlowItem {
-  const label = element.querySelector?.('.vtext-source-ref-label')?.textContent
+  const label = element.querySelector?.('.texture-source-ref-label')?.textContent
     || element.getAttribute('data-source-label')
     || 'source';
   const width = Math.ceil(element.getBoundingClientRect?.().width || 0);
@@ -259,7 +259,7 @@ function isSourceFlowBlock(element: Element | null): boolean {
 
 function buildSourceJournalNoteContent(note: HTMLElement, sourceRef: Element, popover: Element, close: HTMLButtonElement): void {
   const title = document.createElement('cite');
-  title.className = 'vtext-source-journal-cite';
+  title.className = 'texture-source-journal-cite';
   title.setAttribute('data-texture-source-flow-note-title', '');
   title.textContent = sourceRefTitle(sourceRef, popover);
   note.append(title);
@@ -267,20 +267,20 @@ function buildSourceJournalNoteContent(note: HTMLElement, sourceRef: Element, po
   const excerpt = sourceRefExcerpt(popover);
   if (excerpt) {
     const body = document.createElement('p');
-    body.classList.add('vtext-source-journal-body');
+    body.classList.add('texture-source-journal-body');
     body.setAttribute('data-texture-source-flow-note-body', '');
     body.textContent = excerpt;
     note.append(body);
   }
 
   const actions = document.createElement('div');
-  actions.className = 'vtext-source-journal-actions';
+  actions.className = 'texture-source-journal-actions';
   actions.setAttribute('data-texture-source-flow-note-actions', '');
   const entityID = sourceRefEntityID(sourceRef);
   if (entityID) {
     const open = document.createElement('button');
     open.type = 'button';
-    open.className = 'vtext-source-open';
+    open.className = 'texture-source-open';
     open.setAttribute('data-texture-open-source', '');
     open.setAttribute('data-source-entity-id', entityID);
     open.textContent = 'Open source';
@@ -341,20 +341,20 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   flow.setAttribute('data-texture-source-flow', '');
   flow.setAttribute('data-texture-source-flow-region', '');
   flow.setAttribute('data-source-flow-owner-id', sourceRef.getAttribute('data-source-entity-id') || '');
-  flow.className = 'vtext-source-journal-flow';
+  flow.className = 'texture-source-journal-flow';
   flow.setAttribute('contenteditable', 'false');
-  flow.style.setProperty('--vtext-source-flow-line-height', `${options.lineHeight}px`);
-  flow.style.setProperty('--vtext-source-flow-note-width', `${noteWidth}px`);
-  flow.style.setProperty('--vtext-source-flow-gap', `${options.gap}px`);
+  flow.style.setProperty('--texture-source-flow-line-height', `${options.lineHeight}px`);
+  flow.style.setProperty('--texture-source-flow-note-width', `${noteWidth}px`);
+  flow.style.setProperty('--texture-source-flow-gap', `${options.gap}px`);
 
   const note = document.createElement('aside');
   note.setAttribute('data-texture-source-flow-note', '');
-  note.className = 'vtext-source-journal-note';
+  note.className = 'texture-source-journal-note';
   note.setAttribute('role', 'note');
 
   const close = document.createElement('button');
   close.type = 'button';
-  close.className = 'vtext-source-flow-close';
+  close.className = 'texture-source-flow-close';
   close.setAttribute('data-texture-source-flow-collapse', '');
   close.setAttribute('aria-label', 'Collapse source');
   close.textContent = 'Close';
@@ -393,10 +393,10 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   flow.setAttribute('data-texture-source-flow-routed-lines', String(layout.usedNarrowLines));
 
   const lineLayer = document.createElement('div');
-  lineLayer.className = 'vtext-source-journal-lines';
+  lineLayer.className = 'texture-source-journal-lines';
   for (const line of layout.lines) {
     const lineNode = document.createElement('span');
-    lineNode.className = 'vtext-source-journal-line';
+    lineNode.className = 'texture-source-journal-line';
     if (mode === 'side-note' && line.y < layout.noteHeight) {
       lineNode.setAttribute('data-texture-source-flow-line-beside-note', '');
     }
@@ -407,7 +407,7 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
     if (line.fragments?.length) {
       for (const fragment of line.fragments) {
         const fragmentNode = document.createElement('span');
-        fragmentNode.className = fragment.sourceRefHTML ? 'vtext-source-journal-fragment vtext-source-journal-fragment--source' : 'vtext-source-journal-fragment';
+        fragmentNode.className = fragment.sourceRefHTML ? 'texture-source-journal-fragment texture-source-journal-fragment--source' : 'texture-source-journal-fragment';
         if (fragment.gapBefore > 0) {
           fragmentNode.style.marginLeft = `${fragment.gapBefore}px`;
         }
@@ -429,7 +429,7 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   }
   if (mode === 'stacked') {
     flow.append(lineLayer, note);
-    flow.style.setProperty('--vtext-source-flow-stacked-note-top', `${Math.ceil(layout.height + paragraphGap)}px`);
+    flow.style.setProperty('--texture-source-flow-stacked-note-top', `${Math.ceil(layout.height + paragraphGap)}px`);
     flow.style.height = `${Math.ceil(layout.height + paragraphGap + measuredHeight)}px`;
   } else {
     flow.append(lineLayer);

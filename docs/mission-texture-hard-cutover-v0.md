@@ -1696,17 +1696,21 @@ active: protocol v0 is last. C27 is supported for deployed HTML export scope:
 generated platform HTML exports now emit `texture-publication`,
 `texture-table`, `texture-source-ref`, and `texture-sources*` classes/ids; local
 tests assert old-class absence, and staging product proof exported an HTML
-publication with Texture classes and no retired export classes. This slice
-excludes live editor CSS classes, storage tables, `.vtext` file suffixes,
-durable `vtext:` actor ids, `PublishVText` Go symbols, and `/pub/vtext` public
-route compatibility.
+publication with Texture classes and no retired export classes. C28 is locally
+supported for live editor source-ref/source-flow class names: the renderer,
+serializer, editor CSS, source-flow CSS/DOM builder, and focused frontend tests
+now use `texture-source-ref*`, `texture-source-journal-*`,
+`texture-source-flow-close`, `texture-source-open`, and
+`--texture-source-flow-*`, with scoped retired-class search clean and frontend
+build passing. This slice excludes frontend file/module names, storage tables,
+`.vtext` file suffixes, durable `vtext:` actor ids, `PublishVText` Go symbols,
+and `/pub/vtext` public route compatibility.
 
-next move: choose the next high-leverage residue class: broader `.vtext`
-file/alias suffix design, durable `vtext:` actor ids, storage table names,
-`/pub/vtext` public route compatibility policy, live editor CSS class residue,
-or Universal Wire deployed story-field proof when product data exists. C28 is
-active for live editor source-ref/source-flow classes; keep protocol v0
-unwritten until remaining working-surface proofs are complete.
+next move: commit and push the C28 behavior slice, monitor CI and Node B deploy,
+verify staging identity, then run deployed browser/product proof that live
+source refs and source journal flows emit Texture classes and no scoped retired
+classes. Keep protocol v0 unwritten until remaining working-surface proofs are
+complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -1733,15 +1737,15 @@ explicit historical mission evidence. Current status is open_handoff with V=2.
 The inventory, report-only H5 docs checker, high-read docs reconciliation,
 Texture route/tool/prompt slices, deployed prompt-bar -> conductor -> Texture
 first-revision proof, deployed pinned-transclusion proof, visible UI proof,
-source-contract open-surface proof, canonical source-path metadata repair, and
-publication fallback label repair are landed. C27 exported HTML class-name
-checkpoint and deployed behavior proof are done. Choose the next
-residue class from file/storage/actor/public-route/live-editor/Universal-Wire
-edges. C28 is active: commit the live editor source class checkpoint, then
-rename emitted/styled source-ref and source-flow classes from V-name to Texture
-names. Keep frontend file/module names, storage schema, `.vtext` file suffixes,
-durable `vtext:` actor ids, `PublishVText` Go symbols, `/pub/vtext` public
-route compatibility, and protocol v0 out of C28.
+source-contract open-surface proof, canonical source-path metadata repair,
+publication fallback label repair, and C27 deployed exported HTML class-name
+proof are landed. C28 live editor source-ref/source-flow class rename is
+locally supported: commit and push it, monitor CI/deploy, verify staging
+identity, then prove deployed live source refs and journal flows emit Texture
+classes with no scoped retired classes. Keep frontend file/module names,
+storage schema, `.vtext` file suffixes, durable `vtext:` actor ids,
+`PublishVText` Go symbols, `/pub/vtext` public route compatibility, and
+protocol v0 out of C28.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to

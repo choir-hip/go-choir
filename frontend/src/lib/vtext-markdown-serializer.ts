@@ -8,7 +8,7 @@ function serializeInlineMarkdown(node: Node | null): string {
   if (node.nodeType !== Node.ELEMENT_NODE) return '';
   const element = node as Element;
   if (element.matches?.('[data-texture-source-ref]')) {
-    const label = element.getAttribute('data-source-label') || element.querySelector?.('.vtext-source-ref-label')?.textContent || 'source';
+    const label = element.getAttribute('data-source-label') || element.querySelector?.('.texture-source-ref-label')?.textContent || 'source';
     const entityID = element.getAttribute('data-source-entity-id') || '';
     return entityID ? `[${label}](source:${entityID})` : label;
   }

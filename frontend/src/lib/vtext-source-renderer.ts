@@ -369,17 +369,17 @@ export function renderInlineSourceRef(label: string, entityID: string, sourceEnt
   const entity = findSourceEntity(sourceEntities, entityID);
   const displayLabel = label || entity?.label || 'source';
   if (!entity) {
-    return `<span class="vtext-source-ref vtext-source-ref--missing" data-texture-source-ref data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false">${escapeHTML(displayLabel)}</span>`;
+    return `<span class="texture-source-ref texture-source-ref--missing" data-texture-source-ref data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false">${escapeHTML(displayLabel)}</span>`;
   }
   const title = sourceEntityTitle(entity);
   const marker = sourceEntities.indexOf(entity) + 1 || '';
   const expansionSurface = sourceEntityExpansionSurface(entity);
-  return `<span class="vtext-source-ref" data-texture-source-ref data-texture-citation-transclusion data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" data-source-expansion-surface="${escapeHTML(expansionSurface)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
-    <span class="vtext-source-ref-label">${escapeHTML(marker || displayLabel)}</span>
-    <span class="vtext-source-ref-popover" data-texture-source-ref-popover data-texture-inline-transclusion role="note">
+  return `<span class="texture-source-ref" data-texture-source-ref data-texture-citation-transclusion data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" data-source-expansion-surface="${escapeHTML(expansionSurface)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
+    <span class="texture-source-ref-label">${escapeHTML(marker || displayLabel)}</span>
+    <span class="texture-source-ref-popover" data-texture-source-ref-popover data-texture-inline-transclusion role="note">
       <strong>${escapeHTML(title)}</strong>
       ${renderSourceTransclusionBody(entity, { compact: true })}
-      <button type="button" class="vtext-source-open" data-texture-open-source data-source-entity-id="${escapeHTML(entityID)}">Open source</button>
+      <button type="button" class="texture-source-open" data-texture-open-source data-source-entity-id="${escapeHTML(entityID)}">Open source</button>
     </span>
   </span>`;
 }

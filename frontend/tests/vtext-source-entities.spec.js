@@ -1164,7 +1164,7 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
       const lineBox = line.getBoundingClientRect();
       return lineBox.right <= noteBox.left - 10;
     });
-    const secondParagraphBesideNote = Array.from(node.querySelectorAll('.vtext-source-journal-line')).some((line) => {
+    const secondParagraphBesideNote = Array.from(node.querySelectorAll('.texture-source-journal-line')).some((line) => {
       const top = line.getBoundingClientRect().top - node.getBoundingClientRect().top;
       const lineBox = line.getBoundingClientRect();
       return top >= 0 && top < noteBottom && lineBox.right <= noteBox.left - 10 && line.textContent.includes('Second paragraph');
@@ -1312,10 +1312,10 @@ test('VText uses stacked journal flow instead of old source card when side routi
   const geometry = await flow.evaluate((node) => {
     const flowBox = node.getBoundingClientRect();
     const note = node.querySelector('[data-texture-source-flow-note]');
-    const lines = Array.from(node.querySelectorAll('.vtext-source-journal-line'));
+    const lines = Array.from(node.querySelectorAll('.texture-source-journal-line'));
     const noteBox = note?.getBoundingClientRect();
     const lastLineBottom = Math.max(...lines.map((line) => line.getBoundingClientRect().bottom - flowBox.top));
-    const lineLayerHasOldCard = !!node.querySelector('.vtext-source-ref[data-expanded="true"] .vtext-source-ref-popover');
+    const lineLayerHasOldCard = !!node.querySelector('.texture-source-ref[data-expanded="true"] .texture-source-ref-popover');
     return {
       lineCount: lines.length,
       noteAfterLines: !!noteBox && noteBox.top - flowBox.top >= lastLineBottom - 1,
