@@ -1548,8 +1548,8 @@ variant, with platform publication control-route cutover landed and deployed:
    `/api/vtext` route registration, the product API tool allowlist shim,
    registered-router old-route normalization, direct Texture handler test
    paths, and platform/proxy/internal publication control routes are discharged;
-   publication fallback/default labels and export filenames are repaired
-   locally and need CI/deploy/staging proof;
+   publication fallback/default labels and export filenames are discharged for
+   deployed reachable product scope plus CI-covered platform fallback defaults;
 5. discharged: visible UI labels and import affordances are cut over to
    Texture and proven on staging through browser product evidence;
 6. discharged: the edit affordance surface has a common `patch_texture` tool
@@ -1803,22 +1803,27 @@ position / live conjectures / open edges:
   `canonical_vtext_source_path`. `.vtext` suffixes, storage tables, durable
   `vtext:` actor ids, `/pub/vtext` public route compatibility, and Style.vtext
   style-source language remain out of scope for this slice.
-- C26 supported for local platform/build scope: publication fallback/default
-  writers now mint `Published Texture`, `Untitled Texture`,
-  `Texture proposal`, and `published-texture` fallback basenames. The focused
-  publication reader test now expects `Published Texture document`. Focused and
-  full `internal/platform` tests pass, and frontend build passes. The local
-  Playwright publication spec did not reach the changed assertion because no
-  local server was listening on `localhost:4173`; deployed product proof remains
-  open. This slice intentionally excludes `/pub/vtext/...` route identity,
-  `PublishVText` Go API symbols, storage names, and exported HTML/CSS class
-  names.
+- C26 supported for deployed reachable product scope plus CI-covered platform
+  fallback defaults: publication fallback/default writers now mint
+  `Published Texture`, `Untitled Texture`, `Texture proposal`, and
+  `published-texture` fallback basenames. Focused platform tests prove the
+  empty-title/default writer paths that are not reachable through the
+  browser-public publication API because Texture document creation requires a
+  title and proxy publication uses that document title. The reachable deployed
+  product proof published a titled Texture through
+  `/api/platform/texture/publications`, resolved/exported it, and opened the
+  public reader with `Published Texture document` aria labeling, Texture route
+  minting, and no V-name in route/export filenames. This slice intentionally
+  excludes `/pub/vtext/...` route identity, `PublishVText` Go API symbols,
+  storage names, and exported HTML/CSS class names.
 
-next move: push C26, monitor CI/deploy/staging identity, and prove the scoped
-publication fallback/default behavior on staging. Keep broader `.vtext`
-file/alias suffix design, durable `vtext:` actor ids, storage table names,
-`/pub/vtext` public route compatibility policy, exported HTML/CSS class names,
-and protocol v0 out of this slice.
+next move: choose the next high-leverage residue class. The strongest remaining
+candidates are broader `.vtext` file/alias suffix design, durable `vtext:`
+actor ids, storage table names, `/pub/vtext` public route compatibility policy,
+exported HTML/CSS class names, and the deployed Universal Wire story-field
+proof when staging has an edition story payload or a product path creates one
+without manually seeding success records. Keep protocol v0 unwritten until the
+remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -1853,8 +1858,8 @@ prompts/UI/tests/tool affordances toward Texture; frontend `data-texture-*`
 selectors, frontend `/api/texture` probes, browser-public Texture route
 registration, product API allowlist cutover, registered-router normalization,
 deployed source-contract Texture open-surface normalization, and the C25
-canonical Texture source-path metadata deployed repair are landed. C26 is
-locally repaired for publication fallback/default labels while deeper backend/internal old-name residue
+canonical Texture source-path metadata deployed repair, and C26 publication
+fallback/default label repair are landed while deeper backend/internal old-name residue
 remains.
 Preserve one Texture writer among agents, keep human
 direct edits canonical, keep super downstream of Texture for privileged

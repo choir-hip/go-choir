@@ -2831,3 +2831,54 @@ Receipts:
 
 Open edge: commit and push the behavior, monitor CI/deploy/staging identity,
 then run deployed publication/read/export proof against `https://choir.news`.
+
+## 2026-06-16 - Deployed Evidence: Publication Fallback Texture Labels
+
+Claim: C26 is supported for deployed reachable product scope plus CI-covered
+platform fallback defaults. The empty-title platform fallback writer paths are
+not directly reachable through the browser-public publication API because
+Texture document creation requires a title and proxy publication forwards that
+document title to platformd.
+
+Move: monitor the C26 behavior commit through CI and Node B deploy, verify
+staging health reports the pushed SHA, then run a temporary deployed Playwright
+proof that creates a Texture document, publishes it through
+`/api/platform/texture/publications`, resolves/exports the publication, opens
+the public reader, and asserts Texture route/export/aria labels with no
+V-name residue in the reachable surfaces.
+
+Expected ΔV: support C26 for deployed product scope; no coarse V decrease
+because `.vtext` file suffixes, storage names, durable `vtext:` actor ids,
+`/pub/vtext` route compatibility, exported HTML/CSS class names, Universal
+Wire deployed story-field proof, and protocol v0 remain open.
+
+Actual ΔV: C26 is deployed-supported for reachable product scope and
+CI-supported for the platform-only empty fallback defaults. V remains 2.
+
+Receipts:
+- Problem checkpoint commit:
+  `52f67a0893ad09fd5f5933067dede245fc3a946f docs: checkpoint publication fallback texture labels`.
+- Behavior commit:
+  `0b5d293afbca61f3c1e467e5b7d910a59d02cca0 platform: rename publication fallback labels to texture`.
+- CI run `27595560138` passed, including runtime shards, non-runtime package
+  tests, vet/build, TLA+, Docs Truth Check, and deploy gate.
+- Deploy job `81585218930` passed.
+- Docs Truth Check run `27595560180` passed.
+- FlakeHub publish run `27595560149` passed.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `0b5d293afbca61f3c1e467e5b7d910a59d02cca0`, deployed at
+  `2026-06-16T05:10:09Z`.
+- Temporary deployed proof passed:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-publication-fallback-staging.tmp.spec.js`.
+  The proof created a Texture document, published it through
+  `/api/platform/texture/publications`, observed a `/pub/texture/...` route
+  without `/pub/vtext/`, resolved the publication, exported TXT and DOCX
+  filenames without `vtext`, opened the public reader, and observed
+  `aria-label="Published Texture document"` with no old accessibility label.
+- The temporary spec was deleted after the proof.
+
+Open edge: choose the next residue class. The strongest candidates are broader
+`.vtext` file/alias suffix design, durable `vtext:` actor ids, storage table
+names, `/pub/vtext` public route compatibility policy, exported HTML/CSS class
+names, and the deployed Universal Wire story-field proof once staging can
+provide an edition story payload through product paths.
