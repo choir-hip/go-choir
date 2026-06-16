@@ -2430,3 +2430,64 @@ stale source-contract/app-launcher expectations exposed by the broad
 `vtext-source-entities` run, durable metadata keys such as
 `canonical_vtext_source_path`, storage/file suffixes, durable actor ids, and
 the deployed Universal Wire story-field proof when staging has a story payload.
+
+## 2026-06-16 - Problem Checkpoint: Source Contract Texture Open Surface
+
+Claim: publication source-open contract naming is a bounded current product
+surface that can be repaired separately from storage tables, public route
+compatibility, durable actor ids, generic platform publication-version identity,
+and broader prompt-bar route proofs.
+
+Move: document the read-only residue inventory, conjecture delta, protected
+surfaces, admissible evidence class, rollback path, heresy delta, adjacent
+non-goals, and next behavior-slice design before changing the shared
+source-contract schema or generated frontend contract.
+
+Expected ΔV: no coarse V decrease; C24 becomes active with the required Problem
+Documentation First checkpoint in place.
+
+Actual ΔV: no coarse V decrease. C24 is active and ready for implementation.
+
+Protected surfaces: shared `internal/sourcecontract` open-surface schema and
+normalization, generated frontend source contract, frontend source-open plans
+for published Texture sources, platform publication source entity open-surface
+defaults, focused Go/frontend tests, and source-contract matrix expectations.
+
+Admissible evidence class: source-contract Go tests, focused platform
+publication source tests, generated frontend contract check, focused frontend
+source-open-plan tests, frontend build, residue searches, CI, and staging
+deploy identity if runtime behavior changes reach deployed product paths.
+
+Rollback path: restore canonical `vtext` open-surface constants/schema and
+frontend expectations if published-publication source opening, source contract
+generation, or platform publication metadata regresses. Retain `vtext` /
+`published_vtext` as aliases during repair so existing source metadata remains
+readable.
+
+Heresy delta: discovered in read-only inventory, not yet repaired. The slice
+will repair current contract writer/planner names while preserving explicit
+legacy aliases for old source metadata.
+
+Receipts:
+- `frontend/src/lib/source-contract.ts` currently dispatches
+  `publication_version` and `published_vtext_span` to `appId: "texture"` but
+  `openSurface: SOURCE_OPEN_SURFACES.vtext` and `mode: "published_vtext"`.
+- `internal/sourcecontract/source_contract_schema.json` canonizes the
+  publication open surface as `vtext` with aliases `published_vtext`,
+  `publication_version`, and `published_vtext_span`.
+- `internal/sourcecontract/open_surface.go` exposes `OpenSurfaceVText =
+  "vtext"`.
+- `internal/sourcecontract/testdata/source_contract_matrix.json` still expects
+  `appId: "vtext"` for the frontend publication-version open plan, contradicting
+  current code's `appId: "texture"`.
+- `frontend/tests/vtext-source-entities.spec.js` still expects
+  `sourceOpenPlan({ targetKind: "publication_version" })` to use
+  `appId: "vtext"`.
+- `frontend/src/lib/vtext-publication-context.ts` and
+  `frontend/src/lib/vtext-source-renderer.ts` still write/read
+  `published_vtext_span` for published Texture source entities.
+
+Open edge: implement C24 by making current source-contract publication open
+surface names Texture-first, keep legacy aliases/read compatibility, regenerate
+frontend contract output, and run focused Go/frontend coverage plus residue
+searches.

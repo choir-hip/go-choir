@@ -1629,11 +1629,19 @@ position / live conjectures / open edges:
   Storage table names, `.vtext` file suffixes/source paths, durable `vtext:`
   actor ids, `canonical_vtext_source_path`, source-contract app-open
   expectations, and protocol v0 remain adjacent residue.
+- C24 active for source-contract publication Texture open-surface scope:
+  read-only inventory found the contract still canonizes publication-version
+  sources as open surface `vtext`, Go constant `OpenSurfaceVText`, frontend
+  `SOURCE_OPEN_SURFACES.vtext`, source-open mode `published_vtext`, and writer
+  source kinds such as `published_vtext_span`. This slice excludes storage
+  table names, `/pub/vtext` legacy public routes, durable actor ids, generic
+  `publication_version` platform table identity, and broader prompt-bar route
+  proofs. The intended repair is to make current publication source-open
+  contract names Texture-first while retaining legacy aliases.
 
-next move: select the next bounded residue class among stale source-contract /
-app-launcher expectations, durable metadata keys, storage/file suffixes,
-durable actor ids, deployed Universal Wire story-field proof when a story
-payload is reachable, and protocol v0. Keep protocol v0 unwritten until the
+next move: implement C24's source-contract publication Texture open-surface
+rename, regenerate frontend contract artifacts, update focused Go/frontend
+tests, and prove residue searches. Keep protocol v0 unwritten until the
 remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
