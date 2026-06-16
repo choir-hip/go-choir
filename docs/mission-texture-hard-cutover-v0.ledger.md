@@ -3847,3 +3847,34 @@ acceptance proof. It intentionally leaves `database=vtext`, `vtext_*` tables,
 durable `vtext:<doc_id>` actor ids, `AgentProfileVText`, stored
 `/pub/vtext/...` rows, Universal Wire `Wire.vtext`, and protocol v0 for later
 typed slices.
+
+## 2026-06-16 - Landing Evidence: C34a Texture Workspace Identity
+
+Claim: C34a is deployed-supported for filesystem workspace identity.
+
+Move: push the behavior commit, monitor CI/deploy, verify staging identity, and
+run deployed product proof. Expected ΔV: record platform landing evidence for
+the C34a subobligation; coarse V remains 2.
+
+Actual ΔV: C34a landed and deployed; coarse V remains 2.
+
+Receipts:
+
+- Commit `8e68553e23330e110eacf7f298f7471e101c7c15`
+  (`store: default workspaces to texture identity`) pushed to `origin/main`.
+- CI run `27602041868` passed.
+- Docs Truth Check run `27602041894` passed.
+- FlakeHub publish run `27602041885` passed.
+- Deploy job `81605380928` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `8e68553e23330e110eacf7f298f7471e101c7c15`, deployed at
+  `2026-06-16T07:41:44Z`.
+- Deployed acceptance command
+  `CHOIR_AUTH_STATE=/tmp/choir-c34a-workspace-auth.json PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/vtext-markdown-lineage.spec.js -g 'Imported Markdown advances|Imported plain text advances'`
+  passed 2 tests in 14.7s.
+
+Open edge: this is not a table/database/actor-id/storage-route migration.
+Remaining C34 edges are `database=vtext`, `vtext_*` tables, durable
+`vtext:<doc_id>` actor ids, `AgentProfileVText`, stored `/pub/vtext/...` rows,
+Universal Wire `Wire.vtext`, and protocol v0. Next move should choose one
+typed durable identity edge with compatibility and rollback evidence.

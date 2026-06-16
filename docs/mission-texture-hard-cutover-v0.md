@@ -2130,6 +2130,38 @@ unrepaired: `database=vtext`, `vtext_*` tables/indexes, durable `vtext:<doc_id>`
 actor ids, `AgentProfileVText`, `vtext_agent_revision`, stored legacy
 `/pub/vtext/...` rows, `universal-wire/Wire.vtext`, and protocol v0.
 
+## Deployed Repair: C34a Texture Workspace Identity
+
+Mutation class: `red`, deployed behavior evidence for the embedded-Dolt
+workspace identity repair.
+
+Conjecture delta: deployed Choir can continue opening its existing persistent
+workspace while new/current stores now use Texture workspace identity in the
+source-controlled runtime path.
+
+Deployed evidence on 2026-06-16:
+
+- Commit `8e68553e23330e110eacf7f298f7471e101c7c15` passed CI run
+  `27602041868`.
+- Docs Truth Check run `27602041894` and FlakeHub publish run `27602041885`
+  also passed for the same commit.
+- Deploy job `81605380928` succeeded.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `8e68553e23330e110eacf7f298f7471e101c7c15`, deployed at
+  `2026-06-16T07:41:44Z`.
+- Deployed Playwright product proof
+  `CHOIR_AUTH_STATE=/tmp/choir-c34a-workspace-auth.json PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/vtext-markdown-lineage.spec.js -g 'Imported Markdown advances|Imported plain text advances'`
+  passed with 2 tests. This re-proved Markdown and plain-text import through
+  canonical `.texture` source metadata, Markdown export, and recent Texture
+  open on the deployed commit.
+
+Rollback path remains: revert the behavior commit. Existing legacy `.vtext`
+workspaces remain intact because this slice performs no migration.
+
+Heresy delta: deployed repair for filesystem workspace identity only. No
+database/table, actor-id, stored route-row, Universal Wire edition, or protocol
+repair claimed.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2273,22 +2305,25 @@ repair, not product runtime behavior. Commit
 `27601085720`, Docs Truth Check `27601085740`, and FlakeHub publish
 `27601085759` passed. Deploy to staging was skipped because no deployed
 artifact changed.
-C34a is locally supported for Texture filesystem workspace identity:
+C34a is deployed-supported for Texture filesystem workspace identity:
 new/current stores now derive `.texture` / `go-choir-texture`, existing
 `.vtext` / `go-choir-vtext` workspaces are reopened when no current workspace
 exists, Dolt GC uses the same resolver, and the runtime store test harness
 clones `.texture` workspaces. Focused store tests, focused runtime store tests,
-and the full store package passed. This does not claim `database=vtext`,
-`vtext_*` table/index, durable `vtext:<doc_id>` actor, `AgentProfileVText`,
-`vtext_agent_revision`, stored `/pub/vtext/...` route row, or
-`universal-wire/Wire.vtext` repair. C34a still needs push/CI/deploy identity
-and deployed acceptance evidence before it is deployed-supported.
+the full store package, runtime shards, CI run `27602041868`, deploy job
+`81605380928`, and staging health for commit
+`8e68553e23330e110eacf7f298f7471e101c7c15` passed. Deployed Playwright proof
+re-ran the Markdown/plain-text Texture import, `.texture` metadata/export, and
+recent Texture open acceptance against `https://choir.news`. This does not
+claim `database=vtext`, `vtext_*` table/index, durable `vtext:<doc_id>` actor,
+`AgentProfileVText`, `vtext_agent_revision`, stored `/pub/vtext/...` route row,
+or `universal-wire/Wire.vtext` repair.
 
-next move: run the wider local verification for C34a, land and deploy the
-behavior slice, then use staging product proof to show existing Texture storage
-still works on the deployed commit. After C34a lands, attack the next largest
-storage/durable identity subobligation with a typed migration/alias plan and
-old-read/new-write proof.
+next move: attack the next largest storage/durable identity subobligation with
+a typed migration/alias plan and old-read/new-write proof. Candidate next edge:
+durable actor/profile identity (`AgentProfileVText`, `vtext:<doc_id>`,
+`vtext_agent_revision`) because it affects agent routing and needs explicit
+compatibility before any rename.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
