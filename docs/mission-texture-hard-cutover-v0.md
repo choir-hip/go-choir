@@ -301,6 +301,65 @@ Rollback path: restore the deleted fixture exports if a real consumer is found.
 Heresy delta: repaired for deployed unused public-preview Trace fixture residue;
 no durable runtime agent-id or storage-symbol repair claimed.
 
+## Problem Checkpoint: `edit_texture` Compatibility Alias
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+tool registration, prompt default, revision metadata, publication eligibility,
+or test surface changed in this checkpoint.
+
+Read-only search on 2026-06-16 shows that `edit_texture` is no longer the
+common-path Texture write affordance, but it is still wired into several
+separable layers. Removing it as a compatibility alias must not accidentally
+remove legacy revision metadata needed for publication reads or turn the tool
+loop into a semantic workflow gate.
+
+Receipts:
+
+- `rg -n "edit_texture" internal/runtime internal/wirepublish internal/proxy cmd frontend/tests frontend/src -g '!frontend/dist/**'`
+  found current non-doc hits only in `internal/runtime` and
+  `internal/wirepublish`: 118 runtime hits and 7 wire-publish hits across 15
+  code/test files.
+- `internal/runtime/tools_vtext.go` still registers
+  `newEditTextureCompatibilityTool(rt)` for Texture and classifies
+  `edit_texture` as a Texture write tool in `isTextureWriteToolName`.
+- `internal/runtime/tools.go` still treats `edit_texture` as sequential and as
+  a duplicate-protected Texture write tool.
+- `internal/runtime/runtime.go` still treats `edit_texture` as a terminal
+  Texture tool success even though `initialVTextToolChoice` now chooses
+  `patch_texture` or `record_texture_decision`.
+- `materializeVTextToolEdit` and `addVTextEditRevisionMetadata` still default
+  a missing `SourceTool` to `edit_texture`; new `patch_texture` and
+  `rewrite_texture` calls set `SourceTool` explicitly, so this is a fallback
+  residue rather than the intended new-write path.
+- `internal/wirepublish/eligibility.go` and
+  `internal/runtime/universal_wire.go` still accept revision metadata
+  `source=edit_texture` and legacy `source=edit_vtext` for autonomous wire
+  publication eligibility and private publication reads. That is a persisted
+  revision metadata compatibility concern, not the same surface as the
+  model-visible compatibility tool.
+- Test residue is broad: `rg -n "edit_texture" internal/runtime/*_test.go internal/wirepublish/*_test.go internal/proxy/*_test.go frontend/tests -g '!frontend/dist/**'`
+  found 112 test hits, including tool-profile exposure tests, duplicate
+  Texture write tests, email appagent tests, workflow verifier checks, and
+  publication eligibility tests.
+
+Next behavior slice design:
+
+- remove the model-visible `edit_texture` registered tool from the Texture tool
+  registry, agent profile expectations, terminal-tool success list, sequential
+  side-effect list, and duplicate-write test fixtures;
+- change new-write fallback metadata from `edit_texture` to `patch_texture` so
+  untagged internal edit paths do not mint new alias metadata;
+- keep explicit `source=edit_texture` and `source=edit_vtext` read/eligibility
+  compatibility in wire publication and Universal Wire for this slice, with
+  tests labeling it as persisted metadata migration residue rather than a live
+  tool affordance;
+- prove with focused runtime tests that Texture exposes `patch_texture`,
+  `rewrite_texture`, and `record_texture_decision` but not `edit_texture`, that
+  duplicate write protection still covers `patch_texture`/`rewrite_texture`,
+  that no new `edit_texture` tool result is available, and that legacy metadata
+  reads remain explicitly supported until a separate migration plan removes
+  them.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -533,11 +592,18 @@ position / live conjectures / open edges:
   commit `3037e1f92971e7324a8bb8c3e356474e4eee2cc6`, and staging DOM proof
   shows the signed-out Texture preview still renders without the deleted Trace
   fixture language.
+- C17 active: `edit_texture` compatibility alias deletion is now scoped. The
+  model-visible tool alias, terminal handling, new-write fallback metadata, and
+  duplicate-write fixtures can move to `patch_texture`/`rewrite_texture` in the
+  next runtime slice; persisted `source=edit_texture` and `source=edit_vtext`
+  publication metadata compatibility remains separate migration residue and
+  should not be deleted without stored-revision evidence.
 
 next move: select the next bounded residue class among storage
 schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
-and `edit_texture` compatibility alias deletion. Keep protocol v0 unwritten
-until those remaining working-surface proofs are complete.
+and `edit_texture` compatibility alias deletion. The selected next slice is the
+`edit_texture` alias deletion described in the checkpoint above. Keep protocol
+v0 unwritten until those remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

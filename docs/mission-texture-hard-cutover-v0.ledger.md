@@ -1179,3 +1179,59 @@ Receipts:
 Open edge: select the next bounded residue class among storage
 schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
 and `edit_texture` compatibility alias deletion. Protocol v0 remains last.
+
+## 2026-06-16 - `edit_texture` Alias Deletion Checkpoint
+
+Claim: `edit_texture` is a removable compatibility tool alias, but persisted
+revision metadata with `source=edit_texture` or `source=edit_vtext` is a
+different compatibility surface that should not be deleted in the same move.
+
+Move: read Texture agentic invariants, inventory `edit_texture` in current code
+and tests, and document the next behavior slice before touching runtime.
+
+Expected ΔV: 0 global; C17 becomes active and the next runtime slice is scoped.
+
+Actual ΔV: 0. Problem Documentation First checkpoint landed in docs only.
+
+Conjecture delta: deleting the model-visible compatibility alias advances the
+Texture tool ontology, but preserving explicit legacy metadata reads avoids
+turning an affordance cleanup into a publication-history break.
+
+Protected surfaces: Texture tool registry, canonical write metadata, tool loop
+terminal handling, duplicate write protection, Universal Wire publication
+eligibility, and autonomous publication read policy.
+
+Admissible evidence class for the later behavior slice: focused runtime tests
+covering tool-profile exposure, duplicate write protection, Texture revision
+metadata, terminal tool handling, wire publication eligibility, CI, staging
+deploy identity, and a deployed prompt-bar/Trace proof showing no successful
+`edit_texture` tool result.
+
+Rollback path for the later behavior slice: restore the `edit_texture`
+registered tool and terminal/duplicate handling if deployed Texture writers
+cannot use `patch_texture`/`rewrite_texture`.
+
+Heresy delta: discovered alias/metadata coupling risk; no repair claimed yet.
+
+Receipts:
+- `docs/texture-agentic-invariants-2026-06-13.md` confirms Texture tool/write
+  changes are protected and must not force semantic next-role workflow.
+- `rg -n "edit_texture" internal/runtime internal/wirepublish internal/proxy cmd frontend/tests frontend/src -g '!frontend/dist/**'`
+  found current non-doc hits only in `internal/runtime` and
+  `internal/wirepublish`: 118 runtime hits and 7 wire-publish hits across 15
+  code/test files.
+- `internal/runtime/tools_vtext.go` registers
+  `newEditTextureCompatibilityTool(rt)` and classifies `edit_texture` as a
+  Texture write tool.
+- `internal/runtime/tools.go` and `internal/runtime/runtime.go` still include
+  `edit_texture` in sequential/duplicate/terminal write-tool handling.
+- `internal/wirepublish/eligibility.go` and
+  `internal/runtime/universal_wire.go` still accept legacy metadata sources
+  `edit_texture` and `edit_vtext` for publication eligibility/read behavior.
+- Test inventory found 112 `edit_texture` hits in current tests, so the repair
+  must update tests intentionally rather than remove one registration and trust
+  compile failures to find the semantic boundary.
+
+Open edge: implement the runtime alias-deletion slice while retaining explicit
+legacy metadata compatibility, then prove with focused runtime tests before CI
+and staging.
