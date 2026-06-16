@@ -1945,6 +1945,63 @@ Deployed evidence on 2026-06-16:
   'publishes source-service source entities as expandable transclusions and
   canonical exports'`.
 
+## 2026-06-16 - C32 Problem Checkpoint: Texture File Suffix Defaults
+
+Problem: current file manifestation and shortcut behavior still creates and
+prioritizes `.vtext` as the canonical document-file suffix. New Texture
+manifests are allocated as `*.vtext`, document titles derived from file imports
+end in `.vtext`, alias selection prefers `.vtext`, File Browser treats only
+`.vtext` as the special shortcut extension, and Universal Wire story-open
+source paths still use `.story.vtext`. This leaves the product-visible Files
+surface teaching the retired ontology even after the app, routes, tools,
+publication helpers, and source surfaces have moved to Texture.
+
+Observer probe: the deployed Universal Wire staging acceptance passed again on
+2026-06-16, but direct product API inspection of
+`/api/universal-wire/stories` returned `source:
+universal-wire-edition-texture`, an edition at `universal-wire/Wire.vtext`,
+and `story_count: 0`. Therefore the Universal Wire story-field proof remains
+open: there was no deployed story payload to prove `story_texture_doc_id`
+against.
+
+Conjecture delta: C32 tests whether new/current file manifestations can move
+to `.texture` defaults while legacy `.vtext` shortcuts and aliases remain
+readable. If supported, current writes and UI affordances will teach Texture at
+the file boundary without performing a database/table rename or deleting
+historical `.vtext` rows.
+
+Protected surfaces: Texture file open/import, document manifest creation,
+canonical source-path metadata, file-browser shortcut recognition, Universal
+Wire story source open paths, filesystem writes under the sandbox files root,
+and document alias selection. Mutation class is `red` because persistent file
+manifestation and alias behavior are touched. Explicit exclusions: Dolt table
+names (`vtext_documents`, `vtext_revisions`, `vtext_document_aliases`),
+`database=vtext`, durable `vtext:<doc_id>` actor ids, stored
+`/pub/vtext/...` route rows, historical `.vtext` compatibility reads, and
+protocol v0.
+
+Admissible evidence class:
+
+- focused Go tests around file open, manifest creation, alias selection,
+  canonical source-path carry-forward, and Universal Wire story payload shape;
+- focused frontend tests for markdown/file lineage and File Browser shortcut
+  affordances;
+- local frontend build for File Browser and Universal Wire callsites;
+- scoped retired-name search proving new/current file-manifest defaults no
+  longer introduce `.vtext` except explicit legacy compatibility and historical
+  tests;
+- if behavior lands, CI/deploy identity and deployed product proof against
+  staging for a new Texture file manifestation.
+
+Rollback path: revert the C32 behavior commit to restore `.vtext` as the new
+manifest suffix and shortcut recognizer while leaving legacy `.vtext` aliases
+and existing files untouched.
+
+Heresy delta: discovered file-manifest default residue; repair target is new
+Texture file manifestations and user-facing shortcut recognition. C32 does not
+claim storage table, database, durable actor-id, stored public-route-row, or
+Universal Wire story-field repair.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2056,11 +2113,14 @@ is deployed-supported: publication/export helper and API symbols now use
 Texture names while preserving JSON fields, current Texture routes, stored
 public route compatibility, storage tables, and durable actor ids. CI/deploy
 passed, staging reports the pushed SHA, and deployed publication proof passed.
+C32 is documented as the next red slice: new/current Texture file
+manifestation defaults should move from `.vtext` to `.texture`, with legacy
+`.vtext` shortcuts remaining readable and storage tables/actor ids excluded.
 
-next move: choose the next remaining residue class among storage/file suffixes,
-durable actor ids, stored public-route rows, Universal Wire deployed
-story-field proof, or protocol v0 after proof. Keep protocol v0 unwritten until
-remaining working-surface proofs are complete.
+next move: commit the C32 Problem Documentation First checkpoint, then repair
+new file-manifest suffix defaults and shortcut recognition inside the bounded
+C32 surface. Keep protocol v0 unwritten until remaining working-surface proofs
+are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -2090,18 +2150,13 @@ first-revision proof, deployed pinned-transclusion proof, visible UI proof,
 source-contract open-surface proof, canonical source-path metadata repair,
 publication fallback label repair, C27 deployed exported HTML class-name proof,
 C28 deployed live editor source class proof, and C29 deployed public route proof
-are landed. C30 is deployed-supported: the Problem Documentation First checkpoint
-is landed, current Universal Wire style-source labels/paths and prompt contracts
-now use `Style.texture` / `.style.texture`, legacy `Style.vtext Source` cleanup
-is retained only as generated-content sanitization, and local focused/runtime
-shard/build/Playwright/residue checks passed, with the UI test guarding absence
-of both retired `Style.vtext` and current internal `Style.texture` labels. CI
-and a manual forced staging deploy passed; staging reports
-`d05cbc5556227ec9c3b5826a101128725532e882`; deployed Universal Wire UI proof
-passed. Next choose the next remaining residue class. Keep canonical `.vtext`
-file import/open behavior, storage schema, `.vtext` file shortcuts, durable
-`vtext:` actor ids, `PublishVText` Go symbols, backend stored-route migration,
-Universal Wire story-field proof, and protocol v0 out of C30.
+are landed. C30 is deployed-supported for Universal Wire style-source suffixes.
+C31 is deployed-supported for publication/export helper and API symbols. C32 is
+now the active documented slice: new/current Texture file manifestation
+defaults should move from `.vtext` to `.texture` while legacy `.vtext`
+shortcuts remain readable. Keep storage schema, durable `vtext:` actor ids,
+backend stored-route migration, Universal Wire story-field proof, and protocol
+v0 out of C32.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to

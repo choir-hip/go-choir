@@ -3544,3 +3544,38 @@ Receipts:
 Open edge: choose the next residue class. C31 does not repair storage tables,
 `.vtext` file suffixes, durable `vtext:` actor ids, stored `/pub/vtext/...`
 route rows, Universal Wire deployed story-field payload proof, or protocol v0.
+
+## 2026-06-16 - Problem Checkpoint: C32 Texture File Suffix Defaults
+
+Claim: the next highest-value bounded residue class is file-manifest suffix
+behavior. Current new manifest allocation, imported-file document titles,
+alias priority, File Browser shortcut recognition, and Universal Wire story
+open paths still teach `.vtext` as the canonical file suffix.
+
+Move: probe the remaining Universal Wire proof-only edge, then document the
+C32 file-suffix problem before changing persistent file/alias behavior.
+Expected ΔV: no coarse V decrease yet; this checkpoint should make the C32
+repair admissible while explicitly excluding table/database, durable actor-id,
+and stored public-route migrations.
+
+Actual ΔV: documentation checkpoint only; C32 remains active.
+
+Receipts:
+
+- Deployed Universal Wire staging acceptance passed:
+  `GO_CHOIR_RUN_UNIVERSAL_WIRE_STAGING=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/universal-wire-staging-acceptance.spec.js`.
+- Direct authenticated product API inspection of `/api/universal-wire/stories`
+  returned `source: universal-wire-edition-texture`, edition source path
+  `universal-wire/Wire.vtext`, many included document ids, and `story_count:
+  0`; therefore the deployed story-field proof still has no story payload to
+  inspect.
+- Local source inspection found current file-suffix defaults in
+  `internal/runtime/vtext_import.go`, alias priority in
+  `internal/store/vtext.go`, File Browser shortcut recognition in
+  `frontend/src/lib/FileBrowser.svelte`, and Universal Wire story source open
+  paths in `frontend/src/lib/UniversalWireApp.svelte`.
+
+Open edge: run doccheck and commit this checkpoint, then move new/current
+manifest defaults and shortcut recognition to `.texture` while keeping legacy
+`.vtext` aliases readable and leaving table/database names, durable actor ids,
+stored `/pub/vtext/...` rows, and protocol v0 out of scope.
