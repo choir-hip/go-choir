@@ -147,8 +147,8 @@ invariants / qualities / domain ramp (I/Q/D):
   identity -> browser product proof -> protocol canonization.
 
 variant (ranking function) V: current V=2; last ΔV=0 against the coarse
-variant, with registered router/extractor old-route normalization locally
-burned down and CI/deploy pending:
+variant, with registered router/extractor old-route normalization landed and
+deployed:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
@@ -164,7 +164,7 @@ burned down and CI/deploy pending:
    attributes, frontend `/api/vtext` compatibility-route deletion target test
    probes, the browser-public `/api/vtext` route registration, the product API
    tool allowlist shim, registered-router old-route normalization, and direct
-   Texture handler test paths are discharged locally pending CI/deploy;
+   Texture handler test paths are discharged;
 5. discharged: visible UI labels and import affordances are cut over to
    Texture and proven on staging through browser product evidence;
 6. discharged: the edit affordance surface has a common `patch_texture` tool
@@ -239,12 +239,14 @@ position / live conjectures / open edges:
 - C6 supported for deployed product-route scope: `/api/texture` is registered
   and exercised by focused tests, frontend API callers, and staging
   Playwright product proof. The browser-public `/api/vtext` route and
-  `product_api_request` allowlist shim are deleted and deployed; staging route
-  proof shows `/api/texture/documents` reaches the auth gate while
-  `/api/vtext/documents` and `/api/vtext/diff` return plain 404. Remaining
-  browser-public route residue is gone. A local follow-on removes the
-  registered router/extractor dependency on `/api/vtext` and moves direct
-  Texture API handler tests to `/api/texture`; CI/deploy proof is pending.
+  `product_api_request` allowlist shim are deleted and deployed; prior staging
+  route proof showed `/api/texture/documents` reached the auth gate while
+  `/api/vtext/documents` and `/api/vtext/diff` returned plain 404. Remaining
+  browser-public route residue is gone. The follow-on registered
+  router/extractor dependency on `/api/vtext` is also removed and deployed;
+  authenticated legacy-route 404 behavior for that internal dispatch slice is
+  covered by registered-router tests because the current browser automation
+  session could not issue same-origin API fetches after deploy.
 - C7 repaired and CI-green: CI exposed a Universal Wire publication compatibility
   regression. The route/tool slice made new Texture revisions write
   `source=edit_texture`, but the `internal/wirepublish` autonomous publication
@@ -279,16 +281,15 @@ position / live conjectures / open edges:
   selectors render and the old editor/toolbar selectors do not. Remaining
   frontend H5 warnings are app/file names, metadata keys, platform/internal
   publication terms, and historical test names.
-- C13 supported locally for registered-router normalization scope: the Texture
+- C13 supported for deployed registered-router normalization scope: the Texture
   router now dispatches on `/api/texture` directly, the shared doc/revision ID
   extractors only parse `/api/texture`, direct Texture API tests use
   `/api/texture`, and `/api/vtext` remains only in explicit legacy-route
-  refusal tests for this runtime slice. CI/deploy proof is pending.
+  refusal tests for this runtime slice. CI run `27587124142` passed and Node B
+  staging health reported commit `247e28415bb7b5a656b9d83072288403666c9c8a`.
 
-next move: land the registered-router normalization cutover through CI,
-staging deploy identity, and deployed route proof; then cut over app ids,
-storage, file names, metadata names, and platform/internal publication symbols
-toward Texture before protocol v0.
+next move: cut over app ids, storage, file names, metadata names, and
+platform/internal publication symbols toward Texture before protocol v0.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -320,8 +321,10 @@ reconciliation, and a deployed product-facing route/tool/prompt slice plus
 deployed transclusion pinned-ref/newer-version proof, visible UI label proof,
 and deployed `patch_texture` common-path proof are landed. Continue renaming docs/code/
 prompts/UI/tests/tool affordances toward Texture; frontend `data-texture-*`
-selectors, frontend `/api/texture` probes, and browser-public Texture route
-registration are landed while backend/internal old-name residue remains.
+selectors, frontend `/api/texture` probes, browser-public Texture route
+registration, product API allowlist cutover, and registered-router
+normalization are landed while deeper backend/internal old-name residue
+remains.
 Preserve one Texture writer among agents, keep human
 direct edits canonical, keep super downstream of Texture for privileged
 execution, and avoid runtime semantic decision trees. Do

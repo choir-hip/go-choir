@@ -746,13 +746,16 @@ tests for registered routes and `product_api_request`.
 Expected ΔV: 0 against the coarse V=2, with a bounded descent on the internal
 registered-router normalization sub-surface.
 
-Actual ΔV: 0 locally. The registered-router/extractor old-route normalization
-slice is discharged locally, but this is not yet a deployed claim. Storage
-tables, file names, app ids, metadata keys, platform/internal publication
-symbols, role/type/function names, the `edit_texture` compatibility alias, and
-Texture Protocol v0 remain open.
+Actual ΔV: 0 against V=2. The registered-router/extractor old-route
+normalization slice is discharged and deployed. Storage tables, file names,
+app ids, metadata keys, platform/internal publication symbols,
+role/type/function names, the `edit_texture` compatibility alias, and Texture
+Protocol v0 remain open.
 
 Receipts:
+- pushed behavior commit:
+  `247e28415bb7b5a656b9d83072288403666c9c8a`
+  (`runtime: dispatch texture routes without legacy normalization`).
 - Focused local runtime tests passed:
   `nix develop -c go test ./internal/runtime -run 'TestRegisteredTextureRoutesExcludeLegacyVTextPrefix|TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs|TestProductAPIRequestToolRefusesLegacyVTextRoute|TestHandleVTextDocumentsRootUsesTextureRoutes|TestVTextAPI(GetDocument|CreateRevisionUserEdit|GetHistory|GetDiff)|TestVTextAPIAuthGating'`.
 - Local runtime shard script passed:
@@ -768,6 +771,30 @@ Receipts:
   /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,129 warnings;
   warning counts `H1=718`, `H3=15`, `H4=3`, `H5=336`, `R3=57`.
 - `git diff --check`: pass.
+- CI run `27587124142` for `247e2841` succeeded across Go vet/build,
+  non-runtime tests, runtime shards 0-3, integration smoke, TLA+, Docs Truth,
+  aggregate gate, and Node B staging deploy job `81560043847`.
+- Staging health at `https://choir.news/health` reported proxy and sandbox
+  commit `247e28415bb7b5a656b9d83072288403666c9c8a`, deployed at
+  `2026-06-16T01:10:47Z`.
+- Unauthenticated curl route probe against staging returned the uniform auth
+  gate for all three API paths:
+  `/api/texture/documents` -> 401 JSON `{"error":"authentication required"}`;
+  `/api/vtext/documents` -> 401 JSON `{"error":"authentication required"}`;
+  `/api/vtext/diff` -> 401 JSON `{"error":"authentication required"}`.
+  Caller-supplied `X-Authenticated-User` and `X-Authenticated-Email` headers
+  were ignored and returned the same 401s, confirming the public proxy did not
+  permit trusted-header spoofing.
+- Authenticated same-origin Chrome route proof was attempted from an existing
+  `choir.news` tab, but the browser automation evaluation sandbox exposed no
+  `fetch` or `XMLHttpRequest`, and direct API URL navigation was blocked with
+  `net::ERR_BLOCKED_BY_CLIENT`. Therefore deployed authenticated legacy-route
+  404 behavior for this internal dispatch slice remains covered by local/CI
+  registered-router tests rather than a browser status-code probe.
+- Rollback ref: revert commit `247e2841` to restore the internal
+  `normalizeTextureAPIPath` compatibility mapping and direct handler test
+  paths.
 
-Open edge: CI, staging deploy identity, deployed route proof, and all deeper
-storage/app-id/file/metadata/platform publication naming remain open.
+Open edge: app ids, filenames, storage symbols, metadata keys,
+platform/internal publication names, `edit_texture` compatibility alias, and
+final Texture Protocol v0 remain open.
