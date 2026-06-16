@@ -151,7 +151,7 @@ test('Markdown lineage import resolves known citation markers into expandable so
   await expect(rendered).toContainText('One claim still needs source repair [2].');
 });
 
-test('Imported Markdown advances from v0 source artifact to canonical .vtext with Markdown export', async ({ desktopSession }) => {
+test('Imported Markdown advances from v0 source artifact to canonical .texture with Markdown export', async ({ desktopSession }) => {
   test.setTimeout(60_000);
   const { page } = desktopSession;
   const stamp = Date.now();
@@ -180,7 +180,7 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
   expect(opened.original_content_id).toBeTruthy();
 
   const v0Doc = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}`);
-  expect(v0Doc.title).toBe(`imported-md-vtext-${stamp}.vtext`);
+  expect(v0Doc.title).toBe(`imported-md-vtext-${stamp}.texture`);
   expect(v0Doc.current_version_number).toBe(0);
 
   const v1Content = [
@@ -210,14 +210,14 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
 
   expect(v1.version_number).toBe(1);
   expect(v1.parent_revision_id).toBe(v0Doc.current_revision_id);
-  expect(v1.metadata?.canonical_texture_source_path).toMatch(/\.vtext$/);
+  expect(v1.metadata?.canonical_texture_source_path).toMatch(/\.texture$/);
   expect(v1.metadata?.canonical_vtext_source_path).toBeUndefined();
   expect(v1.metadata?.import_manifest?.source_media_type).toBe('text/markdown');
   expect(v1.metadata?.migration_manifest?.migration_adapter).toBe('markdown_to_vtext_projection');
   expect(v1.content).toContain('| VText | Canonical editable document identity. |');
 
   const v1Doc = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}`);
-  expect(v1Doc.title).toBe(`imported-md-vtext-${stamp}.vtext`);
+  expect(v1Doc.title).toBe(`imported-md-vtext-${stamp}.texture`);
   expect(v1Doc.current_revision_id).toBe(v1.revision_id);
   expect(v1Doc.current_version_number).toBe(1);
 
@@ -235,7 +235,7 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
   const manifest = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}/manifest`, {
     method: 'POST',
   });
-  expect(manifest.source_path).toMatch(/\.vtext$/);
+  expect(manifest.source_path).toMatch(/\.texture$/);
 
   const exported = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}/export?format=md`);
   expect(exported.format).toBe('md');
@@ -244,12 +244,12 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
   expect(exported.content).toBe(v1Content);
   expect(exported.content_hash).toBeTruthy();
 
-  const vtextWindow = await openRecentVTextDocument(page, `imported-md-vtext-${stamp}.vtext`);
+  const vtextWindow = await openRecentVTextDocument(page, `imported-md-vtext-${stamp}.texture`);
   await expect(vtextWindow.locator('[data-texture-version]')).toHaveText('v1');
   await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText('Canonical editable document identity.');
 });
 
-test('Imported plain text advances to canonical .vtext with migration metadata and Markdown export', async ({ desktopSession }) => {
+test('Imported plain text advances to canonical .texture with migration metadata and Markdown export', async ({ desktopSession }) => {
   test.setTimeout(60_000);
   const { page } = desktopSession;
   const stamp = Date.now();
@@ -274,7 +274,7 @@ test('Imported plain text advances to canonical .vtext with migration metadata a
   expect(opened.original_content_id).toBeTruthy();
 
   const v0Doc = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}`);
-  expect(v0Doc.title).toBe(`imported-text-vtext-${stamp}.vtext`);
+  expect(v0Doc.title).toBe(`imported-text-vtext-${stamp}.texture`);
   expect(v0Doc.current_version_number).toBe(0);
 
   const v1Content = [
@@ -300,7 +300,7 @@ test('Imported plain text advances to canonical .vtext with migration metadata a
 
   expect(v1.version_number).toBe(1);
   expect(v1.parent_revision_id).toBe(v0Doc.current_revision_id);
-  expect(v1.metadata?.canonical_texture_source_path).toMatch(/\.vtext$/);
+  expect(v1.metadata?.canonical_texture_source_path).toMatch(/\.texture$/);
   expect(v1.metadata?.canonical_vtext_source_path).toBeUndefined();
   expect(v1.metadata?.import_manifest?.source_media_type).toBe('text/plain');
   expect(v1.metadata?.migration_manifest).toMatchObject({

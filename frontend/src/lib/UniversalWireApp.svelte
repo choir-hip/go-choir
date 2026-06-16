@@ -138,7 +138,7 @@
       title: story.headline,
       content: '',
       createdFrom: 'universal_wire_article',
-      sourcePath: `universal-wire/${story.id}.story.vtext`,
+      sourcePath: `universal-wire/${story.id}.story.texture`,
       docId,
       createInitialVersion: false,
       relatedTextures: storyRelatedTextures(story),

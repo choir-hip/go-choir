@@ -27,7 +27,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	pathpkg "path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -356,7 +355,7 @@ func (rt *Runtime) canonicalizeAliasedVTextDocumentTitle(ctx context.Context, ow
 }
 
 func canonicalizeAliasedVTextDocumentTitle(ctx context.Context, st *store.Store, ownerID string, doc *types.Document, updatedAt time.Time) error {
-	if doc == nil || strings.EqualFold(pathpkg.Ext(strings.TrimSpace(doc.Title)), ".vtext") {
+	if doc == nil || isVTextShortcutPath(doc.Title) {
 		return nil
 	}
 	if st == nil {

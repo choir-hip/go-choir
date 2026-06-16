@@ -401,7 +401,9 @@
   }
 
   function isVTextShortcutName(name) {
-    return typeof name === 'string' && name.toLowerCase().endsWith('.vtext');
+    if (typeof name !== 'string') return false;
+    const lower = name.toLowerCase();
+    return lower.endsWith('.texture') || lower.endsWith('.vtext');
   }
 
   function isTextFileName(name) {
@@ -411,7 +413,7 @@
     const ext = parts.length > 1 ? parts.pop() : '';
     if (!ext) return true;
     return [
-      'txt', 'md', 'markdown', 'rst', 'org', 'vtext',
+      'txt', 'md', 'markdown', 'rst', 'org', 'texture', 'vtext',
       'json', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf',
       'csv', 'tsv', 'log',
       'js', 'jsx', 'ts', 'tsx', 'svelte',

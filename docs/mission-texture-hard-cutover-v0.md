@@ -2113,14 +2113,21 @@ is deployed-supported: publication/export helper and API symbols now use
 Texture names while preserving JSON fields, current Texture routes, stored
 public route compatibility, storage tables, and durable actor ids. CI/deploy
 passed, staging reports the pushed SHA, and deployed publication proof passed.
-C32 is documented as the next red slice: new/current Texture file
-manifestation defaults should move from `.vtext` to `.texture`, with legacy
-`.vtext` shortcuts remaining readable and storage tables/actor ids excluded.
+C32 is locally-supported: new/current import titles, manifest allocation,
+manifest shortcut kind, alias priority, File Browser shortcut recognition, and
+Universal Wire story-open source paths now default to `.texture`; legacy
+`.vtext` shortcuts remain readable. Focused runtime/store tests, full runtime
+shards, full store package, frontend build, and scoped residue search passed.
+C32 still needs commit, push, CI/deploy identity, and deployed product proof
+before it becomes deployed-supported. Storage workspace paths/tables, durable
+`vtext:` actor ids, stored `/pub/vtext/...` rows, Universal Wire edition
+`Wire.vtext`, Universal Wire deployed story-field proof, and protocol v0 remain
+outside this slice.
 
-next move: commit the C32 Problem Documentation First checkpoint, then repair
-new file-manifest suffix defaults and shortcut recognition inside the bounded
-C32 surface. Keep protocol v0 unwritten until remaining working-surface proofs
-are complete.
+next move: commit and push the C32 behavior repair, monitor CI/deploy, verify
+staging identity, then run deployed product proof for imported Markdown/plain
+text and manifest `.texture` behavior. Keep protocol v0 unwritten until
+remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -2152,11 +2159,11 @@ publication fallback label repair, C27 deployed exported HTML class-name proof,
 C28 deployed live editor source class proof, and C29 deployed public route proof
 are landed. C30 is deployed-supported for Universal Wire style-source suffixes.
 C31 is deployed-supported for publication/export helper and API symbols. C32 is
-now the active documented slice: new/current Texture file manifestation
-defaults should move from `.vtext` to `.texture` while legacy `.vtext`
-shortcuts remain readable. Keep storage schema, durable `vtext:` actor ids,
-backend stored-route migration, Universal Wire story-field proof, and protocol
-v0 out of C32.
+locally-supported: new/current Texture file manifestation defaults moved from
+`.vtext` to `.texture` while legacy `.vtext` shortcuts remain readable. Next
+move is commit/push plus CI/deploy/staging product proof. Keep storage schema,
+durable `vtext:` actor ids, backend stored-route migration, Universal Wire
+story-field proof, and protocol v0 out of C32.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to

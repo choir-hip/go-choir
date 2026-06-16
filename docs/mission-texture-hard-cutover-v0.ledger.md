@@ -3579,3 +3579,53 @@ Open edge: run doccheck and commit this checkpoint, then move new/current
 manifest defaults and shortcut recognition to `.texture` while keeping legacy
 `.vtext` aliases readable and leaving table/database names, durable actor ids,
 stored `/pub/vtext/...` rows, and protocol v0 out of scope.
+
+## 2026-06-16 - Local Evidence: C32 Texture File Suffix Defaults
+
+Claim: C32 is locally-supported at its bounded scope. New/current Texture file
+manifestations default to `.texture` for import titles, manifest allocation,
+manifest shortcut kind, canonical source-path metadata, alias priority, File
+Browser shortcut recognition, and Universal Wire story-open source paths, while
+legacy `.vtext` shortcuts remain readable.
+
+Move: construct the bounded file-suffix repair after the Problem Documentation
+First checkpoint. Expected ΔV: no coarse V decrease until deployed proof; close
+the local C32 sub-edge and leave storage/actor/stored-route/protocol residue
+explicit.
+
+Actual ΔV: local C32 sub-edge closed; mission V remains 2 pending
+CI/deploy/staging product proof.
+
+Receipts:
+
+- `internal/runtime/vtext_import.go` now allocates `.texture` manifests,
+  titles imports as `.texture`, emits `kind:"texture"` for current shortcut
+  files, accepts legacy `.vtext` shortcut files, and keeps legacy `.vtext`
+  shortcut files at `kind:"vtext"`.
+- `internal/store/vtext.go` now prefers `.texture` aliases before `.vtext`
+  aliases and other aliases.
+- `frontend/src/lib/FileBrowser.svelte` recognizes `.texture` shortcut/text
+  files while preserving `.vtext` recognition.
+- `frontend/src/lib/UniversalWireApp.svelte` opens story source paths as
+  `.story.texture`.
+- Focused tests passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'APICreateRevisionCanonicalizesAliasedImportedDocumentTitle|OpenFileResolvesCanonicalAlias|PlainTextImportCarriesMigrationMetadataToFirstDurableRevision|ImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTable|ImportMarkdownLineageCreatesRevisionHistory|OpenFilePreservesDocxAndPDFOriginalArtifacts|EnsureManifestCreatesAliasAndFile|ShortcutFileKindPreservesLegacyVTextCompatibility|EnsureManifestReusesExistingAlias|AppagentEditCanonicalizesAliasedMarkdownTitle'
+  -count=1`.
+- Focused store alias test passed:
+  `nix develop -c go test ./internal/store -run
+  'TestVTextDocumentAliasSourcePathPrefersCanonicalShortcut' -count=1`.
+- Wider checks passed:
+  `nix develop -c scripts/go-test-runtime-shards`,
+  `nix develop -c go test ./internal/store -count=1`, and
+  `npm --prefix frontend run build` (with pre-existing Universal Wire Svelte
+  warnings).
+- Scoped residue search over the touched C32 surfaces found only intended
+  legacy shortcut compatibility, projection/schema vocabulary, and explicitly
+  excluded storage workspace/table residue.
+
+Open edge: commit/push C32, monitor CI/deploy, verify staging identity, and run
+deployed product proof for imported Markdown/plain text plus manifest
+`.texture` behavior. C32 does not repair storage workspace/table names, durable
+`vtext:` actor ids, stored `/pub/vtext/...` rows, Universal Wire edition
+`Wire.vtext`, Universal Wire deployed story-field payload proof, or protocol v0.

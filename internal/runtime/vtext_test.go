@@ -768,8 +768,8 @@ func TestVTextAPICreateRevisionCanonicalizesAliasedImportedDocumentTitle(t *test
 	if err != nil {
 		t.Fatalf("GetDocument: %v", err)
 	}
-	if doc.Title != "legacy-import.vtext" {
-		t.Fatalf("document title = %q, want legacy-import.vtext", doc.Title)
+	if doc.Title != "legacy-import.texture" {
+		t.Fatalf("document title = %q, want legacy-import.texture", doc.Title)
 	}
 	docID, err := s.GetDocumentAlias(ctx, "user-1", "imports/legacy-import.md")
 	if err != nil {
@@ -3851,8 +3851,8 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDocument opened file: %v", err)
 	}
-	if doc.Title != "ai-news.vtext" {
-		t.Fatalf("opened document title = %q, want ai-news.vtext", doc.Title)
+	if doc.Title != "ai-news.texture" {
+		t.Fatalf("opened document title = %q, want ai-news.texture", doc.Title)
 	}
 
 	second := openReq("Changed file bytes that should not fork a new doc")
@@ -3958,8 +3958,8 @@ func TestVTextPlainTextImportCarriesMigrationMetadataToFirstDurableRevision(t *t
 	if err != nil {
 		t.Fatalf("GetDocument opened text: %v", err)
 	}
-	if doc.Title != "plain-proposal.vtext" {
-		t.Fatalf("opened document title = %q, want plain-proposal.vtext", doc.Title)
+	if doc.Title != "plain-proposal.texture" {
+		t.Fatalf("opened document title = %q, want plain-proposal.texture", doc.Title)
 	}
 	v0, err := s.GetRevision(ctx, opened.CurrentRevisionID, "user-1")
 	if err != nil {
@@ -4021,8 +4021,8 @@ func TestVTextPlainTextImportCarriesMigrationMetadataToFirstDurableRevision(t *t
 	if err != nil {
 		t.Fatalf("GetDocumentAliasSourcePath: %v", err)
 	}
-	if filepath.Ext(sourcePath) != ".vtext" {
-		t.Fatalf("latest alias source_path = %q, want .vtext", sourcePath)
+	if filepath.Ext(sourcePath) != ".texture" {
+		t.Fatalf("latest alias source_path = %q, want .texture", sourcePath)
 	}
 	if docID, err := s.GetDocumentAlias(ctx, "user-1", "notes/plain-proposal.txt"); err != nil || docID != opened.DocID {
 		t.Fatalf("original text alias docID = %q, err = %v, want %q", docID, err, opened.DocID)
@@ -4112,8 +4112,8 @@ func TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTa
 		t.Fatalf("metadata did not record structure stabilization: %#v", meta)
 	}
 	canonicalPath, ok := meta[canonicalTextureSourcePathMetadataKey].(string)
-	if !ok || filepath.Ext(canonicalPath) != ".vtext" {
-		t.Fatalf("%s = %#v, want .vtext", canonicalTextureSourcePathMetadataKey, meta[canonicalTextureSourcePathMetadataKey])
+	if !ok || filepath.Ext(canonicalPath) != ".texture" {
+		t.Fatalf("%s = %#v, want .texture", canonicalTextureSourcePathMetadataKey, meta[canonicalTextureSourcePathMetadataKey])
 	}
 	if _, ok := meta[legacyCanonicalVTextSourcePathKey]; ok {
 		t.Fatalf("revision emitted legacy %s: %#v", legacyCanonicalVTextSourcePathKey, meta)
@@ -4122,8 +4122,8 @@ func TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTa
 	if err != nil {
 		t.Fatalf("GetDocumentAliasSourcePath: %v", err)
 	}
-	if filepath.Ext(sourcePath) != ".vtext" {
-		t.Fatalf("latest alias source_path = %q, want .vtext", sourcePath)
+	if filepath.Ext(sourcePath) != ".texture" {
+		t.Fatalf("latest alias source_path = %q, want .texture", sourcePath)
 	}
 	if docID, err := s.GetDocumentAlias(ctx, "user-1", "proposals/legal-cloud.md"); err != nil || docID != opened.DocID {
 		t.Fatalf("original markdown alias docID = %q, err = %v, want %q", docID, err, opened.DocID)
@@ -4477,8 +4477,8 @@ func TestVTextImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDocument imported lineage: %v", err)
 	}
-	if doc.Title != "legal-cloud.vtext" {
-		t.Fatalf("imported lineage document title = %q, want legal-cloud.vtext", doc.Title)
+	if doc.Title != "legal-cloud.texture" {
+		t.Fatalf("imported lineage document title = %q, want legal-cloud.texture", doc.Title)
 	}
 	revs, err := s.ListRevisionsByDoc(context.Background(), resp.DocID, "user-1", 10)
 	if err != nil {
@@ -5577,8 +5577,8 @@ func TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s GetDocument: %v", tc.name, err)
 		}
-		if doc.Title != "legal-cloud-proposal.vtext" {
-			t.Fatalf("%s document title = %q, want legal-cloud-proposal.vtext", tc.name, doc.Title)
+		if doc.Title != "legal-cloud-proposal.texture" {
+			t.Fatalf("%s document title = %q, want legal-cloud-proposal.texture", tc.name, doc.Title)
 		}
 		item, err := s.GetContentItem(context.Background(), "user-1", tc.resp.OriginalContentID)
 		if err != nil {
@@ -5789,8 +5789,8 @@ func TestVTextEnsureManifestCreatesAliasAndFile(t *testing.T) {
 	if resp.SourcePath == "" {
 		t.Fatal("response source_path should not be empty")
 	}
-	if filepath.Ext(resp.SourcePath) != ".vtext" {
-		t.Fatalf("response source_path extension = %q, want .vtext", filepath.Ext(resp.SourcePath))
+	if filepath.Ext(resp.SourcePath) != ".texture" {
+		t.Fatalf("response source_path extension = %q, want .texture", filepath.Ext(resp.SourcePath))
 	}
 
 	aliasedDocID, err := s.GetDocumentAlias(context.Background(), "user-1", resp.SourcePath)
@@ -5809,14 +5809,51 @@ func TestVTextEnsureManifestCreatesAliasAndFile(t *testing.T) {
 	if err := json.Unmarshal(bytes, &shortcut); err != nil {
 		t.Fatalf("unmarshal shortcut file: %v\nraw=%s", err, string(bytes))
 	}
-	if shortcut.Kind != "vtext" {
-		t.Fatalf("shortcut kind = %q, want %q", shortcut.Kind, "vtext")
+	if shortcut.Kind != "texture" {
+		t.Fatalf("shortcut kind = %q, want %q", shortcut.Kind, "texture")
 	}
 	if shortcut.DocID != docID {
 		t.Fatalf("shortcut doc_id = %q, want %q", shortcut.DocID, docID)
 	}
 	if shortcut.SourcePath != resp.SourcePath {
 		t.Fatalf("shortcut source_path = %q, want %q", shortcut.SourcePath, resp.SourcePath)
+	}
+}
+
+func TestVTextShortcutFileKindPreservesLegacyVTextCompatibility(t *testing.T) {
+	doc := types.Document{
+		DocID:   "doc-shortcut-kind",
+		OwnerID: "user-1",
+		Title:   "Shortcut Kind.texture",
+	}
+
+	for _, tc := range []struct {
+		name       string
+		sourcePath string
+		wantKind   string
+	}{
+		{name: "current texture", sourcePath: "shortcut-kind.texture", wantKind: "texture"},
+		{name: "legacy vtext", sourcePath: "shortcut-kind.vtext", wantKind: "vtext"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if !isVTextShortcutPath(tc.sourcePath) {
+				t.Fatalf("%s should be recognized as a Texture shortcut", tc.sourcePath)
+			}
+			bytes, err := marshalVTextShortcutFile(doc, tc.sourcePath)
+			if err != nil {
+				t.Fatalf("marshalVTextShortcutFile: %v", err)
+			}
+			var shortcut vtextShortcutFile
+			if err := json.Unmarshal(bytes, &shortcut); err != nil {
+				t.Fatalf("unmarshal shortcut file: %v\nraw=%s", err, string(bytes))
+			}
+			if shortcut.Kind != tc.wantKind {
+				t.Fatalf("shortcut kind = %q, want %q", shortcut.Kind, tc.wantKind)
+			}
+			if shortcut.SourcePath != tc.sourcePath {
+				t.Fatalf("shortcut source_path = %q, want %q", shortcut.SourcePath, tc.sourcePath)
+			}
+		})
 	}
 }
 
@@ -6611,8 +6648,8 @@ func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get document: %v", err)
 	}
-	if got.Title != "legacy-proposal.vtext" {
-		t.Fatalf("document title = %q, want legacy-proposal.vtext", got.Title)
+	if got.Title != "legacy-proposal.texture" {
+		t.Fatalf("document title = %q, want legacy-proposal.texture", got.Title)
 	}
 	revs, err := s.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10)
 	if err != nil {
@@ -6623,8 +6660,8 @@ func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 	}
 	meta := decodeRevisionMetadata(revs[0].Metadata)
 	canonicalPath, ok := meta[canonicalTextureSourcePathMetadataKey].(string)
-	if !ok || filepath.Ext(canonicalPath) != ".vtext" {
-		t.Fatalf("%s = %#v, want .vtext", canonicalTextureSourcePathMetadataKey, meta[canonicalTextureSourcePathMetadataKey])
+	if !ok || filepath.Ext(canonicalPath) != ".texture" {
+		t.Fatalf("%s = %#v, want .texture", canonicalTextureSourcePathMetadataKey, meta[canonicalTextureSourcePathMetadataKey])
 	}
 	if _, ok := meta[legacyCanonicalVTextSourcePathKey]; ok {
 		t.Fatalf("appagent revision emitted legacy %s: %#v", legacyCanonicalVTextSourcePathKey, meta)

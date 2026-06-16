@@ -237,7 +237,7 @@ func TestVTextDocumentAliasSourcePathPrefersCanonicalShortcut(t *testing.T) {
 	doc := types.Document{
 		DocID:     "doc-canonical-alias",
 		OwnerID:   "user-1",
-		Title:     "Plain Proposal.vtext",
+		Title:     "Plain Proposal.texture",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -247,16 +247,19 @@ func TestVTextDocumentAliasSourcePathPrefersCanonicalShortcut(t *testing.T) {
 	if err := s.UpsertDocumentAlias(ctx, "user-1", "notes/plain-proposal.txt", doc.DocID, now.Add(2*time.Second)); err != nil {
 		t.Fatalf("UpsertDocumentAlias original: %v", err)
 	}
-	if err := s.UpsertDocumentAlias(ctx, "user-1", "plain-proposal.vtext", doc.DocID, now.Add(time.Second)); err != nil {
-		t.Fatalf("UpsertDocumentAlias canonical: %v", err)
+	if err := s.UpsertDocumentAlias(ctx, "user-1", "plain-proposal.vtext", doc.DocID, now.Add(3*time.Second)); err != nil {
+		t.Fatalf("UpsertDocumentAlias legacy shortcut: %v", err)
+	}
+	if err := s.UpsertDocumentAlias(ctx, "user-1", "plain-proposal.texture", doc.DocID, now.Add(time.Second)); err != nil {
+		t.Fatalf("UpsertDocumentAlias canonical shortcut: %v", err)
 	}
 
 	sourcePath, err := s.GetDocumentAliasSourcePath(ctx, "user-1", doc.DocID)
 	if err != nil {
 		t.Fatalf("GetDocumentAliasSourcePath: %v", err)
 	}
-	if sourcePath != "plain-proposal.vtext" {
-		t.Fatalf("source path = %q, want canonical shortcut", sourcePath)
+	if sourcePath != "plain-proposal.texture" {
+		t.Fatalf("source path = %q, want canonical texture shortcut", sourcePath)
 	}
 	if docID, err := s.GetDocumentAlias(ctx, "user-1", "notes/plain-proposal.txt"); err != nil || docID != doc.DocID {
 		t.Fatalf("original alias docID = %q, err = %v, want %q", docID, err, doc.DocID)

@@ -446,7 +446,7 @@ test('Apps & Changes opens existing VText narratives instead of generating claim
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ doc_id: 'doc-chiron', source_path: 'chiron-report.vtext' }),
+        body: JSON.stringify({ doc_id: 'doc-chiron', source_path: 'chiron-report.texture' }),
       });
       return;
     }

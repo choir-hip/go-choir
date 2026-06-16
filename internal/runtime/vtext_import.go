@@ -46,6 +46,15 @@ type vtextShortcutFile struct {
 	SourcePath string `json:"source_path"`
 }
 
+const (
+	textureShortcutExt      = ".texture"
+	legacyVTextShortcutExt  = ".vtext"
+	textureShortcutFileKind = "texture"
+	legacyVTextShortcutKind = "vtext"
+	defaultTextureTitleStem = "Untitled Texture"
+	defaultTextureFileStem  = "texture"
+)
+
 func normalizeVTextSourcePath(raw string) string {
 	cleaned := pathpkg.Clean("/" + strings.TrimSpace(raw))
 	cleaned = strings.TrimPrefix(cleaned, "/")
@@ -62,11 +71,11 @@ func canonicalVTextImportTitle(sourcePath, requestedTitle string) string {
 	}
 	base = strings.TrimSpace(base)
 	if base == "" || base == "." || base == "/" {
-		base = "Untitled VText"
+		base = defaultTextureTitleStem
 	}
 	base = pathpkg.Base(base)
 	ext := pathpkg.Ext(base)
-	if strings.EqualFold(ext, ".vtext") {
+	if isVTextShortcutPath(base) {
 		return base
 	}
 	stem := strings.TrimSpace(strings.TrimSuffix(base, ext))
@@ -74,14 +83,14 @@ func canonicalVTextImportTitle(sourcePath, requestedTitle string) string {
 		stem = strings.TrimSpace(base)
 	}
 	if stem == "" {
-		stem = "Untitled VText"
+		stem = defaultTextureTitleStem
 	}
-	return stem + ".vtext"
+	return stem + textureShortcutExt
 }
 func slugifyVTextManifestStem(raw string) string {
 	raw = strings.TrimSpace(strings.ToLower(raw))
 	if raw == "" {
-		return "vtext"
+		return defaultTextureFileStem
 	}
 	var b strings.Builder
 	lastDash := false
@@ -99,7 +108,7 @@ func slugifyVTextManifestStem(raw string) string {
 	}
 	stem := strings.Trim(b.String(), "-")
 	if stem == "" {
-		return "vtext"
+		return defaultTextureFileStem
 	}
 	return stem
 }
@@ -119,12 +128,17 @@ func shortDocIDSuffix(docID string) string {
 }
 
 func isVTextShortcutPath(sourcePath string) bool {
-	return strings.EqualFold(pathpkg.Ext(strings.TrimSpace(sourcePath)), ".vtext")
+	ext := pathpkg.Ext(strings.TrimSpace(sourcePath))
+	return strings.EqualFold(ext, textureShortcutExt) || strings.EqualFold(ext, legacyVTextShortcutExt)
 }
 
 func marshalVTextShortcutFile(doc types.Document, sourcePath string) ([]byte, error) {
+	kind := textureShortcutFileKind
+	if strings.EqualFold(pathpkg.Ext(strings.TrimSpace(sourcePath)), legacyVTextShortcutExt) {
+		kind = legacyVTextShortcutKind
+	}
 	return json.MarshalIndent(vtextShortcutFile{
-		Kind:       "vtext",
+		Kind:       kind,
 		DocID:      doc.DocID,
 		Title:      doc.Title,
 		SourcePath: sourcePath,
@@ -742,7 +756,7 @@ func (rt *Runtime) ensureCanonicalVTextProjectionPath(ctx context.Context, owner
 		return "", err
 	}
 	if !isVTextShortcutPath(sourcePath) {
-		return "", fmt.Errorf("manifest path %q is not a .vtext shortcut", sourcePath)
+		return "", fmt.Errorf("manifest path %q is not a Texture shortcut", sourcePath)
 	}
 	return sourcePath, nil
 }
@@ -771,7 +785,7 @@ func ensureVTextManifest(ctx context.Context, st *store.Store, ownerID string, d
 
 	content, err := marshalVTextShortcutFile(doc, sourcePath)
 	if err != nil {
-		return "", fmt.Errorf("marshal vtext shortcut: %w", err)
+		return "", fmt.Errorf("marshal texture shortcut: %w", err)
 	}
 
 	filesRoot := sandbox.ResolveFilesRoot("")
@@ -814,7 +828,7 @@ func (h *APIHandler) ensureCanonicalVTextProjectionPath(ctx context.Context, own
 		return "", err
 	}
 	if !isVTextShortcutPath(sourcePath) {
-		return "", fmt.Errorf("manifest path %q is not a .vtext shortcut", sourcePath)
+		return "", fmt.Errorf("manifest path %q is not a Texture shortcut", sourcePath)
 	}
 	return sourcePath, nil
 }
@@ -823,8 +837,8 @@ func allocateVTextManifestPath(ctx context.Context, st *store.Store, ownerID str
 	stem := slugifyVTextManifestStem(doc.Title)
 	suffix := shortDocIDSuffix(doc.DocID)
 	candidates := []string{
-		fmt.Sprintf("%s.vtext", stem),
-		fmt.Sprintf("%s-%s.vtext", stem, suffix),
+		fmt.Sprintf("%s%s", stem, textureShortcutExt),
+		fmt.Sprintf("%s-%s%s", stem, suffix, textureShortcutExt),
 	}
 	filesRoot := sandbox.ResolveFilesRoot("")
 	for _, candidate := range candidates {
@@ -846,5 +860,5 @@ func allocateVTextManifestPath(ctx context.Context, st *store.Store, ownerID str
 		}
 		return candidate, nil
 	}
-	return fmt.Sprintf("%s-%s.vtext", stem, uuid.New().String()[:8]), nil
+	return fmt.Sprintf("%s-%s%s", stem, uuid.New().String()[:8], textureShortcutExt), nil
 }

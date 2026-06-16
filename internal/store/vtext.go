@@ -672,7 +672,11 @@ func (s *Store) GetDocumentAliasSourcePath(ctx context.Context, ownerID, docID s
 		`SELECT source_path
 		   FROM vtext_document_aliases
 		  WHERE owner_id = ? AND doc_id = ?
-		  ORDER BY CASE WHEN LOWER(source_path) LIKE '%.vtext' THEN 0 ELSE 1 END, updated_at DESC
+		  ORDER BY CASE
+		             WHEN LOWER(source_path) LIKE '%.texture' THEN 0
+		             WHEN LOWER(source_path) LIKE '%.vtext' THEN 1
+		             ELSE 2
+		           END, updated_at DESC
 		  LIMIT 1`,
 		ownerID, docID,
 	)
