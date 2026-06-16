@@ -1288,3 +1288,68 @@ Receipts:
 Open edge: push the runtime repair, monitor CI/deploy, then run deployed
 prompt-bar/Trace proof that Texture first revision uses current write tools and
 does not produce a successful `edit_texture` result.
+
+## 2026-06-16 - Deployed `edit_texture` Alias Deletion
+
+Claim: the model-visible `edit_texture` compatibility alias can stay deleted
+in the deployed product path while persisted legacy revision metadata remains
+read-compatible.
+
+Move: push commit `c6db0df57bd06a22e392fd89eb0f4ee1f4c1bcc1`, monitor CI and
+deploy, verify staging build identity, and run a deployed prompt-bar/Trace
+proof through public authenticated product APIs.
+
+Expected ΔV: support C17 for deployed scope; no coarse V decrease because
+storage/file/metadata/public-route/protocol residue remains.
+
+Actual ΔV: C17 is supported for deployed alias-deletion scope. V remains 2.
+
+Conjecture delta: current Texture writers can use `patch_texture` without the
+retired compatibility alias; no super-before-Texture path is needed for the
+first revision.
+
+Protected surfaces: Texture tool registry, canonical Texture write metadata,
+tool-loop terminal successes, duplicate Texture write protection, prompt-bar
+route materialization, Trace evidence, and staging deployment identity.
+
+Admissible evidence class: CI, deploy job, staging health identity, and
+deployed browser product proof that submits through prompt-bar, observes
+Texture head metadata, reads Trace over `/api/trace/*`, and finds no
+`edit_texture` tool result.
+
+Rollback path: restore the `edit_texture` registered tool, write-tool
+classification, terminal success entry, duplicate-write handling entry, and
+`edit_texture` metadata fallback if deployed Texture writers fail without the
+alias.
+
+Heresy delta: repaired for deployed model-visible alias exposure; legacy
+`source=edit_texture` and `source=edit_vtext` metadata compatibility remains
+discovered migration residue.
+
+Receipts:
+- CI run `27589732107` passed for commit
+  `c6db0df57bd06a22e392fd89eb0f4ee1f4c1bcc1`.
+- Deploy job `81567905099` succeeded.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `c6db0df57bd06a22e392fd89eb0f4ee1f4c1bcc1`, deployed at
+  `2026-06-16T02:22:51Z`.
+- Deployed Playwright product proof registered a fresh user, submitted
+  prompt-bar request `d2a0ccf4-276f-43f2-be6b-f6da43fdaf15`, and received a
+  conductor -> Texture decision for document
+  `d4e62340-bd4c-4644-9fd6-fb28a2b85d30`.
+- Texture head revision `f5fee46f-4178-4dc2-aee3-fe127525cd9b` had
+  `metadata.source=patch_texture` and content
+  "Current write tool: patch_texture. Do not call any retired compatibility
+  alias."
+- Trace for trajectory `d2a0ccf4-276f-43f2-be6b-f6da43fdaf15` contained
+  conductor and Texture agents only, 28 moments, two `patch_texture returned`
+  tool-result moments, four non-error `patch_texture` tool events, zero
+  `rewrite_texture` hits, zero `edit_texture` hits, and zero `super` hits.
+- UI proof found one Texture window, zero legacy `vtext` windows, visible
+  `patch_texture`, no visible `edit_texture`, no "Writing first draft"
+  placeholder, and no forbidden browser requests to `/internal/*`,
+  `/api/agent/*`, `/api/test/*`, `/api/prompts`, or `/api/events`.
+
+Open edge: select the next bounded residue class among storage
+schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
+and protocol v0.

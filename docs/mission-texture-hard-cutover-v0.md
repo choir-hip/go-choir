@@ -224,8 +224,7 @@ Heresy delta: repaired for deployed app identity; no storage/table/file/metadata
 symbol repair claimed.
 
 Remaining scope: storage schema/workspace/file suffixes, metadata keys,
-`/pub/vtext/...` route identity, `edit_texture` compatibility alias deletion,
-and protocol v0.
+`/pub/vtext/...` route identity, and protocol v0.
 
 ## Problem Checkpoint: Public Preview Trace Fixture Residue
 
@@ -390,12 +389,37 @@ Local evidence on 2026-06-16:
   now finds only explicit forbidden-tool assertions and legacy
   `source=edit_texture` metadata compatibility tests/read predicates.
 
+Deployed evidence on 2026-06-16:
+
+- Commit `c6db0df57bd06a22e392fd89eb0f4ee1f4c1bcc1` passed CI run
+  `27589732107`; deploy job `81567905099` succeeded.
+- Staging health at `https://choir.news/health` reported proxy and sandbox
+  commit `c6db0df57bd06a22e392fd89eb0f4ee1f4c1bcc1`, deployed at
+  `2026-06-16T02:22:51Z`.
+- Deployed Playwright product proof registered a fresh staging user, submitted
+  prompt-bar request `d2a0ccf4-276f-43f2-be6b-f6da43fdaf15`, and received
+  conductor -> Texture decision for document
+  `d4e62340-bd4c-4644-9fd6-fb28a2b85d30`.
+- The Texture head revision `f5fee46f-4178-4dc2-aee3-fe127525cd9b` had
+  `metadata.source=patch_texture` and content
+  "Current write tool: patch_texture. Do not call any retired compatibility
+  alias."
+- Trace for trajectory `d2a0ccf4-276f-43f2-be6b-f6da43fdaf15` contained
+  conductor and Texture agents only, 28 moments, two `patch_texture returned`
+  tool-result moments, four non-error `patch_texture` tool events, zero
+  `rewrite_texture` hits, zero `edit_texture` hits, and zero `super` hits.
+- The deployed UI proof found one Texture window, zero legacy `vtext` windows,
+  visible `patch_texture` content, no visible `edit_texture`, no
+  "Writing first draft" placeholder, and no forbidden browser requests to
+  `/internal/*`, `/api/agent/*`, `/api/test/*`, `/api/prompts`, or
+  `/api/events`.
+
 Rollback path: restore the `edit_texture` registered tool, write-tool
 classification, terminal success entry, duplicate-write handling entry, and
 `edit_texture` metadata fallback if deployed Texture writers cannot use
 `patch_texture` or `rewrite_texture`.
 
-Heresy delta: repaired locally for the model-visible `edit_texture`
+Heresy delta: repaired for the deployed model-visible `edit_texture`
 compatibility alias; legacy `source=edit_texture` and `source=edit_vtext`
 metadata compatibility remains discovered migration residue.
 
@@ -474,7 +498,7 @@ variant, with platform publication control-route cutover landed and deployed:
    been reconciled to Texture or line-labeled as historical/deletion residue;
    `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
    /tmp/choir-doccheck.json` now reports no H5 warnings for that high-read set;
-4. current V includes: storage, file, app-id, and metadata symbols still use
+4. current V includes: storage, file, and metadata symbols still use
    the old ontology; frontend `data-vtext-*` attributes, frontend `/api/vtext`
    compatibility-route deletion target test probes, the browser-public
    `/api/vtext` route registration, the product API tool allowlist shim,
@@ -483,16 +507,16 @@ variant, with platform publication control-route cutover landed and deployed:
 5. discharged: visible UI labels and import affordances are cut over to
    Texture and proven on staging through browser product evidence;
 6. discharged: the edit affordance surface has a common `patch_texture` tool
-   and an exceptional `rewrite_texture` tool, with `edit_texture` retained only
-   as a deletion-receipted compatibility alias; staging product proof shows the
+   and an exceptional `rewrite_texture` tool; the model-visible `edit_texture`
+   compatibility alias is deleted and staging product proof shows the
    prompt-bar Texture first revision stored through `patch_texture`;
 7. discharged for local scope: prompt register and registered tool names now
-   use Texture-oriented wording and `edit_texture` /
+   use Texture-oriented wording and `patch_texture` / `rewrite_texture` /
    `record_texture_decision` affordances without adding runtime semantic
    decision trees;
 8. discharged for the current product-facing slice: deployed prompt-bar ->
    conductor -> Texture first-revision proof passed under `/api/texture` and
-   `edit_texture`, with no super-before-Texture trace;
+   `patch_texture`, with no `edit_texture` or super-before-Texture trace;
 9. discharged: transclusion pinned-ref plus newer-version indicator behavior is
    locally focused-test green and proven on staging with browser/product UI
    evidence;
@@ -581,9 +605,8 @@ position / live conjectures / open edges:
   Files import button, and Web Lens import button.
 - C10 supported for deployed common-path scope: `patch_texture` is the exact
   initial Texture write choice and staging Trace showed no successful
-  `edit_texture` result for the proof trajectory. `edit_texture` remains only
-  as a short-lived compatibility alias; settlement still requires a later alias
-  deletion receipt.
+  `edit_texture` result for the proof trajectory. The later alias-deletion
+  receipt is now also landed under C17.
 - C11 supported for high-read docs scope: README, docs index, doctrine,
   current architecture, runtime invariants, mission portfolio, mission graph,
   and this paradoc now teach Texture as the current artifact control-plane
@@ -631,23 +654,22 @@ position / live conjectures / open edges:
   commit `3037e1f92971e7324a8bb8c3e356474e4eee2cc6`, and staging DOM proof
   shows the signed-out Texture preview still renders without the deleted Trace
   fixture language.
-- C17 locally supported pending CI/deploy: the model-visible `edit_texture`
-  compatibility alias is removed from Texture tool registration, terminal
-  handling, new-write fallback metadata, and duplicate-write fixtures.
+- C17 supported for deployed alias-deletion scope: the model-visible
+  `edit_texture` compatibility alias is removed from Texture tool registration,
+  terminal handling, new-write fallback metadata, and duplicate-write fixtures.
   `patch_texture`/`rewrite_texture` remain the live Texture write tools.
   Persisted `source=edit_texture` and `source=edit_vtext` publication metadata
   compatibility remains separate migration residue and is intentionally
-  preserved. Focused runtime tests, wirepublish tests, runtime shards, and
-  live-alias residue search pass locally.
+  preserved. Focused runtime tests, wirepublish tests, runtime shards,
+  live-alias residue search, CI run `27589732107`, deploy job `81567905099`,
+  staging identity for commit `c6db0df57bd06a22e392fd89eb0f4ee1f4c1bcc1`, and
+  deployed prompt-bar/Trace proof all pass.
 
 next move: select the next bounded residue class among storage
 schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
-and `edit_texture` compatibility alias deletion. The selected next slice is the
-`edit_texture` alias deletion described above; push the runtime repair, monitor
-CI/deploy, then prove on staging that prompt-bar Texture first-revision still
-uses current write tools and no successful `edit_texture` tool result appears.
-Keep protocol v0 unwritten until those remaining working-surface proofs are
-complete.
+and protocol v0. The `edit_texture` alias deletion slice is landed and proven
+on staging; keep protocol v0 unwritten until the remaining working-surface
+proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
