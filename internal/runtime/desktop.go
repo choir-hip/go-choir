@@ -77,6 +77,14 @@ func sanitizeDesktopState(state types.DesktopState) types.DesktopState {
 	return state
 }
 
+func normalizeDesktopAppID(appID string) string {
+	appID = strings.TrimSpace(appID)
+	if appID == "vtext" {
+		return "texture"
+	}
+	return appID
+}
+
 func sanitizeWindowStates(windows []types.WindowState, activeWindowID string) ([]types.WindowState, string) {
 	activeWindowID = strings.TrimSpace(activeWindowID)
 	if len(windows) == 0 {
@@ -99,6 +107,7 @@ func sanitizeWindowStates(windows []types.WindowState, activeWindowID string) ([
 		}
 		seen[windowID] = struct{}{}
 		win.WindowID = windowID
+		win.AppID = normalizeDesktopAppID(win.AppID)
 
 		if !win.Mode.Valid() {
 			win.Mode = types.WindowNormal

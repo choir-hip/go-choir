@@ -46,6 +46,17 @@ const windowDefaults = {
 
 const compactDefault = { minWidth: 280, minHeight: 420 };
 
+export const TEXTURE_APP_ID = 'texture';
+
+const LEGACY_APP_ID_ALIASES: Record<string, string> = {
+  vtext: TEXTURE_APP_ID,
+};
+
+export function normalizeAppId(appId: string): string {
+  const normalized = String(appId || '').trim();
+  return LEGACY_APP_ID_ALIASES[normalized] || normalized;
+}
+
 export const APP_REGISTRY = [
   {
     id: 'files',
@@ -108,7 +119,7 @@ export const APP_REGISTRY = [
     theme: { surface: 'standard', shellDataAttr: 'data-pulse-window', contentClass: 'pulse-content' },
   },
   {
-    id: 'vtext',
+    id: TEXTURE_APP_ID,
     name: 'Texture',
     icon: '📝',
     description: 'Versioned artifact editor',
@@ -261,7 +272,8 @@ export const MOBILE_SWITCHER_APPS = APP_REGISTRY
 export const HEAVY_APP_IDS = new Set(APP_REGISTRY.filter((app) => app.window.heavy).map((app) => app.id));
 
 export function getAppDefinition(appId: string): ChoirAppDefinition | null {
-  return APP_REGISTRY.find((app) => app.id === appId) || null;
+  const canonicalAppId = normalizeAppId(appId);
+  return APP_REGISTRY.find((app) => app.id === canonicalAppId) || null;
 }
 
 export function getAppIcon(appId: string): string {

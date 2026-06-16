@@ -981,3 +981,56 @@ Receipts:
 Open edge: implement and land the app-id cutover, then return to storage
 schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
 `edit_texture` compatibility alias deletion, and protocol v0.
+
+## 2026-06-16 - Local Texture App Identity Repair
+
+Claim: the bounded app-identity slice can move to canonical `texture` without
+renaming storage tables, workspace/file suffixes, metadata keys, or auth intent
+kinds in the same move.
+
+Move: change the frontend app registry id to `texture`; route app launch,
+auth replay, source-open, public preview, Universal Wire, related Texture, and
+desktop-store paths through that canonical id; normalize deletion-receipted
+legacy `vtext` app ids at frontend launch/restore and runtime desktop-state API
+boundaries.
+
+Expected ΔV: local support for C15, with no V decrease claimed until CI, deploy,
+and staging DOM proof land.
+
+Actual ΔV: pending deploy. Local evidence supports the repair, but the mission
+state remains open until the landing loop proves the deployed behavior.
+
+Conjecture delta: canonical app identity can move to Texture without stranding
+existing persisted desktop windows, if legacy app ids are normalized at the
+desktop-state and app-launch boundaries.
+
+Protected surfaces: app registry, desktop window persistence/restore,
+source-open app selection, auth intent replay, public preview windows, frontend
+routing, and runtime desktop-state get/save.
+
+Admissible evidence class: focused frontend build and Go desktop-state tests;
+runtime shard suite; CI; Node B deploy identity; staging browser/DOM proof that
+new Texture app surfaces use `data-app-id="texture"` and legacy app ids still
+open Texture.
+
+Rollback path: revert the behavior commit to restore canonical `vtext` app ids
+and remove the normalization shims.
+
+Heresy delta: repaired locally for app identity; no storage/table/file/metadata
+symbol repair claimed.
+
+Receipts:
+- `npm --prefix frontend run build` passed. Vite emitted existing warnings for
+  unused `currentUser` and `.wire-state` selectors in `UniversalWireApp.svelte`.
+- `nix develop -c go test -tags comprehensive -v ./internal/runtime -run '^TestDesktopState'`
+  passed, including `TestDesktopStateSanitizesLegacyTextureAppID`.
+- `nix develop -c scripts/go-test-runtime-shards` passed all four runtime
+  shards.
+- App-id residue search:
+  `rg -n "appId: 'vtext'|appId: \"vtext\"|id: 'vtext'|id: \"vtext\"|openApp\\('vtext'|getAppIcon\\('vtext'|public-preview-vtext|data-app-id=\"vtext\"" frontend/src internal -g '!frontend/dist'`
+  returned only public preview Trace fixture agent ids.
+
+Open edge: push the behavior commit, monitor CI/deploy, run staging DOM proof,
+then return to storage schema/workspace/file suffixes, metadata keys,
+`/pub/vtext/...` route identity, `edit_texture` compatibility alias deletion,
+and protocol v0.

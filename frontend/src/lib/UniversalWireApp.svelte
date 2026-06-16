@@ -111,7 +111,7 @@
 
   function launchVText({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = false, relatedVTexts = [] }) {
     dispatch('launchapp', {
-      appId: 'vtext',
+      appId: 'texture',
       appName: 'Texture',
       icon: '📝',
       appContext: {

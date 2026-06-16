@@ -103,7 +103,7 @@ export function sourceOpenPlan(input: SourceOpenPlanInput = {}): SourceOpenPlan 
 
   if (targetKind === 'published_vtext_span' || targetKind === 'publication_version') {
     return {
-      appId: 'vtext',
+      appId: 'texture',
       openSurface: requested || SOURCE_OPEN_SURFACES.vtext,
       mode: 'published_vtext',
       liveOriginal: false,

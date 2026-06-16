@@ -111,11 +111,36 @@ func TestDesktopStateSaveAndGet(t *testing.T) {
 	if resp.Windows[0].WindowID != "win-1" {
 		t.Errorf("Window[0].WindowID = %q, want %q", resp.Windows[0].WindowID, "win-1")
 	}
-	if resp.Windows[0].AppID != "vtext" {
-		t.Errorf("Window[0].AppID = %q, want %q", resp.Windows[0].AppID, "vtext")
+	if resp.Windows[0].AppID != "texture" {
+		t.Errorf("Window[0].AppID = %q, want %q", resp.Windows[0].AppID, "texture")
 	}
 	if resp.ActiveWindowID != "win-1" {
 		t.Errorf("ActiveWindowID = %q, want %q", resp.ActiveWindowID, "win-1")
+	}
+}
+
+func TestDesktopStateSanitizesLegacyTextureAppID(t *testing.T) {
+	t.Parallel()
+
+	state := sanitizeDesktopState(types.DesktopState{
+		Windows: []types.WindowState{
+			{
+				WindowID: "win-legacy",
+				AppID:    "vtext",
+				Title:    "Legacy Texture",
+				Geometry: types.WindowGeometry{Width: 600, Height: 400},
+				Mode:     types.WindowNormal,
+				ZIndex:   1,
+			},
+		},
+		ActiveWindowID: "win-legacy",
+	})
+
+	if len(state.Windows) != 1 {
+		t.Fatalf("Windows count = %d, want 1", len(state.Windows))
+	}
+	if state.Windows[0].AppID != "texture" {
+		t.Fatalf("Window[0].AppID = %q, want %q", state.Windows[0].AppID, "texture")
 	}
 }
 
@@ -326,7 +351,7 @@ func TestDesktopStateUserIsolation(t *testing.T) {
 	if err := json.NewDecoder(getW1.Body).Decode(&resp1); err != nil {
 		t.Fatalf("decode user-1 response: %v", err)
 	}
-	if len(resp1.Windows) != 1 || resp1.Windows[0].AppID != "vtext" {
+	if len(resp1.Windows) != 1 || resp1.Windows[0].AppID != "texture" {
 		t.Errorf("user-1 desktop state was affected by user-2 save")
 	}
 
@@ -513,7 +538,7 @@ func TestDesktopStatePassiveSessionCannotReplaceSharedState(t *testing.T) {
 	if err := json.NewDecoder(getW.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(resp.Windows) != 1 || resp.Windows[0].AppID != "vtext" || resp.Windows[0].WindowID != "win-a" {
+	if len(resp.Windows) != 1 || resp.Windows[0].AppID != "texture" || resp.Windows[0].WindowID != "win-a" {
 		t.Fatalf("passive session replaced shared state: %+v", resp.Windows)
 	}
 }

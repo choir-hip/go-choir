@@ -171,6 +171,44 @@ Next behavior slice design:
   browser/DOM proof that the Texture app renders under `data-app-id="texture"`
   while legacy `app=vtext` URL or saved state still opens the same app.
 
+## Local Repair: Texture App Identity
+
+Mutation class: `orange`, because this changes frontend app identity, app
+launch/replay behavior, desktop persistence/restore normalization, source-open
+app selection, and runtime desktop-state API sanitization.
+
+Conjecture delta: new app launches and restored windows can use canonical
+`texture` app identity while deletion-receipted legacy `vtext` app ids still
+resolve at launch, URL-intent, frontend desktop-store, and runtime desktop API
+boundaries.
+
+Protected surfaces: app registry, desktop window persistence/restore,
+source-open app selection, auth intent replay, public preview windows, and
+runtime desktop-state get/save.
+
+Local evidence on 2026-06-16:
+
+- `npm --prefix frontend run build` passed. Vite reported pre-existing
+  Universal Wire warnings for unused `currentUser` export and `.wire-state`
+  selectors.
+- `nix develop -c go test -tags comprehensive -v ./internal/runtime -run '^TestDesktopState'`
+  passed, including `TestDesktopStateSanitizesLegacyTextureAppID`.
+- `nix develop -c scripts/go-test-runtime-shards` passed all four runtime
+  shards.
+- App-id residue search for `appId: 'vtext'`, `id: 'vtext'`, legacy open calls,
+  `getAppIcon('vtext')`, `public-preview-vtext`, and `data-app-id="vtext"`
+  found only public preview Trace fixture agent ids after excluding
+  `frontend/dist`.
+
+Rollback path: revert the behavior commit to restore canonical `vtext` app ids
+and remove the frontend/runtime normalization shims.
+
+Heresy delta: repaired locally for app identity; no storage/table/file/metadata
+symbol repair claimed.
+
+Remaining evidence before claim: push, CI, Node B staging deploy identity, and
+staging DOM proof for `data-app-id="texture"` plus legacy app-id compatibility.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -387,14 +425,16 @@ position / live conjectures / open edges:
   `81562610983` deployed commit `019e7a9d78f94e78da91ae2ddc6200dd7dee0184`,
   and staging route probes showed the new Texture control route reaches
   method/auth gates while the old control route returns 404.
-- C15 active: app identity and storage symbols are distinct residue classes.
-  The canonical app registry still uses `id: 'vtext'`, while persisted desktop
-  state may contain `app_id='vtext'`. Storage table/workspace/file and metadata
-  symbols are much broader and require separate migration design.
+- C15 locally supported pending deploy: app identity and storage symbols are
+  distinct residue classes. The canonical app registry now uses
+  `id: 'texture'`; frontend app launch/replay/source-open/public-preview paths
+  now target Texture; frontend and runtime desktop-state boundaries normalize
+  deletion-receipted legacy `vtext` app ids. Storage table/workspace/file and
+  metadata symbols are much broader and require separate migration design.
 
-next move: cut the canonical app id to `texture` with a legacy `vtext` desktop
-state normalization path, leaving storage/table/file/metadata symbols for a
-separate migration slice.
+next move: push the app-identity behavior commit, monitor CI/deploy, verify
+Node B staging identity, and run staging DOM proof for canonical
+`data-app-id="texture"` plus legacy app-id compatibility.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

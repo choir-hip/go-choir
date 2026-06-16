@@ -104,17 +104,17 @@
     if (intent.kind === 'app_launch') {
       return `Open ${intent.appName || 'this app'} with your private computer state.`;
     }
-    if (intent.kind === 'save_vtext') return 'Save this VText revision to your computer.';
-    if (intent.kind === 'publish_vtext') return 'Publish this VText as owner-scoped work.';
+    if (intent.kind === 'save_vtext') return 'Save this Texture revision to your computer.';
+    if (intent.kind === 'publish_vtext') return 'Publish this Texture as owner-scoped work.';
     if (intent.kind === 'file_upload') return 'Upload files into your private computer.';
     if (intent.kind === 'file_mutation') return 'Change files on your private computer.';
     if (String(intent.kind || '').startsWith('email')) return 'Use your mailbox, drafts, and send approval.';
     if (String(intent.kind || '').startsWith('podcast')) return 'Subscribe, import, search providers, or sync playback.';
     if (intent.kind === 'published_vtext_edit') {
-      return `Edit your version of ${intent.title || 'this published VText'}.`;
+      return `Edit your version of ${intent.title || 'this published Texture'}.`;
     }
     if (intent.kind === 'private_vtext_document') {
-      return `Open ${intent.title || 'this VText document'} from your private computer.`;
+      return `Open ${intent.title || 'this Texture document'} from your private computer.`;
     }
     return 'Continue with private computer state.';
   }
@@ -142,12 +142,12 @@
     if (intent?.kind === 'published_vtext_edit') {
       appReplay = {
         id: `app-replay-${++appReplayCounter}`,
-        appId: 'vtext',
-        appName: 'VText',
+        appId: 'texture',
+        appName: 'Texture',
         icon: '📝',
         appContext: {
           publishedRoutePath: intent.routePath || publicRoutePath || window.location.pathname,
-          windowTitle: intent.title || 'Published VText',
+          windowTitle: intent.title || 'Published Texture',
           startPublishedDerivative: true,
           allowMultiple: true,
         },
@@ -157,12 +157,12 @@
     if (intent?.kind === 'private_vtext_document' && intent.docId) {
       appReplay = {
         id: `app-replay-${++appReplayCounter}`,
-        appId: 'vtext',
-        appName: 'VText',
+        appId: 'texture',
+        appName: 'Texture',
         icon: '📝',
         appContext: {
           docId: intent.docId,
-          windowTitle: intent.title || 'VText',
+          windowTitle: intent.title || 'Texture',
           createInitialVersion: false,
           allowMultiple: true,
         },
@@ -184,7 +184,7 @@
     if (typeof window === 'undefined') return null;
     const params = new URLSearchParams(window.location.search || '');
     const appId = (params.get('app') || '').trim().toLowerCase();
-    if (appId === 'vtext') {
+    if (appId === 'vtext' || appId === 'texture') {
       const docId = (params.get('doc') || params.get('doc_id') || '').trim();
       if (!docId) {
         clearConsumedAppIntentFromURL();
@@ -194,7 +194,7 @@
         kind: 'private_vtext_document',
         source: 'url',
         docId,
-        title: (params.get('title') || '').trim() || 'VText',
+        title: (params.get('title') || '').trim() || 'Texture',
       };
     }
     if (appId === 'email') {

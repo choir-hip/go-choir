@@ -65,9 +65,10 @@
     setWindows,
     setIconPositions,
     getDefaultIconPositions,
+    getAppDefinition,
     getAppIcon,
-    APP_REGISTRY,
     isHeavyAppId,
+    normalizeAppId,
   } from './stores/desktop.js';
   import {
     createOverviewPreviewDecisions,
@@ -250,10 +251,10 @@
     const geometry = largePublicVTextGeometry();
     const previewWindows = [
       {
-        windowId: 'public-preview-vtext',
-        appId: 'vtext',
+        windowId: 'public-preview-texture',
+        appId: 'texture',
         title: 'Choir Preview',
-        icon: getAppIcon('vtext'),
+        icon: getAppIcon('texture'),
         x: geometry.x,
         y: geometry.y,
         width: geometry.width,
@@ -264,7 +265,7 @@
         appContext: { preview: true, windowTitle: 'Choir Preview' },
       },
     ];
-    setWindows(previewWindows, 'public-preview-vtext');
+    setWindows(previewWindows, 'public-preview-texture');
   }
 
   async function startAuthenticatedDesktop() {
@@ -1098,11 +1099,11 @@
   function openPublishedVText(routePath, guest = false) {
     const normalizedRoutePath = normalizePublicRoutePath(routePath);
     if (guest) {
-      const preview = windowsSnapshot().find((win) => win.windowId === 'public-preview-vtext');
+      const preview = windowsSnapshot().find((win) => win.windowId === 'public-preview-texture');
       if (preview) closeWindow(preview.windowId);
     }
     const matchingWindows = windowsSnapshot().filter((win) =>
-      win.appId === 'vtext' &&
+      normalizeAppId(win.appId) === 'texture' &&
       win.mode !== 'closed' &&
       win.mode !== 'hidden' &&
       normalizePublicRoutePath(win.appContext?.publishedRoutePath || '') === normalizedRoutePath
@@ -1125,7 +1126,7 @@
       return;
     }
 
-    openApp('vtext', 'Texture', '📝', {
+    openApp('texture', 'Texture', '📝', {
       windowTitle: 'Published Texture',
       publishedRoutePath: normalizedRoutePath,
       publishedGuest: guest,
@@ -1135,8 +1136,8 @@
   }
 
   function handleLaunchApp(event) {
-    const appId = event.detail?.appId || '';
-    const appDef = APP_REGISTRY.find((app) => app.id === appId);
+    const appId = normalizeAppId(event.detail?.appId || '');
+    const appDef = getAppDefinition(appId);
     if (!appDef) {
       showToast(`Could not open ${event.detail?.appName || 'app'}`, { kind: 'error' });
       return;
@@ -1247,9 +1248,9 @@
         return;
       }
 
-      if (decision.app === 'vtext') {
+      if (normalizeAppId(decision.app || '') === 'texture') {
         promptStatus = `Opening ${decision.title || 'Texture'}...`;
-        openApp('vtext', 'Texture', '📝', {
+        openApp('texture', 'Texture', '📝', {
           windowTitle: decision.title || fallbackWindowTitle,
           docId: decision.doc_id || '',
           seedPrompt: decision.seed_prompt || text,
@@ -1289,7 +1290,7 @@
   async function handleOpenTextFile(event) {
     if (!authenticated) {
       const fileName = event.detail?.fileName || 'Preview document';
-      openApp('vtext', 'Texture', getAppIcon('vtext'), {
+      openApp('texture', 'Texture', getAppIcon('texture'), {
         windowTitle: fileName,
         fileName,
         initialContent: `# ${fileName}\n\nThis is a local preview opened from Files. Sign in to open real private files or save changes.`,
@@ -1321,7 +1322,7 @@
         title: fileName,
         initialContent: content,
       });
-      openApp('vtext', 'Texture', '📝', {
+      openApp('texture', 'Texture', '📝', {
         windowTitle: fileName,
         fileName,
         docId: doc.doc_id,
@@ -1365,7 +1366,7 @@
   function handleOpenVTextFromContent(event) {
     if (!authenticated) {
       const detail = event.detail || {};
-      openApp('vtext', 'Texture', getAppIcon('vtext'), {
+      openApp('texture', 'Texture', getAppIcon('texture'), {
         windowTitle: detail.title || 'Preview note',
         initialContent: detail.initialContent || `# ${detail.title || 'Preview note'}\n\nThis is a local preview opened from public content. Sign in to save it as durable Texture.`,
         seedPrompt: detail.seedPrompt || '',
@@ -1386,7 +1387,7 @@
     }
     const detail = event.detail || {};
     const docId = detail.docId || '';
-    openApp('vtext', 'Texture', '📝', {
+    openApp('texture', 'Texture', '📝', {
       windowTitle: detail.title || 'Radio Brief',
       docId,
       initialContent: detail.initialContent || '',

@@ -68,7 +68,7 @@ type WindowState struct {
 	// WindowID is the unique identifier for this window.
 	WindowID string `json:"window_id"`
 
-	// AppID identifies the application running in this window (e.g., "vtext",
+	// AppID identifies the application running in this window (e.g., "texture",
 	// "terminal", "files").
 	AppID string `json:"app_id"`
 

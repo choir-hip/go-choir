@@ -26,11 +26,12 @@ import {
   getAppIcon,
   getAppWindowPreference,
   isHeavyAppId,
+  normalizeAppId,
 } from '../apps/registry';
 
 // ---- App registry ----
 
-export { APP_REGISTRY, DESK_APPS, DESKTOP_ICON_APPS, HEAVY_APP_IDS, getAppDefinition, getAppIcon, getAppWindowPreference, isHeavyAppId };
+export { APP_REGISTRY, DESK_APPS, DESKTOP_ICON_APPS, HEAVY_APP_IDS, getAppDefinition, getAppIcon, getAppWindowPreference, isHeavyAppId, normalizeAppId };
 
 // ---- Window counter ----
 
@@ -198,16 +199,24 @@ function applyLaunchWindowGeometry(baseGeometry, appContext = {}, appId = '') {
 }
 
 function normalizeWindowGeometry(windowState) {
-  const geometry = constrainWindowGeometry({ ...windowState, appId: windowState.appId });
+  const appId = normalizeAppId(windowState.appId);
+  const geometry = constrainWindowGeometry({ ...windowState, appId });
   const restoredGeometry = windowState.restoredGeometry
-    ? constrainWindowGeometry({ ...windowState.restoredGeometry, appId: windowState.appId })
+    ? constrainWindowGeometry({ ...windowState.restoredGeometry, appId })
     : null;
 
   return {
     ...windowState,
+    appId,
     ...geometry,
     restoredGeometry,
   };
+}
+
+function normalizeIconPositions(positions = {}) {
+  return Object.fromEntries(
+    Object.entries(positions || {}).map(([appId, position]) => [normalizeAppId(appId), position])
+  );
 }
 
 function withoutShowDesktopMarkers(windowState) {
@@ -274,17 +283,18 @@ export const visibleWindows = derived(windows, ($windows) =>
 
 /**
  * Open an app window.
- * Most apps are single-instance per appId. VText is multi-instance so
+ * Most apps are single-instance per appId. Texture is multi-instance so
  * prompt/file opens create fresh windows.
  */
 export function openApp(appId, appName, icon, appContext = {}) {
   windows.update(($windows) => {
-    const definition = getAppDefinition(appId);
+    const canonicalAppId = normalizeAppId(appId);
+    const definition = getAppDefinition(canonicalAppId);
     const singletonKey = String(appContext.singletonKey || '').trim();
     const allowMultiple = !singletonKey && (appContext.allowMultiple === true || definition?.window?.singleton === false);
     const existing = singletonKey
-      ? $windows.find((w) => w.appId === appId && w.mode !== 'closed' && w.appContext?.singletonKey === singletonKey)
-      : (!allowMultiple ? $windows.find((w) => w.appId === appId && w.mode !== 'closed') : null);
+      ? $windows.find((w) => normalizeAppId(w.appId) === canonicalAppId && w.mode !== 'closed' && w.appContext?.singletonKey === singletonKey)
+      : (!allowMultiple ? $windows.find((w) => normalizeAppId(w.appId) === canonicalAppId && w.mode !== 'closed') : null);
     if (existing) {
       // Focus existing window and apply any launch context such as a deep link.
       activeWindowId.set(existing.windowId);
@@ -304,7 +314,7 @@ export function openApp(appId, appName, icon, appContext = {}) {
       );
       // If it was minimized, restore its geometry
       if (existing.mode === 'minimized' && existing.restoredGeometry) {
-        const geo = constrainWindowGeometry({ ...existing.restoredGeometry, appId });
+        const geo = constrainWindowGeometry({ ...existing.restoredGeometry, appId: canonicalAppId });
         updated = updated.map((w) =>
           w.windowId === existing.windowId
             ? { ...w, x: geo.x, y: geo.y, width: geo.width, height: geo.height, restoredGeometry: null }
@@ -317,13 +327,13 @@ export function openApp(appId, appName, icon, appContext = {}) {
 
     const windowId = generateWindowId();
     const openCount = $windows.filter((w) => w.mode !== 'closed').length;
-    const geometry = applyLaunchWindowGeometry(getNewWindowGeometry(openCount, appId), appContext, appId);
+    const geometry = applyLaunchWindowGeometry(getNewWindowGeometry(openCount, canonicalAppId), appContext, canonicalAppId);
     const preferredMode = appContext.windowMode === 'maximized' ? 'maximized' : 'normal';
     const newWindow = {
       windowId,
-      appId,
-      title: appContext.windowTitle || appName || appId,
-      icon: icon || getAppIcon(appId),
+      appId: canonicalAppId,
+      title: appContext.windowTitle || appName || canonicalAppId,
+      icon: icon || getAppIcon(canonicalAppId),
       x: geometry.x,
       y: geometry.y,
       width: geometry.width,
@@ -581,16 +591,17 @@ export function setWindows(newWindows, newActiveId) {
 
 /** Move a desktop icon to a new position */
 export function moveIcon(appId, x, y) {
+  const canonicalAppId = normalizeAppId(appId);
   iconPositions.update((positions) => ({
     ...positions,
-    [appId]: { x, y },
+    [canonicalAppId]: { x, y },
   }));
 }
 
 /** Set icon positions (used for loading from server) */
 export function setIconPositions(positions) {
   if (positions && Object.keys(positions).length > 0) {
-    iconPositions.set(positions);
+    iconPositions.set(normalizeIconPositions(positions));
   } else {
     iconPositions.set(getDefaultIconPositions());
   }
