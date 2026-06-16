@@ -4346,6 +4346,43 @@ func TestHandleVTextDocumentsRootUsesTextureRoutes(t *testing.T) {
 	}
 }
 
+func TestRegisteredTextureRoutesExcludeLegacyVTextPrefix(t *testing.T) {
+	t.Parallel()
+	_, handler := testAPISetup(t)
+
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/texture/documents", `{"title":"registered texture route","content":"hello"}`, "user-alice")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status: got %d, want %d; body=%s", createW.Code, http.StatusCreated, createW.Body.String())
+	}
+	var createResp vtextCreateDocResponse
+	if err := json.NewDecoder(createW.Body).Decode(&createResp); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	getW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/texture/documents/"+url.PathEscape(createResp.DocID), "", "user-alice")
+	if getW.Code != http.StatusOK {
+		t.Fatalf("texture get status: got %d, want %d; body=%s", getW.Code, http.StatusOK, getW.Body.String())
+	}
+
+	legacyCases := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodGet, "/api/vtext/documents", ""},
+		{http.MethodPost, "/api/vtext/documents", `{"title":"legacy"}`},
+		{http.MethodGet, "/api/vtext/documents/" + url.PathEscape(createResp.DocID), ""},
+		{http.MethodGet, "/api/vtext/diff", ""},
+		{http.MethodPost, "/api/vtext/files/open", `{"path":"notes.md"}`},
+	}
+	for _, tc := range legacyCases {
+		w := registeredRuntimeRequest(t, handler, tc.method, tc.path, tc.body, "user-alice")
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("%s %s: got status %d, want 404; body=%s", tc.method, tc.path, w.Code, w.Body.String())
+		}
+	}
+}
+
 // --- Supervisor Recovery Visibility Tests ---
 
 func TestSupervisorRecoveryVisible(t *testing.T) {

@@ -1789,18 +1789,14 @@ func (h *APIHandler) HandleInternalRuntimeRunRouter(w http.ResponseWriter, r *ht
 func RegisterVTextRoutes(s *server.Server, h *APIHandler) {
 	// Exact match for document collection (create/list).
 	s.HandleFunc("/api/texture/documents", h.HandleVTextDocumentsRoot)
-	s.HandleFunc("/api/vtext/documents", h.HandleVTextDocumentsRoot)
 
-	// Prefix match for all other Texture routes. The /api/vtext prefix is a
-	// temporary compatibility shim for one cutover window; product clients should
-	// use /api/texture.
+	// Prefix match for all other Texture routes.
 	s.HandleFunc("/api/texture/", h.HandleVTextRouter)
-	s.HandleFunc("/api/vtext/", h.HandleVTextRouter)
 }
 
-// HandleVTextRouter dispatches vtext API requests based on URL path and
-// method. It handles all paths under /api/vtext/ that are not matched by
-// the exact /api/vtext/documents route.
+// HandleVTextRouter dispatches Texture API requests based on URL path and
+// method. It handles all paths under /api/texture/ that are not matched by
+// the exact /api/texture/documents route.
 //
 // Route mapping:
 //
@@ -1946,7 +1942,7 @@ func normalizeTextureAPIPath(path string) string {
 }
 
 // HandleVTextDocumentsRoot routes POST to create and GET to list at
-// /api/vtext/documents (exact match, no trailing slash).
+// /api/texture/documents (exact match, no trailing slash).
 func (h *APIHandler) HandleVTextDocumentsRoot(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
