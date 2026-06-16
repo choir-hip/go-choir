@@ -5013,3 +5013,58 @@ Open edge: land C41 through CI/deploy/staging identity and deployed Texture
 product proof. The deployed proof should exercise a real Texture write/read
 path rather than only health, because this slice touches runtime store
 bootstrap.
+
+## 2026-06-16 - C41 Landing Proof: Texture Database Identity
+
+Claim: C41 is deployed-supported for the user-store Dolt database identity
+slice. The claim is scoped to fresh/current workspaces opening
+`database=texture`, legacy `database=vtext` workspaces remaining readable, and
+Dolt GC selecting the same current-or-legacy database. It does not claim
+`vtext_*` table-name migration, platform table migration, durable actor/profile
+repair, Universal Wire ref repair, or protocol v0.
+
+Move: settle C41 scope with CI, staging deploy identity, and deployed Texture
+product proof. Expected ΔV: promote C41 from local support to deployed support;
+coarse V remains 2.
+
+Actual ΔV: C41 deployed-supported. Coarse V remains 2 because table names,
+platform table residue, durable actor/profile residue, Universal Wire
+story-field proof, and protocol v0 remain.
+
+Receipts:
+
+- Behavior commit `fc166e4fbe1a93122cd6fb57e5c408d3cc864ff3`
+  (`store: use texture dolt database for new workspaces`) pushed to
+  `origin/main`.
+- CI run `27614905254` passed, including Go vet/build, non-runtime tests,
+  integration-tagged smoke, Docs Truth Check, TLA+ model check, all four
+  runtime shards, and staging deploy.
+- Deploy job `81648551589` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `fc166e4fbe1a93122cd6fb57e5c408d3cc864ff3`, deployed at
+  `2026-06-16T11:42:32Z`; receipt stored at `/tmp/choir-c41-health.json`.
+- Deployed product proof
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities"`
+  passed. The proof exercises Texture document creation/write/read,
+  publication through `/api/platform/texture/publications`, source/transclusion
+  metadata, canonical exports, and published reader paths against staging after
+  the database identity cut.
+
+Protected surfaces and rollback:
+
+- Mutation class: red; protected surfaces touched are user Texture
+  document/revision/alias persistence, embedded Dolt workspace opening, legacy
+  workspace/database readability, Dolt maintenance connections, and runtime
+  startup through `store.Open`.
+- Rollback path: revert commit
+  `fc166e4fbe1a93122cd6fb57e5c408d3cc864ff3`. No table rename/drop or row
+  movement was introduced, and existing legacy `vtext` databases remain
+  readable before and after rollback.
+- Heresy delta: repaired deployed new user-store database identity; table
+  names, platform tables, durable actor/profile ids, Universal Wire refs, and
+  protocol v0 remain open.
+
+Open edge: choose the next bounded remaining slice: table-name migration design,
+platform `platform_vtext_*` table residue, durable actor/profile compatibility,
+or deployed Universal Wire story-field proof. Do not start protocol v0 until the
+working surface is fully proven.
