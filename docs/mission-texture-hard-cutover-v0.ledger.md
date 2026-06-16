@@ -2961,3 +2961,51 @@ Receipts:
 
 Open edge: commit and push the behavior, monitor CI/deploy/staging identity,
 then run deployed product-path HTML export proof against `https://choir.news`.
+
+## 2026-06-16 - Deployed Evidence: Exported HTML Texture Class Names
+
+Claim: C27 is supported for deployed product-path HTML export scope. New
+platform HTML publication exports emit Texture-named generated artifact
+classes/ids and do not emit the scoped retired export classes.
+
+Move: monitor the C27 behavior commit through CI and Node B deploy, verify
+staging health reports the pushed SHA, then run a temporary deployed Playwright
+proof that creates a Texture with a table and source citation, publishes it
+through `/api/platform/texture/publications`, exports HTML, and asserts
+Texture-named article/table/source/source-list classes plus old-class absence.
+
+Expected ΔV: support C27 for deployed product scope; no coarse V decrease
+because `.vtext` file suffixes, storage names, durable `vtext:` actor ids,
+`/pub/vtext` route compatibility, live editor CSS class residue, Universal Wire
+deployed story-field proof, and protocol v0 remain open.
+
+Actual ΔV: C27 is deployed-supported. V remains 2.
+
+Receipts:
+- Problem checkpoint commit:
+  `0936099068e8c90c0d07c57a775a718561356881 docs: checkpoint exported html texture classes`.
+- Behavior commit:
+  `8cca9ccedabd6323fb57644a53b1835e2eb46329 platform: rename publication html export classes to texture`.
+- CI run `27595966664` passed, including runtime shards, non-runtime package
+  tests, vet/build, TLA+, Docs Truth Check, and deploy gate.
+- Deploy job `81586443933` passed.
+- Docs Truth Check run `27595966703` passed.
+- FlakeHub publish run `27595966668` passed.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `8cca9ccedabd6323fb57644a53b1835e2eb46329`, deployed at
+  `2026-06-16T05:21:50Z`.
+- Temporary deployed proof passed:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-html-export-classes-staging.tmp.spec.js`.
+  The proof created a Texture document containing a table and source citation,
+  published it through `/api/platform/texture/publications`, exported HTML, and
+  observed `texture-publication`, `texture-table`, `texture-source-ref`,
+  `texture-sources`, and `texture-sources-heading` in generated HTML/CSS with
+  no `vtext-publication`, `vtext-table`, `vtext-source-ref`, `vtext-sources`,
+  or `vtext-sources-heading`.
+- The temporary spec was deleted after the proof.
+
+Open edge: choose the next residue class. Strongest remaining candidates are
+broader `.vtext` file/alias suffix design, durable `vtext:` actor ids, storage
+table names, `/pub/vtext` public route compatibility policy, live editor CSS
+class residue, and Universal Wire deployed story-field proof once staging can
+provide an edition story payload through product paths.
