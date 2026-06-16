@@ -4818,3 +4818,70 @@ Protected surfaces and rollback:
 Open edge: land C40b through CI/deploy/staging identity and deployed public
 route proof. Then return to table/database alias design or durable actor/profile
 residue.
+
+## 2026-06-16 - C40b Landing Proof: Public Route Alias Migration
+
+Claim: C40b is deployed-supported for stored public route-row alias migration.
+The claim is scoped to existing `/pub/vtext/...` publication route rows gaining
+current `/pub/texture/...` aliases without deleting legacy rows. It does not
+claim table/database, durable actor, Universal Wire edition-ref, or protocol
+repair.
+
+Move: settle C40b scope with CI, staging deploy identity, public product API
+proof, and direct browser proof. Expected ΔV: promote C40b from local support to
+deployed support; coarse V remains 2.
+
+Actual ΔV: C40b deployed-supported. Coarse V remains 2 because table/database
+names, durable actor compatibility, Universal Wire edition refs, deployed
+Universal Wire story-field proof, and protocol v0 remain.
+
+Receipts:
+
+- Behavior commit `af6e4e349d50f78059ced803148884ebbcb8017e`
+  (`platform: migrate legacy public texture routes`) pushed to `origin/main`.
+- CI run `27613190873` passed, including Go vet/build, non-runtime tests,
+  integration-tagged smoke, Docs Truth Check, TLA+ model check, all four
+  runtime shards, and staging deploy.
+- Deploy job `81642797177` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `af6e4e349d50f78059ced803148884ebbcb8017e`, deployed at
+  `2026-06-16T11:09:12Z`; receipt stored at `/tmp/choir-c40b-health.json`.
+- Public API proof through browser-public product routes showed legacy route
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` and alias
+  `/pub/texture/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` both
+  resolve to publication `pub-270a62fb-62e6-4509-9779-c0b9b32d2c71` and version
+  `pubver-fe47bb49-edd1-4390-b0e8-454b81833619`; public Markdown export works
+  through the Texture alias. Receipts:
+  `/tmp/choir-c40b-legacy-resolve.json`,
+  `/tmp/choir-c40b-alias-resolve.json`, and
+  `/tmp/choir-c40b-alias-export.json`.
+- Direct browser proof opened
+  `https://choir.news/pub/texture/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`
+  with one `data-app-id="texture"` window, zero `data-app-id="vtext"` windows,
+  one published-reader surface, visible proposal text, and zero forbidden
+  product-path requests to `/internal/*`, `/api/agent/*`, `/api/test/*`,
+  `/api/prompts`, or `/api/events`. Receipt:
+  `/tmp/choir-c40b-route-alias-proof/evidence.json`; screenshot:
+  `/tmp/choir-c40b-route-alias-proof/alias-reader.png`.
+- Broader deployed publication proof
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities"`
+  passed, covering current `/api/platform/texture/publications` publication,
+  source/transclusion metadata, canonical exports, and published reader paths.
+
+Protected surfaces and rollback:
+
+- Mutation class: red; protected surfaces touched are `public_routes`,
+  `rollback_refs`, platform store bootstrap, publication route normalization,
+  and public publication resolution/export behavior for migrated aliases.
+- Rollback path: revert commit
+  `af6e4e349d50f78059ced803148884ebbcb8017e`; generated alias rows also carry
+  rollback refs of kind `disable_route`, and legacy rows remain readable. No
+  destructive data rewrite was introduced.
+- Heresy delta: repaired current alias absence for legacy public route rows;
+  table/database names, durable actor compatibility, Universal Wire edition
+  refs, and protocol v0 remain open.
+
+Open edge: choose the next storage repair. The strongest current candidates are
+a typed table alias/migration layer for user/platform Texture rows or a durable
+actor/profile residue slice. Universal Wire deployed story-field proof and
+protocol v0 stay separate.

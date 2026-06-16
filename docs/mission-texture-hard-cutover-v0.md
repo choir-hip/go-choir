@@ -2827,13 +2827,13 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C40b locally repairs stored
-legacy public-route-row residue by adding an idempotent platform bootstrap
-migration that mints `/pub/texture/...` aliases for existing `/pub/vtext/...`
-publication routes, preserves legacy rows, and writes rollback refs for the new
-aliases. Coarse V remains 2 until CI/deploy/staging proof lands, and because
-table/database names, durable actor compatibility, Universal Wire edition refs,
-deployed Universal Wire story-field proof, and protocol v0 remain.
+variant (ranking function) V: current V=2; last ΔV: C40b is
+deployed-supported for stored legacy public-route-row aliasing. Platform
+bootstrap now idempotently mints `/pub/texture/...` aliases for existing
+`/pub/vtext/...` publication routes, preserves legacy rows, and writes rollback
+refs for generated aliases. Coarse V remains 2 because table/database names,
+durable actor compatibility, Universal Wire edition refs, deployed Universal
+Wire story-field proof, and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -3050,18 +3050,28 @@ stored data. Focused package proof, CI run `27612192131`, deploy job
 `81639495038`, staging health for commit
 `fd57e00c4a854008a8d5a681d80c9ec4b077b8e6`, and deployed public platform
 publication proof passed.
-C40b is locally supported and awaiting landing proof: platform bootstrap now
-runs an idempotent legacy public-route migration. Existing `/pub/vtext/...`
-publication route rows remain readable, current `/pub/texture/...` aliases are
-created when missing, and alias rollback refs disable only the generated current
-routes. Focused platform tests passed. This intentionally adds explicit
-migration-code mentions of `/pub/vtext/%`; it does not reintroduce a current
-product route or delete legacy rows.
+C40b is deployed-supported for public route-row alias migration: platform
+bootstrap now runs an idempotent legacy public-route migration. Existing
+`/pub/vtext/...` publication route rows remain readable, current
+`/pub/texture/...` aliases are created when missing, and alias rollback refs
+disable only the generated current routes. Focused platform tests passed. CI
+run `27613190873`, deploy job `81642797177`, and staging health for commit
+`af6e4e349d50f78059ced803148884ebbcb8017e` passed. Public API proof showed
+legacy route `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`
+and generated alias
+`/pub/texture/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` resolve to
+the same publication/version, and public Markdown export works through the
+Texture alias. Direct staging browser proof opened the alias with one Texture
+window, no legacy `vtext` app window, one published-reader surface, visible
+proposal text, and no forbidden product-path requests. The broader deployed
+publication E2E still passes for current `/api/platform/texture/publications`
+publication, source/transclusion metadata, export, and published reader paths.
+This intentionally keeps explicit migration-code mentions of `/pub/vtext/%`;
+it does not reintroduce a current product route or delete legacy rows.
 
-next move: land C40b through CI/deploy/staging proof, then choose the next
-storage repair: a typed table alias/migration layer for user/platform Texture
-rows or a durable actor/profile residue slice. Keep deployed Universal Wire
-story-field proof and protocol work out of this slice.
+next move: choose the next storage repair: a typed table alias/migration layer
+for user/platform Texture rows or a durable actor/profile residue slice. Keep
+deployed Universal Wire story-field proof and protocol work out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -3103,11 +3113,18 @@ decision app payloads, and content app hints. C38 is deployed-supported for
 current `texture_agent_revision`, visible `role=texture` prompt/tool
 affordances, generated `[roles.texture]` defaults, and current wire eligibility,
 with legacy `vtext_agent_revision`, `role=vtext`, and `[roles.vtext]` still
-readable/fallback inputs. Next move is the next bounded hard-cutover slice,
-likely Trace event-kind/source-surface naming or storage/stored-route residue,
-with a Problem Documentation First checkpoint before behavior changes.
-Universal Wire story-field staging proof and protocol v0 remain open. Keep
-protocol v0 out until the working surface is proven.
+readable/fallback inputs. C39 is deployed-supported for current Texture Trace
+event kinds and run-acceptance evidence naming while legacy stored evidence
+remains readable. C40a is deployed-supported for current platform Texture
+sync/read boundary naming. C40b is deployed-supported for idempotent public
+route-row alias migration: existing `/pub/vtext/...` rows remain readable,
+current `/pub/texture/...` aliases are minted with rollback refs, and staging
+public API/browser proof is recorded. Next move is the next bounded storage or
+durable-actor hard-cutover slice, likely a typed table alias/migration layer
+for user/platform Texture rows or a durable actor/profile residue slice, with a
+Problem Documentation First checkpoint before behavior changes. Universal Wire
+story-field staging proof and protocol v0 remain open. Keep protocol v0 out
+until the working surface is proven.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to
