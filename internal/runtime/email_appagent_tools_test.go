@@ -364,14 +364,14 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	editRaw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
+	editRaw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-email-continuation",
 		"base_revision_id":"rev-user-email-continuation",
-		"operation":"replace_all",
+		"rationale":"owner requested a full email draft artifact",
 		"content":"# Email Appagent Draft Request\n\n**Status:** Draft prepared — pending Email appagent review.\n\n**Recipient:** yusefnathanson@me.com\n**Subject:** Choir Email appagent bridge proof\n**Body:**\nThis is a deployed staging proof that VText requests an Email appagent draft.\n\n---\n\n**Source refs:** User request via conductor:test. No outbound email is authorized."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_texture: %v", err)
+		t.Fatalf("rewrite_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
@@ -502,14 +502,14 @@ func TestEditVTextGroundedEmailArtifactRequiresEmailAppagentContinuation(t *test
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	editRaw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
+	editRaw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-grounded-email-continuation",
 		"base_revision_id":"rev-grounded-initial-email-continuation",
-		"operation":"replace_all",
+		"rationale":"owner requested a full email draft artifact",
 		"content":"# Email Appagent Draft Request\n\n**Status:** Draft prepared from grounded research — pending Email appagent review.\n\n**Recipient:** yusefnathanson@me.com\n**Subject:** Choir Email researched result proof\n**Body:**\nThe official title of https://example.com is \"Example Domain\".\n\n---\n\n**Source refs:** Researcher worker message. No outbound email is authorized."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_texture: %v", err)
+		t.Fatalf("rewrite_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {

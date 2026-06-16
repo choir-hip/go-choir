@@ -479,13 +479,13 @@ func TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn(t *testing.T) {
 	registry := NewToolRegistry()
 	var executed int
 	if err := registry.Register(Tool{
-		Name: "edit_texture",
+		Name: "patch_texture",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			executed++
 			return `{"status":"stored","revision_id":"rev-2"}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register edit_texture: %v", err)
+		t.Fatalf("register patch_texture: %v", err)
 	}
 
 	run := &types.RunRecord{
@@ -495,12 +495,12 @@ func TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn(t *testing.T) {
 		AgentRole:    AgentProfileVText,
 	}
 	results := executeTools(WithToolExecutionContext(context.Background(), run), registry, []types.ToolCall{
-		{ID: "call-edit-1", Name: "edit_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1"}`)},
-		{ID: "call-edit-2", Name: "edit_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"again"}`)},
+		{ID: "call-edit-1", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1"}`)},
+		{ID: "call-edit-2", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"again"}`)},
 	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
 	if executed != 1 {
-		t.Fatalf("executed edit_texture %d times, want 1", executed)
+		t.Fatalf("executed patch_texture %d times, want 1", executed)
 	}
 	if len(results) != 2 {
 		t.Fatalf("results = %d, want 2", len(results))
@@ -508,7 +508,7 @@ func TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn(t *testing.T) {
 	if results[0].IsError {
 		t.Fatalf("first edit result = %#v, want success", results[0])
 	}
-	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate Texture write tool edit_texture") {
+	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate Texture write tool patch_texture") {
 		t.Fatalf("second edit result = %#v, want non-error duplicate notice", results[1])
 	}
 }

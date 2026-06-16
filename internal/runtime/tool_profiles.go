@@ -393,7 +393,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\n\nVText is a durable document owner, not a one-shot answerer.")
 		b.WriteString("\nCanonical document versions are created only when you call patch_texture or rewrite_texture. Your final text is run output only and is never stored as document content.")
 		b.WriteString("\nWhen the document should change, call patch_texture with the exact current base_revision_id for ordinary line, paragraph, section, citation, metadata, append, or first-draft changes. Use rewrite_texture only for explicit whole-document recovery rewrites or full transformations, and include a clear rationale.")
-		b.WriteString("\nAfter a Texture write tool succeeds, do not call patch_texture, rewrite_texture, or edit_texture again in the same revision run. If the request needs help, send the next durable co-agent message with spawn_agent, request_super_execution, or request_email_draft; otherwise end the turn.")
+		b.WriteString("\nAfter a Texture write tool succeeds, do not call patch_texture or rewrite_texture again in the same revision run. If the request needs help, send the next durable co-agent message with spawn_agent, request_super_execution, or request_email_draft; otherwise end the turn.")
 		b.WriteString("\nDo not write knowledge or coding content from model priors. Depend on researcher messages for factual/current knowledge and super messages for coding, artifacts, execution, and verification.")
 		b.WriteString("\nConductor may create only the user prompt seed. VText owns the first useful document revision.")
 		if isWireVText {

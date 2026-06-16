@@ -1235,3 +1235,56 @@ Receipts:
 Open edge: implement the runtime alias-deletion slice while retaining explicit
 legacy metadata compatibility, then prove with focused runtime tests before CI
 and staging.
+
+## 2026-06-16 - Local `edit_texture` Alias Deletion
+
+Claim: the model-visible `edit_texture` compatibility alias can be deleted
+without deleting persisted legacy publication metadata compatibility.
+
+Move: remove the registered `edit_texture` Texture tool, remove it from
+terminal/duplicate/sequential write-tool handling, change untagged new-write
+metadata fallback to `patch_texture`, update tests to use `patch_texture` or
+`rewrite_texture`, and keep explicit `source=edit_texture` /
+`source=edit_vtext` read compatibility.
+
+Expected ΔV: support C17 locally; no global V decrease until CI/deploy and
+staging prompt-bar evidence are recorded.
+
+Actual ΔV: C17 is locally supported pending CI/deploy.
+
+Conjecture delta: the common Texture write surface is now `patch_texture` plus
+exceptional `rewrite_texture`; legacy source metadata compatibility remains a
+read-side migration concern rather than a live tool affordance.
+
+Protected surfaces: Texture tool registry, canonical write metadata fallback,
+tool-loop terminal successes, duplicate write protection, Universal Wire
+publication eligibility/read compatibility, and Texture appagent tests.
+
+Admissible evidence class: focused runtime tests, wirepublish package tests,
+runtime shards, CI, staging deploy identity, and deployed prompt-bar/Trace
+proof showing current write tools and no successful `edit_texture` result.
+
+Rollback path: restore the `edit_texture` registered tool, write-tool
+classification, terminal success entry, duplicate-write handling entry, and
+`edit_texture` metadata fallback.
+
+Heresy delta: repaired locally for the model-visible compatibility alias;
+legacy revision metadata compatibility remains discovered migration residue.
+
+Receipts:
+- `nix develop -c go test ./internal/runtime -run 'TestInstallDefaultAgentToolsProfiles|TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn|TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle|TestVTextAgentRevisionMutationCompletedOnlyOnce|TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation|TestEditVTextExplicitResearcherDoesNotForceSpawnContinuation|TestEditVTextExplicitResearcherDoesNotForceSpawnAfterSuperBase|TestEditVTextExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|TestEditVTextExplicitResearcherFromSeedPromptSurvivesRequestIntent|TestEditVTextExplicitResearcherDoesNotDuplicateExistingResearcher|TestVTextTool|TestEmailAppagent'`
+  passed.
+- `nix develop -c go test ./internal/wirepublish` passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed all four runtime
+  shards.
+- Live-alias residue search
+  `rg -n "newEditTextureCompatibilityTool|Name:\s+\"edit_texture\"|decode edit_texture args|executeTextureEditTool\(ctx, \"edit_texture\"|WithTerminalToolSuccesses\([^)]*edit_texture|case \"patch_texture\", \"rewrite_texture\", \"edit_texture\"|sourceTool = \"edit_texture\"" internal/runtime internal/wirepublish --glob '!frontend/dist/**'`
+  returned no hits.
+- Broad current-code search
+  `rg -n "edit_texture" internal/runtime internal/wirepublish --glob '!frontend/dist/**'`
+  now finds only explicit forbidden-tool assertions and legacy
+  `source=edit_texture` metadata compatibility tests/read predicates.
+
+Open edge: push the runtime repair, monitor CI/deploy, then run deployed
+prompt-bar/Trace proof that Texture first revision uses current write tools and
+does not produce a successful `edit_texture` result.

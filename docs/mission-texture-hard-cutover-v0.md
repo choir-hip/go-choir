@@ -360,6 +360,45 @@ Next behavior slice design:
   reads remain explicitly supported until a separate migration plan removes
   them.
 
+## Local Repair: `edit_texture` Compatibility Alias Deletion
+
+Mutation class: `red`, because this changes protected Texture tool exposure,
+canonical write metadata fallback, tool-loop terminal handling, duplicate write
+protection, and Texture writer tests.
+
+Conjecture delta: removing the model-visible `edit_texture` compatibility alias
+while preserving explicit legacy revision metadata compatibility should advance
+the Texture tool ontology without breaking stored Universal Wire publication
+history.
+
+Protected surfaces: Texture tool registry, canonical Texture write metadata,
+tool-loop terminal successes, duplicate Texture write protection, Universal
+Wire publication eligibility/read compatibility, and Texture appagent tests.
+
+Local evidence on 2026-06-16:
+
+- `nix develop -c go test ./internal/runtime -run 'TestInstallDefaultAgentToolsProfiles|TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn|TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle|TestVTextAgentRevisionMutationCompletedOnlyOnce|TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation|TestEditVTextExplicitResearcherDoesNotForceSpawnContinuation|TestEditVTextExplicitResearcherDoesNotForceSpawnAfterSuperBase|TestEditVTextExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|TestEditVTextExplicitResearcherFromSeedPromptSurvivesRequestIntent|TestEditVTextExplicitResearcherDoesNotDuplicateExistingResearcher|TestVTextTool|TestEmailAppagent'`
+  passed.
+- `nix develop -c go test ./internal/wirepublish` passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed all four runtime
+  shards.
+- Live-alias residue search
+  `rg -n "newEditTextureCompatibilityTool|Name:\s+\"edit_texture\"|decode edit_texture args|executeTextureEditTool\(ctx, \"edit_texture\"|WithTerminalToolSuccesses\([^)]*edit_texture|case \"patch_texture\", \"rewrite_texture\", \"edit_texture\"|sourceTool = \"edit_texture\"" internal/runtime internal/wirepublish --glob '!frontend/dist/**'`
+  returned no hits.
+- Broad current-code search
+  `rg -n "edit_texture" internal/runtime internal/wirepublish --glob '!frontend/dist/**'`
+  now finds only explicit forbidden-tool assertions and legacy
+  `source=edit_texture` metadata compatibility tests/read predicates.
+
+Rollback path: restore the `edit_texture` registered tool, write-tool
+classification, terminal success entry, duplicate-write handling entry, and
+`edit_texture` metadata fallback if deployed Texture writers cannot use
+`patch_texture` or `rewrite_texture`.
+
+Heresy delta: repaired locally for the model-visible `edit_texture`
+compatibility alias; legacy `source=edit_texture` and `source=edit_vtext`
+metadata compatibility remains discovered migration residue.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -592,18 +631,23 @@ position / live conjectures / open edges:
   commit `3037e1f92971e7324a8bb8c3e356474e4eee2cc6`, and staging DOM proof
   shows the signed-out Texture preview still renders without the deleted Trace
   fixture language.
-- C17 active: `edit_texture` compatibility alias deletion is now scoped. The
-  model-visible tool alias, terminal handling, new-write fallback metadata, and
-  duplicate-write fixtures can move to `patch_texture`/`rewrite_texture` in the
-  next runtime slice; persisted `source=edit_texture` and `source=edit_vtext`
-  publication metadata compatibility remains separate migration residue and
-  should not be deleted without stored-revision evidence.
+- C17 locally supported pending CI/deploy: the model-visible `edit_texture`
+  compatibility alias is removed from Texture tool registration, terminal
+  handling, new-write fallback metadata, and duplicate-write fixtures.
+  `patch_texture`/`rewrite_texture` remain the live Texture write tools.
+  Persisted `source=edit_texture` and `source=edit_vtext` publication metadata
+  compatibility remains separate migration residue and is intentionally
+  preserved. Focused runtime tests, wirepublish tests, runtime shards, and
+  live-alias residue search pass locally.
 
 next move: select the next bounded residue class among storage
 schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
 and `edit_texture` compatibility alias deletion. The selected next slice is the
-`edit_texture` alias deletion described in the checkpoint above. Keep protocol
-v0 unwritten until those remaining working-surface proofs are complete.
+`edit_texture` alias deletion described above; push the runtime repair, monitor
+CI/deploy, then prove on staging that prompt-bar Texture first-revision still
+uses current write tools and no successful `edit_texture` tool result appears.
+Keep protocol v0 unwritten until those remaining working-surface proofs are
+complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

@@ -377,7 +377,6 @@ func toolRequiresSequentialTurnExecution(name string) bool {
 		"write_file",
 		"patch_texture",
 		"rewrite_texture",
-		"edit_texture",
 		"spawn_agent",
 		"cancel_agent",
 		"request_super_execution",
@@ -668,7 +667,7 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 
 	for i, call := range calls {
 		switch call.Name {
-		case "patch_texture", "rewrite_texture", "edit_texture":
+		case "patch_texture", "rewrite_texture":
 			if profile != AgentProfileVText {
 				continue
 			}

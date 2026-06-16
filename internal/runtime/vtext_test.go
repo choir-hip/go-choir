@@ -193,7 +193,7 @@ func (p *vtextEditToolProvider) CallWithTools(ctx context.Context, req ToolLoopR
 			Model:      "test-model",
 		}, nil
 	}
-	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") || messagesContainToolCall(req.Messages, "edit_texture") {
+	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "vtext turn complete", Model: "test-model"}, nil
 	}
 	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
@@ -1475,7 +1475,7 @@ func (p *stochasticWorkflowProvider) CallWithTools(ctx context.Context, req Tool
 			Model:      "test-model",
 		}, nil
 	}
-	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") || messagesContainToolCall(req.Messages, "edit_texture") {
+	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
 	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
@@ -2411,7 +2411,7 @@ func TestVTextStaleAgentRevisionRejectsEditAfterUserEdit(t *testing.T) {
 			t.Fatalf("stale output was materialized as a revision: %+v", rev)
 		}
 		if rev.AuthorKind == types.AuthorAppAgent {
-			t.Fatalf("stale edit_texture call created appagent revision: %+v", rev)
+			t.Fatalf("stale Texture write call created appagent revision: %+v", rev)
 		}
 	}
 	doc, err := s.GetDocument(context.Background(), docID, "user-1")
@@ -6515,7 +6515,7 @@ func TestVTextAgentRevisionNoDuplicateOnRenewalRetry(t *testing.T) {
 	}
 }
 
-// TestVTextAgentRevisionMutationCompletedOnlyOnce verifies that edit_texture is
+// TestVTextAgentRevisionMutationCompletedOnlyOnce verifies that Texture write tools are
 // the idempotency boundary for canonical appagent revisions (VAL-CROSS-122).
 func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 	t.Parallel()
@@ -6598,8 +6598,8 @@ func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal edit args: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, run), "edit_texture", rawArgs); err != nil {
-		t.Fatalf("edit_texture: %v", err)
+	if _, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, run), "patch_texture", rawArgs); err != nil {
+		t.Fatalf("patch_texture: %v", err)
 	}
 	got, err := s.GetDocument(ctx, doc.DocID, doc.OwnerID)
 	if err != nil {
@@ -6717,15 +6717,16 @@ func TestVTextAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 		BaseRevisionID: "rev-user-1",
 		Operation:      "replace_all",
 		Content:        "Revised content",
+		Rationale:      "test whole-document replacement",
 	})
 	if err != nil {
-		t.Fatalf("marshal edit_texture args: %v", err)
+		t.Fatalf("marshal rewrite_texture args: %v", err)
 	}
-	if _, err := vtextRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "edit_texture", rawArgs); err != nil {
-		t.Fatalf("first edit_texture: %v", err)
+	if _, err := vtextRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "rewrite_texture", rawArgs); err != nil {
+		t.Fatalf("first rewrite_texture: %v", err)
 	}
-	if _, err := vtextRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "edit_texture", rawArgs); err == nil {
-		t.Fatal("second edit_texture should be rejected after mutation completion")
+	if _, err := vtextRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "rewrite_texture", rawArgs); err == nil {
+		t.Fatal("second rewrite_texture should be rejected after mutation completion")
 	}
 
 	// Call handleRunCompletion twice to simulate duplicate recovery processing.
@@ -6812,21 +6813,21 @@ func TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *te
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-initial-continuation",
 		"base_revision_id":"rev-user-continuation",
-		"operation":"replace_all",
+		"rationale":"test whole-document replacement",
 		"content":"# NBA update\n\nI am preparing a short working update and checking current evidence next."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_texture: %v", err)
+		t.Fatalf("rewrite_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
 	if _, ok := editResult["next_required_tool"]; ok {
-		t.Fatalf("edit_texture must not smuggle a required continuation; result=%s", editRaw)
+		t.Fatalf("rewrite_texture must not smuggle a required continuation; result=%s", editRaw)
 	}
 
 	spawnRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "spawn_agent", json.RawMessage(`{
@@ -6842,7 +6843,7 @@ func TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *te
 		t.Fatalf("decode spawn result: %v", err)
 	}
 	if _, ok := spawnResult["next_required_tool"]; ok {
-		t.Fatalf("spawn_agent after completed edit must not require a second edit_texture; result=%s", spawnRaw)
+		t.Fatalf("spawn_agent after completed edit must not require a second rewrite_texture; result=%s", spawnRaw)
 	}
 }
 
@@ -6910,21 +6911,21 @@ func TestEditVTextExplicitResearcherDoesNotForceSpawnContinuation(t *testing.T) 
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-continuation",
 		"base_revision_id":"rev-user-explicit-researcher",
-		"operation":"replace_all",
+		"rationale":"test whole-document replacement",
 		"content":"# Restart route proof\n\nWorking revision: researcher evidence and super verification are still pending."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_texture: %v", err)
+		t.Fatalf("rewrite_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
 	if _, ok := editResult["next_required_tool"]; ok {
-		t.Fatalf("edit_texture must not force researcher continuation; result=%s", editRaw)
+		t.Fatalf("rewrite_texture must not force researcher continuation; result=%s", editRaw)
 	}
 	if _, ok := registry.Lookup("spawn_agent"); !ok {
 		t.Fatal("vtext registry missing spawn_agent affordance")
@@ -6999,21 +7000,21 @@ func TestEditVTextExplicitResearcherDoesNotForceSpawnAfterSuperBase(t *testing.T
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-after-super",
 		"base_revision_id":"rev-super-explicit-researcher",
-		"operation":"replace_all",
+		"rationale":"test whole-document replacement",
 		"content":"# Restart route proof\n\nSuper evidence has arrived. Researcher evidence is still pending."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_texture: %v", err)
+		t.Fatalf("rewrite_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
 	if _, ok := editResult["next_required_tool"]; ok {
-		t.Fatalf("edit_texture must not force researcher continuation after super-authored base; result=%s", editRaw)
+		t.Fatalf("rewrite_texture must not force researcher continuation after super-authored base; result=%s", editRaw)
 	}
 }
 
@@ -7081,14 +7082,14 @@ func TestEditVTextExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt(
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-base-content",
 		"base_revision_id":"rev-user-explicit-researcher-base-content",
-		"operation":"replace_all",
+		"rationale":"test whole-document replacement",
 		"content":"# Restart route proof\n\nWorking revision from worker update."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_texture: %v", err)
+		t.Fatalf("rewrite_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
@@ -7166,14 +7167,14 @@ func TestEditVTextExplicitResearcherFromSeedPromptSurvivesRequestIntent(t *testi
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-seed-prompt",
 		"base_revision_id":"rev-user-explicit-researcher-seed-prompt",
-		"operation":"replace_all",
+		"rationale":"test whole-document replacement",
 		"content":"# Restart route proof\n\nResearcher finding: pending.\n\nSuper evidence has arrived."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_texture: %v", err)
+		t.Fatalf("rewrite_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
@@ -7273,21 +7274,21 @@ func TestEditVTextExplicitResearcherDoesNotDuplicateExistingResearcher(t *testin
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-existing",
 		"base_revision_id":"rev-user-explicit-researcher-existing",
-		"operation":"replace_all",
+		"rationale":"test whole-document replacement",
 		"content":"# Restart route proof\n\nResearcher work is already open."
 	}`))
 	if err != nil {
-		t.Fatalf("edit_texture: %v", err)
+		t.Fatalf("rewrite_texture: %v", err)
 	}
 	var editResult map[string]any
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
 	if _, ok := editResult["next_required_tool"]; ok {
-		t.Fatalf("edit_texture duplicated existing researcher obligation; result=%s", editRaw)
+		t.Fatalf("rewrite_texture duplicated existing researcher obligation; result=%s", editRaw)
 	}
 }
 

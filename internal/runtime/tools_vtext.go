@@ -20,7 +20,6 @@ func RegisterVTextTools(registry *ToolRegistry, rt *Runtime) error {
 	for _, tool := range []Tool{
 		newPatchTextureTool(rt),
 		newRewriteTextureTool(rt),
-		newEditTextureCompatibilityTool(rt),
 		newRecordVTextDecisionTool(rt),
 		newRequestSuperExecutionTool(rt),
 		newRequestEmailDraftTool(rt),
@@ -64,7 +63,7 @@ type materializedVTextEdit struct {
 
 func isTextureWriteToolName(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "patch_texture", "rewrite_texture", "edit_texture":
+	case "patch_texture", "rewrite_texture":
 		return true
 	default:
 		return false
@@ -130,43 +129,6 @@ func newRewriteTextureTool(rt *Runtime) Tool {
 			in.Edits = nil
 			in.SourceTool = "rewrite_texture"
 			return rt.executeTextureEditTool(ctx, "rewrite_texture", in)
-		},
-	}
-}
-
-func newEditTextureCompatibilityTool(rt *Runtime) Tool {
-	return Tool{
-		Name:        "edit_texture",
-		Description: "Temporary compatibility alias for legacy Texture edit calls. Prefer patch_texture for ordinary structured edits and rewrite_texture for exceptional whole-document recovery rewrites.",
-		Parameters: jsonSchemaObject(map[string]any{
-			"doc_id":           map[string]any{"type": "string"},
-			"base_revision_id": map[string]any{"type": "string"},
-			"operation":        map[string]any{"type": "string", "enum": []string{"replace_all", "apply_edits"}},
-			"content":          map[string]any{"type": "string"},
-			"rationale":        map[string]any{"type": "string"},
-			"edits": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"op":          map[string]any{"type": "string", "enum": []string{"replace", "append"}},
-						"find":        map[string]any{"type": "string"},
-						"replace":     map[string]any{"type": "string"},
-						"text":        map[string]any{"type": "string"},
-						"replace_all": map[string]any{"type": "boolean"},
-					},
-					"required":             []string{"op"},
-					"additionalProperties": false,
-				},
-			},
-		}, []string{"doc_id", "base_revision_id", "operation"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			var in editVTextArgs
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode edit_texture args: %w", err)
-			}
-			in.SourceTool = "edit_texture"
-			return rt.executeTextureEditTool(ctx, "edit_texture", in)
 		},
 	}
 }
@@ -842,7 +804,7 @@ func materializeVTextToolEdit(edit editVTextArgs, current types.Revision) (mater
 	operation := strings.TrimSpace(edit.Operation)
 	sourceTool := strings.TrimSpace(edit.SourceTool)
 	if sourceTool == "" {
-		sourceTool = "edit_texture"
+		sourceTool = "patch_texture"
 	}
 	var content string
 	var editCount int
@@ -960,7 +922,7 @@ func addVTextEditRevisionMetadata(raw json.RawMessage, edit materializedVTextEdi
 	}
 	sourceTool := strings.TrimSpace(edit.SourceTool)
 	if sourceTool == "" {
-		sourceTool = "edit_texture"
+		sourceTool = "patch_texture"
 	}
 	meta["source"] = sourceTool
 	meta["texture_edit_tool"] = sourceTool
