@@ -2143,3 +2143,57 @@ Open edge: implement the C22 behavior slice, prove focused runtime/frontend
 coverage and residue searches locally, then push, monitor CI/deploy, and run a
 deployed Universal Wire product proof if reachable without manually seeding
 success records.
+
+## 2026-06-16 - Local Repair: Universal Wire Story Projection Labels
+
+Claim: Universal Wire story projections can emit Texture-named fields and
+source labels while preserving only deletion-receipted frontend fallback for
+old staged payloads.
+
+Move: rename `types.WireStory` projection JSON fields to
+`projection_texture_docs`, `story_texture_doc_id`, and `texture_content`;
+rename Universal Wire story/source labels to Texture; update platform story
+verification and Texture read-owner helper naming; update Universal Wire
+frontend launch context to prefer `story_texture_doc_id`, emit
+`texture_document` targets and `gw-texture-*` related entities; update focused
+runtime/frontend/staging acceptance tests.
+
+Expected ΔV: support C22 locally; no coarse V decrease until CI, deploy, and
+staging product proof are recorded.
+
+Actual ΔV: C22 is supported for local Universal Wire projection scope. V
+remains 2.
+
+Protected surfaces: browser-public Universal Wire stories API, story projection
+JSON contract, platform story verification, Universal Wire frontend story open
+and related Texture launch context, focused tests, and staging acceptance spec.
+
+Admissible evidence class: focused runtime tests, runtime shards, frontend
+build, residue searches, CI, staging deploy identity, and deployed Universal
+Wire product proof.
+
+Rollback path: restore old Universal Wire story JSON fields/source labels and
+frontend consumers if staging story indexing, publication verification, app
+rendering, or story launch regresses.
+
+Heresy delta: repaired locally for current Universal Wire story projection
+emitters and frontend launch context. Remaining `.vtext`, `vtext:` actor/ref,
+Style.vtext, `related_vtexts`, storage, and platform table names remain
+discovered residue outside this slice.
+
+Receipts:
+- Focused runtime test passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories|TestResolveUniversalWireTextureReadOwner|TestNormalizeWireArticleSourceServiceProse|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails' -count=1`.
+- Runtime shard coverage passed:
+  `nix develop -c scripts/go-test-runtime-shards`.
+- Frontend build passed:
+  `npm --prefix frontend run build`, with existing Universal Wire warnings for
+  unused `currentUser` and `.wire-state` selectors.
+- Current-code residue search for old story projection emitters now finds only
+  explicit fallback/negative assertions in `UniversalWireApp.svelte`,
+  `universal-wire-staging-acceptance.spec.js`, and
+  `universal_wire_test.go`.
+
+Open edge: push the behavior commit, monitor CI/deploy, verify staging commit
+identity, and run deployed Universal Wire acceptance proof with available auth
+state.

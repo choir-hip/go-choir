@@ -1163,6 +1163,72 @@ Next behavior slice design:
   and run deployed Universal Wire product proof if the behavior is reachable
   without manually seeding success records.
 
+## Local Repair: Universal Wire Story Projection Labels
+
+Mutation class: `orange` with red-adjacent evidence boundaries, because this
+changes the browser-public `/api/universal-wire/stories` story projection JSON,
+runtime story publication verification references, Universal Wire frontend
+launch context, deployed staging acceptance expectations, and current
+Universal Wire tests. It does not change canonical Texture writes, storage
+tables, `.vtext` shortcut files, durable actor ids, or platform publication
+route registration.
+
+Conjecture delta: Universal Wire can publish current story projection payloads
+with Texture-named document/content fields and source labels while retaining
+only frontend legacy-read fallback for old `story_vtext_doc_id` payloads until
+staging proves the new payload shape.
+
+Protected surfaces: `/api/universal-wire/stories`, `types.WireStory` JSON,
+Universal Wire story indexing, platform publication verification, Texture API
+read owner resolution for platform-owned Universal Wire docs, Universal Wire
+frontend story launch and related Texture entity construction, and the deployed
+Universal Wire staging acceptance spec.
+
+Local evidence on 2026-06-16:
+
+- `types.WireStory` now emits `projection_texture_docs`,
+  `story_texture_doc_id`, and `texture_content`; the focused runtime test
+  marshals a story and asserts those JSON keys exist while
+  `projection_vtext_docs`, `story_vtext_doc_id`, and `vtext_content` do not.
+- Universal Wire source labels now emit `universal-wire-texture-index`,
+  `universal-wire-edition-texture`, `source-network-texture-*`, and
+  `source-network-texture-index`.
+- `frontend/src/lib/UniversalWireApp.svelte` now defaults to
+  `universal-wire-texture-index`, creates related entities as `gw-texture-*`
+  with `target_kind: 'texture_document'`, opens stories through
+  `story_texture_doc_id` first, and keeps `story_vtext_doc_id` only as an
+  explicit legacy payload fallback. The `.story.vtext` source path and
+  `relatedVTexts` app-context property remain broader metadata/file-suffix
+  residue outside this slice.
+- `frontend/tests/universal-wire-staging-acceptance.spec.js` now treats
+  `universal-wire-edition-texture` as the edition payload and asserts
+  `story_texture_doc_id` is present while `story_vtext_doc_id` is absent.
+- Focused runtime test:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories|TestResolveUniversalWireTextureReadOwner|TestNormalizeWireArticleSourceServiceProse|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails' -count=1`
+  passed.
+- Runtime shard coverage:
+  `nix develop -c scripts/go-test-runtime-shards` passed.
+- Frontend build:
+  `npm --prefix frontend run build` passed with the existing Universal Wire
+  warnings for unused `currentUser` and `.wire-state` selectors.
+- Current-code residue search
+  `rg -n "ProjectionVTextDocs|StoryVTextDoc|VTextContent|projection_vtext_docs|story_vtext_doc_id|vtext_content|source-network-vtext|universal-wire-vtext-index|universal-wire-edition-vtext" internal frontend/src frontend/tests -g '!frontend/dist/**'`
+  now finds only explicit legacy fallback/negative assertions:
+  two fallback reads in `UniversalWireApp.svelte`, one staging negative
+  assertion, and three runtime JSON absence assertions.
+
+Rollback path: restore the old `WireStory` JSON fields, Universal Wire source
+labels, and frontend consumers if staging shows story indexing, platform
+publication verification, signed-in Universal Wire rendering, or Texture story
+launches regress.
+
+Heresy delta: repaired locally for current Universal Wire story projection
+emitters, source-state labels, and frontend launch context. Discovered residue
+remaining outside this slice includes `.vtext` aliases/source paths,
+`vtext:` edition transclusion syntax, durable `vtext:<doc_id>` author labels,
+`vtext_agent_revision` metadata types, Style.vtext style-source language,
+general `related_vtexts` metadata, storage tables, and platform table names.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -1444,19 +1510,19 @@ position / live conjectures / open edges:
   AppChangePackage review-evidence proof all pass. Universal Wire story
   projection fields, general Texture metadata keys, durable actor ids, storage
   tables, and file suffixes are adjacent residue outside this slice.
-- C22 active: Universal Wire story projection metadata is a bounded product API
-  and frontend-launch residue class. The Problem Checkpoint above documents the
-  old emitted fields (`projection_vtext_docs`, `story_vtext_doc_id`,
-  `vtext_content`), story/source labels, frontend consumers, protected
-  surfaces, evidence class, rollback path, and adjacent surfaces deliberately
-  left out of scope.
+- C22 supported for local Universal Wire projection scope: current story
+  payloads now emit Texture-named projection/document/content fields and
+  Texture source labels, frontend Universal Wire opens stories through
+  `story_texture_doc_id` first and emits `texture_document` related launch
+  targets, focused runtime tests pass, runtime shards pass, frontend build
+  passes, and current-code residue search finds old story projection labels
+  only in explicit legacy fallback or absence assertions. Staging CI/deploy and
+  deployed Universal Wire product proof remain open.
 
-next move: implement the Universal Wire story projection label slice: emit
-Texture-named story document/content fields and source-state labels, update the
-frontend consumer to prefer Texture fields, keep only deletion-receipted legacy
-fallback if required by tests, run focused runtime/frontend proof and residue
-searches, then land and prove staging if behavior changes reach production.
-Keep protocol v0 unwritten until the remaining working-surface proofs are
+next move: commit and push the Universal Wire projection behavior slice, monitor
+CI/deploy, verify staging identity, then run deployed Universal Wire acceptance
+proof for the stories API/app surface if reachable with available authenticated
+state. Keep protocol v0 unwritten until the remaining working-surface proofs are
 complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`

@@ -48,15 +48,15 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 	}
 	stories := []types.WireStory{}
 	styleSources := []types.WireStyleSource{}
-	source := "universal-wire-vtext-index"
+	source := "universal-wire-texture-index"
 	var edition *universalWireEditionResponse
-	if editionStories, editionResp, err := h.universalWireEditionVTextStories(r.Context(), styleSources, 12); err == nil {
+	if editionStories, editionResp, err := h.universalWireEditionTextureStories(r.Context(), styleSources, 12); err == nil {
 		edition = editionResp
 		if len(editionStories) > 0 {
 			stories = editionStories
-			source = "universal-wire-edition-vtext"
+			source = "universal-wire-edition-texture"
 		} else if editionResp != nil {
-			source = "universal-wire-edition-vtext"
+			source = "universal-wire-edition-texture"
 		}
 	} else if err != nil {
 		log.Printf("universal wire: edition unavailable: %v", err)
@@ -72,7 +72,7 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 	})
 }
 
-func (h *APIHandler) universalWireEditionVTextStories(ctx context.Context, styleSources []types.WireStyleSource, limit int) ([]types.WireStory, *universalWireEditionResponse, error) {
+func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, styleSources []types.WireStyleSource, limit int) ([]types.WireStory, *universalWireEditionResponse, error) {
 	if h == nil || h.rt == nil || h.rt.Store() == nil {
 		return nil, nil, nil
 	}
@@ -137,15 +137,15 @@ func (h *APIHandler) universalWireEditionVTextStories(ctx context.Context, style
 			}
 			return nil, nil, err
 		}
-		story, ok := wireArticleVTextStoryFromCurrentRevision(ctx, doc, rev, styleSources)
+		story, ok := wireArticleTextureStoryFromCurrentRevision(ctx, doc, rev, styleSources)
 		if !ok {
 			continue
 		}
-		if h.platformdStoryVerificationEnabled() && !h.platformdHasPublishedVText(ctx, story.StoryVTextDoc, doc.CurrentRevisionID) {
+		if h.platformdStoryVerificationEnabled() && !h.platformdHasPublishedTexture(ctx, story.StoryTextureDoc, doc.CurrentRevisionID) {
 			continue
 		}
 		story.Prominence = 100 - len(stories)
-		story.SourceState = "universal-wire-edition-vtext"
+		story.SourceState = "universal-wire-edition-texture"
 		stories = append(stories, story)
 	}
 	return stories, edition, nil
@@ -158,7 +158,7 @@ func (h *APIHandler) platformdStoryVerificationEnabled() bool {
 	return strings.TrimSpace(platformdReadBaseURL()) != ""
 }
 
-func (h *APIHandler) platformdHasPublishedVText(ctx context.Context, docID, revisionID string) bool {
+func (h *APIHandler) platformdHasPublishedTexture(ctx context.Context, docID, revisionID string) bool {
 	base := strings.TrimRight(strings.TrimSpace(platformdReadBaseURL()), "/")
 	if base == "" || strings.TrimSpace(docID) == "" {
 		return false
@@ -257,10 +257,10 @@ func universalWirePlatformOwnerID() string {
 	return ownerID
 }
 
-// resolveUniversalWireVTextReadOwner returns the document owner to use for a
-// read-only VText API request. Authenticated users may read platform-owned
-// article VTexts that are transcluded in the Universal Wire edition.
-func (h *APIHandler) resolveUniversalWireVTextReadOwner(ctx context.Context, requesterOwnerID, docID string) (string, error) {
+// resolveUniversalWireTextureReadOwner returns the document owner to use for a
+// read-only Texture API request. Authenticated users may read platform-owned
+// Texture articles that are transcluded in the Universal Wire edition.
+func (h *APIHandler) resolveUniversalWireTextureReadOwner(ctx context.Context, requesterOwnerID, docID string) (string, error) {
 	if h == nil || h.rt == nil || h.rt.Store() == nil {
 		return "", store.ErrNotFound
 	}
@@ -309,7 +309,7 @@ func (h *APIHandler) universalWireEditionIncludesDoc(ctx context.Context, docID 
 	return false
 }
 
-func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Document, rev types.Revision, styleSources []types.WireStyleSource) (types.WireStory, bool) {
+func wireArticleTextureStoryFromCurrentRevision(ctx context.Context, doc types.Document, rev types.Revision, styleSources []types.WireStyleSource) (types.WireStory, bool) {
 	meta := decodeRevisionMetadata(rev.Metadata)
 	cycleID := sourceNetworkCycleID(meta)
 	if !wireRevisionSourceIsTextureEdit(meta) || cycleID == "" || !wireRevisionIsCanonicalArticle(meta) {
@@ -345,27 +345,27 @@ func wireArticleVTextStoryFromCurrentRevision(ctx context.Context, doc types.Doc
 	}
 	changeState := "platform published"
 	return types.WireStory{
-		ID:                  "source-network-vtext-" + doc.DocID,
-		OwnerID:             doc.OwnerID,
-		Headline:            headline,
-		Dek:                 dek,
-		Freshness:           wireArticleFreshness(doc.UpdatedAt),
-		Prominence:          90,
-		Tension:             "source-network article",
-		ChangeState:         changeState,
-		PlatformRoutePath:   platformRoute,
-		NodeTone:            "live",
-		Related:             []string{},
-		Manifest:            manifest,
-		Claims:              wireArticleArticleClaims(content, styleTitle, meta),
-		Projections:         projections,
-		ProjectionVTextDocs: map[string]string{styleID: doc.DocID},
-		StyleSources:        styleSources,
-		StoryVTextDoc:       doc.DocID,
-		VTextContent:        content,
-		SourceState:         "source-network-vtext-index",
-		CreatedAt:           doc.CreatedAt,
-		UpdatedAt:           doc.UpdatedAt,
+		ID:                    "source-network-texture-" + doc.DocID,
+		OwnerID:               doc.OwnerID,
+		Headline:              headline,
+		Dek:                   dek,
+		Freshness:             wireArticleFreshness(doc.UpdatedAt),
+		Prominence:            90,
+		Tension:               "source-network article",
+		ChangeState:           changeState,
+		PlatformRoutePath:     platformRoute,
+		NodeTone:              "live",
+		Related:               []string{},
+		Manifest:              manifest,
+		Claims:                wireArticleArticleClaims(content, styleTitle, meta),
+		Projections:           projections,
+		ProjectionTextureDocs: map[string]string{styleID: doc.DocID},
+		StyleSources:          styleSources,
+		StoryTextureDoc:       doc.DocID,
+		TextureContent:        content,
+		SourceState:           "source-network-texture-index",
+		CreatedAt:             doc.CreatedAt,
+		UpdatedAt:             doc.UpdatedAt,
 	}, true
 }
 
@@ -535,7 +535,7 @@ func wireArticleSourceEntityManifestStanding(entity vtextSourceEntity) string {
 	case "source_service_item":
 		return "source-service handle"
 	case "vtext":
-		return "related VText"
+		return "related Texture"
 	default:
 		return firstNonEmpty(entity.Kind, "source handle")
 	}
@@ -559,9 +559,9 @@ func wireArticleManifestFromCycleProvenance(meta map[string]any, headline string
 		})
 	case strings.TrimSpace(headline) != "":
 		manifest.Context = append(manifest.Context, types.WireSourceItem{
-			ID:       "source-network-vtext:" + headline,
-			Title:    "Universal Wire VText article head",
-			Standing: "platform VText current revision",
+			ID:       "source-network-texture:" + headline,
+			Title:    "Universal Wire Texture article head",
+			Standing: "platform Texture current revision",
 			Role:     "context",
 		})
 	}
@@ -592,7 +592,7 @@ func wireArticleArticleDek(content string) string {
 	for _, paragraph := range wireArticleArticleParagraphs(content) {
 		return truncateRunes(paragraph, 220)
 	}
-	return "Universal Wire VText article with source and style provenance on its current revision."
+	return "Universal Wire Texture article with source and style provenance on its current revision."
 }
 
 func wireArticleArticleProjection(content string) string {
@@ -695,8 +695,8 @@ func wireArticleArticleLineStartsInventorySection(line string) bool {
 
 func wireArticleArticleClaims(content, _ string, meta map[string]any) []string {
 	claims := []string{
-		"Current head is a normal VText article revision owned by the Universal Wire platform agent.",
-		"Source and style provenance are carried by the VText revision metadata and citations.",
+		"Current head is a normal Texture article revision owned by the Universal Wire platform agent.",
+		"Source and style provenance are carried by the Texture revision metadata and citations.",
 	}
 	if cycleID := sourceNetworkCycleID(meta); cycleID != "" {
 		claims = append(claims, "Source network cycle: "+cycleID)

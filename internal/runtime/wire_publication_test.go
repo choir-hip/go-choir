@@ -14,7 +14,7 @@ import (
 func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 	_, handler := testAPISetup(t)
 	seedUniversalWireEditionFixture(t, handler)
-	story := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-publish-slice")
+	story := seedPlatformSourceNetworkTextureFixture(t, handler, "doc-publish-slice")
 	ctx := context.Background()
 
 	story, err := handler.rt.Store().GetDocument(ctx, story.DocID, story.OwnerID)
@@ -37,7 +37,7 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 		OwnerID:              universalWirePlatformOwnerID(),
 		TrajectoryID:         "traj-publish-slice",
 		Objective:            "resolve wire story candidate to publication or explicit non-publication decision",
-		Reason:               "processor opened a wire story VText route",
+		Reason:               "processor opened a wire story Texture route",
 		AuthorityProfile:     AgentProfileVText,
 		ObjectiveFingerprint: wireStoryResolutionWorkItemFingerprint("traj-publish-slice", story.DocID),
 		CreatedByRunID:       "run-publish-slice",
@@ -134,7 +134,7 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 func TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails(t *testing.T) {
 	_, handler := testAPISetup(t)
 	seedUniversalWireEditionFixture(t, handler)
-	story := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-publish-fail")
+	story := seedPlatformSourceNetworkTextureFixture(t, handler, "doc-publish-fail")
 	ctx := context.Background()
 	story, err := handler.rt.Store().GetDocument(ctx, story.DocID, story.OwnerID)
 	if err != nil {
@@ -157,7 +157,7 @@ func TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails(t *testi
 		OwnerID:              universalWirePlatformOwnerID(),
 		TrajectoryID:         "traj-publish-fail",
 		Objective:            "resolve wire story candidate to publication or explicit non-publication decision",
-		Reason:               "processor opened a wire story VText route",
+		Reason:               "processor opened a wire story Texture route",
 		AuthorityProfile:     AgentProfileVText,
 		ObjectiveFingerprint: wireStoryResolutionWorkItemFingerprint("traj-publish-fail", story.DocID),
 		CreatedByRunID:       "run-publish-fail",

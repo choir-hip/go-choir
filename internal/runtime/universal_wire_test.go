@@ -26,8 +26,8 @@ func TestHandleUniversalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "universal-wire-vtext-index" {
-		t.Fatalf("source = %q, want universal-wire-vtext-index", resp.Source)
+	if resp.Source != "universal-wire-texture-index" {
+		t.Fatalf("source = %q, want universal-wire-texture-index", resp.Source)
 	}
 	if len(resp.Stories) != 0 {
 		t.Fatalf("stories length = %d, want no seeded stories", len(resp.Stories))
@@ -37,7 +37,7 @@ func TestHandleUniversalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	}
 }
 
-func seedPlatformSourceNetworkVTextFixtureWithPublishState(t *testing.T, handler *APIHandler, docID string, published bool) types.Document {
+func seedPlatformSourceNetworkTextureFixtureWithPublishState(t *testing.T, handler *APIHandler, docID string, published bool) types.Document {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -62,7 +62,7 @@ func seedPlatformSourceNetworkVTextFixtureWithPublishState(t *testing.T, handler
 		"source_item_ids":                []string{"srcitem_live_1", "srcitem_live_2"},
 	}
 	if published {
-		metaMap["platformd_route_path"] = "/pub/vtext/madrid-dispatch"
+		metaMap["platformd_route_path"] = "/pub/texture/madrid-dispatch"
 	}
 	meta, _ := json.Marshal(metaMap)
 	rev := types.Revision{
@@ -88,8 +88,8 @@ func seedPlatformSourceNetworkVTextFixtureWithPublishState(t *testing.T, handler
 	return doc
 }
 
-func seedPlatformSourceNetworkVTextFixture(t *testing.T, handler *APIHandler, docID string) types.Document {
-	return seedPlatformSourceNetworkVTextFixtureWithPublishState(t, handler, docID, true)
+func seedPlatformSourceNetworkTextureFixture(t *testing.T, handler *APIHandler, docID string) types.Document {
+	return seedPlatformSourceNetworkTextureFixtureWithPublishState(t, handler, docID, true)
 }
 
 func seedUniversalWireEditionFixture(t *testing.T, handler *APIHandler, includedDocIDs ...string) types.Document {
@@ -129,9 +129,9 @@ func seedUniversalWireEditionFixture(t *testing.T, handler *APIHandler, included
 	return doc
 }
 
-func TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformVTexts(t *testing.T) {
+func TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformTextures(t *testing.T) {
 	_, handler := testAPISetup(t)
-	doc := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-source-network-live")
+	doc := seedPlatformSourceNetworkTextureFixture(t, handler, "doc-source-network-live")
 
 	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
 	if w.Code != http.StatusOK {
@@ -141,11 +141,11 @@ func TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformVTexts(t *te
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "universal-wire-vtext-index" {
-		t.Fatalf("source = %q, want source network vtext index", resp.Source)
+	if resp.Source != "universal-wire-texture-index" {
+		t.Fatalf("source = %q, want source network texture index", resp.Source)
 	}
 	if len(resp.Stories) != 0 {
-		t.Fatalf("stories length = %d, want no untranscluded platform VTexts: %+v", len(resp.Stories), resp.Stories)
+		t.Fatalf("stories length = %d, want no untranscluded platform Textures: %+v", len(resp.Stories), resp.Stories)
 	}
 	if resp.Edition != nil {
 		t.Fatalf("edition = %+v, want no edition without %s alias", resp.Edition, universalWireEditionSourcePath)
@@ -155,9 +155,9 @@ func TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformVTexts(t *te
 	}
 }
 
-func TestHandleUniversalWireStoriesIndexesEditionTranscludedVTextHeads(t *testing.T) {
+func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *testing.T) {
 	_, handler := testAPISetup(t)
-	doc := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-source-network-live")
+	doc := seedPlatformSourceNetworkTextureFixture(t, handler, "doc-source-network-live")
 	edition := seedUniversalWireEditionFixture(t, handler, doc.DocID)
 
 	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
@@ -168,8 +168,8 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedVTextHeads(t *testin
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "universal-wire-edition-vtext" {
-		t.Fatalf("source = %q, want edition VText index", resp.Source)
+	if resp.Source != "universal-wire-edition-texture" {
+		t.Fatalf("source = %q, want edition Texture index", resp.Source)
 	}
 	if resp.Edition == nil || resp.Edition.DocID != edition.DocID || resp.Edition.SourcePath != universalWireEditionSourcePath {
 		t.Fatalf("edition = %+v, want %s", resp.Edition, universalWireEditionSourcePath)
@@ -178,14 +178,26 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedVTextHeads(t *testin
 		t.Fatalf("edition included docs = %+v, want %s", resp.Edition.IncludedDocIDs, doc.DocID)
 	}
 	if len(resp.Stories) != 1 {
-		t.Fatalf("stories length = %d, want only edition-transcluded source VText story", len(resp.Stories))
+		t.Fatalf("stories length = %d, want only edition-transcluded source Texture story", len(resp.Stories))
 	}
 	story := resp.Stories[0]
-	if story.ID != "source-network-vtext-"+doc.DocID ||
+	if story.ID != "source-network-texture-"+doc.DocID ||
 		story.OwnerID != "universal-wire-platform" ||
-		story.StoryVTextDoc != doc.DocID ||
-		story.VTextContent == "" {
-		t.Fatalf("first story is not the indexed source-network VText: %+v", story)
+		story.StoryTextureDoc != doc.DocID ||
+		story.TextureContent == "" {
+		t.Fatalf("first story is not the indexed source-network Texture: %+v", story)
+	}
+	storyJSON, err := json.Marshal(story)
+	if err != nil {
+		t.Fatalf("marshal indexed story: %v", err)
+	}
+	if !strings.Contains(string(storyJSON), `"story_texture_doc_id"`) ||
+		!strings.Contains(string(storyJSON), `"texture_content"`) ||
+		!strings.Contains(string(storyJSON), `"projection_texture_docs"`) ||
+		strings.Contains(string(storyJSON), "story_vtext_doc_id") ||
+		strings.Contains(string(storyJSON), "vtext_content") ||
+		strings.Contains(string(storyJSON), "projection_vtext_docs") {
+		t.Fatalf("indexed story JSON did not expose Texture projection fields only: %s", string(storyJSON))
 	}
 	if story.Headline != "Madrid dispatch" || !strings.Contains(story.Projections["wire-style"], "MADRID -- Pope Leo XIV") {
 		t.Fatalf("indexed source-network story did not expose article head: %+v", story)
@@ -193,8 +205,8 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedVTextHeads(t *testin
 	if story.Freshness != "updated just now" {
 		t.Fatalf("source-network story freshness = %q, want relative update time", story.Freshness)
 	}
-	if story.SourceState != "universal-wire-edition-vtext" {
-		t.Fatalf("source state = %q, want edition VText state", story.SourceState)
+	if story.SourceState != "universal-wire-edition-texture" {
+		t.Fatalf("source state = %q, want edition Texture state", story.SourceState)
 	}
 	if len(story.Manifest.Lead) != 0 || len(story.Manifest.Context) != 1 ||
 		story.Manifest.Context[0].ID != "source-network-cycle:cycle-live" ||
@@ -203,7 +215,7 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedVTextHeads(t *testin
 	}
 	claimText := strings.Join(story.Claims, "\n")
 	if strings.Contains(claimText, "Style.vtext: Universal Wire") ||
-		!strings.Contains(claimText, "Source and style provenance are carried by the VText revision metadata and citations") {
+		!strings.Contains(claimText, "Source and style provenance are carried by the Texture revision metadata and citations") {
 		t.Fatalf("indexed source-network story claims did not preserve provenance/body separation: %+v", story.Claims)
 	}
 }
@@ -258,7 +270,7 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 		"ingestion_handoff_request_id":   "reconciler-scoped",
 		"ingestion_handoff_request_kind": "reconciler",
 		"selected_style_sources":         []map[string]any{{"title": "Style.vtext: Universal Wire"}},
-		"platformd_route_path":           "/pub/vtext/scoped-sources",
+		"platformd_route_path":           "/pub/texture/scoped-sources",
 		"source_item_ids":                []string{"srcitem_cycle_1", "srcitem_cycle_2", "srcitem_cycle_3", "srcitem_cycle_4"},
 		"source_entities": []map[string]any{
 			{
@@ -321,14 +333,14 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "universal-wire-edition-vtext" || resp.Edition == nil {
+	if resp.Source != "universal-wire-edition-texture" || resp.Edition == nil {
 		t.Fatalf("response did not use Universal Wire edition: source=%q edition=%+v", resp.Source, resp.Edition)
 	}
 	if len(resp.Stories) != 1 {
-		t.Fatalf("stories length = %d, want edition-transcluded VText story: %+v", len(resp.Stories), resp.Stories)
+		t.Fatalf("stories length = %d, want edition-transcluded Texture story: %+v", len(resp.Stories), resp.Stories)
 	}
 	story := resp.Stories[0]
-	if story.ID != "source-network-vtext-"+doc.DocID {
+	if story.ID != "source-network-texture-"+doc.DocID {
 		t.Fatalf("first story = %q, want scoped source-network doc", story.ID)
 	}
 	if strings.Contains(story.Dek, "Published:") || strings.Contains(story.Dek, "Source:") || !strings.Contains(story.Dek, "Emergency crews reopened") {
@@ -346,9 +358,9 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 		t.Fatalf("manifest did not resolve source-service item metadata: %+v", story.Manifest.Lead[0])
 	}
 }
-func TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformVTexts(t *testing.T) {
+func TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformTextures(t *testing.T) {
 	_, handler := testAPISetup(t)
-	doc := seedPlatformSourceNetworkVTextFixtureWithPublishState(t, handler, "doc-source-network-unpublished", false)
+	doc := seedPlatformSourceNetworkTextureFixtureWithPublishState(t, handler, "doc-source-network-unpublished", false)
 	seedUniversalWireEditionFixture(t, handler, doc.DocID)
 
 	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
@@ -362,7 +374,7 @@ func TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformVTexts(t *
 	if len(resp.Stories) != 0 {
 		t.Fatalf("stories len = %d, want 0 for unpublished transcluded doc", len(resp.Stories))
 	}
-	if resp.Source != "universal-wire-edition-vtext" {
+	if resp.Source != "universal-wire-edition-texture" {
 		t.Fatalf("source = %q, want edition source", resp.Source)
 	}
 }
@@ -376,15 +388,15 @@ func TestHandleUniversalWireStoriesRequiresAuth(t *testing.T) {
 	}
 }
 
-func TestResolveUniversalWireVTextReadOwnerAllowsEditionTranscludedPlatformDoc(t *testing.T) {
+func TestResolveUniversalWireTextureReadOwnerAllowsEditionTranscludedPlatformDoc(t *testing.T) {
 	_, handler := testAPISetup(t)
-	doc := seedPlatformSourceNetworkVTextFixture(t, handler, "doc-wire-read-through")
+	doc := seedPlatformSourceNetworkTextureFixture(t, handler, "doc-wire-read-through")
 	seedUniversalWireEditionFixture(t, handler, doc.DocID)
 
 	ctx := context.Background()
-	owner, err := handler.resolveUniversalWireVTextReadOwner(ctx, "user-universal-wire", doc.DocID)
+	owner, err := handler.resolveUniversalWireTextureReadOwner(ctx, "user-universal-wire", doc.DocID)
 	if err != nil {
-		t.Fatalf("resolveUniversalWireVTextReadOwner: %v", err)
+		t.Fatalf("resolveUniversalWireTextureReadOwner: %v", err)
 	}
 	if owner != "universal-wire-platform" {
 		t.Fatalf("owner = %q, want universal-wire-platform", owner)

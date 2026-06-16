@@ -8,7 +8,7 @@
 
   let stories = [];
   let selectedStoryId = '';
-  let dataSource = 'universal-wire-vtext-index';
+  let dataSource = 'universal-wire-texture-index';
   let loadError = '';
   let lastSuccessfulLoadKey = '';
   let loadInFlight = false;
@@ -18,15 +18,15 @@
   $: selectedStory = stories.find((story) => story.id === selectedStoryId) || stories[0] || null;
 
   onMount(() => {
-    loadUniversalWireVTexts({ force: true });
+    loadUniversalWireTextures({ force: true });
     refreshTimer = setInterval(() => {
-      if (authenticated) loadUniversalWireVTexts({ force: true, silent: true });
+      if (authenticated) loadUniversalWireTextures({ force: true, silent: true });
     }, 30000);
     const handleFocus = () => {
-      if (authenticated) loadUniversalWireVTexts({ force: true, silent: true });
+      if (authenticated) loadUniversalWireTextures({ force: true, silent: true });
     };
     const handleVisibility = () => {
-      if (!document.hidden && authenticated) loadUniversalWireVTexts({ force: true, silent: true });
+      if (!document.hidden && authenticated) loadUniversalWireTextures({ force: true, silent: true });
     };
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibility);
@@ -38,16 +38,16 @@
     };
   });
 
-  $: if (authenticated) loadUniversalWireVTexts();
+  $: if (authenticated) loadUniversalWireTextures();
 
   function scheduleAuthenticatedRetry() {
     clearTimeout(retryTimer);
     retryTimer = setTimeout(() => {
-      if (authenticated) loadUniversalWireVTexts({ force: true, silent: true });
+      if (authenticated) loadUniversalWireTextures({ force: true, silent: true });
     }, 3000);
   }
 
-  async function loadUniversalWireVTexts({ force = false, silent = false } = {}) {
+  async function loadUniversalWireTextures({ force = false, silent = false } = {}) {
     const loadKey = authenticated ? 'authenticated' : 'preview';
     if (loadInFlight) return;
     if (!force && lastSuccessfulLoadKey === loadKey) return;
@@ -55,7 +55,7 @@
       loadError = '';
       stories = [];
       selectedStoryId = '';
-      dataSource = 'universal-wire-vtext-index';
+      dataSource = 'universal-wire-texture-index';
       lastSuccessfulLoadKey = loadKey;
       return;
     }
@@ -67,7 +67,7 @@
       const payload = await response.json();
       if (Array.isArray(payload.stories)) {
         stories = payload.stories;
-        dataSource = payload.source || 'universal-wire-vtext-index';
+        dataSource = payload.source || 'universal-wire-texture-index';
         if (stories.length && !stories.some((story) => story.id === selectedStoryId)) selectedStoryId = stories[0].id;
         if (!stories.length) selectedStoryId = '';
       }
@@ -82,18 +82,18 @@
     }
   }
 
-  function storyRelatedVTexts(story = selectedStory) {
+  function storyRelatedTextures(story = selectedStory) {
     return (story.related || [])
       .map((storyId) => {
         const related = stories.find((item) => item.id === storyId);
         if (!related) return null;
         return {
-          entity_id: `gw-vtext-${storyId}`,
+          entity_id: `gw-texture-${storyId}`,
           label: related.headline,
           title: related.headline,
           target: {
-            target_kind: 'vtext_document',
-            doc_id: related.story_vtext_doc_id || storyId,
+            target_kind: 'texture_document',
+            doc_id: related.story_texture_doc_id || related.story_vtext_doc_id || storyId,
             story_id: storyId,
           },
           transclusion: {
@@ -109,7 +109,7 @@
       .filter(Boolean);
   }
 
-  function launchVText({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = false, relatedVTexts = [] }) {
+  function launchTexture({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = false, relatedVTexts = [] }) {
     dispatch('launchapp', {
       appId: 'texture',
       appName: 'Texture',
@@ -129,19 +129,19 @@
     });
   }
 
-  function openStoryVText(story = selectedStory) {
+  function openStoryTexture(story = selectedStory) {
     if (!story) return;
     selectedStoryId = story.id;
-    const docId = story.story_vtext_doc_id || '';
+    const docId = story.story_texture_doc_id || story.story_vtext_doc_id || '';
     if (!docId) return;
-    launchVText({
+    launchTexture({
       title: story.headline,
       content: '',
       createdFrom: 'universal_wire_article',
       sourcePath: `universal-wire/${story.id}.story.vtext`,
       docId,
       createInitialVersion: false,
-      relatedVTexts: storyRelatedVTexts(story),
+      relatedVTexts: storyRelatedTextures(story),
     });
   }
 </script>
@@ -178,8 +178,8 @@
               <button
                 type="button"
                 class="headline-button"
-                data-universal-wire-open-vtext
-                on:click={() => openStoryVText(story)}
+                data-universal-wire-open-texture
+                on:click={() => openStoryTexture(story)}
               >
                 {story.headline}
               </button>

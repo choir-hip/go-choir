@@ -50,9 +50,9 @@ test('Universal Wire retries authenticated story loads after transient route fai
   const page = await context.newPage();
   let storyFetches = 0;
   const liveStories = Array.from({ length: 4 }, (_, index) => ({
-    id: `source-network-vtext-${index + 1}`,
+    id: `source-network-texture-${index + 1}`,
     headline: `Live source-network article ${index + 1}`,
-    dek: 'A real source-network VText article reached the Universal Wire front page.',
+    dek: 'A real source-network Texture article reached the Universal Wire front page.',
     freshness: 'updated 2 min ago',
     prominence: 90 - index,
     tension: 'source-network update',
@@ -79,7 +79,7 @@ test('Universal Wire retries authenticated story loads after transient route fai
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ source: 'universal-wire-vtext-index', stories: liveStories }),
+        body: JSON.stringify({ source: 'universal-wire-texture-index', stories: liveStories }),
       });
     });
 

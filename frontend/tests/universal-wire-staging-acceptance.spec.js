@@ -61,9 +61,11 @@ test('deployed Universal Wire rename: stories API and app surface', async ({ bro
     expect(stories.edition.source_path).toBe('universal-wire/Wire.vtext');
     expect(stories.edition.doc_id).toBeTruthy();
     expect(Array.isArray(stories.stories)).toBe(true);
-    if (stories.source === 'universal-wire-edition-vtext') {
+    if (stories.source === 'universal-wire-edition-texture') {
       expect(stories.stories.length).toBeGreaterThan(0);
       expect(stories.stories[0].headline).toBeTruthy();
+      expect(stories.stories[0].story_texture_doc_id).toBeTruthy();
+      expect(stories.stories[0].story_vtext_doc_id).toBeUndefined();
       const published = stories.stories.find((story) => story.platform_route_path);
       if (published) {
         expect(published.changeState).toBe('platform published');

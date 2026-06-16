@@ -980,7 +980,7 @@ func (h *APIHandler) handleVTextGetDocument(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	readOwnerID, err := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, docID)
+	readOwnerID, err := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, docID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
@@ -1392,7 +1392,7 @@ func (h *APIHandler) handleVTextListRevisions(w http.ResponseWriter, r *http.Req
 	if limit > 10000 {
 		limit = 10000
 	}
-	readOwnerID, err := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, docID)
+	readOwnerID, err := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, docID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
@@ -1445,7 +1445,7 @@ func (h *APIHandler) HandleVTextRevision(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			if unscoped, unscopedErr := h.rt.Store().GetRevisionUnscoped(r.Context(), revisionID); unscopedErr == nil {
-				readOwnerID, resolveErr := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, unscoped.DocID)
+				readOwnerID, resolveErr := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, unscoped.DocID)
 				if resolveErr == nil && readOwnerID == unscoped.OwnerID {
 					rev = unscoped
 					err = nil
@@ -1458,7 +1458,7 @@ func (h *APIHandler) HandleVTextRevision(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	if readOwnerID, resolveErr := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, rev.DocID); resolveErr == nil && readOwnerID != ownerID {
+	if readOwnerID, resolveErr := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, rev.DocID); resolveErr == nil && readOwnerID != ownerID {
 		rev = normalizeWireArticleRevisionForRead(rev)
 	}
 	writeAPIJSON(w, http.StatusOK, revisionResponseFromRecord(rev))
@@ -1486,7 +1486,7 @@ func (h *APIHandler) HandleVTextHistory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	readOwnerID, err := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, docID)
+	readOwnerID, err := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, docID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
@@ -1530,7 +1530,7 @@ func (h *APIHandler) HandleVTextDocumentStream(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	readOwnerID, err := h.resolveUniversalWireVTextReadOwner(r.Context(), ownerID, docID)
+	readOwnerID, err := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, docID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})

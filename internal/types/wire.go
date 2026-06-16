@@ -2,7 +2,7 @@ package types
 
 import "time"
 
-// WireStyleSource is a selectable Style.vtext artifact for article voice/structure.
+// WireStyleSource is a selectable style artifact for article voice/structure.
 type WireStyleSource struct {
 	ID         string `json:"id"`
 	Title      string `json:"title"`
@@ -32,27 +32,27 @@ type WireSourceManifest struct {
 	Context    []WireSourceItem `json:"context"`
 }
 
-// WireStory is the Wire app projection of a VText article head (edition index).
+// WireStory is the Wire app projection of a Texture article head (edition index).
 type WireStory struct {
-	ID                  string           `json:"id"`
-	OwnerID             string           `json:"owner_id,omitempty"`
-	Headline            string           `json:"headline"`
-	Dek                 string           `json:"dek"`
-	Freshness           string           `json:"freshness"`
-	Prominence          int              `json:"prominence"`
-	Tension             string           `json:"tension"`
-	ChangeState         string           `json:"changeState"`
-	NodeTone            string           `json:"nodeTone"`
-	Related             []string         `json:"related"`
-	Manifest            WireSourceManifest `json:"manifest"`
-	Claims              []string         `json:"claims"`
-	Projections         map[string]string `json:"projections"`
-	ProjectionVTextDocs map[string]string `json:"projection_vtext_docs,omitempty"`
-	StyleSources        []WireStyleSource `json:"style_sources,omitempty"`
-	StoryVTextDoc       string           `json:"story_vtext_doc_id,omitempty"`
-	VTextContent        string           `json:"vtext_content,omitempty"`
-	PlatformRoutePath   string           `json:"platform_route_path,omitempty"`
-	SourceState         string           `json:"source_state"`
-	CreatedAt           time.Time        `json:"created_at,omitempty"`
-	UpdatedAt           time.Time        `json:"updated_at,omitempty"`
+	ID                    string             `json:"id"`
+	OwnerID               string             `json:"owner_id,omitempty"`
+	Headline              string             `json:"headline"`
+	Dek                   string             `json:"dek"`
+	Freshness             string             `json:"freshness"`
+	Prominence            int                `json:"prominence"`
+	Tension               string             `json:"tension"`
+	ChangeState           string             `json:"changeState"`
+	NodeTone              string             `json:"nodeTone"`
+	Related               []string           `json:"related"`
+	Manifest              WireSourceManifest `json:"manifest"`
+	Claims                []string           `json:"claims"`
+	Projections           map[string]string  `json:"projections"`
+	ProjectionTextureDocs map[string]string  `json:"projection_texture_docs,omitempty"`
+	StyleSources          []WireStyleSource  `json:"style_sources,omitempty"`
+	StoryTextureDoc       string             `json:"story_texture_doc_id,omitempty"`
+	TextureContent        string             `json:"texture_content,omitempty"`
+	PlatformRoutePath     string             `json:"platform_route_path,omitempty"`
+	SourceState           string             `json:"source_state"`
+	CreatedAt             time.Time          `json:"created_at,omitempty"`
+	UpdatedAt             time.Time          `json:"updated_at,omitempty"`
 }
