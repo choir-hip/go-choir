@@ -5241,3 +5241,59 @@ Protected surfaces and rollback:
 Open edge: choose the next bounded remaining slice: user-store `vtext_*` table
 migration design, durable actor/profile compatibility, deployed Universal Wire
 story-field proof, or protocol v0 after working-surface proof.
+
+## 2026-06-16 - C43 Problem Checkpoint: User-Store Table Identity
+
+Claim: current user-store Texture workspaces use the current `texture` Dolt
+database after C41, but the current table family inside that database still
+uses legacy `vtext_*` names. This is a separate migration surface from C42
+platform table identity and from durable actor/profile compatibility.
+
+Move: document before behavior change. Expected ΔV: no coarse V decrease, but
+convert the user-store table residue from an untyped open edge into a bounded
+C43 behavior slice with protected surfaces, rollback path, and proof plan.
+
+Actual ΔV: C43 is documented but not repaired. Coarse V remains 2 because the
+user-store table migration, durable actor/profile compatibility, deployed
+Universal Wire story-field proof, and protocol v0 remain open.
+
+Receipts:
+
+- Scoped non-test search
+  `rg -n "\bvtext_documents\b|\bvtext_revisions\b|\bvtext_document_aliases\b|\bvtext_agent_mutations\b|\bvtext_controller_checkpoints\b|\bvtext_decisions\b|\btexture_documents\b|\btexture_revisions\b|\btexture_document_aliases\b|\btexture_agent_mutations\b|\btexture_controller_checkpoints\b|\btexture_decisions\b" internal/store -g '!**/*_test.go'`
+  found current user-store table residue in `internal/store/vtext.go`.
+- Exact non-test `internal/store` counts: `vtext_documents` 12,
+  `vtext_revisions` 19, `vtext_document_aliases` 7,
+  `vtext_agent_mutations` 12, `vtext_controller_checkpoints` 4, and
+  `vtext_decisions` 8.
+- Store test residue remains limited to direct legacy seeding/inspection in
+  `internal/store/vtext_test.go` and `internal/store/store_test.go`.
+
+Future behavior slice:
+
+- create current `texture_documents`, `texture_revisions`,
+  `texture_document_aliases`, `texture_agent_mutations`,
+  `texture_controller_checkpoints`, and `texture_decisions` tables;
+- retain legacy `vtext_*` tables for existing data, rollback, and older
+  binaries;
+- ensure legacy compatibility columns before copy-forward migration;
+- copy legacy rows into current `texture_*` tables idempotently;
+- move current store reads/writes and version backfill to `texture_*`;
+- keep Go type/function names, durable `vtext:<doc_id>` actor compatibility,
+  metadata/provenance strings, platform table migration code, stored public
+  route rows, and Universal Wire refs out of this slice.
+
+Protected surfaces and rollback:
+
+- Future mutation class: red, touching user-computer Dolt/app state for
+  canonical Texture documents, revisions, aliases, appagent mutation state,
+  controller checkpoints, and decisions.
+- Rollback path: source revert restores current code reads/writes to
+  `vtext_*`. Existing legacy rows remain. Rows created only in `texture_*`
+  after cutover need reverse copy into `vtext_*` before an older binary can see
+  them.
+- Heresy delta: discovered and bounded; no repair claimed in this checkpoint.
+
+Open edge: implement C43 and land it through focused store tests, full store
+coverage, runtime shard coverage, doccheck, diff check, scoped residue search,
+CI/deploy identity, and staging product proof.
