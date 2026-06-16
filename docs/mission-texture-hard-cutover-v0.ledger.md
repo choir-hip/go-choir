@@ -1646,3 +1646,64 @@ Receipts:
 Open edge: push, monitor CI/deploy, verify staging identity, then run deployed
 browser proof that a signed-out Texture action exposes a Texture-named auth
 intent while legacy `?app=vtext&doc=...` still opens Texture.
+
+## 2026-06-16 - Deployed Repair: Texture Auth Intent Labels
+
+Claim: deployed Choir can expose Texture-named auth intent state for signed-out
+Texture actions while preserving deletion-receipted legacy `app=vtext` document
+deep-link compatibility.
+
+Move: verify pushed commit `2f13598d37be2807f8cefe9258300a1a798a081c`, monitor
+CI/deploy, confirm staging health identity, and run a deployed Playwright
+browser proof for signed-out auth overlay and authenticated legacy URL replay.
+
+Expected ΔV: support C19 for deployed scope; no coarse V decrease because
+storage/file suffixes, metadata keys, durable actor IDs, and protocol v0 remain.
+
+Actual ΔV: C19 is supported for deployed auth-intent scope. V remains 2.
+
+Conjecture delta: deployed frontend auth intent naming can teach Texture at the
+auth overlay boundary without touching durable actor ids, storage tables,
+publication predicates, or source/provenance metadata.
+
+Protected surfaces: deployed frontend auth overlay state, Texture editor
+publish action, legacy `?app=vtext&doc=...` URL replay, authenticated Texture
+document open path, and browser-public route hygiene.
+
+Admissible evidence class: CI, deploy job, staging health identity, and
+deployed browser proof.
+
+Rollback path: restore old intent strings in editor dispatches, registry
+requirements, and App replay/message handling if later auth replay or legacy
+app URL compatibility regresses.
+
+Heresy delta: repaired for deployed frontend auth intent labels; durable actor
+ids, storage symbols, and source/provenance metadata remain discovered residue.
+
+Receipts:
+- CI run `27591417530` passed for commit
+  `2f13598d37be2807f8cefe9258300a1a798a081c`; deploy job `81572916777`
+  succeeded.
+- Docs Truth Check run `27591417528` passed; FlakeHub publish run
+  `27591417545` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `2f13598d37be2807f8cefe9258300a1a798a081c`, deployed at
+  `2026-06-16T03:10:59Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-auth-intent-deployed.tmp.spec.js`
+  passed both staging proof tests before the temporary spec was deleted.
+- Signed-out proof observed `data-auth-intent-kind="publish_texture"`, visible
+  "Publish this Texture" auth copy, zero `[data-app-id="vtext"]` windows, and
+  zero forbidden browser-public requests to `/internal/*`, `/api/agent/*`,
+  `/api/test/*`, `/api/prompts`, or `/api/events`.
+- Authenticated legacy URL proof registered a staging user with virtual
+  passkey, created a Texture document and revision through `/api/texture`,
+  navigated to `?app=vtext&doc=...`, and observed one canonical
+  `[data-app-id="texture"]` window, zero `[data-app-id="vtext"]` windows,
+  rendered proof content, and a consumed URL with no `app=vtext` query.
+- Screenshots:
+  `/tmp/choir-texture-auth-intent-1781579569646.png` and
+  `/tmp/choir-texture-auth-legacy-url-1781579569646.png`.
+
+Open edge: select the next bounded residue class among storage
+schema/workspace/file suffixes, metadata keys, durable actor IDs, remaining
+app-route labels, and protocol v0.

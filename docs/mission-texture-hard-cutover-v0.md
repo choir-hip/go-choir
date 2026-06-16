@@ -541,6 +541,51 @@ a deployed browser proof that a signed-out Texture action exposes a
 Texture-named auth intent while legacy `?app=vtext&doc=...` still opens
 Texture.
 
+## Deployed Repair: Texture Auth Intent Labels
+
+Mutation class: `orange`, deployed behavior evidence for the frontend
+auth-intent label repair.
+
+Conjecture delta: deployed Choir can present Texture-named auth-required intent
+state for signed-out Texture actions while preserving deletion-receipted legacy
+`?app=vtext&doc=...` compatibility for authenticated document deep links.
+
+Deployed evidence on 2026-06-16:
+
+- Commit `2f13598d37be2807f8cefe9258300a1a798a081c` passed CI run
+  `27591417530`; the deploy job `81572916777` succeeded.
+- Docs Truth Check run `27591417528` passed, and FlakeHub publish run
+  `27591417545` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `2f13598d37be2807f8cefe9258300a1a798a081c`, deployed at
+  `2026-06-16T03:10:59Z`.
+- Deployed Playwright proof
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-auth-intent-deployed.tmp.spec.js`
+  passed both browser assertions before the temporary spec was deleted.
+- The signed-out proof opened the public Texture preview, used the Texture
+  publish action, observed `[data-auth-overlay]` with
+  `data-auth-intent-kind="publish_texture"`, observed auth copy containing
+  "Publish this Texture", observed zero `[data-app-id="vtext"]` windows, and
+  observed zero forbidden browser-public requests to `/internal/*`,
+  `/api/agent/*`, `/api/test/*`, `/api/prompts`, or `/api/events`.
+- The authenticated legacy URL proof registered a fresh staging user with a
+  virtual passkey, created a Texture document through `/api/texture/documents`,
+  created a revision through `/api/texture/documents/{doc}/revisions`,
+  navigated to `?app=vtext&doc=...`, and observed exactly one canonical
+  `[data-app-id="texture"]` window, zero `[data-app-id="vtext"]` windows,
+  rendered proof content, and a consumed URL with no `app=vtext` query.
+
+Screenshots: `/tmp/choir-texture-auth-intent-1781579569646.png` and
+`/tmp/choir-texture-auth-legacy-url-1781579569646.png`.
+
+Rollback path remains: restore old intent strings in editor dispatches,
+registry requirements, and App replay/message handling if later auth replay or
+legacy app URL compatibility regresses.
+
+Heresy delta: repaired for deployed frontend auth intent labels. Durable actor
+ids, storage symbols, and source/provenance metadata remain separate discovered
+residue.
+
 ## Problem Checkpoint: `edit_texture` Compatibility Alias
 
 Mutation class: `green` documentation and evidence only. No runtime behavior,
@@ -911,17 +956,18 @@ position / live conjectures / open edges:
   `27590698503`, deploy job `81570766605`, staging identity for commit
   `65502a706ef1adba7fc2d1ed5428e3f709f9d2d0`, and deployed Playwright
   publication/read/export proof all pass.
-- C19 supported for local auth-intent scope: frontend Texture actions now emit
+- C19 supported for deployed auth-intent scope: frontend Texture actions now emit
   Texture-named auth intents, the registry requires Texture-named mutable
   intents, and App replay/message handling accepts deletion-receipted legacy
-  intent names. Local build and focused signed-out Texture publish overlay
-  proof pass. Staging CI/deploy/browser proof is still open.
+  intent names. Local build, focused signed-out Texture publish overlay proof,
+  CI run `27591417530`, deploy job `81572916777`, staging identity for commit
+  `2f13598d37be2807f8cefe9258300a1a798a081c`, and deployed Playwright proof
+  for signed-out auth overlay plus legacy `app=vtext` deep link all pass.
 
-next move: push the local Texture auth-intent repair, monitor CI/deploy, verify
-staging identity, and prove on staging that a signed-out Texture action exposes
-a Texture-named auth intent while legacy `?app=vtext&doc=...` still opens
-Texture. Keep protocol v0 unwritten until the remaining working-surface proofs
-are complete.
+next move: select the next bounded residue class among storage
+schema/workspace/file suffixes, metadata keys, durable actor IDs, remaining
+app-route labels, and protocol v0. Keep protocol v0 unwritten until the
+remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
