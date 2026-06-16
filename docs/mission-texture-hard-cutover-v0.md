@@ -1717,21 +1717,27 @@ position / live conjectures / open edges:
   table names, `/pub/vtext` legacy public routes, durable actor ids, generic
   `publication_version` platform identity, and broader prompt-bar route proofs
   remain adjacent residue.
-- C25 supported for local canonical source-path metadata scope: current user
+- C25 supported for deployed canonical source-path metadata scope: current user
   and appagent Texture revision writers now emit
   `canonical_texture_source_path`; durable metadata carry-forward promotes
   legacy `canonical_vtext_source_path` parent/run metadata into the
   Texture-named key without carrying the legacy key forward as a current
-  writer. Focused comprehensive runtime tests, frontend build, and residue
-  searches pass locally. `.vtext` suffixes, storage tables, durable `vtext:`
-  actor ids, `/pub/vtext` public route compatibility, and Style.vtext
+  writer. Focused comprehensive runtime tests, frontend build, residue
+  searches, CI/deploy, staging identity, and deployed product-path metadata
+  proof pass. The deployed proof opened/imported a text file through
+  `/api/texture/files/open`, created a first durable Texture revision, and
+  observed `canonical_texture_source_path` without
+  `canonical_vtext_source_path`. `.vtext` suffixes, storage tables, durable
+  `vtext:` actor ids, `/pub/vtext` public route compatibility, and Style.vtext
   style-source language remain out of scope for this slice.
 
-next move: commit and push C25, monitor CI/deploy/staging identity, then run a
-deployed product-path metadata proof that creates a Texture revision from a
-file-open/import lineage path and observes `canonical_texture_source_path`
-without `canonical_vtext_source_path`. Keep protocol v0 unwritten until the
-remaining working-surface proofs are complete.
+next move: choose the next high-leverage residue class. The strongest
+remaining candidates are broader `.vtext` file/alias suffix design, durable
+`vtext:` actor ids, storage table names, `/pub/vtext` public route compatibility
+policy, and the deployed Universal Wire story-field proof when staging has an
+edition story payload or a product path creates one without manually seeding
+success records. Keep protocol v0 unwritten until the remaining
+working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -1766,7 +1772,7 @@ prompts/UI/tests/tool affordances toward Texture; frontend `data-texture-*`
 selectors, frontend `/api/texture` probes, browser-public Texture route
 registration, product API allowlist cutover, registered-router normalization,
 deployed source-contract Texture open-surface normalization, and the C25
-canonical Texture source-path metadata local repair are landed while deeper
+canonical Texture source-path metadata deployed repair are landed while deeper
 backend/internal old-name residue
 remains.
 Preserve one Texture writer among agents, keep human

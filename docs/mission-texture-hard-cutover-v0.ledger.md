@@ -2703,3 +2703,49 @@ Receipts:
 
 Open edge: push C25, monitor CI/deploy, verify staging identity, and run a
 deployed product-path metadata proof against staging.
+
+## 2026-06-16 - Deployed Evidence: Canonical Texture Source Path Metadata
+
+Claim: C25 is supported for deployed product-path metadata scope, not only
+local runtime/frontend test scope.
+
+Move: monitor the C25 behavior commit through CI and staging deploy, verify
+staging health reports the pushed SHA, then run a temporary deployed Playwright
+proof that opens/imports a text file through `/api/texture/files/open`, creates
+a first durable Texture revision, and asserts the revision metadata contains
+`canonical_texture_source_path` and not `canonical_vtext_source_path`.
+
+Expected ΔV: support C25 for deployed product scope; no coarse V decrease
+because `.vtext` file suffixes, storage names, durable `vtext:` actor ids,
+`/pub/vtext` route compatibility, Universal Wire deployed story-field proof,
+and protocol v0 remain open.
+
+Actual ΔV: C25 is supported for deployed canonical source-path metadata scope.
+V remains 2.
+
+Receipts:
+- Problem checkpoint commit:
+  `f06e1d686f47c3838796aa171e3bd7f335a1dd33 docs: checkpoint canonical texture source path metadata`.
+- Behavior commit:
+  `b5cbadcd90d0f21a51ecb016229e119c697a21dd runtime: rename canonical texture source path metadata`.
+- CI run `27595056664` passed.
+- Deploy job `81583736049` passed.
+- Docs Truth Check run `27595056666` passed.
+- FlakeHub publish run `27595056663` passed.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `b5cbadcd90d0f21a51ecb016229e119c697a21dd`, deployed at
+  `2026-06-16T04:55:40Z`.
+- Temporary deployed proof passed:
+  `GO_CHOIR_RUN_TEXTURE_SOURCE_PATH_METADATA_STAGING=1 BASE_URL=https://choir.news CHOIR_DEPLOYED_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-source-path-metadata-staging.tmp.spec.js`.
+  The proof opened/imported a text file through `/api/texture/files/open`,
+  created a first durable Texture revision through
+  `/api/texture/documents/{doc_id}/revisions`, and observed
+  `metadata.canonical_texture_source_path` ending in `.vtext`, no
+  `metadata.canonical_vtext_source_path`, plus the expected text/plain
+  import/migration manifests.
+
+Open edge: choose the next residue class. The strongest candidates are broader
+`.vtext` file/alias suffix design, durable `vtext:` actor ids, storage table
+names, `/pub/vtext` public route compatibility policy, and the deployed
+Universal Wire story-field proof once staging can provide an edition story
+payload through product paths.
