@@ -2597,3 +2597,60 @@ metadata keys such as `canonical_vtext_source_path`, storage/file suffixes,
 durable `vtext:` actor ids, `/pub/vtext` public-route compatibility, and the
 deployed Universal Wire story-field proof once staging can provide an edition
 story payload through product paths.
+
+## 2026-06-16 - Problem Checkpoint: Canonical Texture Source Path Metadata
+
+Claim: `canonical_vtext_source_path` is a bounded current-writer metadata
+residue that can be repaired separately from `.vtext` shortcut files, storage
+tables, durable `vtext:` actor ids, Style.vtext language, and `/pub/vtext`
+public route compatibility.
+
+Move: run a read-only inventory for next residue candidates, compare local and
+subagent classifications, choose the canonical source-path metadata writer as
+the next bounded C25 slice, and document the conjecture delta, protected
+surfaces, evidence class, rollback path, heresy delta, receipts, and non-goals
+before changing runtime writers.
+
+Expected ΔV: no coarse V decrease; C25 becomes active with the required Problem
+Documentation First checkpoint in place.
+
+Actual ΔV: no coarse V decrease. C25 is active and ready for implementation.
+
+Protected surfaces: user revision creation, appagent `patch_texture` revision
+creation, durable metadata carry-forward, file-open projection alias creation,
+Markdown/source-lineage import metadata, focused runtime tests, and frontend
+markdown-lineage tests.
+
+Admissible evidence class: focused runtime tests covering file-open user
+revision carry-forward, structure stabilization, and appagent patch revisions;
+focused frontend markdown-lineage tests; current-writer residue search; CI and
+staging identity if runtime behavior changes land.
+
+Rollback path: restore `canonical_vtext_source_path` as the emitted durable
+metadata key and remove Texture-name promotion if file-open, revision history,
+import lineage, or appagent patch revisions lose source-path lineage.
+
+Heresy delta: discovered in read-only inventory, not yet repaired. The slice
+will repair current revision writer/carry-forward names while preserving
+explicit legacy read/carry-forward compatibility.
+
+Receipts:
+- `internal/runtime/vtext.go` writes `canonical_vtext_source_path` on user
+  revision creation.
+- `internal/runtime/tools_vtext.go` writes `canonical_vtext_source_path` on
+  appagent-authored `patch_texture` revisions.
+- `internal/runtime/runtime.go` includes `canonical_vtext_source_path` in
+  `durableMetadataKeys`.
+- `internal/runtime/vtext_structure.go` carries durable keys forward without
+  alias promotion.
+- `internal/runtime/vtext_test.go` and
+  `frontend/tests/vtext-markdown-lineage.spec.js` assert the retired key as a
+  current expectation.
+- Independent read-only inventories classified `/pub/vtext` as deliberate live
+  public route compatibility and actor/storage/file suffixes as broader red
+  surfaces, leaving this metadata key as the cleanest bounded current-writer
+  repair.
+
+Open edge: implement C25 with `canonical_texture_source_path` writes and legacy
+`canonical_vtext_source_path` promotion into the Texture-named key, then run
+focused runtime/frontend verification and residue searches.
