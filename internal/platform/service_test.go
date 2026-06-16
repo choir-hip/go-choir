@@ -296,16 +296,16 @@ type publicationSourceContractCase struct {
 	contentHash       string
 }
 
-func TestSyncVTextDocumentPersistsDocumentAndRevisions(t *testing.T) {
+func TestSyncTextureDocumentPersistsDocumentAndRevisions(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	svc := NewService(store, filepath.Join(root, "artifacts"))
 
 	createdAt := time.Date(2026, time.June, 10, 11, 0, 0, 0, time.UTC)
-	req := SyncVTextDocumentRequest{
+	req := SyncTextureDocumentRequest{
 		DocID:   "doc-123",
 		OwnerID: "user-1",
 		Title:   "Platform Draft",
-		Revisions: []SyncVTextRevision{
+		Revisions: []SyncTextureRevision{
 			{
 				RevisionID: "rev-1",
 				Content:    "first revision",
@@ -324,9 +324,9 @@ func TestSyncVTextDocumentPersistsDocumentAndRevisions(t *testing.T) {
 		},
 	}
 
-	resp, err := svc.SyncVTextDocument(context.Background(), req)
+	resp, err := svc.SyncTextureDocument(context.Background(), req)
 	if err != nil {
-		t.Fatalf("SyncVTextDocument: %v", err)
+		t.Fatalf("SyncTextureDocument: %v", err)
 	}
 	if resp.DocID != req.DocID {
 		t.Fatalf("doc id: got %q want %q", resp.DocID, req.DocID)
@@ -335,17 +335,17 @@ func TestSyncVTextDocumentPersistsDocumentAndRevisions(t *testing.T) {
 		t.Fatalf("revision count: got %d want %d", resp.RevisionCount, len(req.Revisions))
 	}
 
-	doc, err := svc.GetPlatformVTextDocument(context.Background(), req.DocID)
+	doc, err := svc.GetPlatformTextureDocument(context.Background(), req.DocID)
 	if err != nil {
-		t.Fatalf("GetPlatformVTextDocument: %v", err)
+		t.Fatalf("GetPlatformTextureDocument: %v", err)
 	}
 	if doc.OwnerID != req.OwnerID || doc.Title != req.Title {
 		t.Fatalf("document mismatch: %#v", doc)
 	}
 
-	revisions, err := svc.ListPlatformVTextRevisions(context.Background(), req.DocID)
+	revisions, err := svc.ListPlatformTextureRevisions(context.Background(), req.DocID)
 	if err != nil {
-		t.Fatalf("ListPlatformVTextRevisions: %v", err)
+		t.Fatalf("ListPlatformTextureRevisions: %v", err)
 	}
 	if len(revisions) != 2 {
 		t.Fatalf("revision len: got %d want 2", len(revisions))
@@ -357,9 +357,9 @@ func TestSyncVTextDocumentPersistsDocumentAndRevisions(t *testing.T) {
 		t.Fatalf("revision defaults mismatch: citations=%s metadata=%s", revisions[0].Citations, revisions[0].Metadata)
 	}
 
-	rev, err := svc.GetPlatformVTextRevision(context.Background(), "rev-2")
+	rev, err := svc.GetPlatformTextureRevision(context.Background(), "rev-2")
 	if err != nil {
-		t.Fatalf("GetPlatformVTextRevision: %v", err)
+		t.Fatalf("GetPlatformTextureRevision: %v", err)
 	}
 	if rev.ParentRevisionID != "rev-1" || rev.AuthorKind != "human" || rev.AuthorLabel != "Wiz" {
 		t.Fatalf("revision metadata mismatch: %#v", rev)

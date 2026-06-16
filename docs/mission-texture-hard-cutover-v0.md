@@ -2827,12 +2827,13 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C40 read-only inventory
-typed storage/table, durable actor, stored-route, and Universal Wire edition
-residue as the next protected-surface problem. Coarse V remains 2 because no
-storage/runtime repair is claimed yet, and database/table names, stored legacy
-routes, Universal Wire edition refs, deployed Universal Wire story-field proof,
-and protocol v0 remain.
+variant (ranking function) V: current V=2; last ΔV: C40a repaired the current
+platform Texture sync/read boundary: internal Texture routes now land in
+Texture-named request/response, handler, service, store, proxy sync, metadata
+enrichment, log/error, and Dolt commit-message affordances. Coarse V remains 2
+because table/database names, stored legacy routes, durable actor compatibility,
+Universal Wire edition refs, deployed Universal Wire story-field proof, and
+protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -3039,11 +3040,19 @@ state, route identity, and durable actor compatibility. Compatibility
 requirements: existing user/platform data and stored legacy public routes must
 remain readable, migration must be idempotent, and no opaque computer state may
 be promoted without typed evidence.
+C40a is locally supported and awaiting landing proof: current platform
+`/internal/platform/texture/*` sync/read routes now use Texture-named Go
+request/response types, store/service methods, handlers, proxy async-sync
+helper, publication metadata enrichment helper, logs/errors, and Dolt commit
+messages. The existing `platform_vtext_*` storage tables remain the explicit
+compatibility substrate for persisted rows; this slice does not rewrite table
+names, route rows, or stored data. Focused package proof passed for
+`go test ./internal/platform ./internal/proxy`; staging proof is still required
+after commit/deploy.
 
-next move: design and implement the first bounded C40 repair slice. Prefer a
-typed, reversible storage boundary with explicit legacy read compatibility over
-a broad rename: either platform/public route-row migration evidence, or a
-current Texture schema alias/migration layer for user Texture tables. Keep
+next move: land C40a through CI/deploy/staging proof, then choose the next
+storage repair: either a typed table alias/migration layer for user/platform
+Texture rows or an idempotent public-route-row migration/alias proof. Keep
 deployed Universal Wire story-field proof and protocol work out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`

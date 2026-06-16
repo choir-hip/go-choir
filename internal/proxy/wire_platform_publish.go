@@ -123,7 +123,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		return
 	}
 
-	enrichedMetadata, err := h.enrichVTextPublicationMetadata(r, sandboxURL, platformOwner, rev.Metadata)
+	enrichedMetadata, err := h.enrichTexturePublicationMetadata(r, sandboxURL, platformOwner, rev.Metadata)
 	if err != nil {
 		log.Printf("proxy: wire publish enrich metadata: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to prepare publication source metadata"})
@@ -156,9 +156,9 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Sync the full VText (all revisions) to platformd so published articles
+	// Sync the full Texture (all revisions) to platformd so published articles
 	// carry their complete revision history.
-	go h.syncVTextToPlatformd(r, sandboxURL, platformOwner, req.DocID, doc.Title)
+	go h.syncTextureToPlatformd(r, sandboxURL, platformOwner, req.DocID, doc.Title)
 
 	writeJSON(w, status, platformResp)
 }
@@ -174,30 +174,30 @@ type sandboxRevisionEntry struct {
 	Metadata         json.RawMessage `json:"metadata"`
 }
 
-// syncVTextToPlatformd fetches all revisions of a VText document from the
+// syncTextureToPlatformd fetches all revisions of a Texture document from the
 // platform sandbox and syncs them to platformd's DoltDB. This runs
 // asynchronously after a successful publication so the publish response is
 // not delayed.
-func (h *Handler) syncVTextToPlatformd(r *http.Request, sandboxURL, ownerID, docID, title string) {
+func (h *Handler) syncTextureToPlatformd(r *http.Request, sandboxURL, ownerID, docID, title string) {
 	ctx := r.Context()
 
 	var revisions []sandboxRevisionEntry
 	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &revisions); err != nil {
-		log.Printf("proxy: sync vtext to platformd: fetch revisions for %s: %v", docID, err)
+		log.Printf("proxy: sync texture to platformd: fetch revisions for %s: %v", docID, err)
 		return
 	}
 	if len(revisions) == 0 {
-		log.Printf("proxy: sync vtext to platformd: no revisions for %s", docID)
+		log.Printf("proxy: sync texture to platformd: no revisions for %s", docID)
 		return
 	}
 
-	syncReq := platform.SyncVTextDocumentRequest{
+	syncReq := platform.SyncTextureDocumentRequest{
 		DocID:   docID,
 		OwnerID: ownerID,
 		Title:   title,
 	}
 	for _, rev := range revisions {
-		syncReq.Revisions = append(syncReq.Revisions, platform.SyncVTextRevision{
+		syncReq.Revisions = append(syncReq.Revisions, platform.SyncTextureRevision{
 			RevisionID:       rev.RevisionID,
 			ParentRevisionID: rev.ParentRevisionID,
 			AuthorKind:       rev.AuthorKind,
@@ -210,17 +210,17 @@ func (h *Handler) syncVTextToPlatformd(r *http.Request, sandboxURL, ownerID, doc
 
 	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/texture/sync")
 	if err != nil {
-		log.Printf("proxy: sync vtext to platformd: build URL: %v", err)
+		log.Printf("proxy: sync texture to platformd: build URL: %v", err)
 		return
 	}
 	data, err := json.Marshal(syncReq)
 	if err != nil {
-		log.Printf("proxy: sync vtext to platformd: marshal: %v", err)
+		log.Printf("proxy: sync texture to platformd: marshal: %v", err)
 		return
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(string(data)))
 	if err != nil {
-		log.Printf("proxy: sync vtext to platformd: build request: %v", err)
+		log.Printf("proxy: sync texture to platformd: build request: %v", err)
 		return
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -228,12 +228,12 @@ func (h *Handler) syncVTextToPlatformd(r *http.Request, sandboxURL, ownerID, doc
 
 	resp, err := h.platformd.Do(httpReq)
 	if err != nil {
-		log.Printf("proxy: sync vtext to platformd: call: %v", err)
+		log.Printf("proxy: sync texture to platformd: call: %v", err)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		log.Printf("proxy: sync vtext to platformd: status %d for doc %s", resp.StatusCode, docID)
+		log.Printf("proxy: sync texture to platformd: status %d for doc %s", resp.StatusCode, docID)
 		return
 	}
 	log.Printf("proxy: synced %d revisions for doc %s to platformd", len(revisions), docID)

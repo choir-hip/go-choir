@@ -60,7 +60,7 @@ func (s *Service) Health(ctx context.Context) error {
 	return s.store.Ping(ctx)
 }
 
-func (s *Service) SyncVTextDocument(ctx context.Context, req SyncVTextDocumentRequest) (*SyncVTextDocumentResponse, error) {
+func (s *Service) SyncTextureDocument(ctx context.Context, req SyncTextureDocumentRequest) (*SyncTextureDocumentResponse, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")
 	}
@@ -77,12 +77,12 @@ func (s *Service) SyncVTextDocument(ctx context.Context, req SyncVTextDocumentRe
 		return nil, fmt.Errorf("owner_id is required")
 	}
 
-	if err := s.store.UpsertVTextDocument(ctx, req.DocID, req.OwnerID, req.Title); err != nil {
-		return nil, fmt.Errorf("platform sync vtext: upsert document: %w", err)
+	if err := s.store.UpsertTextureDocument(ctx, req.DocID, req.OwnerID, req.Title); err != nil {
+		return nil, fmt.Errorf("platform sync texture: upsert document: %w", err)
 	}
 
 	for _, rev := range req.Revisions {
-		platformRev := PlatformVTextRevision{
+		platformRev := PlatformTextureRevision{
 			RevisionID:       strings.TrimSpace(rev.RevisionID),
 			DocID:            req.DocID,
 			OwnerID:          req.OwnerID,
@@ -97,40 +97,40 @@ func (s *Service) SyncVTextDocument(ctx context.Context, req SyncVTextDocumentRe
 		if platformRev.RevisionID == "" {
 			continue
 		}
-		if err := s.store.UpsertVTextRevision(ctx, platformRev); err != nil {
-			return nil, fmt.Errorf("platform sync vtext: upsert revision %s: %w", platformRev.RevisionID, err)
+		if err := s.store.UpsertTextureRevision(ctx, platformRev); err != nil {
+			return nil, fmt.Errorf("platform sync texture: upsert revision %s: %w", platformRev.RevisionID, err)
 		}
 	}
 
-	if err := s.store.commitDolt(ctx, "sync vtext document "+req.DocID+" with "+fmt.Sprintf("%d", len(req.Revisions))+" revisions"); err != nil {
+	if err := s.store.commitDolt(ctx, "sync texture document "+req.DocID+" with "+fmt.Sprintf("%d", len(req.Revisions))+" revisions"); err != nil {
 		return nil, err
 	}
 
-	return &SyncVTextDocumentResponse{
+	return &SyncTextureDocumentResponse{
 		DocID:         req.DocID,
 		RevisionCount: len(req.Revisions),
 	}, nil
 }
 
-func (s *Service) GetPlatformVTextDocument(ctx context.Context, docID string) (*PlatformVTextDocument, error) {
+func (s *Service) GetPlatformTextureDocument(ctx context.Context, docID string) (*PlatformTextureDocument, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")
 	}
-	return s.store.GetVTextDocument(ctx, docID)
+	return s.store.GetTextureDocument(ctx, docID)
 }
 
-func (s *Service) ListPlatformVTextRevisions(ctx context.Context, docID string) ([]PlatformVTextRevision, error) {
+func (s *Service) ListPlatformTextureRevisions(ctx context.Context, docID string) ([]PlatformTextureRevision, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")
 	}
-	return s.store.ListVTextRevisions(ctx, docID)
+	return s.store.ListTextureRevisions(ctx, docID)
 }
 
-func (s *Service) GetPlatformVTextRevision(ctx context.Context, revisionID string) (*PlatformVTextRevision, error) {
+func (s *Service) GetPlatformTextureRevision(ctx context.Context, revisionID string) (*PlatformTextureRevision, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")
 	}
-	return s.store.GetVTextRevision(ctx, revisionID)
+	return s.store.GetTextureRevision(ctx, revisionID)
 }
 
 func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest) (*PublishTextureResponse, error) {
@@ -508,7 +508,7 @@ func (s *Service) SubmitPublicationProposal(ctx context.Context, req SubmitPubli
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("platform proposal: commit transaction: %w", err)
 	}
-	if err := s.store.commitDolt(ctx, "propose vtext revision "+req.SubmitterRevisionID+" for publication "+req.PublicationID); err != nil {
+	if err := s.store.commitDolt(ctx, "propose texture revision "+req.SubmitterRevisionID+" for publication "+req.PublicationID); err != nil {
 		return nil, err
 	}
 

@@ -4656,3 +4656,59 @@ Protected surfaces and rollback:
 Open edge: select the first bounded C40 repair. Prefer platform/public route-row
 or user Texture table alias/migration work over a broad all-at-once storage
 rename. Keep Universal Wire story-field proof and protocol v0 separate.
+
+## 2026-06-16 - C40a Platform Texture Sync Boundary
+
+Claim: the first safe storage-adjacent repair is to make the current platform
+Texture sync/read boundary Texture-named in code and emitted evidence, while
+leaving persisted `platform_vtext_*` table names as explicit compatibility
+substrate until a separate typed migration exists.
+
+Move: construct. Expected ΔV: reduce current platform storage-boundary naming
+residue without claiming a table or route-row migration.
+
+Actual ΔV: current platform `/internal/platform/texture/*` routes now land in
+Texture-named request/response types, handler methods, service/store methods,
+proxy async-sync helper, publication metadata enrichment helper, logs/errors,
+and Dolt commit messages. Coarse V remains 2 because table/database names,
+stored legacy routes, durable actor compatibility, Universal Wire edition refs,
+deployed Universal Wire story-field proof, and protocol v0 remain.
+
+Receipts:
+
+- Edited `internal/platform/types.go`, `internal/platform/store.go`,
+  `internal/platform/service.go`, `internal/platform/handlers.go`,
+  `internal/proxy/wire_platform_publish.go`,
+  `internal/proxy/platform_publish.go`, and focused platform tests.
+- `nix develop -c go test ./internal/platform` passed.
+- `nix develop -c go test ./internal/proxy -run 'TestPlatform|TestWire|TestHandlePlatform|TestPublication'`
+  passed.
+- `nix develop -c go test ./internal/platform ./internal/proxy` passed.
+- `git diff --check` passed.
+- `scripts/doccheck --report /tmp/choir-doccheck-c40a-platform-texture-sync.md --json /tmp/choir-doccheck-c40a-platform-texture-sync.json`
+  passed with 212 docs and 1112 report-only warnings.
+- The scoped C40 non-test storage inventory now finds 95 hits, recorded at
+  `/tmp/choir-c40a-storage-nontest-inventory.txt`; C40 found 97 before this
+  boundary repair.
+- Scoped boundary search for `SyncVText`, `PlatformVText`,
+  `GetPlatformVText`, `ListPlatformVText`, `syncVText`, `enrichVText`,
+  `sync vtext`, `platform sync vtext`, `propose vtext`, and related failure
+  wording found no hits in `internal/platform` or the touched proxy paths; the
+  remaining `HandlePlatformVTextRead` proxy surface is separate browser-public
+  read compatibility residue.
+
+Protected surfaces and rollback:
+
+- Mutation class: red, because platform artifact storage/read boundaries and
+  Dolt commit messages are protected even though this pass does not rewrite
+  data.
+- Protected surfaces touched: platform Texture sync/read APIs, platform
+  publication metadata enrichment, proxy asynchronous platform sync, and
+  persisted `platform_vtext_*` row readability.
+- Rollback path: source revert only; no data migration was introduced.
+- Heresy delta: repaired current platform sync/read boundary naming; left table
+  and route-row residue discovered/open.
+
+Open edge: land C40a through CI/deploy/staging identity and product proof. Then
+choose the next storage repair: typed table alias/migration layer or
+idempotent public-route-row migration/alias proof.

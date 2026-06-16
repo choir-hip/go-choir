@@ -146,7 +146,7 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		h.lifecycle.record("platform_publish.private_read", "revision_mismatch", time.Since(started))
 		return
 	}
-	enrichedMetadata, err := h.enrichVTextPublicationMetadata(r, sandboxURL, authResult.UserID, rev.Metadata)
+	enrichedMetadata, err := h.enrichTexturePublicationMetadata(r, sandboxURL, authResult.UserID, rev.Metadata)
 	if err != nil {
 		log.Printf("proxy: platform publish enrich source metadata: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to prepare publication source metadata"})
@@ -204,7 +204,7 @@ func validateOptionalJSONObject(raw json.RawMessage, label string) error {
 	return nil
 }
 
-func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, userID string, raw json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) enrichTexturePublicationMetadata(r *http.Request, sandboxURL, userID string, raw json.RawMessage) (json.RawMessage, error) {
 	if len(raw) == 0 {
 		return raw, nil
 	}

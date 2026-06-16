@@ -201,7 +201,7 @@ func (h *Handler) HandleInternalProposalDeliveryState(w http.ResponseWriter, r *
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (h *Handler) HandleInternalSyncVTextDocument(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleInternalSyncTextureDocument(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -210,21 +210,21 @@ func (h *Handler) HandleInternalSyncVTextDocument(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
-	var req SyncVTextDocumentRequest
+	var req SyncTextureDocumentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
-	resp, err := h.service.SyncVTextDocument(r.Context(), req)
+	resp, err := h.service.SyncTextureDocument(r.Context(), req)
 	if err != nil {
-		log.Printf("platformd: sync vtext document: %v", err)
+		log.Printf("platformd: sync texture document: %v", err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (h *Handler) HandleInternalGetVTextDocument(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleInternalGetTextureDocument(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -244,20 +244,20 @@ func (h *Handler) HandleInternalGetVTextDocument(w http.ResponseWriter, r *http.
 		http.NotFound(w, r)
 		return
 	}
-	doc, err := h.service.GetPlatformVTextDocument(r.Context(), docID)
+	doc, err := h.service.GetPlatformTextureDocument(r.Context(), docID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.NotFound(w, r)
 			return
 		}
-		log.Printf("platformd: get vtext document %s: %v", docID, err)
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get vtext document"})
+		log.Printf("platformd: get texture document %s: %v", docID, err)
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get texture document"})
 		return
 	}
 	writeJSON(w, http.StatusOK, doc)
 }
 
-func (h *Handler) HandleInternalListVTextRevisions(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleInternalListTextureRevisions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -267,7 +267,7 @@ func (h *Handler) HandleInternalListVTextRevisions(w http.ResponseWriter, r *htt
 		return
 	}
 	if !strings.HasSuffix(r.URL.Path, "/revisions") {
-		h.HandleInternalGetVTextDocument(w, r)
+		h.HandleInternalGetTextureDocument(w, r)
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/internal/platform/texture/documents/")
@@ -278,16 +278,16 @@ func (h *Handler) HandleInternalListVTextRevisions(w http.ResponseWriter, r *htt
 		http.NotFound(w, r)
 		return
 	}
-	revisions, err := h.service.ListPlatformVTextRevisions(r.Context(), docID)
+	revisions, err := h.service.ListPlatformTextureRevisions(r.Context(), docID)
 	if err != nil {
-		log.Printf("platformd: list vtext revisions %s: %v", docID, err)
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list vtext revisions"})
+		log.Printf("platformd: list texture revisions %s: %v", docID, err)
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list texture revisions"})
 		return
 	}
 	writeJSON(w, http.StatusOK, revisions)
 }
 
-func (h *Handler) HandleInternalGetVTextRevision(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleInternalGetTextureRevision(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -303,14 +303,14 @@ func (h *Handler) HandleInternalGetVTextRevision(w http.ResponseWriter, r *http.
 		http.NotFound(w, r)
 		return
 	}
-	rev, err := h.service.GetPlatformVTextRevision(r.Context(), revisionID)
+	rev, err := h.service.GetPlatformTextureRevision(r.Context(), revisionID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.NotFound(w, r)
 			return
 		}
-		log.Printf("platformd: get vtext revision %s: %v", revisionID, err)
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get vtext revision"})
+		log.Printf("platformd: get texture revision %s: %v", revisionID, err)
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get texture revision"})
 		return
 	}
 	writeJSON(w, http.StatusOK, rev)
@@ -324,10 +324,10 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)
 	s.HandleFunc("/internal/platform/proposal-deliveries/state", h.HandleInternalProposalDeliveryState)
 	s.HandleFunc("/internal/platform/publications/", h.HandleInternalPublicationProposal)
-	s.HandleFunc("/internal/platform/texture/sync", h.HandleInternalSyncVTextDocument)
-	s.HandleFunc("/internal/platform/texture/revisions/", h.HandleInternalGetVTextRevision)
-	s.HandleFunc("/internal/platform/texture/documents/", h.HandleInternalListVTextRevisions)
-	s.HandleFunc("/internal/platform/texture/documents", h.HandleInternalGetVTextDocument)
+	s.HandleFunc("/internal/platform/texture/sync", h.HandleInternalSyncTextureDocument)
+	s.HandleFunc("/internal/platform/texture/revisions/", h.HandleInternalGetTextureRevision)
+	s.HandleFunc("/internal/platform/texture/documents/", h.HandleInternalListTextureRevisions)
+	s.HandleFunc("/internal/platform/texture/documents", h.HandleInternalGetTextureDocument)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -247,14 +247,14 @@ type UpdateProposalDeliveryStateResponse struct {
 	DeliveryState string `json:"delivery_state"`
 }
 
-type SyncVTextDocumentRequest struct {
-	DocID     string              `json:"doc_id"`
-	OwnerID   string              `json:"owner_id"`
-	Title     string              `json:"title"`
-	Revisions []SyncVTextRevision `json:"revisions"`
+type SyncTextureDocumentRequest struct {
+	DocID     string                `json:"doc_id"`
+	OwnerID   string                `json:"owner_id"`
+	Title     string                `json:"title"`
+	Revisions []SyncTextureRevision `json:"revisions"`
 }
 
-type SyncVTextRevision struct {
+type SyncTextureRevision struct {
 	RevisionID       string          `json:"revision_id"`
 	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
 	AuthorKind       string          `json:"author_kind,omitempty"`
@@ -265,18 +265,18 @@ type SyncVTextRevision struct {
 	CreatedAt        time.Time       `json:"created_at,omitempty"`
 }
 
-type SyncVTextDocumentResponse struct {
+type SyncTextureDocumentResponse struct {
 	DocID         string `json:"doc_id"`
 	RevisionCount int    `json:"revision_count"`
 }
 
-type PlatformVTextDocument struct {
+type PlatformTextureDocument struct {
 	DocID   string `json:"doc_id"`
 	OwnerID string `json:"owner_id"`
 	Title   string `json:"title"`
 }
 
-type PlatformVTextRevision struct {
+type PlatformTextureRevision struct {
 	RevisionID       string          `json:"revision_id"`
 	DocID            string          `json:"doc_id"`
 	OwnerID          string          `json:"owner_id"`

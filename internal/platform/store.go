@@ -405,7 +405,7 @@ func (s *Store) commitDolt(ctx context.Context, message string) error {
 	return nil
 }
 
-func (s *Store) UpsertVTextDocument(ctx context.Context, docID, ownerID, title string) error {
+func (s *Store) UpsertTextureDocument(ctx context.Context, docID, ownerID, title string) error {
 	now := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO platform_vtext_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE title=VALUES(title), updated_at=VALUES(updated_at)`,
@@ -413,7 +413,7 @@ func (s *Store) UpsertVTextDocument(ctx context.Context, docID, ownerID, title s
 	return err
 }
 
-func (s *Store) UpsertVTextRevision(ctx context.Context, rev PlatformVTextRevision) error {
+func (s *Store) UpsertTextureRevision(ctx context.Context, rev PlatformTextureRevision) error {
 	now := time.Now().UTC()
 	if rev.CreatedAt.IsZero() {
 		rev.CreatedAt = now
@@ -430,8 +430,8 @@ func (s *Store) UpsertVTextRevision(ctx context.Context, rev PlatformVTextRevisi
 	return err
 }
 
-func (s *Store) GetVTextDocument(ctx context.Context, docID string) (*PlatformVTextDocument, error) {
-	var doc PlatformVTextDocument
+func (s *Store) GetTextureDocument(ctx context.Context, docID string) (*PlatformTextureDocument, error) {
+	var doc PlatformTextureDocument
 	err := s.db.QueryRowContext(ctx,
 		`SELECT doc_id, owner_id, title FROM platform_vtext_documents WHERE doc_id = ?`, docID).Scan(&doc.DocID, &doc.OwnerID, &doc.Title)
 	if err != nil {
@@ -440,16 +440,16 @@ func (s *Store) GetVTextDocument(ctx context.Context, docID string) (*PlatformVT
 	return &doc, nil
 }
 
-func (s *Store) ListVTextRevisions(ctx context.Context, docID string) ([]PlatformVTextRevision, error) {
+func (s *Store) ListTextureRevisions(ctx context.Context, docID string) ([]PlatformTextureRevision, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at FROM platform_vtext_revisions WHERE doc_id = ? ORDER BY created_at ASC`, docID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var revisions []PlatformVTextRevision
+	var revisions []PlatformTextureRevision
 	for rows.Next() {
-		var rev PlatformVTextRevision
+		var rev PlatformTextureRevision
 		var citationsStr, metadataStr string
 		if err := rows.Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.ParentRevisionID, &rev.AuthorKind, &rev.AuthorLabel, &rev.Content, &citationsStr, &metadataStr, &rev.CreatedAt); err != nil {
 			return nil, err
@@ -461,8 +461,8 @@ func (s *Store) ListVTextRevisions(ctx context.Context, docID string) ([]Platfor
 	return revisions, rows.Err()
 }
 
-func (s *Store) GetVTextRevision(ctx context.Context, revisionID string) (*PlatformVTextRevision, error) {
-	var rev PlatformVTextRevision
+func (s *Store) GetTextureRevision(ctx context.Context, revisionID string) (*PlatformTextureRevision, error) {
+	var rev PlatformTextureRevision
 	var citationsStr, metadataStr string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at FROM platform_vtext_revisions WHERE revision_id = ?`, revisionID).Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.ParentRevisionID, &rev.AuthorKind, &rev.AuthorLabel, &rev.Content, &citationsStr, &metadataStr, &rev.CreatedAt)

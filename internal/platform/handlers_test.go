@@ -79,11 +79,11 @@ func TestRegisteredTextureRoutesExcludeLegacyVTextPlatformPrefix(t *testing.T) {
 	s := server.NewServer("platformd-test", "0")
 	RegisterRoutes(s, handler)
 
-	syncBody, _ := json.Marshal(SyncVTextDocumentRequest{
+	syncBody, _ := json.Marshal(SyncTextureDocumentRequest{
 		DocID:   "doc-1",
 		OwnerID: "user-1",
 		Title:   "Platform Note",
-		Revisions: []SyncVTextRevision{{
+		Revisions: []SyncTextureRevision{{
 			RevisionID: "rev-1",
 			AuthorKind: "agent",
 			Content:    "Platform content",
