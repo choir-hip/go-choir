@@ -83,6 +83,104 @@ func decodePublicationExportMetadata(t *testing.T, raw json.RawMessage) publicat
 	return out
 }
 
+func TestPublicationFallbackDefaultsUseTextureLabels(t *testing.T) {
+	bundle := &PublicationBundle{
+		Route:       PublicationRoute{Path: "/pub/texture/example"},
+		Publication: PublicationSummary{},
+		Version: PublicationVersionSummary{
+			ID: "pubver-1",
+		},
+		Artifact: PublicationArtifact{Content: "Fallback body."},
+	}
+
+	doc := buildPublicationDocument(bundle)
+	if doc.Title != defaultPublishedTextureTitle {
+		t.Fatalf("publication document title = %q, want %q", doc.Title, defaultPublishedTextureTitle)
+	}
+	if strings.Contains(doc.Title, "VText") {
+		t.Fatalf("publication document title retained retired name: %q", doc.Title)
+	}
+
+	coreXML := docxCoreXML(bundle)
+	if !strings.Contains(coreXML, "<dc:title>"+defaultPublishedTextureTitle+"</dc:title>") {
+		t.Fatalf("DOCX core title missing Texture fallback: %s", coreXML)
+	}
+	if strings.Contains(coreXML, "Published VText") {
+		t.Fatalf("DOCX core title retained retired name: %s", coreXML)
+	}
+
+	if got := publicationExportFilename("", "", "txt"); got != defaultPublishedTextureSlugBase+".txt" {
+		t.Fatalf("empty export filename = %q, want %q", got, defaultPublishedTextureSlugBase+".txt")
+	}
+	if got := publicationExportFilename("   ", "   ", "md"); got != defaultPublishedTextureSlugBase+".md" {
+		t.Fatalf("blank export filename = %q, want %q", got, defaultPublishedTextureSlugBase+".md")
+	}
+}
+
+func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	svc := NewService(store, filepath.Join(root, "artifacts"))
+
+	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+		OwnerID:          "owner-defaults",
+		SourceDocID:      "doc-defaults",
+		SourceRevisionID: "rev-defaults",
+		Content:          "A publication that relies on the default Texture title.",
+		RequestedBy:      "owner-defaults",
+	})
+	if err != nil {
+		t.Fatalf("PublishVText: %v", err)
+	}
+	if !strings.HasPrefix(resp.RoutePath, "/pub/texture/untitled-texture-") {
+		t.Fatalf("default route path = %q, want /pub/texture/untitled-texture-*", resp.RoutePath)
+	}
+
+	var publicationTitle, publicationSlug string
+	if err := store.db.QueryRowContext(context.Background(), `SELECT title, slug FROM publications WHERE publication_id = ?`, resp.PublicationID).Scan(&publicationTitle, &publicationSlug); err != nil {
+		t.Fatalf("query publication defaults: %v", err)
+	}
+	if publicationTitle != defaultUntitledTextureTitle {
+		t.Fatalf("publication title = %q, want %q", publicationTitle, defaultUntitledTextureTitle)
+	}
+	if strings.Contains(publicationTitle, "VText") || strings.Contains(publicationSlug, "vtext") {
+		t.Fatalf("publication default retained retired name: title=%q slug=%q", publicationTitle, publicationSlug)
+	}
+
+	publishedExport, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "txt")
+	if err != nil {
+		t.Fatalf("ExportPublicationByRoute: %v", err)
+	}
+	if !strings.HasPrefix(publishedExport.Filename, "untitled-texture-") {
+		t.Fatalf("default export filename = %q, want untitled-texture-*", publishedExport.Filename)
+	}
+	if strings.Contains(publishedExport.Filename, "vtext") {
+		t.Fatalf("default export filename retained retired name: %q", publishedExport.Filename)
+	}
+
+	proposal, err := svc.SubmitPublicationProposal(context.Background(), SubmitPublicationProposalRequest{
+		PublicationID:        resp.PublicationID,
+		PublicationVersionID: resp.PublicationVersionID,
+		SubmitterID:          "reader-defaults",
+		SubmitterDocID:       "reader-doc-defaults",
+		SubmitterRevisionID:  "reader-rev-defaults",
+		Content:              "A reader proposal that relies on the default Texture title.",
+		RequestedBy:          "reader-defaults",
+	})
+	if err != nil {
+		t.Fatalf("SubmitPublicationProposal: %v", err)
+	}
+	var proposalTitle string
+	if err := store.db.QueryRowContext(context.Background(), `SELECT title FROM publication_version_proposals WHERE proposal_id = ?`, proposal.ProposalID).Scan(&proposalTitle); err != nil {
+		t.Fatalf("query proposal defaults: %v", err)
+	}
+	if proposalTitle != defaultTextureProposalTitle {
+		t.Fatalf("proposal title = %q, want %q", proposalTitle, defaultTextureProposalTitle)
+	}
+	if strings.Contains(proposalTitle, "VText") {
+		t.Fatalf("proposal default retained retired name: %q", proposalTitle)
+	}
+}
+
 func evidenceStateBySourceEntityID(t *testing.T, transclusions []PublicationTransclusion) map[string]map[string]any {
 	t.Helper()
 	out := make(map[string]map[string]any, len(transclusions))

@@ -2779,3 +2779,55 @@ Receipts:
 
 Open edge: commit and push the docs checkpoint, monitor the report-only docs
 truth checker, then implement C26 behavior changes.
+
+## 2026-06-16 - Local Repair: Publication Fallback Texture Labels
+
+Claim: C26 is supported for local platform/build scope. Current publication
+fallback/default writers can mint Texture-named labels and fallback filenames
+without changing live `/pub/vtext/...` public-route compatibility, broad
+`PublishVText` Go API symbols, storage names, or exported HTML/CSS class names.
+
+Move: replace scoped fallback/default strings with shared Texture-named
+platform constants, update the published-reader accessibility expectation, and
+add focused platform tests for pure fallback helpers plus persisted default
+publication/proposal titles.
+
+Expected ΔV: no coarse V decrease until CI/deploy/staging proof lands, but the
+active C26 code residue should become local-supported.
+
+Actual ΔV: C26 is local-supported. Deployed proof remains open.
+
+Protected surfaces: platform publication default titles, proposal default
+titles, publication document construction, DOCX core metadata, export filename
+basenames, published-reader accessibility assertions, focused platform tests,
+and frontend build.
+
+Admissible evidence class: local full touched-package test plus frontend build;
+browser proof is not claimed locally because no local server was running.
+
+Rollback path: restore the previous V-name default strings and test
+expectations if CI, deployed route minting, publication reads, proposals,
+export filenames, DOCX metadata, or published-reader accessibility regress.
+
+Heresy delta: repaired locally for current publication fallback/default writers;
+legacy public route identity, broad Go API names, storage names, and exported
+CSS class names remain separately classified residue.
+
+Receipts:
+- Docs checkpoint commit
+  `52f67a0893ad09fd5f5933067dede245fc3a946f` pushed to `origin/main`; Docs
+  Truth Check run `27595386118` passed.
+- Focused platform tests passed:
+  `nix develop -c go test ./internal/platform -run 'TestPublicationFallbackDefaultsUseTextureLabels|TestPublicationPersistedDefaultTitlesUseTextureLabels|TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestPublishVTextCreatesImmutablePublicRecords' -count=1`.
+- Full touched package passed:
+  `nix develop -c go test ./internal/platform -count=1`.
+- Frontend build passed:
+  `npm --prefix frontend run build`.
+- Scoped residue search found only the new negative test assertion:
+  `rg -n "Published VText|published-vtext|Untitled VText|VText proposal|Published Vtext" internal/platform frontend/src frontend/tests -g '!frontend/dist/**'`.
+- Local Playwright publication spec was attempted but failed before page load
+  because no server was listening on `http://localhost:4173`; it is not
+  evidence for or against the changed assertion.
+
+Open edge: commit and push the behavior, monitor CI/deploy/staging identity,
+then run deployed publication/read/export proof against `https://choir.news`.

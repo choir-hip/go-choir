@@ -22,6 +22,11 @@ const (
 	publicTexturePrefix     = "/pub/texture/"
 	legacyPublicVTextPrefix = "/pub/vtext/"
 	textMediaType           = "text/plain; charset=utf-8"
+
+	defaultPublishedTextureTitle    = "Published Texture"
+	defaultUntitledTextureTitle     = "Untitled Texture"
+	defaultTextureProposalTitle     = "Texture proposal"
+	defaultPublishedTextureSlugBase = "published-texture"
 )
 
 type Service struct {
@@ -153,7 +158,7 @@ func (s *Service) PublishVText(ctx context.Context, req PublishVTextRequest) (*P
 		return nil, fmt.Errorf("source_revision_id is required")
 	}
 	if req.Title == "" {
-		req.Title = "Untitled VText"
+		req.Title = defaultUntitledTextureTitle
 	}
 	if req.Content == "" {
 		return nil, fmt.Errorf("content is required")
@@ -373,7 +378,7 @@ func (s *Service) SubmitPublicationProposal(ctx context.Context, req SubmitPubli
 		return nil, fmt.Errorf("content is required")
 	}
 	if req.Title == "" {
-		req.Title = "VText proposal"
+		req.Title = defaultTextureProposalTitle
 	}
 	if req.Citations == nil {
 		req.Citations = json.RawMessage("[]")

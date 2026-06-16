@@ -319,9 +319,9 @@ func exportFormatIsBinary(format string) bool {
 }
 
 func publicationExportFilename(slug, title, format string) string {
-	base := slugify(firstNonEmpty(slug, title, "published-vtext"))
+	base := slugify(firstNonEmpty(slug, title, defaultPublishedTextureSlugBase))
 	if base == "" {
-		base = "published-vtext"
+		base = defaultPublishedTextureSlugBase
 	}
 	return base + "." + format
 }

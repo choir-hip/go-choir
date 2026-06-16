@@ -69,7 +69,7 @@ func buildPublicationDocument(bundle *PublicationBundle) PublicationDocument {
 		return PublicationDocument{}
 	}
 	doc := PublicationDocument{
-		Title:    firstNonEmpty(bundle.Publication.Title, "Published VText"),
+		Title:    firstNonEmpty(bundle.Publication.Title, defaultPublishedTextureTitle),
 		Blocks:   publicationDocumentBlocks(bundle.Artifact.Content),
 		Manifest: buildPublicationSourceManifest(bundle),
 	}

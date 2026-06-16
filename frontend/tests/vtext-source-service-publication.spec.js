@@ -199,7 +199,7 @@ test('publishes source-service source entities as expandable transclusions and c
   await expect(publishedReader).toBeVisible({ timeout: 15_000 });
   await expect(publishedReader).toHaveAttribute('data-publication-version-id', publish.publication_version_id);
   await expect(publishedReader).toHaveAttribute('contenteditable', 'false');
-  await expect(publishedReader).toHaveAttribute('aria-label', 'Published VText document');
+  await expect(publishedReader).toHaveAttribute('aria-label', 'Published Texture document');
   await expect(publishedReader).not.toHaveAttribute('aria-multiline', 'true');
   const publishedSurfaceSemantics = await publishedReader.evaluate((node) => ({
     tagName: node.tagName.toLowerCase(),
