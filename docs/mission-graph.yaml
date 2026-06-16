@@ -49,6 +49,7 @@ nodes:
   - m3.2-vtext-prompt-decision-notes # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   - m3.3-vm-bootstrap-recovery-race
   - m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  - texture-product-loop-recovery-v0
   - texture-hard-cutover-v0
   - m3-lifecycle-cutover
   - m4-continuation-deletion
@@ -138,11 +139,28 @@ nodes:
   depends_on:
   - m3.3-vm-bootstrap-recovery-race
   enables:
-  - texture-hard-cutover-v0
+  - texture-product-loop-recovery-v0
   sources:
   - docs/mission-portfolio-2026-06-11.md
   - docs/mission-lifecycle-cutover-v0.md
   - docs/texture-agentic-invariants-2026-06-13.md
+  - AGENTS.md
+- id: texture-product-loop-recovery-v0
+  title: Texture Hard Cutover And Product Loop Recovery v0
+  path: docs/mission-texture-product-loop-recovery-v0.md
+  ledger: docs/mission-texture-product-loop-recovery-v0.ledger.md
+  status: open_handoff
+  kind: spine
+  depends_on:
+  - m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  enables:
+  - texture-hard-cutover-v0
+  sources:
+  - docs/why-texture-2026-06-15.md
+  - docs/why-texture-background-2026-06-15.md
+  - docs/texture-agentic-invariants-2026-06-13.md
+  - docs/mission-texture-hard-cutover-v0.md
+  - docs/choir-doctrine.md
   - AGENTS.md
 - id: texture-hard-cutover-v0
   title: Texture Hard Cutover v0
@@ -151,7 +169,7 @@ nodes:
   status: open_handoff
   kind: spine
   depends_on:
-  - m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  - texture-product-loop-recovery-v0
   enables:
   - m3-lifecycle-cutover
   sources:
