@@ -1519,7 +1519,7 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 						"loop_id": rec.RunID,
 						"phase":   phase,
 					})
-					rt.emitVTextAgentEvent(ctx, rec, types.EventVTextAgentRevisionProgress,
+					rt.emitVTextAgentEvent(ctx, rec, types.EventTextureAgentRevisionProgress,
 						events.CauseProviderProgress, progressPayload)
 				}
 			}
@@ -2102,7 +2102,7 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		CreatedAt:   now,
 	}
 	if err := rt.store.CreateRevision(ctx, userRev); err != nil {
-		return conductorDecision{}, fmt.Errorf("create user prompt vtext revision: %w", err)
+		return conductorDecision{}, fmt.Errorf("create user prompt Texture revision: %w", err)
 	}
 	rt.emitVTextDocumentRevisionEventForRun(ctx, rec, userRev)
 
@@ -2117,7 +2117,7 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		CreatedAt: now,
 		UpdatedAt: time.Now().UTC(),
 	}); err != nil {
-		return conductorDecision{}, fmt.Errorf("persist vtext appagent: %w", err)
+		return conductorDecision{}, fmt.Errorf("persist Texture appagent: %w", err)
 	}
 	decision.DocID = doc.DocID
 	decision.UserRevisionID = userRev.RevisionID
@@ -2130,14 +2130,14 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		initialPrompt = routeSeedPrompt
 	}
 	if initialPrompt == "" {
-		initialPrompt = "Create the first useful current-state version of this vtext document."
+		initialPrompt = "Create the first useful current-state version of this Texture document."
 	}
 	initialRun, err := rt.submitVTextAgentRevisionRun(ctx, doc, rec.OwnerID, vtextAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
 		Prompt: initialPrompt,
 	}, rec.RunID, 0)
 	if err != nil {
-		return conductorDecision{}, fmt.Errorf("start initial vtext agent revision: %w", err)
+		return conductorDecision{}, fmt.Errorf("start initial Texture agent revision: %w", err)
 	}
 	decision.InitialLoopID = initialRun.RunID
 	decision = fillConductorDecisionFromRun(rec, decision)
@@ -2173,7 +2173,7 @@ func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
 		isTextureDecisionApp(metadataStringValue(rec.Metadata, "requested_app")) &&
 		metadataStringValue(rec.Metadata, "input_source") == "prompt_bar" {
 		if _, err := rt.ensureConductorVTextRoute(context.Background(), rec, "", decision.InitialContent); err != nil {
-			log.Printf("runtime: conductor run %s: materialize prompt-bar vtext route: %v", rec.RunID, err)
+			log.Printf("runtime: conductor run %s: materialize prompt-bar Texture route: %v", rec.RunID, err)
 		}
 		return
 	}
@@ -2218,7 +2218,7 @@ func (rt *Runtime) recordExplicitInitialVTextDecisionIfNeeded(ctx context.Contex
 	}
 	existing, err := rt.store.ListVTextDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
 	if err != nil {
-		return fmt.Errorf("list initial vtext decisions: %w", err)
+		return fmt.Errorf("list initial Texture decisions: %w", err)
 	}
 	for _, decision := range existing {
 		if decision.RunID == rec.RunID && decision.DecisionKind == kind && decision.Reason == reason {
@@ -2243,7 +2243,7 @@ func (rt *Runtime) recordExplicitInitialVTextDecisionIfNeeded(ctx context.Contex
 		decision.ActorID = currentTextureAgentID(docID)
 	}
 	if err := rt.store.CreateVTextDecision(ctx, decision); err != nil {
-		return fmt.Errorf("record initial vtext decision: %w", err)
+		return fmt.Errorf("record initial Texture decision: %w", err)
 	}
 	rt.emitVTextDecisionRecordedEvent(ctx, rec, decision)
 	rec.Metadata["vtext_initial_decision_recorded"] = true
@@ -2455,6 +2455,9 @@ func vtextPromptExplicitlyRequestsDecisionNote(prompt string) bool {
 	if strings.Contains(text, "record") && strings.Contains(text, "off-document") && strings.Contains(text, "decision note") {
 		return true
 	}
+	if strings.Contains(text, "record") && strings.Contains(text, "texture decision") {
+		return true
+	}
 	if strings.Contains(text, "record") && strings.Contains(text, "vtext decision") {
 		return true
 	}
@@ -2628,7 +2631,7 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 			"loop_id": rec.RunID,
 			"status":  "waiting_for_worker_updates",
 		})
-		rt.emitVTextAgentEvent(persistCtx, rec, types.EventVTextAgentRevisionProgress,
+		rt.emitVTextAgentEvent(persistCtx, rec, types.EventTextureAgentRevisionProgress,
 			events.CauseToolExecution, progressPayload)
 		log.Printf("runtime: vtext agent revision run %s requested workers and completed without document edit; waiting for worker updates", rec.RunID)
 		return nil
@@ -2649,11 +2652,11 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 	failPayload, _ := json.Marshal(map[string]string{
 		"doc_id":  docID,
 		"loop_id": rec.RunID,
-		"error":   "vtext run completed without storing a Texture revision",
+		"error":   "Texture run completed without storing a Texture revision",
 	})
-	rt.emitVTextAgentEvent(persistCtx, rec, types.EventVTextAgentRevisionFailed,
+	rt.emitVTextAgentEvent(persistCtx, rec, types.EventTextureAgentRevisionFailed,
 		events.CauseTaskLifecycle, failPayload)
-	log.Printf("runtime: vtext agent revision run %s completed without a Texture write tool; no canonical revision created", rec.RunID)
+	log.Printf("runtime: Texture agent revision run %s completed without a Texture write tool; no canonical revision created", rec.RunID)
 	return nil
 }
 
@@ -3115,7 +3118,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 				"loop_id": rec.RunID,
 				"error":   err.Error(),
 			})
-			rt.emitVTextAgentEvent(persistCtx, rec, types.EventVTextAgentRevisionFailed,
+			rt.emitVTextAgentEvent(persistCtx, rec, types.EventTextureAgentRevisionFailed,
 				events.CauseProviderFailure, failPayload)
 		}
 	}

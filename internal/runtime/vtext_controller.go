@@ -121,7 +121,7 @@ func (rt *Runtime) reconcileVTextWorkerState(ctx context.Context, ownerID, docID
 		Intent: "integrate_worker_findings",
 	}, latestMessage.FromRunID, latestMessage.Seq)
 	if err != nil {
-		return fmt.Errorf("start reconciled vtext revision: %w", err)
+		return fmt.Errorf("start reconciled Texture revision: %w", err)
 	}
 	return nil
 }

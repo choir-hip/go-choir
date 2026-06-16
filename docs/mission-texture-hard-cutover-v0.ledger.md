@@ -4485,3 +4485,40 @@ Protected surfaces and rollback:
 
 Open edge: implement C39 with current Texture event/checkpoint emission plus
 legacy read compatibility.
+
+## 2026-06-16 - C39 Local Repair: Texture Trace Evidence Names
+
+Claim: current Trace/run-acceptance evidence can move to Texture naming without
+breaking legacy stored `vtext.*` event rows or old `vtext_opened` acceptance
+records.
+
+Move: behavior construct and local proof. Expected ΔV: repair the C39 local
+implementation obligation, while coarse V remains 2 until CI/deploy/staging
+acceptance proves it in production.
+
+Actual ΔV: C39 is locally supported and ready to land; coarse V remains 2.
+Current event constants emit `texture.agent_revision.*`,
+`texture.document_revision.created`, and `texture.decision.recorded`. Trace
+summaries/tone and document stream projection read both current Texture events
+and legacy stored V-name events. Run-acceptance synthesis now writes
+`texture_opened` and Texture evidence wording while legacy `vtext_opened`
+records remain valid for acceptance level and invariant derivation. Active
+runtime prompts/errors/verifier strings touched by this slice now say Texture.
+
+Receipts:
+
+- `nix develop -c go test ./internal/types -run 'TestTextureAgentRevisionEventKinds|TestLegacyVTextAgentRevisionEventKindsRemainReadable' -count=1` passed.
+- `nix develop -c go test ./internal/types -count=1` passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestRunAcceptance(Synthesize|Legacy)' -count=1` passed.
+- `nix develop -c go test ./internal/runtime -run 'Test(HandleTrace|Trace|BuildTrace|RecordVTextDecision|VTextDiagnosis|DefaultVTextPrompt|RecordVTextDecisionToolDescription|ExplicitNoWorkerDecision|InitialVTextDecision|HandlePromptBar|ConductorVText|ConductorDecision|ConductorPromptBar)' -count=1` passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed all four sequential runtime shards.
+- `git diff --check` passed.
+- `scripts/doccheck --report /tmp/choir-doccheck-c39-texture-evidence.md --json /tmp/choir-doccheck-c39-texture-evidence.json` passed report-only with 212 docs and 1115 warnings.
+- Scoped non-test C39 residue search recorded `/tmp/choir-c39-nontest-residue.txt` with 31 hits, all explicit legacy compatibility or the accepted legacy decision-note parser branch.
+- Scoped test C39 residue search recorded `/tmp/choir-c39-test-residue.txt` with 11 hits, all legacy-read tests.
+- Current Texture evidence search recorded `/tmp/choir-c39-current-texture-hits.txt` with 76 hits.
+
+Open edge: commit/push, monitor CI/deploy, verify staging identity, then run a
+deployed prompt-bar -> conductor -> Texture proof showing current Trace event
+kinds/summaries and synthesized run acceptance `texture_opened` evidence through
+public product routes.

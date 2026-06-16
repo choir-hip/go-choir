@@ -193,15 +193,15 @@ func (rt *Runtime) VerifyVTextWorkflow(ctx context.Context, opts VTextWorkflowVe
 
 	revisions, err := rt.store.ListRevisionsByDoc(ctx, doc.DocID, ownerID, 200)
 	if err != nil {
-		return report, fmt.Errorf("list vtext revisions: %w", err)
+		return report, fmt.Errorf("list Texture revisions: %w", err)
 	}
 	if err := verifyVTextRevisionCausality(revisions, events, updates, opts.RequireWorkerConsumption); err != nil {
 		return report, err
 	}
-	guarantee("vtext revisions have valid causal parents")
-	guarantee("vtext appagent revisions were created through a Texture write tool")
+	guarantee("Texture revisions have valid causal parents")
+	guarantee("Texture appagent revisions were created through a Texture write tool")
 	if opts.RequireWorkerConsumption {
-		guarantee("vtext consumed worker update message sequences in a later revision")
+		guarantee("Texture consumed worker update message sequences in a later revision")
 	}
 
 	return report, nil
@@ -568,7 +568,7 @@ func verifyVTextRevisionCausality(revisions []types.Revision, events []types.Eve
 		}
 		for seq, found := range needed {
 			if !found {
-				return fmt.Errorf("worker update message seq %d was not consumed by a vtext revision", seq)
+				return fmt.Errorf("worker update message seq %d was not consumed by a Texture revision", seq)
 			}
 		}
 	}

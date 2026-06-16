@@ -1659,13 +1659,14 @@ func vtextStreamEventFromRecord(rec types.EventRecord) (vtextDocumentStreamEvent
 		Error:             strings.TrimSpace(payload["error"]),
 	}
 	switch rec.Kind {
-	case types.EventVTextAgentRevisionStarted, types.EventVTextAgentRevisionProgress:
+	case types.EventTextureAgentRevisionStarted, types.EventTextureAgentRevisionProgress,
+		types.LegacyEventVTextAgentRevisionStarted, types.LegacyEventVTextAgentRevisionProgress:
 		event.Kind = "synth_started"
-	case types.EventVTextAgentRevisionCompleted:
+	case types.EventTextureAgentRevisionCompleted, types.LegacyEventVTextAgentRevisionCompleted:
 		event.Kind = "synth_completed"
-	case types.EventVTextAgentRevisionFailed:
+	case types.EventTextureAgentRevisionFailed, types.LegacyEventVTextAgentRevisionFailed:
 		event.Kind = "synth_failed"
-	case types.EventVTextDocumentRevisionCreated:
+	case types.EventTextureDocumentRevisionCreated, types.LegacyEventVTextDocumentRevisionCreated:
 		event.Kind = "revision_created"
 	default:
 		return vtextDocumentStreamEvent{}, false

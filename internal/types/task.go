@@ -292,36 +292,54 @@ const (
 	// source lineage and route/artifact profile.
 	EventAppAdoptionRolledBack EventKind = "app_adoption.rolled_back"
 
-	// EventVTextAgentRevisionStarted is emitted when an appagent-driven
+	// EventTextureAgentRevisionStarted is emitted when an appagent-driven
 	// document revision starts executing. The payload includes the doc_id
 	// so the frontend can correlate the revision to the open document
 	// (VAL-ETEXT-004).
-	EventVTextAgentRevisionStarted EventKind = "vtext.agent_revision.started"
+	EventTextureAgentRevisionStarted EventKind = "texture.agent_revision.started"
 
-	// EventVTextAgentRevisionProgress is emitted during appagent revision
+	// EventTextureAgentRevisionProgress is emitted during appagent revision
 	// execution, carrying incremental progress that the open document
 	// can display without manual refresh (VAL-ETEXT-004).
-	EventVTextAgentRevisionProgress EventKind = "vtext.agent_revision.progress"
+	EventTextureAgentRevisionProgress EventKind = "texture.agent_revision.progress"
 
-	// EventVTextAgentRevisionCompleted is emitted when an appagent-driven
+	// EventTextureAgentRevisionCompleted is emitted when an appagent-driven
 	// revision completes and the canonical revision is created. The payload
 	// includes the doc_id and revision_id (VAL-ETEXT-003, VAL-ETEXT-004).
-	EventVTextAgentRevisionCompleted EventKind = "vtext.agent_revision.completed"
+	EventTextureAgentRevisionCompleted EventKind = "texture.agent_revision.completed"
 
-	// EventVTextAgentRevisionFailed is emitted when an appagent-driven
+	// EventTextureAgentRevisionFailed is emitted when an appagent-driven
 	// revision fails. The payload includes the doc_id and error message.
-	EventVTextAgentRevisionFailed EventKind = "vtext.agent_revision.failed"
+	EventTextureAgentRevisionFailed EventKind = "texture.agent_revision.failed"
 
-	// EventVTextDocumentRevisionCreated is emitted when a canonical document
+	// EventTextureDocumentRevisionCreated is emitted when a canonical document
 	// revision is created outside the appagent synthesis loop, such as a direct
 	// user-authored save through the document API. The payload includes doc_id,
 	// revision_id, and current_revision_id so the editor can follow head changes.
-	EventVTextDocumentRevisionCreated EventKind = "vtext.document_revision.created"
+	EventTextureDocumentRevisionCreated EventKind = "texture.document_revision.created"
 
-	// EventVTextDecisionRecorded is emitted when VText records an off-document
+	// EventTextureDecisionRecorded is emitted when Texture records an off-document
 	// decision note. Decision notes are evidence/provenance, not canonical
 	// document revisions.
-	EventVTextDecisionRecorded EventKind = "vtext.decision.recorded"
+	EventTextureDecisionRecorded EventKind = "texture.decision.recorded"
+
+	// LegacyEventVText* constants keep old stored Trace rows readable while new
+	// evidence emits Texture event kinds.
+	LegacyEventVTextAgentRevisionStarted    EventKind = "vtext.agent_revision.started"
+	LegacyEventVTextAgentRevisionProgress   EventKind = "vtext.agent_revision.progress"
+	LegacyEventVTextAgentRevisionCompleted  EventKind = "vtext.agent_revision.completed"
+	LegacyEventVTextAgentRevisionFailed     EventKind = "vtext.agent_revision.failed"
+	LegacyEventVTextDocumentRevisionCreated EventKind = "vtext.document_revision.created"
+	LegacyEventVTextDecisionRecorded        EventKind = "vtext.decision.recorded"
+
+	// EventVText* symbols are compatibility aliases for source that has not yet
+	// been mechanically renamed; they emit the current Texture event kinds.
+	EventVTextAgentRevisionStarted    EventKind = EventTextureAgentRevisionStarted
+	EventVTextAgentRevisionProgress   EventKind = EventTextureAgentRevisionProgress
+	EventVTextAgentRevisionCompleted  EventKind = EventTextureAgentRevisionCompleted
+	EventVTextAgentRevisionFailed     EventKind = EventTextureAgentRevisionFailed
+	EventVTextDocumentRevisionCreated EventKind = EventTextureDocumentRevisionCreated
+	EventVTextDecisionRecorded        EventKind = EventTextureDecisionRecorded
 
 	// EventDesktopStateUpdated is emitted when a user's persisted desktop
 	// workspace changes.

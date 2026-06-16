@@ -1852,8 +1852,8 @@ func TestVTextSystemPromptSharesChoirCoreContext(t *testing.T) {
 	if !strings.Contains(prompt, "Current UTC date/time:") || !strings.Contains(prompt, "Treat relative-date requests") {
 		t.Fatalf("system prompt missing temporal grounding context: %q", prompt)
 	}
-	if !strings.Contains(prompt, "VText is a durable document owner, not a one-shot answerer.") {
-		t.Fatalf("system prompt missing vtext wake semantics: %q", prompt)
+	if !strings.Contains(prompt, "Texture is a durable document owner, not a one-shot answerer.") {
+		t.Fatalf("system prompt missing Texture wake semantics: %q", prompt)
 	}
 	if !strings.Contains(prompt, "Current coordination channel: doc-1.") {
 		t.Fatalf("system prompt missing coordination channel: %q", prompt)
@@ -2647,7 +2647,7 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 		switch ev.Kind {
 		case types.EventChannelMessage:
 			hasChannelMessage = true
-		case types.EventVTextDocumentRevisionCreated, types.EventVTextAgentRevisionCompleted:
+		case types.EventTextureDocumentRevisionCreated, types.EventTextureAgentRevisionCompleted:
 			hasVTextRevision = true
 		}
 	}
@@ -7407,12 +7407,12 @@ func TestVTextAgentRevisionProgressEvents(t *testing.T) {
 		t.Fatalf("list events: %v", err)
 	}
 
-	// We should find vtext.agent_revision.started and
-	// vtext.agent_revision.completed events.
+	// We should find texture.agent_revision.started and
+	// texture.agent_revision.completed events.
 	var foundStarted, foundCompleted bool
 	for _, ev := range events {
 		switch ev.Kind {
-		case types.EventVTextAgentRevisionStarted:
+		case types.EventTextureAgentRevisionStarted:
 			foundStarted = true
 			// Verify the payload contains doc_id.
 			var payload map[string]string
@@ -7421,7 +7421,7 @@ func TestVTextAgentRevisionProgressEvents(t *testing.T) {
 					t.Errorf("started event doc_id = %q, want %q", payload["doc_id"], docID)
 				}
 			}
-		case types.EventVTextAgentRevisionCompleted:
+		case types.EventTextureAgentRevisionCompleted:
 			foundCompleted = true
 			var payload map[string]string
 			if err := json.Unmarshal(ev.Payload, &payload); err == nil {
@@ -7435,10 +7435,10 @@ func TestVTextAgentRevisionProgressEvents(t *testing.T) {
 		}
 	}
 	if !foundStarted {
-		t.Error("missing vtext.agent_revision.started event (VAL-ETEXT-004)")
+		t.Error("missing texture.agent_revision.started event (VAL-ETEXT-004)")
 	}
 	if !foundCompleted {
-		t.Error("missing vtext.agent_revision.completed event (VAL-ETEXT-004)")
+		t.Error("missing texture.agent_revision.completed event (VAL-ETEXT-004)")
 	}
 }
 

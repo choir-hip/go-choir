@@ -286,7 +286,7 @@ test('prompt bar can route coding work through a background worker VM AppChangeP
   const checkpointKinds = (acceptance.checkpoints || []).map((checkpoint) => checkpoint.kind);
   expect(checkpointKinds).toEqual(expect.arrayContaining([
     'submitted',
-    'vtext_opened',
+    'texture_opened',
     'super_requested',
     'worker_leased',
     'worker_delegated',

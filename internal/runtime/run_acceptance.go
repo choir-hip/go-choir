@@ -24,6 +24,11 @@ type runAcceptanceSynthesizeInput struct {
 	StagingURL            string
 }
 
+const (
+	runAcceptanceCheckpointTextureOpened     = "texture_opened"
+	runAcceptanceCheckpointLegacyVTextOpened = "vtext_opened"
+)
+
 type acceptanceBuilder struct {
 	record      types.RunAcceptanceRecord
 	evidence    []types.RunAcceptanceEvidenceRef
@@ -154,13 +159,13 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 	}
 
 	if docID, at, refID := acceptanceDocumentEvidence(&builder, root, events); docID != "" {
-		builder.addCheckpoint("vtext_opened", "passed", at, 0, []string{refID}, map[string]any{"doc_id": docID})
+		builder.addCheckpoint(runAcceptanceCheckpointTextureOpened, "passed", at, 0, []string{refID}, map[string]any{"doc_id": docID})
 	}
 
 	superResults := collectAcceptanceToolResults(events, "request_super_execution")
 	if len(superResults) > 0 {
 		item := superResults[0]
-		ref := builder.addEventEvidence(item.event, "vtext requested persistent super execution", map[string]any{
+		ref := builder.addEventEvidence(item.event, "Texture requested persistent super execution", map[string]any{
 			"tool":    "request_super_execution",
 			"loop_id": payloadString(item.output, "loop_id"),
 		})
@@ -426,13 +431,16 @@ func acceptanceDocumentEvidence(builder *acceptanceBuilder, root types.RunRecord
 		if json.Unmarshal([]byte(root.Result), &decision) == nil {
 			docID := payloadString(decision, "doc_id")
 			if docID != "" {
-				ref := builder.addRunEvidence(root, "conductor decision opened vtext document")
+				ref := builder.addRunEvidence(root, "conductor decision opened Texture document")
 				return docID, root.UpdatedAt, ref
 			}
 		}
 	}
 	for _, ev := range events {
-		if ev.Kind != types.EventVTextDocumentRevisionCreated && ev.Kind != types.EventVTextAgentRevisionCompleted {
+		if ev.Kind != types.EventTextureDocumentRevisionCreated &&
+			ev.Kind != types.EventTextureAgentRevisionCompleted &&
+			ev.Kind != types.LegacyEventVTextDocumentRevisionCreated &&
+			ev.Kind != types.LegacyEventVTextAgentRevisionCompleted {
 			continue
 		}
 		payload := parseTracePayload(ev.Payload)
@@ -440,7 +448,7 @@ func acceptanceDocumentEvidence(builder *acceptanceBuilder, root types.RunRecord
 		if docID == "" {
 			continue
 		}
-		ref := builder.addEventEvidence(ev, "vtext document revision exists for trajectory", map[string]any{"doc_id": docID})
+		ref := builder.addEventEvidence(ev, "Texture document revision exists for trajectory", map[string]any{"doc_id": docID})
 		return docID, ev.Timestamp, ref
 	}
 	return "", time.Time{}, ""
@@ -1078,10 +1086,11 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 	}
 	level := types.RunAcceptanceDocsLevel
 	state := types.RunAcceptanceBlocked
-	if has["submitted"] && has["vtext_opened"] {
+	textureOpened := has[runAcceptanceCheckpointTextureOpened] || has[runAcceptanceCheckpointLegacyVTextOpened]
+	if has["submitted"] && textureOpened {
 		level = types.RunAcceptanceStagingSmokeLevel
 	}
-	if has["submitted"] && has["vtext_opened"] && has["super_requested"] && has["worker_leased"] && has["worker_supervision_observed"] {
+	if has["submitted"] && textureOpened && has["super_requested"] && has["worker_leased"] && has["worker_supervision_observed"] {
 		level = types.RunAcceptanceStagingSmokeLevel
 		state = types.RunAcceptanceAccepted
 	}
@@ -1110,7 +1119,8 @@ func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAc
 			blockedKindSet[checkpoint.Kind] = true
 		}
 	}
-	promptPathObserved := kindSet["submitted"] && kindSet["vtext_opened"]
+	textureOpened := kindSet[runAcceptanceCheckpointTextureOpened] || kindSet[runAcceptanceCheckpointLegacyVTextOpened]
+	promptPathObserved := kindSet["submitted"] && textureOpened
 	adoptionPathObserved := kindSet["app_adoption_verified"] || kindSet["app_adoption_promoted"]
 	workerMutationBounded := kindSet["worker_leased"] && kindSet["worker_delegated"] && kindSet["app_package_published"]
 	workerSupervisionBounded := kindSet["worker_leased"] && kindSet["worker_delegated"] && kindSet["worker_supervision_observed"]
@@ -1122,7 +1132,7 @@ func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAc
 		{
 			Name:   "product_path_observed",
 			State:  stateForBool(promptPathObserved || adoptionPathObserved),
-			Detail: "acceptance is derived from prompt/VText/super trace evidence or product AppChangePackage/adoption events, not caller-supplied checkpoints",
+			Detail: "acceptance is derived from prompt/Texture/super trace evidence or product AppChangePackage/adoption events, not caller-supplied checkpoints",
 		},
 		{
 			Name:   "worker_mutation_bounded",
@@ -1220,7 +1230,7 @@ func buildAcceptanceVerifierContracts(rec types.RunAcceptanceRecord) []types.Run
 		},
 		{
 			Name:    "export-level-product-path",
-			Purpose: "prove prompt/VText/super/vmctl/delegate/AppChangePackage/adoption prefix without browser-public internal orchestration APIs",
+			Purpose: "prove prompt/Texture/super/vmctl/delegate/AppChangePackage/adoption prefix without browser-public internal orchestration APIs",
 			State: stateForBool(
 				rec.State == types.RunAcceptanceAccepted &&
 					(rec.AcceptanceLevel == types.RunAcceptanceExportLevel ||

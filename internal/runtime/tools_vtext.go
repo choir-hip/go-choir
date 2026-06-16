@@ -656,15 +656,15 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 	}
 	if err := rt.store.CreateRevision(ctx, rev); err != nil {
 		_ = rt.store.FailAgentMutation(ctx, rec.RunID)
-		return types.Revision{}, fmt.Errorf("create vtext revision: %w", err)
+		return types.Revision{}, fmt.Errorf("create Texture revision: %w", err)
 	}
 	storedRev, err := rt.store.GetRevision(ctx, rev.RevisionID, rec.OwnerID)
 	if err != nil {
-		return types.Revision{}, fmt.Errorf("load created vtext revision: %w", err)
+		return types.Revision{}, fmt.Errorf("load created Texture revision: %w", err)
 	}
 	if err := rt.store.CompleteAgentMutation(ctx, rec.RunID, rev.RevisionID); err != nil {
 		if err != store.ErrMutationAlreadyCompleted {
-			return types.Revision{}, fmt.Errorf("complete vtext mutation: %w", err)
+			return types.Revision{}, fmt.Errorf("complete Texture mutation: %w", err)
 		}
 	}
 	if mutation.ScheduledMessageSeq > 0 {
@@ -687,7 +687,7 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 		"revision_id": storedRev.RevisionID,
 		"loop_id":     rec.RunID,
 	})
-	rt.emitVTextAgentEvent(ctx, rec, types.EventVTextAgentRevisionCompleted,
+	rt.emitVTextAgentEvent(ctx, rec, types.EventTextureAgentRevisionCompleted,
 		events.CauseToolExecution, completedPayload)
 	rt.maybeAutonomousPublishWireArticle(ctx, doc, storedRev, rec)
 	return storedRev, nil

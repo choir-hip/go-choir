@@ -517,7 +517,7 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	if rec.State != types.RunAcceptanceAccepted {
 		t.Fatalf("state = %q, want accepted", rec.State)
 	}
-	for _, want := range []string{"submitted", "vtext_opened", "super_requested", "worker_leased", "worker_delegated", "app_package_published", "app_adoption_verified"} {
+	for _, want := range []string{"submitted", "texture_opened", "super_requested", "worker_leased", "worker_delegated", "app_package_published", "app_adoption_verified"} {
 		if !acceptanceHasCheckpoint(rec, want) {
 			t.Fatalf("missing checkpoint %q in %+v", want, rec.Checkpoints)
 		}
@@ -577,11 +577,11 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	}
 }
 
-func TestRunAcceptanceSynthesizeDoesNotAcceptPromptVTextOnlySmoke(t *testing.T) {
+func TestRunAcceptanceSynthesizeDoesNotAcceptPromptTextureOnlySmoke(t *testing.T) {
 	t.Parallel()
 	_, handler := testAPISetup(t)
 
-	prompt := "Mission lifecycle cutover staging smoke creates a prompt-bar VText route."
+	prompt := "Mission lifecycle cutover staging smoke creates a prompt-bar Texture route."
 	submitBody := fmt.Sprintf(`{"text":%q}`, prompt)
 	submitW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/prompt-bar", submitBody, "user-alice")
 	if submitW.Code != http.StatusAccepted {
@@ -604,9 +604,9 @@ func TestRunAcceptanceSynthesizeDoesNotAcceptPromptVTextOnlySmoke(t *testing.T) 
 				t.Fatalf("decode acceptance: %v", err)
 			}
 			if rec.AcceptanceLevel != types.RunAcceptanceStagingSmokeLevel || rec.State != types.RunAcceptanceBlocked {
-				t.Fatalf("acceptance = %s/%s, want staging-smoke-level/blocked for prompt/VText-only smoke; checkpoints=%+v invariants=%+v risks=%+v", rec.AcceptanceLevel, rec.State, rec.Checkpoints, rec.InvariantChecks, rec.FailureResidualRisks)
+				t.Fatalf("acceptance = %s/%s, want staging-smoke-level/blocked for prompt/Texture-only smoke; checkpoints=%+v invariants=%+v risks=%+v", rec.AcceptanceLevel, rec.State, rec.Checkpoints, rec.InvariantChecks, rec.FailureResidualRisks)
 			}
-			for _, want := range []string{"submitted", "vtext_opened"} {
+			for _, want := range []string{"submitted", "texture_opened"} {
 				if !acceptanceHasCheckpoint(rec, want) {
 					t.Fatalf("missing checkpoint %q in %+v", want, rec.Checkpoints)
 				}
@@ -618,9 +618,26 @@ func TestRunAcceptanceSynthesizeDoesNotAcceptPromptVTextOnlySmoke(t *testing.T) 
 			}
 			if strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "acceptance invariant product_path_observed is blocked") ||
 				strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "acceptance invariant worker_mutation_bounded is blocked") {
-				t.Fatalf("prompt/VText smoke should not carry invariant blocker risks: %+v", rec.FailureResidualRisks)
+				t.Fatalf("prompt/Texture smoke should not carry invariant blocker risks: %+v", rec.FailureResidualRisks)
 			}
 		})
+	}
+}
+
+func TestRunAcceptanceLegacyVTextOpenedCheckpointRemainsReadable(t *testing.T) {
+	checkpoints := []types.RunAcceptanceCheckpoint{
+		{Kind: "submitted", State: "passed"},
+		{Kind: "vtext_opened", State: "passed"},
+	}
+	level, state := acceptanceLevelAndState(checkpoints)
+	if level != types.RunAcceptanceStagingSmokeLevel || state != types.RunAcceptanceBlocked {
+		t.Fatalf("legacy vtext_opened acceptance = %s/%s, want staging-smoke-level/blocked", level, state)
+	}
+	checks := buildAcceptanceInvariantChecks(types.RunAcceptanceRecord{Checkpoints: checkpoints})
+	for _, check := range checks {
+		if check.Name == "product_path_observed" && check.State != "passed" {
+			t.Fatalf("legacy vtext_opened product_path_observed = %+v, want passed", check)
+		}
 	}
 }
 
@@ -670,7 +687,7 @@ func TestRunAcceptanceSynthesizeAcceptsSourcePackageWithoutRecipientAdoption(t *
 	if rec.AcceptanceLevel != types.RunAcceptanceExportLevel || rec.State != types.RunAcceptanceAccepted {
 		t.Fatalf("acceptance = %s/%s, want export-level/accepted; checkpoints=%+v invariants=%+v contracts=%+v", rec.AcceptanceLevel, rec.State, rec.Checkpoints, rec.InvariantChecks, rec.VerifierContracts)
 	}
-	for _, want := range []string{"submitted", "vtext_opened", "super_requested", "worker_leased", "worker_delegated", "app_package_published"} {
+	for _, want := range []string{"submitted", "texture_opened", "super_requested", "worker_leased", "worker_delegated", "app_package_published"} {
 		if !acceptanceHasCheckpoint(rec, want) {
 			t.Fatalf("missing checkpoint %q in %+v", want, rec.Checkpoints)
 		}
@@ -1101,7 +1118,7 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 		OwnerID:      "user-alice",
 		TrajectoryID: "traj-source-package",
 		Timestamp:    now.Add(4 * time.Second),
-		Kind:         types.EventVTextDocumentRevisionCreated,
+		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      json.RawMessage(`{"doc_id":"doc-source-package","revision_id":"rev-source-package"}`),
 	})
 	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-source-package", "run-vtext-source-package", "agent-vtext-source-package", "traj-source-package", "channel-source-package", now.Add(5*time.Second), "request_super_execution", map[string]any{
@@ -1257,7 +1274,7 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 		OwnerID:      "user-alice",
 		TrajectoryID: "traj-runtime-supervision",
 		Timestamp:    now.Add(4 * time.Second),
-		Kind:         types.EventVTextDocumentRevisionCreated,
+		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      json.RawMessage(`{"doc_id":"doc-runtime-supervision","revision_id":"rev-runtime-supervision"}`),
 	})
 	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-runtime-supervision", "run-vtext-runtime-supervision", "agent-vtext-runtime-supervision", "traj-runtime-supervision", "channel-runtime-supervision", now.Add(5*time.Second), "request_super_execution", map[string]any{
@@ -1421,7 +1438,7 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 		OwnerID:      "user-alice",
 		TrajectoryID: "traj-acceptance",
 		Timestamp:    now.Add(4 * time.Second),
-		Kind:         types.EventVTextDocumentRevisionCreated,
+		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      json.RawMessage(`{"doc_id":"doc-acceptance","revision_id":"rev-1"}`),
 	})
 	appendAcceptanceToolResult(t, rt, "event-super-acceptance", "run-vtext-acceptance", "agent-vtext-acceptance", now.Add(5*time.Second), "request_super_execution", map[string]any{
@@ -1606,7 +1623,7 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 		OwnerID:      "user-alice",
 		TrajectoryID: "traj-acceptance",
 		Timestamp:    now.Add(4 * time.Second),
-		Kind:         types.EventVTextDocumentRevisionCreated,
+		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      json.RawMessage(`{"doc_id":"doc-acceptance","revision_id":"rev-1"}`),
 	})
 	appendAcceptanceToolResult(t, rt, "event-super-acceptance", "run-vtext-acceptance", "agent-vtext-acceptance", now.Add(5*time.Second), "request_super_execution", map[string]any{
@@ -1724,7 +1741,7 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 		OwnerID:      "user-alice",
 		TrajectoryID: "traj-pending-delegate",
 		Timestamp:    now.Add(4 * time.Second),
-		Kind:         types.EventVTextDocumentRevisionCreated,
+		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      json.RawMessage(`{"doc_id":"doc-pending-delegate","revision_id":"rev-1"}`),
 	})
 	appendAcceptanceToolResult(t, rt, "event-super-pending-delegate", "run-vtext-pending-delegate", "agent-vtext-pending-delegate", now.Add(5*time.Second), "request_super_execution", map[string]any{

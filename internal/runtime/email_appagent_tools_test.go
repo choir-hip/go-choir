@@ -20,10 +20,10 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	}
 	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
 	if vtextRegistry == nil {
-		t.Fatal("missing vtext registry")
+		t.Fatal("missing Texture registry")
 	}
 	if _, ok := vtextRegistry.Lookup("request_email_draft"); !ok {
-		t.Fatal("vtext registry missing request_email_draft")
+		t.Fatal("Texture registry missing request_email_draft")
 	}
 	if _, ok := rt.ToolRegistryForProfile(AgentProfileSuper).Lookup("request_email_draft"); ok {
 		t.Fatal("super must not have direct email draft tool")

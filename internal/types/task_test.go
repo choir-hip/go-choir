@@ -226,19 +226,19 @@ func TestRuntimeHealthStateValues(t *testing.T) {
 	}
 }
 
-func TestVTextAgentRevisionEventKinds(t *testing.T) {
-	// Verify the vtext agent revision event kinds exist and are distinct.
+func TestTextureAgentRevisionEventKinds(t *testing.T) {
+	// Verify the current Texture agent revision event kinds exist and are distinct.
 	eventKinds := []EventKind{
-		EventVTextAgentRevisionStarted,
-		EventVTextAgentRevisionProgress,
-		EventVTextAgentRevisionCompleted,
-		EventVTextAgentRevisionFailed,
+		EventTextureAgentRevisionStarted,
+		EventTextureAgentRevisionProgress,
+		EventTextureAgentRevisionCompleted,
+		EventTextureAgentRevisionFailed,
 	}
 	expected := []string{
-		"vtext.agent_revision.started",
-		"vtext.agent_revision.progress",
-		"vtext.agent_revision.completed",
-		"vtext.agent_revision.failed",
+		"texture.agent_revision.started",
+		"texture.agent_revision.progress",
+		"texture.agent_revision.completed",
+		"texture.agent_revision.failed",
 	}
 	for i, kind := range eventKinds {
 		if string(kind) != expected[i] {
@@ -262,7 +262,27 @@ func TestVTextAgentRevisionEventKinds(t *testing.T) {
 	}
 	for _, tk := range taskKinds {
 		if seen[string(tk)] {
-			t.Errorf("vtext event kind collides with task event kind: %q", tk)
+			t.Errorf("Texture event kind collides with task event kind: %q", tk)
+		}
+	}
+}
+
+func TestLegacyVTextAgentRevisionEventKindsRemainReadable(t *testing.T) {
+	eventKinds := []EventKind{
+		LegacyEventVTextAgentRevisionStarted,
+		LegacyEventVTextAgentRevisionProgress,
+		LegacyEventVTextAgentRevisionCompleted,
+		LegacyEventVTextAgentRevisionFailed,
+	}
+	expected := []string{
+		"vtext.agent_revision.started",
+		"vtext.agent_revision.progress",
+		"vtext.agent_revision.completed",
+		"vtext.agent_revision.failed",
+	}
+	for i, kind := range eventKinds {
+		if string(kind) != expected[i] {
+			t.Errorf("legacy event kind %d: got %q, want %q", i, kind, expected[i])
 		}
 	}
 }

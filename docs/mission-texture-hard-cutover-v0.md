@@ -2827,11 +2827,12 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: read-only C39 checkpoint
-typed Trace/run-acceptance evidence naming residue after C38. Coarse V remains
-2 because Trace event-kind/checkpoint repair is not yet implemented, and
-database/table names, stored legacy routes, Universal Wire edition refs,
-deployed Universal Wire story-field proof, and protocol v0 remain.
+variant (ranking function) V: current V=2; last ΔV: C39 local implementation
+and verification repaired current Trace/run-acceptance evidence naming while
+preserving legacy readability; landing and staging proof are pending. Coarse V
+remains 2 because C39 is not deployed-supported yet, and database/table names,
+stored legacy routes, Universal Wire edition refs, deployed Universal Wire
+story-field proof, and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -3009,14 +3010,23 @@ evidence surfaces. Conjecture delta: new/current evidence should emit and derive
 Texture names while legacy stored `vtext.*` events and `vtext_opened`
 acceptance records remain readable. Rollback path: revert the single future
 behavior commit; do not rewrite stored event rows or acceptance records.
+C39 is locally supported but not yet deployed: current event constants now emit
+`texture.agent_revision.*`, `texture.document_revision.created`, and
+`texture.decision.recorded`; Trace summaries/tone and document event projection
+recognize current Texture plus legacy stored V-name events; new run-acceptance
+synthesis emits `texture_opened` and Texture evidence wording while legacy
+`vtext_opened` records still derive staging-smoke state/invariants; active
+runtime prompts/errors/verifier messages on the touched paths now say Texture.
+Focused tests, comprehensive-tagged run-acceptance tests, runtime shards,
+doccheck, `git diff --check`, and scoped residue searches passed locally. The
+remaining scoped C39 non-test residue is explicit legacy compatibility plus one
+legacy prompt parser branch.
 
-next move: implement C39 current Trace/run-acceptance evidence naming repair:
-introduce current Texture event kinds/checkpoint labels and legacy recognition
-helpers, update Trace summaries/tone and run-acceptance synthesis to use Texture
-wording, keep old stored `vtext.*` events readable, then prove locally and via
-staging prompt-bar -> conductor -> Texture Trace/run-acceptance evidence. Keep
-storage/stored-route, Universal Wire story-field proof, and protocol work out of
-this slice.
+next move: commit and push C39, monitor CI/deploy, verify staging identity, then
+run deployed prompt-bar -> conductor -> Texture proof that current Trace event
+kinds/summaries use Texture and synthesized run acceptance records use
+`texture_opened`. Keep storage/stored-route, Universal Wire story-field proof,
+and protocol work out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

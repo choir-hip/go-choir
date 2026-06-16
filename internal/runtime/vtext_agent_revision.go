@@ -234,7 +234,7 @@ func (h *APIHandler) reconcilePendingMutationFromDocumentHead(ctx context.Contex
 }
 
 func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Document, ownerID string, req vtextAgentRevisionRequest, parentRunID string, scheduledMessageSeq int64) (*types.RunRecord, error) {
-	// Build the backend-owned vtext revision request from current document state.
+	// Build the backend-owned Texture revision request from current document state.
 	var currentRevision types.Revision
 	var currentRevisionLoaded bool
 	if doc.CurrentRevisionID != "" {
@@ -382,7 +382,7 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 		"doc_id":  doc.DocID,
 		"loop_id": rec.RunID,
 	})
-	rt.emitVTextAgentEvent(ctx, rec, types.EventVTextAgentRevisionStarted,
+	rt.emitVTextAgentEvent(ctx, rec, types.EventTextureAgentRevisionStarted,
 		events.CauseTaskLifecycle, startedPayload)
 
 	return rec, nil
@@ -447,12 +447,12 @@ func vtextUseFocusedUserEditContext(current types.Revision, previous *types.Revi
 	return current.AuthorKind == types.AuthorUser && previous != nil && len(current.Content) >= 12000
 }
 
-// buildAgentRevisionRequest constructs the backend-owned vtext revision
-// request sent as the user turn for the vtext appagent.
+// buildAgentRevisionRequest constructs the backend-owned Texture revision
+// request sent as the user turn for the Texture appagent.
 func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req vtextAgentRevisionRequest, diffSummary string, hasGroundedHistory bool, recentWorkerMessages []ChannelMessage, _ []string) string {
 	var b strings.Builder
 	promptBarInstructionRevision := current.AuthorKind == types.AuthorUser && metadataBoolValue(metadata, "prompt_bar_instruction_revision")
-	b.WriteString("A revise event was triggered for the current vtext document.")
+	b.WriteString("A revise event was triggered for the current Texture document.")
 
 	intent := strings.TrimSpace(req.Intent)
 	if intent == "" {
@@ -1047,7 +1047,7 @@ func (rt *Runtime) emitVTextDocumentRevisionEvent(ctx context.Context, ownerID s
 		EventID:   uuid.New().String(),
 		OwnerID:   ownerID,
 		Timestamp: time.Now().UTC(),
-		Kind:      types.EventVTextDocumentRevisionCreated,
+		Kind:      types.EventTextureDocumentRevisionCreated,
 		Payload:   payload,
 	}
 	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
@@ -1084,7 +1084,7 @@ func (rt *Runtime) emitVTextDocumentRevisionEventForRun(ctx context.Context, rec
 		OwnerID:      rec.OwnerID,
 		TrajectoryID: trajectoryIDForRun(rec),
 		Timestamp:    time.Now().UTC(),
-		Kind:         types.EventVTextDocumentRevisionCreated,
+		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      payload,
 	}
 	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
@@ -1111,11 +1111,11 @@ func (rt *Runtime) emitVTextDecisionRecordedEvent(ctx context.Context, rec *type
 		"next_action":   decision.NextAction,
 	})
 	if err != nil {
-		log.Printf("runtime: marshal vtext decision event: %v", err)
+		log.Printf("runtime: marshal Texture decision event: %v", err)
 		return
 	}
 	if rec != nil {
-		rt.emitVTextAgentEvent(ctx, rec, types.EventVTextDecisionRecorded, events.CauseToolExecution, payload)
+		rt.emitVTextAgentEvent(ctx, rec, types.EventTextureDecisionRecorded, events.CauseToolExecution, payload)
 		return
 	}
 	evRec := &types.EventRecord{
@@ -1126,11 +1126,11 @@ func (rt *Runtime) emitVTextDecisionRecordedEvent(ctx context.Context, rec *type
 		OwnerID:      decision.OwnerID,
 		TrajectoryID: decision.TrajectoryID,
 		Timestamp:    decision.CreatedAt,
-		Kind:         types.EventVTextDecisionRecorded,
+		Kind:         types.EventTextureDecisionRecorded,
 		Payload:      payload,
 	}
 	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
-		log.Printf("runtime: persist vtext decision event: %v", err)
+		log.Printf("runtime: persist Texture decision event: %v", err)
 		return
 	}
 	rt.bus.Publish(events.RuntimeEvent{

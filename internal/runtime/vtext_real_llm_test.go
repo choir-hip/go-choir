@@ -604,11 +604,11 @@ func TestVTextAgentRevisionRealLLMEventsEmitted(t *testing.T) {
 	}
 
 	expectedKinds := map[types.EventKind]bool{
-		types.EventRunSubmitted:                false,
-		types.EventRunStarted:                  false,
-		types.EventRunCompleted:                false,
-		types.EventVTextAgentRevisionStarted:   false,
-		types.EventVTextAgentRevisionCompleted: false,
+		types.EventRunSubmitted:                  false,
+		types.EventRunStarted:                    false,
+		types.EventRunCompleted:                  false,
+		types.EventTextureAgentRevisionStarted:   false,
+		types.EventTextureAgentRevisionCompleted: false,
 	}
 
 	for _, ev := range evts {
@@ -625,7 +625,7 @@ func TestVTextAgentRevisionRealLLMEventsEmitted(t *testing.T) {
 
 	// Verify completed event payload.
 	for _, ev := range evts {
-		if ev.Kind == types.EventVTextAgentRevisionCompleted {
+		if ev.Kind == types.EventTextureAgentRevisionCompleted {
 			var payload map[string]string
 			if err := json.Unmarshal(ev.Payload, &payload); err == nil {
 				if payload["doc_id"] != docResp.DocID {

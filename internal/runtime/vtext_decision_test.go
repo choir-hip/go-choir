@@ -67,7 +67,7 @@ func TestRecordVTextDecisionToolPersistsAndEmitsReadableEvent(t *testing.T) {
 	}
 	found := false
 	for _, ev := range events {
-		if ev.Kind != types.EventVTextDecisionRecorded {
+		if ev.Kind != types.EventTextureDecisionRecorded {
 			continue
 		}
 		found = true
@@ -76,7 +76,7 @@ func TestRecordVTextDecisionToolPersistsAndEmitsReadableEvent(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("missing vtext decision event")
+		t.Fatal("missing Texture decision event")
 	}
 }
 
@@ -134,7 +134,7 @@ func TestVTextDiagnosisAndTraceLogsIncludeDecisionRecords(t *testing.T) {
 		t.Fatalf("trace logs status = %d, body: %s", traceW.Code, traceW.Body.String())
 	}
 	body := traceW.Body.String()
-	if !strings.Contains(body, "vtext decision wait_for_evidence: Researcher has not delivered source evidence yet.") ||
+	if !strings.Contains(body, "Texture decision wait_for_evidence: Researcher has not delivered source evidence yet.") ||
 		!strings.Contains(body, `"decision_id":"decision-trace-1"`) {
 		t.Fatalf("trace logs missing readable decision: %s", body)
 	}

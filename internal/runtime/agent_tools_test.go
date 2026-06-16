@@ -3958,7 +3958,7 @@ func TestSubmitWorkerUpdateFallsBackToVTextChannelWhenExplicitTargetMissing(t *t
 		updateID        string
 	}{
 		{name: "bare doc id", explicitAgentID: docID, updateID: "terminal-blocker-bare-doc"},
-		{name: "missing vtext agent", explicitAgentID: "vtext:" + docID, updateID: "terminal-blocker-vtext-agent"},
+		{name: "legacy vtext agent id", explicitAgentID: "vtext:" + docID, updateID: "terminal-blocker-vtext-agent"},
 		{name: "stale owner id", explicitAgentID: ownerID, updateID: "terminal-blocker-owner-id"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

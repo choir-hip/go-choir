@@ -1463,35 +1463,35 @@ func traceEventSummary(ev types.EventRecord, payload map[string]any) string {
 			return errText
 		}
 		return string(ev.Kind)
-	case types.EventVTextAgentRevisionStarted:
-		return "vtext revision started"
-	case types.EventVTextAgentRevisionProgress:
+	case types.EventTextureAgentRevisionStarted, types.LegacyEventVTextAgentRevisionStarted:
+		return "Texture revision started"
+	case types.EventTextureAgentRevisionProgress, types.LegacyEventVTextAgentRevisionProgress:
 		if phase := payloadString(payload, "phase"); phase != "" {
-			return fmt.Sprintf("vtext %s", phase)
+			return fmt.Sprintf("Texture %s", phase)
 		}
-		return "vtext revision progress"
-	case types.EventVTextAgentRevisionCompleted:
+		return "Texture revision progress"
+	case types.EventTextureAgentRevisionCompleted, types.LegacyEventVTextAgentRevisionCompleted:
 		if revisionID := payloadString(payload, "revision_id"); revisionID != "" {
 			return fmt.Sprintf("created revision %s", shortTraceID(revisionID))
 		}
-		return "vtext revision completed"
-	case types.EventVTextAgentRevisionFailed:
+		return "Texture revision completed"
+	case types.EventTextureAgentRevisionFailed, types.LegacyEventVTextAgentRevisionFailed:
 		if errText := payloadString(payload, "error"); errText != "" {
 			return errText
 		}
-		return "vtext revision failed"
-	case types.EventVTextDocumentRevisionCreated:
+		return "Texture revision failed"
+	case types.EventTextureDocumentRevisionCreated, types.LegacyEventVTextDocumentRevisionCreated:
 		if revisionID := payloadString(payload, "revision_id"); revisionID != "" {
 			return fmt.Sprintf("document head -> %s", shortTraceID(revisionID))
 		}
 		return "document revision created"
-	case types.EventVTextDecisionRecorded:
+	case types.EventTextureDecisionRecorded, types.LegacyEventVTextDecisionRecorded:
 		kind := traceNonEmpty(payloadString(payload, "decision_kind"), "decision")
 		reason := traceExcerpt(payloadString(payload, "reason"), 96)
 		if reason != "" {
-			return fmt.Sprintf("vtext decision %s: %s", kind, reason)
+			return fmt.Sprintf("Texture decision %s: %s", kind, reason)
 		}
-		return fmt.Sprintf("vtext decision %s", kind)
+		return fmt.Sprintf("Texture decision %s", kind)
 	default:
 		return string(ev.Kind)
 	}
@@ -1499,9 +1499,9 @@ func traceEventSummary(ev types.EventRecord, payload map[string]any) string {
 
 func traceEventTone(ev types.EventRecord) string {
 	switch ev.Kind {
-	case types.EventRunFailed, types.EventRunBlocked, types.EventRunCancelled, types.EventVTextAgentRevisionFailed:
+	case types.EventRunFailed, types.EventRunBlocked, types.EventRunCancelled, types.EventTextureAgentRevisionFailed, types.LegacyEventVTextAgentRevisionFailed:
 		return "error"
-	case types.EventRunCompleted, types.EventRunCompactionCompleted, types.EventRunContinuationStarted, types.EventAppAdoptionVerified, types.EventAppAdoptionPromoted, types.EventVTextAgentRevisionCompleted, types.EventVTextDocumentRevisionCreated, types.EventBrowserNavigationCompleted, types.EventBrowserControlCompleted, types.EventBrowserSessionClosed:
+	case types.EventRunCompleted, types.EventRunCompactionCompleted, types.EventRunContinuationStarted, types.EventAppAdoptionVerified, types.EventAppAdoptionPromoted, types.EventTextureAgentRevisionCompleted, types.LegacyEventVTextAgentRevisionCompleted, types.EventTextureDocumentRevisionCreated, types.LegacyEventVTextDocumentRevisionCreated, types.EventBrowserNavigationCompleted, types.EventBrowserControlCompleted, types.EventBrowserSessionClosed:
 		return "success"
 	case types.EventRunPassivated, types.EventRunCompactionStarted, types.EventRunRetry, types.EventRunContinuationSelected, types.EventAppChangePackagePublished, types.EventAppAdoptionProposed, types.EventAppAdoptionVerificationStarted, types.EventBrowserSessionCreated:
 		return "active"
@@ -1511,7 +1511,7 @@ func traceEventTone(ev types.EventRecord) string {
 		return "message"
 	case types.EventToolInvoked, types.EventToolResult:
 		return "tool"
-	case types.EventVTextDecisionRecorded:
+	case types.EventTextureDecisionRecorded, types.LegacyEventVTextDecisionRecorded:
 		return "active"
 	default:
 		return "neutral"

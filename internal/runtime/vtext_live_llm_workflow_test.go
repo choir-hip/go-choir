@@ -252,8 +252,8 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperVText(t *testing.T) {
 	if !liveSuccessfulBashResult(eventsByTrajectory) {
 		t.Fatalf("trace missing successful bash verification result")
 	}
-	if !liveEventsContain(eventsByTrajectory, types.EventVTextAgentRevisionCompleted, "") {
-		t.Fatalf("trace missing vtext revision completion")
+	if !liveEventsContain(eventsByTrajectory, types.EventTextureAgentRevisionCompleted, "") {
+		t.Fatalf("trace missing Texture revision completion")
 	}
 	if _, err := rt.VerifyVTextWorkflow(context.Background(), choirruntime.VTextWorkflowVerificationOptions{
 		OwnerID:                     liveLLMOwnerID,
