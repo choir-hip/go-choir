@@ -3280,3 +3280,46 @@ Open edge: choose the next residue class. Strongest remaining candidates are
 broader `.vtext` file/alias suffix design, durable `vtext:` actor ids, storage
 table names, and Universal Wire deployed story-field proof once staging can
 provide an edition story payload through product paths.
+
+## 2026-06-16 - Problem Checkpoint: Universal Wire Style Texture Suffixes
+
+Claim: C30 is an admissible bounded residue class. Current Universal Wire and
+coagent style-source prompt/default surfaces still introduce `Style.vtext`
+labels and `.style.vtext` source paths, but this can be repaired without
+touching canonical `.vtext` import/open behavior, storage aliases, file-browser
+shortcuts, durable actor ids, or metadata compatibility keys.
+
+Move: read-only inventory over coagent prompt construction, Universal Wire
+defaults and generated-content cleanup filters, runtime tool profiles, processor
+prompt defaults, and focused tests; document the problem before behavior
+changes.
+
+Expected ΔV: no coarse V decrease. This checkpoint creates the admissible first
+commit for the C30 behavior slice and should make the next move unambiguous.
+
+Actual ΔV: documentation checkpoint only; C30 remains active.
+
+Receipts:
+- `internal/runtime/tools_coagent.go` emits `## Style.vtext Source`, `Selected
+  Style.vtext source context`, `Style.vtext` reader-facing exclusion rules,
+  default style source titles such as `Style.vtext: Universal Wire`, default
+  source paths such as `styles/universal-wire.style.vtext`, and style-selection
+  rationales ending in `Style.vtext`.
+- `internal/runtime/universal_wire.go` supplies default title
+  `Style.vtext: Universal Wire` and filters generated `Style.vtext Source`
+  headings.
+- `internal/runtime/tool_profiles.go` and
+  `internal/runtime/prompt_defaults/processor.md` still tell agents to pass
+  `Style.vtext` needs.
+- Runtime tests in
+  `internal/runtime/{runtime,universal_wire,agent_tools}_test.go` assert
+  `Style.vtext` prompt content and metadata.
+- Problem checkpoint added to
+  `docs/mission-texture-hard-cutover-v0.md` with conjecture delta, protected
+  surfaces, admissible evidence class, rollback path, heresy delta, and next
+  behavior slice design.
+
+Open edge: commit and push the docs checkpoint, monitor Docs Truth Check, then
+implement C30 behavior changes: current style-source labels/paths and prompt
+contracts move to `Style.texture` / `.style.texture`; legacy `Style.vtext`
+cleanup recognition stays explicitly scoped.

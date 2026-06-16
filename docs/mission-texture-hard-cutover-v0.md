@@ -1696,6 +1696,82 @@ Next behavior slice design:
 - push, monitor CI/deploy for behavior changes, and prove a newly published
   Texture opens through `/pub/texture/...` on staging.
 
+## Problem Checkpoint: Universal Wire Style Texture Suffixes
+
+Mutation class: `green` documentation and evidence only. No prompt text,
+runtime behavior, style source metadata, tests, API contract, import/export
+logic, storage schema, file-browser behavior, or persistent state changed in
+this checkpoint.
+
+Read-only search on 2026-06-16 shows a bounded style-source residue class
+inside Universal Wire and coagent prompt construction:
+
+- `internal/runtime/tools_coagent.go` emits `## Style.vtext Source`, `Selected
+  Style.vtext source context`, reader-facing exclusion rules mentioning
+  `Style.vtext`, default style source titles such as `Style.vtext: Universal
+  Wire`, default source paths such as `styles/universal-wire.style.vtext`, and
+  style-selection rationales ending in `Style.vtext`;
+- `internal/runtime/universal_wire.go` still supplies the default title
+  `Style.vtext: Universal Wire`, trims `.vtext` from story-derived headlines,
+  and filters generated content headings named `Style.vtext Source`;
+- `internal/runtime/tool_profiles.go` and
+  `internal/runtime/prompt_defaults/processor.md` still instruct agents to pass
+  `Style.vtext` needs;
+- runtime tests in `internal/runtime/{runtime,universal_wire,agent_tools}_test.go`
+  assert `Style.vtext` prompt content and metadata.
+
+This is narrower than canonical file suffix migration. It does not change
+`.vtext` import/open behavior, file-browser recognition, alias ordering,
+workspace paths, migration adapter names, metadata compatibility keys, durable
+`vtext:` actor ids, or stored document titles. It is broader than test wording:
+the old label appears in runtime prompt contracts that shape Universal Wire
+article drafting and source/style metadata.
+
+Conjecture delta: Universal Wire style-source labels, style source paths, and
+prompt instructions can move from `Style.vtext` / `.style.vtext` to
+`Style.texture` / `.style.texture` while preserving the same selected style
+source semantics, article-head completion contract, and content filters. The
+legacy content filter should continue removing old `Style.vtext Source`
+headings as historical/generated cleanup, but current prompts and defaults
+should no longer introduce those headings.
+
+Protected surfaces: coagent processor/reconciler prompts, default Wire style
+source metadata, Universal Wire article projection cleanup, tests that assert
+style-source prompt contracts, and downstream Wire publication eligibility that
+depends on selected style metadata.
+
+Admissible evidence class: focused runtime tests covering Universal Wire prompt
+construction and processor handoff, residue search proving current style-source
+defaults/prompts no longer introduce `Style.vtext` outside explicit legacy
+cleanup or negative assertions, CI/deploy identity if behavior changes land,
+and staging/product evidence only if a deployed Wire story-field proof becomes
+available through product paths. This slice does not claim canonical `.texture`
+file import/storage migration.
+
+Rollback path: restore previous `Style.vtext` prompt labels, style source
+paths, and expectations if Universal Wire style selection, article prompt
+contracts, or generated-content cleanup regress.
+
+Heresy delta: discovered: after public route and source-class repairs, current
+Universal Wire style prompts still teach agents to think in `Style.vtext`
+documents. Introduced: none in this checkpoint. Repaired target: current
+style-source prompt/default surfaces should speak `Style.texture` while the
+legacy `.vtext` file/import/storage migration remains separate and explicit.
+
+Next behavior slice design:
+
+- rename current style-source labels from `Style.vtext` to `Style.texture`;
+- rename default style source paths from `styles/*.style.vtext` to
+  `styles/*.style.texture`;
+- update processor/reconciler prompt instructions and focused runtime tests to
+  expect `Style.texture`;
+- keep cleanup filters that recognize old `Style.vtext Source` headings as
+  legacy generated-content sanitizers, but add/confirm current `Style.texture`
+  cleanup paths as well;
+- keep canonical `.vtext` file import/open behavior, file-browser shortcuts,
+  storage aliases, metadata compatibility keys, durable actor ids, and protocol
+  v0 out of C30.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -1793,12 +1869,16 @@ route normalization, and current source-reader fixtures now use only
 health reports the pushed SHA; and deployed product proof created and published
 a Texture through `/pub/texture/...` while same-slug `/pub/vtext/...` was not
 treated as a public reader. The backend `/pub/vtext/...` stored-route row shim
-remains explicitly tagged as compatibility residue until storage migration.
+remains explicitly tagged as compatibility residue until storage migration. C30
+is active for Universal Wire style-source suffixes: current prompts/defaults
+still introduce `Style.vtext` labels and `.style.vtext` source paths, while
+canonical `.vtext` import/storage behavior stays out of scope.
 
-next move: choose the next high-leverage residue class: broader `.vtext`
-file/alias suffix design, durable `vtext:` actor ids, storage table names, or
-Universal Wire deployed story-field proof when product data exists. Keep
-protocol v0 unwritten until remaining working-surface proofs are complete.
+next move: commit the C30 problem checkpoint, then rename Universal Wire
+style-source labels/paths and prompt contracts from `Style.vtext` /
+`.style.vtext` to `Style.texture` / `.style.texture`, while keeping legacy
+cleanup filters and leaving canonical file/storage migration for a later slice.
+Keep protocol v0 unwritten until remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -1828,10 +1908,13 @@ first-revision proof, deployed pinned-transclusion proof, visible UI proof,
 source-contract open-surface proof, canonical source-path metadata repair,
 publication fallback label repair, C27 deployed exported HTML class-name proof,
 C28 deployed live editor source class proof, and C29 deployed public route proof
-are landed. Choose the next residue class from file/storage/actor/Universal-Wire
-edges. Keep storage schema, `.vtext` file suffixes, durable `vtext:` actor ids,
-`PublishVText` Go symbols, backend stored-route migration, Universal Wire
-story-field proof, and protocol v0 out of completed C29.
+are landed. C30 is active: commit the Universal Wire Style.texture checkpoint,
+then rename current style-source labels/paths and prompt contracts from
+`Style.vtext` / `.style.vtext` to `Style.texture` / `.style.texture`. Keep
+canonical `.vtext` file import/open behavior, storage schema, `.vtext` file
+shortcuts, durable `vtext:` actor ids, `PublishVText` Go symbols, backend
+stored-route migration, Universal Wire story-field proof, and protocol v0 out
+of C30.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to
