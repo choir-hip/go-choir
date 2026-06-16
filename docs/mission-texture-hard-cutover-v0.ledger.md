@@ -5178,3 +5178,66 @@ Open edge: land C42 through CI/deploy/staging identity and deployed product
 proof. The deployed proof should exercise platform Texture sync/read or
 publication document behavior, not only health, because this slice changes
 platform store bootstrap and table identity.
+
+## 2026-06-16 - C42 Landing Proof: Platform Table Identity
+
+Claim: C42 is deployed-supported for the platform table identity slice. The
+claim is scoped to platform bootstrap creating `platform_texture_*`, legacy
+`platform_vtext_*` rows copying forward idempotently, and current platform
+Texture reads/writes targeting current tables. It does not claim user-store
+`vtext_*` table migration, durable actor-id migration, stored route-row
+deletion, Universal Wire story-field settlement, or protocol v0.
+
+Move: settle C42 scope with CI, staging deploy identity, and deployed
+browser-public platform-backed read proof. Expected ΔV: promote C42 from local
+support to deployed support; coarse V remains 2.
+
+Actual ΔV: C42 deployed-supported. Coarse V remains 2 because user-store
+table-name residue, durable actor/profile compatibility, Universal Wire
+story-field proof, and protocol v0 remain.
+
+Receipts:
+
+- Behavior commit `c749e31b21da04575a8477872eb65ac6d881d8b2`
+  (`platform: use texture tables for platform documents`) pushed to
+  `origin/main`.
+- CI run `27616117172` passed, including Go vet/build, non-runtime tests,
+  integration-tagged smoke, Docs Truth Check, TLA+ model check, all four
+  runtime shards, and staging deploy.
+- Separate Docs Truth Check run `27616117130` and FlakeHub publish run
+  `27616117230` passed for the same commit.
+- Deploy job `81652699154` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `c749e31b21da04575a8477872eb65ac6d881d8b2`, deployed at
+  `2026-06-16T12:05:27Z`; receipt stored at `/tmp/choir-c42-health.json`.
+- Deployed platform-backed read proof
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/c42-platform-texture-read.tmp.spec.js`
+  passed before the temporary spec was deleted. It used a fresh authenticated
+  browser session and browser-public `/api/texture` routes with
+  `read_owner=universal-wire-platform`; missing platform document and revision
+  reads returned controlled `404` responses instead of platform store or missing
+  table errors.
+- Deployed Universal Wire staging acceptance
+  `GO_CHOIR_RUN_UNIVERSAL_WIRE_STAGING=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/universal-wire-staging-acceptance.spec.js`
+  passed, but staging still showed zero Universal Wire articles, so it remains
+  empty-state coverage rather than the open story-field proof.
+
+Protected surfaces and rollback:
+
+- Mutation class: red; protected surfaces touched are platform Texture document
+  sync, revision sync/read, platform store bootstrap, existing platform Dolt
+  rows, browser-public platform-backed Texture read projection, and rollback to
+  older binaries that still expect `platform_vtext_*`.
+- Rollback path: revert commit
+  `c749e31b21da04575a8477872eb65ac6d881d8b2`. Existing legacy rows remain in
+  place. Rows created only in `platform_texture_*` after this cutover would
+  need a reverse copy into `platform_vtext_*` before running an older binary
+  that must see them; current code intentionally stops dual-writing legacy
+  tables.
+- Heresy delta: repaired deployed platform table identity; user-store `vtext_*`
+  tables, durable actor/profile ids, stored public route-row compatibility,
+  Universal Wire story-field proof, and protocol v0 remain open.
+
+Open edge: choose the next bounded remaining slice: user-store `vtext_*` table
+migration design, durable actor/profile compatibility, deployed Universal Wire
+story-field proof, or protocol v0 after working-surface proof.

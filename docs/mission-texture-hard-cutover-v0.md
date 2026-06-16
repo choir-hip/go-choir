@@ -3021,6 +3021,32 @@ Heresy delta: repaired locally for platform table identity. User-store
 `/pub/vtext/...` route rows, Universal Wire `vtext:` refs, and protocol v0
 remain open.
 
+Deployed evidence on 2026-06-16:
+
+- Commit `c749e31b21da04575a8477872eb65ac6d881d8b2` passed CI run
+  `27616117172`, including Go vet/build, non-runtime tests,
+  integration-tagged smoke, Docs Truth Check, TLA+ model check, all four
+  runtime shards, and staging deploy.
+- Separate Docs Truth Check run `27616117130` and FlakeHub publish run
+  `27616117230` completed successfully for the same commit.
+- Deploy job `81652699154` succeeded.
+- Staging health at `https://choir.news/health` reported proxy and sandbox
+  commit `c749e31b21da04575a8477872eb65ac6d881d8b2`, deployed at
+  `2026-06-16T12:05:27Z`; receipt stored at `/tmp/choir-c42-health.json`.
+- Deployed platform-backed read proof
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/c42-platform-texture-read.tmp.spec.js`
+  passed before the temporary spec was deleted. The probe used a fresh
+  authenticated browser session and browser-public routes
+  `/api/texture/documents/c42-missing-doc-...?read_owner=universal-wire-platform`
+  and `/api/texture/revisions/c42-missing-rev-...?read_owner=universal-wire-platform`.
+  Both returned controlled `404` responses instead of platform store or missing
+  table errors, proving the deployed proxy -> platformd Texture read path can
+  query the current platform tables after bootstrap.
+- Deployed Universal Wire staging acceptance
+  `GO_CHOIR_RUN_UNIVERSAL_WIRE_STAGING=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/universal-wire-staging-acceptance.spec.js`
+  passed. The observed staging app still had zero Universal Wire articles, so
+  this was empty-state coverage and not counted as story-field settlement.
+
 ## Parallax State
 
 status: open_handoff
@@ -3310,17 +3336,21 @@ runtime shards, doccheck, `git diff --check`, scoped `database=vtext` non-test
 store search, CI run `27614905254`, deploy job `81648551589`, staging health
 for commit `fc166e4fbe1a93122cd6fb57e5c408d3cc864ff3`, and deployed Texture
 publication proof passed.
-C42 is locally supported for platform table identity: platform bootstrap now
+C42 is deployed-supported for platform table identity: platform bootstrap now
 creates current `platform_texture_*` tables, copies legacy `platform_vtext_*`
 rows forward idempotently, and current store methods read/write
 `platform_texture_*`. Legacy tables remain as compatibility state, but current
-code intentionally stops dual-writing them. Coarse V remains 2 until CI/deploy
-and staging product proof land.
+code intentionally stops dual-writing them. Focused platform tests, full
+platform/proxy tests, doccheck, scoped residue search, independent diff review,
+CI run `27616117172`, deploy job `81652699154`, staging health for commit
+`c749e31b21da04575a8477872eb65ac6d881d8b2`, and deployed browser-public
+platform-backed Texture read proof passed. Universal Wire staging acceptance
+still observed zero articles, so deployed story-field proof remains open.
 
-next move: land C42 through CI/deploy/staging identity and deployed product
-proof. Keep user-store `vtext_*` tables, durable actor/profile compatibility,
-stored route-row compatibility, Universal Wire story-field proof, and protocol
-work out of this slice.
+next move: choose the next bounded remaining slice: user-store `vtext_*` table
+migration design, durable actor/profile compatibility, deployed Universal Wire
+story-field proof, or protocol v0 after working-surface proof. Keep protocol v0
+out until the working surface is fully proven.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -3372,11 +3402,14 @@ public API/browser proof is recorded. C41 is deployed-supported for user-store
 Dolt database identity: new/current user-store workspaces open
 `database=texture`, legacy `database=vtext` workspaces remain readable, and
 table-name/platform-table/durable-actor/Universal-Wire residue stays out of
-scope. Next move is the next bounded remaining slice: table-name migration
-design, platform `platform_vtext_*` table residue, durable actor/profile
-compatibility, or deployed Universal Wire story-field proof. Universal Wire
-story-field staging proof and protocol v0 remain open. Keep protocol v0 out
-until the working surface is proven.
+scope. C42 is deployed-supported for platform table identity:
+`platform_texture_*` is the current platform document storage substrate,
+legacy `platform_vtext_*` rows are copied forward idempotently, and staging
+platform-backed read proof passed. Next move is the next bounded remaining
+slice: user-store `vtext_*` table migration design, durable actor/profile
+compatibility, deployed Universal Wire story-field proof, or protocol v0 after
+proof. Universal Wire story-field staging proof and protocol v0 remain open.
+Keep protocol v0 out until the working surface is proven.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to
