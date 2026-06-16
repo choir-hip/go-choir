@@ -475,7 +475,7 @@ func (s *Service) SubmitPublicationProposal(ctx context.Context, req SubmitPubli
 			selector = string(ref.Selector)
 		}
 		toID := firstNonEmpty(ref.SpanID, ref.PublicationVersionID, req.PublicationVersionID)
-		toKind := "published_vtext_span"
+		toKind := "published_texture_span"
 		if ref.SpanID == "" {
 			toKind = "publication_version"
 		}

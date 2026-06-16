@@ -257,7 +257,7 @@ export function publicationSourceEntityToLocal(record: any, context: { bundle?: 
   };
   if (!entity.target.item_id && record.target_kind === 'source_service_item') entity.target.item_id = record.target_id || '';
   if (!entity.target.content_id && record.target_kind === 'content_item') entity.target.content_id = record.target_id || '';
-  if (!entity.target.publication_version_id && record.target_kind === 'published_vtext_span') {
+  if (!entity.target.publication_version_id && (record.target_kind === 'published_texture_span' || record.target_kind === 'published_vtext_span')) {
     entity.target.publication_version_id = record.target_id || bundle?.version?.id || '';
   }
   return sourceEntityID(entity) ? entity : null;

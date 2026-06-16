@@ -2491,3 +2491,63 @@ Open edge: implement C24 by making current source-contract publication open
 surface names Texture-first, keep legacy aliases/read compatibility, regenerate
 frontend contract output, and run focused Go/frontend coverage plus residue
 searches.
+
+## 2026-06-16 - Local Repair: Source Contract Texture Open Surface
+
+Claim: current source-contract publication source-open naming can move to
+Texture while retaining legacy `vtext` / `published_vtext*` input
+compatibility.
+
+Move: change the shared source-contract schema canonical publication open
+surface from `vtext` to `texture`; replace Go `OpenSurfaceVText` with
+`OpenSurfaceTexture`; regenerate the frontend contract artifact; update
+frontend source-open plans to return `openSurface: "texture"` and
+`mode: "published_texture"`; update current publication source entity writers
+and platform proposal citation edges to emit `published_texture_span`; keep
+legacy `vtext` and `published_vtext*` forms as aliases/read compatibility.
+
+Expected ΔV: support C24 locally; no coarse V decrease until CI/deploy and any
+needed deployed product evidence are recorded.
+
+Actual ΔV: C24 is supported for local shared-contract/frontend/platform scope.
+V remains 2.
+
+Protected surfaces: shared source-contract normalization, generated frontend
+source contract, frontend source-open planning, platform publication source
+entity open-surface defaults, publication proposal source-kind writes, and
+focused tests.
+
+Admissible evidence class: source-contract Go tests, focused platform/proxy Go
+tests, focused frontend source-contract tests, frontend build/generated
+contract check, residue searches, CI, and staging identity or deployed
+publication source-open proof if required.
+
+Rollback path: restore canonical `vtext` open-surface names and
+`published_vtext_span` writer defaults if publication source opening, source
+contract generation, or platform source metadata regresses. Legacy inputs
+remain accepted during the repair.
+
+Heresy delta: repaired locally for current source-contract writer/planner names;
+legacy open-surface tokens remain deletion-receipted aliases.
+
+Receipts:
+- Source-contract Go tests passed:
+  `nix develop -c go test ./internal/sourcecontract`.
+- Focused platform publication/source tests passed:
+  `nix develop -c go test ./internal/platform -run 'Test.*Source|Test.*Publication|Test.*Publish|Test.*Proposal' -count=1`.
+- Focused proxy platform/public tests passed:
+  `nix develop -c go test ./internal/proxy -run 'Test.*Platform|Test.*Publication|Test.*Public' -count=1`.
+- Focused frontend source-contract tests passed:
+  `npm --prefix frontend run e2e -- --project=chromium tests/vtext-source-entities.spec.js -g "frontend source contract|source open plans"`.
+- Frontend build and generated-contract check passed:
+  `npm --prefix frontend run build`.
+- Current writer/planner residue search found no accidental old current
+  contract names:
+  `rg -n "OpenSurfaceVText|SOURCE_OPEN_SURFACES\\.vtext|published_vtext_derivative|mode: 'published_vtext'|\\\"mode\\\": \\\"published_vtext\\\"|appId: 'vtext'|\\\"appId\\\": \\\"vtext\\\"|openSurface: 'vtext'|\\\"openSurface\\\": \\\"vtext\\\"" internal frontend/src frontend/tests -g '!frontend/dist/**'`.
+- Legacy-token search now finds only explicit aliases/read compatibility and
+  the separate auth-intent compatibility bridge:
+  `rg -n "published_vtext|published_vtext_span" internal frontend/src frontend/tests -g '!frontend/dist/**'`.
+
+Open edge: push C24, monitor CI/deploy, verify staging identity, and determine
+whether a deployed publication source-open browser proof is needed for this
+contract slice.

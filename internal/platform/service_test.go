@@ -748,8 +748,8 @@ func TestPublicationExportPreservesSourceContractMatrix(t *testing.T) {
 			contentHash:       "hash-content-blocked",
 		},
 		{
-			entityID:          "src-publication-vtext",
-			kind:              "published_vtext",
+			entityID:          "src-publication-texture",
+			kind:              "published_texture",
 			targetKind:        "publication_version",
 			targetID:          "pubver-123",
 			target:            map[string]any{"target_kind": "publication_version", "publication_version_id": "pubver-123"},
@@ -759,11 +759,11 @@ func TestPublicationExportPreservesSourceContractMatrix(t *testing.T) {
 			rawSelectorKind:   "data release vintage",
 			wantSelectorKind:  sourcecontract.SelectorKindDataVintage,
 			rawOpenSurface:    "publication-version",
-			wantOpenSurface:   sourcecontract.OpenSurfaceVText,
+			wantOpenSurface:   sourcecontract.OpenSurfaceTexture,
 			rawEvidenceState:  "fetch_failed",
 			wantEvidenceState: sourcecontract.EvidenceStateUnavailable,
-			quote:             "Published VText source import failed.",
-			contentHash:       "hash-publication-vtext",
+			quote:             "Published Texture source import failed.",
+			contentHash:       "hash-publication-texture",
 		},
 	}
 
@@ -1194,7 +1194,7 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 		Title:                "Reader proposal",
 		Content:              "A reader derivative with transcluded source.",
 		Transclusions: []TransclusionRef{{
-			SourceKind:           "published_vtext_span",
+			SourceKind:           "published_texture_span",
 			PublicationID:        resp.PublicationID,
 			PublicationVersionID: resp.PublicationVersionID,
 			SpanID:               resp.RetrievalSpanIDs[0],

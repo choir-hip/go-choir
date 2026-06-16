@@ -109,8 +109,8 @@
     "web_lens": {
       "aliases": ["weblens", "browser", "web", "live", "original", "live_original"]
     },
-    "vtext": {
-      "aliases": ["published_vtext", "publication_version", "published_vtext_span"]
+    "texture": {
+      "aliases": ["vtext", "published_texture", "published_texture_span", "published_vtext", "publication_version", "published_vtext_span"]
     },
     "video": {
       "aliases": ["youtube", "youtube_video"]

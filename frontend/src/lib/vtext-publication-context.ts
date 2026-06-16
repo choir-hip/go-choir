@@ -36,7 +36,7 @@ export function buildPublishedTransclusionRef(
     route_path: bundle.route?.path || publishedRoutePath || appContext?.publishedRoutePath || '',
   };
   return {
-    source_kind: firstSpan?.id ? 'published_vtext_span' : 'publication_version',
+    source_kind: firstSpan?.id ? 'published_texture_span' : 'publication_version',
     publication_id: bundle.publication.id,
     publication_version_id: bundle.version.id,
     span_id: firstSpan?.id || firstBlock?.span_id || '',
@@ -59,7 +59,7 @@ export function derivativeContentForPublished(bundle: any = null) {
 export function publishedCitationPayload(ref: any = null, bundle: any = null) {
   if (!ref) return [];
   return [{
-    kind: 'published_vtext_span',
+    kind: 'published_texture_span',
     title: titleForPublishedBundle(bundle),
     publication_id: ref.publication_id,
     publication_version_id: ref.publication_version_id,

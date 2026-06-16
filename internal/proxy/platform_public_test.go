@@ -222,7 +222,7 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	body := `{"doc_id":"doc-1","revision_id":"rev-1","publication_version_id":"pubver-1","transclusions":[{"source_kind":"published_vtext_span","publication_id":"pub-1","publication_version_id":"pubver-1","span_id":"span-1","content_hash":"hash","snapshot_text":"source"}]}`
+	body := `{"doc_id":"doc-1","revision_id":"rev-1","publication_version_id":"pubver-1","transclusions":[{"source_kind":"published_texture_span","publication_id":"pub-1","publication_version_id":"pubver-1","span_id":"span-1","content_hash":"hash","snapshot_text":"source"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/platform/publications/pub-1/proposals", strings.NewReader(body))
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "reader-1")})
 	w := httptest.NewRecorder()

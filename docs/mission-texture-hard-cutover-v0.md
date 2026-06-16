@@ -1629,19 +1629,22 @@ position / live conjectures / open edges:
   Storage table names, `.vtext` file suffixes/source paths, durable `vtext:`
   actor ids, `canonical_vtext_source_path`, source-contract app-open
   expectations, and protocol v0 remain adjacent residue.
-- C24 active for source-contract publication Texture open-surface scope:
-  read-only inventory found the contract still canonizes publication-version
-  sources as open surface `vtext`, Go constant `OpenSurfaceVText`, frontend
-  `SOURCE_OPEN_SURFACES.vtext`, source-open mode `published_vtext`, and writer
-  source kinds such as `published_vtext_span`. This slice excludes storage
+- C24 supported for local source-contract publication Texture open-surface
+  scope: shared source-contract schema now canonizes the publication open
+  surface as `texture`; Go exposes `OpenSurfaceTexture`; frontend source-open
+  plans return `openSurface: "texture"` and `mode: "published_texture"`;
+  current publication source entity writers emit `published_texture_span`;
+  legacy `vtext` / `published_vtext*` tokens remain explicit aliases/read
+  compatibility. Focused source-contract, platform, proxy, frontend
+  source-plan tests, frontend build, and residue searches pass locally. Storage
   table names, `/pub/vtext` legacy public routes, durable actor ids, generic
-  `publication_version` platform table identity, and broader prompt-bar route
-  proofs. The intended repair is to make current publication source-open
-  contract names Texture-first while retaining legacy aliases.
+  `publication_version` platform identity, and broader prompt-bar route proofs
+  remain adjacent residue.
 
-next move: implement C24's source-contract publication Texture open-surface
-rename, regenerate frontend contract artifacts, update focused Go/frontend
-tests, and prove residue searches. Keep protocol v0 unwritten until the
+next move: commit and push C24, monitor CI/deploy/staging identity, and decide
+whether a deployed publication source-open proof is needed for this slice or
+whether CI/staging identity plus existing publication-source coverage is enough
+before selecting the next residue class. Keep protocol v0 unwritten until the
 remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`

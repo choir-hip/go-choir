@@ -36,7 +36,7 @@
     { "raw": "web-lens", "want": "web_lens" },
     { "raw": "browser", "want": "web_lens" },
     { "raw": "live original", "want": "web_lens" },
-    { "raw": "publication-version", "want": "vtext" },
+    { "raw": "publication-version", "want": "texture" },
     { "raw": "youtube_video", "want": "video" },
     { "raw": "image", "want": "image" }
   ],
@@ -57,9 +57,9 @@
       "want": { "appId": "content", "openSurface": "source", "mode": "source_reader", "liveOriginal": false, "readerMode": true }
     },
     {
-      "name": "published vtext opens vtext",
+      "name": "published Texture opens Texture",
       "input": { "targetKind": "publication_version" },
-      "want": { "appId": "vtext", "openSurface": "vtext", "mode": "published_vtext", "liveOriginal": false, "readerMode": false }
+      "want": { "appId": "texture", "openSurface": "texture", "mode": "published_texture", "liveOriginal": false, "readerMode": false }
     },
     {
       "name": "youtube source opens video",

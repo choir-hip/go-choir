@@ -381,9 +381,14 @@ test('source open plans normalize Web Lens and Source Viewer aliases', () => {
     liveOriginal: true,
   });
   expect(sourceOpenPlan({ targetKind: 'publication_version' })).toMatchObject({
-    appId: 'vtext',
-    openSurface: 'vtext',
-    mode: 'published_vtext',
+    appId: 'texture',
+    openSurface: 'texture',
+    mode: 'published_texture',
+  });
+  expect(sourceOpenPlan({ targetKind: 'published_vtext_span' })).toMatchObject({
+    appId: 'texture',
+    openSurface: 'texture',
+    mode: 'published_texture',
   });
   expect(sourceEntityOpenPlan({ ...urlSource, kind: 'youtube_video', display: { open_surface: 'video' } })).toMatchObject({
     appId: 'video',

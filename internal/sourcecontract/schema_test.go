@@ -50,7 +50,7 @@ func TestSourceContractSchemaMatchesGoConstants(t *testing.T) {
 	assertSchemaHas("open_surfaces", embeddedSourceContractSchema.OpenSurfaces,
 		OpenSurfaceSource,
 		OpenSurfaceWebLens,
-		OpenSurfaceVText,
+		OpenSurfaceTexture,
 		OpenSurfaceVideo,
 		OpenSurfaceImage,
 	)

@@ -3,7 +3,7 @@ package sourcecontract
 const (
 	OpenSurfaceSource  = "source"
 	OpenSurfaceWebLens = "web_lens"
-	OpenSurfaceVText   = "vtext"
+	OpenSurfaceTexture = "texture"
 	OpenSurfaceVideo   = "video"
 	OpenSurfaceImage   = "image"
 )

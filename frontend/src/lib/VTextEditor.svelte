@@ -1057,7 +1057,7 @@
         citations: publishedCitationPayload(ref),
         metadata: {
           ...buildRevisionMetadata(),
-          created_from: 'published_vtext_derivative',
+          created_from: 'published_texture_derivative',
           source_route_path: publishedRoutePath || appContext.publishedRoutePath || '',
         },
       });
