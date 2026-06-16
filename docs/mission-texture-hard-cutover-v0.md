@@ -2139,7 +2139,11 @@ legacy `vtext` window ids. The previously failing deployed command
 `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/vtext-markdown-lineage.spec.js -g 'Imported Markdown advances|Imported plain text advances'`
 passed with a fresh auth state, proving the reusable acceptance path no longer
 depends on retired desktop/window selectors. This is a yellow proof-surface
-repair, not product runtime behavior.
+repair, not product runtime behavior. Commit
+`376ac6d9c5439fd7c08c52fa628dc5f341820b97` landed the harness repair; CI run
+`27601085720`, Docs Truth Check `27601085740`, and FlakeHub publish
+`27601085759` passed. Deploy to staging was skipped because no deployed
+artifact changed.
 
 next move: move to the remaining storage/durable actor/stored-route residue or
 find/create a product-valid Universal Wire story-field staging proof. Keep

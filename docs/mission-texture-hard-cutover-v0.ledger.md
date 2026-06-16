@@ -3751,3 +3751,26 @@ Open edge: C33 does not repair product runtime behavior, storage schema names,
 durable `vtext:` actor ids, stored `/pub/vtext/...` rows, Universal Wire
 deployed story-field proof, or protocol v0. Next move should attack one of
 those remaining product/protocol edges.
+
+## 2026-06-16 - Landing Evidence: C33 Reusable Texture Acceptance Selectors
+
+Claim: C33 is landed as a yellow test/proof-surface repair.
+
+Move: push the harness repair and monitor repository checks. Expected ΔV:
+record landing evidence without changing coarse mission V.
+
+Actual ΔV: landing evidence recorded; mission V remains 2.
+
+Receipts:
+
+- Commit `376ac6d9c5439fd7c08c52fa628dc5f341820b97`
+  (`test: launch texture acceptance through current shell`) pushed to
+  `origin/main`.
+- GitHub CI run `27601085720` passed.
+- Docs Truth Check run `27601085740` passed.
+- FlakeHub publish run `27601085759` passed.
+- `Deploy to Staging (Node B)` was skipped by deploy-impact detection because
+  the commit changed only tests/docs and no deployed artifact.
+
+Open edge: same as C33 harness evidence above; the next productive move is a
+product/protocol edge, not more harness repair unless another proof fails.
