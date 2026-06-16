@@ -1696,21 +1696,23 @@ active: protocol v0 is last. C27 is supported for deployed HTML export scope:
 generated platform HTML exports now emit `texture-publication`,
 `texture-table`, `texture-source-ref`, and `texture-sources*` classes/ids; local
 tests assert old-class absence, and staging product proof exported an HTML
-publication with Texture classes and no retired export classes. C28 is locally
+publication with Texture classes and no retired export classes. C28 is deployed
 supported for live editor source-ref/source-flow class names: the renderer,
 serializer, editor CSS, source-flow CSS/DOM builder, and focused frontend tests
 now use `texture-source-ref*`, `texture-source-journal-*`,
 `texture-source-flow-close`, `texture-source-open`, and
-`--texture-source-flow-*`, with scoped retired-class search clean and frontend
-build passing. This slice excludes frontend file/module names, storage tables,
-`.vtext` file suffixes, durable `vtext:` actor ids, `PublishVText` Go symbols,
-and `/pub/vtext` public route compatibility.
+`--texture-source-flow-*`; CI/deploy passed; staging health reports the pushed
+SHA; and deployed browser proof created a Texture document, opened it in the
+Texture app, clicked a source ref, and observed Texture live/source-flow classes
+with no scoped retired classes. This slice excludes frontend file/module names,
+storage tables, `.vtext` file suffixes, durable `vtext:` actor ids,
+`PublishVText` Go symbols, and `/pub/vtext` public route compatibility.
 
-next move: commit and push the C28 behavior slice, monitor CI and Node B deploy,
-verify staging identity, then run deployed browser/product proof that live
-source refs and source journal flows emit Texture classes and no scoped retired
-classes. Keep protocol v0 unwritten until remaining working-surface proofs are
-complete.
+next move: choose the next high-leverage residue class: broader `.vtext`
+file/alias suffix design, durable `vtext:` actor ids, storage table names,
+`/pub/vtext` public route compatibility policy, or Universal Wire deployed
+story-field proof when product data exists. Keep protocol v0 unwritten until
+remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -1738,14 +1740,12 @@ The inventory, report-only H5 docs checker, high-read docs reconciliation,
 Texture route/tool/prompt slices, deployed prompt-bar -> conductor -> Texture
 first-revision proof, deployed pinned-transclusion proof, visible UI proof,
 source-contract open-surface proof, canonical source-path metadata repair,
-publication fallback label repair, and C27 deployed exported HTML class-name
-proof are landed. C28 live editor source-ref/source-flow class rename is
-locally supported: commit and push it, monitor CI/deploy, verify staging
-identity, then prove deployed live source refs and journal flows emit Texture
-classes with no scoped retired classes. Keep frontend file/module names,
-storage schema, `.vtext` file suffixes, durable `vtext:` actor ids,
-`PublishVText` Go symbols, `/pub/vtext` public route compatibility, and
-protocol v0 out of C28.
+publication fallback label repair, C27 deployed exported HTML class-name proof,
+and C28 deployed live editor source class proof are landed. Choose the next
+residue class from file/storage/actor/public-route/Universal-Wire edges. Keep
+frontend file/module names, storage schema, `.vtext` file suffixes, durable
+`vtext:` actor ids, `PublishVText` Go symbols, `/pub/vtext` public route
+compatibility, and protocol v0 out of completed C28.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to

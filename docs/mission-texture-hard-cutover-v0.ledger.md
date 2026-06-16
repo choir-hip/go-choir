@@ -3088,3 +3088,57 @@ Receipts:
 Open edge: commit and push the behavior slice, monitor CI/deploy, verify staging
 identity, and run deployed browser/product proof that live source refs and
 source journal flows emit Texture classes without the scoped retired classes.
+
+## 2026-06-16 - Deployed Proof: Live Editor Texture Source Classes
+
+Claim: C28 is supported for deployed product scope. Live Texture source refs and
+source journal flows now use Texture-named classes in the deployed editor, and
+the scoped retired live source classes are absent from the proof surface.
+
+Move: push the C28 behavior commit, monitor CI and Node B deploy, verify staging
+health identity, run a temporary deployed Playwright proof that creates a
+Texture document through `/api/texture/documents`, opens the deployed Texture
+app, clicks a live source ref, and asserts Texture source-ref/source-flow
+classes plus old-class absence.
+
+Expected ΔV: support C28 for deployed product scope. No coarse V decrease
+because `.vtext` file suffixes, storage names, durable `vtext:` actor ids,
+`/pub/vtext` route compatibility, Universal Wire deployed story-field proof,
+and protocol v0 remain open.
+
+Actual ΔV: C28 is deployed-supported. V remains 2.
+
+Receipts:
+- Behavior commit:
+  `7e9d90dc72d964b86881c29c21a7e7a216355d38 frontend: rename live source classes to texture`.
+- CI run `27596392703` passed, including runtime shards, non-runtime package
+  tests, vet/build, TLA+, Docs Truth Check, frontend build, and deploy gate.
+- Deploy job `81587679005` passed.
+- Docs Truth Check run `27596392711` passed.
+- FlakeHub publish run `27596392712` passed.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `7e9d90dc72d964b86881c29c21a7e7a216355d38`, deployed at
+  `2026-06-16T05:33:26Z`.
+- Temporary deployed proof passed:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-live-source-classes-staging.tmp.spec.js`.
+  The proof created a Texture document through `/api/texture/documents`, added a
+  revision with a source entity, opened the deployed Texture app through its
+  visible app affordance, clicked the source citation, and observed
+  `texture-source-ref`, `texture-source-ref-label`,
+  `texture-source-ref-popover`, `texture-source-journal-flow`,
+  `texture-source-journal-lines`, `texture-source-journal-line`,
+  `texture-source-journal-note`, `texture-source-open`, and
+  `texture-source-flow-close` with no `vtext-source-ref*`,
+  `vtext-source-journal-*`, `vtext-source-open`, or `vtext-source-flow-close`
+  on the proof surface.
+- The first temporary proof attempt timed out before the target surface because
+  the deployed desktop no longer exposed the old `data-desktop-icon-id="vtext"`
+  selector in that session; the passing proof used the visible `Texture` app
+  affordance instead. The temporary spec and `frontend/test-results` scratch
+  output were deleted after proof.
+
+Open edge: choose the next residue class. Strongest remaining candidates are
+broader `.vtext` file/alias suffix design, durable `vtext:` actor ids, storage
+table names, `/pub/vtext` public route compatibility policy, and Universal Wire
+deployed story-field proof once staging can provide an edition story payload
+through product paths.
