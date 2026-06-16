@@ -3368,7 +3368,9 @@ Receipts:
   selectors.
 - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm --prefix frontend run e2e --
   --project=chromium tests/universal-wire-app.spec.js -g 'deletes detritus
-  source chronology and bespoke style controls'` passed against local Vite.
+  source chronology and bespoke style controls'` passed against local Vite,
+  asserting both retired `Style.vtext` and current internal `Style.texture`
+  labels stay out of the visible Universal Wire UI.
 - Scoped search for `Style.vtext` / `style.vtext` in the touched runtime and
   Universal Wire test surfaces found only `internal/runtime/universal_wire.go`
   legacy cleanup filters and `internal/runtime/universal_wire_test.go` negative

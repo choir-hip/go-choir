@@ -110,6 +110,7 @@ test('Universal Wire deletes detritus source chronology and bespoke style contro
   await expect(app.locator('[data-universal-wire-replace-style]')).toHaveCount(0);
   await expect(app.locator('[data-universal-wire-ask-choir]')).toHaveCount(0);
   await expect(app.locator('text=Chronology')).toHaveCount(0);
+  await expect(app.locator('text=Style.vtext')).toHaveCount(0);
   await expect(app.locator('text=Style.texture')).toHaveCount(0);
 });
 

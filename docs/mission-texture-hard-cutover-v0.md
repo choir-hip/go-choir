@@ -1809,7 +1809,9 @@ Local evidence on 2026-06-16:
   `.wire-state` selectors.
 - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm --prefix frontend run e2e --
   --project=chromium tests/universal-wire-app.spec.js -g 'deletes detritus
-  source chronology and bespoke style controls'` passed against local Vite.
+  source chronology and bespoke style controls'` passed against local Vite,
+  asserting both retired `Style.vtext` and current internal `Style.texture`
+  labels stay out of the visible Universal Wire UI.
 - Scoped residue search for `Style.vtext` / `style.vtext` in the touched
   runtime and Universal Wire test surfaces found only legacy cleanup code and
   its negative fixture/assertion.
@@ -1965,12 +1967,13 @@ are landed. C30 is local-supported: the Problem Documentation First checkpoint
 is landed, current Universal Wire style-source labels/paths and prompt contracts
 now use `Style.texture` / `.style.texture`, legacy `Style.vtext Source` cleanup
 is retained only as generated-content sanitization, and local focused/runtime
-shard/build/Playwright/residue checks passed. Next commit and push C30 behavior,
-monitor CI/deploy, and record deployed evidence or a precise product-proof
-blocker. Keep canonical `.vtext` file import/open behavior, storage schema,
-`.vtext` file shortcuts, durable `vtext:` actor ids, `PublishVText` Go symbols,
-backend stored-route migration, Universal Wire story-field proof, and protocol
-v0 out of C30.
+shard/build/Playwright/residue checks passed, with the UI test guarding absence
+of both retired `Style.vtext` and current internal `Style.texture` labels. Next
+commit and push C30 behavior, monitor CI/deploy, and record deployed evidence or
+a precise product-proof blocker. Keep canonical `.vtext` file import/open
+behavior, storage schema, `.vtext` file shortcuts, durable `vtext:` actor ids,
+`PublishVText` Go symbols, backend stored-route migration, Universal Wire
+story-field proof, and protocol v0 out of C30.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to
