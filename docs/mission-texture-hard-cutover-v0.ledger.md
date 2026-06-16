@@ -1823,3 +1823,78 @@ Receipts:
 
 Open edge: push, monitor CI/deploy, verify staging identity, then run deployed
 product proof for source gap repair metadata.
+
+## 2026-06-16 - Deployed Repair: Source Repair Metadata Labels
+
+Claim: deployed Choir can emit Texture-named provenance metadata for new source
+gap repairs and source artifact paths without changing source entity
+structures, source routes, storage tables, `.vtext` alias behavior, durable
+actor ids, or platform publication attestations.
+
+Move: push commit `39d0c2ba125c81d59b34002685a9ce19ec98eda0`, monitor CI and
+deploy, verify staging build identity, and run a deployed Playwright product
+proof that creates a Markdown-lineage Texture document, repairs a citation gap,
+opens the Texture document in the desktop UI, and observes the new metadata
+label.
+
+Expected ΔV: support C20 for deployed scope; no coarse V decrease because
+storage/file suffixes, broader metadata keys, durable actor ids, app-package
+evidence fields, and protocol v0 remain.
+
+Actual ΔV: C20 is supported for deployed source-metadata scope. V remains 2.
+
+Conjecture delta: source repair metadata can teach Texture at the
+new-emission boundary while preserving the broader stateful migration surfaces
+for separately designed slices.
+
+Protected surfaces: deployed source gap repair revision metadata, deployed
+Texture document/revision APIs, Texture desktop document opening,
+browser-public route hygiene, staging deployment identity, and focused
+runtime/frontend tests.
+
+Admissible evidence class: full CI, deploy job, staging health identity,
+focused local tests, residue search, and deployed browser/product proof.
+
+Rollback path: restore the old emitted `vtext_source_*` metadata values and
+test expectations if later source repair, source artifact attachment, or
+downstream metadata readers regress.
+
+Heresy delta: repaired for deployed new source repair/artifact metadata labels.
+Adjacent metadata keys, storage symbols, app-package evidence fields, durable
+actor ids, and platform publication provenance remain discovered residue.
+
+Receipts:
+- CI run `27591835245` passed for commit
+  `39d0c2ba125c81d59b34002685a9ce19ec98eda0`; deploy job `81574215697`
+  succeeded.
+- Docs Truth Check run `27591835237` passed; FlakeHub publish run
+  `27591835231` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `39d0c2ba125c81d59b34002685a9ce19ec98eda0`, deployed at
+  `2026-06-16T03:22:47Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-source-metadata-deployed.tmp.spec.js`
+  passed before the temporary spec was deleted.
+- The proof used public product APIs
+  `/api/texture/markdown-lineage/import`,
+  `/api/texture/documents/{doc}/source-repairs`, and
+  `/api/texture/documents/{doc}/revisions`; no browser-public internal or
+  test-only routes were used.
+- Evidence artifact:
+  `/tmp/choir-texture-source-metadata-1781580461671.json`; screenshot:
+  `/tmp/choir-texture-source-metadata-1781580461671.png`.
+- Product evidence ids: staging user
+  `playwright-state-1781580336142-whrv71@example.com`; Texture document
+  `8161aac2-4710-46a9-a3a3-2e2f7193b797`; base revision
+  `f5ae5dd5-7455-4cfd-8e88-009d923fd4bd`; repaired revision
+  `4e0ec188-10a3-4b1a-b4fd-dbcaaf71f0ea`.
+- Product observations: repaired revision metadata source was
+  `texture_source_gap_repair`, not `vtext_source_gap_repair`; repaired content
+  linked the citation to the source entity; the Texture desktop app opened the
+  proof document under canonical `texture` app identity; rendered citation
+  transclusion showed the source label and excerpt; forbidden browser-public
+  request count was zero for `/internal/*`, `/api/agent/*`, `/api/test/*`,
+  `/api/prompts`, and `/api/events`.
+
+Open edge: select the next bounded residue class among metadata keys,
+storage/file suffixes, durable actor ids, app-package evidence fields,
+remaining app-route labels, and protocol v0.
