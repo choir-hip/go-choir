@@ -3230,3 +3230,53 @@ Open edge: commit and push the behavior slice, monitor CI/deploy, verify staging
 identity, and run deployed product proof that a newly published Texture mints
 and loads through `/pub/texture/...` while current frontend surfaces do not
 carry `/pub/vtext/...`.
+
+## 2026-06-16 - Deployed Proof: Public Legacy Publication Routes
+
+Claim: C29 is supported for deployed product scope. New/current public
+publication surfaces mint and load through `/pub/texture/...`, current frontend
+route recognition no longer treats `/pub/vtext/...` as a public reader route,
+and backend `/pub/vtext/...` support is explicitly scoped as stored-route
+compatibility residue.
+
+Move: push the C29 behavior commit, monitor CI and Node B deploy, verify staging
+health identity, run a temporary deployed Playwright proof that creates a
+Texture, publishes it through `/api/platform/texture/publications`, opens the
+published `/pub/texture/...` route, and checks a same-slug `/pub/vtext/...`
+route is not rendered as a public reader.
+
+Expected ΔV: support C29 for deployed product scope. No coarse V decrease
+because `.vtext` file suffixes, storage names, durable `vtext:` actor ids,
+Universal Wire deployed story-field proof, backend public-route storage
+migration, and protocol v0 remain open.
+
+Actual ΔV: C29 is deployed-supported. V remains 2.
+
+Receipts:
+- Behavior commit:
+  `6e84f0e1756e626abff88617690199e2879994bb frontend: stop recognizing legacy vtext public routes`.
+- CI run `27596903040` passed, including runtime shards, non-runtime package
+  tests, vet/build, TLA+, Docs Truth Check, frontend build, and deploy gate.
+- Deploy job `81589137652` passed.
+- Docs Truth Check run `27596903042` passed.
+- FlakeHub publish run `27596903056` passed.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `6e84f0e1756e626abff88617690199e2879994bb`, deployed at
+  `2026-06-16T05:46:42Z`.
+- Temporary deployed proof passed:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-public-route-staging.tmp.spec.js`.
+  The proof created a Texture document through `/api/texture/documents`,
+  published it through `/api/platform/texture/publications`, verified the
+  returned `route_path` matched `/pub/texture/...` and not `/pub/vtext/...`,
+  resolved the route through `/api/platform/publications/resolve`, opened the
+  public reader at the `/pub/texture/...` route, found no `/pub/vtext/...` links
+  in the reader, then opened the same slug under `/pub/vtext/...` and observed
+  no `[data-texture-published-reader]`, with the authenticated desktop visible
+  instead.
+- The temporary spec and `frontend/test-results` scratch output were deleted
+  after proof.
+
+Open edge: choose the next residue class. Strongest remaining candidates are
+broader `.vtext` file/alias suffix design, durable `vtext:` actor ids, storage
+table names, and Universal Wire deployed story-field proof once staging can
+provide an edition story payload through product paths.
