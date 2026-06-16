@@ -358,7 +358,7 @@ func handleSourceServiceIngestionHandoffLatest(store *cycle.Storage) http.Handle
 			ReconcilerRequests: sourceAPIReconcilerRequests(summary.ReconcilerRequests),
 			Metadata: sourceapi.IngestionHandoffMetadata{
 				Topology:      "source-items -> processor-handoffs -> corpus-reconciler-handoff",
-				AuthorityRule: "source and version provenance stay in source items and VText; handoffs are queues, not publication authority",
+				AuthorityRule: "source and version provenance stay in source items and Texture; handoffs are queues, not publication authority",
 			},
 		})
 	}
@@ -807,7 +807,7 @@ func (d *ingestionRuntimeDispatcher) submitProcessor(ctx context.Context, req cy
 		"\nProcessor key: " + req.ProcessorKey +
 		"\nContinuity ref: " + req.ContinuityRef +
 		"\nSource item handles: " + strings.Join(req.SourceItemIDs, ", ") +
-		"\nDo not paste source bodies into the checkpoint. Use source_search/fetch_url by handle or URL when needed, preserve source handles, and spawn VText agents when a story should be opened or revised."
+		"\nDo not paste source bodies into the checkpoint. Use source_search/fetch_url by handle or URL when needed, preserve source handles, and spawn Texture agents when a story should be opened or revised."
 	channelID := "processor-v2:" + strings.ReplaceAll(req.ProcessorKey, ":", "-")
 	agentID := "processor-v2:" + strings.ReplaceAll(req.ProcessorKey, ":", "-")
 	return d.submit(ctx, runtimeRunSubmitRequest{
@@ -844,7 +844,7 @@ func (d *ingestionRuntimeDispatcher) submitReconciler(ctx context.Context, req c
 		"\nScope: " + req.Scope +
 		"\nProcessor request handles: " + strings.Join(req.ProcessorRequestIDs, ", ") +
 		"\nSource item handles: " + strings.Join(req.SourceItemIDs, ", ") +
-		"\nReview the story corpus and source/processor state. Note consensus, contradictions, drift, research needs, and candidate VText updates without mutating platform stories."
+		"\nReview the story corpus and source/processor state. Note consensus, contradictions, drift, research needs, and candidate Texture updates without mutating platform stories."
 	return d.submit(ctx, runtimeRunSubmitRequest{
 		OwnerID: d.ownerID,
 		Prompt:  prompt,

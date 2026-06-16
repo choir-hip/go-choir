@@ -1132,7 +1132,7 @@ func TestIngestionRuntimeDispatcherStopsReadingActiveChildRunsForCompletedProces
 						ResolutionState:         "all_source_items_decided_with_story_route",
 						SourceItemCount:         1,
 						ResolvedSourceItemCount: 1,
-						LastDecision:            "opened_vtext",
+						LastDecision:            "opened_texture",
 						StoryDocID:              "doc-childrun-capacity-live",
 					},
 				})
@@ -1202,7 +1202,7 @@ func TestIngestionRuntimeDispatcherStoryRouteCapacityReleaseAlignsWithRuntimeAdm
 					ResolutionState:         "all_source_items_decided_with_story_route",
 					SourceItemCount:         1,
 					ResolvedSourceItemCount: 1,
-					LastDecision:            "opened_vtext",
+					LastDecision:            "opened_texture",
 					StoryDocID:              "doc-story-route-429-live",
 				},
 			})
