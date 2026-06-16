@@ -1536,6 +1536,86 @@ Next behavior slice design:
 - push, monitor CI/deploy, and prove the new exported HTML artifact surface on
   staging through product publication/export APIs.
 
+## Problem Checkpoint: Live Editor Texture Source Classes
+
+Mutation class: `green` documentation and evidence only. No frontend source,
+runtime behavior, rendered DOM, CSS, tests, storage, API contract, public route,
+or persistent state changed in this checkpoint.
+
+Read-only search on 2026-06-16 shows that the live Texture renderer still emits
+and styles retired-name CSS classes in current editor and published-reader DOM:
+
+- `frontend/src/lib/vtext-source-renderer.ts` emits
+  `vtext-source-ref`, `vtext-source-ref--missing`,
+  `vtext-source-ref-label`, `vtext-source-ref-popover`,
+  `vtext-transclusion-body`, `vtext-transclusion-quote`,
+  `vtext-source-facts`, and `vtext-source-open`;
+- `frontend/src/lib/VTextEditor.svelte` styles the live source-ref DOM through
+  `.vtext-source-ref*` selectors;
+- `frontend/src/lib/vtext-source-flow.ts` creates source journal flow DOM with
+  `vtext-source-journal-*`, `vtext-source-flow-close`, and
+  `vtext-source-open` classes, and uses `--vtext-source-flow-*` CSS variables;
+- `frontend/src/lib/vtext-source-flow.css` styles the source journal flow
+  through `.vtext-source-journal-*`, `.vtext-source-ref*`, and
+  `--vtext-source-flow-*`;
+- focused frontend tests still inspect some of those old class names for source
+  flow geometry and old-card absence.
+
+This is narrower than renaming frontend module/file names such as
+`vtext-source-flow.ts`, app/editor component names, storage schema, `.vtext`
+file suffixes, durable `vtext:` actor ids, `PublishVText` Go symbols, and
+`/pub/vtext/...` public route compatibility. It is broader than a pure selector
+cleanup because the old classes are emitted into live product DOM and govern
+source transclusion interaction styling.
+
+Conjecture delta: live Texture source-ref and source-flow DOM classes can move
+to Texture names while preserving stable `data-texture-*` behavioral selectors,
+Markdown serialization, source popovers, journal flow layout, source-open
+buttons, and published-reader behavior. The repair should not rename frontend
+file/module names or unrelated `vtext-related-ref` and transclusion body classes
+in the same slice unless a focused test proves they are part of the same source
+class contract.
+
+Protected surfaces: frontend source-ref rendering, Markdown serialization,
+source journal flow layout, source popover styling, source-open controls,
+published-reader source interaction, focused Playwright tests, frontend build,
+and staging browser proof for live source refs and journal source flow.
+
+Admissible evidence class: focused frontend tests covering source-ref rendering
+and source journal flow geometry, frontend build, residue search proving the
+scoped emitted/styled source classes no longer use the retired name except
+explicit negative assertions or out-of-scope file/module names, CI/deploy
+identity, and deployed browser proof that a new Texture with source refs renders
+Texture-named source classes and no old source-ref/source-flow classes.
+
+Rollback path: restore the previous V-name live source classes/selectors and
+test expectations if source refs lose styling, popovers, journal-flow layout,
+source-open behavior, Markdown serialization, or published-reader source
+interaction.
+
+Heresy delta: discovered: after exported HTML artifacts moved to Texture
+classes, the live editor/published-reader renderer still exposes old ontology
+through product DOM classes. Introduced: none in this checkpoint. Repaired
+target: current live source-ref/source-flow DOM should emit Texture-named
+classes while module filenames, storage, actor ids, file suffixes, Go API
+symbols, and public legacy routes remain separately classified residue.
+
+Next behavior slice design:
+
+- rename live source-ref classes from `vtext-source-ref*` to
+  `texture-source-ref*`;
+- rename source journal flow classes and CSS variables from
+  `vtext-source-journal-*`, `vtext-source-flow-close`,
+  `vtext-source-open`, and `--vtext-source-flow-*` to Texture names;
+- update CSS, TypeScript DOM construction/querying, Markdown serialization, and
+  focused frontend tests to use the new class names while keeping
+  `data-texture-*` selectors stable;
+- keep frontend file/module names, storage schema, `.vtext` suffixes, durable
+  actor ids, `PublishVText` API symbols, `/pub/vtext` routes, and unrelated
+  related-ref/transclusion-body classes out of scope;
+- push, monitor CI/deploy, and prove the live DOM source class surface on
+  staging through product browser evidence.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -1624,8 +1704,9 @@ route compatibility.
 next move: choose the next high-leverage residue class: broader `.vtext`
 file/alias suffix design, durable `vtext:` actor ids, storage table names,
 `/pub/vtext` public route compatibility policy, live editor CSS class residue,
-or Universal Wire deployed story-field proof when product data exists. Keep
-protocol v0 unwritten until remaining working-surface proofs are complete.
+or Universal Wire deployed story-field proof when product data exists. C28 is
+active for live editor source-ref/source-flow classes; keep protocol v0
+unwritten until remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -1656,9 +1737,11 @@ source-contract open-surface proof, canonical source-path metadata repair, and
 publication fallback label repair are landed. C27 exported HTML class-name
 checkpoint and deployed behavior proof are done. Choose the next
 residue class from file/storage/actor/public-route/live-editor/Universal-Wire
-edges. Keep live editor CSS classes, storage
-schema, `.vtext` file suffixes, durable `vtext:` actor ids, `PublishVText` Go
-symbols, `/pub/vtext` public route compatibility, and protocol v0 out of C27.
+edges. C28 is active: commit the live editor source class checkpoint, then
+rename emitted/styled source-ref and source-flow classes from V-name to Texture
+names. Keep frontend file/module names, storage schema, `.vtext` file suffixes,
+durable `vtext:` actor ids, `PublishVText` Go symbols, `/pub/vtext` public
+route compatibility, and protocol v0 out of C28.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to

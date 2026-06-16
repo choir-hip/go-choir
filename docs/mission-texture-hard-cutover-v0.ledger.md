@@ -3009,3 +3009,40 @@ broader `.vtext` file/alias suffix design, durable `vtext:` actor ids, storage
 table names, `/pub/vtext` public route compatibility policy, live editor CSS
 class residue, and Universal Wire deployed story-field proof once staging can
 provide an edition story payload through product paths.
+
+## 2026-06-16 - Problem Checkpoint: Live Editor Texture Source Classes
+
+Claim: C28 is an admissible bounded residue class. The live Texture renderer
+and source journal flow still emit/stylize retired-name source classes in
+current product DOM, but the repair can avoid frontend file/module names,
+storage/file suffixes, durable actor ids, public route compatibility, and broad
+Go API symbols.
+
+Move: read-only inventory over source-ref rendering, Markdown serialization,
+source journal flow CSS/DOM construction, VTextEditor source-ref styling, and
+focused source-flow tests; document the problem before behavior changes.
+
+Expected ΔV: no coarse V decrease. This checkpoint creates the admissible first
+commit for the C28 behavior slice and should make the next move unambiguous.
+
+Actual ΔV: documentation checkpoint only; C28 remains active.
+
+Receipts:
+- `frontend/src/lib/vtext-source-renderer.ts` emits `vtext-source-ref*`,
+  `vtext-transclusion-*`, `vtext-source-facts`, and `vtext-source-open`
+  classes in live rendered source refs.
+- `frontend/src/lib/VTextEditor.svelte` styles `.vtext-source-ref*` live
+  source refs and popovers.
+- `frontend/src/lib/vtext-source-flow.ts` and
+  `frontend/src/lib/vtext-source-flow.css` create/style `vtext-source-journal-*`,
+  `vtext-source-flow-close`, `vtext-source-open`, and
+  `--vtext-source-flow-*`.
+- `frontend/tests/vtext-source-entities.spec.js` still inspects some old class
+  names for source-flow geometry and old-card absence.
+- Problem checkpoint added to
+  `docs/mission-texture-hard-cutover-v0.md` with conjecture delta, protected
+  surfaces, admissible evidence class, rollback path, heresy delta, and next
+  behavior slice design.
+
+Open edge: commit and push the docs checkpoint, monitor Docs Truth Check, then
+implement C28 behavior changes.
