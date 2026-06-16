@@ -2331,6 +2331,53 @@ assertions, model-policy key naming, database/table symbols, and stored legacy
 route rows remain explicit C35/C34 residue until separate documented slices
 repair or classify them.
 
+## Deployed Evidence: C35 Texture Actor/Profile Identity
+
+Mutation class: `red` platform behavior change, same protected surfaces as the
+local C35 repair.
+
+Landing evidence on 2026-06-16:
+
+- Commit `32b7d98a4e096e9d0399afc841f46de2981e80cb`
+  (`runtime: write texture actor identity`) pushed to `origin/main`.
+- CI run `27604293193` passed, including all runtime shards, non-runtime Go
+  tests, Go vet/build, TLA+ model checks, and deploy impact classification.
+- Docs Truth Check run `27604293140` passed.
+- FlakeHub publish run `27604293345` passed.
+- Deploy job `81612751708` passed.
+- `https://choir.news/health` reported deployed commit
+  `32b7d98a4e096e9d0399afc841f46de2981e80cb`, deployed at
+  `2026-06-16T08:24:29Z`.
+
+Deployed product proof:
+
+- Targeted Playwright/API proof against `https://choir.news` recorded evidence
+  in `/tmp/choir-c35-actor-identity.json`,
+  `/tmp/choir-c35-actor-identity-poll.json`, and screenshot
+  `/tmp/choir-c35-actor-identity.png`.
+- Prompt-bar submission `b0265135-6544-4ae3-9c97-8a3207fd5daa` created Texture
+  document `02d689f0-1e7f-457f-928c-3ffd08065147`.
+- Trace showed conductor first, then
+  `texture:02d689f0-1e7f-457f-928c-3ffd08065147` with
+  `profile="texture"` and `role="texture"`, final state `completed`.
+- The same trace had no `vtext:<doc_id>` actor, no `profile="vtext"` /
+  `role="vtext"` actor, and no super agent before Texture; in this proof it
+  had no super agent at all.
+- Texture revisions reached two records: user revision
+  `269fed4f-c099-462e-89bf-675ac1dc4612` and appagent revision
+  `18a07fc2-996e-439d-9f8a-73fa7a8018bc` with metadata source
+  `patch_texture`.
+- Regression command
+  `CHOIR_AUTH_STATE=/tmp/choir-c35-lineage-auth.json PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/vtext-markdown-lineage.spec.js -g 'Imported Markdown advances|Imported plain text advances'`
+  passed 2 tests, covering Markdown/plain-text source migration, `.texture`
+  metadata, history/recent open behavior, and Markdown export after the C35
+  deploy.
+
+Residual discovered during deployed proof: the browser-public prompt submission
+decision still returns `app: "vtext"`. This is now explicit C35 residue for a
+separate Problem Documentation First slice; it is not counted as actor/profile
+repair, because the deployed run and Trace actor identity are Texture.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2367,13 +2414,13 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C35 locally repaired the
-first actor/profile identity slice: new/current Texture appagent writes now use
+variant (ranking function) V: current V=2; last ΔV: C35 deployed-supported the
+first actor/profile identity slice: new/current Texture appagent writes use
 `texture` profile/role and `texture:<doc_id>` ids while legacy `vtext` reads
-remain compatible. Coarse V remains 2 until CI/deploy/staging proof lands.
-Database/table names, `vtext_agent_revision` task type, prompt/tool schema
-wording, stored legacy routes, Universal Wire edition refs, deployed Universal
-Wire story-field proof, and protocol v0 remain.
+remain compatible. Coarse V remains 2 because database/table names,
+`vtext_agent_revision` task type, prompt/tool schema wording, prompt submission
+decision `app: "vtext"`, stored legacy routes, Universal Wire edition refs,
+deployed Universal Wire story-field proof, and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -2490,24 +2537,28 @@ recent Texture open acceptance against `https://choir.news`. This does not
 claim `database=vtext`, `vtext_*` table/index, durable `vtext:<doc_id>` actor,
 `AgentProfileVText`, `vtext_agent_revision`, stored `/pub/vtext/...` route row,
 or `universal-wire/Wire.vtext` repair.
-C35 is locally repaired for the first actor/profile slice: centralized Texture
+C35 is deployed-supported for the first actor/profile slice: centralized Texture
 actor/profile helpers exist; explicit new Texture revision/coagent/super-request
 paths persist `texture` profile/role and `texture:<doc_id>` agent ids; internal
 registries and `[roles.vtext]` model-policy lookup remain compatible; and
 legacy `vtext:<doc_id>` worker deliveries still match, wake, and mark delivered.
-Focused tests, clean full runtime shards, doccheck, and scoped production
-search pass locally. The current invariant doc is
+Focused tests, clean full runtime shards, doccheck, scoped production search,
+CI, deploy, staging health, and deployed product proof pass. Staging proof for
+prompt-bar submission `b0265135-6544-4ae3-9c97-8a3207fd5daa` showed conductor
+before `texture:02d689f0-1e7f-457f-928c-3ffd08065147`, no legacy `vtext` actor,
+no super-before-Texture route, and a completed appagent revision
+`18a07fc2-996e-439d-9f8a-73fa7a8018bc`. The current invariant doc is
 `docs/texture-agentic-invariants-2026-06-13.md`, which forbids turning Texture
 identity repair into a forced workflow or role sequence. This slice leaves
-`vtext_agent_revision`, prompt/tool `role=vtext` affordance wording,
-Trace/front-end acceptance assertions, table/database symbols, and model-policy
-key naming for separate documented cuts.
+`vtext_agent_revision`, prompt/tool `role=vtext` affordance wording, browser
+prompt submission `app: "vtext"`, Trace/front-end acceptance assertions,
+table/database symbols, and model-policy key naming for separate documented
+cuts.
 
-next move: commit and push C35, then monitor CI, deploy identity, and staging
-product proof. The deployed proof should show prompt-bar -> conductor ->
-Texture first revision creates a current `texture:<doc_id>` run/agent identity
-while legacy `vtext:<doc_id>` delivery compatibility remains accepted by
-focused/local evidence.
+next move: document the newly surfaced browser-public prompt decision
+`app: "vtext"` residue, then cut one small route/payload slice or choose the
+next higher-ΔV durable storage symbol slice. Do not fix the prompt decision
+payload before a checkpoint names its evidence and rollback path.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

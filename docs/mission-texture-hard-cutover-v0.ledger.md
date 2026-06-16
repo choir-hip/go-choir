@@ -3975,3 +3975,50 @@ Open edge: commit/push/CI/deploy/staging proof. This slice intentionally leaves
 `vtext_agent_revision`, prompt/tool `role=vtext` affordances, frontend Trace
 assertions, model-policy key naming, database/table symbols, and stored legacy
 route rows for separate documented repair slices.
+
+## 2026-06-16 - Landing Evidence: C35 Texture Actor/Profile Identity
+
+Claim: C35 is deployed-supported for the first actor/profile identity slice:
+new/current Texture actor writes are current-name while legacy delivery reads
+remain compatible.
+
+Move: push the behavior commit, monitor CI/deploy, verify staging identity, and
+run deployed product proof. Expected ΔV: record platform landing evidence for
+C35; coarse V remains 2 because broader storage/route/protocol residue remains.
+
+Actual ΔV: C35 landed and deployed; coarse V remains 2.
+
+Receipts:
+
+- Commit `32b7d98a4e096e9d0399afc841f46de2981e80cb`
+  (`runtime: write texture actor identity`) pushed to `origin/main`.
+- CI run `27604293193` passed.
+- Docs Truth Check run `27604293140` passed.
+- FlakeHub publish run `27604293345` passed.
+- Deploy job `81612751708` passed.
+- `https://choir.news/health` reported deployed commit
+  `32b7d98a4e096e9d0399afc841f46de2981e80cb`, deployed at
+  `2026-06-16T08:24:29Z`.
+- Targeted staging Playwright/API proof recorded
+  `/tmp/choir-c35-actor-identity.json`,
+  `/tmp/choir-c35-actor-identity-poll.json`, and screenshot
+  `/tmp/choir-c35-actor-identity.png`.
+- Prompt-bar submission `b0265135-6544-4ae3-9c97-8a3207fd5daa` created Texture
+  document `02d689f0-1e7f-457f-928c-3ffd08065147`; Trace showed conductor then
+  `texture:02d689f0-1e7f-457f-928c-3ffd08065147` with `profile="texture"` and
+  `role="texture"`, no legacy `vtext` actor, no super-before-Texture route, and
+  final trace state `completed`.
+- The deployed document had user revision
+  `269fed4f-c099-462e-89bf-675ac1dc4612` and appagent revision
+  `18a07fc2-996e-439d-9f8a-73fa7a8018bc`.
+- Staging regression command
+  `CHOIR_AUTH_STATE=/tmp/choir-c35-lineage-auth.json PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/vtext-markdown-lineage.spec.js -g 'Imported Markdown advances|Imported plain text advances'`
+  passed 2 tests.
+
+Open edge: the deployed prompt submission decision still reports
+`app: "vtext"` even though the run/Trace actor is Texture. This is discovered
+C35 residue and requires its own Problem Documentation First checkpoint before a
+behavior fix. Remaining non-C35 edges include `vtext_agent_revision`,
+prompt/tool `role=vtext` affordances, frontend Trace assertions, model-policy
+key naming, database/table symbols, stored legacy route rows, deployed
+Universal Wire story-field proof, and protocol v0.
