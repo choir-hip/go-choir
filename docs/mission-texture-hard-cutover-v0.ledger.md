@@ -480,3 +480,62 @@ Receipts:
 Open edge: commit and push the construct, monitor CI/deploy, then prove on
 staging that prompt-bar -> conductor -> Texture first revision uses
 `patch_texture` metadata and Trace rather than the compatibility alias.
+
+## 2026-06-15 - Staging Proof For Texture Write Tool Split
+
+Claim: deployed Texture first-revision creation now uses the common
+`patch_texture` affordance instead of the compatibility `edit_texture` alias,
+while `rewrite_texture` remains available only for exceptional full-document
+recovery with rationale.
+
+Move: push commit `7d697e477c9e0c81c30629267743e231395e812c`, monitor CI and
+Node B deploy, verify staging build identity, then run a temporary
+authenticated Playwright product proof against `https://choir.news`. The
+scratch spec was deleted after the run; evidence was written outside the repo.
+
+Expected ΔV: -1 by discharging the common-vs-exceptional edit-affordance proof
+for the deployed common path.
+
+Actual ΔV: -1. V moves from 4 to 3. This proof does not discharge high-read
+docs, internal symbol residue, compatibility-shim deletion, final retired-name
+receipts, or Texture Protocol v0.
+
+Receipts:
+- pushed commit:
+  `7d697e477c9e0c81c30629267743e231395e812c`
+  (`runtime: split texture write tools`).
+- CI run `27584278584`: success. Runtime shards 0-3, non-runtime tests,
+  integration-tagged smoke, Go vet/build, Docs Truth Check job, TLA+ model
+  check, final Go gate, and Node B staging deploy job passed.
+- Docs Truth Check run `27584278581`: success.
+- FlakeHub publish run `27584278590`: success.
+- Staging health: `https://choir.news/health` reported proxy and sandbox
+  commit `7d697e477c9e0c81c30629267743e231395e812c`, deployed at
+  `2026-06-15T23:56:42Z`.
+- Staging acceptance command:
+  `PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_DESKTOP_READY_TIMEOUT_MS=180000 npm --prefix frontend run e2e -- tests/texture-write-tool-staging.tmp.spec.js`
+  passed, 1 test, 23.1s.
+- Staging evidence artifact:
+  `/tmp/texture-write-tool-staging-proof-1781567962356.json`.
+- Product evidence ids: submission
+  `4c2d66f3-f090-4a6d-aa85-d90f92fd62da`; Texture document
+  `a8259528-5a53-4e89-ac7c-e76d8a8cc59a`; user/base revision
+  `2567a5d3-d976-44e1-ba5d-08ca163ac665`; appagent revision
+  `eb11c5c0-985c-4b5d-ab15-cc43481c7241`; Texture loop
+  `9ab5792e-430c-4685-914f-61482ad9a4b0`.
+- Product observations: the visible prompt bar created a Texture document for
+  marker `TEXTURE_WRITE_TOOL_1781567953855`; the appagent revision content
+  preserved the marker; revision metadata recorded `source=patch_texture`,
+  `texture_edit_tool=patch_texture`, and `vtext_edit_operation=apply_edits`;
+  Trace roles included `conductor` and `vtext`; the successful
+  `patch_texture` tool result stored the appagent revision; successful
+  `edit_texture` result count was 0.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,146 warnings.
+- `git diff --check`: pass.
+- Rollback ref: revert commit `7d697e47` to return the Texture writer to the
+  single compatibility `edit_texture` affordance.
+
+Open edge: continue high-read documentation reconciliation, internal
+symbol/storage/data-attribute cleanup, compatibility-shim deletion with
+receipts, final retired-name search, and Texture Protocol v0.
