@@ -109,9 +109,28 @@ func planDoltGC(usage doltGCDiskUsage, previousMilestoneGiB, milestoneGiB uint64
 }
 
 func runDoltGCWorkspace(workspacePath string) error {
+	rootDB, rootConnector, err := openDoltRootDB(workspacePath)
+	if err != nil {
+		return fmt.Errorf("dolt gc: open root db: %w", err)
+	}
+	databaseName, err := resolveTextureWorkspaceDatabaseName(rootDB, false)
+	if closeErr := rootDB.Close(); closeErr != nil {
+		_ = rootConnector.Close()
+		return fmt.Errorf("dolt gc: close root db: %w", closeErr)
+	}
+	if closeErr := rootConnector.Close(); closeErr != nil {
+		return fmt.Errorf("dolt gc: close root connector: %w", closeErr)
+	}
+	if err != nil {
+		return fmt.Errorf("dolt gc: resolve database: %w", err)
+	}
+	if databaseName == "" {
+		return nil
+	}
 	dbDSN := fmt.Sprintf(
-		"file://%s?commitname=Choir&commitemail=system@choir.local&database=vtext&multistatements=true&clientfoundrows=true",
+		"file://%s?commitname=Choir&commitemail=system@choir.local&database=%s&multistatements=true&clientfoundrows=true",
 		workspacePath,
+		databaseName,
 	)
 	cfg, err := embedded.ParseDSN(dbDSN)
 	if err != nil {

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	embedded "github.com/dolthub/driver"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -24,6 +27,106 @@ func vtextTestStore(t *testing.T) *Store {
 	}
 	t.Cleanup(func() { _ = s.Close() })
 	return s
+}
+
+func TestOpenVTextWorkspaceUsesTextureDatabaseForFreshWorkspace(t *testing.T) {
+	s := vtextTestStore(t)
+
+	var databaseName string
+	if err := s.vtextHandle().QueryRow("SELECT DATABASE()").Scan(&databaseName); err != nil {
+		t.Fatalf("SELECT DATABASE(): %v", err)
+	}
+	if databaseName != textureDatabaseName {
+		t.Fatalf("database = %q, want %q", databaseName, textureDatabaseName)
+	}
+}
+
+func TestOpenVTextWorkspaceReadsLegacyVTextDatabase(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "legacy.db")
+	workspacePath := deriveTextureWorkspacePath(dbPath)
+	seedLegacyVTextWorkspace(t, workspacePath)
+
+	s, err := OpenVTextWorkspace(dbPath)
+	if err != nil {
+		t.Fatalf("OpenVTextWorkspace legacy database: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	var databaseName string
+	if err := s.vtextHandle().QueryRow("SELECT DATABASE()").Scan(&databaseName); err != nil {
+		t.Fatalf("SELECT DATABASE(): %v", err)
+	}
+	if databaseName != legacyVTextDatabaseName {
+		t.Fatalf("database = %q, want legacy %q", databaseName, legacyVTextDatabaseName)
+	}
+
+	got, err := s.GetDocument(ctx, "legacy-doc", "legacy-owner")
+	if err != nil {
+		t.Fatalf("GetDocument legacy: %v", err)
+	}
+	if got.Title != "Legacy VText Database Doc" {
+		t.Fatalf("legacy title = %q", got.Title)
+	}
+}
+
+func seedLegacyVTextWorkspace(t *testing.T, workspacePath string) {
+	t.Helper()
+	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
+		t.Fatalf("mkdir legacy workspace: %v", err)
+	}
+	rootDB, connector, err := openDoltRootDB(workspacePath)
+	if err != nil {
+		t.Fatalf("open legacy root db: %v", err)
+	}
+	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS " + legacyVTextDatabaseName); err != nil {
+		_ = rootDB.Close()
+		_ = connector.Close()
+		t.Fatalf("create legacy database: %v", err)
+	}
+	if err := rootDB.Close(); err != nil {
+		_ = connector.Close()
+		t.Fatalf("close legacy root db: %v", err)
+	}
+	if err := connector.Close(); err != nil {
+		t.Fatalf("close legacy root connector: %v", err)
+	}
+
+	dbDSN := fmt.Sprintf(
+		"file://%s?commitname=Choir&commitemail=system@choir.local&database=%s&multistatements=true&clientfoundrows=true",
+		workspacePath,
+		legacyVTextDatabaseName,
+	)
+	cfg, err := embedded.ParseDSN(dbDSN)
+	if err != nil {
+		t.Fatalf("parse legacy database dsn: %v", err)
+	}
+	dbConnector, err := embedded.NewConnector(cfg)
+	if err != nil {
+		t.Fatalf("new legacy database connector: %v", err)
+	}
+	db := sql.OpenDB(dbConnector)
+	configureEmbeddedDoltDB(db)
+	defer func() {
+		_ = db.Close()
+		_ = dbConnector.Close()
+	}()
+	if _, err := db.Exec(vtextSchemaDDL); err != nil {
+		t.Fatalf("apply legacy schema: %v", err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(
+		`INSERT INTO vtext_documents (doc_id, owner_id, title, current_revision_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		"legacy-doc",
+		"legacy-owner",
+		"Legacy VText Database Doc",
+		"",
+		now,
+		now,
+	); err != nil {
+		t.Fatalf("seed legacy document: %v", err)
+	}
 }
 
 // ----- Document CRUD -----

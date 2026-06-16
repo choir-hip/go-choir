@@ -4956,3 +4956,60 @@ Protected surfaces and rollback:
 Open edge: implement C41 user-store database identity. If the Dolt adapter
 cannot reliably detect database existence without opening the database, revise
 the slice before construction rather than silently folding in table migration.
+
+## 2026-06-16 - C41 Local Construct: Texture Database Identity
+
+Claim: new user-store Texture workspaces can open a current `texture` Dolt
+database while existing `vtext` databases remain readable, without renaming
+tables or moving rows.
+
+Move: construct. Expected ΔV: repair the user-store database identity slice;
+leave table names, platform tables, durable actor/profile ids, Universal Wire
+refs, deployed proof, and protocol v0 open.
+
+Actual ΔV: C41 is locally supported. Fresh workspaces now create/open
+`database=texture`; existing workspaces with only `database=vtext` are detected
+and opened as legacy; Dolt GC resolves the same current-or-legacy database
+before running. Coarse V remains 2 until CI/deploy/staging proof lands and
+because other storage/actor/protocol obligations remain.
+
+Receipts:
+
+- Edited `internal/store/vtext.go` to add current/legacy database constants,
+  root-connection database detection, fresh `texture` database creation, and
+  legacy `vtext` fallback.
+- Edited `internal/store/dolt_maintenance.go` so `DOLT_GC()` uses the same
+  current-or-legacy database resolver and no-ops when no Texture database
+  exists.
+- Added `TestOpenVTextWorkspaceUsesTextureDatabaseForFreshWorkspace` and
+  `TestOpenVTextWorkspaceReadsLegacyVTextDatabase` in
+  `internal/store/vtext_test.go`.
+- `nix develop -c go test ./internal/store -run 'TestOpenVTextWorkspaceUsesTextureDatabaseForFreshWorkspace|TestOpenVTextWorkspaceReadsLegacyVTextDatabase|TestVTextCreateDocument|TestUnifiedDoltWorkspace'`
+  passed.
+- `nix develop -c go test ./internal/store` passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed.
+- `scripts/doccheck --report /tmp/choir-doccheck-c41-db-behavior.md --json
+  /tmp/choir-doccheck-c41-db-behavior.json` passed in report-only mode with
+  212 docs and 1,112 warnings.
+- `git diff --check` passed.
+- `rg -n "database=vtext" internal/store -g '!**/*_test.go'` returned no hits.
+
+Protected surfaces and rollback:
+
+- Mutation class: red, because this changes user-computer Dolt/app state
+  identity and embedded store bootstrap.
+- Protected surfaces touched: user Texture document/revision/alias
+  persistence, embedded Dolt workspace opening, legacy workspace/database
+  readability, Dolt maintenance connections, and runtime startup through
+  `store.Open`.
+- Rollback path: source revert restores fresh workspace opening to
+  `database=vtext`. No table rename/drop or row movement was introduced, and
+  existing legacy `vtext` databases remain readable before and after rollback.
+- Heresy delta: repaired locally for new user-store database identity; table
+  names, platform tables, durable actor/profile ids, Universal Wire refs, and
+  protocol v0 remain open.
+
+Open edge: land C41 through CI/deploy/staging identity and deployed Texture
+product proof. The deployed proof should exercise a real Texture write/read
+path rather than only health, because this slice touches runtime store
+bootstrap.

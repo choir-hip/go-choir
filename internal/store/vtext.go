@@ -179,6 +179,8 @@ const (
 	legacyVTextWorkspaceSuffix = ".vtext"
 	defaultTextureWorkspaceDir = "go-choir-texture"
 	legacyVTextWorkspaceDir    = "go-choir-vtext"
+	textureDatabaseName        = "texture"
+	legacyVTextDatabaseName    = "vtext"
 )
 
 // OpenVTextWorkspace opens (or creates) an embedded Dolt workspace for vtext
@@ -246,26 +248,11 @@ func openVTextWorkspaceDB(path string) (*sql.DB, string, doltConnector, error) {
 		return nil, "", nil, fmt.Errorf("vtext workspace: create directory: %w", err)
 	}
 
-	rootDSN := fmt.Sprintf(
-		"file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true",
-		workspacePath,
-	)
-	cfg, err := embedded.ParseDSN(rootDSN)
+	rootDB, connector, err := openDoltRootDB(workspacePath)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("vtext workspace: parse dsn: %w", err)
+		return nil, "", nil, err
 	}
-	cfg.BackOff = newDoltOpenBackOff()
-	connector, err := embedded.NewConnector(cfg)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("vtext workspace: new connector: %w", err)
-	}
-	rootDB := sql.OpenDB(connector)
-	configureEmbeddedDoltDB(rootDB)
-	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS vtext"); err != nil {
-		_ = rootDB.Close()
-		_ = connector.Close()
-		return nil, "", nil, fmt.Errorf("vtext workspace: create database: %w", err)
-	}
+	databaseName, err := resolveTextureWorkspaceDatabaseName(rootDB, true)
 	if err := rootDB.Close(); err != nil {
 		_ = connector.Close()
 		return nil, "", nil, fmt.Errorf("vtext workspace: close bootstrap connection: %w", err)
@@ -273,10 +260,14 @@ func openVTextWorkspaceDB(path string) (*sql.DB, string, doltConnector, error) {
 	if err := connector.Close(); err != nil {
 		return nil, "", nil, fmt.Errorf("vtext workspace: close bootstrap connector: %w", err)
 	}
+	if err != nil {
+		return nil, "", nil, err
+	}
 
 	dbDSN := fmt.Sprintf(
-		"file://%s?commitname=Choir&commitemail=system@choir.local&database=vtext&multistatements=true&clientfoundrows=true",
+		"file://%s?commitname=Choir&commitemail=system@choir.local&database=%s&multistatements=true&clientfoundrows=true",
 		workspacePath,
+		databaseName,
 	)
 
 	var lastErr error
@@ -308,6 +299,66 @@ func openVTextWorkspaceDB(path string) (*sql.DB, string, doltConnector, error) {
 	}
 
 	return nil, "", nil, lastErr
+}
+
+func openDoltRootDB(workspacePath string) (*sql.DB, doltConnector, error) {
+	rootDSN := fmt.Sprintf(
+		"file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true",
+		workspacePath,
+	)
+	cfg, err := embedded.ParseDSN(rootDSN)
+	if err != nil {
+		return nil, nil, fmt.Errorf("vtext workspace: parse dsn: %w", err)
+	}
+	cfg.BackOff = newDoltOpenBackOff()
+	connector, err := embedded.NewConnector(cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("vtext workspace: new connector: %w", err)
+	}
+	rootDB := sql.OpenDB(connector)
+	configureEmbeddedDoltDB(rootDB)
+	return rootDB, connector, nil
+}
+
+func resolveTextureWorkspaceDatabaseName(rootDB *sql.DB, createIfMissing bool) (string, error) {
+	if exists, err := doltDatabaseExists(rootDB, textureDatabaseName); err != nil {
+		return "", err
+	} else if exists {
+		return textureDatabaseName, nil
+	}
+	if exists, err := doltDatabaseExists(rootDB, legacyVTextDatabaseName); err != nil {
+		return "", err
+	} else if exists {
+		return legacyVTextDatabaseName, nil
+	}
+	if !createIfMissing {
+		return "", nil
+	}
+	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS " + textureDatabaseName); err != nil {
+		return "", fmt.Errorf("vtext workspace: create texture database: %w", err)
+	}
+	return textureDatabaseName, nil
+}
+
+func doltDatabaseExists(rootDB *sql.DB, name string) (bool, error) {
+	rows, err := rootDB.Query("SHOW DATABASES")
+	if err != nil {
+		return false, fmt.Errorf("vtext workspace: show databases: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var databaseName string
+		if err := rows.Scan(&databaseName); err != nil {
+			return false, fmt.Errorf("vtext workspace: scan database name: %w", err)
+		}
+		if databaseName == name {
+			return true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("vtext workspace: iterate databases: %w", err)
+	}
+	return false, nil
 }
 
 func newDoltOpenBackOff() backoff.BackOff {
