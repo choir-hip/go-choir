@@ -2378,6 +2378,66 @@ decision still returns `app: "vtext"`. This is now explicit C35 residue for a
 separate Problem Documentation First slice; it is not counted as actor/profile
 repair, because the deployed run and Trace actor identity are Texture.
 
+## Problem Checkpoint: Prompt Decision App Payload Residue
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+schema, API response, prompt default, UI, test, or persistent state changed in
+this checkpoint.
+
+Read-only staging and source inventory on 2026-06-16 confirms that the
+browser-public prompt decision payload still teaches the old app id even after
+the deployed C35 actor/profile cutover.
+
+Receipts:
+
+- C35 staging proof in `/tmp/choir-c35-actor-identity.json` observed prompt-bar
+  submission `b0265135-6544-4ae3-9c97-8a3207fd5daa` returning
+  `decision.app: "vtext"` for Texture document
+  `02d689f0-1e7f-457f-928c-3ffd08065147`, while Trace for the same trajectory
+  used `texture:<doc_id>` with `profile="texture"` and `role="texture"`.
+- The follow-up poll in `/tmp/choir-c35-actor-identity-poll.json` observed the
+  same trajectory complete with an appagent revision and no legacy Trace actor,
+  confirming this residue is the browser-public decision payload, not C35 actor
+  identity.
+- Source inventory found the prompt decision route rooted in
+  `internal/runtime/runtime.go`: `conductorRequestedApp` defaults
+  `requested_app` to `AgentProfileVText`; `normalizeConductorDecision` and
+  initial route helpers require `decision.App == AgentProfileVText`; stored
+  prompt recovery also rehydrates `app:"vtext"`.
+- `internal/runtime/provider.go` still emits fallback conductor decisions with
+  `"app": AgentProfileVText` when `requested_app` is the old name.
+- Runtime/product tests still assert the old prompt decision app in
+  `internal/runtime/api_test.go`, `runtime_test.go`,
+  `prompt_bar_unit_test.go`, and `vtext_workflow_verifier.go`.
+- Deployed/frontend acceptance tests still assert `decision.app === "vtext"` in
+  `frontend/tests/gateway-e2e-deployed.spec.js`,
+  `desktop-shell-core.spec.js`, `vtext-real-workflow-demo.spec.js`,
+  `vtext-deployed-live-search.spec.js`,
+  `vtext-deployed-source-service-research.spec.js`,
+  `vtext-dry-run-plumbing-demo.spec.js`, and
+  `vtext-background-worker-demo.spec.js`.
+- Frontend app launch code already normalizes both `vtext` and `texture` in
+  `frontend/src/App.svelte` and `frontend/src/lib/Desktop.svelte`, so the
+  repair can make new prompt decisions say `texture` while preserving legacy
+  incoming decisions.
+
+Next behavior slice design:
+
+- make new/current prompt-bar conductor decisions return
+  `decision.app: "texture"` and store/request `requested_app="texture"` for
+  Texture requests;
+- keep legacy `decision.app: "vtext"` and `requested_app="vtext"` accepted at
+  the runtime and frontend boundaries so old stored decisions and active
+  clients still open Texture;
+- update workflow verifier and deployed/frontend assertions to expect current
+  `texture` payloads while retaining explicit legacy tests;
+- do not fold `vtext_agent_revision`, tool profile keys, model-policy role
+  keys, table names, or durable route rows into this payload slice.
+
+Rollback path for the later behavior slice: revert the payload commit to resume
+new prompt decisions as `app:"vtext"` while retaining the C35 actor/profile
+identity commit.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2555,10 +2615,11 @@ prompt submission `app: "vtext"`, Trace/front-end acceptance assertions,
 table/database symbols, and model-policy key naming for separate documented
 cuts.
 
-next move: document the newly surfaced browser-public prompt decision
-`app: "vtext"` residue, then cut one small route/payload slice or choose the
-next higher-ΔV durable storage symbol slice. Do not fix the prompt decision
-payload before a checkpoint names its evidence and rollback path.
+next move: cut the small prompt decision payload slice now that the residue is
+documented: new prompt-bar Texture decisions should return/store
+`app: "texture"` / `requested_app="texture"` while legacy `vtext` decisions
+remain accepted. Do not fold task type, tool profile, model-policy, table, or
+route-row migration into this payload slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

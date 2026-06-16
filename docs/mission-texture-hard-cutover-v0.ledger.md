@@ -4022,3 +4022,35 @@ behavior fix. Remaining non-C35 edges include `vtext_agent_revision`,
 prompt/tool `role=vtext` affordances, frontend Trace assertions, model-policy
 key naming, database/table symbols, stored legacy route rows, deployed
 Universal Wire story-field proof, and protocol v0.
+
+## 2026-06-16 - Problem Checkpoint: Prompt Decision App Payload Residue
+
+Claim: the next small repair target is browser-public prompt decision app
+payload naming, not durable actor identity. No runtime repair is claimed in this
+move.
+
+Move: document the staging-discovered `decision.app: "vtext"` residue and
+source inventory before a behavior fix. Expected ΔV: no repair decrease;
+convert a discovered residual heresy into a typed problem with compatibility and
+rollback requirements.
+
+Actual ΔV: coarse V remains 2. The prompt decision payload slice is documented
+as the next candidate repair.
+
+Receipts:
+
+- `/tmp/choir-c35-actor-identity.json` recorded deployed prompt-bar submission
+  `b0265135-6544-4ae3-9c97-8a3207fd5daa` returning `decision.app: "vtext"`
+  while Trace used `texture:02d689f0-1e7f-457f-928c-3ffd08065147` with
+  `profile="texture"` and `role="texture"`.
+- `/tmp/choir-c35-actor-identity-poll.json` recorded the same trajectory
+  completing with an appagent revision and no legacy Trace actor.
+- Source inventory found `conductorRequestedApp`, conductor decision
+  normalization, stored prompt recovery, provider fallback decisions, workflow
+  verifier checks, runtime tests, and deployed/frontend specs still expecting
+  the old prompt decision app id.
+
+Open edge: implement the small payload slice only: new/current prompt decisions
+return/store `texture`; legacy `vtext` decisions remain accepted; do not fold
+task type, tool profile, model-policy, table, or route-row migration into this
+slice.
