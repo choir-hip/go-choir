@@ -4885,3 +4885,74 @@ Open edge: choose the next storage repair. The strongest current candidates are
 a typed table alias/migration layer for user/platform Texture rows or a durable
 actor/profile residue slice. Universal Wire deployed story-field proof and
 protocol v0 stay separate.
+
+## 2026-06-16 - C41 Problem Checkpoint: Texture Database Identity Residue
+
+Claim: the next storage repair should be the user-store Dolt database identity
+boundary, not a broad all-storage rename. The narrower conjecture is that new
+Texture workspaces can open a current `texture` database while existing
+`vtext` databases remain readable; table names, platform table names, durable
+actor ids, and Universal Wire refs need separate typed migrations.
+
+Move: probe/read-only inventory and design. Expected ΔV: buy observer evidence
+and select the next bounded red-surface slice; no runtime repair claimed.
+
+Actual ΔV: selected C41 as a bounded repair candidate. Coarse V remains 2 until
+behavior, CI/deploy, and staging proof land.
+
+Receipts:
+
+- Read `docs/computer-ontology.md`: the relevant split is that Dolt/app state,
+  artifact/provenance graph, and route identity are separate ledgers. Shared
+  storage changes must become typed artifacts; route identity is not the same
+  surface as table/database identity.
+- `rg -n "CREATE TABLE IF NOT EXISTS (vtext|platform_vtext)|vtext_documents|vtext_revisions|vtext_document_aliases|vtext_agent_mutations|vtext_controller_checkpoints|vtext_decisions|platform_vtext_documents|platform_vtext_revisions|database=vtext|legacyVTextWorkspace|go-choir-vtext|legacyPublicVTextPrefix|/pub/vtext|vtext:|AgentProfileVText|vtext_agent_revision|Wire\\.vtext|universalWireEditionSourcePath|platform_vtext" internal frontend docs -g '!frontend/dist/**' | tee /tmp/choir-c41-storage-actor-inventory.txt | wc -l`
+  found 1,150 hits.
+- Scoped non-test internal inventory
+  `/tmp/choir-c41-internal-nontest.txt` found 230 hits; the largest clusters
+  were `internal/store/vtext.go` (114), `internal/runtime/tool_profiles.go`
+  (13), `internal/runtime/vtext_controller.go` (11),
+  `internal/runtime/universal_wire.go` (11), `internal/runtime/runtime.go`
+  (10), and `internal/platform/store.go` (8).
+- Scoped test/frontend-test inventory `/tmp/choir-c41-test-inventory.txt`
+  found 465 hits; the largest clusters were
+  `internal/runtime/agent_tools_test.go` (103),
+  `internal/runtime/vtext_test.go` (101), and
+  `internal/runtime/email_appagent_tools_test.go` (32).
+- User-store database/table hits include `database=vtext`, `vtext_documents`,
+  `vtext_revisions`, `vtext_document_aliases`, `vtext_agent_mutations`,
+  `vtext_controller_checkpoints`, and `vtext_decisions`.
+- Platform table hits are narrower: `platform_vtext_documents` and
+  `platform_vtext_revisions` in `internal/platform/store.go`.
+- Actor/profile hits are a separate runtime surface:
+  `AgentProfileVText`, `vtext_agent_revision`, legacy `vtext:<doc_id>`
+  routing, and `[roles.vtext]` fallback policy.
+
+Next behavior slice:
+
+- create/open `database=texture` for fresh user-store Texture workspaces;
+- detect and preserve existing `database=vtext` workspaces when no current
+  `texture` database exists;
+- leave `vtext_*` table names, platform `platform_vtext_*` tables, durable
+  actor/profile ids, Universal Wire `vtext:` refs, and public route
+  compatibility unchanged;
+- prove with focused store tests for fresh current database identity and legacy
+  database readability, then full store package, doccheck, CI/deploy, staging
+  identity, and deployed product proof.
+
+Protected surfaces and rollback:
+
+- Future behavior mutation class: red, because this touches user-computer
+  Dolt/app state identity and embedded store bootstrap.
+- Protected surfaces: user Texture document/revision/alias persistence,
+  embedded Dolt workspace opening, legacy workspace/database readability,
+  Dolt maintenance connections, and document-store tests.
+- Rollback path: source revert restores new workspace opening to
+  `database=vtext`; the slice must not drop or rename tables and must keep
+  existing `database=vtext` readable, so there is no destructive data rollback.
+- Heresy delta: discovered and bounded database-identity residue; no repair
+  claimed yet.
+
+Open edge: implement C41 user-store database identity. If the Dolt adapter
+cannot reliably detect database existence without opening the database, revise
+the slice before construction rather than silently folding in table migration.

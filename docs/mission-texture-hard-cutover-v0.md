@@ -2800,6 +2800,66 @@ task/profile/model-policy naming with legacy read compatibility.
 - Do not resume M3 or source/news work until the core prompt-bar artifact loop
   has product-path proof under the Texture ontology.
 
+## Problem Checkpoint: Texture Database Identity Residue
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+schema, storage migration, API, prompt default, UI, test, or persistent state
+changed in this checkpoint.
+
+Read-only inventory on 2026-06-16 shows that C40's remaining storage residue is
+not one rename surface. The dominant user-store cluster is
+`internal/store/vtext.go`, which still opens Dolt with `database=vtext`, creates
+`vtext_*` tables, and exposes V-name bootstrap/helper symbols. Platform
+publication state has its own smaller `platform_vtext_*` table cluster, while
+durable actor/profile compatibility is spread through runtime policy and
+routing. These surfaces have different merge and rollback laws under
+`docs/computer-ontology.md`: database/table state belongs to Dolt/app state,
+actor ids belong to durable run/Trace state, and route identity has already been
+handled separately by C40b.
+
+Receipts:
+
+- `rg ... | tee /tmp/choir-c41-storage-actor-inventory.txt | wc -l` found
+  1,150 storage/actor residue hits across `internal`, `frontend`, and `docs`.
+- The scoped non-test internal inventory
+  `/tmp/choir-c41-internal-nontest.txt` found 230 hits; the largest clusters
+  were `internal/store/vtext.go` (114), `internal/runtime/tool_profiles.go`
+  (13), `internal/runtime/vtext_controller.go` (11),
+  `internal/runtime/universal_wire.go` (11), `internal/runtime/runtime.go`
+  (10), and `internal/platform/store.go` (8).
+- The scoped test inventory `/tmp/choir-c41-test-inventory.txt` found 465 hits;
+  the largest clusters were `internal/runtime/agent_tools_test.go` (103),
+  `internal/runtime/vtext_test.go` (101), and
+  `internal/runtime/email_appagent_tools_test.go` (32).
+- User-store storage hits include `database=vtext`, `vtext_documents`,
+  `vtext_revisions`, `vtext_document_aliases`, `vtext_agent_mutations`,
+  `vtext_controller_checkpoints`, and `vtext_decisions`.
+- Platform-store hits include `platform_vtext_documents` and
+  `platform_vtext_revisions`.
+- Runtime actor/profile hits include `AgentProfileVText`,
+  `vtext_agent_revision`, legacy `vtext:<doc_id>` routing, and
+  `[roles.vtext]` fallback policy.
+
+Next behavior slice design:
+
+- cut only the user-store Dolt database identity first: new/current Texture
+  workspaces should create and open `database=texture`;
+- preserve existing `database=vtext` workspaces by detecting the legacy database
+  and opening it when no current `texture` database exists;
+- keep `vtext_*` table names, platform `platform_vtext_*` tables, durable
+  actor/profile ids, Universal Wire `vtext:` refs, and public route
+  compatibility out of this slice;
+- prove with focused store tests that fresh workspaces use the current Texture
+  database, legacy `vtext` databases remain readable, and document/revision
+  behavior is unchanged; then run full store coverage, doccheck, CI/deploy,
+  staging identity, and deployed product proof reusing the Markdown/Texture
+  import or publication path.
+
+Rollback path for the future behavior slice: source revert restores opening
+`database=vtext` for new workspaces. Because the slice must not rename or drop
+tables and must keep legacy `database=vtext` readable, rollback has no
+destructive data step.
+
 ## Parallax State
 
 status: open_handoff
@@ -2827,7 +2887,9 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C40b is
+variant (ranking function) V: current V=2; last ΔV: C41 problem checkpoint
+separates user-store database identity from table names, platform tables, and
+runtime actor/profile compatibility; no runtime repair is claimed yet. C40b is
 deployed-supported for stored legacy public-route-row aliasing. Platform
 bootstrap now idempotently mints `/pub/texture/...` aliases for existing
 `/pub/vtext/...` publication routes, preserves legacy rows, and writes rollback
@@ -3068,10 +3130,20 @@ publication E2E still passes for current `/api/platform/texture/publications`
 publication, source/transclusion metadata, export, and published reader paths.
 This intentionally keeps explicit migration-code mentions of `/pub/vtext/%`;
 it does not reintroduce a current product route or delete legacy rows.
+C41 database identity residue is now documented: read-only inventory found
+1,150 storage/actor residue hits across `internal`, `frontend`, and `docs`, with
+230 scoped non-test internal hits and 465 test hits. The next bounded repair is
+user-store Dolt database identity only: new/current Texture workspaces should
+open `database=texture`, while existing `database=vtext` workspaces remain
+readable. This explicitly excludes `vtext_*` table names,
+`platform_vtext_*` tables, durable actor/profile ids, Universal Wire `vtext:`
+refs, and public route compatibility.
 
-next move: choose the next storage repair: a typed table alias/migration layer
-for user/platform Texture rows or a durable actor/profile residue slice. Keep
-deployed Universal Wire story-field proof and protocol work out of this slice.
+next move: implement C41 user-store Dolt database identity with legacy
+`database=vtext` fallback, prove fresh `database=texture` and legacy database
+readability locally, then land through CI/deploy/staging product proof. Keep
+table-name migration, platform tables, durable actor/profile residue, deployed
+Universal Wire story-field proof, and protocol work out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -3119,12 +3191,13 @@ remains readable. C40a is deployed-supported for current platform Texture
 sync/read boundary naming. C40b is deployed-supported for idempotent public
 route-row alias migration: existing `/pub/vtext/...` rows remain readable,
 current `/pub/texture/...` aliases are minted with rollback refs, and staging
-public API/browser proof is recorded. Next move is the next bounded storage or
-durable-actor hard-cutover slice, likely a typed table alias/migration layer
-for user/platform Texture rows or a durable actor/profile residue slice, with a
-Problem Documentation First checkpoint before behavior changes. Universal Wire
-story-field staging proof and protocol v0 remain open. Keep protocol v0 out
-until the working surface is proven.
+public API/browser proof is recorded. C41 Problem Documentation First checkpoint
+is recorded for Texture database identity residue. Next move is to implement the
+bounded user-store Dolt database identity repair: new/current workspaces open
+`database=texture`, legacy `database=vtext` workspaces remain readable, and
+table-name/platform-table/durable-actor/Universal-Wire residue stays out of
+scope. Universal Wire story-field staging proof and protocol v0 remain open.
+Keep protocol v0 out until the working surface is proven.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to
