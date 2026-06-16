@@ -261,7 +261,7 @@ test('upload file via UI writes into current folder', async ({ desktopSession })
   await expect(uploaded).toBeVisible({ timeout: 5000 });
 
   await uploaded.click();
-  const editorArea = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  const editorArea = page.locator('[data-texture-app] [data-texture-editor-area]').last();
   await expect(editorArea).toContainText('hello from upload UI');
 });
 
@@ -330,10 +330,10 @@ test('clicking text file opens in VText', async ({ desktopSession }) => {
 
   await fileItem.click();
 
-  const vtextWindow = page.locator('[data-vtext-app]');
+  const vtextWindow = page.locator('[data-texture-app]');
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
 
-  const editorArea = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  const editorArea = page.locator('[data-texture-app] [data-texture-editor-area]').last();
   await expect(editorArea).toContainText(fileContent);
 });
 
@@ -418,9 +418,9 @@ test('PDF files expose explicit VText import without replacing the PDF reader ro
   await page.locator('[data-window]').filter({ has: pdfViewer }).last().locator('[data-window-close]').click();
 
   await fileItem.locator('[data-import-vtext-btn]').click();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
+  const vtextWindow = page.locator('[data-texture-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('VText imported PDF proof', { timeout: 10_000 });
+  await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText('VText imported PDF proof', { timeout: 10_000 });
 });
 
 test('DOCX files import to VText from original bytes with table projection', async ({ desktopSession }) => {
@@ -440,9 +440,9 @@ test('DOCX files import to VText from original bytes with table projection', asy
   await expect(fileItem.locator('[data-import-vtext-btn]')).toBeVisible();
 
   await fileItem.locator('[data-import-vtext-btn]').click();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
+  const vtextWindow = page.locator('[data-texture-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  const editor = vtextWindow.locator('[data-vtext-editor-area]');
+  const editor = vtextWindow.locator('[data-texture-editor-area]');
   await expect(editor).toContainText('VText imported DOCX proof', { timeout: 10_000 });
   await expect(editor).toContainText('This sentence must be projected from DOCX bytes');
   await expect(editor).toContainText('Work product');
@@ -466,16 +466,16 @@ test('DOCX import can revise, publish, and export DOCX and PDF derivatives', asy
   await expect(fileItem).toBeVisible({ timeout: 5000 });
 
   const openResponse = page.waitForResponse((response) =>
-    response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/vtext/files/open'
+    response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/texture/files/open'
   );
   await fileItem.locator('[data-import-vtext-btn]').click();
   const opened = await (await openResponse).json();
 
-  const vtextWindow = page.locator('[data-vtext-app]').last();
+  const vtextWindow = page.locator('[data-texture-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('VText DOCX roundtrip proof', { timeout: 10_000 });
+  await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText('VText DOCX roundtrip proof', { timeout: 10_000 });
 
-  const doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}`);
+  const doc = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}`);
   const revisedContent = [
     'VText DOCX roundtrip proof',
     '',
@@ -486,7 +486,7 @@ test('DOCX import can revise, publish, and export DOCX and PDF derivatives', asy
     '| Revision | Applied after import |',
     '| Export | DOCX and PDF derivatives generated after publish |',
   ].join('\n');
-  const revision = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
+  const revision = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: revisedContent,
@@ -536,16 +536,16 @@ test('PDF import can revise, publish, and export DOCX and PDF derivatives', asyn
   await expect(fileItem).toBeVisible({ timeout: 5000 });
 
   const openResponse = page.waitForResponse((response) =>
-    response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/vtext/files/open'
+    response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/texture/files/open'
   );
   await fileItem.locator('[data-import-vtext-btn]').click();
   const opened = await (await openResponse).json();
 
-  const vtextWindow = page.locator('[data-vtext-app]').last();
+  const vtextWindow = page.locator('[data-texture-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('VText PDF roundtrip proof', { timeout: 10_000 });
+  await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText('VText PDF roundtrip proof', { timeout: 10_000 });
 
-  const doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}`);
+  const doc = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}`);
   const revisedContent = [
     'VText PDF roundtrip proof',
     '',
@@ -556,7 +556,7 @@ test('PDF import can revise, publish, and export DOCX and PDF derivatives', asyn
     '| Import | PDF text projected from original bytes |',
     '| Export | DOCX and PDF derivatives generated from revised VText |',
   ].join('\n');
-  const revision = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
+  const revision = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: revisedContent,

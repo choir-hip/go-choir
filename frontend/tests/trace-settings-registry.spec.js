@@ -111,7 +111,7 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
         url.pathname === '/api/adoptions' ||
         url.pathname.startsWith('/api/shell/') ||
         url.pathname.startsWith('/api/desktop/') ||
-        url.pathname.startsWith('/api/vtext/')) &&
+        url.pathname.startsWith('/api/texture/')) &&
       response.status() >= 400
     ) {
       failedProductRequests.push(`${url.pathname}:${response.status()}`);

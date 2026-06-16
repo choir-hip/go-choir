@@ -91,7 +91,7 @@ async function waitForPromptDecision(page, submissionId, timeout = 12000) {
 }
 
 async function listRevisions(page, docId) {
-  return fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(docId)}/revisions`);
+  return fetchJSON(page, `/api/texture/documents/${encodeURIComponent(docId)}/revisions`);
 }
 
 async function waitForRevisionTotal(page, docId, want, timeout = 15000) {
@@ -108,7 +108,7 @@ async function waitForRevisionTotal(page, docId, want, timeout = 15000) {
 async function waitForConsumedWorkerRoles(page, docId, roles, timeout = 20000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    const doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(docId)}`);
+    const doc = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(docId)}`);
     const revisions = await listRevisions(page, docId);
     const head = (revisions.revisions || []).find((revision) => revision.revision_id === doc.current_revision_id);
     const consumed = (revisions.revisions || []).flatMap((revision) =>
@@ -190,14 +190,14 @@ test('dry-run vtext plumbing demo uses seeded worker updates and artifacts', asy
   expect(conductorDecision.app).toBe('vtext');
   expect(conductorDecision.initial_loop_id || '').toBeTruthy();
 
-  const vtextWindow = page.locator('[data-vtext-app]').last();
+  const vtextWindow = page.locator('[data-texture-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 10000 });
-  await expect(vtextWindow.locator('[data-vtext-version]')).toHaveText('v1');
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(/cellular automata/);
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
+  await expect(vtextWindow.locator('[data-texture-version]')).toHaveText('v1');
+  await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText(/cellular automata/);
+  await expect(vtextWindow.locator('[data-texture-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
 
   const beforeManualRevision = await listRevisions(page, conductorDecision.doc_id);
-  const editor = vtextWindow.locator('[data-vtext-editor-area]');
+  const editor = vtextWindow.locator('[data-texture-editor-area]');
   await editor.fill(`${await editor.textContent()}
 
 User edit: keep the model deterministic, cite the research assumptions, and require a generated artifact plus a verification script.`);
@@ -206,10 +206,10 @@ User edit: keep the model deterministic, cite the research assumptions, and requ
     response.request().method() === 'POST' &&
     /\/api\/vtext\/documents\/[^/]+\/revise$/.test(new URL(response.url()).pathname)
   );
-  await vtextWindow.locator('[data-vtext-prompt]').click();
+  await vtextWindow.locator('[data-texture-prompt]').click();
   const manualRevision = await (await manualRevisionResponse).json();
   await waitForRevisionTotal(page, conductorDecision.doc_id, beforeManualRevision.revisions.length + 2, 15000);
-  await expect(vtextWindow.locator('[data-vtext-version]')).toContainText(/^v[3-9]/, { timeout: 10000 });
+  await expect(vtextWindow.locator('[data-texture-version]')).toContainText(/^v[3-9]/, { timeout: 10000 });
 
   const artifactHTML = await seedEvolutionArtifact(page);
   const researchResp = await submitDryRunResearchFindings(page, {
@@ -263,7 +263,7 @@ User edit: keep the model deterministic, cite the research assumptions, and requ
   expect(finalText).toContain('artifacts/evolution-ca.html');
   expect(finalText).toContain('node artifacts/evolution-ca.verify.js passed');
   expect(finalText).not.toMatch(/Task completed successfully|stub provider|Worker update ready\.|Research findings ready\./i);
-  await expect(vtextWindow.locator('[data-vtext-version]')).toContainText(/^v[4-9]/, { timeout: 10000 });
+  await expect(vtextWindow.locator('[data-texture-version]')).toContainText(/^v[4-9]/, { timeout: 10000 });
 
   await page.locator('[data-desktop-icon-id="files"]').dblclick();
   const filesApp = page.locator('[data-files-app]').last();

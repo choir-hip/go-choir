@@ -75,7 +75,7 @@ async function waitForAppagentRevision(page, docId, baselineCount) {
   const deadline = Date.now() + 240_000;
   let latest = null;
   while (Date.now() < deadline) {
-    latest = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(docId)}/revisions?limit=10000`);
+    latest = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(docId)}/revisions?limit=10000`);
     const revisions = latest.revisions || [];
     if (revisions.length > baselineCount && revisions.some((revision) => revision.author_kind === 'appagent')) {
       return revisions;
@@ -91,11 +91,11 @@ test('live VText revision consumes direct edit instructions and keeps long-docum
   const initialContent = legalCloudLongDraft();
   const editedContent = directUserEditDraft(initialContent);
 
-  const doc = await fetchJSON(page, '/api/vtext/documents', {
+  const doc = await fetchJSON(page, '/api/texture/documents', {
     method: 'POST',
     body: JSON.stringify({ title }),
   });
-  const initial = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+  const initial = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: initialContent,
@@ -107,7 +107,7 @@ test('live VText revision consumes direct edit instructions and keeps long-docum
       },
     }),
   });
-  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+  await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: editedContent,
@@ -121,8 +121,8 @@ test('live VText revision consumes direct edit instructions and keeps long-docum
     }),
   });
 
-  const revisionsBefore = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions?limit=10000`);
-  const revise = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revise`, {
+  const revisionsBefore = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions?limit=10000`);
+  const revise = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revise`, {
     method: 'POST',
     body: JSON.stringify({ intent: 'revise' }),
   });
@@ -142,7 +142,7 @@ test('live VText revision consumes direct edit instructions and keeps long-docum
   expect(appagent.content).toContain('| Term | Definition |');
   expect(appagent.content).toContain('| Work product | Durable, reviewable professional output. |');
 
-  const diagnosis = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/diagnosis?limit=3`);
+  const diagnosis = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/diagnosis?limit=3`);
   expect((diagnosis.runs || []).some((run) => run.loop_id === revise.loop_id)).toBe(true);
   expect(appagent.metadata?.vtext_context_mode).toBe('current_head_plus_user_edit_diff');
   expect(appagent.metadata?.vtext_edit_operation).toBe('apply_edits');

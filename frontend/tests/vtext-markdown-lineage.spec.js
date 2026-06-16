@@ -36,12 +36,12 @@ async function closeDesktopWindows(page, appIds = ['content', 'vtext']) {
 async function openRecentVTextDocument(page, recentLabel, openedTitle = recentLabel) {
   await closeDesktopWindows(page);
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const recentWindow = page.locator('[data-window-app-id="vtext"]').filter({ has: page.locator('[data-vtext-recent]') }).last();
-  await expect(recentWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await recentWindow.locator('[data-vtext-recent-document]').filter({ hasText: recentLabel }).click();
+  const recentWindow = page.locator('[data-window-app-id="vtext"]').filter({ has: page.locator('[data-texture-recent]') }).last();
+  await expect(recentWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await recentWindow.locator('[data-texture-recent-document]').filter({ hasText: recentLabel }).click();
   const documentWindow = page.locator('[data-window-app-id="vtext"]').filter({ hasText: openedTitle }).last();
-  await expect(documentWindow.locator('[data-vtext-app]')).toBeVisible({ timeout: 10000 });
-  return documentWindow.locator('[data-vtext-app]');
+  await expect(documentWindow.locator('[data-texture-app]')).toBeVisible({ timeout: 10000 });
+  return documentWindow.locator('[data-texture-app]');
 }
 
 test('Markdown lineage import resolves known citation markers into expandable source transclusions', async ({ desktopSession }) => {
@@ -131,15 +131,15 @@ test('Markdown lineage import resolves known citation markers into expandable so
 
   const vtextWindow = await openRecentVTextDocument(page, `Legal Cloud Sourced Lineage ${stamp}`);
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
-  const citation = rendered.locator('[data-vtext-source-ref]').first();
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
+  const citation = rendered.locator('[data-texture-source-ref]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
-  await expect(citation).toHaveAttribute('data-vtext-citation-transclusion', '');
+  await expect(citation).toHaveAttribute('data-texture-citation-transclusion', '');
   await citation.click();
   await expect(citation).toHaveAttribute('data-expanded', 'true');
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
-  const journalOpenSource = rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source]');
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(sourceLabel);
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(excerpt);
+  const journalOpenSource = rendered.locator('[data-texture-source-flow-note] [data-texture-open-source]');
   await expect(journalOpenSource).toBeVisible();
   const initialSourceWindows = await page.locator('[data-content-viewer]').count();
   await journalOpenSource.click();
@@ -244,8 +244,8 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
   expect(exported.content_hash).toBeTruthy();
 
   const vtextWindow = await openRecentVTextDocument(page, `imported-md-vtext-${stamp}.vtext`);
-  await expect(vtextWindow.locator('[data-vtext-version]')).toHaveText('v1');
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('Canonical editable document identity.');
+  await expect(vtextWindow.locator('[data-texture-version]')).toHaveText('v1');
+  await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText('Canonical editable document identity.');
 });
 
 test('Imported plain text advances to canonical .vtext with migration metadata and Markdown export', async ({ desktopSession }) => {
@@ -446,7 +446,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
 
   const vtextWindow = await openRecentVTextDocument(page, `Content-backed Legal Cloud ${stamp}`);
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
   await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
   await expect(rendered).toContainText('Work product');
 
@@ -457,13 +457,13 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   expect(restored.revision_id).toBeTruthy();
   await page.reload();
   const restoredWindow = await openRecentVTextDocument(page, `Content-backed Legal Cloud ${stamp}`);
-  const restoredRendered = restoredWindow.locator('[data-vtext-rendered]');
-  const citation = restoredRendered.locator('[data-vtext-source-ref]').first();
+  const restoredRendered = restoredWindow.locator('[data-texture-rendered]');
+  const citation = restoredRendered.locator('[data-texture-source-ref]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
   await citation.click();
   await expect(citation).toHaveAttribute('data-expanded', 'true');
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(sourceLabel);
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(excerpt);
 });
 
 test('Migrated source gaps can be repaired as canonical VText revisions', async ({ desktopSession }) => {
@@ -563,15 +563,15 @@ test('Migrated source gaps can be repaired as canonical VText revisions', async 
 
   const vtextWindow = await openRecentVTextDocument(page, `Source Gap Repair ${stamp}`);
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
-  const citation = rendered.locator('[data-vtext-source-ref]').first();
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
+  const citation = rendered.locator('[data-texture-source-ref]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
   await expect(citation).toHaveAttribute('data-source-label', '2');
   await citation.click();
   await expect(citation).toHaveAttribute('data-expanded', 'true');
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
-  await expect(rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source]')).toBeVisible();
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(sourceLabel);
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(excerpt);
+  await expect(rendered.locator('[data-texture-source-flow-note] [data-texture-open-source]')).toBeVisible();
 });
 
 test('VText Sources panel applies source-gap repair and opens repaired source window', async ({ desktopSession }) => {
@@ -601,18 +601,18 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
 
   const vtextWindow = await openRecentVTextDocument(page, `Panel Source Repair ${stamp}`);
 
-  await vtextWindow.locator('[data-vtext-source-panel]').click();
-  const sourcePanel = vtextWindow.locator('[data-vtext-source-diagnostics]');
+  await vtextWindow.locator('[data-texture-source-panel]').click();
+  const sourcePanel = vtextWindow.locator('[data-texture-source-diagnostics]');
   await expect(sourcePanel).toBeVisible({ timeout: 10000 });
-  await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toContainText('[2]');
-  await expect(sourcePanel.locator('[data-vtext-source-review-panel]')).toBeVisible();
-  await expect(sourcePanel.locator('[data-vtext-source-review-marker].selected')).toContainText('[2]');
-  await expect(sourcePanel.locator('[data-vtext-source-repair-payload]')).toHaveCount(0);
-  await sourcePanel.locator('[data-vtext-source-review-title]').fill(sourceLabel);
-  await sourcePanel.locator('[data-vtext-source-review-excerpt]').fill(excerpt);
+  await expect(sourcePanel.locator('[data-texture-source-gaps]')).toContainText('[2]');
+  await expect(sourcePanel.locator('[data-texture-source-review-panel]')).toBeVisible();
+  await expect(sourcePanel.locator('[data-texture-source-review-marker].selected')).toContainText('[2]');
+  await expect(sourcePanel.locator('[data-texture-source-repair-payload]')).toHaveCount(0);
+  await sourcePanel.locator('[data-texture-source-review-title]').fill(sourceLabel);
+  await sourcePanel.locator('[data-texture-source-review-excerpt]').fill(excerpt);
   const repairRequestPromise = page.waitForRequest((request) => request.url().includes('/source-repairs'));
   const repairResponsePromise = page.waitForResponse((response) => response.url().includes('/source-repairs'));
-  await sourcePanel.locator('[data-vtext-apply-source-review]').click();
+  await sourcePanel.locator('[data-texture-apply-source-review]').click();
   const repairRequest = await repairRequestPromise;
   expect(repairRequest.method()).toBe('POST');
   const repairPayload = JSON.parse(repairRequest.postData() || '{}');
@@ -623,17 +623,17 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   const repairResponse = await repairResponsePromise;
   expect(repairResponse.status()).toBe(201);
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
-  const citation = rendered.locator('[data-vtext-source-ref]').first();
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
+  const citation = rendered.locator('[data-texture-source-ref]').first();
   await expect(citation).toBeVisible({ timeout: 15000 });
-  await expect(citation).toHaveAttribute('data-vtext-citation-transclusion', '');
+  await expect(citation).toHaveAttribute('data-texture-citation-transclusion', '');
   await citation.click();
   await expect(citation).toHaveAttribute('data-expanded', 'true');
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(sourceLabel);
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(excerpt);
 
   const initialSourceWindows = await page.locator('[data-content-viewer]').count();
-  await rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source]').click();
+  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source]').click();
   await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toContainText(sourceLabel);
@@ -643,9 +643,9 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   await page.locator('[data-window-app-id="content"]').last().locator('[data-window-close]').click();
   await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows, { timeout: 10000 });
 
-  await expect(sourcePanel.locator('[data-vtext-source-entities]')).toContainText(sourceLabel);
-  await expect(sourcePanel.locator('[data-vtext-source-entity-chip]').filter({ hasText: sourceLabel })).toContainText('Confirms claim');
-  await sourcePanel.locator('[data-vtext-source-entity-chip]').filter({ hasText: sourceLabel }).click();
+  await expect(sourcePanel.locator('[data-texture-source-entities]')).toContainText(sourceLabel);
+  await expect(sourcePanel.locator('[data-texture-source-entity-chip]').filter({ hasText: sourceLabel })).toContainText('Confirms claim');
+  await sourcePanel.locator('[data-texture-source-entity-chip]').filter({ hasText: sourceLabel }).click();
   await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
   const panelSourceWindow = page.locator('[data-content-viewer]').last();
   await expect(panelSourceWindow).toContainText(sourceLabel);
@@ -680,22 +680,22 @@ test('VText Sources panel can mark a citation gap as no source needed', async ({
 
   const vtextWindow = await openRecentVTextDocument(page, `Panel No Source Needed ${stamp}`);
 
-  await vtextWindow.locator('[data-vtext-source-panel]').click();
-  const sourcePanel = vtextWindow.locator('[data-vtext-source-diagnostics]');
+  await vtextWindow.locator('[data-texture-source-panel]').click();
+  const sourcePanel = vtextWindow.locator('[data-texture-source-diagnostics]');
   await expect(sourcePanel).toBeVisible({ timeout: 10000 });
-  await expect(sourcePanel.locator('[data-vtext-source-review-panel]')).toBeVisible();
-  await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toContainText('[2]');
-  await expect(sourcePanel.locator('[data-vtext-source-review-marker].selected')).toContainText('[2]');
+  await expect(sourcePanel.locator('[data-texture-source-review-panel]')).toBeVisible();
+  await expect(sourcePanel.locator('[data-texture-source-gaps]')).toContainText('[2]');
+  await expect(sourcePanel.locator('[data-texture-source-review-marker].selected')).toContainText('[2]');
 
-  await sourcePanel.locator('[data-vtext-source-review-relation]').selectOption('no_source_needed');
-  await expect(sourcePanel.locator('[data-vtext-source-review-title]')).toHaveCount(0);
-  await expect(sourcePanel.locator('[data-vtext-source-review-excerpt]')).toHaveCount(0);
-  await expect(sourcePanel.locator('[data-vtext-apply-source-review]')).toBeDisabled();
-  await sourcePanel.locator('[data-vtext-source-review-reason]').fill(reason);
+  await sourcePanel.locator('[data-texture-source-review-relation]').selectOption('no_source_needed');
+  await expect(sourcePanel.locator('[data-texture-source-review-title]')).toHaveCount(0);
+  await expect(sourcePanel.locator('[data-texture-source-review-excerpt]')).toHaveCount(0);
+  await expect(sourcePanel.locator('[data-texture-apply-source-review]')).toBeDisabled();
+  await sourcePanel.locator('[data-texture-source-review-reason]').fill(reason);
 
   const repairRequestPromise = page.waitForRequest((request) => request.url().includes('/source-repairs'));
   const repairResponsePromise = page.waitForResponse((response) => response.url().includes('/source-repairs'));
-  await sourcePanel.locator('[data-vtext-apply-source-review]').click();
+  await sourcePanel.locator('[data-texture-apply-source-review]').click();
   const repairRequest = await repairRequestPromise;
   expect(repairRequest.method()).toBe('POST');
   const repairPayload = JSON.parse(repairRequest.postData() || '{}');
@@ -728,11 +728,11 @@ test('VText Sources panel can mark a citation gap as no source needed', async ({
     },
   ]);
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
   await expect(rendered).toContainText('This ordinary framing sentence should not keep a citation marker.');
   await expect(rendered).not.toContainText('[2]');
-  await expect(rendered.locator('[data-vtext-source-ref]')).toHaveCount(0);
-  await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toHaveCount(0, { timeout: 15000 });
+  await expect(rendered.locator('[data-texture-source-ref]')).toHaveCount(0);
+  await expect(sourcePanel.locator('[data-texture-source-gaps]')).toHaveCount(0, { timeout: 15000 });
 });
 
 test('VText Sources panel can cancel diagnosis without blocking source review', async ({ desktopSession }) => {
@@ -774,24 +774,24 @@ test('VText Sources panel can cancel diagnosis without blocking source review', 
 
   try {
     const vtextWindow = await openRecentVTextDocument(page, `Cancel Source Diagnosis ${stamp}`);
-    await vtextWindow.locator('[data-vtext-source-panel]').click();
-    const sourcePanel = vtextWindow.locator('[data-vtext-source-diagnostics]');
-    const diagnosisButton = sourcePanel.locator('[data-vtext-load-diagnosis]');
+    await vtextWindow.locator('[data-texture-source-panel]').click();
+    const sourcePanel = vtextWindow.locator('[data-texture-source-diagnostics]');
+    const diagnosisButton = sourcePanel.locator('[data-texture-load-diagnosis]');
     await expect(sourcePanel).toBeVisible({ timeout: 10000 });
-    await expect(sourcePanel.locator('[data-vtext-source-review-panel]')).toBeVisible();
-    await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toContainText('[2]');
+    await expect(sourcePanel.locator('[data-texture-source-review-panel]')).toBeVisible();
+    await expect(sourcePanel.locator('[data-texture-source-gaps]')).toContainText('[2]');
 
     const diagnosisRequest = page.waitForRequest((request) => request.url().includes('/diagnosis'));
     await diagnosisButton.click();
     await diagnosisRequest;
     await expect(diagnosisButton).toHaveText('Cancel diagnosis');
-    await expect(sourcePanel.locator('[data-vtext-apply-source-review]')).toBeDisabled();
+    await expect(sourcePanel.locator('[data-texture-apply-source-review]')).toBeDisabled();
 
     await diagnosisButton.click();
     await expect(diagnosisButton).toHaveText('Diagnosis', { timeout: 5000 });
-    await expect(vtextWindow.locator('[data-vtext-save-status]')).toContainText('Source diagnosis cancelled');
-    await expect(sourcePanel.locator('[data-vtext-source-review-panel]')).toBeVisible();
-    await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toContainText('[2]');
+    await expect(vtextWindow.locator('[data-texture-save-status]')).toContainText('Source diagnosis cancelled');
+    await expect(sourcePanel.locator('[data-texture-source-review-panel]')).toBeVisible();
+    await expect(sourcePanel.locator('[data-texture-source-gaps]')).toContainText('[2]');
   } finally {
     if (releaseDiagnosis) releaseDiagnosis();
     await page.unroute(diagnosisRoute);
@@ -831,17 +831,17 @@ test('VText Sources panel shows structured edit evidence without raw prompts', a
 
   const vtextWindow = await openRecentVTextDocument(page, `Edit Evidence Fixture ${stamp}`);
 
-  await vtextWindow.locator('[data-vtext-source-panel]').click();
-  const editEvidence = vtextWindow.locator('[data-vtext-edit-evidence]');
+  await vtextWindow.locator('[data-texture-source-panel]').click();
+  const editEvidence = vtextWindow.locator('[data-texture-edit-evidence]');
   await expect(editEvidence).toBeVisible({ timeout: 10000 });
-  await expect(editEvidence.locator('[data-vtext-edit-context-mode]')).toContainText('focused_user_edit_diff');
-  await expect(editEvidence.locator('[data-vtext-edit-operation]')).toContainText('apply_edits');
-  await expect(editEvidence.locator('[data-vtext-edit-prompt-chars]')).toContainText('9382');
-  await expect(editEvidence.locator('[data-vtext-edit-count]')).toContainText('2');
-  await expect(editEvidence.locator('[data-vtext-edit-delta-chars]')).toContainText('-41');
-  await expect(editEvidence.locator('[data-vtext-edit-latency-ms]')).toContainText('1275');
+  await expect(editEvidence.locator('[data-texture-edit-context-mode]')).toContainText('focused_user_edit_diff');
+  await expect(editEvidence.locator('[data-texture-edit-operation]')).toContainText('apply_edits');
+  await expect(editEvidence.locator('[data-texture-edit-prompt-chars]')).toContainText('9382');
+  await expect(editEvidence.locator('[data-texture-edit-count]')).toContainText('2');
+  await expect(editEvidence.locator('[data-texture-edit-delta-chars]')).toContainText('-41');
+  await expect(editEvidence.locator('[data-texture-edit-latency-ms]')).toContainText('1275');
   await expect(editEvidence).not.toContainText('raw prompt text must stay out');
-  await expect(vtextWindow.locator('[data-vtext-rendered]')).not.toContainText('focused_user_edit_diff');
+  await expect(vtextWindow.locator('[data-texture-rendered]')).not.toContainText('focused_user_edit_diff');
 });
 
 test('VText Sources panel shows bounded revision structure without body text', async ({ desktopSession }) => {
@@ -921,20 +921,20 @@ test('VText Sources panel shows bounded revision structure without body text', a
 
   const vtextWindow = await openRecentVTextDocument(page, `Structure Evidence Fixture ${stamp}`);
   try {
-    await vtextWindow.locator('[data-vtext-source-panel]').click();
-    await vtextWindow.locator('[data-vtext-load-diagnosis]').click();
+    await vtextWindow.locator('[data-texture-source-panel]').click();
+    await vtextWindow.locator('[data-texture-load-diagnosis]').click();
 
-    const structureSummary = vtextWindow.locator('[data-vtext-structure-summary]');
+    const structureSummary = vtextWindow.locator('[data-texture-structure-summary]');
     await expect(structureSummary).toBeVisible({ timeout: 10000 });
     await expect(structureSummary).toContainText('bounded summaries');
     await expect(structureSummary).toContainText('tables');
     await expect(structureSummary).toContainText('sources');
     await expect(structureSummary).toContainText('v78');
     await expect(structureSummary).toContainText('v70');
-    const structureRevision = structureSummary.locator('[data-vtext-structure-revision]').first();
+    const structureRevision = structureSummary.locator('[data-texture-structure-revision]').first();
     await expect(structureRevision).toContainText('table 1');
     await expect(structureRevision).toContainText('2c/3r');
-    const signature = await structureRevision.locator('[data-vtext-table-signature]').first().getAttribute('data-table-signature');
+    const signature = await structureRevision.locator('[data-texture-table-signature]').first().getAttribute('data-table-signature');
     expect(signature || '').toMatch(/^sha256:/);
     await expect(structureSummary).not.toContainText('Work product');
     await expect(structureSummary).not.toContainText('Durable output');
@@ -1005,17 +1005,17 @@ test('VText Sources panel shows off-document decision notes separately', async (
 
   const vtextWindow = await openRecentVTextDocument(page, `Decision Evidence Fixture ${stamp}`);
   try {
-    await vtextWindow.locator('[data-vtext-source-panel]').click();
-    await vtextWindow.locator('[data-vtext-load-diagnosis]').click();
+    await vtextWindow.locator('[data-texture-source-panel]').click();
+    await vtextWindow.locator('[data-texture-load-diagnosis]').click();
 
-    const decisions = vtextWindow.locator('[data-vtext-decisions]');
+    const decisions = vtextWindow.locator('[data-texture-decisions]');
     await expect(decisions).toBeVisible({ timeout: 10000 });
     await expect(decisions).toContainText('VText decisions');
-    await expect(decisions.locator('[data-vtext-decision]')).toHaveAttribute('data-decision-kind', 'delegation_skipped');
+    await expect(decisions.locator('[data-texture-decision]')).toHaveAttribute('data-decision-kind', 'delegation_skipped');
     await expect(decisions).toContainText(decisionReason);
     await expect(decisions).toContainText('Use patch_texture for the reader-facing revision.');
-    await expect(decisions.locator('[data-vtext-decision-refs]')).toContainText('source:owner-excerpt');
-    await expect(vtextWindow.locator('[data-vtext-rendered]')).not.toContainText(decisionReason);
+    await expect(decisions.locator('[data-texture-decision-refs]')).toContainText('source:owner-excerpt');
+    await expect(vtextWindow.locator('[data-texture-rendered]')).not.toContainText(decisionReason);
   } finally {
     await page.unroute(diagnosisRoute);
   }

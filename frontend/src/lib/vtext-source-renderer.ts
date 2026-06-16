@@ -351,14 +351,14 @@ export function renderSourceTransclusionBody(entity: any, { compact = false } = 
   const snapshot = compact ? sourceEntityInlineExcerptText(entity, 360) : sourceEntityExcerptText(entity);
   const facts = renderSourceEntityFacts(entity);
   if (compact) {
-    return `<span class="vtext-transclusion-body vtext-transclusion-body--compact" data-vtext-transclusion-body>
+    return `<span class="vtext-transclusion-body vtext-transclusion-body--compact" data-texture-transclusion-body>
       ${snapshot ? `<span class="vtext-transclusion-quote">${renderInlineMarkdown(snapshot, [])}</span>` : ''}
       ${sourceEntityMedia(entity, { inline: true })}
       ${facts.trim() ? `<span class="vtext-source-facts">${facts}</span>` : ''}
     </span>`;
   }
   const media = sourceEntityMedia(entity);
-  return `<div class="vtext-transclusion-body" data-vtext-transclusion-body>
+  return `<div class="vtext-transclusion-body" data-texture-transclusion-body>
     ${snapshot ? `<blockquote class="vtext-transclusion-quote">${renderInlineMarkdown(snapshot, [])}</blockquote>` : ''}
     ${media}
     ${facts.trim() ? `<div class="vtext-source-facts">${facts}</div>` : ''}
@@ -369,17 +369,17 @@ export function renderInlineSourceRef(label: string, entityID: string, sourceEnt
   const entity = findSourceEntity(sourceEntities, entityID);
   const displayLabel = label || entity?.label || 'source';
   if (!entity) {
-    return `<span class="vtext-source-ref vtext-source-ref--missing" data-vtext-source-ref data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false">${escapeHTML(displayLabel)}</span>`;
+    return `<span class="vtext-source-ref vtext-source-ref--missing" data-texture-source-ref data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false">${escapeHTML(displayLabel)}</span>`;
   }
   const title = sourceEntityTitle(entity);
   const marker = sourceEntities.indexOf(entity) + 1 || '';
   const expansionSurface = sourceEntityExpansionSurface(entity);
-  return `<span class="vtext-source-ref" data-vtext-source-ref data-vtext-citation-transclusion data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" data-source-expansion-surface="${escapeHTML(expansionSurface)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
+  return `<span class="vtext-source-ref" data-texture-source-ref data-texture-citation-transclusion data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" data-source-expansion-surface="${escapeHTML(expansionSurface)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
     <span class="vtext-source-ref-label">${escapeHTML(marker || displayLabel)}</span>
-    <span class="vtext-source-ref-popover" data-vtext-source-ref-popover data-vtext-inline-transclusion role="note">
+    <span class="vtext-source-ref-popover" data-texture-source-ref-popover data-texture-inline-transclusion role="note">
       <strong>${escapeHTML(title)}</strong>
       ${renderSourceTransclusionBody(entity, { compact: true })}
-      <button type="button" class="vtext-source-open" data-vtext-open-source data-source-entity-id="${escapeHTML(entityID)}">Open source</button>
+      <button type="button" class="vtext-source-open" data-texture-open-source data-source-entity-id="${escapeHTML(entityID)}">Open source</button>
     </span>
   </span>`;
 }
@@ -467,12 +467,12 @@ export function renderInlineVTextRef(label: string, docRef: string, relatedVText
   const currentVersionNumber = vtextEntityCurrentVersionNumber(entity);
   const newerVersion = hasNewerVTextVersion(entity, pinnedRevisionID);
   const className = entity ? 'vtext-related-ref' : 'vtext-related-ref vtext-related-ref--missing';
-  return `<span class="${className}" data-vtext-related-ref data-vtext-doc-id="${escapeHTML(docID)}" data-vtext-label="${escapeHTML(displayLabel)}"${pinnedRevisionID ? ` data-vtext-related-revision-id="${escapeHTML(pinnedRevisionID)}" data-vtext-related-pin-state="pinned"` : ''}${pinnedVersionNumber ? ` data-vtext-related-version-number="${escapeHTML(pinnedVersionNumber)}"` : ''}${currentRevisionID ? ` data-vtext-related-current-revision-id="${escapeHTML(currentRevisionID)}"` : ''}${currentVersionNumber ? ` data-vtext-related-current-version-number="${escapeHTML(currentVersionNumber)}"` : ''}${newerVersion ? ' data-vtext-related-has-newer-version="true"' : ''} contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Related Texture: ${title}`)}">
+  return `<span class="${className}" data-texture-related-ref data-texture-doc-id="${escapeHTML(docID)}" data-texture-label="${escapeHTML(displayLabel)}"${pinnedRevisionID ? ` data-texture-related-revision-id="${escapeHTML(pinnedRevisionID)}" data-texture-related-pin-state="pinned"` : ''}${pinnedVersionNumber ? ` data-texture-related-version-number="${escapeHTML(pinnedVersionNumber)}"` : ''}${currentRevisionID ? ` data-texture-related-current-revision-id="${escapeHTML(currentRevisionID)}"` : ''}${currentVersionNumber ? ` data-texture-related-current-version-number="${escapeHTML(currentVersionNumber)}"` : ''}${newerVersion ? ' data-texture-related-has-newer-version="true"' : ''} contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Related Texture: ${title}`)}">
     <span class="vtext-related-ref-label">${escapeHTML(displayLabel)}</span>
-    <span class="vtext-related-ref-popover" data-vtext-inline-transclusion role="note">
+    <span class="vtext-related-ref-popover" data-texture-inline-transclusion role="note">
       <strong>${escapeHTML(title)}</strong>
-      ${pinnedRevisionID ? `<span class="vtext-transclusion-pin" data-vtext-related-version-pin>Version pin${pinnedVersionNumber ? ` v${escapeHTML(pinnedVersionNumber)}` : ''}</span>` : ''}
-      ${newerVersion ? '<span class="vtext-transclusion-newer" data-vtext-related-newer-version>Newer version available</span>' : ''}
+      ${pinnedRevisionID ? `<span class="vtext-transclusion-pin" data-texture-related-version-pin>Version pin${pinnedVersionNumber ? ` v${escapeHTML(pinnedVersionNumber)}` : ''}</span>` : ''}
+      ${newerVersion ? '<span class="vtext-transclusion-newer" data-texture-related-newer-version>Newer version available</span>' : ''}
       ${snapshot ? `<span class="vtext-transclusion-quote">${renderInlineMarkdown(snapshot, [], [])}</span>` : ''}
     </span>
   </span>`;

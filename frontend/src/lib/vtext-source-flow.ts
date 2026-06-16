@@ -201,7 +201,7 @@ function sourceFlowText(node: Node | null, activeSourceRef: Element): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
   if (node.nodeType !== Node.ELEMENT_NODE) return '';
   const element = node as Element;
-  if (element.matches?.('[data-vtext-source-ref]')) {
+  if (element.matches?.('[data-texture-source-ref]')) {
     const label = element.querySelector?.('.vtext-source-ref-label')?.textContent || element.getAttribute('data-source-label') || '';
     return label ? ` ${label} ` : ' ';
   }
@@ -230,7 +230,7 @@ function sourceFlowItems(node: Node | null, activeSourceRef: Element, font: stri
   }
   if (node.nodeType !== Node.ELEMENT_NODE) return [];
   const element = node as Element;
-  if (element.matches?.('[data-vtext-source-ref]')) {
+  if (element.matches?.('[data-texture-source-ref]')) {
     return [sourceRefFlowItem(element)];
   }
   return Array.from(node.childNodes).flatMap((child) => sourceFlowItems(child, activeSourceRef, font));
@@ -247,12 +247,12 @@ function sourceRefTitle(sourceRef: Element, popover: Element): string {
 }
 
 function sourceRefExcerpt(popover: Element): string {
-  return normalizeFlowText(popover.querySelector('[data-vtext-transclusion-body] .vtext-transclusion-quote')?.textContent);
+  return normalizeFlowText(popover.querySelector('[data-texture-transclusion-body] .vtext-transclusion-quote')?.textContent);
 }
 
 function isSourceFlowBlock(element: Element | null): boolean {
   if (!element?.matches?.(SOURCE_FLOW_BLOCK_SELECTOR)) return false;
-  if (element.closest?.('[data-vtext-source-flow]')) return false;
+  if (element.closest?.('[data-texture-source-flow]')) return false;
   if (element.querySelector?.('table, iframe, img, pre, code, ul, ol, blockquote')) return false;
   return !!normalizeFlowText(element.textContent);
 }
@@ -260,7 +260,7 @@ function isSourceFlowBlock(element: Element | null): boolean {
 function buildSourceJournalNoteContent(note: HTMLElement, sourceRef: Element, popover: Element, close: HTMLButtonElement): void {
   const title = document.createElement('cite');
   title.className = 'vtext-source-journal-cite';
-  title.setAttribute('data-vtext-source-flow-note-title', '');
+  title.setAttribute('data-texture-source-flow-note-title', '');
   title.textContent = sourceRefTitle(sourceRef, popover);
   note.append(title);
 
@@ -268,20 +268,20 @@ function buildSourceJournalNoteContent(note: HTMLElement, sourceRef: Element, po
   if (excerpt) {
     const body = document.createElement('p');
     body.classList.add('vtext-source-journal-body');
-    body.setAttribute('data-vtext-source-flow-note-body', '');
+    body.setAttribute('data-texture-source-flow-note-body', '');
     body.textContent = excerpt;
     note.append(body);
   }
 
   const actions = document.createElement('div');
   actions.className = 'vtext-source-journal-actions';
-  actions.setAttribute('data-vtext-source-flow-note-actions', '');
+  actions.setAttribute('data-texture-source-flow-note-actions', '');
   const entityID = sourceRefEntityID(sourceRef);
   if (entityID) {
     const open = document.createElement('button');
     open.type = 'button';
     open.className = 'vtext-source-open';
-    open.setAttribute('data-vtext-open-source', '');
+    open.setAttribute('data-texture-open-source', '');
     open.setAttribute('data-source-entity-id', entityID);
     open.textContent = 'Open source';
     actions.append(open);
@@ -314,9 +314,9 @@ function collectSourceFlowBlocks(paragraph: Element, sourceRef: Element, layoutO
 }
 
 export function clearSourceJournalFlows(root?: ParentNode | null): void {
-  root?.querySelectorAll?.('[data-vtext-source-flow]').forEach((node) => node.remove());
-  root?.querySelectorAll?.('[data-vtext-source-flow-hidden]').forEach((node) => {
-    node.removeAttribute('data-vtext-source-flow-hidden');
+  root?.querySelectorAll?.('[data-texture-source-flow]').forEach((node) => node.remove());
+  root?.querySelectorAll?.('[data-texture-source-flow-hidden]').forEach((node) => {
+    node.removeAttribute('data-texture-source-flow-hidden');
   });
   root?.querySelectorAll?.('[data-source-flow-mounted]').forEach((node) => {
     node.removeAttribute('data-source-flow-mounted');
@@ -325,7 +325,7 @@ export function clearSourceJournalFlows(root?: ParentNode | null): void {
 
 export function mountSourceJournalFlow(sourceRef: Element | null, options: MountSourceJournalFlowOptions): boolean {
   const paragraph = sourceRef?.closest?.('p');
-  const popover = sourceRef?.querySelector?.('[data-vtext-source-ref-popover]');
+  const popover = sourceRef?.querySelector?.('[data-texture-source-ref-popover]');
   if (!sourceRef || !paragraph || !popover || sourceRef.querySelector?.('iframe, img')) return false;
 
   const containerWidth = Math.floor(paragraph.clientWidth || paragraph.getBoundingClientRect?.().width || 0);
@@ -338,8 +338,8 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   const noteWidth = Math.min(340, Math.max(minNoteWidth, Math.floor(containerWidth * 0.34)));
   const paragraphGap = Math.max(8, Math.round(options.lineHeight * 0.55));
   const flow = document.createElement('div');
-  flow.setAttribute('data-vtext-source-flow', '');
-  flow.setAttribute('data-vtext-source-flow-region', '');
+  flow.setAttribute('data-texture-source-flow', '');
+  flow.setAttribute('data-texture-source-flow-region', '');
   flow.setAttribute('data-source-flow-owner-id', sourceRef.getAttribute('data-source-entity-id') || '');
   flow.className = 'vtext-source-journal-flow';
   flow.setAttribute('contenteditable', 'false');
@@ -348,14 +348,14 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   flow.style.setProperty('--vtext-source-flow-gap', `${options.gap}px`);
 
   const note = document.createElement('aside');
-  note.setAttribute('data-vtext-source-flow-note', '');
+  note.setAttribute('data-texture-source-flow-note', '');
   note.className = 'vtext-source-journal-note';
   note.setAttribute('role', 'note');
 
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'vtext-source-flow-close';
-  close.setAttribute('data-vtext-source-flow-collapse', '');
+  close.setAttribute('data-texture-source-flow-collapse', '');
   close.setAttribute('aria-label', 'Collapse source');
   close.textContent = 'Close';
   buildSourceJournalNoteContent(note, sourceRef, popover, close);
@@ -388,9 +388,9 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
     flow.remove();
     return false;
   }
-  flow.setAttribute('data-vtext-source-flow-mode', mode);
-  flow.setAttribute('data-vtext-source-flow-lines', String(layout.lines.length));
-  flow.setAttribute('data-vtext-source-flow-routed-lines', String(layout.usedNarrowLines));
+  flow.setAttribute('data-texture-source-flow-mode', mode);
+  flow.setAttribute('data-texture-source-flow-lines', String(layout.lines.length));
+  flow.setAttribute('data-texture-source-flow-routed-lines', String(layout.usedNarrowLines));
 
   const lineLayer = document.createElement('div');
   lineLayer.className = 'vtext-source-journal-lines';
@@ -398,9 +398,9 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
     const lineNode = document.createElement('span');
     lineNode.className = 'vtext-source-journal-line';
     if (mode === 'side-note' && line.y < layout.noteHeight) {
-      lineNode.setAttribute('data-vtext-source-flow-line-beside-note', '');
+      lineNode.setAttribute('data-texture-source-flow-line-beside-note', '');
     }
-    lineNode.setAttribute('data-vtext-source-flow-line-width', String(Math.ceil(line.width)));
+    lineNode.setAttribute('data-texture-source-flow-line-width', String(Math.ceil(line.width)));
     lineNode.style.left = `${line.x}px`;
     lineNode.style.top = `${line.y}px`;
     lineNode.style.width = `${Math.ceil(line.width + 2)}px`;
@@ -435,7 +435,7 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
     flow.append(lineLayer);
     flow.style.height = `${Math.ceil(layout.height)}px`;
   }
-  blocks.forEach((block) => block.element?.setAttribute('data-vtext-source-flow-hidden', ''));
+  blocks.forEach((block) => block.element?.setAttribute('data-texture-source-flow-hidden', ''));
   sourceRef.setAttribute('data-source-flow-mounted', 'true');
   return true;
 }

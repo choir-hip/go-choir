@@ -53,8 +53,8 @@ async function waitForPromptDecision(page, submissionId, timeout = 150_000) {
 
 async function loadVTextState(page, docId) {
   const [doc, revisionsResponse] = await Promise.all([
-    fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(docId)}`),
-    fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(docId)}/revisions`),
+    fetchJSON(page, `/api/texture/documents/${encodeURIComponent(docId)}`),
+    fetchJSON(page, `/api/texture/documents/${encodeURIComponent(docId)}/revisions`),
   ]);
   const revisions = revisionsResponse.revisions || [];
   const head = revisions.find((revision) => revision.revision_id === doc.current_revision_id);
@@ -191,9 +191,9 @@ test('deployed prompt-bar VText flow uses live search for current 2026 evidence'
     expect(decision.app).toBe('vtext');
     expect(decision.doc_id).toBeTruthy();
 
-    const vtextWindow = page.locator('[data-vtext-app]').last();
+    const vtextWindow = page.locator('[data-texture-app]').last();
     await expect(vtextWindow).toBeVisible({ timeout: 30_000 });
-    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(/live|search|evidence|source|2026/i, { timeout: 30_000 });
+    await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText(/live|search|evidence|source|2026/i, { timeout: 30_000 });
 
     const search = await waitForSuccessfulWebSearch(page, body.submission_id);
     const searchProviders = Array.isArray(search.providers) && search.providers.length > 0

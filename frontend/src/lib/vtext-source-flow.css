@@ -1,4 +1,4 @@
-.rendered-doc [data-vtext-source-flow-hidden] {
+.rendered-doc [data-texture-source-flow-hidden] {
   display: none !important;
 }
 
@@ -73,7 +73,7 @@
   text-transform: none;
 }
 
-.rendered-doc .vtext-source-journal-flow[data-vtext-source-flow-mode="stacked"] .vtext-source-journal-note {
+.rendered-doc .vtext-source-journal-flow[data-texture-source-flow-mode="stacked"] .vtext-source-journal-note {
   top: var(--vtext-source-flow-stacked-note-top);
   right: auto;
   left: 0;
@@ -175,7 +175,7 @@
     word-break: break-word;
   }
 
-  .rendered-doc .vtext-source-journal-flow[data-vtext-source-flow-mode="stacked"] .vtext-source-journal-note {
+  .rendered-doc .vtext-source-journal-flow[data-texture-source-flow-mode="stacked"] .vtext-source-journal-note {
     width: auto;
     max-width: 100%;
   }

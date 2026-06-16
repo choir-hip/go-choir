@@ -30,11 +30,11 @@ async function fetchJSON(page, path, options = {}) {
 test('live VText agent preserves inline source ref anchors', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const sourceURL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-  const doc = await fetchJSON(page, '/api/vtext/documents', {
+  const doc = await fetchJSON(page, '/api/texture/documents', {
     method: 'POST',
     body: JSON.stringify({ title: `Live Source Ref ${Date.now()}` }),
   });
-  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+  await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: `# Source Ref Live Probe\n\nThis sentence cites [the source clip](source:src-live-youtube) and should keep that inline source anchor.`,
@@ -74,7 +74,7 @@ test('live VText agent preserves inline source ref anchors', async ({ desktopSes
     }),
   });
 
-  const revise = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revise`, {
+  const revise = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revise`, {
     method: 'POST',
     body: JSON.stringify({
       intent: 'revise',
@@ -84,7 +84,7 @@ test('live VText agent preserves inline source ref anchors', async ({ desktopSes
   expect(revise.loop_id).toBeTruthy();
 
   await expect.poll(async () => {
-    const revisions = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`);
+    const revisions = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`);
     return revisions.revisions.some((revision) =>
       revision.author_kind === 'appagent' &&
       revision.content?.includes('[the source clip](source:src-live-youtube)')

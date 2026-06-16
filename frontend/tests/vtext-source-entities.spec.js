@@ -114,14 +114,14 @@ test('related VText inline refs render as native transclusion refs', () => {
     }],
   );
 
-  expect(html).toContain('data-vtext-related-ref');
-  expect(html).toContain('data-vtext-doc-id="doc-grid-story"');
-  expect(html).toContain('data-vtext-related-revision-id="rev-grid-v1"');
-  expect(html).toContain('data-vtext-related-version-number="1"');
-  expect(html).toContain('data-vtext-related-current-revision-id="rev-grid-v2"');
-  expect(html).toContain('data-vtext-related-current-version-number="2"');
-  expect(html).toContain('data-vtext-related-has-newer-version="true"');
-  expect(html).toContain('data-vtext-related-newer-version');
+  expect(html).toContain('data-texture-related-ref');
+  expect(html).toContain('data-texture-doc-id="doc-grid-story"');
+  expect(html).toContain('data-texture-related-revision-id="rev-grid-v1"');
+  expect(html).toContain('data-texture-related-version-number="1"');
+  expect(html).toContain('data-texture-related-current-revision-id="rev-grid-v2"');
+  expect(html).toContain('data-texture-related-current-version-number="2"');
+  expect(html).toContain('data-texture-related-has-newer-version="true"');
+  expect(html).toContain('data-texture-related-newer-version');
   expect(html).toContain('Forecast changes moved stress toward northern reserve margins.');
 });
 
@@ -377,7 +377,7 @@ test('VText renders source entities as expandable sources and opens owning media
   const { page } = desktopSession;
   const created = await page.evaluate(async () => {
     const title = `Source Entity Fixture ${Date.now()}`;
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -417,7 +417,7 @@ test('VText renders source entities as expandable sources and opens owning media
         },
       ],
     };
-    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -433,22 +433,22 @@ test('VText renders source entities as expandable sources and opens owning media
   });
 
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
-  await expect(rendered.locator('[data-vtext-source-ref]')).toBeVisible({ timeout: 10000 });
-  await expect(rendered.locator('[data-vtext-source-ref]')).toHaveAttribute('data-vtext-citation-transclusion', '');
-  await rendered.locator('[data-vtext-source-ref]').click();
-  const citation = rendered.locator('[data-vtext-source-ref]');
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
+  await expect(rendered.locator('[data-texture-source-ref]')).toBeVisible({ timeout: 10000 });
+  await expect(rendered.locator('[data-texture-source-ref]')).toHaveAttribute('data-texture-citation-transclusion', '');
+  await rendered.locator('[data-texture-source-ref]').click();
+  const citation = rendered.locator('[data-texture-source-ref]');
   await expect(citation).toHaveAttribute('data-expanded', 'true');
   await expect(citation).toHaveAttribute('data-source-expansion-surface', 'media');
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText('YouTube source fixture');
-  await expect(citation.locator('[data-vtext-inline-transclusion] iframe')).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText('transcript unavailable');
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText('YouTube source fixture');
+  await expect(citation.locator('[data-texture-inline-transclusion] iframe')).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText('transcript unavailable');
 
-  await citation.locator('[data-vtext-open-source]').click();
+  await citation.locator('[data-texture-open-source]').click();
   await expect(page.locator('[data-window]').filter({ hasText: 'YouTube source fixture' }).last()).toBeVisible({ timeout: 10000 });
 });
 
@@ -499,7 +499,7 @@ test('VText opens content-item text sources as reader-mode markdown', async ({ d
     });
     if (!contentRes.ok) throw new Error(`create content item failed: ${contentRes.status}`);
     const item = await contentRes.json();
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -507,7 +507,7 @@ test('VText opens content-item text sources as reader-mode markdown', async ({ d
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
-    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -567,20 +567,20 @@ test('VText opens content-item text sources as reader-mode markdown', async ({ d
   });
 
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
-  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-reader-mode"]');
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
+  const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-reader-mode"]');
   await expect(citation).toBeVisible({ timeout: 10000 });
   await citation.click();
-  const flowNote = rendered.locator('[data-vtext-source-flow-note]');
+  const flowNote = rendered.locator('[data-texture-source-flow-note]');
   await expect(flowNote).toBeVisible();
   await expect(flowNote).toContainText('Second source sentence explains why the cleaned markdown is useful');
   await expect(flowNote).toContainText('Third source sentence gives the inline citation enough context');
   await expect(flowNote).not.toContainText('Fourth source sentence should remain bounded');
-  await flowNote.locator('[data-vtext-open-source][data-source-entity-id="src-reader-mode"]').click();
+  await flowNote.locator('[data-texture-open-source][data-source-entity-id="src-reader-mode"]').click();
 
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
@@ -624,7 +624,7 @@ test('VText opens content-item text sources as reader-mode markdown', async ({ d
   });
   expect(expandedGeometry).toBe(true);
   await page.locator('[data-window-app-id="vtext"]').last().click({ position: { x: 24, y: 24 } });
-  await flowNote.locator('[data-vtext-open-source][data-source-entity-id="src-reader-mode"]').click();
+  await flowNote.locator('[data-texture-open-source][data-source-entity-id="src-reader-mode"]').click();
   await expect(page.locator('[data-content-viewer][data-source-reader-mode="true"]')).toHaveCount(1);
 });
 
@@ -644,7 +644,7 @@ test('VText source URL opens Source Viewer unless browser is explicitly requeste
   const created = await page.evaluate(async () => {
     const title = `Source URL Routing Fixture ${Date.now()}`;
     const sourceURL = 'https://example.com/source-url-routing-fixture';
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -652,7 +652,7 @@ test('VText source URL opens Source Viewer unless browser is explicitly requeste
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
-    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -736,15 +736,15 @@ test('VText source URL opens Source Viewer unless browser is explicitly requeste
   });
 
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
-  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-url-source-viewer"]');
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
+  const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-url-source-viewer"]');
   await expect(citation).toBeVisible({ timeout: 10000 });
   await citation.click();
-  await rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source]').click();
+  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source]').click();
 
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
@@ -753,10 +753,10 @@ test('VText source URL opens Source Viewer unless browser is explicitly requeste
   await expect(page.locator('[data-browser-app]')).toHaveCount(0);
   await page.locator('[data-window-app-id="vtext"]').last().click({ position: { x: 24, y: 24 } });
 
-  const explicitBrowserCitation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-url-web-lens"]').first();
+  const explicitBrowserCitation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-url-web-lens"]').first();
   await expect(explicitBrowserCitation).toBeVisible({ timeout: 10000 });
   await explicitBrowserCitation.click();
-  await rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source][data-source-entity-id="src-url-web-lens"]').click();
+  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source][data-source-entity-id="src-url-web-lens"]').click();
   await expect(page.locator('[data-browser-app]')).toHaveCount(1);
 });
 
@@ -904,7 +904,7 @@ test('VText source panel attaches readable text to an existing source entity', a
 
   const created = await page.evaluate(async () => {
     const title = `Source Artifact Attach Fixture ${Date.now()}`;
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -912,7 +912,7 @@ test('VText source panel attaches readable text to an existing source entity', a
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
-    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -962,14 +962,14 @@ test('VText source panel attaches readable text to an existing source entity', a
   });
 
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  await vtextWindow.locator('[data-vtext-source-panel]').click();
-  const sourcePanel = vtextWindow.locator('[data-vtext-source-diagnostics]');
+  await vtextWindow.locator('[data-texture-source-panel]').click();
+  const sourcePanel = vtextWindow.locator('[data-texture-source-diagnostics]');
   await expect(sourcePanel).toBeVisible({ timeout: 10000 });
-  await sourcePanel.locator('[data-vtext-source-artifact-text]').fill([
+  await sourcePanel.locator('[data-texture-source-artifact-text]').fill([
     '# Attached readable source',
     '',
     'Readable attachment confirms the cited claim.',
@@ -981,7 +981,7 @@ test('VText source panel attaches readable text to an existing source entity', a
   const createResponse = page.waitForResponse((response) => response.url().includes('/api/content/items'));
   const attachRequest = page.waitForRequest((request) => request.url().includes('/source-attachments'));
   const attachResponse = page.waitForResponse((response) => response.url().includes('/source-attachments'));
-  await sourcePanel.locator('[data-vtext-attach-source-artifact]').click();
+  await sourcePanel.locator('[data-texture-attach-source-artifact]').click();
   expect((await createRequest).method()).toBe('POST');
   const contentResponse = await createResponse;
   expect(contentResponse.status()).toBe(201);
@@ -992,11 +992,11 @@ test('VText source panel attaches readable text to an existing source entity', a
   const sourceAttachmentResponse = await attachResponse;
   expect(sourceAttachmentResponse.status()).toBe(201);
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
-  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-attach-text"]').first();
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
+  const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-attach-text"]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
   await citation.click();
-  await rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source]').click();
+  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source]').click();
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
   await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Attached readable source');
@@ -1020,7 +1020,7 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
 
   const created = await page.evaluate(async () => {
     const title = `Source Flow Fixture ${Date.now()}`;
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -1091,7 +1091,7 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
       'Fourth paragraph proves the article continues in the normal full measure once the source apparatus no longer occupies the right column.',
       'Fifth paragraph gives the verifier another full-width line after the note so the test cannot pass merely because one paragraph happened to wrap narrowly beside the source.',
     ];
-    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -1107,35 +1107,35 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   });
 
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
-  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-fixture-flow"]').first();
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
+  const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-fixture-flow"]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
   await expect(citation).toHaveAttribute('data-source-expansion-surface', 'journal');
   await citation.click();
-  const flow = rendered.locator('[data-vtext-source-flow]');
+  const flow = rendered.locator('[data-texture-source-flow]');
   await expect(flow).toBeVisible({ timeout: 5000 });
   await expect(flow).toContainText('ABA Formal Opinion 512 fixture');
   await expect(flow).not.toContainText('source available');
   await expect(flow).not.toContainText('public source');
   await expect(citation).toHaveAttribute('data-source-flow-mounted', 'true');
-  expect(await rendered.locator('p[data-vtext-source-flow-hidden]').count()).toBeGreaterThanOrEqual(2);
+  expect(await rendered.locator('p[data-texture-source-flow-hidden]').count()).toBeGreaterThanOrEqual(2);
   expect(await flow.evaluate((node) => getComputedStyle(node).position)).toBe('relative');
-  const note = flow.locator('[data-vtext-source-flow-note]');
+  const note = flow.locator('[data-texture-source-flow-note]');
   expect(await note.evaluate((node) => getComputedStyle(node).position)).toBe('absolute');
-  await expect(note.locator('[data-vtext-source-flow-note-title]')).toContainText('ABA Formal Opinion 512 fixture');
-  await expect(note.locator('[data-vtext-source-ref-popover]')).toHaveCount(0);
-  await expect(note.locator('[data-vtext-source-flow-note-actions] [data-vtext-open-source]')).toBeVisible();
-  await expect(flow).toHaveAttribute('data-vtext-source-flow-routed-lines', /^[3-9]\d*$/);
+  await expect(note.locator('[data-texture-source-flow-note-title]')).toContainText('ABA Formal Opinion 512 fixture');
+  await expect(note.locator('[data-texture-source-ref-popover]')).toHaveCount(0);
+  await expect(note.locator('[data-texture-source-flow-note-actions] [data-texture-open-source]')).toBeVisible();
+  await expect(flow).toHaveAttribute('data-texture-source-flow-routed-lines', /^[3-9]\d*$/);
   const journalGeometry = await flow.evaluate((node) => {
-    const note = node.querySelector('[data-vtext-source-flow-note]');
+    const note = node.querySelector('[data-texture-source-flow-note]');
     const flowBox = node.getBoundingClientRect();
     const noteBox = note.getBoundingClientRect();
     const noteBottom = note.getBoundingClientRect().bottom - node.getBoundingClientRect().top;
-    const besideLines = Array.from(node.querySelectorAll('[data-vtext-source-flow-line-beside-note]'));
+    const besideLines = Array.from(node.querySelectorAll('[data-texture-source-flow-line-beside-note]'));
     const besideLineCount = besideLines.length;
     const sideColumnIsClear = besideLines.every((line) => {
       const lineBox = line.getBoundingClientRect();
@@ -1149,7 +1149,7 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
     return { besideLineCount, sideColumnIsClear, secondParagraphBesideNote };
   });
   const continuedBelowFlow = await rendered.evaluate((node) => {
-    const flow = node.querySelector('[data-vtext-source-flow]');
+    const flow = node.querySelector('[data-texture-source-flow]');
     const followingParagraph = Array.from(node.querySelectorAll('p')).find((paragraph) => paragraph.textContent.includes('Fourth paragraph'));
     if (!flow || !followingParagraph) return false;
     const flowBox = flow.getBoundingClientRect();
@@ -1161,21 +1161,21 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   expect(journalGeometry.secondParagraphBesideNote).toBe(true);
   expect(continuedBelowFlow).toBe(true);
   await expect(note.locator('.vtext-source-facts')).toHaveCount(0);
-  const nestedCitation = flow.locator('[data-vtext-source-ref][data-source-entity-id="src-fixture-nested"]');
+  const nestedCitation = flow.locator('[data-texture-source-ref][data-source-entity-id="src-fixture-nested"]');
   await expect(nestedCitation).toBeVisible();
-  await expect(nestedCitation.locator('[data-vtext-inline-transclusion]')).toBeHidden();
+  await expect(nestedCitation.locator('[data-texture-inline-transclusion]')).toBeHidden();
   await nestedCitation.click();
-  const remountedFlow = rendered.locator('[data-vtext-source-flow]');
+  const remountedFlow = rendered.locator('[data-texture-source-flow]');
   await expect(remountedFlow).toHaveCount(1);
-  await expect(remountedFlow.locator('[data-vtext-source-flow-note]')).toContainText('ABA Model Rule 1.6 fixture');
-  await expect(remountedFlow.locator('[data-vtext-source-flow-note]')).not.toContainText('ABA Formal Opinion 512 fixture');
+  await expect(remountedFlow.locator('[data-texture-source-flow-note]')).toContainText('ABA Model Rule 1.6 fixture');
+  await expect(remountedFlow.locator('[data-texture-source-flow-note]')).not.toContainText('ABA Formal Opinion 512 fixture');
   const remountedState = await rendered.evaluate((node) => {
-    const flow = node.querySelector('[data-vtext-source-flow]');
-    const mounted = node.querySelector('[data-vtext-source-ref][data-source-entity-id="src-fixture-nested"][data-source-flow-mounted="true"]');
-    const expandedInsideFlow = flow?.querySelector('[data-vtext-source-ref][data-expanded="true"]');
+    const flow = node.querySelector('[data-texture-source-flow]');
+    const mounted = node.querySelector('[data-texture-source-ref][data-source-entity-id="src-fixture-nested"][data-source-flow-mounted="true"]');
+    const expandedInsideFlow = flow?.querySelector('[data-texture-source-ref][data-expanded="true"]');
     return {
       owner: flow?.getAttribute('data-source-flow-owner-id') || '',
-      hasMountedOriginal: !!mounted && !mounted.closest('[data-vtext-source-flow]'),
+      hasMountedOriginal: !!mounted && !mounted.closest('[data-texture-source-flow]'),
       hasExpandedInsideFlow: !!expandedInsideFlow,
     };
   });
@@ -1183,7 +1183,7 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   expect(remountedState.hasMountedOriginal).toBe(true);
   expect(remountedState.hasExpandedInsideFlow).toBe(false);
 
-  await remountedFlow.locator('[data-vtext-open-source][data-source-entity-id="src-fixture-nested"]').click();
+  await remountedFlow.locator('[data-texture-open-source][data-source-entity-id="src-fixture-nested"]').click();
   const sourceWindow = page.locator('[data-window]').filter({ hasText: 'ABA Model Rule 1.6 fixture' }).last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
 });
@@ -1205,7 +1205,7 @@ test('VText uses stacked journal flow instead of old source card when side routi
 
   const created = await page.evaluate(async () => {
     const title = `Stacked Source Flow Fixture ${Date.now()}`;
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -1213,7 +1213,7 @@ test('VText uses stacked journal flow instead of old source card when side routi
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
-    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -1262,33 +1262,33 @@ test('VText uses stacked journal flow instead of old source card when side routi
   });
 
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
   await rendered.evaluate((node) => {
     const element = /** @type {HTMLElement} */ (node);
     element.style.width = '560px';
     element.style.maxWidth = '560px';
   });
-  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-stacked-flow"]').first();
+  const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-stacked-flow"]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
   await expect(citation).toHaveAttribute('data-source-expansion-surface', 'journal');
   await citation.click();
 
-  const flow = rendered.locator('[data-vtext-source-flow]');
+  const flow = rendered.locator('[data-texture-source-flow]');
   await expect(flow).toBeVisible({ timeout: 5000 });
-  await expect(flow).toHaveAttribute('data-vtext-source-flow-mode', 'stacked');
-  await expect(flow).toHaveAttribute('data-vtext-source-flow-routed-lines', '0');
+  await expect(flow).toHaveAttribute('data-texture-source-flow-mode', 'stacked');
+  await expect(flow).toHaveAttribute('data-texture-source-flow-routed-lines', '0');
   await expect(citation).toHaveAttribute('data-source-flow-mounted', 'true');
-  await expect(flow.locator('[data-vtext-source-ref-popover]')).toHaveCount(0);
-  await expect(flow.locator('[data-vtext-source-flow-note]')).toContainText('Stacked journal source fixture');
-  await expect(flow.locator('[data-vtext-source-flow-note]')).not.toContainText('source available');
+  await expect(flow.locator('[data-texture-source-ref-popover]')).toHaveCount(0);
+  await expect(flow.locator('[data-texture-source-flow-note]')).toContainText('Stacked journal source fixture');
+  await expect(flow.locator('[data-texture-source-flow-note]')).not.toContainText('source available');
 
   const geometry = await flow.evaluate((node) => {
     const flowBox = node.getBoundingClientRect();
-    const note = node.querySelector('[data-vtext-source-flow-note]');
+    const note = node.querySelector('[data-texture-source-flow-note]');
     const lines = Array.from(node.querySelectorAll('.vtext-source-journal-line'));
     const noteBox = note?.getBoundingClientRect();
     const lastLineBottom = Math.max(...lines.map((line) => line.getBoundingClientRect().bottom - flowBox.top));
@@ -1321,7 +1321,7 @@ test('VText mobile source journal flow stays within the reader width', async ({ 
 
   const created = await page.evaluate(async () => {
     const title = `Mobile Source Flow Fixture ${Date.now()}`;
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -1329,7 +1329,7 @@ test('VText mobile source journal flow stays within the reader width', async ({ 
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
-    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -1378,24 +1378,24 @@ test('VText mobile source journal flow stays within the reader width', async ({ 
   });
 
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
-  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-mobile-flow"]').first();
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
+  const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-mobile-flow"]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
   await citation.click();
 
-  const flow = rendered.locator('[data-vtext-source-flow]');
+  const flow = rendered.locator('[data-texture-source-flow]');
   await expect(flow).toBeVisible({ timeout: 5000 });
-  await expect(flow.locator('[data-vtext-source-flow-note]')).toContainText('NixOS reproducible configuration and rollback');
+  await expect(flow.locator('[data-texture-source-flow-note]')).toContainText('NixOS reproducible configuration and rollback');
   await page.screenshot({ path: test.info().outputPath('vtext-mobile-source-flow.png'), fullPage: true });
 
   const geometry = await rendered.evaluate((node) => {
     const rendered = /** @type {HTMLElement} */ (node);
-    const flow = rendered.querySelector('[data-vtext-source-flow]');
-    const note = rendered.querySelector('[data-vtext-source-flow-note]');
+    const flow = rendered.querySelector('[data-texture-source-flow]');
+    const note = rendered.querySelector('[data-texture-source-flow-note]');
     const paragraph = Array.from(rendered.querySelectorAll('p')).find((item) => item.textContent?.includes('Base architecture'));
     const renderedBox = rendered.getBoundingClientRect();
     const flowBox = flow?.getBoundingClientRect();
@@ -1428,7 +1428,7 @@ test('VText autosave roundtrips rendered markdown tables without flattening cell
   const { page } = desktopSession;
   const created = await page.evaluate(async () => {
     const title = `Table Roundtrip Fixture ${Date.now()}`;
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -1446,7 +1446,7 @@ test('VText autosave roundtrips rendered markdown tables without flattening cell
       '',
       'Edit this paragraph to trigger serialization.',
     ].join('\n');
-    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -1462,11 +1462,11 @@ test('VText autosave roundtrips rendered markdown tables without flattening cell
   });
 
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
   await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
   await expect(rendered).toContainText('Edit this paragraph to trigger serialization.');
   await rendered.click();
@@ -1493,7 +1493,7 @@ test('VText autosave preserves table structure when a bounded cell edit is made'
   const { page } = desktopSession;
   const created = await page.evaluate(async () => {
     const title = `Bounded Table Edit Fixture ${Date.now()}`;
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -1511,7 +1511,7 @@ test('VText autosave preserves table structure when a bounded cell edit is made'
       '',
       'Only one table cell should change.',
     ].join('\n');
-    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -1527,16 +1527,16 @@ test('VText autosave preserves table structure when a bounded cell edit is made'
   });
 
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
   await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
   const editedDefinition = 'Durable, reviewable professional output with source memory.';
   await rendered.locator('tbody tr').first().locator('td').nth(1).evaluate((cell, text) => {
     cell.textContent = text;
-    cell.closest('[data-vtext-rendered]')?.dispatchEvent(new InputEvent('input', {
+    cell.closest('[data-texture-rendered]')?.dispatchEvent(new InputEvent('input', {
       bubbles: true,
       inputType: 'insertText',
       data: text,

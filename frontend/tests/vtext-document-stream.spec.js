@@ -26,12 +26,12 @@ async function openFilesApp(page) {
 
 async function openVText(page) {
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  await page.locator('[data-vtext-editor]').last().waitFor({ state: 'visible', timeout: 10000 });
-  const recent = page.locator('[data-vtext-app] [data-vtext-recent]').last();
+  await page.locator('[data-texture-editor]').last().waitFor({ state: 'visible', timeout: 10000 });
+  const recent = page.locator('[data-texture-app] [data-texture-recent]').last();
   if (await recent.isVisible().catch(() => false)) {
-    await page.locator('[data-vtext-app] [data-vtext-new-document]').last().click();
+    await page.locator('[data-texture-app] [data-texture-new-document]').last().click();
   }
-  const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  const editor = page.locator('[data-texture-app] [data-texture-editor-area]').last();
   await editor.waitFor({ state: 'visible', timeout: 10000 });
   await expect(editor).toHaveAttribute('contenteditable', 'true', { timeout: 10000 });
 }
@@ -54,18 +54,18 @@ async function openFileInVText(page, fileName) {
   const filesWindow = await openFilesApp(page);
   const openResponse = page.waitForResponse((response) => {
     const url = new URL(response.url());
-    return response.request().method() === 'POST' && url.pathname === '/api/vtext/files/open';
+    return response.request().method() === 'POST' && url.pathname === '/api/texture/files/open';
   });
   const fileItem = filesWindow.locator('[data-file-item]').filter({ hasText: fileName }).first();
   await expect(fileItem).toBeVisible({ timeout: 5000 });
   await fileItem.click();
-  await page.locator('[data-vtext-app]').last().waitFor({ state: 'visible', timeout: 10000 });
+  await page.locator('[data-texture-app]').last().waitFor({ state: 'visible', timeout: 10000 });
   return (await openResponse).json();
 }
 
 async function createExternalRevision(page, docId, parentRevisionId, content) {
   return page.evaluate(async ({ docId, parentRevisionId, content }) => {
-    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}/revisions`, {
+    const res = await fetch(`/api/texture/documents/${encodeURIComponent(docId)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -86,7 +86,7 @@ async function createExternalRevision(page, docId, parentRevisionId, content) {
 
 async function listRevisions(page, docId) {
   return page.evaluate(async (docIdValue) => {
-    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docIdValue)}/revisions`, {
+    const res = await fetch(`/api/texture/documents/${encodeURIComponent(docIdValue)}/revisions`, {
       method: 'GET',
       credentials: 'include',
     });
@@ -152,13 +152,13 @@ test('vtext auto-follows latest head when the editor is clean', async ({ page, a
   await seedTextFile(page, fileName, initialContent);
   const opened = await openFileInVText(page, fileName);
 
-  const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  const editor = page.locator('[data-texture-app] [data-texture-editor-area]').last();
   await expect(editor).toContainText(initialContent);
 
   await createExternalRevision(page, opened.doc_id, opened.current_revision_id, externalContent);
 
   await expect(editor).toContainText(externalContent, { timeout: 10000 });
-  await expect(page.locator('[data-vtext-new-version]')).toHaveCount(0);
+  await expect(page.locator('[data-texture-new-version]')).toHaveCount(0);
 });
 
 test('vtext autosaves dirty text without advancing versions when the head moves', async ({ page, authenticator }) => {
@@ -171,7 +171,7 @@ test('vtext autosaves dirty text without advancing versions when the head moves'
   await seedTextFile(page, fileName, initialContent);
   const opened = await openFileInVText(page, fileName);
 
-  const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  const editor = page.locator('[data-texture-app] [data-texture-editor-area]').last();
   await editor.fill(dirtyContent);
 
   await createExternalRevision(page, opened.doc_id, opened.current_revision_id, externalContent);
@@ -181,7 +181,7 @@ test('vtext autosaves dirty text without advancing versions when the head moves'
 
   const revisions = await listRevisions(page, opened.doc_id);
   const currentDoc = await page.evaluate(async (docId) => {
-    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}`, {
+    const res = await fetch(`/api/texture/documents/${encodeURIComponent(docId)}`, {
       method: 'GET',
       credentials: 'include',
     });
@@ -195,14 +195,14 @@ test('vtext autosaves dirty text without advancing versions when the head moves'
   expect(latestRevision?.content || '').toContain(externalContent);
   expect(latestRevision?.content || '').not.toContain(dirtyContent);
   await expect(editor).toContainText(dirtyContent, { timeout: 10000 });
-  await expect(page.locator('[data-vtext-new-version]')).toHaveCount(1);
+  await expect(page.locator('[data-texture-new-version]')).toHaveCount(1);
 });
 
 test('vtext does not restore stale local draft over a newer canonical table head', async ({ page, authenticator }) => {
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
   const stamp = Date.now();
   const created = await page.evaluate(async (stampValue) => {
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -221,7 +221,7 @@ test('vtext does not restore stale local draft over a newer canonical table head
       'Vector database',
       'Stores embeddings for retrieval.',
     ].join('\n');
-    const firstRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const firstRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -256,7 +256,7 @@ test('vtext does not restore stale local draft over a newer canonical table head
       '| Vector database | Stores embeddings for retrieval. |',
       '| Source entity | A citation-backed source object. |',
     ].join('\n');
-    const secondRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const secondRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -276,22 +276,22 @@ test('vtext does not restore stale local draft over a newer canonical table head
   await page.reload();
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 10000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 10000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
   await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
   await expect(rendered).toContainText('Source entity');
-  await expect(vtextWindow.locator('[data-vtext-save-status]')).toContainText('Autosaved draft skipped; newer version loaded');
-  await expect(vtextWindow.locator('[data-vtext-state]')).toContainText('Latest');
+  await expect(vtextWindow.locator('[data-texture-save-status]')).toContainText('Autosaved draft skipped; newer version loaded');
+  await expect(vtextWindow.locator('[data-texture-state]')).toContainText('Latest');
 });
 
 test('vtext does not restore same-head local draft that lost canonical tables', async ({ page, authenticator }) => {
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
   const stamp = Date.now();
   const created = await page.evaluate(async (stampValue) => {
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -309,7 +309,7 @@ test('vtext does not restore same-head local draft that lost canonical tables', 
       '| Vector database | Stores embeddings for retrieval. |',
       '| Source entity | A citation-backed source object. |',
     ].join('\n');
-    const revisionRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const revisionRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -351,22 +351,22 @@ test('vtext does not restore same-head local draft that lost canonical tables', 
   await page.reload();
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 10000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 10000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
   await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
   await expect(rendered).toContainText('Source entity');
-  await expect(vtextWindow.locator('[data-vtext-save-status]')).toContainText('Autosaved draft skipped; canonical table structure loaded');
-  await expect(vtextWindow.locator('[data-vtext-state]')).toContainText('Latest');
+  await expect(vtextWindow.locator('[data-texture-save-status]')).toContainText('Autosaved draft skipped; canonical table structure loaded');
+  await expect(vtextWindow.locator('[data-texture-state]')).toContainText('Latest');
 });
 
 test('vtext does not auto-restore a differing local draft over a non-empty canonical head', async ({ page, authenticator }) => {
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
   const stamp = Date.now();
   const created = await page.evaluate(async (stampValue) => {
-    const docRes = await fetch('/api/vtext/documents', {
+    const docRes = await fetch('/api/texture/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -381,7 +381,7 @@ test('vtext does not auto-restore a differing local draft over a non-empty canon
       '',
       'The browser cache has a different local draft.',
     ].join('\n');
-    const revisionRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    const revisionRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -417,15 +417,15 @@ test('vtext does not auto-restore a differing local draft over a non-empty canon
   await page.reload();
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 10000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+  const vtextWindow = page.locator('[data-texture-app]').last();
+  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 10000 });
+  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const rendered = vtextWindow.locator('[data-texture-rendered]');
   await expect(rendered).toContainText('This is the saved canonical paragraph.', { timeout: 10000 });
   await expect(rendered).not.toContainText('This is the stale browser-local paragraph.');
-  await expect(vtextWindow.locator('[data-vtext-save-status]')).toContainText('Autosaved draft skipped; canonical version loaded');
-  await expect(vtextWindow.locator('[data-vtext-state]')).toContainText('Latest');
+  await expect(vtextWindow.locator('[data-texture-save-status]')).toContainText('Autosaved draft skipped; canonical version loaded');
+  await expect(vtextWindow.locator('[data-texture-state]')).toContainText('Latest');
 });
 
 test('vtext compares historical version and accepts merge preview as next revision', async ({ page, authenticator }) => {
@@ -454,23 +454,23 @@ test('vtext compares historical version and accepts merge preview as next revisi
   const opened = await openFileInVText(page, fileName);
   await createExternalRevision(page, opened.doc_id, opened.current_revision_id, latestContent);
 
-  const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  const editor = page.locator('[data-texture-app] [data-texture-editor-area]').last();
   await expect(editor).toContainText('Latest draft adds newer support', { timeout: 10000 });
 
-  await page.locator('[data-vtext-app] [data-vtext-prev]').last().click();
+  await page.locator('[data-texture-app] [data-texture-prev]').last().click();
   await expect(editor).toContainText('Earlier executive framing', { timeout: 10000 });
-  await page.locator('[data-vtext-app] [data-vtext-compare]').last().click();
-  await expect(page.locator('[data-vtext-app] [data-vtext-compare-panel]').last()).toContainText(/Compare|Model compare|changed/i, { timeout: 30000 });
-  await expect(page.locator('[data-vtext-app] [data-vtext-merge-suggestion]').first()).toBeVisible({ timeout: 30000 });
-  await page.locator('[data-vtext-app] [data-vtext-merge-preview]').last().click();
-  await expect(page.locator('[data-vtext-app] [data-vtext-compare-panel]').last()).toContainText(/Merge preview|Model merge|Merged into/i, { timeout: 30000 });
+  await page.locator('[data-texture-app] [data-texture-compare]').last().click();
+  await expect(page.locator('[data-texture-app] [data-texture-compare-panel]').last()).toContainText(/Compare|Model compare|changed/i, { timeout: 30000 });
+  await expect(page.locator('[data-texture-app] [data-texture-merge-suggestion]').first()).toBeVisible({ timeout: 30000 });
+  await page.locator('[data-texture-app] [data-texture-merge-preview]').last().click();
+  await expect(page.locator('[data-texture-app] [data-texture-compare-panel]').last()).toContainText(/Merge preview|Model merge|Merged into/i, { timeout: 30000 });
   await expect(editor).toContainText('newest conclusion should remain', { timeout: 10000 });
   await expect(editor).not.toContainText('VText merge preview provenance');
-  await page.locator('[data-vtext-app] [data-vtext-accept-merge]').last().click();
+  await page.locator('[data-texture-app] [data-texture-accept-merge]').last().click();
 
   const revisions = await waitForRevisionTotal(page, opened.doc_id, 3, 12000);
   const currentDoc = await page.evaluate(async (docId) => {
-    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}`, {
+    const res = await fetch(`/api/texture/documents/${encodeURIComponent(docId)}`, {
       method: 'GET',
       credentials: 'include',
     });
@@ -500,7 +500,7 @@ test('reopening the same file path resolves to the same canonical vtext doc', as
   expect(secondOpen.doc_id).toBe(firstOpen.doc_id);
 
   const revisions = await page.evaluate(async (docId) => {
-    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}/revisions`, {
+    const res = await fetch(`/api/texture/documents/${encodeURIComponent(docId)}/revisions`, {
       method: 'GET',
       credentials: 'include',
     });
@@ -522,7 +522,7 @@ test('vtext file-backed window restores on reload with the latest canonical head
   await seedTextFile(page, fileName, initialContent);
   const opened = await openFileInVText(page, fileName);
 
-  const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  const editor = page.locator('[data-texture-app] [data-texture-editor-area]').last();
   await expect(editor).toContainText(initialContent);
 
   await createExternalRevision(page, opened.doc_id, opened.current_revision_id, externalContent);
@@ -533,7 +533,7 @@ test('vtext file-backed window restores on reload with the latest canonical head
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
   await page.waitForTimeout(1500);
 
-  const restoredEditor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  const restoredEditor = page.locator('[data-texture-app] [data-texture-editor-area]').last();
   await expect(restoredEditor).toContainText(externalContent, { timeout: 10000 });
 });
 
@@ -546,7 +546,7 @@ test('dry-run test endpoint: submit_research_findings batches rapid worker updat
   const initialContent = 'Base draft that should get a findings-driven follow-up.';
 
   await openVText(page);
-  const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  const editor = page.locator('[data-texture-app] [data-texture-editor-area]').last();
   await editor.fill(initialContent);
   await expect(editor).toContainText(initialContent);
 
@@ -554,11 +554,11 @@ test('dry-run test endpoint: submit_research_findings batches rapid worker updat
     return response.request().method() === 'POST' &&
       /\/api\/vtext\/documents\/[^/]+\/revise$/.test(new URL(response.url()).pathname);
   });
-  await page.locator('[data-vtext-prompt]').last().click();
+  await page.locator('[data-texture-prompt]').last().click();
   const revisionResponse = await revisionRequest;
   expect(revisionResponse.status()).toBe(202);
   const revisionJSON = await revisionResponse.json();
-  await expect(page.locator('[data-vtext-save-status]').last()).toContainText(/First draft ready|Agent created next version/, { timeout: 10000 });
+  await expect(page.locator('[data-texture-save-status]').last()).toContainText(/First draft ready|Agent created next version/, { timeout: 10000 });
 
   const baselineRevisions = await listRevisions(page, revisionJSON.doc_id);
   const baselineCount = baselineRevisions.revisions.length;
@@ -579,7 +579,7 @@ test('dry-run test endpoint: submit_research_findings batches rapid worker updat
   const afterWake = await waitForRevisionTotal(page, revisionJSON.doc_id, baselineCount + 1, 12000);
   expect(afterWake.revisions.length).toBe(baselineCount + 1);
   const currentDoc = await page.evaluate(async (docId) => {
-    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}`, {
+    const res = await fetch(`/api/texture/documents/${encodeURIComponent(docId)}`, {
       credentials: 'include',
     });
     if (!res.ok) {
@@ -591,8 +591,8 @@ test('dry-run test endpoint: submit_research_findings batches rapid worker updat
   expect(latestRevision?.content || '').toContain('Finding A');
   expect(latestRevision?.content || '').toContain('Finding B');
   expect(latestRevision?.content || '').not.toMatch(/Research findings ready\.|Task completed successfully|stub provider/i);
-  await expect(page.locator('[data-vtext-new-version]')).toHaveCount(0);
-  await expect(page.locator('[data-vtext-version]').last()).toHaveText(`v${afterWake.revisions.length - 1}`);
+  await expect(page.locator('[data-texture-new-version]')).toHaveCount(0);
+  await expect(page.locator('[data-texture-version]').last()).toHaveText(`v${afterWake.revisions.length - 1}`);
 
   await page.waitForTimeout(4000);
   const stableRevisions = await listRevisions(page, revisionJSON.doc_id);
@@ -607,16 +607,16 @@ test('dry-run test endpoint: submit_worker_update records artifacts and tests be
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
 
   await openVText(page);
-  const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  const editor = page.locator('[data-texture-app] [data-texture-editor-area]').last();
   await editor.fill('Base draft that needs a verified simulation artifact.');
 
   const revisionRequest = page.waitForResponse((response) => {
     return response.request().method() === 'POST' &&
       /\/api\/vtext\/documents\/[^/]+\/revise$/.test(new URL(response.url()).pathname);
   });
-  await page.locator('[data-vtext-prompt]').last().click();
+  await page.locator('[data-texture-prompt]').last().click();
   const revisionJSON = await (await revisionRequest).json();
-  await expect(page.locator('[data-vtext-save-status]').last()).toContainText(/First draft ready|Agent created next version/, { timeout: 10000 });
+  await expect(page.locator('[data-texture-save-status]').last()).toContainText(/First draft ready|Agent created next version/, { timeout: 10000 });
 
   const baselineRevisions = await listRevisions(page, revisionJSON.doc_id);
   const baselineCount = baselineRevisions.revisions.length;
@@ -635,7 +635,7 @@ test('dry-run test endpoint: submit_worker_update records artifacts and tests be
 
   const afterWake = await waitForRevisionTotal(page, revisionJSON.doc_id, baselineCount + 1, 12000);
   const currentDoc = await page.evaluate(async (docId) => {
-    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}`, {
+    const res = await fetch(`/api/texture/documents/${encodeURIComponent(docId)}`, {
       credentials: 'include',
     });
     if (!res.ok) {
@@ -656,5 +656,5 @@ test('dry-run test endpoint: submit_worker_update records artifacts and tests be
     item.content_preview.includes('evolution-ca.verify.js passed')
   )).toBe(true);
 
-  await expect(page.locator('[data-vtext-version]').last()).toHaveText(`v${afterWake.revisions.length - 1}`);
+  await expect(page.locator('[data-texture-version]').last()).toHaveText(`v${afterWake.revisions.length - 1}`);
 });

@@ -70,8 +70,8 @@ async function waitForPromptDecision(page, submissionId, samples, timeout = 150_
 
 async function loadVTextState(page, docId) {
   const [doc, revisions] = await Promise.all([
-    fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(docId)}`),
-    fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(docId)}/revisions`),
+    fetchJSON(page, `/api/texture/documents/${encodeURIComponent(docId)}`),
+    fetchJSON(page, `/api/texture/documents/${encodeURIComponent(docId)}/revisions`),
   ]);
   return { doc, revisions: revisions.revisions || [] };
 }

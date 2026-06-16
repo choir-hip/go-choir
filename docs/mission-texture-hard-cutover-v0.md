@@ -146,7 +146,8 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: docs and detector warnings -> focused local tests -> staging deploy
   identity -> browser product proof -> protocol canonization.
 
-variant (ranking function) V: current V=2; last ΔV=-1:
+variant (ranking function) V: current V=2; last ΔV=0 against the coarse
+variant, with frontend selector/probe residue burned down:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
@@ -157,9 +158,10 @@ variant (ranking function) V: current V=2; last ΔV=-1:
    been reconciled to Texture or line-labeled as historical/deletion residue;
    `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
    /tmp/choir-doccheck.json` now reports no H5 warnings for that high-read set;
-4. current V includes: internal runtime, storage, file, UI data-attribute, and
-   compatibility-shim symbols still use the old ontology; product-facing API
-   routes and tool affordance names now expose Texture locally;
+4. current V includes: internal runtime, storage, file, app-id, metadata,
+   platform/internal publication, and compatibility-shim symbols still use the
+   old ontology; frontend `data-vtext-*` attributes and frontend
+   `/api/vtext` compatibility-route deletion target test probes are discharged;
 5. discharged: visible UI labels and import affordances are cut over to
    Texture and proven on staging through browser product evidence;
 6. discharged: the edit affordance surface has a common `patch_texture` tool
@@ -222,7 +224,7 @@ position / live conjectures / open edges:
 - C3 supported for report-only scope: the docs checker now carries H5
   retired-name warnings without failing docs-only CI. Current baseline:
   `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
-  /tmp/choir-doccheck.json` reports 1,132 total warnings, including 339 H5
+  /tmp/choir-doccheck.json` reports 1,128 total warnings, including 335 H5
   file-level warnings across AGENTS.md, cmd, docs, frontend,
   internal, and specs. Promotion to fail-closed remains future work after the
   baseline burns down.
@@ -262,10 +264,16 @@ position / live conjectures / open edges:
   ontology. Remaining old-name hits in that set are line-labeled historical
   mission paths, internal detector symbols, or compatibility route deletion
   targets; the high-read H5 subset is empty.
+- C12 supported for frontend selector/probe scope: frontend source and tests
+  no longer contain `data-vtext` selectors or `/api/vtext` product API probes.
+  Local build and a static-preview DOM probe show `data-texture-*` selectors
+  render and the old editor/toolbar selectors do not. Remaining frontend H5
+  warnings are app/file names, metadata keys, platform/internal publication
+  terms, and historical test names.
 
-next move: cut over internal runtime/storage/file/UI data-attribute names and
-compatibility shims toward Texture, then write protocol v0 only after the
-remaining working surface is settled.
+next move: cut over backend/runtime API compatibility shims, app ids, storage,
+file names, and metadata names toward Texture, then write protocol v0 only
+after the remaining working surface is settled.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -296,9 +304,11 @@ report-only H5 docs checker, operating-contract/high-read-doc Texture
 reconciliation, and a deployed product-facing route/tool/prompt slice plus
 deployed transclusion pinned-ref/newer-version proof, visible UI label proof,
 and deployed `patch_texture` common-path proof are landed. Continue renaming docs/code/
-prompts/UI/tests/tool affordances toward Texture, preserve one Texture writer
-among agents, keep human direct edits canonical, keep super downstream of
-Texture for privileged execution, and avoid runtime semantic decision trees. Do
+prompts/UI/tests/tool affordances toward Texture; frontend `data-texture-*`
+selectors and frontend `/api/texture` probes are landed while backend/internal
+old-name residue remains. Preserve one Texture writer among agents, keep human
+direct edits canonical, keep super downstream of Texture for privileged
+execution, and avoid runtime semantic decision trees. Do
 not canonize a Texture Protocol upfront; make protocol v0 the last deliverable
 after the working minimal product surface is proven. Append moves to
 docs/mission-texture-hard-cutover-v0.ledger.md and settle only with CI, staging

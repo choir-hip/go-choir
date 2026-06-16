@@ -376,13 +376,13 @@ test('Apps & Changes opens existing VText narratives instead of generating claim
   const now = '2026-05-21T00:00:00.000Z';
   let createdRevision = false;
   await routeAppsChanges(page, { packages: [pkg] });
-  await page.route('**/api/vtext/**', async (route) => {
+  await page.route('**/api/texture/**', async (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
-    if (method === 'POST' && (url.pathname === '/api/vtext/documents' || url.pathname.includes('/revisions'))) {
+    if (method === 'POST' && (url.pathname === '/api/texture/documents' || url.pathname.includes('/revisions'))) {
       createdRevision = true;
     }
-    if (url.pathname === '/api/vtext/documents/doc-chiron') {
+    if (url.pathname === '/api/texture/documents/doc-chiron') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -398,7 +398,7 @@ test('Apps & Changes opens existing VText narratives instead of generating claim
       });
       return;
     }
-    if (url.pathname === '/api/vtext/revisions/rev-chiron') {
+    if (url.pathname === '/api/texture/revisions/rev-chiron') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -417,7 +417,7 @@ test('Apps & Changes opens existing VText narratives instead of generating claim
       });
       return;
     }
-    if (url.pathname === '/api/vtext/documents/doc-chiron/revisions') {
+    if (url.pathname === '/api/texture/documents/doc-chiron/revisions') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -434,7 +434,7 @@ test('Apps & Changes opens existing VText narratives instead of generating claim
       });
       return;
     }
-    if (url.pathname === '/api/vtext/documents/doc-chiron/stream') {
+    if (url.pathname === '/api/texture/documents/doc-chiron/stream') {
       await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream' },
@@ -442,7 +442,7 @@ test('Apps & Changes opens existing VText narratives instead of generating claim
       });
       return;
     }
-    if (url.pathname === '/api/vtext/documents/doc-chiron/manifest' && method === 'POST') {
+    if (url.pathname === '/api/texture/documents/doc-chiron/manifest' && method === 'POST') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -458,9 +458,9 @@ test('Apps & Changes opens existing VText narratives instead of generating claim
   await expect(store).toBeVisible({ timeout: 10_000 });
   await store.locator('[data-change-open-vtext-report]').click();
 
-  const vtext = page.locator('[data-vtext-editor]').last();
+  const vtext = page.locator('[data-texture-editor]').last();
   await expect(vtext).toBeVisible({ timeout: 10_000 });
-  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Real narrative', { timeout: 20_000 });
+  await expect(vtext.locator('[data-texture-editor-area]')).toContainText('Real narrative', { timeout: 20_000 });
   expect(createdRevision).toBe(false);
 });
 
@@ -686,15 +686,15 @@ test('Web Lens imports Obscura semantic snapshot into VText without iframe rende
   await expect(webLens.locator('[data-browser-import-vtext]')).toBeVisible();
 
   await webLens.locator('[data-browser-import-vtext]').click();
-  const vtext = page.locator('[data-vtext-editor]').last();
+  const vtext = page.locator('[data-texture-editor]').last();
   await expect(vtext).toBeVisible({ timeout: 10_000 });
-  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Web Lens import', {
+  await expect(vtext.locator('[data-texture-editor-area]')).toContainText('Web Lens import', {
     timeout: 20_000,
   });
-  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Example Domain', {
+  await expect(vtext.locator('[data-texture-editor-area]')).toContainText('Example Domain', {
     timeout: 20_000,
   });
-  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText(`Content item: ${contentID}`, {
+  await expect(vtext.locator('[data-texture-editor-area]')).toContainText(`Content item: ${contentID}`, {
     timeout: 20_000,
   });
 

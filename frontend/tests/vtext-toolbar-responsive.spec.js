@@ -17,7 +17,7 @@ async function setVTextWindowWidth(page, width) {
 
 async function toolbarMetrics(page) {
   return page.evaluate(() => {
-    const toolbar = document.querySelector('[data-vtext-toolbar]');
+    const toolbar = document.querySelector('[data-texture-toolbar]');
     if (!toolbar) throw new Error('VText toolbar not found');
 
     const visibleItems = [
@@ -76,7 +76,7 @@ async function toolbarMetrics(page) {
 
 test('VText toolbar stays one row with invariant height across window widths', async ({ page }) => {
   await page.goto(BASE_URL);
-  await expect(page.locator('[data-vtext-toolbar]')).toBeVisible();
+  await expect(page.locator('[data-texture-toolbar]')).toBeVisible();
 
   const widths = [1600, 1200, 900, 640, 560, 460, 390, 340];
   let expectedHeight = null;

@@ -20,11 +20,11 @@ async function registerAndLoadDesktop(page, email) {
 
 async function openBlankVText(page) {
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  await page.locator('[data-vtext-editor]').waitFor({ state: 'visible', timeout: 15000 });
-  const recent = page.locator('[data-vtext-recent]');
+  await page.locator('[data-texture-editor]').waitFor({ state: 'visible', timeout: 15000 });
+  const recent = page.locator('[data-texture-recent]');
   await expect(recent).toBeVisible({ timeout: 15000 });
-  await page.locator('[data-vtext-new-document]').click();
-  const editor = page.locator('[data-vtext-editor-area]');
+  await page.locator('[data-texture-new-document]').click();
+  const editor = page.locator('[data-texture-editor-area]');
   await editor.waitFor({ state: 'visible', timeout: 15000 });
   return editor;
 }
@@ -44,8 +44,8 @@ async function getVTextLayout(page) {
         bottom: box.bottom,
       };
     };
-    const toolbar = document.querySelector('[data-vtext-toolbar]');
-    const controls = [...document.querySelectorAll('[data-vtext-toolbar] [data-vtext-version], [data-vtext-toolbar] button, [data-vtext-toolbar] [data-vtext-state]')]
+    const toolbar = document.querySelector('[data-texture-toolbar]');
+    const controls = [...document.querySelectorAll('[data-texture-toolbar] [data-texture-version], [data-texture-toolbar] button, [data-texture-toolbar] [data-texture-state]')]
       .filter((el) => el.offsetParent !== null)
       .map((el) => {
         const box = el.getBoundingClientRect();
@@ -60,8 +60,8 @@ async function getVTextLayout(page) {
       viewportMeta: meta,
       window: rect('[data-window]'),
       titlebar: rect('[data-window-titlebar]'),
-      toolbar: rect('[data-vtext-toolbar]'),
-      editor: rect('[data-vtext-editor-area]'),
+      toolbar: rect('[data-texture-toolbar]'),
+      editor: rect('[data-texture-editor-area]'),
       promptSurface: rect('[data-prompt-surface]'),
       toolbarOpacity: toolbar ? Number(getComputedStyle(toolbar).opacity) : null,
       toolbarHidden: toolbar ? toolbar.classList.contains('toolbar-hidden') : false,
@@ -97,15 +97,15 @@ test('mobile VText is full-screen-like, editable rendered Markdown, and quiet ac
   await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0);
 
   await editor.fill('# Rendered Markdown Proof\n\nThis is **bold** and `code`.\n\n- first\n- second');
-  await page.locator('[data-vtext-toolbar]').click();
+  await page.locator('[data-texture-toolbar]').click();
   await expect(editor.locator('h1')).toContainText('Rendered Markdown Proof');
   await expect(editor.locator('strong')).toContainText('bold');
   await expect(editor.locator('code')).toContainText('code');
-  await expect(page.locator('[data-vtext-save-status]')).toContainText('Saved', { timeout: 7000 });
+  await expect(page.locator('[data-texture-save-status]')).toContainText('Saved', { timeout: 7000 });
 
   await page.reload();
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 15000 });
-  editor = page.locator('[data-vtext-editor-area]');
+  editor = page.locator('[data-texture-editor-area]');
   await editor.waitFor({ state: 'visible', timeout: 15000 });
   await expect(editor).toContainText('Rendered Markdown Proof', { timeout: 15000 });
 
@@ -114,18 +114,18 @@ test('mobile VText is full-screen-like, editable rendered Markdown, and quiet ac
     '',
     ...Array.from({ length: 30 }, (_, i) => `Paragraph ${i + 1}: markdown remains editable while the compact toolbar fades during reading.`),
   ].join('\n\n'));
-  await page.locator('[data-vtext-toolbar]').click();
+  await page.locator('[data-texture-toolbar]').click();
   await editor.evaluate((node) => {
     node.scrollTop = 180;
     node.dispatchEvent(new Event('scroll', { bubbles: true }));
   });
   await page.mouse.move(180, 520);
-  await expect(page.locator('[data-vtext-toolbar]')).toHaveClass(/toolbar-hidden/);
+  await expect(page.locator('[data-texture-toolbar]')).toHaveClass(/toolbar-hidden/);
   await editor.evaluate((node) => {
     node.scrollTop = 168;
     node.dispatchEvent(new Event('scroll', { bubbles: true }));
   });
-  await expect(page.locator('[data-vtext-toolbar]')).toHaveClass(/toolbar-hidden/);
+  await expect(page.locator('[data-texture-toolbar]')).toHaveClass(/toolbar-hidden/);
   await page.waitForTimeout(220);
   const hiddenLayout = await getVTextLayout(page);
   expect(hiddenLayout.toolbar.height).toBeLessThan(8);
@@ -134,13 +134,13 @@ test('mobile VText is full-screen-like, editable rendered Markdown, and quiet ac
     node.scrollTop = 60;
     node.dispatchEvent(new Event('scroll', { bubbles: true }));
   });
-  await expect(page.locator('[data-vtext-toolbar]')).not.toHaveClass(/toolbar-hidden/);
-  await expect(page.locator('[data-vtext-save-status]')).toContainText('Saved', { timeout: 7000 });
+  await expect(page.locator('[data-texture-toolbar]')).not.toHaveClass(/toolbar-hidden/);
+  await expect(page.locator('[data-texture-save-status]')).toContainText('Saved', { timeout: 7000 });
 
   const beforeReload = await getVTextLayout(page);
   await page.reload();
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 15000 });
-  await page.locator('[data-vtext-editor-area]').waitFor({ state: 'visible', timeout: 15000 });
+  await page.locator('[data-texture-editor-area]').waitFor({ state: 'visible', timeout: 15000 });
   layout = await getVTextLayout(page);
   expect(Math.abs(layout.window.width - beforeReload.window.width)).toBeLessThanOrEqual(2);
   expect(Math.abs(layout.window.height - beforeReload.window.height)).toBeLessThanOrEqual(2);

@@ -26,14 +26,14 @@ test('logged-out shell uses PromptSurface, DeskSheet, and local previews', async
   await expect(page.locator('[data-prompt-surface]')).toBeVisible();
   await expect(page.locator('[data-desk-menu-button]')).toBeVisible();
   await expect(page.locator('[data-window-tray-item]')).toHaveCount(3);
-  await expect(page.locator('[data-vtext-editor]')).toContainText('A note before sign-in');
+  await expect(page.locator('[data-texture-editor]')).toContainText('A note before sign-in');
   await expect(page.locator('[data-trace-app]')).toHaveCount(0);
   const favicon = await page.locator('link[rel="icon"][data-tetramark-favicon]').getAttribute('href');
   expect(decodeURIComponent(favicon || '')).toContain('M 269.72 36.86');
   expect(decodeURIComponent(favicon || '')).toContain('M 476.43 455.41');
 
-  const vtextToolbar = page.locator('[data-vtext-toolbar]');
-  const vtextEditor = page.locator('[data-vtext-editor-area]');
+  const vtextToolbar = page.locator('[data-texture-toolbar]');
+  const vtextEditor = page.locator('[data-texture-editor-area]');
   await vtextEditor.evaluate((node) => {
     node.innerHTML = `<h1>Scroll proof</h1>${Array.from({ length: 40 }, (_, i) => `<p>Paragraph ${i + 1}: the toolbar should recede while reading.</p>`).join('')}`;
     node.scrollTop = 0;
@@ -261,17 +261,17 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
           blur: root.getPropertyValue('--choir-blur').trim(),
           uiFont: root.getPropertyValue('--choir-font-ui').trim(),
         },
-        vtextFont: getComputedStyle(document.querySelector('[data-vtext-editor]')).fontFamily,
+        vtextFont: getComputedStyle(document.querySelector('[data-texture-editor]')).fontFamily,
         settingsFont: getComputedStyle(document.querySelector('[data-settings-window]')).fontFamily,
         vtextToolbar: {
-          backgroundColor: getComputedStyle(document.querySelector('[data-vtext-toolbar]')).backgroundColor,
-          color: getComputedStyle(document.querySelector('[data-vtext-toolbar]')).color,
+          backgroundColor: getComputedStyle(document.querySelector('[data-texture-toolbar]')).backgroundColor,
+          color: getComputedStyle(document.querySelector('[data-texture-toolbar]')).color,
         },
         fileToolbar: {
           backgroundColor: getComputedStyle(document.querySelector('[data-files-app] .toolbar')).backgroundColor,
           color: getComputedStyle(document.querySelector('[data-files-app] .toolbar')).color,
         },
-        vtextHeadingColor: getComputedStyle(document.querySelector('[data-vtext-editor-area] h1')).color,
+        vtextHeadingColor: getComputedStyle(document.querySelector('[data-texture-editor-area] h1')).color,
         shells: [...document.querySelectorAll('[data-app-host]')].map((element) => {
           const style = element ? getComputedStyle(element) : null;
           return {
@@ -346,7 +346,7 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
       deskLabel: read('[data-desk-sheet-app] strong'),
       deskButton: read('[data-desk-sheet-app]'),
       desktopIconLabel: read('[data-desktop-icon-label]'),
-      vtextButton: read('[data-vtext-toolbar] button'),
+      vtextButton: read('[data-texture-toolbar] button'),
       settingsButton: read('[data-settings-window] button'),
     };
   });

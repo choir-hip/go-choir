@@ -21,7 +21,7 @@
 </script>
 
 {#if visible}
-  <section class="compare-panel" class:compare-panel-error={compareError && !comparePending && !mergePending} data-vtext-compare-panel>
+  <section class="compare-panel" class:compare-panel-error={compareError && !comparePending && !mergePending} data-texture-compare-panel>
     <div class="compare-heading">
       <div>
         <p class="eyebrow">{compareError ? 'Compare failed' : mergePreview ? 'Merge preview' : `What changed since ${versionLabel}`}</p>
@@ -48,7 +48,7 @@
       </div>
     {/if}
     {#if compareError && !comparePending && !mergePending}
-      <div class="compare-error" role="alert" data-vtext-compare-error>
+      <div class="compare-error" role="alert" data-texture-compare-error>
         <span>{compareError}</span>
         <button type="button" class="secondary-action" on:click={() => dispatch('retry-compare')}>
           Retry compare
@@ -65,7 +65,7 @@
     {#if compareResult?.suggestions?.length && !mergePreview}
       <div class="merge-suggestions">
         {#each compareResult.suggestions as suggestion}
-          <label class="merge-suggestion" data-vtext-merge-suggestion>
+          <label class="merge-suggestion" data-texture-merge-suggestion>
             <input
               type="checkbox"
               checked={suggestionSelected(suggestion.id)}

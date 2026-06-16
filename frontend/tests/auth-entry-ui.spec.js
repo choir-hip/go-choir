@@ -234,7 +234,7 @@ test('signed-out prompt survives registration and resumes through product prompt
   const response = await responsePromise;
   expect(response.status()).toBe(202);
   expect(response.request().postDataJSON()).toEqual({ text: prompt });
-  await expect(page.locator('[data-vtext-app]').last()).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('[data-texture-app]').last()).toBeVisible({ timeout: 15000 });
 });
 
 // ---------------------------------------------------------------

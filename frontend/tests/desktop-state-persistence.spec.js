@@ -130,14 +130,14 @@ test('stale bare email URL intent does not override restored desktop state', asy
   await registerAndLoadDesktop(page, authenticator, email);
 
   await openApp(page, 'vtext');
-  await page.locator('[data-vtext-app]').last().waitFor({ state: 'visible', timeout: 10000 });
+  await page.locator('[data-texture-app]').last().waitFor({ state: 'visible', timeout: 10000 });
   await page.waitForTimeout(1000);
 
   await page.goto(`${BASE_URL}?app=email`);
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
   await page.waitForTimeout(1500);
 
-  await expect(page.locator('[data-vtext-app]').last()).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-texture-app]').last()).toBeVisible({ timeout: 10000 });
   await expect(page.locator('[data-email-app]')).toHaveCount(0);
   await expect(page).not.toHaveURL(/app=email/);
 });
@@ -151,11 +151,11 @@ test('private vtext URL intent opens the requested authenticated document', asyn
 
   const stamp = Date.now();
   const title = `Deep Linked VText ${stamp}`;
-  const doc = await fetchJSON(page, '/api/vtext/documents', {
+  const doc = await fetchJSON(page, '/api/texture/documents', {
     method: 'POST',
     body: JSON.stringify({ title }),
   });
-  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+  await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: `# ${title}\n\nPrivate deep link fixture.`,
@@ -170,9 +170,9 @@ test('private vtext URL intent opens the requested authenticated document', asyn
     timeout: 120000,
   });
 
-  const editor = page.locator(`[data-vtext-editor][data-vtext-doc-id="${doc.doc_id}"]`).last();
+  const editor = page.locator(`[data-texture-editor][data-texture-doc-id="${doc.doc_id}"]`).last();
   await expect(editor).toBeVisible({ timeout: 15000 });
-  await expect(editor.locator('[data-vtext-rendered]')).toContainText('Private deep link fixture');
+  await expect(editor.locator('[data-texture-rendered]')).toContainText('Private deep link fixture');
   await expect(page).not.toHaveURL(/app=vtext/);
   await expect(page).not.toHaveURL(/doc=/);
 });

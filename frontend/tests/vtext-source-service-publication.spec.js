@@ -38,11 +38,11 @@ test('publishes source-service source entities as expandable transclusions and c
   const sourceLabel = 'Current economy source packet';
   const excerpt = 'The source-service item is represented as a VText transclusion, not flattened prose.';
 
-  const doc = await fetchJSON(page, '/api/vtext/documents', {
+  const doc = await fetchJSON(page, '/api/texture/documents', {
     method: 'POST',
     body: JSON.stringify({ title }),
   });
-  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+  await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: `# ${title}\n\n${excerpt} [source](source:src-service-economy)\n\nA second sentence keeps the citation marker compact while metadata owns the source identity.`,
@@ -195,7 +195,7 @@ test('publishes source-service source entities as expandable transclusions and c
   expect(textExport.content).not.toContain('Close');
 
   await page.goto(`${baseURL}${publish.route_path}`);
-  const publishedReader = page.locator('[data-vtext-published-reader]').last();
+  const publishedReader = page.locator('[data-texture-published-reader]').last();
   await expect(publishedReader).toBeVisible({ timeout: 15_000 });
   await expect(publishedReader).toHaveAttribute('data-publication-version-id', publish.publication_version_id);
   await expect(publishedReader).toHaveAttribute('contenteditable', 'false');
@@ -211,15 +211,15 @@ test('publishes source-service source entities as expandable transclusions and c
     role: '',
     tabIndexAttribute: '',
   });
-  const citation = publishedReader.locator('[data-vtext-source-ref]').first();
-  await expect(citation).toHaveAttribute('data-vtext-citation-transclusion', '');
+  const citation = publishedReader.locator('[data-texture-source-ref]').first();
+  await expect(citation).toHaveAttribute('data-texture-citation-transclusion', '');
   await citation.click();
   await expect(citation).toHaveAttribute('data-expanded', 'true');
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
-  await expect(citation.locator('[data-vtext-inline-transclusion]')).not.toContainText(itemID);
-  const journalOpenSource = publishedReader.locator('[data-vtext-source-flow-note] [data-vtext-open-source]').first();
-  const inlineOpenSource = publishedReader.locator('[data-vtext-open-source][data-source-entity-id="src-service-economy"]:visible').first();
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(sourceLabel);
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(excerpt);
+  await expect(citation.locator('[data-texture-inline-transclusion]')).not.toContainText(itemID);
+  const journalOpenSource = publishedReader.locator('[data-texture-source-flow-note] [data-texture-open-source]').first();
+  const inlineOpenSource = publishedReader.locator('[data-texture-open-source][data-source-entity-id="src-service-economy"]:visible').first();
   const openSource = await journalOpenSource.isVisible().catch(() => false) ? journalOpenSource : inlineOpenSource;
   await expect(openSource).toBeVisible();
 
@@ -236,11 +236,11 @@ test('publishes source-service source entities as expandable transclusions and c
   try {
     const guestPage = await guestContext.newPage();
     await guestPage.goto(`${baseURL}${publish.route_path}`);
-    const guestReader = guestPage.locator('[data-vtext-published-reader]').last();
+    const guestReader = guestPage.locator('[data-texture-published-reader]').last();
     await expect(guestReader).toBeVisible({ timeout: 15_000 });
-    const guestCitation = guestReader.locator('[data-vtext-source-ref][data-source-entity-id="src-service-economy"]').first();
+    const guestCitation = guestReader.locator('[data-texture-source-ref][data-source-entity-id="src-service-economy"]').first();
     await guestCitation.click();
-    const guestOpenSource = guestReader.locator('[data-vtext-source-flow-note] [data-vtext-open-source]').first();
+    const guestOpenSource = guestReader.locator('[data-texture-source-flow-note] [data-texture-open-source]').first();
     await expect(guestOpenSource).toBeVisible({ timeout: 10_000 });
     const initialGuestSourceWindows = await guestPage.locator('[data-content-viewer]').count();
     await guestOpenSource.click();
@@ -286,11 +286,11 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
     }),
   });
 
-  const doc = await fetchJSON(page, '/api/vtext/documents', {
+  const doc = await fetchJSON(page, '/api/texture/documents', {
     method: 'POST',
     body: JSON.stringify({ title }),
   });
-  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+  await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: `# ${title}\n\nThe proposal cites ethics guidance as an inspectable source [1](source:src-public-content). A following sentence keeps normal article flow beside the source note.`,
@@ -354,16 +354,16 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
   expect(resolved.transclusions?.[0]?.snapshot_text).toBe(excerpt);
 
   await page.goto(`${baseURL}${publish.route_path}`);
-  const publishedReader = page.locator('[data-vtext-published-reader]').last();
+  const publishedReader = page.locator('[data-texture-published-reader]').last();
   await expect(publishedReader).toBeVisible({ timeout: 15_000 });
-  const citation = publishedReader.locator('[data-vtext-source-ref][data-source-entity-id="src-public-content"]').first();
+  const citation = publishedReader.locator('[data-texture-source-ref][data-source-entity-id="src-public-content"]').first();
   await citation.click();
-  const sourceNote = publishedReader.locator('[data-vtext-source-flow-note]').filter({ hasText: 'ABA Formal Opinion 512 cleaned source' }).last();
+  const sourceNote = publishedReader.locator('[data-texture-source-flow-note]').filter({ hasText: 'ABA Formal Opinion 512 cleaned source' }).last();
   await expect(sourceNote).toBeVisible({ timeout: 10_000 });
   await expect(sourceNote).toContainText(excerpt);
   await expect(sourceNote).not.toContainText('Full cleaned reader source detail');
 
-  await sourceNote.locator('[data-vtext-open-source]').click();
+  await sourceNote.locator('[data-texture-open-source]').click();
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
   await expect(sourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
@@ -374,14 +374,14 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
   try {
     const guestPage = await guestContext.newPage();
     await guestPage.goto(`${baseURL}${publish.route_path}`);
-    const guestReader = guestPage.locator('[data-vtext-published-reader]').last();
+    const guestReader = guestPage.locator('[data-texture-published-reader]').last();
     await expect(guestReader).toBeVisible({ timeout: 15_000 });
-    const guestCitation = guestReader.locator('[data-vtext-source-ref][data-source-entity-id="src-public-content"]').first();
+    const guestCitation = guestReader.locator('[data-texture-source-ref][data-source-entity-id="src-public-content"]').first();
     await guestCitation.click();
-    const guestSourceNote = guestReader.locator('[data-vtext-source-flow-note]').filter({ hasText: 'ABA Formal Opinion 512 cleaned source' }).last();
+    const guestSourceNote = guestReader.locator('[data-texture-source-flow-note]').filter({ hasText: 'ABA Formal Opinion 512 cleaned source' }).last();
     await expect(guestSourceNote).toBeVisible({ timeout: 10_000 });
     await expect(guestSourceNote).toContainText(excerpt);
-    await guestSourceNote.locator('[data-vtext-open-source]').click();
+    await guestSourceNote.locator('[data-texture-open-source]').click();
     const guestSourceWindow = guestPage.locator('[data-content-viewer]').last();
     await expect(guestSourceWindow).toBeVisible({ timeout: 10000 });
     await expect(guestSourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
@@ -401,11 +401,11 @@ test('publishes public URL-backed sources with reader snapshots for guests', asy
   const sourceLabel = 'Example Domain public URL source';
   const excerpt = 'This domain is for use in illustrative examples in documents.';
 
-  const doc = await fetchJSON(page, '/api/vtext/documents', {
+  const doc = await fetchJSON(page, '/api/texture/documents', {
     method: 'POST',
     body: JSON.stringify({ title }),
   });
-  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+  await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
       content: `# ${title}\n\nThe publication path imports a public URL-backed source snapshot [1](source:src-public-url).`,
@@ -501,17 +501,17 @@ test('publishes public URL-backed sources with reader snapshots for guests', asy
   });
 
   await page.goto(`${baseURL}${publish.route_path}`);
-  const publishedReader = page.locator('[data-vtext-published-reader]').last();
+  const publishedReader = page.locator('[data-texture-published-reader]').last();
   await expect(publishedReader).toBeVisible({ timeout: 15_000 });
-  const citation = publishedReader.locator('[data-vtext-source-ref][data-source-entity-id="src-public-url"]').first();
+  const citation = publishedReader.locator('[data-texture-source-ref][data-source-entity-id="src-public-url"]').first();
   await citation.click();
-  const sourceNote = publishedReader.locator('[data-vtext-source-flow-note]').filter({ hasText: sourceLabel }).last();
+  const sourceNote = publishedReader.locator('[data-texture-source-flow-note]').filter({ hasText: sourceLabel }).last();
   await expect(sourceNote).toBeVisible({ timeout: 10_000 });
   await expect(sourceNote).toContainText(excerpt);
   await expect(sourceNote).not.toContainText('More information');
 
   const initialSourceWindows = await page.locator('[data-content-viewer]').count();
-  await sourceNote.locator('[data-vtext-open-source]').click();
+  await sourceNote.locator('[data-texture-open-source]').click();
   await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
@@ -523,16 +523,16 @@ test('publishes public URL-backed sources with reader snapshots for guests', asy
   try {
     const guestPage = await guestContext.newPage();
     await guestPage.goto(`${baseURL}${publish.route_path}`);
-    const guestReader = guestPage.locator('[data-vtext-published-reader]').last();
+    const guestReader = guestPage.locator('[data-texture-published-reader]').last();
     await expect(guestReader).toBeVisible({ timeout: 15_000 });
-    const guestCitation = guestReader.locator('[data-vtext-source-ref][data-source-entity-id="src-public-url"]').first();
+    const guestCitation = guestReader.locator('[data-texture-source-ref][data-source-entity-id="src-public-url"]').first();
     await guestCitation.click();
-    const guestSourceNote = guestReader.locator('[data-vtext-source-flow-note]').filter({ hasText: sourceLabel }).last();
+    const guestSourceNote = guestReader.locator('[data-texture-source-flow-note]').filter({ hasText: sourceLabel }).last();
     await expect(guestSourceNote).toBeVisible({ timeout: 10_000 });
     await expect(guestSourceNote).toContainText(excerpt);
     await expect(guestSourceNote).not.toContainText('More information');
     const initialGuestSourceWindows = await guestPage.locator('[data-content-viewer]').count();
-    await guestSourceNote.locator('[data-vtext-open-source]').click();
+    await guestSourceNote.locator('[data-texture-open-source]').click();
     await expect(guestPage.locator('[data-content-viewer]')).toHaveCount(initialGuestSourceWindows + 1, { timeout: 10000 });
     const guestSourceWindow = guestPage.locator('[data-content-viewer]').last();
     await expect(guestSourceWindow).toBeVisible({ timeout: 10000 });

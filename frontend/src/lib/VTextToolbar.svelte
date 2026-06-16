@@ -43,12 +43,12 @@
   $: visibleStateLabel = normalizedStateLabel && normalizedStateLabel !== normalizedRevisionLineLabel ? stateLabel : '';
 </script>
 
-<div class="doc-toolbar" class:toolbar-hidden={toolbarHidden} data-vtext-toolbar>
+<div class="doc-toolbar" class:toolbar-hidden={toolbarHidden} data-texture-toolbar>
   <div class="version-controls">
-    <span class="nav-version" data-vtext-version>{versionLabel}</span>
+    <span class="nav-version" data-texture-version>{versionLabel}</span>
     <button
       class="nav-btn"
-      data-vtext-prev
+      data-texture-prev
       aria-label={previousAriaLabel}
       title={previousTitle}
       on:click={() => dispatch('prev')}
@@ -58,7 +58,7 @@
     </button>
     <button
       class="nav-btn"
-      data-vtext-next
+      data-texture-next
       aria-label={nextAriaLabel}
       title={nextTitle}
       on:click={() => dispatch('next')}
@@ -66,10 +66,10 @@
     >
       &gt;
     </button>
-    <span class="draft-line" data-vtext-draft-line>{revisionLineLabel}</span>
+    <span class="draft-line" data-texture-draft-line>{revisionLineLabel}</span>
   </div>
 
-  <div class="doc-state" class:doc-state-empty={!visibleStateLabel} data-vtext-state aria-hidden={!visibleStateLabel}>
+  <div class="doc-state" class:doc-state-empty={!visibleStateLabel} data-texture-state aria-hidden={!visibleStateLabel}>
     {visibleStateLabel}
   </div>
 
@@ -77,23 +77,23 @@
     {#if isPublishedReader}
       <button
         class="secondary-action"
-        data-vtext-copy-full-text
+        data-texture-copy-full-text
         on:click={() => dispatch('copy-full-text')}
         disabled={loading || publishedActionPending}
       >
         Copy text
       </button>
-      <details class="download-menu" data-vtext-download-menu>
+      <details class="download-menu" data-texture-download-menu>
         <summary>Download</summary>
-        <button type="button" data-vtext-download-md on:click={() => dispatch('download', 'md')} disabled={loading || publishedActionPending}>Markdown</button>
-        <button type="button" data-vtext-download-txt on:click={() => dispatch('download', 'txt')} disabled={loading || publishedActionPending}>Text</button>
-        <button type="button" data-vtext-download-html on:click={() => dispatch('download', 'html')} disabled={loading || publishedActionPending}>HTML</button>
-        <button type="button" data-vtext-download-docx on:click={() => dispatch('download', 'docx')} disabled={loading || publishedActionPending}>DOCX</button>
-        <button type="button" data-vtext-download-pdf on:click={() => dispatch('download', 'pdf')} disabled={loading || publishedActionPending}>PDF</button>
+        <button type="button" data-texture-download-md on:click={() => dispatch('download', 'md')} disabled={loading || publishedActionPending}>Markdown</button>
+        <button type="button" data-texture-download-txt on:click={() => dispatch('download', 'txt')} disabled={loading || publishedActionPending}>Text</button>
+        <button type="button" data-texture-download-html on:click={() => dispatch('download', 'html')} disabled={loading || publishedActionPending}>HTML</button>
+        <button type="button" data-texture-download-docx on:click={() => dispatch('download', 'docx')} disabled={loading || publishedActionPending}>DOCX</button>
+        <button type="button" data-texture-download-pdf on:click={() => dispatch('download', 'pdf')} disabled={loading || publishedActionPending}>PDF</button>
       </details>
       <button
         class="prompt-btn"
-        data-vtext-edit-published
+        data-texture-edit-published
         on:click={() => dispatch('edit-published')}
         disabled={loading || publishedActionPending}
       >
@@ -105,7 +105,7 @@
       {#if agentPending}
         <button
           class="secondary-action danger"
-          data-vtext-cancel-revision
+          data-texture-cancel-revision
           on:click={() => dispatch('cancel-revision')}
           disabled={cancelPending}
         >
@@ -117,7 +117,7 @@
       {#if isPublishedMode}
         <button
           class="secondary-action"
-          data-vtext-submit-proposal
+          data-texture-submit-proposal
           on:click={() => dispatch('submit-proposal')}
           disabled={loading || submitting || agentPending || publishedActionPending || !hasCurrentDoc}
         >
@@ -129,7 +129,7 @@
         {#if hasMergePreview}
           <button
             class="prompt-btn"
-            data-vtext-accept-merge
+            data-texture-accept-merge
             on:click={() => dispatch('accept-merge')}
             disabled={mergePending || publishedActionPending || !hasCurrentDoc}
           >
@@ -139,7 +139,7 @@
           </button>
           <button
             class="secondary-action danger"
-            data-vtext-discard-merge
+            data-texture-discard-merge
             on:click={() => dispatch('discard-merge')}
             disabled={mergePending || publishedActionPending}
           >
@@ -150,7 +150,7 @@
         {:else}
           <button
             class="secondary-action"
-            data-vtext-compare
+            data-texture-compare
             on:click={() => dispatch('compare')}
             disabled={loading || submitting || agentPending || comparePending || nextDisabled}
           >
@@ -160,7 +160,7 @@
           </button>
           <button
             class="secondary-action"
-            data-vtext-source-panel
+            data-texture-source-panel
             on:click={() => dispatch('sources')}
             disabled={loading || submitting || agentPending || !hasCurrentDoc}
           >
@@ -171,7 +171,7 @@
           {#if isViewingHistorical}
             <button
               class="secondary-action"
-              data-vtext-restore-version
+              data-texture-restore-version
               on:click={() => dispatch('restore')}
               disabled={loading || submitting || agentPending || restorePending || !hasCurrentRevision}
             >
@@ -183,7 +183,7 @@
           {#if hasCompareResult}
             <button
               class="secondary-action"
-              data-vtext-merge-preview
+              data-texture-merge-preview
               on:click={() => dispatch('merge-preview')}
               disabled={mergePending || selectedMergeSuggestionCount === 0}
             >
@@ -196,7 +196,7 @@
         <div class="publish-menu-wrap">
           <button
             class="secondary-action publish-action"
-            data-vtext-publish
+            data-texture-publish
             aria-haspopup="menu"
             aria-expanded={publishMenuOpen}
             on:click={() => dispatch('toggle-publish')}
@@ -207,7 +207,7 @@
             <span class="label-tiny">{publishedActionPending ? '…' : 'Publish'}</span>
           </button>
           {#if publishMenuOpen}
-            <div class="publish-menu" data-vtext-publish-menu role="menu" aria-label="Publish this version">
+            <div class="publish-menu" data-texture-publish-menu role="menu" aria-label="Publish this version">
               <div class="publish-menu-heading">
                 <p class="eyebrow">Publish</p>
                 <h3>Publish {versionLabel}</h3>
@@ -217,7 +217,7 @@
                 <button
                   type="button"
                   class="primary-action"
-                  data-vtext-publish-confirm
+                  data-texture-publish-confirm
                   on:click={() => dispatch('publish-confirm')}
                   disabled={publishedActionPending}
                 >
@@ -226,7 +226,7 @@
                 <button
                   type="button"
                   class="secondary-action"
-                  data-vtext-publish-cancel
+                  data-texture-publish-cancel
                   on:click={() => dispatch('publish-cancel')}
                   disabled={publishedActionPending}
                 >
@@ -239,8 +239,8 @@
       {/if}
       <button
         class="prompt-btn revise-action"
-        data-vtext-prompt
-        data-vtext-save
+        data-texture-prompt
+        data-texture-save
         on:click={() => dispatch('prompt')}
         disabled={loading || submitting || agentPending || isViewingHistorical || publishedActionPending}
       >
@@ -680,7 +680,7 @@
       display: none;
     }
 
-    .secondary-action[data-vtext-compare]:disabled {
+    .secondary-action[data-texture-compare]:disabled {
       display: none;
     }
 

@@ -585,3 +585,45 @@ Receipts:
 Open edge: cut over internal runtime/storage/file/UI data-attribute names and
 compatibility shims toward Texture; protocol v0 remains intentionally unwritten
 until the working surface is settled.
+
+## 2026-06-16 - Frontend Selector And Probe Cutover
+
+Claim: the frontend DOM/test selector surface can stop teaching the old
+artifact name without changing visible product copy, canonical write semantics,
+or backend compatibility behavior.
+
+Move: mechanically rename frontend `data-vtext-*` attributes and matching
+Playwright selectors to `data-texture-*`, and move frontend tests/probes from
+`/api/vtext` to `/api/texture`. Leave backend route shims, app ids, filenames,
+metadata keys, and storage symbols for later backend/internal passes.
+
+Expected ΔV: 0 against the coarse mission variant, but a bounded descent on the
+internal-symbol sub-surface: remove frontend old-name DOM selectors and
+frontend `/api/vtext` probes.
+
+Actual ΔV: 0 against V=2. The UI data-attribute/probe slice is discharged, H5
+falls from 339 to 335, and the remaining internal-symbol obligation is narrower
+but still open.
+
+Receipts:
+- `rg -n "data-vtext|/api/vtext" frontend/src frontend/tests`: no matches.
+- `npm --prefix frontend run build`: pass, with the pre-existing
+  `UniversalWireApp.svelte` unused export/CSS warnings.
+- Static preview DOM probe against `http://127.0.0.1:5173`: rendered
+  `data-texture-editor`, `data-texture-toolbar`, and
+  `data-texture-editor-area`; rendered zero `data-vtext-editor`,
+  `data-vtext-toolbar`, or `data-vtext-editor-area`; page HTML contained no
+  `/api/vtext` string.
+- Attempted focused Playwright test
+  `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm --prefix frontend run e2e -- tests/prompt-surface-registry.spec.js -g "logged-out shell uses PromptSurface"`
+  failed before reaching the renamed Texture selectors because static preview
+  rendered one `[data-window-tray-item]` while the existing test expects three.
+  Treat this as a local fixture mismatch, not selector-cutover evidence.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,128 warnings;
+  warning counts `H1=718`, `H3=15`, `H4=3`, `H5=335`, `R3=57`.
+- `git diff --check`: pass.
+
+Open edge: backend/runtime route shims, app ids, filenames, storage symbols,
+metadata keys, platform/internal publication names, and final protocol v0
+remain open.

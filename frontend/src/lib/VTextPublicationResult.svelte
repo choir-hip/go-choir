@@ -16,7 +16,7 @@
 {#if publishResult}
   <section
     class="publication-panel publication-result"
-    data-vtext-publish-result
+    data-texture-publish-result
     data-publication-id={publishResult.publication_id || ''}
     data-publication-version-id={publishResult.publication_version_id || ''}
     data-public-route={publishResult.route_path || ''}
@@ -24,27 +24,27 @@
   >
     <div class="publication-heading">
       <p class="eyebrow">Published</p>
-      <a class="public-link" data-vtext-public-link href={publicURL} on:click={handleLinkClick}>
+      <a class="public-link" data-texture-public-link href={publicURL} on:click={handleLinkClick}>
         {publicURL || 'Public route ready'}
       </a>
     </div>
     <div class="publication-actions">
-      <button type="button" class="primary-action" data-vtext-copy-public on:click={() => dispatch('copy-public')}>
+      <button type="button" class="primary-action" data-texture-copy-public on:click={() => dispatch('copy-public')}>
         Copy link
       </button>
-      <button type="button" class="secondary-action" data-vtext-open-public on:click={() => dispatch('open-public')}>
+      <button type="button" class="secondary-action" data-texture-open-public on:click={() => dispatch('open-public')}>
         Open link
       </button>
-      <button type="button" class="secondary-action" data-vtext-copy-full-text on:click={() => dispatch('copy-full-text')}>
+      <button type="button" class="secondary-action" data-texture-copy-full-text on:click={() => dispatch('copy-full-text')}>
         Copy text
       </button>
-      <details class="download-menu" data-vtext-download-menu>
+      <details class="download-menu" data-texture-download-menu>
         <summary>Download</summary>
-        <button type="button" data-vtext-download-md on:click={() => dispatch('download', 'md')}>Markdown</button>
-        <button type="button" data-vtext-download-txt on:click={() => dispatch('download', 'txt')}>Text</button>
-        <button type="button" data-vtext-download-html on:click={() => dispatch('download', 'html')}>HTML</button>
-        <button type="button" data-vtext-download-docx on:click={() => dispatch('download', 'docx')}>DOCX</button>
-        <button type="button" data-vtext-download-pdf on:click={() => dispatch('download', 'pdf')}>PDF</button>
+        <button type="button" data-texture-download-md on:click={() => dispatch('download', 'md')}>Markdown</button>
+        <button type="button" data-texture-download-txt on:click={() => dispatch('download', 'txt')}>Text</button>
+        <button type="button" data-texture-download-html on:click={() => dispatch('download', 'html')}>HTML</button>
+        <button type="button" data-texture-download-docx on:click={() => dispatch('download', 'docx')}>DOCX</button>
+        <button type="button" data-texture-download-pdf on:click={() => dispatch('download', 'pdf')}>PDF</button>
       </details>
     </div>
   </section>
@@ -53,7 +53,7 @@
 {#if publishedProposal}
   <section
     class="publication-panel publication-result"
-    data-vtext-proposal-result
+    data-texture-proposal-result
     data-proposal-id={publishedProposal.proposal_id || ''}
     data-proposal-state={publishedProposal.state || ''}
     data-delivery-state={publishedProposal.delivery_state || ''}

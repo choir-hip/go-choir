@@ -59,7 +59,7 @@
   $: canAttachSourceArtifact = Boolean(currentDoc && currentRevision && sourceArtifactText.trim());
 </script>
 
-<section class="source-panel" data-vtext-source-diagnostics>
+<section class="source-panel" data-texture-source-diagnostics>
   <div class="source-panel-heading">
     <div>
       <p class="eyebrow">Sources</p>
@@ -68,7 +68,7 @@
     <button
       type="button"
       class="secondary-action"
-      data-vtext-load-diagnosis
+      data-texture-load-diagnosis
       on:click={() => dispatch('diagnosis')}
       disabled={!currentDoc || isPublishedReadOnly}
     >
@@ -77,7 +77,7 @@
   </div>
 
   {#if sourceCandidates.length}
-    <div class="source-marker-list" data-vtext-source-gaps aria-label="Claims needing source review">
+    <div class="source-marker-list" data-texture-source-gaps aria-label="Claims needing source review">
       {#each sourceCandidates as marker}
         <span>{marker}</span>
       {/each}
@@ -85,24 +85,24 @@
   {/if}
 
   {#if sourceEntities.length}
-    <div class="source-entity-list" data-vtext-source-entities>
+    <div class="source-entity-list" data-texture-source-entities>
       {#each sourceEntities as entity}
         <button
           type="button"
           class="source-entity-chip"
-          data-vtext-source-entity-chip
+          data-texture-source-entity-chip
           on:click={() => dispatch('source-entity-open', { entity })}
         >
           <strong>{sourceEntityTitle(entity)}</strong>
           <span>{sourceEntityKindLabel(entity.kind)}</span>
-          <span class="source-evidence-state" data-vtext-source-evidence-state>{sourceEvidenceStateLabel(sourceEvidenceState(entity) || 'available')}</span>
+          <span class="source-evidence-state" data-texture-source-evidence-state>{sourceEvidenceStateLabel(sourceEvidenceState(entity) || 'available')}</span>
         </button>
       {/each}
     </div>
   {/if}
 
   {#if sourceSummary}
-    <div class="source-diagnosis-facts" data-vtext-diagnosis-summary>
+    <div class="source-diagnosis-facts" data-texture-diagnosis-summary>
       <span>{sourceSummary.revisionCount} revisions</span>
       <span>{sourceSummary.runCount} runs</span>
       {#if sourceSummary.latestVersion}
@@ -121,7 +121,7 @@
   {/if}
 
   {#if sourceStructures.length}
-    <div class="source-structure-evidence" data-vtext-structure-summary>
+    <div class="source-structure-evidence" data-texture-structure-summary>
       <div class="source-artifact-heading">
         <span class="evidence-label">Revision structure</span>
         <strong>{sourceStructures.length} bounded summaries</strong>
@@ -129,7 +129,7 @@
       {#each sourceStructures as structure}
         <article
           class="source-structure-card"
-          data-vtext-structure-revision
+          data-texture-structure-revision
           data-revision-id={structure.revisionID}
           data-version={structure.version}
         >
@@ -158,10 +158,10 @@
             </div>
           </dl>
           {#if structure.tables.length}
-            <div class="source-table-signatures" data-vtext-table-signatures>
+            <div class="source-table-signatures" data-texture-table-signatures>
               {#each structure.tables as table}
                 <span
-                  data-vtext-table-signature
+                  data-texture-table-signature
                   data-table-index={table.index}
                   data-table-signature={table.signature}
                 >
@@ -176,7 +176,7 @@
   {/if}
 
   {#if sourceDecisions.length}
-    <div class="vtext-decision-evidence" data-vtext-decisions>
+    <div class="vtext-decision-evidence" data-texture-decisions>
       <div class="source-artifact-heading">
         <span class="evidence-label">Texture decisions</span>
         <strong>{sourceDecisions.length} off-document note{sourceDecisions.length === 1 ? '' : 's'}</strong>
@@ -184,7 +184,7 @@
       {#each sourceDecisions as decision}
         <article
           class="vtext-decision-card"
-          data-vtext-decision
+          data-texture-decision
           data-decision-id={decision.decisionID}
           data-decision-kind={decision.kind}
         >
@@ -199,7 +199,7 @@
             <p class="decision-next">{decision.nextAction}</p>
           {/if}
           {#if decision.evidenceRefs.length}
-            <div class="decision-refs" data-vtext-decision-refs>
+            <div class="decision-refs" data-texture-decision-refs>
               {#each decision.evidenceRefs as ref}
                 <span>{ref}</span>
               {/each}
@@ -211,7 +211,7 @@
   {/if}
 
   {#if editEvidence}
-    <div class="source-edit-evidence" data-vtext-edit-evidence>
+    <div class="source-edit-evidence" data-texture-edit-evidence>
       <div>
         <span class="evidence-label">Edit evidence</span>
         <strong>{editEvidence.version || 'revision'}</strong>
@@ -221,37 +221,37 @@
       </div>
       <dl>
         {#if editEvidence.contextMode}
-          <div data-vtext-edit-context-mode>
+          <div data-texture-edit-context-mode>
             <dt>context</dt>
             <dd>{editEvidence.contextMode}</dd>
           </div>
         {/if}
         {#if editEvidence.operation}
-          <div data-vtext-edit-operation>
+          <div data-texture-edit-operation>
             <dt>operation</dt>
             <dd>{editEvidence.operation}</dd>
           </div>
         {/if}
         {#if editEvidence.promptChars !== null}
-          <div data-vtext-edit-prompt-chars>
+          <div data-texture-edit-prompt-chars>
             <dt>prompt chars</dt>
             <dd>{editEvidence.promptChars}</dd>
           </div>
         {/if}
         {#if editEvidence.editCount !== null}
-          <div data-vtext-edit-count>
+          <div data-texture-edit-count>
             <dt>edits</dt>
             <dd>{editEvidence.editCount}</dd>
           </div>
         {/if}
         {#if editEvidence.deltaChars !== null}
-          <div data-vtext-edit-delta-chars>
+          <div data-texture-edit-delta-chars>
             <dt>delta chars</dt>
             <dd>{editEvidence.deltaChars}</dd>
           </div>
         {/if}
         {#if editEvidence.latencyMs !== null}
-          <div data-vtext-edit-latency-ms>
+          <div data-texture-edit-latency-ms>
             <dt>latency ms</dt>
             <dd>{editEvidence.latencyMs}</dd>
           </div>
@@ -262,7 +262,7 @@
 
   {#if !isPublishedReadOnly}
     {#if sourceCandidates.length}
-      <div class="source-review-panel" data-vtext-source-review-panel>
+      <div class="source-review-panel" data-texture-source-review-panel>
         <div class="source-artifact-heading">
           <span class="evidence-label">Source review</span>
           <strong>{sourceReviewMarker ? `Repair ${sourceReviewMarker}` : 'Choose marker'}</strong>
@@ -272,7 +272,7 @@
             <button
               type="button"
               class:selected={marker === sourceReviewMarker}
-              data-vtext-source-review-marker
+              data-texture-source-review-marker
               data-source-marker={marker}
               on:click={() => dispatch('source-review-marker', { marker })}
             >
@@ -282,7 +282,7 @@
         </div>
         <label class="source-artifact-field">
           <span>Review outcome</span>
-          <select data-vtext-source-review-relation bind:value={sourceReviewRelation}>
+          <select data-texture-source-review-relation bind:value={sourceReviewRelation}>
             <option value="confirms">Source confirms claim</option>
             <option value="qualifies">Source qualifies claim</option>
             <option value="refutes">Source refutes claim</option>
@@ -293,7 +293,7 @@
           <label class="source-artifact-field">
             <span>Reason</span>
             <textarea
-              data-vtext-source-review-reason
+              data-texture-source-review-reason
               bind:value={sourceReviewReason}
               spellcheck="true"
               rows="3"
@@ -303,16 +303,16 @@
         {:else}
           <label class="source-artifact-field">
             <span>Source title</span>
-            <input data-vtext-source-review-title bind:value={sourceReviewTitle} placeholder="Name the confirming, qualifying, or refuting source" />
+            <input data-texture-source-review-title bind:value={sourceReviewTitle} placeholder="Name the confirming, qualifying, or refuting source" />
           </label>
           <label class="source-artifact-field">
             <span>Source URL</span>
-            <input data-vtext-source-review-url bind:value={sourceReviewURL} placeholder="Optional public source URL" />
+            <input data-texture-source-review-url bind:value={sourceReviewURL} placeholder="Optional public source URL" />
           </label>
           <label class="source-artifact-field">
             <span>Source excerpt</span>
             <textarea
-              data-vtext-source-review-excerpt
+              data-texture-source-review-excerpt
               bind:value={sourceReviewExcerpt}
               spellcheck="true"
               rows="5"
@@ -324,7 +324,7 @@
           <button
             type="button"
             class="primary-action"
-            data-vtext-apply-source-review
+            data-texture-apply-source-review
             on:click={() => dispatch('apply-source-review')}
             disabled={sourceRepairPending || !canApplySourceReview}
           >
@@ -340,7 +340,7 @@
       </div>
     {/if}
 
-    <div class="source-artifact-panel" data-vtext-source-artifact-panel>
+    <div class="source-artifact-panel" data-texture-source-artifact-panel>
       <div class="source-artifact-heading">
         <span class="evidence-label">Source artifact</span>
         <strong>{selectedSourceEntity ? sourceEntityTitle(selectedSourceEntity) : 'Choose a source'}</strong>
@@ -351,7 +351,7 @@
             <button
               type="button"
               class:selected={sourceEntityID(entity) === selectedSourceEntityID}
-              data-vtext-source-artifact-target
+              data-texture-source-artifact-target
               data-source-entity-id={sourceEntityID(entity)}
               on:click={() => dispatch('source-artifact-target', { entity })}
             >
@@ -361,17 +361,17 @@
         </div>
         <label class="source-artifact-field">
           <span>Title</span>
-          <input data-vtext-source-artifact-title bind:value={sourceArtifactTitle} />
+          <input data-texture-source-artifact-title bind:value={sourceArtifactTitle} />
         </label>
         <label class="source-artifact-field">
           <span>URL</span>
-          <input data-vtext-source-artifact-url bind:value={sourceArtifactURL} />
+          <input data-texture-source-artifact-url bind:value={sourceArtifactURL} />
         </label>
         <div class="source-panel-actions">
           <button
             type="button"
             class="secondary-action"
-            data-vtext-import-source-artifact
+            data-texture-import-source-artifact
             on:click={() => dispatch('import-source-artifact')}
             disabled={sourceArtifactPending || !canImportSourceArtifact}
           >
@@ -381,7 +381,7 @@
         <label class="source-artifact-field">
           <span>Readable source text</span>
           <textarea
-            data-vtext-source-artifact-text
+            data-texture-source-artifact-text
             bind:value={sourceArtifactText}
             spellcheck="true"
             rows="7"
@@ -391,7 +391,7 @@
           <button
             type="button"
             class="primary-action"
-            data-vtext-attach-source-artifact
+            data-texture-attach-source-artifact
             on:click={() => dispatch('attach-source-artifact')}
             disabled={sourceArtifactPending || !canAttachSourceArtifact}
           >

@@ -7,20 +7,20 @@ function serializeInlineMarkdown(node: Node | null): string {
   }
   if (node.nodeType !== Node.ELEMENT_NODE) return '';
   const element = node as Element;
-  if (element.matches?.('[data-vtext-source-ref]')) {
+  if (element.matches?.('[data-texture-source-ref]')) {
     const label = element.getAttribute('data-source-label') || element.querySelector?.('.vtext-source-ref-label')?.textContent || 'source';
     const entityID = element.getAttribute('data-source-entity-id') || '';
     return entityID ? `[${label}](source:${entityID})` : label;
   }
-  if (element.matches?.('[data-vtext-related-ref]')) {
-    const label = element.getAttribute('data-vtext-label') || element.querySelector?.('.vtext-related-ref-label')?.textContent || 'Texture';
-    const docID = element.getAttribute('data-vtext-doc-id') || '';
-    const revisionID = element.getAttribute('data-vtext-related-revision-id') || '';
+  if (element.matches?.('[data-texture-related-ref]')) {
+    const label = element.getAttribute('data-texture-label') || element.querySelector?.('.vtext-related-ref-label')?.textContent || 'Texture';
+    const docID = element.getAttribute('data-texture-doc-id') || '';
+    const revisionID = element.getAttribute('data-texture-related-revision-id') || '';
     const target = vtextRelatedMarkdownTarget(docID, revisionID);
     return target ? `[${label}](vtext:${target})` : label;
   }
-  if (element.closest?.('[data-vtext-source-flow]')) return '';
-  if (element.closest?.('[data-vtext-source-entity]')) return '';
+  if (element.closest?.('[data-texture-source-flow]')) return '';
+  if (element.closest?.('[data-texture-source-entity]')) return '';
 
   const tag = element.tagName.toLowerCase();
   if (tag === 'br') return '\n';
@@ -47,8 +47,8 @@ function serializeBlockMarkdown(node: Node | null): string {
   }
   if (node.nodeType !== Node.ELEMENT_NODE) return '';
   const element = node as Element;
-  if (element.matches?.('[data-vtext-source-flow]')) return '';
-  if (element.matches?.('[data-vtext-source-entity]')) return '';
+  if (element.matches?.('[data-texture-source-flow]')) return '';
+  if (element.matches?.('[data-texture-source-entity]')) return '';
 
   const tag = element.tagName.toLowerCase();
   if (element.matches?.('.table-scroll') && element.querySelector?.('table')) {

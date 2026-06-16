@@ -115,8 +115,8 @@ async function waitForSuccessfulSourceSearch(page, trajectoryId, timeout = 180_0
 
 async function loadVTextState(page, docId) {
   const [doc, revisionsResponse] = await Promise.all([
-    fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(docId)}`),
-    fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(docId)}/revisions`),
+    fetchJSON(page, `/api/texture/documents/${encodeURIComponent(docId)}`),
+    fetchJSON(page, `/api/texture/documents/${encodeURIComponent(docId)}/revisions`),
   ]);
   const revisions = revisionsResponse.revisions || [];
   const head = revisions.find((revision) => revision.revision_id === doc.current_revision_id);

@@ -121,7 +121,7 @@ export const APP_REGISTRY = [
       compact: compactDefault,
     },
     auth: { preview: 'public-preview', requiresAuthFor: ['save_vtext', 'revise_vtext', 'publish_vtext'] },
-    theme: { surface: 'document', shellDataAttr: 'data-vtext-app', contentClass: 'vtext-content' },
+    theme: { surface: 'document', shellDataAttr: 'data-texture-app', contentClass: 'vtext-content' },
   },
   {
     id: 'universal-wire',

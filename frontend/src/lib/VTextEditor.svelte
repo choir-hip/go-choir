@@ -1754,11 +1754,11 @@
   }
 
   function handleRelatedVTextOpen(relatedRef) {
-    const docID = String(relatedRef?.getAttribute?.('data-vtext-doc-id') || '').trim();
+    const docID = String(relatedRef?.getAttribute?.('data-texture-doc-id') || '').trim();
     if (!docID) return '';
     const entity = relatedVTextForDocID(docID);
-    const revisionID = vtextEntityPinnedRevisionID(entity, relatedRef?.getAttribute?.('data-vtext-related-revision-id') || '');
-    const title = String(entity?.title || entity?.label || relatedRef?.getAttribute?.('data-vtext-label') || 'Related Texture').trim();
+    const revisionID = vtextEntityPinnedRevisionID(entity, relatedRef?.getAttribute?.('data-texture-related-revision-id') || '');
+    const title = String(entity?.title || entity?.label || relatedRef?.getAttribute?.('data-texture-label') || 'Related Texture').trim();
     const snapshot = String(entity?.transclusion?.snapshot_text || entity?.snapshot_text || '').trim();
     dispatch('launchapp', {
       appId: 'vtext',
@@ -1780,17 +1780,17 @@
   }
 
   function handleEditorClick(event) {
-    const collapse = event.target?.closest?.('[data-vtext-source-flow-collapse]');
+    const collapse = event.target?.closest?.('[data-texture-source-flow-collapse]');
     if (collapse) {
       event.preventDefault();
       event.stopPropagation();
-      editorSurface?.querySelectorAll?.('[data-vtext-source-ref][data-expanded="true"]').forEach((node) => {
+      editorSurface?.querySelectorAll?.('[data-texture-source-ref][data-expanded="true"]').forEach((node) => {
         node.setAttribute('data-expanded', 'false');
       });
       clearSourceJournalFlows(editorSurface);
       return;
     }
-    const button = event.target?.closest?.('[data-vtext-open-source]');
+    const button = event.target?.closest?.('[data-texture-open-source]');
     if (button) {
       event.preventDefault();
       event.stopPropagation();
@@ -1801,15 +1801,15 @@
       handleSourceOpenButton(button);
       return;
     }
-    const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
+    const sourceRef = event.target?.closest?.('[data-texture-source-ref]');
     if (sourceRef) {
       event.preventDefault();
       return;
     }
-    const relatedRef = event.target?.closest?.('[data-vtext-related-ref]');
+    const relatedRef = event.target?.closest?.('[data-texture-related-ref]');
     if (!relatedRef) return;
     event.preventDefault();
-    const docID = relatedRef.getAttribute('data-vtext-doc-id') || '';
+    const docID = relatedRef.getAttribute('data-texture-doc-id') || '';
     if (docID && docID === relatedOpenPointerHandledDocID && Date.now() - relatedOpenPointerHandledAt < 800) {
       return;
     }
@@ -1817,21 +1817,21 @@
   }
 
   function handleEditorKeydown(event) {
-    const relatedRef = event.target?.closest?.('[data-vtext-related-ref]');
+    const relatedRef = event.target?.closest?.('[data-texture-related-ref]');
     if (relatedRef && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();
       event.stopPropagation();
       handleRelatedVTextOpen(relatedRef);
       return;
     }
-    const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
+    const sourceRef = event.target?.closest?.('[data-texture-source-ref]');
     if (sourceRef && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();
       event.stopPropagation();
       toggleInlineSourceRef(sourceRef);
       return;
     }
-    const button = event.target?.closest?.('[data-vtext-open-source]');
+    const button = event.target?.closest?.('[data-texture-open-source]');
     if (!button || (event.key !== 'Enter' && event.key !== ' ')) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1839,7 +1839,7 @@
   }
 
   function refreshSourceJournalFlow() {
-    const expanded = editorSurface?.querySelector?.('[data-vtext-source-ref][data-expanded="true"]');
+    const expanded = editorSurface?.querySelector?.('[data-texture-source-ref][data-expanded="true"]');
     if (!expanded) return;
     clearSourceJournalFlows(editorSurface);
     requestAnimationFrame(() => mountSourceJournalFlow(expanded, {
@@ -1851,8 +1851,8 @@
 
   function renderedSourceRefForEntity(entityID) {
     if (!entityID || !editorSurface) return null;
-    return Array.from(editorSurface.querySelectorAll?.('[data-vtext-source-ref]') || [])
-      .find((node) => !node.closest?.('[data-vtext-source-flow]') && node.getAttribute?.('data-source-entity-id') === entityID) || null;
+    return Array.from(editorSurface.querySelectorAll?.('[data-texture-source-ref]') || [])
+      .find((node) => !node.closest?.('[data-texture-source-flow]') && node.getAttribute?.('data-source-entity-id') === entityID) || null;
   }
 
   function expandSourceRefAsJournalFlow(sourceRef) {
@@ -1867,12 +1867,12 @@
 
   function toggleInlineSourceRef(sourceRef) {
     if (!sourceRef) return;
-    const flow = sourceRef.closest?.('[data-vtext-source-flow]');
+    const flow = sourceRef.closest?.('[data-texture-source-flow]');
     if (flow) {
       const entityID = sourceRef.getAttribute('data-source-entity-id') || '';
       const ownerID = flow.getAttribute('data-source-flow-owner-id') || '';
       clearSourceJournalFlows(editorSurface);
-      editorSurface?.querySelectorAll?.('[data-vtext-source-ref][data-expanded="true"]').forEach((node) => {
+      editorSurface?.querySelectorAll?.('[data-texture-source-ref][data-expanded="true"]').forEach((node) => {
         node.setAttribute('data-expanded', 'false');
       });
       if (!entityID || entityID === ownerID) return;
@@ -1881,7 +1881,7 @@
     }
     const expanded = sourceRef.getAttribute('data-expanded') === 'true';
     clearSourceJournalFlows(editorSurface);
-    editorSurface?.querySelectorAll?.('[data-vtext-source-ref][data-expanded="true"]').forEach((node) => {
+    editorSurface?.querySelectorAll?.('[data-texture-source-ref][data-expanded="true"]').forEach((node) => {
       if (node !== sourceRef) node.setAttribute('data-expanded', 'false');
     });
     sourceRef.setAttribute('data-expanded', expanded ? 'false' : 'true');
@@ -1891,16 +1891,16 @@
   }
 
   function handleEditorPointerDown(event) {
-    const collapse = event.target?.closest?.('[data-vtext-source-flow-collapse]');
+    const collapse = event.target?.closest?.('[data-texture-source-flow-collapse]');
     if (collapse) {
       event.preventDefault();
-      editorSurface?.querySelectorAll?.('[data-vtext-source-ref][data-expanded="true"]').forEach((node) => {
+      editorSurface?.querySelectorAll?.('[data-texture-source-ref][data-expanded="true"]').forEach((node) => {
         node.setAttribute('data-expanded', 'false');
       });
       clearSourceJournalFlows(editorSurface);
       return;
     }
-    const sourceOpen = event.target?.closest?.('[data-vtext-open-source]');
+    const sourceOpen = event.target?.closest?.('[data-texture-open-source]');
     if (sourceOpen) {
       event.preventDefault();
       event.stopPropagation();
@@ -1908,13 +1908,13 @@
       sourceOpenPointerHandledAt = Date.now();
       return;
     }
-    const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
+    const sourceRef = event.target?.closest?.('[data-texture-source-ref]');
     if (sourceRef) {
       event.preventDefault();
       toggleInlineSourceRef(sourceRef);
       return;
     }
-    const relatedRef = event.target?.closest?.('[data-vtext-related-ref]');
+    const relatedRef = event.target?.closest?.('[data-texture-related-ref]');
     if (!relatedRef) return;
     event.preventDefault();
     event.stopPropagation();
@@ -2028,12 +2028,12 @@
 
 <div
   class="vtext-editor"
-  data-vtext-editor
-  data-vtext-doc-id={currentDoc?.doc_id || ''}
-  data-vtext-initial-loop-id={appContext.initialLoopId || undefined}
+  data-texture-editor
+  data-texture-doc-id={currentDoc?.doc_id || ''}
+  data-texture-initial-loop-id={appContext.initialLoopId || undefined}
 >
   {#if showRecent}
-    <section class="recent-panel" data-vtext-recent>
+    <section class="recent-panel" data-texture-recent>
       <div class="recent-hero">
         <p class="eyebrow">Texture</p>
         <h2>Recent living documents</h2>
@@ -2041,19 +2041,19 @@
       </div>
 
       <div class="recent-actions">
-        <button class="primary-action" data-vtext-new-document on:click={handleNewDocument} disabled={loading || recentLoading}>
+        <button class="primary-action" data-texture-new-document on:click={handleNewDocument} disabled={loading || recentLoading}>
           New document
         </button>
       </div>
 
-      <div class="recent-list" data-vtext-recent-list>
+      <div class="recent-list" data-texture-recent-list>
         {#if recentLoading}
           <div class="recent-empty">Loading recent Textures…</div>
         {:else if recentDocuments.length === 0}
           <div class="recent-empty">No Textures yet.</div>
         {:else}
           {#each recentDocuments as doc (doc.doc_id)}
-            <button class="recent-card" data-vtext-recent-document on:click={() => handleOpenRecent(doc)}>
+            <button class="recent-card" data-texture-recent-document on:click={() => handleOpenRecent(doc)}>
               <span class="recent-title">{doc.title || 'Untitled Texture'}</span>
               <span class="recent-meta">
                 v{documentCurrentVersionNumber(doc)}
@@ -2119,8 +2119,8 @@
     {#if agentPending}
       <div
         class="work-banner"
-        data-vtext-working
-        data-vtext-agent-run-id={agentRunId || undefined}
+        data-texture-working
+        data-texture-agent-run-id={agentRunId || undefined}
         role="status"
         aria-live="polite"
       >
@@ -2132,7 +2132,7 @@
       </div>
     {/if}
 
-    <div class="document-body" data-vtext-document-body>
+    <div class="document-body" data-texture-document-body>
       {#if sourcePanelOpen}
         <VTextSourcePanel
           {currentDoc}
@@ -2198,9 +2198,9 @@
       {#if isPublishedReadOnly}
         <article
           class="rendered-doc editable-doc readonly published-readonly"
-          data-vtext-editor-area
-          data-vtext-rendered
-          data-vtext-published-reader={publishedBundle ? '' : undefined}
+          data-texture-editor-area
+          data-texture-rendered
+          data-texture-published-reader={publishedBundle ? '' : undefined}
           data-publication-id={publishedBundle?.publication?.id || undefined}
           data-publication-version-id={publishedBundle?.version?.id || undefined}
           data-content-hash={publishedBundle?.version?.content_hash || undefined}
@@ -2218,8 +2218,8 @@
         <div
           class="rendered-doc editable-doc"
           class:readonly={isEditorReadOnly}
-          data-vtext-editor-area
-          data-vtext-rendered
+          data-texture-editor-area
+          data-texture-rendered
           data-publication-id={publishedBundle?.publication?.id || undefined}
           data-publication-version-id={publishedBundle?.version?.id || undefined}
           data-content-hash={publishedBundle?.version?.content_hash || undefined}
@@ -2246,7 +2246,7 @@
   {#if newVersionAvailable}
     <button
       class="update-pill"
-      data-vtext-new-version
+      data-texture-new-version
       on:click={handleShowLatestVersion}
       disabled={loading}
     >
@@ -2258,7 +2258,7 @@
     <div class="error-float" role="alert">{error}</div>
   {/if}
 
-  <div class="sr-only" aria-live="polite" data-vtext-save-status>{saveStatus}</div>
+  <div class="sr-only" aria-live="polite" data-texture-save-status>{saveStatus}</div>
   <div class="sr-only" aria-live="polite">{loading ? 'Loading Texture…' : ''}</div>
 </div>
 

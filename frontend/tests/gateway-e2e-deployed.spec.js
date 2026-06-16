@@ -222,10 +222,10 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
     expect(decision.framing_revision_id).toBeTruthy();
     expect(decision.initial_loop_id).toBeTruthy();
 
-    const vtextWindow = page.locator('[data-vtext-app]').last();
+    const vtextWindow = page.locator('[data-texture-app]').last();
     await expect(vtextWindow).toBeVisible({ timeout: 30000 });
-    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 30000 });
-    await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
+    await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 30000 });
+    await expect(vtextWindow.locator('[data-texture-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
 
     testResults.steps[6].observed = `Conductor decision: ${JSON.stringify(finalStatus.decision)?.substring(0, 300)}`;
 
@@ -235,7 +235,7 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
       observed: 'In progress...'
     });
 
-    const revisionsResponse = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(decision.doc_id)}/revisions`);
+    const revisionsResponse = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(decision.doc_id)}/revisions`);
     const revisions = revisionsResponse.revisions || [];
     const userRevision = revisions.find((revision) => revision.revision_id === decision.user_revision_id);
     const framingRevision = revisions.find((revision) => revision.revision_id === decision.framing_revision_id);
