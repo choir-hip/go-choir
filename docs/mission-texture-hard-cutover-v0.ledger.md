@@ -1707,3 +1707,61 @@ Receipts:
 Open edge: select the next bounded residue class among storage
 schema/workspace/file suffixes, metadata keys, durable actor IDs, remaining
 app-route labels, and protocol v0.
+
+## 2026-06-16 - Problem Checkpoint: Source Repair Metadata Label Residue
+
+Claim: source repair and source artifact provenance labels are a bounded
+metadata residue class, separate from storage tables, durable actor ids,
+platform publication predicates, app-package evidence fields, and transclusion
+metadata keys.
+
+Move: read-only inventory of source repair/artifact metadata emitters,
+frontend source artifact creation provenance, focused assertions, and adjacent
+broader metadata residues; document the behavior slice before code changes.
+
+Expected ΔV: 0 global; C20 becomes active and the source repair metadata label
+slice is scoped.
+
+Actual ΔV: 0. Problem Documentation First checkpoint landed in docs only.
+
+Conjecture delta: new source repair and source artifact provenance labels can
+teach Texture without touching source entity structs, source routes,
+`.vtext` alias/storage fields, durable actor ids, or platform publication
+attestations.
+
+Protected surfaces for the later behavior slice: source gap repair revision
+metadata, source artifact attachment revision metadata, frontend source content
+item creation provenance, source repair tests, source artifact attachment
+tests, and markdown-lineage browser tests.
+
+Admissible evidence class for the later behavior slice: focused runtime source
+repair tests, focused frontend markdown-lineage/source repair test, frontend
+build, residue search, CI, staging deploy identity, and deployed product proof
+if the behavior is reachable through staging UI/API.
+
+Rollback path for the later behavior slice: restore the old emitted
+`vtext_source_*` metadata values and test expectations if source repair,
+source artifact attachment, or downstream metadata readers regress.
+
+Heresy delta: discovered source repair metadata label residue; no behavior
+repair claimed yet.
+
+Receipts:
+- `internal/runtime/vtext_source_repairs.go` still emits
+  `source="vtext_source_gap_repair"` and
+  `source="vtext_source_artifact_attachment"`.
+- `frontend/src/lib/vtext-source-actions.ts` still emits
+  `created_from: 'vtext_source_artifact_ui'`.
+- `internal/runtime/vtext_test.go` still asserts the old source repair and
+  source artifact attachment metadata values.
+- `frontend/tests/vtext-markdown-lineage.spec.js` still asserts
+  `repaired.metadata?.source === 'vtext_source_gap_repair'`.
+- Adjacent hits including `canonical_vtext_source_path`, `related_vtexts`,
+  `story_vtext_doc_id`, `vtext_doc_id`, `vtext_revision_id`,
+  `private_vtext_revision`, `publish_vtext_revision`, and
+  `choir.platform.publish_vtext.v0` are broader migration surfaces kept out of
+  this slice.
+
+Open edge: implement the behavior slice after this checkpoint: emit
+Texture-named source repair/artifact provenance values, update focused tests,
+and prove locally before CI/staging.

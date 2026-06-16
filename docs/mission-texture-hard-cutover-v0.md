@@ -586,6 +586,55 @@ Heresy delta: repaired for deployed frontend auth intent labels. Durable actor
 ids, storage symbols, and source/provenance metadata remain separate discovered
 residue.
 
+## Problem Checkpoint: Source Repair Metadata Label Residue
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+frontend source, schema, API, prompt default, UI, test, or persistent state
+changed in this checkpoint.
+
+Read-only search on 2026-06-16 shows a narrow source/provenance metadata
+residue class: new source repair and source artifact paths can still emit
+old-name `vtext_source_*` provenance strings even though the user-visible
+surface, product API routes, and auth intents now teach Texture. This is
+separate from storage table names, durable actor ids, publication verifier
+predicates, and app-package review contract fields.
+
+Receipts:
+
+- `internal/runtime/vtext_source_repairs.go` still writes revision metadata
+  `source="vtext_source_gap_repair"` for source gap repairs and
+  `source="vtext_source_artifact_attachment"` for source artifact attachment
+  revisions.
+- `frontend/src/lib/vtext-source-actions.ts` still creates source content item
+  metadata with `created_from: 'vtext_source_artifact_ui'`.
+- `internal/runtime/vtext_test.go` still asserts the old emitted metadata
+  values in source repair and source artifact attachment tests.
+- `frontend/tests/vtext-markdown-lineage.spec.js` still asserts
+  `repaired.metadata?.source === 'vtext_source_gap_repair'`.
+- Adjacent metadata hits such as `canonical_vtext_source_path`,
+  `related_vtexts`, `story_vtext_doc_id`, `vtext_doc_id`,
+  `vtext_revision_id`, `private_vtext_revision`,
+  `publish_vtext_revision`, and `choir.platform.publish_vtext.v0` are broader
+  storage, transclusion, app-package review, or platform publication
+  provenance surfaces and require separate migration design.
+
+Next behavior slice design:
+
+- emit `texture_source_gap_repair`,
+  `texture_source_artifact_attachment`, and
+  `texture_source_artifact_ui` for new source repair/artifact paths;
+- keep source entity structs, source routes, and `.vtext`/alias/storage fields
+  out of this slice;
+- preserve no reader compatibility unless investigation finds a live consumer
+  of these exact old emitted values; if compatibility is required, make it an
+  explicit legacy read predicate with a deletion receipt rather than continuing
+  to emit old values;
+- prove locally with focused runtime source repair tests, the focused frontend
+  markdown-lineage/source repair test, frontend build, and residue searches,
+  then push, monitor CI/deploy, verify staging identity, and run a deployed
+  proof through the source repair or source artifact product path if the
+  behavior reaches staging.
+
 ## Problem Checkpoint: `edit_texture` Compatibility Alias
 
 Mutation class: `green` documentation and evidence only. No runtime behavior,
@@ -963,11 +1012,19 @@ position / live conjectures / open edges:
   CI run `27591417530`, deploy job `81572916777`, staging identity for commit
   `2f13598d37be2807f8cefe9258300a1a798a081c`, and deployed Playwright proof
   for signed-out auth overlay plus legacy `app=vtext` deep link all pass.
+- C20 active: source repair/artifact provenance labels are a small metadata
+  residue class. New source repair and source artifact paths still emit
+  `vtext_source_gap_repair`, `vtext_source_artifact_attachment`, and
+  `vtext_source_artifact_ui`; adjacent fields such as
+  `canonical_vtext_source_path`, `related_vtexts`, platform publication
+  predicates, app-package `vtext_doc_id`, and storage symbols remain broader
+  migration surfaces.
 
-next move: select the next bounded residue class among storage
-schema/workspace/file suffixes, metadata keys, durable actor IDs, remaining
-app-route labels, and protocol v0. Keep protocol v0 unwritten until the
-remaining working-surface proofs are complete.
+next move: implement the source repair metadata label slice: emit
+Texture-named source repair/artifact provenance values, update focused runtime
+and frontend tests, run local checks and residue search, then push and prove
+through CI/deploy/staging if behavior changes. Keep protocol v0 unwritten until
+the remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
