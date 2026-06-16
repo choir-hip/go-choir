@@ -689,7 +689,7 @@ func (rt *Runtime) importYouTubeURLContent(ctx context.Context, ownerID, normali
 			OwnerID:      ownerID,
 			SourceType:   "derived_transcript",
 			MediaType:    "text/x-youtube-transcript",
-			AppHint:      "vtext",
+			AppHint:      AgentProfileTexture,
 			Title:        "Transcript for YouTube " + videoID,
 			SourceURL:    canonicalURL,
 			CanonicalURL: "youtube://" + videoID + "/transcript/" + firstNonEmpty(transcript.Language, "unknown"),
@@ -1779,7 +1779,7 @@ func appHintForMedia(mediaType, sourceURL, filePath string) string {
 	case mediaType == "application/pdf":
 		return "pdf"
 	case mediaType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-		return "vtext"
+		return AgentProfileTexture
 	case mediaType == "application/epub+zip":
 		return "epub"
 	case mediaType == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
@@ -1787,7 +1787,7 @@ func appHintForMedia(mediaType, sourceURL, filePath string) string {
 	case mediaType == "application/rss+xml" || strings.Contains(strings.ToLower(sourceURL+filePath), "podcast"):
 		return "podcast"
 	case mediaType == "text/markdown" || mediaType == "text/plain":
-		return "vtext"
+		return AgentProfileTexture
 	case mediaType == "text/html" || mediaType == "application/xhtml+xml":
 		return "browser"
 	default:

@@ -362,7 +362,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
     body: JSON.stringify({
       source_type: 'file',
       media_type: 'text/markdown',
-      app_hint: 'vtext',
+      app_hint: 'texture',
       title: `Content-backed Legal Cloud v44 ${stamp}`,
       file_path: `proposals/content-backed-legal-cloud-${stamp}.md#v44`,
       text_content: [
@@ -379,7 +379,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
     body: JSON.stringify({
       source_type: 'file',
       media_type: 'text/markdown',
-      app_hint: 'vtext',
+      app_hint: 'texture',
       title: `Content-backed Legal Cloud v49 ${stamp}`,
       file_path: `proposals/content-backed-legal-cloud-${stamp}.md#v49`,
       text_content: [

@@ -638,6 +638,7 @@ func TestContentImportURLStoresConfiguredTranscriptItem(t *testing.T) {
 	var transcript struct {
 		SourceType  string         `json:"source_type"`
 		MediaType   string         `json:"media_type"`
+		AppHint     string         `json:"app_hint"`
 		TextContent string         `json:"text_content"`
 		Metadata    map[string]any `json:"metadata"`
 		Provenance  map[string]any `json:"provenance"`
@@ -647,6 +648,9 @@ func TestContentImportURLStoresConfiguredTranscriptItem(t *testing.T) {
 	}
 	if transcript.SourceType != "derived_transcript" || transcript.MediaType != "text/x-youtube-transcript" {
 		t.Fatalf("transcript item type = %q/%q", transcript.SourceType, transcript.MediaType)
+	}
+	if transcript.AppHint != AgentProfileTexture {
+		t.Fatalf("transcript app_hint = %q, want %q", transcript.AppHint, AgentProfileTexture)
 	}
 	if transcript.TextContent != "Stored transcript line." {
 		t.Fatalf("transcript text = %q", transcript.TextContent)

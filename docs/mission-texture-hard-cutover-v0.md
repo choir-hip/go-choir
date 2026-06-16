@@ -2584,6 +2584,61 @@ Rollback path for the later behavior slice: revert the app-hint payload commit
 to resume emitting `app_hint:"vtext"` for current text-like content while
 retaining C35 actor identity and C36 prompt decision payload repair.
 
+## Local Repair: Content App-Hint Payload
+
+Mutation class: `orange`, because this changes runtime content-item app hints,
+Texture file-open originals, DOCX extraction projections, Markdown lineage
+snapshots, derived transcript content items, prompt-bar content decision
+payloads that copy `app_hint`, and product acceptance fixtures.
+
+Conjecture delta: new/current text-like content projections can teach Texture
+with `app_hint:"texture"` while the runtime/API boundary still accepts legacy
+stored `app_hint:"vtext"` through `normalizeAppHint`.
+
+Protected surfaces: `/api/prompt-bar` content decisions, content item creation
+and reads, `/api/texture/files/open`, Markdown lineage import, DOCX extraction,
+YouTube derived transcript creation, source/artifact evidence surfaces, and the
+deployed Markdown lineage acceptance fixture.
+
+Local evidence on 2026-06-16:
+
+- Current emissions in `internal/runtime/content.go`,
+  `internal/runtime/content_extract.go`, and
+  `internal/runtime/vtext_lineage.go` now use `AgentProfileTexture` for DOCX,
+  Markdown, plain text, Markdown lineage snapshots, and derived transcripts.
+- Runtime and frontend tests now assert/create current text-like content items
+  with `app_hint:"texture"` while leaving legacy acceptance to existing
+  normalization paths.
+- Scoped current-emission search
+  `rg -n 'app_hint.*vtext|AppHint.*vtext|AppHint:\s+"vtext"|return "vtext"|appHint: "vtext"|app_hint: '\''vtext'\''' internal/runtime frontend/tests frontend/src -g '!frontend/dist/**'`
+  returned no hits.
+- Focused runtime packet
+  `nix develop -c go test ./internal/runtime -run 'TestVTextOpenFileResolvesCanonicalAlias|TestVTextImportMarkdownLineageCreatesRevisionHistory|TestVTextImportMarkdownLineageUsesExistingContentItems|TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts|TestResearcherReadContentItemReturnsPrivateSourceArtifact|TestImportYouTubeURLContent|TestHandlePromptBar|TestConductorTaskNormalizesStructuredRouteResult' -count=1`
+  passed.
+- Content/extraction packet
+  `nix develop -c go test ./internal/runtime -run 'TestContent|TestExtract|TestFetchYouTubeTranscript' -count=1`
+  passed.
+- Sequential runtime shard suite
+  `nix develop -c scripts/go-test-runtime-shards` passed after Go cache cleanup.
+  A prior accidental parallel shard attempt failed during linking with
+  `no space left on device` and is not counted as behavioral evidence.
+- Fresh pre-commit focused runtime packet combining the touched behavior tests
+  passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextOpenFileResolvesCanonicalAlias|TestVTextImportMarkdownLineageCreatesRevisionHistory|TestVTextImportMarkdownLineageUsesExistingContentItems|TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts|TestResearcherReadContentItemReturnsPrivateSourceArtifact|TestImportYouTubeURLContent|TestHandlePromptBar|TestConductorTaskNormalizesStructuredRouteResult|TestContent|TestExtract|TestFetchYouTubeTranscript' -count=1`.
+- `npm --prefix frontend run build` passed with the pre-existing Universal Wire
+  warnings for unused `currentUser` and `.wire-state` selectors.
+- `git diff --check` passed.
+- `scripts/doccheck --report /tmp/choir-doccheck-c37-content-app-hint-local.md --json /tmp/choir-doccheck-c37-content-app-hint-local.json`
+  passed in report-only mode: 212 docs, 1117 warnings.
+
+Rollback path: revert the app-hint payload behavior commit to resume emitting
+`app_hint:"vtext"` for current text-like content. C35 actor/profile identity and
+C36 prompt decision payload repairs remain separate rollback units.
+
+Heresy delta: repaired locally for current text-like content app-hint payloads;
+no task type, tool profile wording, model-policy key, table/database, durable
+actor id, stored route-row, or Universal Wire edition repair is claimed.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2620,13 +2675,14 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C36 deployed-supported the
-prompt decision payload slice: new/current prompt-bar Texture decisions
-return/store `app: "texture"` / `requested_app="texture"` while legacy `vtext`
-decisions remain accepted. Coarse V remains 2 because database/table names,
-`vtext_agent_revision` task type, prompt/tool schema wording, content import
-app hints, stored legacy routes, Universal Wire edition refs, deployed
-Universal Wire story-field proof, and protocol v0 remain.
+variant (ranking function) V: current V=2; last ΔV: C37 locally repaired the
+content app-hint payload slice: new/current text-like Texture content
+projections emit `app_hint:"texture"` while legacy `vtext` hints remain
+accepted. Coarse V remains 2 because the C37 behavior still needs landing,
+CI/deploy identity, and staging product proof, and because database/table names,
+`vtext_agent_revision` task type, prompt/tool schema wording, stored legacy
+routes, Universal Wire edition refs, deployed Universal Wire story-field proof,
+and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -2768,12 +2824,22 @@ frontend build, doccheck, CI run `27605982668`, deploy job `81618326388`,
 staging health, and targeted deployed prompt-bar/Trace proof passed. This slice
 excludes task type, tool profile, model-policy key, table/database, content
 app-hint, and stored route-row migration.
+C37 is locally supported for content app-hint payload identity: current DOCX,
+Markdown, plain text, Markdown lineage, and derived transcript content
+projections now emit `app_hint:"texture"`; tests and deployed Markdown lineage
+fixtures now expect current Texture hints; scoped current-emission search,
+focused runtime packets, sequential runtime shards, frontend build, doccheck,
+and diff checks passed. This slice still requires commit/push, CI/deploy
+identity, and staging product proof before it is deployed-supported. It
+excludes `vtext_agent_revision`, tool/profile wording, model-policy keys,
+table/database/storage symbols, durable actor ids, stored route rows, Universal
+Wire edition refs, and protocol v0.
 
-next move: cut the documented content app-hint payload slice: new/current
-text-like Texture content projections should emit `app_hint:"texture"` while
-legacy `vtext` app hints remain accepted. Do not fold task type, tool profile
-wording, model-policy keys, storage table names, durable actor ids, or stored
-route-row migration into this app-hint slice.
+next move: finish the C37 landing loop: commit and push the app-hint payload
+repair; monitor CI and deploy; verify staging commit identity; then run
+deployed product/API proof that new/current text-like content items and
+prompt-bar content decisions expose `app_hint:"texture"` with no forbidden
+internal-route shortcut.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

@@ -4166,3 +4166,47 @@ Open edge: implement only the app-hint payload slice: new/current text-like
 content projections emit `texture`; legacy `vtext` hints remain accepted; do
 not fold task type, tool profile wording, model-policy keys, table/database
 symbols, durable actor ids, or stored route-row migration into this slice.
+
+## 2026-06-16 - Local Repair: C37 Content App-Hint Payload
+
+Claim: C37 is locally supported for current text-like content app-hint payload
+identity, but not yet deployed-supported.
+
+Move: construct the documented content app-hint payload repair. Expected ΔV:
+repair the app-hint residue locally while leaving coarse V=2 until commit,
+CI/deploy identity, and staging product proof land.
+
+Actual ΔV: local repair evidence exists; coarse V remains 2.
+
+Receipts:
+
+- DOCX, Markdown, plain text, Markdown lineage snapshot, and derived transcript
+  current emissions now use `AgentProfileTexture`.
+- Runtime/frontend tests now assert or create current text-like content items
+  with `app_hint:"texture"`.
+- Scoped current-emission search
+  `rg -n 'app_hint.*vtext|AppHint.*vtext|AppHint:\s+"vtext"|return "vtext"|appHint: "vtext"|app_hint: '\''vtext'\''' internal/runtime frontend/tests frontend/src -g '!frontend/dist/**'`
+  returned no hits.
+- Focused runtime packet
+  `nix develop -c go test ./internal/runtime -run 'TestVTextOpenFileResolvesCanonicalAlias|TestVTextImportMarkdownLineageCreatesRevisionHistory|TestVTextImportMarkdownLineageUsesExistingContentItems|TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts|TestResearcherReadContentItemReturnsPrivateSourceArtifact|TestImportYouTubeURLContent|TestHandlePromptBar|TestConductorTaskNormalizesStructuredRouteResult' -count=1`
+  passed.
+- Content/extraction packet
+  `nix develop -c go test ./internal/runtime -run 'TestContent|TestExtract|TestFetchYouTubeTranscript' -count=1`
+  passed.
+- Sequential runtime shard suite
+  `nix develop -c scripts/go-test-runtime-shards` passed after Go cache cleanup.
+  An accidental parallel shard attempt failed at link time with
+  `no space left on device` and was discarded as non-evidence.
+- Fresh combined focused runtime packet
+  `nix develop -c go test ./internal/runtime -run 'TestVTextOpenFileResolvesCanonicalAlias|TestVTextImportMarkdownLineageCreatesRevisionHistory|TestVTextImportMarkdownLineageUsesExistingContentItems|TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts|TestResearcherReadContentItemReturnsPrivateSourceArtifact|TestImportYouTubeURLContent|TestHandlePromptBar|TestConductorTaskNormalizesStructuredRouteResult|TestContent|TestExtract|TestFetchYouTubeTranscript' -count=1`
+  passed.
+- `npm --prefix frontend run build` passed with the pre-existing Universal Wire
+  warnings for unused `currentUser` and `.wire-state` selectors.
+- `git diff --check` passed.
+- `scripts/doccheck --report /tmp/choir-doccheck-c37-content-app-hint-local.md --json /tmp/choir-doccheck-c37-content-app-hint-local.json`
+  passed in report-only mode: 212 docs, 1117 warnings.
+
+Open edge: commit/push, monitor CI/deploy, verify staging identity, and run
+deployed content app-hint product proof. Task type, tool profile wording,
+model-policy keys, table/database symbols, durable actor ids, stored route rows,
+Universal Wire edition refs, and protocol v0 remain outside C37.

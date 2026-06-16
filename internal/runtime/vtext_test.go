@@ -3898,7 +3898,7 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetContentItem original: %v", err)
 	}
-	if originalItem.FilePath != "notes/ai-news.md" || originalItem.MediaType != "text/markdown" || originalItem.AppHint != "vtext" {
+	if originalItem.FilePath != "notes/ai-news.md" || originalItem.MediaType != "text/markdown" || originalItem.AppHint != AgentProfileTexture {
 		t.Fatalf("original content item = %#v", originalItem)
 	}
 	if originalItem.TextContent != "Initial file content" || originalItem.ContentHash == "" {
@@ -4527,7 +4527,7 @@ func TestVTextImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 	for _, item := range items {
 		if item.SourceType == "file_version" && item.FilePath != "" && strings.HasPrefix(item.FilePath, "proposals/legal-cloud.md#") {
 			foundSnapshots++
-			if item.MediaType != "text/markdown" || item.AppHint != "vtext" || item.TextContent == "" || item.ContentHash == "" {
+			if item.MediaType != "text/markdown" || item.AppHint != AgentProfileTexture || item.TextContent == "" || item.ContentHash == "" {
 				t.Fatalf("snapshot content item = %#v", item)
 			}
 		}
@@ -5216,7 +5216,7 @@ func TestVTextSourceArtifactAttachmentCreatesMetadataOnlyRevision(t *testing.T) 
 		OwnerID:      "user-1",
 		SourceType:   "text",
 		MediaType:    "text/markdown",
-		AppHint:      "vtext",
+		AppHint:      AgentProfileTexture,
 		Title:        "Readable Public Rule",
 		SourceURL:    "https://example.com/rule",
 		CanonicalURL: "https://example.com/rule",
@@ -5316,7 +5316,7 @@ func TestVTextSourceArtifactAttachmentRejectsEmptyContentItem(t *testing.T) {
 		OwnerID:     "user-1",
 		SourceType:  "text",
 		MediaType:   "text/markdown",
-		AppHint:     "vtext",
+		AppHint:     AgentProfileTexture,
 		Title:       "Empty Source",
 		TextContent: "",
 		ContentHash: contentHash(""),
@@ -5354,7 +5354,7 @@ func TestVTextImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 		OwnerID:     "user-1",
 		SourceType:  "file_version",
 		MediaType:   "text/markdown",
-		AppHint:     "vtext",
+		AppHint:     AgentProfileTexture,
 		Title:       "legal-cloud.md v44",
 		FilePath:    "proposals/legal-cloud-content-backed.md#v44",
 		TextContent: oldContent,
@@ -5369,7 +5369,7 @@ func TestVTextImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 		OwnerID:     "user-1",
 		SourceType:  "file_version",
 		MediaType:   "text/markdown",
-		AppHint:     "vtext",
+		AppHint:     AgentProfileTexture,
 		Title:       "legal-cloud.md v49",
 		FilePath:    "proposals/legal-cloud-content-backed.md#v49",
 		TextContent: latestContent,
@@ -5570,7 +5570,7 @@ func TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts(t *testing.T) {
 		warning   string
 		wantText  string
 	}{
-		{name: "docx", resp: docx, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", appHint: "vtext", lossiness: 40, warning: "docx_projection_requires_style_adapter", wantText: "Extracted DOCX projection text"},
+		{name: "docx", resp: docx, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", appHint: AgentProfileTexture, lossiness: 40, warning: "docx_projection_requires_style_adapter", wantText: "Extracted DOCX projection text"},
 		{name: "pdf", resp: pdf, mediaType: "application/pdf", appHint: "pdf", lossiness: 80, warning: "pdf_projection_requires_extraction_adapter", wantText: "Extracted PDF projection text"},
 	} {
 		doc, err := s.GetDocument(context.Background(), tc.resp.DocID, "user-1")

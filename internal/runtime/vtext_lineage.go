@@ -438,7 +438,7 @@ func buildMarkdownLineageContentItem(ownerID, sourcePath, title string, version 
 		OwnerID:     ownerID,
 		SourceType:  "file_version",
 		MediaType:   "text/markdown",
-		AppHint:     "vtext",
+		AppHint:     AgentProfileTexture,
 		Title:       fmt.Sprintf("%s %s", title, label),
 		FilePath:    fmt.Sprintf("%s#%s", sourcePath, label),
 		TextContent: content,

@@ -141,7 +141,7 @@ func extractPDFDocument(ctx context.Context, sourceName string, raw []byte) cont
 func extractDOCXDocument(ctx context.Context, sourceName string, raw []byte) contentExtraction {
 	extraction := contentExtraction{
 		MediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-		AppHint:   "vtext",
+		AppHint:   AgentProfileTexture,
 		Adapter:   "docx_pandoc_markdown",
 		Metadata:  map[string]any{"source_name": strings.TrimSpace(sourceName)},
 	}

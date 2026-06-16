@@ -3268,7 +3268,7 @@ func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
 		OwnerID:      "user-alice",
 		SourceType:   "derived_transcript",
 		MediaType:    "text/x-youtube-transcript",
-		AppHint:      "vtext",
+		AppHint:      AgentProfileTexture,
 		Title:        "Transcript",
 		SourceURL:    "https://www.youtube.com/watch?v=abc12345678",
 		CanonicalURL: "youtube://abc12345678/transcript/en",
