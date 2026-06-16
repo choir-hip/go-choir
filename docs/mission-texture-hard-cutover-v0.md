@@ -187,8 +187,7 @@ invariants / qualities / domain ramp (I/Q/D):
   identity -> browser product proof -> protocol canonization.
 
 variant (ranking function) V: current V=2; last ΔV=0 against the coarse
-variant, with platform publication control-route cutover locally supported and
-landing pending:
+variant, with platform publication control-route cutover landed and deployed:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
@@ -204,8 +203,7 @@ landing pending:
    compatibility-route deletion target test probes, the browser-public
    `/api/vtext` route registration, the product API tool allowlist shim,
    registered-router old-route normalization, direct Texture handler test
-   paths, and platform/proxy/internal publication control routes are discharged
-   for local scope;
+   paths, and platform/proxy/internal publication control routes are discharged;
 5. discharged: visible UI labels and import affordances are cut over to
    Texture and proven on staging through browser product evidence;
 6. discharged: the edit affordance surface has a common `patch_texture` tool
@@ -328,8 +326,8 @@ position / live conjectures / open edges:
   `/api/texture`, and `/api/vtext` remains only in explicit legacy-route
   refusal tests for this runtime slice. CI run `27587124142` passed and Node B
   staging health reported commit `247e28415bb7b5a656b9d83072288403666c9c8a`.
-- C14 supported for local route-control scope, landing pending: platform
-  publication control routes now use Texture paths
+- C14 supported for deployed route-control scope: platform publication control
+  routes now use Texture paths
   (`/api/platform/texture/publications`,
   `/internal/wire/platform/publications/texture`,
   `/internal/platform/publications/texture`, and
@@ -337,11 +335,14 @@ position / live conjectures / open edges:
   `/api/texture`. The retired public control route returns 404, platformd
   registered-route tests reject the old internal prefixes, and `/pub/vtext/...`
   remains separately classified as live public route identity until a redirect
-  and rollback policy exists.
+  and rollback policy exists. CI run `27587958358` passed, deploy job
+  `81562610983` deployed commit `019e7a9d78f94e78da91ae2ddc6200dd7dee0184`,
+  and staging route probes showed the new Texture control route reaches
+  method/auth gates while the old control route returns 404.
 
-next move: land the platform publication control-route cutover, monitor CI and
-Node B deploy identity, then probe staging so the old control route is absent
-while the new Texture control route reaches its expected method/auth gate.
+next move: choose the next highest-ΔV residue target among storage tables,
+file/app-id/metadata symbols, `/pub/vtext/...` route identity migration policy,
+the `edit_texture` compatibility alias, or final Texture Protocol v0.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

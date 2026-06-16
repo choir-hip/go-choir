@@ -859,21 +859,22 @@ Expected ΔV: 0 against coarse V=2, with bounded descent on the
 platform/internal publication-symbol sub-surface.
 
 Actual ΔV: 0 against V=2. The platform publication control-route sub-surface is
-locally discharged, with CI/deploy/staging proof still pending. Storage tables,
-file names, app ids, metadata keys, `/pub/vtext/...` public route identity,
-`edit_texture` compatibility alias, and Texture Protocol v0 remain open.
+discharged and deployed. Storage tables, file names, app ids, metadata keys,
+`/pub/vtext/...` public route identity, `edit_texture` compatibility alias, and
+Texture Protocol v0 remain open.
 
-Conjecture delta: supported locally that publication control routes can move to
-Texture naming without renaming live public article URLs.
+Conjecture delta: supported for deployed route-control scope that publication
+control routes can move to Texture naming without renaming live public article
+URLs.
 
 Protected surfaces: public proxy API routing, platformd internal routing, Wire
 autonomous publication, publication read/sync paths, frontend publish caller,
 and deployment routing.
 
-Admissible evidence class at this point: local route-focused tests, full
+Admissible evidence class reached: local route-focused tests, full
 touched-package tests, frontend build, runtime shard evidence, report-only
-doccheck, residue search, and diff check. CI, deploy identity, and staging route
-probe remain required before claiming deployed support.
+doccheck, residue search, diff check, CI, Node B deploy identity, and staging
+route probe.
 
 Receipts:
 - Focused local route tests passed:
@@ -894,12 +895,27 @@ Receipts:
   route 404 test, old platformd registered-route absence tests, and old
   `/api/vtext` platform-read negative cases.
 - `git diff --check`: pass.
+- Pushed behavior commit:
+  `019e7a9d78f94e78da91ae2ddc6200dd7dee0184`
+  (`runtime: cut platform publication routes to texture`).
+- CI run `27587958358` passed across Go vet/build, non-runtime tests, runtime
+  shards 0-3, integration smoke, TLA+, Docs Truth, frontend build, aggregate
+  gate, and Node B staging deploy job `81562610983`.
+- Staging health at `https://choir.news/health` reported proxy and sandbox
+  commit `019e7a9d78f94e78da91ae2ddc6200dd7dee0184`, deployed at
+  `2026-06-16T01:33:28Z`.
+- Unauthenticated staging route probe returned:
+  `GET /api/platform/texture/publications -> 405 {"error":"method not allowed"}`;
+  `POST /api/platform/texture/publications -> 401 {"error":"authentication required"}`;
+  `GET /api/platform/vtext/publications -> 404 {"error":"not found"}`;
+  `POST /api/platform/vtext/publications -> 404 {"error":"not found"}`.
 
 Rollback path: revert the future behavior commit to restore the old platform
 publication control routes and private publication reads.
 
-Heresy delta: repaired for local route-control scope; no storage/public-route
+Heresy delta: repaired for deployed route-control scope; no storage/public-route
 or protocol repair claimed.
 
-Open edge: land the behavior commit, verify CI/deploy/staging route behavior,
-then continue storage/app-id/file/metadata naming and protocol v0.
+Open edge: continue storage/app-id/file/metadata naming, `/pub/vtext/...` route
+identity migration policy, `edit_texture` compatibility alias deletion, and
+protocol v0.
