@@ -2495,6 +2495,47 @@ wording, model-policy key naming, table/database symbols, content import app
 hints for Markdown/plain text, stored route rows, and Universal Wire edition
 refs.
 
+## Landing Evidence: C36 Prompt Decision App Payload
+
+Mutation class: `red`.
+
+C36 is deployed-supported. New/current prompt-bar Texture decisions now return
+`app:"texture"` in browser-public submission status while preserving C35
+Texture actor identity and legacy `vtext` decision compatibility.
+
+Receipts:
+
+- Commit `7a9042323a676879afe93f1e6ed226eb3f74e82b`
+  (`runtime: return texture prompt decisions`) pushed to `origin/main`.
+- CI run `27605982668` passed:
+  `https://github.com/choir-hip/go-choir/actions/runs/27605982668`.
+- Docs Truth Check run `27605982675` passed.
+- FlakeHub publish run `27605982682` passed.
+- Deploy job `81618326388` passed inside CI run `27605982668`.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `7a9042323a676879afe93f1e6ed226eb3f74e82b`, deployed at
+  `2026-06-16T08:54:47Z`.
+- Targeted deployed Playwright/API proof recorded
+  `/tmp/choir-c36-prompt-decision.json`,
+  `/tmp/choir-c36-prompt-decision-poll.json`, and screenshot
+  `/tmp/choir-c36-prompt-decision.png`.
+- Prompt submission `f6de90dc-c21b-4531-8e5b-ef594a237713` completed and
+  returned `decision.app: "texture"` for Texture document
+  `80f1dd5b-0571-4bc6-bc92-675aa29e062f`.
+- Trace for that trajectory showed conductor first, then
+  `texture:80f1dd5b-0571-4bc6-bc92-675aa29e062f` with
+  `profile="texture"` and `role="texture"`, both completed.
+- The same trace had no `vtext:<doc_id>` actor and no `profile="vtext"` /
+  `role="vtext"` actor.
+- The deployed document reached two revisions: user instruction revision
+  `f2d4b27a-fbce-4dea-9c46-46488b699aa7` and appagent revision
+  `8599c1cf-e04f-40f2-92d0-0755e09db3f0` with metadata source
+  `patch_texture`.
+
+Rollback path: revert commit
+`7a9042323a676879afe93f1e6ed226eb3f74e82b`; C35 actor/profile identity remains
+separately revertible at commit `32b7d98a4e096e9d0399afc841f46de2981e80cb`.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2531,10 +2572,10 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C36 is locally repaired but
-not yet deployed: new/current prompt-bar Texture decisions return/store
-`app: "texture"` / `requested_app="texture"` while legacy `vtext` decisions
-remain accepted. Coarse V remains 2 because database/table names,
+variant (ranking function) V: current V=2; last ΔV: C36 deployed-supported the
+prompt decision payload slice: new/current prompt-bar Texture decisions
+return/store `app: "texture"` / `requested_app="texture"` while legacy `vtext`
+decisions remain accepted. Coarse V remains 2 because database/table names,
 `vtext_agent_revision` task type, prompt/tool schema wording, content import
 app hints, stored legacy routes, Universal Wire edition refs, deployed
 Universal Wire story-field proof, and protocol v0 remain.
@@ -2671,18 +2712,20 @@ identity repair into a forced workflow or role sequence. This slice leaves
 prompt submission `app: "vtext"`, Trace/front-end acceptance assertions,
 table/database symbols, and model-policy key naming for separate documented
 cuts.
-C36 is locally repaired pending commit/push/CI/deploy/staging proof: current
-prompt-bar Texture decisions now emit `app:"texture"` and
+C36 is deployed-supported for prompt decision app payload identity: current
+prompt-bar Texture decisions emit `app:"texture"` and
 `requested_app="texture"`, while runtime/frontend boundaries still accept
 legacy `vtext` decisions. Focused runtime tests, all four runtime shards,
-frontend build, and `git diff --check` passed locally. This slice excludes task
-type, tool profile, model-policy key, table/database, content app-hint, and
-stored route-row migration.
+frontend build, doccheck, CI run `27605982668`, deploy job `81618326388`,
+staging health, and targeted deployed prompt-bar/Trace proof passed. This slice
+excludes task type, tool profile, model-policy key, table/database, content
+app-hint, and stored route-row migration.
 
-next move: commit and push C36, monitor CI/deploy, verify staging build
-identity, then run deployed prompt-bar product proof that status decisions
-return `app:"texture"` while Trace still shows conductor before Texture and no
-legacy `vtext:<doc_id>` actor.
+next move: choose the next documented V=2 residue slice. The largest remaining
+current-name blockers are `vtext_agent_revision`, prompt/tool role wording,
+model-policy key naming, database/table symbols, content import app hints,
+stored legacy route rows, Universal Wire edition refs, deployed Universal Wire
+story-field proof, and protocol v0.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

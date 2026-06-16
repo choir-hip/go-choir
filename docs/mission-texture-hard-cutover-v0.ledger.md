@@ -4087,3 +4087,46 @@ Open edge: commit and push the repair, monitor CI/deploy, verify staging build
 identity, and run deployed proof that `/api/prompt-bar/submissions/{id}`
 returns `decision.app:"texture"` while Trace still shows conductor before the
 Texture actor and no legacy `vtext:<doc_id>` actor.
+
+## 2026-06-16 - Landing Evidence: C36 Prompt Decision App Payload
+
+Claim: C36 is deployed-supported for browser-public prompt decision app payload
+identity.
+
+Move: push the C36 behavior commit, monitor CI/deploy, verify staging identity,
+and run a focused deployed prompt-bar/Trace proof. Expected ΔV: repair the
+prompt decision payload residue without changing the coarse V=2 remaining
+storage/task/model-policy/route/protocol obligations.
+
+Actual ΔV: C36 landed and deployed; coarse V remains 2.
+
+Receipts:
+
+- Commit `7a9042323a676879afe93f1e6ed226eb3f74e82b`
+  (`runtime: return texture prompt decisions`) pushed to `origin/main`.
+- CI run `27605982668` passed.
+- Docs Truth Check run `27605982675` passed.
+- FlakeHub publish run `27605982682` passed.
+- Deploy job `81618326388` passed.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `7a9042323a676879afe93f1e6ed226eb3f74e82b`, deployed at
+  `2026-06-16T08:54:47Z`.
+- Targeted deployed Playwright/API proof recorded
+  `/tmp/choir-c36-prompt-decision.json`,
+  `/tmp/choir-c36-prompt-decision-poll.json`, and screenshot
+  `/tmp/choir-c36-prompt-decision.png`.
+- Prompt submission `f6de90dc-c21b-4531-8e5b-ef594a237713` completed with
+  `decision.app: "texture"` for Texture document
+  `80f1dd5b-0571-4bc6-bc92-675aa29e062f`.
+- Trace showed conductor before
+  `texture:80f1dd5b-0571-4bc6-bc92-675aa29e062f`, profile/role `texture`,
+  no `vtext:<doc_id>` actor, and no `profile="vtext"` / `role="vtext"` actor.
+- The deployed document had user instruction revision
+  `f2d4b27a-fbce-4dea-9c46-46488b699aa7` and appagent revision
+  `8599c1cf-e04f-40f2-92d0-0755e09db3f0` with metadata source
+  `patch_texture`.
+
+Open edge: task type, tool profile wording, model-policy key naming,
+database/table symbols, content import app hints, stored legacy route rows,
+Universal Wire edition refs, deployed Universal Wire story-field proof, and
+protocol v0 remain outside C36.
