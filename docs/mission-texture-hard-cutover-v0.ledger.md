@@ -4522,3 +4522,62 @@ Open edge: commit/push, monitor CI/deploy, verify staging identity, then run a
 deployed prompt-bar -> conductor -> Texture proof showing current Trace event
 kinds/summaries and synthesized run acceptance `texture_opened` evidence through
 public product routes.
+
+## 2026-06-16 - C39 Landing: Deployed Texture Trace Evidence Names
+
+Claim: C39 is deployed-supported for current Trace/run-acceptance evidence
+naming. The scope remains event/checkpoint/evidence projection only; storage
+symbols, stored route rows, Universal Wire story-field proof, and protocol v0
+remain outside this slice.
+
+Move: land, deploy, and run staging product-path proof. Expected ΔV: close the
+C39 deployed-support obligation without changing coarse V=2.
+
+Actual ΔV: C39 deployed-supported; coarse V remains 2.
+
+Receipts:
+
+- Behavior commit `bffad4d6013aafb8359e07baeab2d89b3a789a1b`
+  (`runtime: emit texture trace evidence names`) pushed to `origin/main`.
+- CI run `27610879275` passed, including Go vet/build, non-runtime tests,
+  integration-tagged smoke, TLA+ model check, Docs Truth Check, all four
+  internal/runtime shards, and staging deploy.
+- Deploy job `81634946340` passed.
+- Separate Docs Truth Check run `27610878863` passed.
+- FlakeHub publish run `27610878890` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `bffad4d6013aafb8359e07baeab2d89b3a789a1b`, deployed at
+  `2026-06-16T10:24:05Z`.
+- Deployed browser/API proof recorded
+  `/tmp/choir-c39-texture-trace-proof-1781605847169.json` and screenshot
+  `/tmp/choir-c39-texture-trace-proof-1781605847169.png`.
+- The proof registered/reused auth state for
+  `playwright-state-1781605508444-kodf7u@example.com`, submitted prompt-bar
+  submission `65dc8b95-05e1-4407-85ce-21218aadce3a`, and created Texture doc
+  `41e480f4-da5b-4467-bd4e-5cf325960d75`.
+- Prompt decision was `action:"open_app"`, `app:"texture"`,
+  `doc_id:"41e480f4-da5b-4467-bd4e-5cf325960d75"`, and initial loop
+  `d82bb148-e7f9-4301-a951-e5032db01012`.
+- Browser DOM proof observed two `data-window-app-id="texture"` windows, zero
+  legacy `vtext` windows, and two Texture app surfaces.
+- Public Trace trajectory
+  `65dc8b95-05e1-4407-85ce-21218aadce3a` showed conductor ->
+  `texture:41e480f4-da5b-4467-bd4e-5cf325960d75`, `agent_count:2`,
+  `first_texture_index:1`, and `first_super_index:-1`.
+- Trace logs exposed current event kinds
+  `texture.document_revision.created`, `texture.agent_revision.started`, and
+  `texture.agent_revision.progress`, with zero legacy `vtext.*` event kinds and
+  no `vtext revision` / `vtext decision` summary wording.
+- The proof observed zero forbidden browser-public internal requests to
+  `/internal/*`, `/api/agent/*`, `/api/prompts`, `/api/test/*`, or
+  `/api/events`.
+- Run acceptance synthesis via public
+  `/api/run-acceptances/synthesize` created
+  `runacc-49da5125339dded1c5b1` with
+  `acceptance_level:"staging-smoke-level"`, `state:"blocked"`, and checkpoints
+  `submitted` and `texture_opened`. The blocked state is expected for this
+  slice because it does not claim worker/package/promotion acceptance.
+
+Open edge: next high-ΔV move is storage/table and durable actor/stored-route
+residue, unless the deployed Universal Wire story-field proof becomes cheaper
+through product-path story creation. Protocol v0 remains last.

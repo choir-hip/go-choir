@@ -2827,10 +2827,9 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C39 local implementation
-and verification repaired current Trace/run-acceptance evidence naming while
-preserving legacy readability; landing and staging proof are pending. Coarse V
-remains 2 because C39 is not deployed-supported yet, and database/table names,
+variant (ranking function) V: current V=2; last ΔV: C39 is
+deployed-supported for current Trace/run-acceptance evidence naming while
+preserving legacy readability. Coarse V remains 2 because database/table names,
 stored legacy routes, Universal Wire edition refs, deployed Universal Wire
 story-field proof, and protocol v0 remain.
 Discharged:
@@ -3010,7 +3009,7 @@ evidence surfaces. Conjecture delta: new/current evidence should emit and derive
 Texture names while legacy stored `vtext.*` events and `vtext_opened`
 acceptance records remain readable. Rollback path: revert the single future
 behavior commit; do not rewrite stored event rows or acceptance records.
-C39 is locally supported but not yet deployed: current event constants now emit
+C39 is deployed-supported: current event constants now emit
 `texture.agent_revision.*`, `texture.document_revision.created`, and
 `texture.decision.recorded`; Trace summaries/tone and document event projection
 recognize current Texture plus legacy stored V-name events; new run-acceptance
@@ -3018,15 +3017,20 @@ synthesis emits `texture_opened` and Texture evidence wording while legacy
 `vtext_opened` records still derive staging-smoke state/invariants; active
 runtime prompts/errors/verifier messages on the touched paths now say Texture.
 Focused tests, comprehensive-tagged run-acceptance tests, runtime shards,
-doccheck, `git diff --check`, and scoped residue searches passed locally. The
-remaining scoped C39 non-test residue is explicit legacy compatibility plus one
-legacy prompt parser branch.
+doccheck, `git diff --check`, scoped residue searches, CI/deploy, staging
+identity, and deployed browser/API proof passed. Deployed proof for prompt-bar
+submission `65dc8b95-05e1-4407-85ce-21218aadce3a` created Texture doc
+`41e480f4-da5b-4467-bd4e-5cf325960d75`, showed conductor -> Texture Trace
+agents with no super-before-Texture route, observed current Texture event kinds
+with zero legacy `vtext.*` event kinds, and synthesized run acceptance
+`runacc-49da5125339dded1c5b1` with checkpoints `submitted` and
+`texture_opened`. The remaining scoped C39 non-test residue is explicit legacy
+compatibility plus one legacy prompt parser branch.
 
-next move: commit and push C39, monitor CI/deploy, verify staging identity, then
-run deployed prompt-bar -> conductor -> Texture proof that current Trace event
-kinds/summaries use Texture and synthesized run acceptance records use
-`texture_opened`. Keep storage/stored-route, Universal Wire story-field proof,
-and protocol work out of this slice.
+next move: choose the next high-ΔV slice toward V=1: storage/table and durable
+actor/stored-route residue, or deployed Universal Wire story-field proof if
+staging can create a story payload through product path without manual success
+seeding. Keep protocol work last.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
