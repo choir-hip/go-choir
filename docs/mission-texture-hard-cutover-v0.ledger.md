@@ -3878,3 +3878,42 @@ Remaining C34 edges are `database=vtext`, `vtext_*` tables, durable
 `vtext:<doc_id>` actor ids, `AgentProfileVText`, stored `/pub/vtext/...` rows,
 Universal Wire `Wire.vtext`, and protocol v0. Next move should choose one
 typed durable identity edge with compatibility and rollback evidence.
+
+## 2026-06-16 - Problem Checkpoint: C35 Durable Actor/Profile Identity Residue
+
+Claim: the next Texture hard-cutover edge is actor/profile identity, not another
+filesystem or UI label. No runtime repair is claimed in this move.
+
+Move: read-only inventory plus Problem Documentation First checkpoint. Expected
+ΔV: no repair decrease; convert durable actor/profile residue into a typed
+problem record with compatibility and rollback requirements.
+
+Actual ΔV: coarse V remains 2. C35 is documented as the next red-surface
+candidate slice.
+
+Receipts:
+
+- The previous invariant path named by the operating contract,
+  `docs/vtext-agentic-invariants-2026-06-13.md`, is absent; `rg --files docs |
+  rg 'vtext.*invariant|agentic.*invariant|vtext-agentic'` found
+  `docs/texture-agentic-invariants-2026-06-13.md`, which was read before this
+  checkpoint.
+- `rg -n "AgentProfileVText|role=vtext|profile=vtext|requested_app\".*vtext|requested_app.*AgentProfileVText|vtext_agent_revision|vtext:<|agent_id\":\"vtext|agent_id.*vtext:" internal/runtime internal/store internal/types frontend/tests internal/runtime/prompt_defaults -g '!frontend/dist/**' | wc -l`
+  found 431 current actor/profile residue hits.
+- The same search touched 54 files, including runtime profile/tool code, prompt
+  defaults, model policy, workflow verifier, agent revision submission, coagent
+  routing, persistence/API tests, and deployed frontend Trace assertions.
+- Focused code inventory showed new revision runs still write
+  `type="vtext_agent_revision"`, `agent_profile="vtext"`,
+  `agent_role="vtext"`, and `agent_id="vtext:<doc_id>"`; coagent handoffs and
+  verifier contracts also match `vtext:<doc_id>`.
+- Added `2026-06-16 - C35 Problem Checkpoint: Durable Actor/Profile Identity
+  Residue` to the paradoc with conjecture delta, protected surfaces,
+  admissible evidence, rollback path, and heresy delta.
+
+Open edge: no behavior change yet. The first admissible C35 behavior slice
+should centralize Texture actor/profile compatibility, keep old `vtext` runs and
+deliveries readable, and make one current write path emit `texture` identity
+with focused old-read/new-write proof. Do not fold `vtext_agent_revision` task
+type or model-policy key migration into that slice unless tests prove they must
+move together.
