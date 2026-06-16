@@ -3020,8 +3020,8 @@ func TestIsPlatformTextureReadRequest(t *testing.T) {
 		{http.MethodGet, "/api/texture/documents/doc-1", false},
 		{http.MethodGet, "/api/texture/documents/doc-1?read_owner=other-user", false},
 		{http.MethodPost, "/api/texture/documents/doc-1?read_owner=universal-wire-platform", false},
-		{http.MethodGet, "/api/texture/documents/doc-1?read_owner=universal-wire-platform", false},
-		{http.MethodGet, "/api/texture/revisions/rev-1?read_owner=universal-wire-platform", false},
+		{http.MethodGet, "/api/texture/documents?read_owner=universal-wire-platform", false},
+		{http.MethodGet, "/api/texture/revisions?read_owner=universal-wire-platform", false},
 		{http.MethodGet, "/api/universal-wire/stories?read_owner=universal-wire-platform", false},
 	}
 	for _, tc := range cases {
@@ -3885,6 +3885,18 @@ func TestProxyHealthReportsRedactedLifecycleAggregates(t *testing.T) {
 // TestVMctlRouting_GracefulDegradation tests that when vmctl is unreachable,
 // the proxy falls back to the static sandbox URL.
 func TestVMctlRouting_GracefulDegradation(t *testing.T) {
+	oldWindow := sandboxResolveRetryWindow
+	oldBaseDelay := sandboxResolveRetryBaseDelay
+	oldMaxDelay := sandboxResolveRetryMaxDelay
+	sandboxResolveRetryWindow = 100 * time.Millisecond
+	sandboxResolveRetryBaseDelay = time.Millisecond
+	sandboxResolveRetryMaxDelay = 5 * time.Millisecond
+	t.Cleanup(func() {
+		sandboxResolveRetryWindow = oldWindow
+		sandboxResolveRetryBaseDelay = oldBaseDelay
+		sandboxResolveRetryMaxDelay = oldMaxDelay
+	})
+
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
