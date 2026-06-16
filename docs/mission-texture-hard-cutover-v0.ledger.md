@@ -2383,3 +2383,50 @@ contract/app-launcher residue, not evidence against C23.
 
 Open edge: push the behavior commit, monitor CI/deploy, verify staging identity,
 and attempt deployed related-transclusion proof or record the smallest blocker.
+
+## 2026-06-16 - Deployed Evidence: Related Texture Metadata Keys
+
+Claim: deployed Choir proves the C23 current related-Texture metadata path:
+`related_textures` metadata, `texture_document` target kind, `texture:` inline
+refs, pinned related revision rendering, and newer-version indication.
+
+Move: push the C23 checkpoint and behavior commits, monitor CI/deploy, verify
+staging build identity, then run a temporary deployed Playwright proof that
+creates child and parent Texture documents through public authenticated
+`/api/texture` APIs, opens the parent through the deployed Texture UI, and
+asserts the related transclusion DOM.
+
+Expected ΔV: support C23 for deployed product scope; no coarse V decrease
+because broader storage/file/actor/source-contract residue and protocol v0
+remain open.
+
+Actual ΔV: C23 is supported for deployed related-transclusion scope. V remains
+2.
+
+Receipts:
+- Docs checkpoint commit:
+  `2bdeed0c docs: checkpoint related texture metadata keys`.
+- Behavior commit:
+  `201d2e5d74c68476c9a930fb32165abc6d1c7175 frontend: rename related texture metadata keys`.
+- CI run `27593972972` passed, including frontend build, Go vet/build,
+  non-runtime tests, integration smoke, runtime shards 0-3, TLA, Docs Truth
+  Check, and deploy job `81580494742`.
+- Separate Docs Truth Check run `27593973013` passed; FlakeHub publish run
+  `27593972981` passed.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `201d2e5d74c68476c9a930fb32165abc6d1c7175`, deployed at
+  `2026-06-16T04:24:18Z`.
+- Temporary deployed proof passed:
+  `GO_CHOIR_RUN_TEXTURE_RELATED_STAGING=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-related-staging.tmp.spec.js`.
+  The proof created a child Texture with two revisions, created a parent
+  Texture revision whose metadata used `related_textures` and
+  `target_kind: "texture_document"`, opened the parent via `?app=texture`, and
+  observed `data-texture-related-ref`, pinned revision id, current revision id,
+  `data-texture-related-has-newer-version="true"`, `Version pin`, `Newer
+  version available`, and the pinned snapshot text.
+
+Open edge: choose the next residue class. The strongest current candidates are
+stale source-contract/app-launcher expectations exposed by the broad
+`vtext-source-entities` run, durable metadata keys such as
+`canonical_vtext_source_path`, storage/file suffixes, durable actor ids, and
+the deployed Universal Wire story-field proof when staging has a story payload.

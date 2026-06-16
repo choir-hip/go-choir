@@ -1619,25 +1619,22 @@ position / live conjectures / open edges:
   source-label and empty-state app surface; deployed story-field proof remains
   open until staging has an edition story payload or a product path creates one
   without manually seeding success records.
-- C23 supported for local Texture related-transclusion metadata/context scope:
+- C23 supported for deployed Texture related-transclusion metadata/context scope:
   current frontend writers now prefer `related_textures`,
   `relatedTextures`, `texture_document`, `texture:` markdown refs, and
   Texture-named helper exports. The editor and markdown renderer keep explicit
   legacy read/parser fallback for `related_vtexts`, `relatedVTexts`, and
-  `vtext:` refs. Focused related-transclusion tests, frontend build, and
-  residue searches pass locally. Storage table names, `.vtext` file
-  suffixes/source paths, durable `vtext:` actor ids,
-  `canonical_vtext_source_path`, source-contract app-open expectations, and
-  protocol v0 remain adjacent residue.
+  `vtext:` refs. Focused related-transclusion tests, frontend build, residue
+  searches, CI, staging deploy identity, and deployed browser/API proof pass.
+  Storage table names, `.vtext` file suffixes/source paths, durable `vtext:`
+  actor ids, `canonical_vtext_source_path`, source-contract app-open
+  expectations, and protocol v0 remain adjacent residue.
 
-next move: commit and push C23, monitor CI/deploy/staging identity, and run a
-deployed Texture related-transclusion proof if a bounded product path is
-reachable without manually seeding success records. If deployed proof is not
-reachable, record the blocker precisely and select the next residue class
-among stale source-contract/app-launcher expectations, durable metadata keys,
-storage/file suffixes, durable actor ids, deployed Universal Wire story-field
-proof, and protocol v0. Keep protocol v0 unwritten until the remaining
-working-surface proofs are complete.
+next move: select the next bounded residue class among stale source-contract /
+app-launcher expectations, durable metadata keys, storage/file suffixes,
+durable actor ids, deployed Universal Wire story-field proof when a story
+payload is reachable, and protocol v0. Keep protocol v0 unwritten until the
+remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
