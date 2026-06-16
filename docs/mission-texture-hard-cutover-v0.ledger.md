@@ -4258,3 +4258,46 @@ Open edge: next pass should document the task/profile/model-policy payload
 residue before behavior changes. Table/database symbols, durable actor ids,
 stored route rows, Universal Wire edition refs, deployed Universal Wire
 story-field proof, and protocol v0 remain outside C37.
+
+## 2026-06-16 - Problem Checkpoint: Task/Profile/Model-Policy Payload Residue
+
+Claim: after C35-C37, task/profile/model-policy payload residue is the next
+bounded repair target. No runtime repair is claimed in this move.
+
+Move: read-only inventory and Problem Documentation First checkpoint. Expected
+ΔV: no repair decrease; convert the next payload residue into a typed problem
+with compatibility, rollback, and proof requirements.
+
+Actual ΔV: coarse V remains 2. The next behavior slice is scoped to
+`vtext_agent_revision`, prompt/tool role wording, and model-policy key naming,
+excluding table/database, durable stored actor-id, stored route-row, Universal
+Wire edition, and protocol work.
+
+Receipts:
+
+- `rg -n "vtext_agent_revision" internal/runtime internal/wirepublish frontend/tests internal/types -g '!frontend/dist/**' | wc -l`
+  found 57 current task-type hits.
+- Current task-type source hits include
+  `internal/runtime/vtext_agent_revision.go`, `internal/runtime/runtime.go`,
+  `internal/runtime/tools_vtext.go`, `internal/runtime/tool_profiles.go`,
+  `internal/runtime/runtime_persistence.go`,
+  `internal/runtime/vtext_workflow_verifier.go`,
+  `internal/runtime/universal_wire.go`, and
+  `internal/wirepublish/eligibility.go`.
+- `rg -n "AgentProfileVText|\brole=vtext\b|\bprofile=vtext\b|\"role\"\s*:\s*\"vtext\"|agent_profile\"\s*:\s*\"vtext\"|agent_role\"\s*:\s*\"vtext\"|requested_app\".*vtext|requested_app.*AgentProfileVText" internal/runtime frontend/tests internal/types -g '!frontend/dist/**' | wc -l`
+  found 325 scoped profile/role/requested-app hits.
+- `internal/runtime/tool_profiles.go` defines `AgentProfileVText = "vtext"`,
+  infers `vtext_agent_revision` as `AgentProfileVText`, defaults some requested
+  apps to `AgentProfileVText`, and still tells conductor to prefer
+  `spawn_agent with role=vtext`.
+- Current prompt defaults in `internal/runtime/prompt_defaults/processor.md`,
+  `reconciler.md`, `super.md`, `co-super.md`, and `core.md` still teach VText /
+  `role=vtext` wording for current model-visible instructions.
+- Model-policy residue centers on `[roles.vtext]` and `AgentProfileVText` in
+  `internal/runtime/model_policy.go`, `internal/runtime/model_policy_test.go`,
+  `internal/runtime/texture_identity_test.go`, and
+  `docs/mission-runtime-model-context-substrate-v0.md`.
+
+Open edge: implement current Texture task/profile/model-policy names with
+legacy read/fallback compatibility, then prove with focused runtime/model-policy
+tests, runtime shards, CI/deploy identity, and deployed prompt-bar/Trace proof.

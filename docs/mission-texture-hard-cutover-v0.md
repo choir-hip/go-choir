@@ -2689,6 +2689,108 @@ Task type, tool profile wording, model-policy keys, table/database symbols,
 durable actor ids, stored route rows, Universal Wire edition refs, and protocol
 v0 remain outside C37.
 
+## Problem Checkpoint: Task/Profile/Model-Policy Payload Residue
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+schema, prompt default, tool schema, model routing, API response, test, or
+persistent state changed in this checkpoint.
+
+Read-only inventory on 2026-06-16 shows that, after C35-C37, current writes can
+use Texture actor/profile and app-hint payloads, but several payload/control
+surfaces still teach the old V-name as the current document-agent route.
+
+Receipts:
+
+- Scoped task-type search
+  `rg -n "vtext_agent_revision" internal/runtime internal/wirepublish frontend/tests internal/types -g '!frontend/dist/**' | wc -l`
+  found 57 current hits. Current source hits include
+  `internal/runtime/vtext_agent_revision.go`, `internal/runtime/runtime.go`,
+  `internal/runtime/tools_vtext.go`, `internal/runtime/tool_profiles.go`,
+  `internal/runtime/runtime_persistence.go`,
+  `internal/runtime/vtext_workflow_verifier.go`,
+  `internal/runtime/universal_wire.go`, and
+  `internal/wirepublish/eligibility.go`.
+- Scoped profile/role/requested-app search
+  `rg -n "AgentProfileVText|\brole=vtext\b|\bprofile=vtext\b|\"role\"\s*:\s*\"vtext\"|agent_profile\"\s*:\s*\"vtext\"|agent_role\"\s*:\s*\"vtext\"|requested_app\".*vtext|requested_app.*AgentProfileVText" internal/runtime frontend/tests internal/types -g '!frontend/dist/**' | wc -l`
+  found 325 current hits.
+- `internal/runtime/tool_profiles.go` still defines
+  `AgentProfileVText = "vtext"`, infers `vtext_agent_revision` runs as
+  `AgentProfileVText`, defaults some requested apps to `AgentProfileVText`, and
+  tells conductor: "Prefer spawn_agent with role=vtext" and "Default to opening
+  vtext".
+- Current prompt defaults still use user/model-visible old-name wording:
+  `internal/runtime/prompt_defaults/processor.md` and
+  `internal/runtime/prompt_defaults/reconciler.md` instruct
+  `spawn_agent` with `role=vtext`; `prompt_defaults/super.md` and
+  `prompt_defaults/co-super.md` refer to "a vtext owner" and "canonical vtext
+  revisions"; `prompt_defaults/core.md` still says "VText owns canonical
+  document versions."
+- Model-policy residue is centered on `[roles.vtext]` and
+  `AgentProfileVText`: `internal/runtime/model_policy.go` embeds
+  `[roles.vtext]` defaults, resolves `AgentProfileVText`, and currently
+  normalizes `texture` back to `AgentProfileVText`; tests in
+  `internal/runtime/model_policy_test.go` and
+  `internal/runtime/texture_identity_test.go` assert legacy `[roles.vtext]`
+  compatibility.
+- `internal/runtime/tools_model_verify.go` still describes `vtext` as a
+  model-policy role example, and deployed/legacy tests still cover
+  `role:"vtext"` handoffs and Trace agents.
+
+Conjecture delta: the next repair should make new/current task/profile/model
+policy payloads say Texture without deleting legacy reads. The cutover must
+separate three compatibility surfaces: run task type, prompt/tool affordance
+role strings, and model-policy TOML keys. A blind rename would risk orphaning
+existing runs, breaking worker update routing, or changing provider/model
+selection.
+
+Protected surfaces: run metadata `type`, `agent_profile`, `agent_role`, and
+`requested_app`; tool schemas and tool-loop role normalization; conductor,
+processor, reconciler, super, co-super, and Texture prompt defaults;
+workflow verifier predicates; wire-publication eligibility; model-policy
+resolution/provider routing; frontend deployed acceptance assertions; and
+legacy run/Trace evidence.
+
+Next behavior slice design:
+
+- Introduce current `texture_agent_revision` task-type emission for new/current
+  Texture revision runs while accepting legacy `vtext_agent_revision` anywhere
+  the runtime reads, matches, wakes, verifies, or publishes existing runs.
+- Update current prompt defaults and tool-visible role wording to say Texture /
+  `role=texture`, while preserving legacy `role=vtext` as an accepted input at
+  the tool-schema/normalization boundary until a deletion receipt proves it is
+  unused.
+- Prefer `[roles.texture]` for current per-computer model policy, fall back to
+  `[roles.vtext]` for existing policies, and keep platform catalog/provider
+  semantics unchanged.
+- Keep table/database names, durable stored actor ids, stored public route
+  rows, Universal Wire edition refs, and protocol v0 out of this slice.
+- Avoid adding runtime semantic decision trees or role-sequence gates; this is a
+  payload/name compatibility repair, not a workflow repair.
+
+Admissible evidence class for the future behavior slice:
+
+- Focused tests proving new revision runs emit `texture_agent_revision` and
+  legacy `vtext_agent_revision` records still authorize Texture write tools,
+  persistence, verifier checks, worker deliveries, and wire publication
+  eligibility.
+- Tool-schema and prompt-default tests proving current visible affordances use
+  `role=texture` / Texture wording while legacy `role=vtext` inputs still
+  normalize.
+- Model-policy tests proving `[roles.texture]` is selected for current policy
+  and `[roles.vtext]` remains a fallback for existing computer policies.
+- Runtime shard suite, frontend build or focused deployed acceptance tests as
+  touched, CI, staging deploy identity, and deployed prompt-bar/Trace proof
+  that conductor -> Texture still has no super-before-Texture route.
+
+Rollback path for the later behavior slice: revert the behavior commit, leaving
+old `vtext_agent_revision`, `role=vtext`, and `[roles.vtext]` behavior in
+place. No stored run, agent, table, or policy rows should be rewritten in this
+slice without a separate migration and rollback ref.
+
+Heresy delta: discovered current payload/control residue after the C35-C37
+repairs. No runtime repair is claimed. Repair target is current
+task/profile/model-policy naming with legacy read compatibility.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2725,13 +2827,12 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C37 deployed-supported the
-content app-hint payload slice: new/current text-like Texture content
-projections and prompt-bar content decisions emit `app_hint:"texture"` while
-legacy `vtext` hints remain accepted. Coarse V remains 2 because
-database/table names, `vtext_agent_revision` task type, prompt/tool schema
-wording, model-policy keys, stored legacy routes, Universal Wire edition refs,
-deployed Universal Wire story-field proof, and protocol v0 remain.
+variant (ranking function) V: current V=2; last ΔV: read-only checkpoint
+documented the task/profile/model-policy payload residue after C37; no runtime
+repair decrease is claimed. Coarse V remains 2 because database/table names,
+`vtext_agent_revision` task type, prompt/tool schema wording, model-policy
+keys, stored legacy routes, Universal Wire edition refs, deployed Universal
+Wire story-field proof, and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -2883,13 +2984,17 @@ frontend build, doccheck, diff checks, CI run `27607329387`, deploy job
 slice excludes `vtext_agent_revision`, tool/profile wording, model-policy keys,
 table/database/storage symbols, durable actor ids, stored route rows, Universal
 Wire edition refs, and protocol v0.
+The task/profile/model-policy checkpoint is now documented: scoped inventory
+found 57 `vtext_agent_revision` hits and 325 scoped profile/role/requested-app
+hits, plus current prompt-default and `[roles.vtext]` model-policy residue. No
+runtime repair is claimed by that checkpoint.
 
-next move: perform a read-only inventory and Problem Documentation First
-checkpoint for the next payload residue slice: `vtext_agent_revision` task
-type, prompt/tool profile wording, and model-policy key naming. Do not make
-behavior changes before the checkpoint names compatibility, rollback, and proof
-requirements, and do not fold table/database or stored route-row migration into
-that slice.
+next move: implement the first task/profile/model-policy behavior slice:
+current Texture revision runs and current visible role/model-policy affordances
+should use Texture naming, while legacy `vtext_agent_revision`, `role=vtext`,
+and `[roles.vtext]` remain readable/fallback inputs. Keep table/database,
+durable stored actor-id, stored route-row, Universal Wire edition, and protocol
+work out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
