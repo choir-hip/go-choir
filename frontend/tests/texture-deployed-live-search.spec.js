@@ -1,10 +1,27 @@
 import { test, expect } from '@playwright/test';
 import { setupVirtualAuthenticator, removeVirtualAuthenticator } from './helpers/webauthn.js';
+import { registerPasskey } from './helpers/auth.js';
+import { waitForDesktopReady } from './helpers/auth-state.js';
 
 const BASE_URL = process.env.CHOIR_DEPLOYED_BASE_URL || 'https://choir.news';
 
 test.use({ trace: 'on', video: 'on', screenshot: 'on' });
-test.setTimeout(480_000);
+test.setTimeout(600_000);
+
+async function waitForStagingReady(page, timeout = 180_000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const health = await page.evaluate(async () => {
+      const res = await fetch('/health', { credentials: 'include' });
+      return res.ok ? res.json() : { status: 'error', upstream: 'error' };
+    });
+    if (health.status === 'ok' && health.upstream === 'ok') {
+      return health;
+    }
+    await page.waitForTimeout(5000);
+  }
+  throw new Error('staging health never reached status=ok upstream=ok');
+}
 test.skip(
   process.env.GO_CHOIR_RUN_DEPLOYED_LIVE_SEARCH !== '1',
   'set GO_CHOIR_RUN_DEPLOYED_LIVE_SEARCH=1 to verify deployed prompt-bar -> Texture live search'
@@ -31,11 +48,9 @@ async function fetchJSON(page, path) {
 
 async function registerAndLoadDesktop(page, email) {
   await page.goto(BASE_URL);
-  await page.getByRole('textbox', { name: 'Email' }).fill(email);
-  await page.getByRole('button', { name: /register with passkey/i }).click();
-  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 30_000 });
+  await registerPasskey(page, email, BASE_URL);
   await page.reload();
-  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 20_000 });
+  await waitForDesktopReady(page, 120_000);
 }
 
 async function waitForPromptDecision(page, submissionId, timeout = 150_000) {
@@ -181,6 +196,8 @@ test('deployed prompt-bar Texture flow uses live search for current 2026 evidenc
 
   try {
     await registerAndLoadDesktop(page, uniqueEmail());
+    const health = await waitForStagingReady(page);
+    console.log('staging health:', JSON.stringify(health.build || health));
 
     const prompt = [
       'Create a texture briefing about what is new in AI infrastructure news today, June 16, 2026.',
