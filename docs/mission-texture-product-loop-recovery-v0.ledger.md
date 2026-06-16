@@ -283,3 +283,148 @@ window. Product-path assertions over metadata caught that evidence gap.
 Open edge: this remains local proof only. No commit, CI, Node B deploy identity,
 or deployed browser/product-path proof exists yet. Full docs residue
 classification is still open.
+
+## 2026-06-16 - Deployed Texture Product Loop Recovered (V 5 -> 0)
+
+Move: land the no-compatibility Texture cutover repair, force a staging deploy
+for the deployed behavior commit, and run public product-path acceptance against
+`https://choir.news`.
+
+Code/doc lineage:
+
+- problem-documentation checkpoint:
+  `454c7300 docs: record Texture product-loop recovery mission`;
+- behavior repair: `9a44fac8 fix: restore Texture product loop after cutover`;
+- CI-stability repair:
+  `689267df test: stabilize proxy vmctl fallback coverage`;
+- pushed/deployed behavior SHA:
+  `689267dff0cd561395dfb99a4285256716e35740`.
+
+Verification receipts before deploy:
+
+- focused runtime Texture tests passed;
+- `nix develop -c scripts/go-test-runtime-shards` passed;
+- `nix develop -c go test ./internal/proxy ./internal/platform ./internal/store ./cmd/doccheck`
+  passed;
+- `npm run build` from `frontend/` passed with pre-existing
+  `UniversalWireApp.svelte` unused export/CSS warnings and the existing Vite
+  chunk-size warning;
+- `git diff --check` passed;
+- `git grep -n -i vtext -- ':!docs/**'` returned no non-doc hits.
+
+CI/deploy receipts:
+
+- push CI run `27629664781` passed for
+  `689267dff0cd561395dfb99a4285256716e35740`; staging deploy was skipped
+  because the last pushed commit was test-only;
+- forced staging workflow run `27629794781` passed;
+- deploy job `81701750360` passed;
+- `https://choir.news/health` reported proxy and sandbox
+  `commit/deployed_commit=689267dff0cd561395dfb99a4285256716e35740`,
+  `deployed_at=2026-06-16T15:46:50Z`.
+
+Primary deployed product-path proof:
+
+- authenticated staging user:
+  `38756763-7956-49f4-8c8d-d92b71dda9a9`;
+- prompt-bar submission / trajectory:
+  `54517080-cffb-4586-9a43-bb011859be7d`;
+- prompt:
+  `Texture acceptance 1781625366937: research what changed in AI infrastructure news today, ask a researcher for current evidence, then revise the Texture with a concise sourced brief. Do not answer from memory.`;
+- Texture document:
+  `3c38eb57-da24-44df-9d44-180ccf78b0c3`;
+- initial Texture loop:
+  `3da77550-fa50-4c29-8c3a-43c768d23088`;
+- researcher:
+  `ff209210-668f-416e-b7f9-c35eb1724c8d`;
+- evidence wake loops:
+  `22b96f3f-85df-4050-8af1-dbb607b29a0d` and
+  `92352a1a-ded0-4d60-bde3-17cb6000c4b2`;
+- final trajectory state: `completed`, `live=false`;
+- agents: conductor completed, Texture completed with three runs, researcher
+  completed with one run;
+- edges: conductor -> Texture, Texture -> researcher, researcher -> Texture;
+- no prompt-bar-to-super-before-Texture edge appeared;
+- revision list reached v3:
+  `86f3bf16-cdf6-43be-b0a3-176996c6901b`, appagent-authored, with one
+  consumed worker update and no pending worker update;
+- v2:
+  `a548f4c7-9966-400a-be6e-512e91c1fd85`, appagent-authored, consumed the
+  first researcher update and recorded the second as pending because it arrived
+  after the scheduled checkpoint;
+- v1:
+  `665db922-d1ab-4876-842e-9287e3649941`, first Texture working draft;
+- v0:
+  `83a45c93-24da-4e2c-a8d5-41e0119b55ba`, intentionally blank
+  prompt-bar instruction revision with the original prompt preserved in
+  metadata/intake;
+- direct UI proof opened
+  `https://choir.news/?app=texture&doc=3c38eb57-da24-44df-9d44-180ccf78b0c3`,
+  rendered `[data-texture-app]` and `[data-texture-intake]`, showed the prompt
+  text and the v3 sourced brief, and saved screenshot
+  `/tmp/choir-texture-ui-doc.png`.
+
+Run acceptance synthesis:
+
+- researcher proof acceptance record:
+  `runacc-e27492fe9a16fc636550`, target
+  `texture-product-loop-recovery-v0`, trajectory
+  `54517080-cffb-4586-9a43-bb011859be7d`;
+- level/state: `staging-smoke-level` / `blocked`;
+- passed checkpoints: `submitted`, `texture_opened`;
+- passed invariants: `product_path_observed`, `worker_mutation_bounded`,
+  `promotion_not_overclaimed`, `checkpoint_causal_order`;
+- blocked verifier contract: `export-level-product-path`, because the current
+  synthesizer recognizes super/worker or package/adoption paths and does not
+  yet elevate Texture-created researcher evidence to an accepted level.
+
+Additional super/worker probe:
+
+- authenticated staging user:
+  `58e7872b-d3ca-470d-9c3e-32c2112bc7e3`;
+- prompt-bar submission / trajectory:
+  `5ec87f80-c6e6-4296-9355-2eb5f50700c4`;
+- Texture document:
+  `c8e66931-d7e8-47f7-90df-20ccbd11a664`;
+- Texture requested super execution, super leased worker VM
+  `vm-e711264d117f6409a376fd58c930c98d` / worker
+  `worker-8474adafd0af601d`, and delegation events were observed;
+- acceptance record:
+  `runacc-a2bd46027d5d836cb06e`, target
+  `texture-product-loop-recovery-v0-super-worker-proof`;
+- level/state: `staging-smoke-level` / `blocked`;
+- passed checkpoints: `submitted`, `texture_opened`, `super_requested`,
+  `worker_leased`;
+- blocked checkpoint: `worker_delegated` with last observed state
+  `running` / `worker_observed` for worker loop
+  `901b8a08-a388-4e94-a66b-9827a5aaa5f4`;
+- direct UI screenshot saved `/tmp/choir-texture-super-worker-ui.png`.
+
+Expected ΔV: 5 -> 0 for the Texture product-loop recovery mission, with a
+separate residual acceptance-model/live-worker axis recorded rather than hidden.
+
+Actual ΔV: 5 -> 0. The deployed product path now proves owner-legible
+prompt-bar Texture intake, Texture-first routing, full first-turn affordance in
+local tests, Texture-created researcher work, worker evidence returning to the
+same Texture context, pending wake cleanup, and V2+/V3 revisions from that
+evidence. The staging health identity matches the pushed behavior commit and
+the direct UI proof renders the recovered Texture document.
+
+Residual risks / next realism axis:
+
+- the current `RunAcceptanceRecord` state machine under-accepts
+  Texture-created researcher evidence; it records the proof as
+  `staging-smoke-level/blocked` even though the product trajectory completed
+  and produced V3 from researcher evidence;
+- the optional super/worker probe reached vmctl lease but did not reach a
+  terminal worker delegation checkpoint before the trace completed;
+- search-provider outages occurred during the researcher proof, though Brave
+  succeeded and the artifact incorporated current imported evidence;
+- historical/background docs still contain retired-name discussion as historical
+  evidence. The live non-doc surface is clean by `git grep`.
+
+Settlement: settled for the no-compatibility Texture product-loop recovery
+mission. Do not claim promotion-level or export-level acceptance from these
+records. The next mission should either teach run acceptance about
+Texture-created researcher evidence or repair the live worker delegation
+completion path.

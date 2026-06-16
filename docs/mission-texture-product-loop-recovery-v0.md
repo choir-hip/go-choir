@@ -193,7 +193,7 @@ Minimum product-loop proof:
 
 ## Parallax State
 
-status: open_handoff
+status: settled
 
 mission conjecture: if the live codebase first deletes the retired ontology
 without compatibility shims, and only then repairs/proves the deployed
@@ -235,13 +235,15 @@ invariants / qualities / domain ramp (I/Q/D):
   verification; then run staging browser proof against `https://choir.news`
   with a real prompt-bar submission and public product APIs.
 
-variant (ranking function) V: current V=5; last ΔV: 6 -> 5 after adding local
-product-path proof that Texture-created researcher and persistent-super work can
-return evidence to the same Texture context, wake Texture, and produce V2+
-revisions whose metadata records the consumed worker update. Owner-legible
-prompt-bar intake and full first-turn affordance are also locally supported.
-Docs residue, commit/CI/deploy identity, and deployed product-loop proof remain
-open:
+variant (ranking function) V: current V=0; last ΔV: 5 -> 0 after landing the
+repair, forcing staging deploy, and proving the deployed prompt-bar -> conductor
+-> Texture -> researcher -> Texture loop on `https://choir.news`. The product
+trajectory completed with Texture-first routing, owner-legible intake, worker
+evidence back into the same Texture context, and V3 from that evidence. The
+only remaining axes are explicitly residual: run-acceptance synthesis does not
+yet elevate Texture-created researcher evidence to an accepted level, and an
+optional super/worker proof leased a worker but did not observe terminal worker
+delegation before trace completion.
 
 1. completed: document the no-compatibility owner override and
    cutover-before-repair order;
@@ -275,12 +277,13 @@ open:
    revisions from that evidence. The repair also fixed revision metadata so a
    scheduled worker wake records the consumed evidence window even when the
    durable checkpoint has already caught up;
-9. partially supported: manual-seeding witnesses have product-path replacements
-   for researcher and super evidence, and `scripts/go-test-runtime-shards`
-   passes locally. Commit, push, CI, deploy, staging identity, and deployed
-   browser acceptance remain open;
-10. open: run deployed browser acceptance proving no old live ontology plus
-   V2+ from downstream evidence.
+9. completed: manual-seeding witnesses have product-path replacements for
+   researcher and super evidence, `scripts/go-test-runtime-shards` passed
+   locally, behavior commit `689267dff0cd561395dfb99a4285256716e35740` passed
+   CI/deploy, and staging health reported the deployed SHA;
+10. completed: deployed browser/product-path acceptance proved no old live
+   non-doc ontology, prompt-bar Texture intake, no direct prompt-bar-to-super
+   route before Texture, and V2+/V3 from downstream researcher evidence.
 
 budget: one urgent red-surface fix-forward mission before M3 resumes. Broad
 rename/deletion is authorized because the owner explicitly values coherent
@@ -306,7 +309,9 @@ id, Texture doc id, Texture run id, tool definition/tool choice evidence,
 worker run id(s), worker evidence payload, revision list proving V2+ from that
 evidence, Trace/diagnosis proof of no super-before-Texture, CI run, deploy run,
 staging health commit, and residual risk note. No rollback compatibility proof
-is required or desired.
+is required or desired. Final deployed evidence is recorded in
+`docs/mission-texture-product-loop-recovery-v0.ledger.md` under
+`2026-06-16 - Deployed Texture Product Loop Recovered (V 5 -> 0)`.
 
 heresy delta: discovered: compatibility posture let a broken artifact loop hide
 behind rename progress. Repaired locally: first-turn exact tool imprisonment,
@@ -348,36 +353,40 @@ position / live conjectures / open edges:
 - C9 supported locally: detector behavior is preserved while detector source and
   tests no longer contain grep-visible retired-name literals. `cmd/doccheck`
   still passes.
-- C10 active: full docs residue remains too broad to call the hard cutover
-  settled. Current high-read docs edited by the docs subagent must be reviewed
-  and committed intentionally, while historical/background docs need explicit
-  classification rather than silent conversion.
-- C11 supported locally: owner-legible prompt-bar intake does not require
+- C10 settled for live surfaces: non-doc residue proof is clean. Historical
+  docs that mention retired names remain classified as historical/background
+  evidence, not live runtime surface.
+- C11 supported and deployed: owner-legible prompt-bar intake does not require
   stuffing the raw prompt into canonical document prose. The API exposes
-  `intake_prompt` and the frontend renders it separately from the editor body.
-  Staging browser proof is still required.
-- C12 supported locally: broad `required` first-turn tool choice allows the
+  `intake_prompt`, the frontend renders it separately from the editor body, and
+  staging UI proof rendered `[data-texture-intake]`.
+- C12 supported and deployed locally-by-test/staging-by-effect: broad
+  `required` first-turn tool choice allows the
   model to emit both a write and researcher spawn in the same first Texture
   response, and both effects persist on the prompt-bar trajectory.
-- C13 supported locally: Texture-created researcher and persistent-super runs
+- C13 supported and deployed: Texture-created researcher and persistent-super runs
   can return `update_coagent` evidence to `texture:<docID>` on the same
   prompt-bar trajectory; Texture wakes and writes V2+ revisions from those
-  packets without manual seeding.
+  packets without manual seeding. Staging proof reached V3 from researcher
+  evidence.
 - C14 supported locally: worker evidence revision metadata now summarizes the
   scheduled evidence window from the previous Texture head when the stored
   controller checkpoint has already reached the scheduled message. This repairs
   a proof gap without weakening worker-message eligibility or treating
   Texture-to-super assignments as Texture evidence.
-- C15 supported locally: full runtime shards pass after repairing corrupted
+- C15 supported and deployed: full runtime shards pass after repairing corrupted
   hard-cutover tests that rejected canonical Texture fields/role keys.
+- C16 residual: `RunAcceptanceRecord` synthesis is not yet aligned with
+  Texture-created researcher evidence. The researcher trajectory synthesized
+  `runacc-e27492fe9a16fc636550` as `staging-smoke-level/blocked` despite
+  completed V3 product proof. A separate super/worker probe synthesized
+  `runacc-a2bd46027d5d836cb06e`, passed `submitted`, `texture_opened`,
+  `super_requested`, and `worker_leased`, but remained blocked at
+  `worker_delegated` with the worker still observed as running.
 
-next move: turn local proof into a landable settlement package. First classify
-and intentionally stage the broad docs residue edits and mission evidence so the
-first commit documents the discovered product-loop problems before any behavior
-fix commit lands. Then commit/push the repair set, monitor CI and deploy, verify
-staging commit identity, and run deployed browser/product-path acceptance on
-`https://choir.news`. Do not regress the clean non-doc residue proof, full
-first-turn affordance, or no-compatibility override.
+next move: promote settlement evidence outward only where useful, then start a
+separate mission for the residual acceptance-model/live-worker axis. Do not
+reopen compatibility shims or old route aliases as a workaround.
 
 ledger file: docs/mission-texture-product-loop-recovery-v0.ledger.md
 
@@ -392,9 +401,11 @@ learning state: the central learning is retained here until promoted outward:
 Texture mission acceptance must prove both ontology coherence and the artifact
 loop. Compatibility progress is not progress.
 
-settlement: settled only when the live codebase has no old-ontology runtime
-surfaces, a pushed behavior commit passes CI, deploys to Node B, staging health
-reports that commit, and browser/product-path acceptance proves prompt-bar
-Texture intake, Texture-first routing, Texture-created downstream worker
-evidence, and V2+ revision from that evidence. If any of those remain absent,
-exit `open_handoff` or `blocked`, not settled.
+settlement: settled for this mission. The live non-doc codebase has no
+old-ontology runtime surfaces, pushed behavior commit
+`689267dff0cd561395dfb99a4285256716e35740` passed CI and deployed to Node B,
+staging health reports that commit, and deployed browser/product-path
+acceptance proved prompt-bar Texture intake, Texture-first routing,
+Texture-created downstream researcher evidence, and V2+/V3 revisions from that
+evidence. Do not claim export-level, promotion-level, or continuation-level
+acceptance from the synthesized records; those remain separate residual axes.
