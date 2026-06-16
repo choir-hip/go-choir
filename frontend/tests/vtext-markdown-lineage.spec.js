@@ -546,7 +546,7 @@ test('Migrated source gaps can be repaired as canonical VText revisions', async 
   expect(repaired.parent_revision_id).toBe(imported.current_revision_id);
   expect(repaired.content).toContain(`[2](source:${sourceEntityID})`);
   expect(repaired.content).not.toContain(`[2](source:${sourceEntityID})(source:`);
-  expect(repaired.metadata?.source).toBe('vtext_source_gap_repair');
+  expect(repaired.metadata?.source).toBe('texture_source_gap_repair');
   expect(repaired.metadata?.source_gaps).toBeUndefined();
   expect(repaired.metadata?.source_entities).toHaveLength(1);
   expect(repaired.metadata?.source_entities?.[0]?.evidence?.state).toBe('confirms');

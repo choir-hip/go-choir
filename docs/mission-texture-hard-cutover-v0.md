@@ -635,6 +635,56 @@ Next behavior slice design:
   proof through the source repair or source artifact product path if the
   behavior reaches staging.
 
+## Local Repair: Source Repair Metadata Labels
+
+Mutation class: `orange`, because this changes new revision metadata emitted by
+the source repair and source artifact attachment product paths, plus frontend
+source content item provenance metadata.
+
+Conjecture delta: new source repair/artifact metadata can emit Texture-named
+provenance values without changing source entity structures, source routes,
+storage tables, `.vtext` alias behavior, durable actor ids, or platform
+publication attestations.
+
+Protected surfaces: source gap repair revision metadata, source artifact
+attachment revision metadata, frontend source content item creation provenance,
+source repair tests, source artifact attachment tests, and markdown-lineage
+browser tests.
+
+Local evidence on 2026-06-16:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextSourceGapRepairCreatesRevision|TestVTextSourceArtifactAttachmentCreatesMetadataOnlyRevision'
+  -count=1` passed.
+- `npm --prefix frontend run build` passed. Vite reported the existing
+  Universal Wire warnings for unused `currentUser` and `.wire-state`
+  selectors.
+- Live residue search
+  `rg -n "vtext_source_gap_repair|vtext_source_artifact_attachment|vtext_source_artifact_ui" internal frontend/src frontend/tests -g '!frontend/dist/**'`
+  returned no hits.
+- Texture-name search now finds only the intended emitters and focused
+  assertions for `texture_source_gap_repair`,
+  `texture_source_artifact_attachment`, and
+  `texture_source_artifact_ui`.
+- Local Playwright attempt
+  `npm --prefix frontend run e2e -- --project=chromium
+  tests/vtext-markdown-lineage.spec.js --grep "Migrated source gaps"`
+  failed before app execution because no local server was listening on
+  `localhost:4173`; this is local harness availability, not product behavior
+  evidence.
+
+Rollback path: restore the old emitted `vtext_source_*` metadata values and
+test expectations if source repair, source artifact attachment, or downstream
+metadata readers regress.
+
+Heresy delta: repaired locally for new source repair/artifact metadata labels;
+broader metadata, storage, actor-id, app-package, and platform publication
+provenance residue remains discovered and out of scope.
+
+Open edge: push the repair, monitor CI/deploy, verify staging identity, and run
+a deployed product proof for source gap repair metadata through the
+browser/API path.
+
 ## Problem Checkpoint: `edit_texture` Compatibility Alias
 
 Mutation class: `green` documentation and evidence only. No runtime behavior,
@@ -1012,19 +1062,22 @@ position / live conjectures / open edges:
   CI run `27591417530`, deploy job `81572916777`, staging identity for commit
   `2f13598d37be2807f8cefe9258300a1a798a081c`, and deployed Playwright proof
   for signed-out auth overlay plus legacy `app=vtext` deep link all pass.
-- C20 active: source repair/artifact provenance labels are a small metadata
-  residue class. New source repair and source artifact paths still emit
-  `vtext_source_gap_repair`, `vtext_source_artifact_attachment`, and
-  `vtext_source_artifact_ui`; adjacent fields such as
+- C20 supported for local source-metadata scope: new source repair and source
+  artifact paths now emit `texture_source_gap_repair`,
+  `texture_source_artifact_attachment`, and `texture_source_artifact_ui`.
+  Focused comprehensive runtime tests and frontend build pass; live residue
+  search finds no old `vtext_source_gap_repair`,
+  `vtext_source_artifact_attachment`, or `vtext_source_artifact_ui` hits in
+  `internal`, `frontend/src`, or `frontend/tests`. Staging CI/deploy/browser
+  proof is still open. Adjacent fields such as
   `canonical_vtext_source_path`, `related_vtexts`, platform publication
   predicates, app-package `vtext_doc_id`, and storage symbols remain broader
   migration surfaces.
 
-next move: implement the source repair metadata label slice: emit
-Texture-named source repair/artifact provenance values, update focused runtime
-and frontend tests, run local checks and residue search, then push and prove
-through CI/deploy/staging if behavior changes. Keep protocol v0 unwritten until
-the remaining working-surface proofs are complete.
+next move: push the source repair metadata label repair, monitor CI/deploy,
+verify staging identity, and run deployed product proof for source gap repair
+metadata. Keep protocol v0 unwritten until the remaining working-surface
+proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

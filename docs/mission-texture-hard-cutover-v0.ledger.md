@@ -1765,3 +1765,61 @@ Receipts:
 Open edge: implement the behavior slice after this checkpoint: emit
 Texture-named source repair/artifact provenance values, update focused tests,
 and prove locally before CI/staging.
+
+## 2026-06-16 - Local Repair: Source Repair Metadata Labels
+
+Claim: new source repair and source artifact paths can emit Texture-named
+provenance values without changing source entity structures, source routes,
+storage tables, `.vtext` alias behavior, durable actor ids, or platform
+publication attestations.
+
+Move: rename emitted source repair/artifact metadata values to
+`texture_source_gap_repair`, `texture_source_artifact_attachment`, and
+`texture_source_artifact_ui`; update focused runtime and frontend expectations;
+run focused checks and residue search.
+
+Expected ΔV: support C20 locally; no coarse V decrease until CI, deploy, and
+staging proof are recorded.
+
+Actual ΔV: C20 is supported for local source-metadata scope. V remains 2.
+
+Conjecture delta: the source repair metadata namespace can teach Texture at the
+new-emission boundary while leaving broader metadata/storage/actor/platform
+surfaces untouched.
+
+Protected surfaces: source gap repair revision metadata, source artifact
+attachment revision metadata, frontend source content item creation provenance,
+source repair tests, source artifact attachment tests, and markdown-lineage
+browser tests.
+
+Admissible evidence class: focused runtime source repair tests, frontend build,
+residue search, CI, staging deploy identity, and deployed source repair product
+proof.
+
+Rollback path: restore the old emitted `vtext_source_*` metadata values and
+test expectations if source repair, source artifact attachment, or downstream
+metadata readers regress.
+
+Heresy delta: repaired locally for new source repair/artifact metadata labels;
+broader metadata, storage, actor-id, app-package, and platform publication
+provenance residue remains discovered and out of scope.
+
+Receipts:
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextSourceGapRepairCreatesRevision|TestVTextSourceArtifactAttachmentCreatesMetadataOnlyRevision'
+  -count=1` passed.
+- `npm --prefix frontend run build` passed with the existing Universal Wire
+  warnings for unused `currentUser` and `.wire-state` selectors.
+- Live residue search for
+  `vtext_source_gap_repair|vtext_source_artifact_attachment|vtext_source_artifact_ui`
+  across `internal`, `frontend/src`, and `frontend/tests` returned no hits.
+- Texture-name search found only intended emitters/assertions for
+  `texture_source_gap_repair`, `texture_source_artifact_attachment`, and
+  `texture_source_artifact_ui`.
+- Local Playwright attempt for
+  `tests/vtext-markdown-lineage.spec.js --grep "Migrated source gaps"` failed
+  before app execution because no local server was listening on
+  `localhost:4173`.
+
+Open edge: push, monitor CI/deploy, verify staging identity, then run deployed
+product proof for source gap repair metadata.

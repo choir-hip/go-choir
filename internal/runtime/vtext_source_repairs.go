@@ -93,7 +93,7 @@ func (h *APIHandler) HandleVTextSourceGapRepair(w http.ResponseWriter, r *http.R
 	for key, value := range metadata {
 		nextMetadata[key] = value
 	}
-	nextMetadata["source"] = "vtext_source_gap_repair"
+	nextMetadata["source"] = "texture_source_gap_repair"
 	nextMetadata["base_revision_id"] = baseRev.RevisionID
 	nextMetadata["draft_line"] = defaultDraftLine()
 	nextMetadata["source_repair_resolution_count"] = len(resolutions)
@@ -209,7 +209,7 @@ func (h *APIHandler) HandleVTextSourceArtifactAttachment(w http.ResponseWriter, 
 	for key, value := range metadata {
 		nextMetadata[key] = value
 	}
-	nextMetadata["source"] = "vtext_source_artifact_attachment"
+	nextMetadata["source"] = "texture_source_artifact_attachment"
 	nextMetadata["base_revision_id"] = baseRev.RevisionID
 	nextMetadata["draft_line"] = defaultDraftLine()
 	nextMetadata["source_attachment_count"] = len(manifest)

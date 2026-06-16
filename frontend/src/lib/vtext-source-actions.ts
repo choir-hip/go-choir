@@ -35,7 +35,7 @@ export function sourceContentItemPayload({
     text_content: text,
     metadata: {
       source_entity_id: sourceEntityID(entity),
-      created_from: 'vtext_source_artifact_ui',
+      created_from: 'texture_source_artifact_ui',
     },
     provenance: {
       rights_scope: 'public_source',

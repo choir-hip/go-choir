@@ -4954,7 +4954,7 @@ func TestVTextSourceGapRepairCreatesRevision(t *testing.T) {
 		t.Fatalf("repaired content double-linked marker: %q", repaired.Content)
 	}
 	meta := decodeRevisionMetadata(repaired.Metadata)
-	if meta["source"] != "vtext_source_gap_repair" || meta["base_revision_id"] != imported.CurrentRevisionID {
+	if meta["source"] != "texture_source_gap_repair" || meta["base_revision_id"] != imported.CurrentRevisionID {
 		t.Fatalf("repair metadata = %#v", meta)
 	}
 	if _, ok := meta["source_gaps"]; ok {
@@ -5247,7 +5247,7 @@ func TestVTextSourceArtifactAttachmentCreatesMetadataOnlyRevision(t *testing.T) 
 		t.Fatalf("attached revision = %#v", attached)
 	}
 	meta := decodeRevisionMetadata(attached.Metadata)
-	if meta["source"] != "vtext_source_artifact_attachment" || meta["base_revision_id"] != imported.CurrentRevisionID {
+	if meta["source"] != "texture_source_artifact_attachment" || meta["base_revision_id"] != imported.CurrentRevisionID {
 		t.Fatalf("attachment metadata = %#v", meta)
 	}
 	if meta["source_attachment_count"] != float64(1) {
