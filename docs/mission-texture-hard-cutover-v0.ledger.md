@@ -2914,3 +2914,50 @@ Receipts:
 
 Open edge: commit and push the docs checkpoint, monitor Docs Truth Check, then
 implement C27 behavior changes.
+
+## 2026-06-16 - Local Repair: Exported HTML Texture Class Names
+
+Claim: C27 is supported for local platform test scope. New platform HTML
+publication exports can emit Texture-named classes/ids without changing live
+editor CSS classes, source manifests, publication routes, JSON-LD, profile
+metadata, storage, actor ids, file suffixes, or broad Go API symbols.
+
+Move: rename generated export HTML classes/ids and embedded profile CSS from
+`vtext-*` to `texture-*`; update focused platform tests to assert
+Texture-class presence and old export-class absence.
+
+Expected ΔV: no coarse V decrease until CI/deploy/staging proof lands; the
+active C27 code residue should become local-supported.
+
+Actual ΔV: C27 is local-supported. Deployed proof remains open.
+
+Protected surfaces: platform HTML export rendering, embedded export CSS,
+source citation anchors, source-list accessibility ids, and focused platform
+tests.
+
+Admissible evidence class: local focused and full `internal/platform` tests,
+doccheck, and scoped residue search. Browser/product proof is not claimed until
+staging deploy.
+
+Rollback path: restore previous V-name export classes/ids and test
+expectations if CI or staging proves generated HTML layout, source anchors,
+source lists, or profile styling regressed.
+
+Heresy delta: repaired locally for new exported HTML artifact classes/ids; live
+editor CSS classes and broad storage/actor/file/public-route residue remain
+separate.
+
+Receipts:
+- Docs checkpoint commit `0936099068e8c90c0d07c57a775a718561356881` pushed to
+  `origin/main`; Docs Truth Check run `27595845648` passed.
+- Focused platform tests passed:
+  `nix develop -c go test ./internal/platform -run 'TestPublishVTextCreatesImmutablePublicRecords|TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes' -count=1`.
+- Full touched package passed:
+  `nix develop -c go test ./internal/platform -count=1`.
+- Report-only doccheck passed:
+  `scripts/doccheck --report /tmp/choir-doccheck-c27-local.md --json /tmp/choir-doccheck-c27-local.json`.
+- Scoped old export class search found only negative assertions:
+  `rg -n "vtext-publication|vtext-source-ref|vtext-table|vtext-sources|vtext-sources-heading" internal/platform -g '!frontend/dist/**'`.
+
+Open edge: commit and push the behavior, monitor CI/deploy/staging identity,
+then run deployed product-path HTML export proof against `https://choir.news`.

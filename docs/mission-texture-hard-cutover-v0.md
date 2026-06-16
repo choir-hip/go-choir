@@ -1612,17 +1612,15 @@ C2-C3 and C6-C26 are supported at the scopes recorded in the ledger, with C22's
 deployed Universal Wire story-field proof still open until staging has a story
 payload or product path creates one without manual success seeding. C4 remains
 active for old mission docs that may be clearer to leave historical. C5 remains
-active: protocol v0 is last. C27 is active from the new checkpoint: platform
-HTML publication exports still emit `vtext-publication`, `vtext-table`,
-`vtext-source-ref`, and `vtext-sources*` classes/ids in generated artifacts.
-This slice excludes live editor CSS classes, storage tables, `.vtext` file
-suffixes, durable `vtext:` actor ids, `PublishVText` Go symbols, and
-`/pub/vtext` public route compatibility.
+active: protocol v0 is last. C27 is supported for local platform test scope:
+generated platform HTML exports now emit `texture-publication`,
+`texture-table`, `texture-source-ref`, and `texture-sources*` classes/ids, and
+focused tests assert old-class absence. This slice excludes live editor CSS
+classes, storage tables, `.vtext` file suffixes, durable `vtext:` actor ids,
+`PublishVText` Go symbols, and `/pub/vtext` public route compatibility.
 
-next move: commit and push the C27 docs checkpoint, monitor Docs Truth Check,
-then rename generated HTML export classes/ids and embedded CSS to Texture names,
-run focused platform tests and residue searches, push behavior through CI/deploy,
-and prove staging HTML export output through product publication/export APIs.
+next move: commit and push the C27 behavior, monitor CI/deploy/staging identity,
+then prove staging HTML export output through product publication/export APIs.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -1651,9 +1649,9 @@ Texture route/tool/prompt slices, deployed prompt-bar -> conductor -> Texture
 first-revision proof, deployed pinned-transclusion proof, visible UI proof,
 source-contract open-surface proof, canonical source-path metadata repair, and
 publication fallback label repair are landed. C27 is active: commit the exported
-HTML class-name checkpoint, then rename generated platform HTML export
-classes/ids from V-name to Texture names and prove through CI, staging identity,
-and product publication/export proof. Keep live editor CSS classes, storage
+HTML class-name checkpoint and local behavior repair are done; push and prove
+generated platform HTML export classes/ids through CI, staging identity, and
+product publication/export proof. Keep live editor CSS classes, storage
 schema, `.vtext` file suffixes, durable `vtext:` actor ids, `PublishVText` Go
 symbols, `/pub/vtext` public route compatibility, and protocol v0 out of C27.
 Preserve one Texture writer among agents, keep human direct edits canonical,

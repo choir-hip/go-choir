@@ -1223,11 +1223,36 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	if !strings.Contains(exported.Content, "This is the published projection with") || exported.ContentHash == "" {
 		t.Fatalf("export content/hash = %#v", exported)
 	}
-	if !strings.Contains(exported.Content, "<h1>Mission Note</h1>") || !strings.Contains(exported.Content, `<a class="vtext-source-ref"`) || !strings.Contains(exported.Content, `id="choir-source-manifest"`) {
+	if !strings.Contains(exported.Content, "<h1>Mission Note</h1>") || !strings.Contains(exported.Content, `<a class="texture-source-ref"`) || !strings.Contains(exported.Content, `id="choir-source-manifest"`) {
 		t.Fatalf("html export missing semantic document/source manifest: %s", exported.Content)
 	}
-	if !strings.Contains(exported.Content, `choir-export-profile" content="default-professional"`) || !strings.Contains(exported.Content, `.vtext-table`) {
+	if !strings.Contains(exported.Content, `choir-export-profile" content="default-professional"`) || !strings.Contains(exported.Content, `.texture-table`) {
 		t.Fatalf("html export missing default professional profile: %s", exported.Content)
+	}
+	for _, retiredClass := range []string{
+		"vtext-publication",
+		"vtext-source-ref",
+		"vtext-table",
+		"vtext-sources",
+		"vtext-sources-heading",
+	} {
+		if strings.Contains(exported.Content, retiredClass) {
+			t.Fatalf("html export retained retired class/id %q: %s", retiredClass, exported.Content)
+		}
+	}
+	for _, textureClass := range []string{
+		`class="texture-publication"`,
+		`class="texture-source-ref"`,
+		`class="texture-sources"`,
+		`id="texture-sources-heading"`,
+		`.texture-publication`,
+		`.texture-source-ref`,
+		`.texture-table`,
+		`.texture-sources`,
+	} {
+		if !strings.Contains(exported.Content, textureClass) {
+			t.Fatalf("html export missing Texture class/id %q: %s", textureClass, exported.Content)
+		}
 	}
 	if !strings.Contains(exported.Content, `id="choir-export-profile"`) || !strings.Contains(exported.Content, `"citation_placement": "inline_marker_appendix"`) || !strings.Contains(exported.Content, `"metadata_policy"`) {
 		t.Fatalf("html export missing embedded export profile contract: %s", exported.Content)
