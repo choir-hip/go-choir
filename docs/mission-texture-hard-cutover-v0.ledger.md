@@ -1898,3 +1898,66 @@ Receipts:
 Open edge: select the next bounded residue class among metadata keys,
 storage/file suffixes, durable actor ids, app-package evidence fields,
 remaining app-route labels, and protocol v0.
+
+## 2026-06-16 - Problem Checkpoint: App Package And Platform Provenance Label Residue
+
+Claim: AppChangePackage human-proof refs and platform publication provenance
+labels are a protected evidence/provenance residue class, separate from
+Universal Wire story projection fields, general Texture metadata keys, storage
+tables, file suffixes, and durable actor ids.
+
+Move: read-only inventory of package tool schema fields, review-evidence
+classification, vsuper prompt defaults, app-promotion tests, platform
+publication provenance writes, and public bundle read redaction; document the
+behavior slice before code changes.
+
+Expected ΔV: 0 global; C21 becomes active and the AppChangePackage/platform
+provenance slice is scoped.
+
+Actual ΔV: 0. Problem Documentation First checkpoint landed in docs only.
+
+Conjecture delta: new app-package and platform provenance evidence can teach
+Texture without touching storage schema, durable actor ids, Universal Wire
+story projection metadata, or `.vtext` file aliases.
+
+Protected surfaces for the later behavior slice: AppChangePackage tool schema,
+package provenance refs, review-evidence human-proof classification, vsuper
+prompt defaults, platform publication provenance entities/activities/verifier
+predicates, public bundle citation redaction, and focused runtime/platform/
+frontend fixtures.
+
+Admissible evidence class for the later behavior slice: focused
+app-promotion/shipper tests, platform publication tests, touched frontend
+fixture tests, residue search, CI, staging deploy identity, and deployed
+product/API proof when reachable without manually seeding success records.
+
+Rollback path for the later behavior slice: restore old emitted package
+provenance field names and platform provenance predicates if review evidence,
+publication, bundle reads, or downstream adoption proof regresses.
+
+Heresy delta: discovered app-package/platform provenance label residue; no
+behavior repair claimed yet.
+
+Receipts:
+- `internal/runtime/tools_shipper.go` still exposes
+  `vtext_doc_id` and `vtext_revision_id` in `publish_app_change_package`
+  args/schema/provenance output and describes the human proof narrative as
+  VText.
+- `internal/runtime/api_app_promotion.go` still recognizes narrative refs by
+  `vtext` keys/values and emits missing-proof copy `narrative VText`.
+- `internal/runtime/prompt_defaults/vsuper.md` still asks for a causal VText
+  narrative plus `vtext_doc_id` and `vtext_revision_id`.
+- `internal/runtime/agent_tools_test.go`,
+  `internal/runtime/app_promotion_test.go`, and
+  `frontend/tests/web-surface-rationalization.spec.js` still assert or stub
+  the old package evidence fields.
+- `internal/platform/service.go` still writes
+  `private_vtext_revision`, `publish_vtext_revision`,
+  `choir-private:vtext/...`, and
+  `choir.platform.publish_vtext.v0`.
+- `internal/platform/service_publication_read.go` still rewrites legacy
+  private revision citations so public bundles do not leak private ids.
+
+Open edge: implement the behavior slice after this checkpoint: emit Texture
+package evidence fields and platform provenance labels, preserve only explicit
+legacy read compatibility where needed, and prove locally before CI/staging.

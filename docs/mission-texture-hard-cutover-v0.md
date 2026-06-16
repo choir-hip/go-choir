@@ -755,6 +755,69 @@ Adjacent metadata keys such as `canonical_vtext_source_path`,
 platform publication provenance, storage symbols, and durable actor ids remain
 discovered residue outside this slice.
 
+## Problem Checkpoint: App Package And Platform Provenance Label Residue
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+frontend source, platform provenance writes, tool schema, prompt default, API,
+test, or persistent state changed in this checkpoint.
+
+Read-only search on 2026-06-16 shows a protected evidence/provenance residue
+class: AppChangePackage human-proof refs and platform publication provenance
+still teach the old artifact ontology even though the app, routes, public
+publication URLs, auth intents, and source repair metadata now teach Texture.
+This is separate from Universal Wire story projection metadata, general
+Texture document metadata keys, storage tables, file suffixes, and durable
+actor ids.
+
+Receipts:
+
+- `internal/runtime/tools_shipper.go` still exposes
+  `publish_app_change_package` args and schema fields `vtext_doc_id` and
+  `vtext_revision_id`, writes the same keys into package provenance refs, and
+  describes the human proof narrative as VText.
+- `internal/runtime/api_app_promotion.go` still classifies human proof
+  narrative refs by keys or values containing `vtext`, and missing-proof copy
+  says `narrative VText`.
+- `internal/runtime/prompt_defaults/vsuper.md` still instructs candidate
+  publishers to produce a causal VText narrative and pass `vtext_doc_id` /
+  `vtext_revision_id`.
+- `internal/runtime/agent_tools_test.go`,
+  `internal/runtime/app_promotion_test.go`, and
+  `frontend/tests/web-surface-rationalization.spec.js` still use those old
+  app-package evidence field names in current fixtures.
+- `internal/platform/service.go` still writes publication provenance and
+  verifier records using `private_vtext_revision`,
+  `publish_vtext_revision`, `choir-private:vtext/...`, and
+  `choir.platform.publish_vtext.v0`.
+- `internal/platform/service_publication_read.go` still rewrites
+  `private_vtext_revision` citation edges so private revision ids do not leak
+  into public bundles.
+- Adjacent hits such as `story_vtext_doc_id`, `projection_vtext_docs`,
+  `vtext_content`, `source-network-vtext-index`,
+  `canonical_vtext_source_path`, `related_vtexts`, durable `vtext:<doc_id>`
+  actor ids, storage tables, and `.vtext` file aliases are broader surfaces
+  kept out of this slice.
+
+Next behavior slice design:
+
+- emit and document `texture_doc_id` and `texture_revision_id` for new
+  AppChangePackage human-proof refs;
+- update the human-proof detector and review evidence copy so current
+  Texture narrative refs are first-class;
+- keep deletion-receipted legacy read compatibility for existing package
+  provenance refs only if review-evidence tests prove it is needed;
+- emit platform publication provenance as `private_texture_revision`,
+  `publish_texture_revision`, `choir-private:texture/...`, and
+  `choir.platform.publish_texture.v0`;
+- keep public bundle reads from leaking either legacy or current private
+  revision ids;
+- prove locally with focused runtime app-promotion/shipper tests, platform
+  publication tests, frontend fixture tests if touched, residue search for new
+  emitters, then push, monitor CI/deploy, verify staging identity, and run a
+  deployed product/API proof for AppChangePackage review evidence or platform
+  publication provenance if the behavior is reachable on staging without
+  manually seeding success records.
+
 ## Problem Checkpoint: `edit_texture` Compatibility Alias
 
 Mutation class: `green` documentation and evidence only. No runtime behavior,
@@ -1145,11 +1208,20 @@ position / live conjectures / open edges:
   `canonical_vtext_source_path`, `related_vtexts`, platform publication
   predicates, app-package `vtext_doc_id`, durable actor ids, and storage
   symbols remain broader migration surfaces.
+- C21 active: AppChangePackage human-proof refs and platform publication
+  provenance labels are a protected evidence surface. New package proof and
+  platform provenance should emit Texture-named fields/predicates while public
+  bundle reads continue to hide private revision ids and any required legacy
+  read compatibility is deletion-receipted. Universal Wire story projection
+  fields, general Texture metadata keys, durable actor ids, storage tables, and
+  file suffixes are adjacent residue outside this slice.
 
-next move: select the next bounded residue class among metadata keys,
-storage/file suffixes, durable actor ids, app-package evidence fields,
-remaining app-route labels, and protocol v0. Keep protocol v0 unwritten until
-the remaining working-surface proofs are complete.
+next move: implement the C21 AppChangePackage/platform provenance behavior
+slice: rename new human-proof refs to Texture, update platform publication
+provenance predicates to Texture, preserve only explicit legacy read
+compatibility where tests require it, then prove locally before pushing for
+CI/deploy/staging evidence. Keep protocol v0 unwritten until the remaining
+working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
